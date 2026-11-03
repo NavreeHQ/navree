@@ -379,7 +379,6 @@ fn no_arguments(input: ParseStream, rule: &str) -> syn::Result<()> {
     Ok(())
 }
 
-/// Nothing follows the argument.
 /// Why a Rust pattern can't be stated to a browser as it is: the browser would accept or
 /// refuse other values than the server. `None` when it reads it the same way.
 ///
@@ -387,8 +386,18 @@ fn no_arguments(input: ParseStream, rule: &str) -> syn::Result<()> {
 /// `\w`, `\d`, `\s`, `\b` and `.` mean less than in Rust's Unicode-aware syntax, a class
 /// is stricter about `-` and some punctuation, and an invalid pattern is silently
 /// ignored. So only a pattern written plainly in the syntax both read the same way gets
-/// through: anchored with `^` and `$`, choices inside a group, characters written out.
+/// through: anchored with `^` and `$`, choices inside a group, characters written out,
+/// and every part valid in `v` mode, so that the browser checks it at all.
 fn browser_problem(pattern: &str) -> Option<String> {
+    /// What came last, for what may follow: only something to repeat takes a count, and
+    /// a count takes one `?` that makes it lazy.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Last {
+        Nothing,
+        Atom,
+        Count,
+        Lazy,
+    }
     // What may follow `\` outside a class, and inside one, in both dialects.
     const SYNTAX: &str = r"^$\.*+?()[]{}|/";
     const CLASS_ESCAPES: &str = r"^$\.*+?()[]{}|/-&!#%,:;<=>@`~";
@@ -403,9 +412,14 @@ fn browser_problem(pattern: &str) -> Option<String> {
              the server, from `^` to `$`",
         );
     }
+    let repeat = || {
+        leave(
+            "a `*`, `+`, `?` or `{n}` repeats the one thing just before it, once: a browser \
+             refuses the whole pattern for `a+*`, `a{2}*`, `^*` or `(*`",
+        )
+    };
     let mut depth = 0usize;
-    // Whether what came last can take a `{n,m}`.
-    let mut atom = false;
+    let mut last = Last::Nothing;
     let mut i = 0;
     while i < n {
         match chars[i] {
@@ -419,7 +433,7 @@ fn browser_problem(pattern: &str) -> Option<String> {
                     ));
                 }
                 i += 2;
-                atom = true;
+                last = Last::Atom;
                 continue;
             }
             '[' => {
@@ -430,8 +444,8 @@ fn browser_problem(pattern: &str) -> Option<String> {
                 if chars.get(i) == Some(&']') {
                     return leave("a `]` first in a class needs a `\\` in a browser's patterns");
                 }
-                // Whether the last item can start a range.
-                let mut single = false;
+                // The last item, when it is one character that can start a range.
+                let mut single: Option<char> = None;
                 loop {
                     let Some(&c) = chars.get(i) else {
                         return leave("a class needs its `]`");
@@ -449,24 +463,27 @@ fn browser_problem(pattern: &str) -> Option<String> {
                                      or nothing: write the characters out, like `[0-9]`"
                                 ));
                             }
-                            single = true;
+                            single = Some(next);
                             i += 2;
                         }
                         '-' => {
                             let next = chars.get(i + 1).copied();
-                            if !single || matches!(next, None | Some(']' | '-')) {
+                            let Some(start) =
+                                single.filter(|_| !matches!(next, None | Some(']' | '-')))
+                            else {
                                 return leave(
                                     "in a browser's patterns a `-` in a class only joins a \
                                      range, like `a-z`: write `\\-` for a dash",
                                 );
-                            }
-                            match next {
+                            };
+                            let end = match next {
                                 Some('\\') => {
                                     let escaped = chars.get(i + 2).copied().unwrap_or(' ');
                                     if !CLASS_ESCAPES.contains(escaped) {
                                         return leave("a range ends at one character");
                                     }
                                     i += 3;
+                                    escaped
                                 }
                                 Some(end) if "()[{}/|".contains(end) => {
                                     return leave(
@@ -474,9 +491,18 @@ fn browser_problem(pattern: &str) -> Option<String> {
                                          `\\` in a browser's patterns",
                                     );
                                 }
-                                _ => i += 2,
+                                Some(end) => {
+                                    i += 2;
+                                    end
+                                }
+                                None => ' ',
+                            };
+                            if end < start {
+                                return leave(&format!(
+                                    "a range goes up, like `a-z`: a browser refuses `{start}-{end}`"
+                                ));
                             }
-                            single = false;
+                            single = None;
                         }
                         '(' | ')' | '[' | '{' | '}' | '/' | '|' => {
                             return leave(
@@ -491,12 +517,12 @@ fn browser_problem(pattern: &str) -> Option<String> {
                                      patterns: write one `\\{c}` and the other"
                                 ));
                             }
-                            single = true;
+                            single = Some(c);
                             i += 1;
                         }
                     }
                 }
-                atom = true;
+                last = Last::Atom;
                 continue;
             }
             '(' => {
@@ -512,12 +538,15 @@ fn browser_problem(pattern: &str) -> Option<String> {
                     i += 1;
                 }
                 depth += 1;
-                atom = false;
+                last = Last::Nothing;
                 continue;
             }
             ')' => {
-                depth = depth.saturating_sub(1);
-                atom = true;
+                if depth == 0 {
+                    return leave("a `)` needs its `(`");
+                }
+                depth -= 1;
+                last = Last::Atom;
             }
             '|' if depth == 0 => {
                 return leave(
@@ -525,7 +554,7 @@ fn browser_problem(pattern: &str) -> Option<String> {
                      ones: put the choice in a group, `^(?:a|b)$`",
                 );
             }
-            '|' => atom = false,
+            '|' => last = Last::Nothing,
             '.' => {
                 return leave(
                     "`.` matches less in a browser than on the server: write the characters it \
@@ -545,26 +574,43 @@ fn browser_problem(pattern: &str) -> Option<String> {
                 let second = parts.next();
                 let digits =
                     |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
-                if !atom
-                    || close.is_none()
+                if close.is_none()
                     || !digits(first)
                     || second.is_some_and(|part| !part.is_empty() && !digits(part))
                 {
                     return leave("a `{` that isn't a count, like `{3}` or `{2,5}`, needs a `\\`");
                 }
+                if last != Last::Atom {
+                    return repeat();
+                }
+                let number = |part: &str| part.parse::<u64>().unwrap_or(u64::MAX);
+                if second.is_some_and(|part| !part.is_empty() && number(part) < number(first)) {
+                    return leave("a count goes up, like `{2,5}`: a browser refuses `{5,2}`");
+                }
                 i = close.unwrap_or(n) + 1;
-                atom = false;
+                last = Last::Count;
                 continue;
             }
-            // An anchor or a count is nothing to count.
-            '*' | '+' | '?' | '^' | '$' => atom = false,
-            _ => atom = true,
+            '*' | '+' | '?' => {
+                last = match (last, chars[i]) {
+                    (Last::Atom, _) => Last::Count,
+                    (Last::Count, '?') => Last::Lazy,
+                    _ => return repeat(),
+                }
+            }
+            // An anchor is nothing to repeat.
+            '^' | '$' => last = Last::Nothing,
+            _ => last = Last::Atom,
         }
         i += 1;
+    }
+    if depth != 0 {
+        return leave("a `(` needs its `)`");
     }
     None
 }
 
+/// Nothing follows the argument.
 fn no_more(content: ParseStream) -> syn::Result<()> {
     if content.is_empty() {
         Ok(())
@@ -748,6 +794,12 @@ mod browser_patterns {
             r"^(?:[0-9]{3}|[A-Z]{2}-[0-9]{2}|[a\-z])$",
             r"^[0-9]{2,}$",
             r"^José$",
+            r"^a+?$",
+            r"^a{2}?$",
+            r"^(?:a)*?$",
+            r"^[a-z]{2,3}?$",
+            r"^(a)$",
+            r"^(?:a|b)c$",
         ] {
             assert_eq!(browser_problem(pattern), None, "{pattern}");
         }
@@ -775,6 +827,20 @@ mod browser_patterns {
             r"^\-$",
             r"^[\d]$",
             r"^a\$",
+            // Invalid in a browser's `v` mode, where an invalid pattern checks nothing.
+            r"^a+*$",
+            r"^a?+$",
+            r"^a*+$",
+            r"^*a$",
+            r"^a{2}*$",
+            r"^a{1,2}{3}$",
+            r"^a+??$",
+            r"^(*a)$",
+            r"^(?:|*)$",
+            r"^a{3,2}$",
+            r"^[z-a]$",
+            r"^(a$",
+            r"^a)$",
         ] {
             assert!(browser_problem(pattern).is_some(), "{pattern}");
         }
