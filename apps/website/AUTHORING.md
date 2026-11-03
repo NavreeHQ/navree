@@ -375,7 +375,7 @@ to get something done.
   Argon2), and so are protocols and standards: "speaks the Pusher protocol,
   so pusher-js and any Pusher client connects", OpenAPI 3.1, OAuth 2.1,
   OpenTelemetry, MCP. The JSON error shape
-  (`{ "statusCode", "message", "error" }`) is Navree's.
+  (`{ "statusCode", "message", "error", "code" }`) is Navree's.
 
 - **Talk to the reader.** "You", never "the user" or "we". "Register the job
   in your module", not "The job should be registered".
