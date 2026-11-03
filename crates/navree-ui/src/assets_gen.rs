@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "7dcd57c4af7d";
+pub const BUILD: &str = "58e2a3952ab8";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-d67293dd5eb1.js";
@@ -12,13 +12,16 @@ pub const CORE_URL: &str = "/_navree/ui/core-d67293dd5eb1.js";
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-be39798e378b.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-26f00c88e5c7.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-67279efcb892.js";
 
 /// The URL of `table.js`.
 pub const TABLE_URL: &str = "/_navree/ui/table-4f81fade135f.js";
 
+/// The URL of `select.js`.
+pub const SELECT_URL: &str = "/_navree/ui/select-486898133a97.js";
+
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-13b5ca448c87.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-a859d215d368.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-d140a28d7b63.json";
@@ -55,7 +58,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "26f00c88e5c7",
+        hash: "67279efcb892",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -71,9 +74,18 @@ pub static FILES: &[Asset] = &[
         brotli: Some(include_bytes!("../dist/table.js.br")),
     },
     Asset {
+        name: "select",
+        ext: "js",
+        hash: "486898133a97",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/select.js"),
+        gzip: Some(include_bytes!("../dist/select.js.gz")),
+        brotli: Some(include_bytes!("../dist/select.js.br")),
+    },
+    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "13b5ca448c87",
+        hash: "a859d215d368",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),

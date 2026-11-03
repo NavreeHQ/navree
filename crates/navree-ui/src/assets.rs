@@ -63,6 +63,7 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::SIDEBAR, SIDEBAR_URL),
         (Uses::OVERLAY, OVERLAY_URL),
         (Uses::TABLE, TABLE_URL),
+        (Uses::SELECT, SELECT_URL),
     ]
     .into_iter()
     .filter(move |(bit, _)| uses.has(*bit))

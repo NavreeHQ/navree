@@ -6,12 +6,24 @@ const GAP = 4;
 const MARGIN = 8;
 const HOVER_DELAY = 300;
 
-/** @param {HTMLElement} pop @param {Element} anchor */
-function place(pop, anchor) {
+/** Popups showing now that are placed by script: they follow a scroll and a resize. @type {Set<HTMLElement>} */
+const shown = new Set();
+
+/** The side a list opened on, kept while it is open so it doesn't jump as its rows change. @type {WeakMap<HTMLElement, boolean>} */
+const downs = new WeakMap();
+
+/** @param {HTMLElement} pop @param {Element} anchor @param {boolean} [again] decide the side afresh */
+function place(pop, anchor, again) {
   const a = anchor.getBoundingClientRect();
-  const p = pop.getBoundingClientRect();
+  // A list is at least as wide as its control; its own height is what the room allows.
+  if (pop.hasAttribute("data-ui-match-width")) pop.style.minWidth = a.width + "px";
+  const fit = pop.hasAttribute("data-ui-fit");
+  if (fit) pop.style.maxHeight = "";
+  // Layout sizes, not the box as drawn: a popup that is fading in is a little scaled.
+  const p = { width: pop.offsetWidth, height: pop.offsetHeight };
   const side = pop.getAttribute("data-side") || "bottom";
-  const vw = innerWidth, vh = innerHeight;
+  const vw = innerWidth, vh = Math.min(innerHeight, visualViewport ? visualViewport.height : innerHeight);
+  const rtl = getComputedStyle(anchor).direction === "rtl";
   let top, left;
   if (side === "left" || side === "right") {
     const room = side === "right" ? vw - a.right : a.left;
@@ -19,28 +31,74 @@ function place(pop, anchor) {
     left = (side === "right") !== flip ? a.right + GAP : a.left - p.width - GAP;
     top = a.top + (a.height - p.height) / 2;
   } else {
-    const room = side === "bottom" ? vh - a.bottom : a.top;
-    const flip = room < p.height + GAP && (side === "bottom" ? a.top : vh - a.bottom) > room;
-    top = (side === "bottom") !== flip ? a.bottom + GAP : a.top - p.height - GAP;
+    const below = vh - a.bottom, above = a.top;
+    const room = side === "bottom" ? below : above;
+    // A list that grows (a search is on its way) is placed for the height it may reach.
+    const want = pop.hasAttribute("data-ui-grow") ? Math.max(p.height, Math.min(parseFloat(getComputedStyle(pop).maxHeight) || 0, 260)) : p.height;
+    const flip = room < want + GAP && (side === "bottom" ? above : below) > room;
+    const kept = !again && shown.has(pop) ? downs.get(pop) : undefined;
+    const down = kept ?? (side === "bottom") !== flip;
+    downs.set(pop, down);
+    let height = p.height;
+    if (fit) {
+      const space = Math.max(96, (down ? below : above) - GAP - MARGIN);
+      if (height > space) pop.style.maxHeight = space + "px";
+      height = Math.min(height, space);
+    }
+    top = down ? a.bottom + GAP : a.top - height - GAP;
+    // Start and end are logical: they swap in a right-to-left page.
     const align = pop.getAttribute("data-align");
-    left = align === "start" ? a.left : align === "end" ? a.right - p.width : a.left + (a.width - p.width) / 2;
+    const edge = align === "start" ? (rtl ? "r" : "l") : align === "end" ? (rtl ? "l" : "r") : "c";
+    left = edge === "l" ? a.left : edge === "r" ? a.right - p.width : a.left + (a.width - p.width) / 2;
   }
   pop.style.left = Math.max(MARGIN, Math.min(left, vw - p.width - MARGIN)) + "px";
-  pop.style.top = Math.max(MARGIN, Math.min(top, vh - p.height - MARGIN)) + "px";
+  pop.style.top = Math.max(MARGIN, Math.min(top, vh - Math.min(p.height, vh - 2 * MARGIN) - MARGIN)) + "px";
 }
 
 /** @param {HTMLElement} pop */
 function anchorOf(pop) {
   const id = CSS.escape(pop.id);
-  return one(`[popovertarget="${id}"],[data-ui-hover="${id}"]`);
+  return one(`[popovertarget="${id}"],[data-ui-hover="${id}"],[data-ui-anchor="${id}"]`);
 }
 
 on(document, "toggle", (e) => {
   const pop = /** @type {HTMLElement} */ (e.target);
-  if (/** @type {ToggleEvent} */ (e).newState !== "open" || !pop.hasAttribute?.("data-ui-place")) return;
+  if (!pop.hasAttribute?.("data-ui-place")) return;
+  if (/** @type {ToggleEvent} */ (e).newState !== "open") {
+    shown.delete(pop);
+    return;
+  }
   const anchor = anchorOf(pop);
   if (anchor) place(pop, anchor);
+  shown.add(pop);
 }, true);
+
+// A popup opened by script asks to be placed in the same frame it shows in, so it is
+// never seen where the browser first puts it.
+on(document, "ui:place", (e) => {
+  const pop = /** @type {HTMLElement} */ (e.target);
+  const anchor = anchorOf(pop);
+  if (anchor) place(pop, anchor);
+  shown.add(pop);
+}, true);
+
+let frame = 0;
+/** @param {Event} e */
+function follow(e) {
+  if (!shown.size || frame) return;
+  const inside = /** @type {Node} */ (e.target);
+  for (const pop of shown) if (pop.contains?.(inside)) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    for (const pop of shown) {
+      const anchor = pop.matches(":popover-open") ? anchorOf(pop) : null;
+      if (anchor) place(pop, anchor, true);
+      else shown.delete(pop);
+    }
+  });
+}
+on(window, "scroll", follow, { capture: true, passive: true });
+on(window, "resize", follow, { passive: true });
 
 /** @type {Map<string, number>} */
 const timers = new Map();

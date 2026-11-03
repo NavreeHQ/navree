@@ -223,6 +223,8 @@ impl Uses {
     pub const OVERLAY: Self = Self(1 << 2);
     /// The table module: selection, resizing and reordering columns.
     pub const TABLE: Self = Self(1 << 3);
+    /// The select module: Select, Combobox, MultiSelect and the command palette.
+    pub const SELECT: Self = Self(1 << 4);
 
     /// Both sets together.
     #[must_use]
