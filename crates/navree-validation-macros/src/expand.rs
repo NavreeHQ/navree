@@ -96,11 +96,14 @@ pub(crate) fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
 
 /// The fields with rules, as data for the `RuleTable` impl.
 fn rule_table(nv: &TokenStream, fields: &[Field]) -> TokenStream {
-    let entries = fields.iter().filter(|field| !field.skipped).filter_map(|field| {
-        let name = field.name.as_ref()?;
-        let rules = rule_list(nv, &field.rules.rules);
-        Some(quote!(#nv::FieldRules { name: #name, rules: &[#(#rules),*] },))
-    });
+    let entries = fields
+        .iter()
+        .filter(|field| !field.skipped)
+        .filter_map(|field| {
+            let name = field.name.as_ref()?;
+            let rules = rule_list(nv, &field.rules.rules);
+            Some(quote!(#nv::FieldRules { name: #name, rules: &[#(#rules),*] },))
+        });
     quote!(#(#entries)*)
 }
 
@@ -144,7 +147,9 @@ fn rule_list(nv: &TokenStream, rules: &[Rule]) -> Vec<TokenStream> {
 /// A bound computed at run time isn't stated.
 fn constant_usize(bound: Option<&syn::Expr>) -> TokenStream {
     match bound {
-        Some(expr @ (syn::Expr::Lit(_) | syn::Expr::Path(_))) => quote!(::core::option::Option::Some(#expr)),
+        Some(expr @ (syn::Expr::Lit(_) | syn::Expr::Path(_))) => {
+            quote!(::core::option::Option::Some(#expr))
+        }
         _ => quote!(::core::option::Option::None),
     }
 }
@@ -159,7 +164,9 @@ fn literal_text(bound: Option<&syn::Expr>) -> TokenStream {
                 syn::Lit::Float(float) => Some(float.base10_digits().to_owned()),
                 _ => None,
             },
-            syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => text(&unary.expr).map(|digits| format!("-{digits}")),
+            syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => {
+                text(&unary.expr).map(|digits| format!("-{digits}"))
+            }
             _ => None,
         }
     }

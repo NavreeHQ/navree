@@ -992,7 +992,10 @@ fn a_row_link_goes_through_the_url_check() {
         assert!(!html.contains(site), "{html}");
         // A field in a link is one path segment, so it can't be a scheme.
         assert!(html.contains("<bdi>open</bdi></a>"), "{html}");
-        assert!(!html.to_lowercase().contains(r#"href="javascript:"#), "{html}");
+        assert!(
+            !html.to_lowercase().contains(r#"href="javascript:"#),
+            "{html}"
+        );
         assert!(!html.contains(r#"href="data:"#), "{html}");
     }
 }
