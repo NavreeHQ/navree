@@ -169,7 +169,7 @@ function move(root, by, end) {
   let to = end === "first" ? 0 : end === "last" ? rows.length - 1 : at + by;
   if (!end) {
     const loop = root.hasAttribute("data-ui-palette");
-    if (to < 0) to = loop ? rows.length - 1 : at < 0 ? 0 : 0;
+    if (to < 0) to = loop ? rows.length - 1 : 0;
     else if (to >= rows.length) to = loop ? 0 : rows.length - 1;
   }
   activate(root, rows[to]);
@@ -223,10 +223,9 @@ function limit(root, full) {
   if (root.hasAttribute("data-limit") === full) return;
   flag(root, "data-limit", full);
   for (const o of parts(root).list.querySelectorAll(full ? OPTION + '[aria-selected="false"]' : "[data-limit-off]")) {
-    if (full) o.setAttribute("data-limit-off", "");
-    else o.removeAttribute("data-limit-off");
-    flag(o, "aria-disabled", full);
+    flag(o, "data-limit-off", full);
     if (full) o.setAttribute("aria-disabled", "true");
+    else o.removeAttribute("aria-disabled");
   }
 }
 
@@ -248,14 +247,16 @@ function chips(root, values) {
     c.querySelector("[data-slot=chip-remove]")?.setAttribute("aria-label", fmt(words(root).remove, { label }));
     box.append(c);
   }
-  // Chips follow the order chosen.
-  for (const v of values) { const c = have.get(v) || box.querySelector(`[data-value="${CSS.escape(v)}"]`); if (c) box.append(c); }
+  // Chips follow the order chosen; one that has focus isn't moved if it needn't be.
+  const now = [...box.querySelectorAll("[data-slot=chip]")].map((c) => c.getAttribute("data-value"));
+  if (now.join("\u{1f}") !== values.join("\u{1f}")) for (const v of values) { const c = box.querySelector(`[data-slot=chip][data-value="${CSS.escape(v)}"]`); if (c) box.append(c); }
   const after = Number(root.getAttribute("data-ui-summary")) || 0;
   box.querySelector("[data-slot=chip-summary]")?.remove();
   flag(root, "data-summary", !!after && values.length > after);
   if (after && values.length > after) {
     const sum = make("span");
     sum.setAttribute("data-slot", "chip-summary");
+    sum.setAttribute("role", "listitem");
     sum.textContent = fmt(words(root).count, { n: values.length });
     box.append(sum);
   }
@@ -367,9 +368,9 @@ function close(root, refocus) {
   s.q = "";
   s.buffer = "";
   if (p.typed) p.control.value = "";
+  // A combobox shows what is chosen again.
   if (p.kind === "combobox") sync(root);
   if (refocus) p.control?.focus({ preventScroll: true });
-  if (p.typed && p.kind !== "combobox") p.control.value = "";
 }
 
 // ----------------------------------------------------------------- filtering
@@ -402,7 +403,7 @@ function view(root) {
     if (el.hidden !== off) el.hidden = off;
     scored.push({ el, score });
   }
-  if (pal && tokens.length) order(scored);
+  if (pal) order(scored);
   for (const g of p.list.querySelectorAll("[role=group]")) {
     const any = g.querySelector(ITEM + ":not([hidden])");
     if (g.hidden === !!any) g.hidden = !any;
@@ -470,7 +471,7 @@ function highlight(root, tokens) {
   const css = /** @type {any} */ (globalThis.CSS);
   if (!css?.highlights || typeof Highlight === "undefined") return;
   css.highlights.delete("ui-match");
-  if (!tokens.length || root.hasAttribute("data-ui-search") && false) return;
+  if (!tokens.length) return;
   const ranges = [];
   for (const o of parts(root).list.querySelectorAll(ITEM + ":not([hidden])")) {
     const node = (o.querySelector("[data-slot=option-text]") || o).firstChild;

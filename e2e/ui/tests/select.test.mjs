@@ -526,12 +526,11 @@ for (const browserName of browsers) {
       const { page, picker, close } = await open("/select");
       const c = picker("combo-search");
       await page.route("**/select/people?q=nope*", (route) => route.fulfill({ status: 403, body: "no" }));
-      await page.route("**/select/people?q=gone*", (route) => route.fulfill({ status: 302, headers: { location: "/plain" } }));
       await page.locator("#f-combo-search").click();
       await page.locator("#f-combo-search").fill("nope");
       await page.waitForFunction(() => /no longer have access/.test(document.querySelector("#combo-search [data-slot=select-note]")?.textContent || ""));
       assert.equal(await c.rows.count(), 0, "no stale rows");
-      await page.locator("#f-combo-search").fill("gone");
+      await page.locator("#f-combo-search").fill("session-ended");
       await page.waitForURL("**/plain");
       assert.equal(await page.locator("#combo-search").count(), 0, "no list of the old page");
       await close();
@@ -831,8 +830,7 @@ for (const browserName of browsers) {
       await page.keyboard.press("Escape");
       await page.keyboard.press("Control+k");
       await page.keyboard.type("zzzzqq");
-      await page.waitForTimeout(500);
-      assert.match(await page.locator("#palette [data-slot=select-note]").innerText(), /No results/);
+      await page.waitForFunction(() => /No results/.test(document.querySelector("#palette [data-slot=select-note]").textContent), null, { timeout: 5000 });
       await close();
     });
 
@@ -940,7 +938,7 @@ for (const browserName of browsers) {
       await close();
     });
 
-    test("Back and forward keep the value the person chose", async () => {
+    test("Back and forward: the button shows what the select holds, whatever the browser restored", async () => {
       const { page, picker, close } = await open("/select/form");
       await page.locator("#f-form-stage").click();
       await page.keyboard.press("ArrowDown");
@@ -949,8 +947,12 @@ for (const browserName of browsers) {
       await page.goto(BASE + "/plain");
       await page.goBack();
       await page.waitForSelector("#form-select");
-      assert.equal(await picker("form-select").value(), chosen);
-      assert.equal(await page.locator("#f-form-stage").innerText(), await page.locator("#form-select [role=option][aria-selected=true]").evaluate((o) => o.textContent), "the button shows what the carrier holds");
+      const held = await picker("form-select").value();
+      // A page that is never stored (`no-store`) gets its form values back from some browsers and
+      // not others; the button must agree with the select in either case.
+      const shown = await page.locator("#f-form-stage").innerText();
+      const label = held === "" ? "Choose a stage" : await page.locator(`#form-select [role=option][data-value="${held}"]`).evaluate((o) => o.textContent);
+      assert.equal(shown, label, `the button shows what the select holds (${held || "nothing"}); it held ${chosen} before`);
       await close();
     });
 
@@ -994,5 +996,206 @@ for (const browserName of browsers) {
         await close();
       });
     }
+
+    test("A filter form: choosing refreshes the region with no submit button pressed, and the URL and Back follow", async () => {
+      const { page, picker, close } = await open("/select/filter");
+      const requests = [];
+      page.on("request", (r) => { if (r.url().includes("/select/filter?")) requests.push(r.url()); });
+      await page.locator("#filter-select-trigger").click();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(() => document.querySelector("#filter-result").textContent === "Stage: qualified");
+      assert.equal(requests.length, 1, "one fetch for the one change");
+      assert.ok(page.url().includes("stage=qualified"), page.url());
+      await page.goBack();
+      await page.waitForFunction(() => document.querySelector("#filter-result").textContent === "Stage: ");
+      assert.equal(await picker("filter-select").value(), "", "Back shows the value the page had");
+      await close();
+    });
+
+    test("A filter form with JavaScript off: the native select and the button do the same", async () => {
+      const { page, close } = await open("/select/filter", { js: false });
+      await page.locator("#filter-select [data-slot=select-native]").selectOption("won");
+      await page.locator("#filter-form button[type=submit]").click();
+      await page.waitForURL("**/select/filter?stage=won");
+      assert.equal(await page.locator("#filter-result").innerText(), "Stage: won");
+      assert.equal(await page.locator("#filter-select [data-slot=select-native]").inputValue(), "won");
+      await close();
+    });
+
+    test("Tab visits each picker once: not the hidden select, the clear button, the toggle or a chip's button", async () => {
+      const { page, close } = await open("/select/form");
+      await page.locator("h1").first().click();
+      const stops = [];
+      for (let i = 0; i < 9; i++) {
+        await page.keyboard.press("Tab");
+        stops.push(await page.evaluate(() => `${document.activeElement.id || document.activeElement.getAttribute("data-slot") || document.activeElement.tagName}`));
+      }
+      for (const stop of stops) {
+        assert.ok(!/select-native|chip-remove|combobox-toggle|combobox-clear|select-clear/.test(stop), `a stop on ${stop}: ${stops}`);
+      }
+      assert.ok(stops.includes("f-form-stage") && stops.includes("f-form-owner") && stops.includes("f-form-person"), stops.join(", "));
+      assert.equal(stops.filter((s) => s === "f-form-owner").length, 1, "one stop for a combobox");
+      await close();
+    });
+
+    test("Focus is visible: a ring on the button and on the box that holds an input", async () => {
+      const { page, close } = await open("/select");
+      await page.locator("#f-select-basic").focus();
+      assert.notEqual(await page.locator("#f-select-basic").evaluate((e) => getComputedStyle(e).outlineStyle), "none");
+      await page.locator("#f-combo-basic").focus();
+      assert.notEqual(await page.locator("#combo-basic [data-slot=combobox-control]").evaluate((e) => getComputedStyle(e).outlineStyle), "none");
+      await page.locator("#f-multi-basic").focus();
+      await page.keyboard.press("Backspace");
+      assert.notEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), "none", "a chip shows its focus");
+      await close();
+    });
+
+    test("What a screen reader is told: result counts, what was added and removed", async () => {
+      const { page, picker, close } = await open("/select");
+      const c = picker("combo-basic");
+      await page.locator("#f-combo-basic").click();
+      await page.keyboard.type("an");
+      await page.waitForFunction(() => document.querySelector("#combo-basic [data-slot=select-status]").textContent === "10 results available");
+      const m = picker("multi-basic");
+      await page.locator("#f-multi-basic").click();
+      await page.keyboard.type("jap");
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(() => document.querySelector("#multi-basic [data-slot=select-status]").textContent === "Japan added");
+      await m.chips.last().locator("[data-slot=chip-remove]").click();
+      await page.waitForFunction(() => document.querySelector("#multi-basic [data-slot=select-status]").textContent === "Japan removed");
+      assert.equal(await page.locator("#multi-basic [data-slot=select-status]").getAttribute("aria-live"), "polite");
+      assert.equal(await c.status.getAttribute("role"), "status");
+      await close();
+    });
+
+    test("In French: the words come from the page, and English is the runtime's own", async () => {
+      const { page, close } = await open("/select/fr");
+      assert.equal(await page.locator("#fr-combo [data-slot=combobox-clear]").getAttribute("aria-label"), "Effacer");
+      await page.locator("#f-fr-combo").click();
+      await page.keyboard.press("Control+a");
+      await page.keyboard.type("qqq");
+      assert.equal(await page.locator("#fr-combo-list [data-action=create]").innerText(), "Créer « qqq »");
+      assert.match(await page.locator("#fr-combo [data-slot=select-note]").innerText(), /Aucun résultat/);
+      await page.locator("#f-fr-combo").fill("an");
+      await page.waitForFunction(() => /résultats disponibles/.test(document.querySelector("#fr-combo [data-slot=select-status]").textContent));
+      await close();
+    });
+
+    test("A chosen option can show a shorter label in the button than in the list", async () => {
+      const { page, close } = await open("/select");
+      await page.locator("#f-select-rich").click();
+      await page.locator("#select-rich-list [role=option]", { hasText: "Ada Lovelace" }).click();
+      assert.equal(await page.locator("#f-select-rich").innerText(), "Ada");
+      await close();
+    });
+
+    // ------------------------------------------------------------ axe, every state
+
+    /** Each state is what a person sees at one moment: a list open, an error, a hint. */
+    const STATES = {
+      "closed, everything at rest": async () => {},
+      "a select open": async ({ page }) => { await page.locator("#f-select-basic").click(); },
+      "a select open with groups and a disabled option": async ({ page }) => { await page.locator("#f-select-groups").click(); },
+      "a select open with descriptions, an icon and a picture": async ({ page }) => { await page.locator("#f-select-rich").click(); },
+      "a select open with nothing in it": async ({ page }) => { await page.locator("#f-select-empty").click(); },
+      "a combobox open": async ({ page }) => { await page.locator("#f-combo-basic").click(); },
+      "a combobox typed into, matches highlighted": async ({ page }) => { await page.locator("#f-combo-basic").click(); await page.keyboard.type("an"); },
+      "a combobox with no match": async ({ page }) => { await page.locator("#f-combo-basic").click(); await page.keyboard.type("qqqq"); },
+      "a combobox with a create row": async ({ page }) => { await page.locator("#f-combo-free").click(); await page.keyboard.type("Prospect"); },
+      "a combobox whose create row is off": async ({ page }) => { await page.locator("#f-combo-denied").click(); await page.keyboard.type("Yellow"); },
+      "a combobox answered by the server": async ({ page }) => {
+        await page.locator("#f-combo-search").click();
+        await page.waitForFunction(() => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length === 20);
+      },
+      "a combobox whose search failed": async ({ page }) => {
+        await page.route("**/select/people?*", (route) => route.fulfill({ status: 500, body: "no" }));
+        await page.locator("#f-combo-search").click();
+        await page.waitForFunction(() => /Couldn't load/.test(document.querySelector("#combo-search [data-slot=select-note]").textContent));
+      },
+      "a combobox while it searches": async ({ page }) => {
+        await page.route("**/select/people?*", async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+        await page.locator("#f-combo-search").click();
+        await page.waitForFunction(() => document.querySelector("#combo-search-list").getAttribute("aria-busy") === "true");
+      },
+      "a multi-select open": async ({ page }) => { await page.locator("#f-multi-basic").click(); },
+      "a multi-select at its maximum": async ({ page }) => { await page.locator("#f-multi-max").click(); await page.keyboard.type("ja"); await page.keyboard.press("Enter"); },
+      "a multi-select with select all": async ({ page }) => { await page.locator("#f-multi-all").click(); },
+      "a chip with focus": async ({ page }) => { await page.locator("#f-multi-basic").focus(); await page.keyboard.press("Backspace"); },
+      "the palette open": async ({ page }) => { await page.keyboard.press("Control+k"); },
+      "the palette with a search": async ({ page }) => { await page.keyboard.press("Control+k"); await page.keyboard.type("deal"); },
+      "the palette with nothing found": async ({ page }) => {
+        await page.keyboard.press("Control+k");
+        await page.keyboard.type("zzzzqq");
+        await page.waitForFunction(() => /No results/.test(document.querySelector("#palette [data-slot=select-note]").textContent));
+      },
+      "the palette with results from the server": async ({ page }) => {
+        await page.keyboard.press("Control+k");
+        await page.keyboard.type("grace");
+        await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
+      },
+      "a combobox in a dialog": async ({ page }) => {
+        await page.locator("button[command=show-modal][commandfor=pick-dialog]").click();
+        await page.locator("#f-dlg-combo").click();
+      },
+    };
+
+    for (const [name, setup] of Object.entries(STATES)) {
+      for (const scheme of ["dark", "light"]) {
+        test(`axe and the content security policy, ${scheme}: ${name}`, { timeout: 60000 }, async () => {
+          const ctx = await open("/select", { light: scheme === "light" });
+          await setup(ctx);
+          await ctx.page.waitForTimeout(250);
+          assert.deepEqual(await axe(ctx.page), []);
+          assert.deepEqual(ctx.problems, []);
+          await ctx.close();
+        });
+      }
+    }
+
+    test("axe: the right-to-left page and the form that posts", async () => {
+      const rtl = await open("/select");
+      await rtl.page.locator("#f-rtl-select").scrollIntoViewIfNeeded();
+      await rtl.page.locator("#f-rtl-multi").click();
+      assert.deepEqual(await axe(rtl.page), []);
+      await rtl.close();
+      const form = await open("/select/form");
+      await form.page.locator("#pick-form button[type=submit]").click();
+      assert.deepEqual(await axe(form.page), [], "with the errors showing");
+      await form.close();
+    });
+
+    test("forced colours: the active row and the borders don't depend on colour alone", async () => {
+      const context = await browser.newContext({ forcedColors: "active", viewport: { width: 1440, height: 900 } }).catch(() => null);
+      if (!context) return;
+      const page = await context.newPage();
+      await page.goto(BASE + "/select");
+      await page.locator("#f-select-basic").click();
+      const style = await page.locator("#select-basic-list [data-active]").evaluate((e) => getComputedStyle(e).backgroundColor);
+      assert.notEqual(style, "rgba(0, 0, 0, 0)", "the active row is drawn");
+      await context.close();
+    });
+
+    test("reduced motion: nothing animates", async () => {
+      const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1440, height: 900 } });
+      const page = await context.newPage();
+      await page.goto(BASE + "/select");
+      await page.locator("#f-select-basic").click();
+      const duration = await page.locator("#select-basic-popup").evaluate((e) => getComputedStyle(e).animationDuration);
+      assert.ok(parseFloat(duration) <= 0.001, duration);
+      await context.close();
+    });
+
+    test("every state, with screenshots, at 1440px and 390px, in dark and light", { skip: !SHOTS, timeout: 300000 }, async () => {
+      for (const [scheme, viewport, tag] of [["dark", { width: 1440, height: 900 }, "1440"], ["light", { width: 1440, height: 900 }, "1440"], ["dark", { width: 390, height: 844 }, "390"], ["light", { width: 390, height: 844 }, "390"]]) {
+        for (const [name, setup] of Object.entries(STATES)) {
+          const ctx = await open("/select", { light: scheme === "light", viewport, touch: tag === "390" });
+          await setup(ctx);
+          await shot(ctx.page, `${scheme}-${tag}-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`);
+          await ctx.close();
+        }
+      }
+    });
   });
 }

@@ -31,7 +31,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   Bubble, Button, ButtonGroup, Card, Checkbox, Direction, Empty, Field, Input,
   InputGroup, Item, Kbd, Label, Marker, Message, NativeSelect, Pagination, Progress,
   RadioGroup, Separator, Skeleton, Spinner, Switch, Table, Textarea, Toggle, Heading,
-  Text. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
+  Text. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
   HoverCard, Popover, ScrollArea, Sheet, Tooltip. Layout: Stack, Row, Grid, Container.
   Shell: `Shell`, `AppShell`, `Page`. Components carry no outer margin: layout
   belongs to the layout primitives.
@@ -67,6 +67,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A dialog, an accordion, a switch | None: `<dialog>`, `command`, `<details>`, `<input>`. |
 | A popover, tooltip or hover card | `overlay`: placing and hover delay. |
 | A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
+| A select, combobox, multi-select or command palette | `overlay`, `select`. |
 | A data table | `core`, `table`, `overlay`. |
 | The app shell | `core`, `sidebar`. |
 
@@ -156,6 +157,53 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 **Other sources.** `navree-orm` is the path built for this table: allow-list, keyset, NULL order, bulk checks, exports. Rows from anywhere else can go straight to `DataTable`, and `TableSource` is the shape for a reusable one; the source then owns scoping and checks.
 
 **One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
+
+## Selects, comboboxes and the command palette
+
+```rust
+Field::new("deal-owner", "Owner").control(
+    Combobox::new("owner_id")
+        .placeholder("Search people")
+        .search("/people/options")
+        .selected_choice(("7", "Grace Hopper")),
+)
+
+async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
+    PEOPLE.find(Person::query(), &query, &uow, "/people/options", |r| {
+        let person = r.into_inner();
+        Choice::new(person.id.to_string(), person.name)
+    }).await
+}
+```
+
+`Select` is a styled listbox for a small fixed list, `Combobox` finds one choice by
+typing, `MultiSelect` keeps many as chips, and `Command` is a palette in a modal dialog
+(`Ctrl` or `Cmd` and `K`). Each is server-rendered markup that the `select` module
+drives, with a real `<select>` carrying the value: forms, `required`, reset and `change`
+behave as for any select, and with JavaScript off the `<select>` is what shows.
+
+- **Keys and names.** The WAI-ARIA select-only and editable combobox patterns: focus stays
+  on the control, the list is followed with `aria-activedescendant`, and result counts,
+  picks, removals and failures are announced.
+- **Options in the page or on the server.** A list in the page holds every option, filters
+  over all of them (case, accents, words in any order, keywords) and draws at most 200
+  matches. A searched list asks `GET url?q=text`: debounced, the previous request
+  cancelled, only the newest answer used, busy and failed states, `Show more`, and
+  nothing filtered again in the browser. `OptionQuery` clips the text, caps the limit
+  (50) and the offset, and never fails; `OptionSource` (with the `orm` feature) searches
+  the columns your code names, binds the text, and starts from the scoped query you give
+  it, so workspace scoping and row-level security hold.
+- **Replies are options and nothing else.** The runtime rebuilds a reply from the
+  elements and attributes a list is drawn with: no script, form, `id`, off-site link or
+  stray picture survives.
+- **Creating.** `.creatable()` makes the typed text the value; `.create_url(url)` has the
+  server make the record and answer the option; `.create_denied(reason)` shows the row
+  switched off with its reason.
+- **In forms.** `#[form(widget = listbox | combobox | multiselect)]`, `FormView::search`,
+  and a field of type `Many<T>` for a multi-select.
+- **Palette.** Items are links, posted forms or browser commands, with icons, keywords,
+  shortcuts (a chord needs a modifier), recent items kept in the browser and a server
+  source. The page builds only the items the person may use.
 
 ## Fetching ahead of a click
 

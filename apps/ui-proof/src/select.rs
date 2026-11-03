@@ -756,6 +756,68 @@ fn create_team(pairs: &[(String, String)]) -> navree::http::response::Response {
         .into_response()
 }
 
+/// A filter form: a select that changes what a region shows. With script the choice
+/// fetches the region; without it the button submits.
+fn filter_page(shell: &AppShell, pairs: &[(String, String)]) -> AppPage {
+    let stage = pairs
+        .iter()
+        .find(|(name, _)| name == "stage")
+        .map_or("", |(_, value)| value.as_str());
+    shell.page("A filter").body(
+        Card::new().body(
+            Stack::gap(3).children((
+                el("form")
+                    .attr("method", "get")
+                    .attr("action", "/select/filter")
+                    .attr("data-ui-target", "filter-result")
+                    .attr("id", "filter-form")
+                    .children(
+                        Row::gap(2).children((
+                            Select::new("stage")
+                                .id("filter-select")
+                                .aria_label("Stage")
+                                .placeholder("Any stage")
+                                .options(stages())
+                                .selected(stage.to_owned()),
+                            Button::outline("Apply").submit(),
+                        )),
+                    ),
+                el("p")
+                    .attr("id", "filter-result")
+                    .child(format!("Stage: {stage}")),
+            )),
+        ),
+    )
+}
+
+/// The words of a page in French, for the runtime to use.
+fn french() -> SelectLabels {
+    let mut labels = SelectLabels::default();
+    labels.empty = "Aucun résultat".into();
+    labels.clear = "Effacer".into();
+    labels.results = "{n} résultats disponibles".into();
+    labels.result = "1 résultat disponible".into();
+    labels.create = "Créer « {q} »".into();
+    labels
+}
+
+fn french_page(shell: &AppShell) -> AppPage {
+    shell.page("En français").body(
+        Card::new().body(
+            Stack::gap(3).children((Field::new("f-fr-combo", "Pays").control(
+                Combobox::new("pays")
+                    .id("fr-combo")
+                    .placeholder("Chercher un pays")
+                    .options(countries())
+                    .creatable()
+                    .clearable()
+                    .selected("fr")
+                    .labels(&french()),
+            ),)),
+        ),
+    )
+}
+
 /// Shows what a form sent.
 fn echo(shell: &AppShell, pairs: &[(String, String)]) -> AppPage {
     let items: Vec<Element> = pairs
@@ -814,6 +876,18 @@ impl Controller for SelectPages {
                 |shell: AppShell| async move { big(&shell, "multi", 10_000) },
             )
             .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/select/filter",
+                |shell: AppShell, query: navree::http::extract::Query<Vec<(String, String)>>| async move {
+                    filter_page(&shell, &query.0)
+                },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/select/fr", |shell: AppShell| async move {
+                french_page(&shell)
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/select/form", |shell: AppShell| async move {
                 form_page(&shell)
             })
@@ -829,7 +903,17 @@ impl Controller for SelectPages {
             RouteDef::on(
                 Method::GET,
                 "!/select/people",
-                |query: OptionQuery| async move { people(&query) },
+                |query: OptionQuery| async move {
+                    // What an ended session does to a search: it goes to the sign-in page.
+                    if query.text() == "session-ended" {
+                        return (
+                            http::StatusCode::SEE_OTHER,
+                            [(http::header::LOCATION, "/plain")],
+                        )
+                            .into_response();
+                    }
+                    people(&query).into_response()
+                },
             )
             .public(),
             RouteDef::on(

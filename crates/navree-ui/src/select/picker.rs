@@ -360,6 +360,8 @@ impl Picker {
                 .slot("chips")
                 .attr("role", "list")
                 .attr_opt("aria-label", self.aria_label.clone())
+                // Inactive, so the dimmed text is exempt from the contrast rule.
+                .attr_opt("aria-disabled", self.disabled.then_some("true"))
                 .child(chips)
         });
         el("div")
