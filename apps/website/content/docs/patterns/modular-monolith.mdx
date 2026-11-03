@@ -87,7 +87,7 @@ cargo run -p crm-api -- check
 ```
 
 ```text
-module graph OK: 33 modules, 84 providers
+module graph OK: 37 modules, 122 providers
 ```
 
 `check --graph` prints the whole graph as a tree. Each module lists what it provides, with each provider's dependencies after `<-`, and what it exports. The deals module's entry shows its boundary at a glance: one export, and everything else private (the two `ListenerBinding` entries are the event subscriptions `wire` registered).
@@ -99,6 +99,7 @@ module graph OK: 33 modules, 84 providers
 │   ├── provides crm_deals::notification::NotifyDealOwner (singleton) <- navree_notify::notifier::Notifier, navree_auth::service::AuthService, navree_config::config::Config
 │   ├── provides navree_events::registry::ListenerBinding<crm_deals::events::DealAssigned, crm_deals::notification::NotifyDealOwner> (transient) <- crm_deals::notification::NotifyDealOwner
 │   ├── provides navree_events::registry::ListenerBinding<crm_deals::events::DealWon, crm_deals::notification::NotifyDealOwner> (transient) <- crm_deals::notification::NotifyDealOwner
+│   ├── provides crm_deals::mcp::DealsMcp (singleton) <- crm_deals::service::DealService
 │   ├── exports crm_deals::service::DealService
 │   └── CrmCoreModule (see above)
 ```
