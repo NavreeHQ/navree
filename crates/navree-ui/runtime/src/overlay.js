@@ -90,8 +90,9 @@ let frame = 0;
 /** @param {Event} e */
 function follow(e) {
   if (!shown.size || frame) return;
-  const inside = /** @type {Node} */ (e.target);
-  for (const pop of shown) if (pop.contains?.(inside)) return;
+  // Scrolling inside a popup moves nothing under it. A resize has the window for its target.
+  const inside = e.target;
+  if (inside instanceof Node) for (const pop of shown) if (pop.contains?.(inside)) return;
   frame = requestAnimationFrame(() => {
     frame = 0;
     for (const pop of shown) {
