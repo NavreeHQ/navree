@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { Faq } from "@/components/faq";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
@@ -20,6 +21,7 @@ export default function AiPage() {
       <AgentsHalf />
       <ProductHalf />
       <AiClosing />
+      <Faq name="ai" />
       <PageSchema path="/ai/" metadata={metadata} />
     </>
   );
