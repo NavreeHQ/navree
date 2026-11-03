@@ -14,6 +14,9 @@ const until = async (done, ms = 5000) => {
 };
 let unique = 0;
 const key = (name) => `${name}-${++unique}`;
+// A cold browser on a busy machine can take seconds to swap a page: waits for a state are
+// long, and the checks that nothing else was sent come after the state is reached.
+const LONG = 30000;
 const button = (id, commands) => `<button id="${id}" type="button" data-ui-click='${JSON.stringify(commands).replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'>x</button>`;
 
 for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]]) {
@@ -60,7 +63,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
         f.routes.set(`/${name}-danger`, (req, res) => f.ops(res, { ops: [] }));
         const { context, page } = await fresh(`/${name}`);
         await twice(page);
-        await until(() => new URL(page.url()).pathname === `/${name}-next`, 5000);
+        await until(() => new URL(page.url()).pathname === `/${name}-next`, LONG);
         await sleep(800);
         assert.equal(new URL(page.url()).pathname, `/${name}-next`);
         assert.deepEqual(hits(`/${name}-danger`), [], "nothing posted on the page the user was sent to");
@@ -77,6 +80,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
         const { context, page } = await fresh(`/${name}`);
         await twice(page);
         await page.click("#away");
+        await until(() => new URL(page.url()).pathname === `/${name}-other`, LONG);
         await sleep(1200);
         assert.equal(new URL(page.url()).pathname, `/${name}-other`);
         assert.deepEqual(hits(`/${name}-danger`), [], "nothing posted on the other page");
@@ -91,7 +95,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       f.routes.set(`/${name}-post`, (req, res, body) => setTimeout(() => f.ops(res, { ops: [] }), 250));
       const { context, page } = await fresh(`/${name}`);
       await twice(page);
-      await until(() => hits(`/${name}-post`).length >= 2, 3000);
+      await until(() => hits(`/${name}-post`).length >= 2, LONG);
       await sleep(300);
       assert.deepEqual(hits(`/${name}-post`).map((hit) => hit.body), ["title=one", "title=two"]);
       await context.close();
@@ -104,6 +108,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       f.routes.set(`/${name}-danger`, (req, res) => f.ops(res, { ops: [] }));
       const { context, page } = await fresh(`/${name}`);
       await twice(page);
+      await page.waitForFunction((n) => document.getElementById("f")?.getAttribute("action") === `/${n}-danger`, name, { timeout: LONG });
       await sleep(900);
       assert.deepEqual(hits(`/${name}-danger`), []);
       await context.close();
@@ -115,6 +120,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => f.ops(res, { ops: [] }, 200, { "set-cookie": "XSRF-TOKEN=; Path=/; Max-Age=0" }), 300));
       const { context, page } = await fresh(`/${name}`);
       await twice(page);
+      await page.waitForFunction(() => !document.cookie.includes("XSRF-TOKEN=tok1"), null, { timeout: LONG });
       await sleep(1000);
       assert.deepEqual(hits(`/${name}-post`).map((hit) => [hit.body, hit.headers["x-xsrf-token"] ?? null]), [["a=one", "tok1"]]);
       await context.close();
