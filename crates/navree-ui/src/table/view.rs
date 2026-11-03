@@ -153,8 +153,34 @@ pub struct TableData<'a, R> {
     version: Option<&'a str>,
 }
 
-/// How a column's values compare in the browser: as numbers, as ISO dates, or (with
-/// no code) as text.
+/// Whether `text`, a cell's value as files write it, reads back as `kind`: a number, or
+/// a date written ISO. Empty is NULL, which every kind has.
+fn reads_as(kind: &str, text: &str) -> bool {
+    let text = text.trim();
+    if text.is_empty() {
+        return true;
+    }
+    match kind {
+        "n" => text
+            .replace(',', "")
+            .parse::<f64>()
+            .is_ok_and(f64::is_finite),
+        _ => {
+            let bytes = text.as_bytes();
+            bytes.len() >= 10
+                && bytes[..10].iter().enumerate().all(|(at, byte)| {
+                    if at == 4 || at == 7 {
+                        *byte == b'-'
+                    } else {
+                        byte.is_ascii_digit()
+                    }
+                })
+        }
+    }
+}
+
+/// How a column's values compare in the browser: as numbers or as ISO dates. Text has no
+/// code: only the database knows how it orders text.
 fn kind_code(kind: ValueKind) -> Option<&'static str> {
     match kind {
         ValueKind::Int | ValueKind::Money | ValueKind::Float | ValueKind::Decimal => Some("n"),
@@ -543,6 +569,8 @@ pub struct DataTable<'a, R, F = NoFilter> {
     refreshable: bool,
     debounce: Option<u32>,
     prefetch: bool,
+    /// The columns this page sorts in the browser, by index (see `local_columns`).
+    local: Vec<bool>,
     cell_uses: Cell<Uses>,
 }
 
@@ -591,6 +619,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             refreshable: false,
             debounce: None,
             prefetch: false,
+            local: Vec::new(),
             cell_uses: Cell::new(Uses::NONE),
         }
     }
@@ -862,6 +891,38 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             Total::Exact(total) => total == shown,
             Total::AtLeast(_) | Total::Unknown => shown < u64::from(self.query.per_page()),
         }
+    }
+
+    /// The columns this page can sort in the browser, by index. Only when it holds every
+    /// row of its result, and only sortable numbers and dates whose cells show the very
+    /// value the store sorts: the column queried is the one shown, and every row's value
+    /// reads back as that kind. Text follows the database's collation and a relation
+    /// sorts by a key the cell doesn't show, so those always ask the server.
+    fn local_columns(&self) -> Vec<bool> {
+        if !self.holds_all() {
+            return Vec::new();
+        }
+        let mut text = String::new();
+        (0..R::COLUMNS.len())
+            .map(|at| {
+                let column = TableQuery::<R, F>::column(at);
+                let Some(kind) = kind_code(column.kind) else {
+                    return false;
+                };
+                column.sortable
+                    && column.source == column.name
+                    && self.data.rows.iter().all(|row| {
+                        text.clear();
+                        row.write_text(at, &mut text);
+                        reads_as(kind, &text)
+                    })
+            })
+            .collect()
+    }
+
+    /// Whether column `at` sorts in the browser on this page.
+    fn is_local(&self, at: usize) -> bool {
+        self.local.get(at).copied().unwrap_or(false)
     }
 
     /// The default order, spelled as the URL spells a sort.
@@ -1279,9 +1340,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr_opt("data-sticky", sticky_at.map(str::to_owned))
             .attr_opt(
                 "data-kind",
-                (column.sortable && self.holds_all())
-                    .then(|| kind_code(column.kind))
-                    .flatten(),
+                self.is_local(at).then(|| kind_code(column.kind)).flatten(),
             );
         if let Some(direction) = sorted {
             th = th.attr(
@@ -2183,7 +2242,6 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let selectable = self.selectable();
         let form = self.bulk_id();
         let span = self.span();
-        let local = self.holds_all();
         let mut out = String::new();
         let mut label = String::new();
         for (index, row) in self.data.rows.iter().enumerate() {
@@ -2235,9 +2293,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .find(|(name, _)| *name == TableQuery::<R, F>::column(*at).name)
                     .map(|(_, draw)| draw);
                 out.push_str(open);
-                // A cell drawn by the page shows what it likes: its value, for a sort
-                // in the browser, goes with it.
-                if local && draw.is_some() && TableQuery::<R, F>::column(*at).sortable {
+                // A column sorted in the browser carries each cell's value, which is
+                // what the store sorts, whatever the cell shows.
+                if self.is_local(*at) {
                     out.push_str(" data-v=\"");
                     label.clear();
                     row.write_text(*at, &mut label);
@@ -2553,7 +2611,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         .to_string()
     }
 
-    fn into_node(self) -> Node {
+    fn into_node(mut self) -> Node {
+        self.local = self.local_columns();
         let state = &self.query.state;
         // Sticky start columns are numbered, so the stylesheet can place each by
         // its own offset variable.
@@ -2602,7 +2661,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr_opt("data-ui-live-src", self.live_from.clone())
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
-        if self.holds_all() {
+        if self.local.contains(&true) {
             root = root
                 .flag("data-ui-local", true)
                 .attr("data-ui-sort-default", Self::default_sort());

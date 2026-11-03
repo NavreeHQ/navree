@@ -110,7 +110,7 @@ for (const browserName of browsers) {
       await reset();
       const { page, close, problems } = await open("/exact");
       assert.equal(await page.locator("#sized[data-ui-local]").count(), 1);
-      for (const [column, sort] of [["amount", "amount"], ["amount", "-amount"], ["closed_on", "closed_on"], ["title", "title"]]) {
+      for (const [column, sort] of [["amount", "amount"], ["amount", "-amount"], ["closed_on", "closed_on"]]) {
         const expected = await serverKeys(`/exact?sort=${sort}`, "sized");
         // The server's answer is held back: what shows meanwhile was sorted here.
         let release;
@@ -137,15 +137,42 @@ for (const browserName of browsers) {
         assert.equal(meanwhile.sort, column, sort);
         assert.equal(meanwhile.arrow, sort.startsWith("-") ? "down" : "up", `${sort}: the heading's arrow moved with the rows`);
         assert.equal(meanwhile.ranks, 0, `${sort}: no rank of the old order is left`);
-        if (column !== "title") assert.deepEqual(await keys(page, "sized"), expected, `${sort}: values and NULLs sort as the server sorts`);
+        assert.deepEqual(await keys(page, "sized"), expected, `${sort}: values and NULLs sort as the server sorts`);
         release();
         await page.waitForURL(new RegExp(`sort=${sort.replace("-", "\\-")}(&|$)`));
         await settled(page, "sized");
         await page.unroute(/\/exact\?/);
-        // Text may compare otherwise in the database; the server's order stands.
         assert.deepEqual(await keys(page, "sized"), expected, `${sort}: the server's order after its answer`);
       }
       assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("text and a relation sort on the server, even when the page holds every row", async () => {
+      await reset();
+      const { page, close } = await open("/exact");
+      // A database orders text by its own collation, and a relation by a key the cell
+      // doesn't show: only the server knows either order.
+      assert.equal(await page.locator("#sized thead th[data-col=title][data-kind]").count(), 0);
+      assert.equal(await page.locator("#sized thead th[data-col=company][data-kind]").count(), 0);
+      for (const column of ["title", "company"]) {
+        const before = await keys(page, "sized");
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        await page.route(/\/exact\?/, async (route) => {
+          await held;
+          await route.continue();
+        });
+        await page.locator(`#sized thead th[data-col=${column}] [data-slot=sort-link]`).click();
+        await page.waitForTimeout(200);
+        assert.deepEqual(await keys(page, "sized"), before, `${column}: nothing moves before the server answers`);
+        assert.equal(await page.locator("#sized[data-pending]").count(), 1, `${column}: busy`);
+        release();
+        await page.waitForURL(new RegExp(`sort=${column}(&|$)`));
+        await settled(page, "sized");
+        await page.unroute(/\/exact\?/);
+        assert.deepEqual(await keys(page, "sized"), await serverKeys(`/exact?sort=${column}`, "sized"), column);
+      }
       await close();
     });
 

@@ -315,32 +315,29 @@ function onlySort(from, to) {
   return rest(from) === rest(to);
 }
 
-const collator = new Intl.Collator(undefined, { sensitivity: "base" });
 const digits = /^\d{1,15}$/;
 
 /**
- * A cell's value for sorting: what the server wrote in `data-v`, or the cell's text, as
- * a number in a column of numbers. Empty is NULL, the smallest value, as on every store.
- * @param {HTMLTableRowElement} row @param {number} at @param {string | null} kind
+ * A cell's value for sorting: what the server wrote in `data-v`, as a number in a column
+ * of numbers. Empty is NULL, the smallest value, as on every store.
+ * @param {HTMLTableRowElement} row @param {number} at @param {string} kind
  */
 function valueOf(row, at, kind) {
-  const cell = row.cells[at];
-  const raw = (cell?.getAttribute("data-v") ?? cell?.textContent ?? "").trim();
+  const raw = row.cells[at]?.getAttribute("data-v") ?? "";
   const number = kind === "n" ? Number(raw.replace(/[^\d.eE+-]/g, "")) : 0;
   return raw === "" || Number.isNaN(number) ? null : kind === "n" ? number : raw;
 }
 
 /**
- * Orders two values: NULL first, numbers as numbers, dates (written ISO) and keys of
- * digits by their text or number, the rest as words.
- * @param {any} a @param {any} b @param {string | null} [kind]
+ * Orders two values: NULL first, numbers as numbers, dates (written ISO) as their text,
+ * keys of digits as numbers. Text is never ordered here: a database orders it by its
+ * own collation.
+ * @param {any} a @param {any} b @param {string} [kind]
  */
 function compare(a, b, kind) {
   if (a === null || b === null) return a === b ? 0 : a === null ? -1 : 1;
-  if (typeof a === "number") return a - b;
-  if (kind === "k" && digits.test(a) && digits.test(b)) return a - b;
-  if (kind === "d" || kind === "k") return a < b ? -1 : a > b ? 1 : 0;
-  return collator.compare(a, b);
+  if (typeof a === "number" || (kind === "k" && digits.test(a) && digits.test(b))) return a - b;
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
@@ -358,8 +355,10 @@ function sortHere(root, url) {
   if (sort.includes(",")) return false;
   const down = sort[0] === "-", name = down ? sort.slice(1) : sort;
   const th = /** @type {HTMLTableCellElement | undefined} */ (heads.find((cell) => cell.getAttribute("data-col") === name));
-  if (name && !th) return false;
-  const kind = th?.getAttribute("data-kind") ?? null;
+  // Only a column the server says the browser can read the way the store sorts it:
+  // numbers and dates that show their own value.
+  const kind = th?.getAttribute("data-kind") || "";
+  if (name && !kind) return false;
   /** Each row's key, what it sorts by, the row and its details row, which moves with it. @type {any[][]} */
   const groups = [];
   for (const row of body.rows) {

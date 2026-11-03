@@ -754,3 +754,60 @@ fn a_page_that_holds_part_of_the_result_asks_the_server() {
     let html = draw(&q(""), &[], 0);
     assert!(!html.contains("data-ui-local"), "no rows: {html}");
 }
+
+/// Only numbers and dates whose cells show the value the store sorts: text follows the
+/// database's collation, a relation sorts by a key the cell doesn't show, and a number
+/// column whose cells show words can't be read back. Those ask the server.
+#[test]
+fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
+    #[derive(Clone, TableRow)]
+    #[table(per = 25)]
+    struct Local {
+        #[col(skip)]
+        id: i64,
+        #[col(sortable)]
+        name: String,
+        #[col(sortable, kind = int, source = "company_id")]
+        company: String,
+        #[col(sortable, kind = int)]
+        code: String,
+        #[col(sortable, numeric)]
+        amount: Option<i64>,
+        #[col(sortable)]
+        closed: Option<chrono::NaiveDate>,
+    }
+    let row = |id: i64, code: &str, amount: Option<i64>| Local {
+        id,
+        name: format!("Deal {id}"),
+        company: "Acme".into(),
+        code: code.into(),
+        amount,
+        closed: chrono::NaiveDate::from_ymd_opt(2026, 1, u32::try_from(id).unwrap()),
+    };
+    let rows = vec![row(1, "12", Some(5)), row(2, "A1", None)];
+    let page = TablePage::new(rows, 2);
+    let query = TableQuery::<Local>::parse("/deals", "");
+    let html = render(&DataTable::new("deals", &query, &page).into());
+    assert!(html.contains("data-ui-local"), "{html}");
+    for column in ["name", "company", "code"] {
+        assert!(
+            !html.contains(&format!(r#"data-col="{column}" data-kind"#)),
+            "{column} asks the server: {html}"
+        );
+    }
+    assert!(
+        html.contains(r#"data-col="amount" data-numeric data-kind="n""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"data-col="closed" data-kind="d""#),
+        "{html}"
+    );
+    // Every cell of those columns says its value, NULL as empty.
+    assert!(html.contains(r#"data-v="5""#), "{html}");
+    assert!(html.contains(r#"data-v="""#), "{html}");
+    assert!(html.contains(r#"data-v="2026-01-01""#), "{html}");
+    assert!(!html.contains(r#"data-v="Deal"#), "{html}");
+    assert!(!html.contains(r#"data-v="A1""#), "{html}");
+    assert!(!html.contains(r#"data-v="Acme""#), "{html}");
+}
