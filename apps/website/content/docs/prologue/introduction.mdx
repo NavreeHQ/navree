@@ -95,11 +95,11 @@ Each module is its own crate, and the `navree` crate re-exports all of them, one
 | Foundation | The kernel (module graph, dependency injection, lifecycle hooks, commands); typed configuration from `.env`, TOML files and `APP_*` variables; structured logging with redaction |
 | HTTP | Controllers and route attributes on Navree's own router, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error", "code" }`) with stable, translatable error codes, rate limits, CORS and security headers, signed URLs, maintenance mode |
 | Validation | `#[derive(Validate)]` rules and `Valid<T>` extractors, one readable message per broken rule, async `unique` and `exists` rules |
-| Database | An ORM with typed queries, relationships and eager loading, casts, events, scopes, soft deletes, factories and test helpers; a unit of work per request; per-module migrations written with a schema builder, seeders and pagination; TimescaleDB by default (PostgreSQL with hypertables), plain PostgreSQL, MySQL and MariaDB, SQLite for tests, and MongoDB through a document driver |
+| Database | An ORM with typed queries, relationships and eager loading, casts, events, scopes, soft deletes, factories and test helpers; a unit of work per request; per-module migrations written with a schema builder, seeders and pagination; TimescaleDB by default (PostgreSQL with hypertables), plain PostgreSQL, MySQL and MariaDB, SQLite (a file, with nothing to install), and MongoDB through a document driver |
 | Security | JWT access tokens with rotating refresh tokens, pluggable authentication strategies, registration, password reset, email verification and two-factor authentication; roles, permissions and abilities with record checks and SQL list filters, shared with the front end; AES-256-GCM encryption and Argon2id hashing; an audit log |
 | Workspaces | Workspaces, members, roles and invitations; the current workspace from a header, a subdomain, a path or a token; isolation by row, schema or database |
 | Background work | Database and memory job queues with retries, backoff, unique and delayed jobs; events with synchronous and queued listeners; a scheduler on cron expressions that runs each task once across servers |
-| Communication | Mail from templates over SMTP; notifications over mail, the database and broadcasts; a WebSocket server that speaks the Pusher protocol, with public, private and presence channels |
+| Communication | Mail from templates over SMTP and the SES, Mailgun, Postmark and Resend APIs; notifications over mail, the database and broadcasts; a WebSocket server that speaks the Pusher protocol, with public, private and presence channels |
 | Integrations | File storage on named disks with signed temporary URLs; an HTTP client with retries, timeouts, an SSRF policy and fakes; a cache with tags and locks; templates |
 | Operations | Health and readiness probes, Prometheus metrics, an OpenAPI 3.1 document with a docs UI |
 | Testing and tools | `TestApp` and an in-process test client with fakes; the `navree` CLI with `navree new`, code generators and a rebuilding dev server |
@@ -134,8 +134,9 @@ Everything else a production application needs is first-party too: open source u
 | [Webhooks](/docs/packages/webhooks/) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [Localization](/docs/packages/localization/) | Translations, plurals and locale negotiation |
 | [Browser testing](/docs/packages/browser-testing/) | Drive a real browser from your tests |
+| [All packages](/docs/packages/) | Documents, media, imports and exports, workflows, directory sync, custom domains, integrations and settings, too |
 
-The repository also holds a reference application: a CRM with an API built on Navree and a Next.js front end. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
+The repository also holds a reference application: a CRM with an API built on Navree and front ends in Next.js and Nuxt. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
 
 ## Who Navree is for
 

@@ -17,6 +17,8 @@ Everything lives in one repository: the framework, the CLI, the agent skills, re
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
 | `apps/crm-nuxt` | The same CRM front end in Nuxt |
 | `apps/evidence-app` | One Navree application that wires every package and tool, built into an image and run under load by the harness in `e2e/` |
+| `apps/ui-docs` | Writes the Navree UI docs data (`apps/website/content/ui/`) from the toolkit: `cargo run -p ui-docs` |
+| `apps/ui-proof`, `apps/ui-table-proof` | Proof pages and tests for Navree UI: a form, a 1,000-row table, a dashboard, every component in its states, and the data table against real databases |
 | `apps/website` | navree.com and these docs |
 | `packages/js` | The npm packages `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt` and `@navree/theme`, a pnpm workspace |
 | `skills/` | The agent skills, one directory per skill, each with a `SKILL.md` |
@@ -24,7 +26,7 @@ Everything lives in one repository: the framework, the CLI, the agent skills, re
 | `e2e/` | The evidence harness: a Docker Compose stack, k6 load scenarios and HTTP checks |
 | `fuzz/` | Fuzz targets for every parser of untrusted input |
 
-The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api`, `apps/crm-api/crates/*` and `apps/evidence-app`. The apps under `bench/` and the fuzz targets in `fuzz/` are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
+The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api`, `apps/crm-api/crates/*`, `apps/evidence-app`, `apps/ui-docs`, `apps/ui-proof` and `apps/ui-table-proof`. The apps under `bench/` and the fuzz targets in `fuzz/` are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
 
 ## Setting up
 
@@ -54,7 +56,7 @@ Modules often need something from a module beside them: the auth module wants to
 - `hierarchy_table_lists_exactly_the_workspace_crates` fails when a crate is missing from the table, or the table names a crate that doesn't exist.
 - `hierarchy_table_never_points_up_and_has_no_cycles` checks the table itself.
 - `lockfile_has_no_aws_lc_openssl_native_tls_or_cmake` keeps native TLS libraries and CMake out of `Cargo.lock`, and `lockfile_follows_the_crypto_policy` keeps `rsa`, `p256`, `p384` and `ed25519-dalek` out of it.
-- `no_other_data_layer_is_in_the_graph` keeps every `sea-*` package out of `Cargo.lock` and out of the workspace's manifests: the data layer is navree-db, navree-orm and navree-schema.
+- `no_other_data_layer_is_in_the_graph` keeps any other data-layer package out of `Cargo.lock` and out of the workspace's manifests: the data layer is navree-db, navree-orm and navree-schema.
 - `a_build_without_sqlite_has_no_libsqlite3_sys` and `the_sqlite_feature_builds_sqlite_and_no_other_driver` check that SQLite comes only from the `sqlite` feature.
 
 There are three exceptions, all for dev-dependencies: a crate's tests may use any crate in a lower layer (so a crate in L4 can boot modules from L2 and L3 with `navree-testing`), a crate's tests may depend on the crate itself to turn on its own features, and `navree-macros` may dev-depend on the runtime crates, to expand its macros against them.
@@ -135,7 +137,7 @@ A new or updated dependency needs `cargo deny check` and `cargo vet` to pass; `s
 - **No secrets in messages.** Configuration and validation errors name the key that is wrong, never its value, and logs redact secret-looking fields. Keep it that way.
 - **Tests with the change.** Crates keep their integration tests under `tests/`. A fix comes with a test that fails without it.
 
-Commit messages in the history describe the change in the imperative, prefixed with the area when there is one, such as `website: point repository links at NavreeHQ/navree`.
+Commit messages name a type and an area, then say what the change does, such as `docs(website): point repository links at NavreeHQ/navree` or `fix(validation): report the first limit`.
 
 ## Proposing a change
 
@@ -169,3 +171,17 @@ node scripts/check-docs.ts content/docs/basics/validation.mdx
 ```
 
 It checks each page's front-matter, that its MDX compiles, that it uses only the site's components and known code languages, that its `/docs/...` links point at real pages, and that no stub callout is left. It must print `OK`. Before you open the pull request, run `pnpm build`, which also builds the search index and fails on any page in the manifest that is missing or invalid.
+
+## Where to next
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/crate-hierarchy/" title="The crate hierarchy">
+    Every layer and the edges between crates that the dependency test allows.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/directory-structure/#the-framework-repository" title="The framework repository">
+    The tree of the repository, folder by folder.
+  </LinkCard>
+  <LinkCard href="/docs/testing/getting-started/" title="Testing">
+    Write the tests that come with your change.
+  </LinkCard>
+</LinkCards>
