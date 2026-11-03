@@ -897,11 +897,12 @@ export default async function PerformancePage() {
 
       {/* ------------------------------------------------------------ next */}
       <Section id="next">
-        <SectionHead id="next" eyebrow="Next" title="What we're making faster next.">
+        <SectionHead id="next" eyebrow="Next" title="What gets faster next.">
           <p>
             {site.name}&apos;s own per-request work is where the time goes: on a single query the app used{" "}
             {cpus(r.db.cpuPct)} of its {s.app.count} CPUs while PostgreSQL used {cpus(r.db.pgCpuPct)} of {s.pg.count}.
-            Reading the code turned up eight costs, and removing each one takes work off every request it touches.
+            Reading the code turned up the {nextUp.length} costs below, and removing each one takes work off every request it
+            touches.
           </p>
         </SectionHead>
 
