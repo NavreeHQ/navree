@@ -18,9 +18,15 @@ fn reads_back(number: PhoneNumber) {
         PhoneFormat::Rfc3966,
     ] {
         let written = number.format(how);
+        // E.164 has no room for an extension: it reads back without one.
+        let want = if how == PhoneFormat::E164 {
+            number.without_extension()
+        } else {
+            number
+        };
         assert_eq!(
             PhoneNumber::parse(&written, None),
-            Ok(number),
+            Ok(want),
             "{e164} written {how:?} as {written:?}"
         );
     }
@@ -116,4 +122,13 @@ fn hostile_input_is_refused_quickly() {
             &input[..10]
         );
     }
+}
+
+#[test]
+fn a_number_with_an_extension_reads_back_from_its_formats() {
+    // Found by fuzzing: the extension does not survive E.164, and must not have to.
+    let gb = Region::parse("GB");
+    let number = PhoneNumber::parse("020 7946 0018,,12", gb).unwrap();
+    assert_eq!(number.extension(), Some("12"));
+    reads_back(number);
 }

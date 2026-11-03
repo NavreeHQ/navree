@@ -5,7 +5,8 @@
 //!
 //! Invariants: a parsed number is `+` and at most 15 digits, fits its plan
 //! (it has a type, and is valid for its region), and reads back to the same
-//! number from its E.164, international and RFC 3966 forms; its national
+//! number from its international and RFC 3966 forms, and from E.164 without
+//! its extension; its national
 //! form reads back, in its region, to a number written the same way
 //! nationally. A number accepted only as possible has a possible length and
 //! reads back from E.164. Nothing panics.
@@ -35,9 +36,15 @@ fn check_valid(number: PhoneNumber) {
         PhoneFormat::Rfc3966,
     ] {
         let written = number.format(how);
+        // E.164 has no room for an extension: it reads back without one.
+        let want = if how == PhoneFormat::E164 {
+            number.without_extension()
+        } else {
+            number
+        };
         assert_eq!(
             PhoneNumber::parse(&written, None),
-            Ok(number),
+            Ok(want),
             "{e164} written {how:?} as {written:?}"
         );
     }
