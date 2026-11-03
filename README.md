@@ -19,7 +19,7 @@
   &nbsp;·&nbsp;
   <a href="https://navree.com/docs/getting-started/installation/"><b>Get started</b></a>
   &nbsp;·&nbsp;
-  <a href="https://navree.com/docs/ui/choosing-a-ui/"><b>UI</b></a>
+  <a href="https://navree.com/ui/"><b>Navree UI</b></a>
   &nbsp;·&nbsp;
   <a href="https://navree.com/ecosystem/"><b>Ecosystem</b></a>
   &nbsp;·&nbsp;
@@ -238,7 +238,7 @@ log, and two front ends on the same API, one in Next.js and one in Nuxt.
 
 ## Screens and front ends
 
-[Navree UI](https://navree.com/docs/ui/overview/) is the `ui` feature of
+[Navree UI](https://navree.com/ui/) is the `ui` feature of
 `navree`, on by default. A handler returns typed components and the toolkit
 renders them to HTML on the server, with one stylesheet, a small runtime
 that loads only what a page uses, and a strict content security policy.

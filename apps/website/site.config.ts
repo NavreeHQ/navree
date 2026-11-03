@@ -38,11 +38,11 @@ export const site = {
   /**
    * The main navigation, read by the header and the footer. `match` is the
    * section (or sections) an item marks as current; the most specific match
-   * wins, so the UI pages mark "UI" and not "Docs".
+   * wins.
    */
   nav: [
     { label: "Docs", href: "/docs/", match: ["/docs"] },
-    { label: "UI", href: "/docs/ui/choosing-a-ui/", match: ["/docs/ui", "/docs/components"] },
+    { label: "UI", href: "/ui/", match: ["/ui"] },
     { label: "Ecosystem", href: "/ecosystem/", match: ["/ecosystem"] },
     { label: "Architecture", href: "/architecture/", match: ["/architecture"] },
     { label: "AI", href: "/ai/", match: ["/ai"] },

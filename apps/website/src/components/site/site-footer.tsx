@@ -45,6 +45,7 @@ const columns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Resources",
     links: [
+      { label: "Navree UI", href: "/ui/" },
       { label: "Performance", href: "/performance/" },
       { label: "Architecture", href: "/architecture/" },
       { label: "Release notes", href: "/docs/prologue/release-notes/" },
