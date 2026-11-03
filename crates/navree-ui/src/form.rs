@@ -215,22 +215,49 @@ impl<T: Serialize> Serialize for Many<T> {
     }
 }
 
+/// Reads a [`Many`] from what a form holds (the values joined by the separator) and
+/// from what it writes (a list), so it reads back what it serialized.
 impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Many<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        use serde::de::{Error as _, IntoDeserializer};
-        let text = String::deserialize(deserializer)?;
-        if text.is_empty() {
-            return Ok(Self(Vec::new()));
+        use serde::de::{Error as _, IntoDeserializer, SeqAccess, Visitor};
+
+        struct Values<T>(PhantomData<fn() -> T>);
+
+        impl<'de, T: serde::de::DeserializeOwned> Visitor<'de> for Values<T> {
+            type Value = Many<T>;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a list of values, or the values of a form field joined together")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<Many<T>, E> {
+                if text.is_empty() {
+                    return Ok(Many(Vec::new()));
+                }
+                text.split(SEPARATOR)
+                    .map(|piece| {
+                        T::deserialize(
+                            IntoDeserializer::<serde::de::value::Error>::into_deserializer(piece),
+                        )
+                        .map_err(E::custom)
+                    })
+                    .collect::<Result<Vec<T>, E>>()
+                    .map(Many)
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Many<T>, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = seq.next_element::<T>()? {
+                    if values.len() == MAX_MANY {
+                        return Err(A::Error::custom("too many values"));
+                    }
+                    values.push(value);
+                }
+                Ok(Many(values))
+            }
         }
-        text.split(SEPARATOR)
-            .map(|piece| {
-                T::deserialize(
-                    IntoDeserializer::<serde::de::value::Error>::into_deserializer(piece),
-                )
-                .map_err(D::Error::custom)
-            })
-            .collect::<Result<Vec<T>, D::Error>>()
-            .map(Self)
+
+        deserializer.deserialize_any(Values(PhantomData))
     }
 }
 
@@ -1507,6 +1534,23 @@ mod tests {
             Money::parse(&Money(i64::MAX).display()),
             Some(Money(i64::MAX))
         );
+    }
+
+    #[test]
+    fn a_list_field_reads_back_what_it_serialized_and_what_a_form_holds() {
+        let tags: Many<String> = vec!["a".to_owned(), "b c".to_owned()].into();
+        let json = serde_json::to_string(&tags).unwrap();
+        assert_eq!(json, r#"["a","b c"]"#);
+        let back: Many<String> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, tags, "a list reads back");
+        let empty: Many<String> = serde_json::from_str("[]").unwrap();
+        assert!(empty.is_empty());
+        // A form's own text: the values joined by the separator.
+        let joined: Many<String> = serde_json::from_str(r#""a\u001fb""#).unwrap();
+        assert_eq!(joined.0, ["a", "b"]);
+        assert!(serde_json::from_str::<Many<String>>("12").is_err());
+        let too_many = format!("[{}]", vec!["\"x\""; MAX_MANY + 1].join(","));
+        assert!(serde_json::from_str::<Many<String>>(&too_many).is_err());
     }
 
     #[test]
