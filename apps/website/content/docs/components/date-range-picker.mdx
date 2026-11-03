@@ -41,7 +41,7 @@ A preset fills the window and closes the popover. Each is counted from `today`, 
 | Last 7, 14, 30 days | The days up to and including today. |
 | All time | From the picker's `min` to today. Needs a `min`. |
 
-The default list is Today, Yesterday, Last 7 days, Last 30 days, This month and Last month. `.presets([...])` picks the list and the order, `.preset_label(preset, text)` sets a button's words, and `.presets([])` shows none. A preset whose days fall outside the limits is off. The preset that matches the window is pressed, and *Custom range* is pressed when none does.
+The default list is Today, Yesterday, Last 7 days, Last 30 days, This month and Last month. `.presets([...])` picks the list and the order, `.preset_label(preset, text)` sets a button's words (they follow the picker's locale unless you do), and `.presets([])` shows none. A preset whose days fall outside the limits is off. The preset that matches the window is pressed, and *Custom range* is pressed when none does.
 
 <UiPreview example="date-range-picker/presets" />
 

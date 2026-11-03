@@ -788,7 +788,10 @@ impl DateRangePicker {
                 .preset_labels
                 .iter()
                 .find(|(p, _)| p == preset)
-                .map_or_else(|| preset.label().to_owned(), |(_, text)| text.clone());
+                .map_or_else(
+                    || self.locale.labels.preset(*preset).to_owned(),
+                    |(_, text)| text.clone(),
+                );
             let button = Button::new(text)
                 .variant(ButtonVariant::Ghost)
                 .size(Size::Sm)
@@ -811,7 +814,7 @@ impl DateRangePicker {
         }
         if self.custom && !self.presets.is_empty() {
             let active = self.value.is_some() && !matched;
-            let button = Button::new("Custom range")
+            let button = Button::new(self.locale.labels.custom_range.to_string())
                 .variant(ButtonVariant::Ghost)
                 .size(Size::Sm)
                 .attr("data-ui-preset", "custom")
@@ -826,7 +829,7 @@ impl DateRangePicker {
             el("div")
                 .slot("range-presets")
                 .attr("role", "group")
-                .attr("aria-label", "Presets")
+                .attr("aria-label", self.locale.labels.presets.to_string())
                 .child(items)
         });
         let placeholder = self

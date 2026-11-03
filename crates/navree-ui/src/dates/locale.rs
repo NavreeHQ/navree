@@ -14,6 +14,7 @@ use std::sync::Arc;
 use chrono::Weekday;
 
 use super::data;
+use super::range::DatePreset;
 
 /// The order of day, month and year in a typed date.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,11 +92,19 @@ pub struct DateLabels {
     pub invalid_time: Cow<'static, str>,
     /// The message for a time that cannot be chosen.
     pub unavailable_time: Cow<'static, str>,
+    /// The entry of a range picker that sends a person to the calendar.
+    pub custom_range: Cow<'static, str>,
+    /// The name of the group of presets, for a screen reader.
+    pub presets: Cow<'static, str>,
+    /// The words on each preset's button, in the order of [`DatePreset::ALL`]; read them
+    /// with [`DateLabels::preset`].
+    pub preset_names: [Cow<'static, str>; 14],
 }
 
 impl DateLabels {
-    /// Builds the labels from their texts in field order.
-    pub(crate) const fn from_array(t: [&'static str; 20]) -> Self {
+    /// Builds the labels from their texts in field order. After the twenty words the
+    /// browser reads come the two of the range picker and the fourteen presets.
+    pub(crate) const fn from_array(t: [&'static str; 36]) -> Self {
         let [
             prev_month,
             next_month,
@@ -117,6 +126,22 @@ impl DateLabels {
             unavailable_date,
             invalid_time,
             unavailable_time,
+            custom_range,
+            presets,
+            p0,
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            p6,
+            p7,
+            p8,
+            p9,
+            p10,
+            p11,
+            p12,
+            p13,
         ] = t;
         Self {
             prev_month: Cow::Borrowed(prev_month),
@@ -139,10 +164,34 @@ impl DateLabels {
             unavailable_date: Cow::Borrowed(unavailable_date),
             invalid_time: Cow::Borrowed(invalid_time),
             unavailable_time: Cow::Borrowed(unavailable_time),
+            custom_range: Cow::Borrowed(custom_range),
+            presets: Cow::Borrowed(presets),
+            preset_names: [
+                Cow::Borrowed(p0),
+                Cow::Borrowed(p1),
+                Cow::Borrowed(p2),
+                Cow::Borrowed(p3),
+                Cow::Borrowed(p4),
+                Cow::Borrowed(p5),
+                Cow::Borrowed(p6),
+                Cow::Borrowed(p7),
+                Cow::Borrowed(p8),
+                Cow::Borrowed(p9),
+                Cow::Borrowed(p10),
+                Cow::Borrowed(p11),
+                Cow::Borrowed(p12),
+                Cow::Borrowed(p13),
+            ],
         }
     }
 
-    /// The labels in field order, as the browser module reads them.
+    /// The words on a preset's button.
+    pub fn preset(&self, preset: DatePreset) -> &str {
+        &self.preset_names[preset.index()]
+    }
+
+    /// The first twenty labels in field order, as the browser module reads them. The preset
+    /// names are drawn by the server and stay out of the page's data.
     pub(crate) fn as_list(&self) -> [&str; 20] {
         [
             &self.prev_month,
@@ -521,6 +570,35 @@ mod tests {
             assert!(locale.short_year_pattern.contains("{y}"), "{name}");
             assert!(!locale.placeholder.is_empty(), "{name}");
             assert!(!locale.am.is_empty() && !locale.pm.is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn every_locale_names_each_preset_in_its_own_words() {
+        let english = data::all()[0];
+        assert_eq!(&*english.tag, "en");
+        for preset in super::DatePreset::ALL {
+            assert_eq!(english.labels.preset(preset), preset.label());
+        }
+        assert_eq!(&*english.labels.custom_range, "Custom range");
+        for locale in data::all() {
+            let name = &locale.tag;
+            assert!(!locale.labels.custom_range.is_empty(), "{name} custom range");
+            assert!(!locale.labels.presets.is_empty(), "{name} presets");
+            let mut seen = std::collections::HashSet::new();
+            for preset in super::DatePreset::ALL {
+                let text = locale.labels.preset(preset);
+                assert!(!text.is_empty(), "{name} {preset:?}");
+                assert!(seen.insert(text.to_owned()), "{name}: two presets read {text:?}");
+            }
+            if !name.starts_with("en") {
+                assert_ne!(
+                    locale.labels.preset(super::DatePreset::Today),
+                    "Today",
+                    "{name} still says Today in English"
+                );
+                assert_ne!(&*locale.labels.custom_range, "Custom range", "{name}");
+            }
         }
     }
 

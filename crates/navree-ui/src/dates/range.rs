@@ -217,6 +217,26 @@ impl DatePreset {
         Self::AllTime,
     ];
 
+    /// Where the preset stands in [`DatePreset::ALL`].
+    pub(super) const fn index(self) -> usize {
+        match self {
+            Self::Today => 0,
+            Self::Yesterday => 1,
+            Self::ThisWeek => 2,
+            Self::LastWeek => 3,
+            Self::Last7Days => 4,
+            Self::Last14Days => 5,
+            Self::Last30Days => 6,
+            Self::ThisMonth => 7,
+            Self::LastMonth => 8,
+            Self::ThisQuarter => 9,
+            Self::LastQuarter => 10,
+            Self::ThisYear => 11,
+            Self::LastYear => 12,
+            Self::AllTime => 13,
+        }
+    }
+
     /// A stable name for the preset.
     pub const fn key(self) -> &'static str {
         match self {
@@ -242,7 +262,8 @@ impl DatePreset {
         Self::ALL.into_iter().find(|preset| preset.key() == key)
     }
 
-    /// The words on its button, in English. A page sets its own with
+    /// The words on its button, in English. The picker writes them in its locale's
+    /// words ([`DateLabels::preset`](super::DateLabels::preset)); a page sets its own with
     /// [`DateRangePicker::preset_label`](super::DateRangePicker::preset_label).
     pub const fn label(self) -> &'static str {
         match self {
@@ -390,6 +411,13 @@ mod tests {
 
     fn day(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn a_preset_knows_its_place_in_the_list() {
+        for (at, preset) in DatePreset::ALL.into_iter().enumerate() {
+            assert_eq!(preset.index(), at, "{preset:?}");
+        }
     }
 
     #[test]

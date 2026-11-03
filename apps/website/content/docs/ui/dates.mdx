@@ -74,7 +74,7 @@ The first day of the week follows the Unicode CLDR's week data: Sunday in the Un
 
 For a language that isn't built in, make a `LocaleData`, set its fields, and pass `DateLocale::custom(data)`. `.labels(...)` on a locale changes only the words on the controls. The server writes the locale into the control and the browser reads it back, so a month's name is the same on the first month and on the next one the browser draws. Digits are Western in what is written. Digits of any script are read.
 
-The words on the controls and the messages are built in for all nineteen. The names of presets are English unless the page sets them with `.preset_label`. Gregorian is the only calendar.
+The words on the controls, the messages and the names of the presets are built in for all nineteen, and `.preset_label` sets any one of them for a page. The built-in words are short common phrases that were written for Navree and not yet read by a native speaker of each language, so check the ones your users will see. Gregorian is the only calendar.
 
 <UiProps type="DateLocale" />
 

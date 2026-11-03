@@ -796,6 +796,32 @@ fn random_text_never_panics_and_never_reads_as_an_impossible_day() {
 }
 
 #[test]
+fn a_range_picker_names_its_presets_in_its_locale() {
+    let german = html(DateRangePicker::new("from", "to").today(today()).locale(DateLocale::of("de")));
+    for word in ["Heute", "Gestern", "Letzte 7 Tage", "Dieser Monat", "Eigener Zeitraum", "Schnellauswahl"] {
+        assert!(german.contains(word), "{word}");
+    }
+    assert!(!german.contains("Yesterday") && !german.contains("Custom range"));
+    let arabic = html(DateRangePicker::new("from", "to").today(today()).locale(DateLocale::of("ar")));
+    assert!(arabic.contains("اليوم") && arabic.contains("نطاق مخصص"));
+    // English is the default and the words of a page win over the locale's.
+    let english = html(DateRangePicker::new("from", "to").today(today()));
+    assert!(english.contains("Last 7 days") && english.contains("Custom range"));
+    let own = html(
+        DateRangePicker::new("from", "to")
+            .today(today())
+            .locale(DateLocale::of("de"))
+            .preset_label(DatePreset::Today, "Jetzt"),
+    );
+    assert!(own.contains("Jetzt") && !own.contains(">Heute<"));
+    // The browser's list of words is unchanged: the preset names are drawn by the server and
+    // no page carries them a second time.
+    let loc = json_attr(&german, "data-ui-dates=\"calendar\"", "data-ui-loc");
+    assert_eq!(loc["L"].as_array().unwrap().len(), 20);
+    assert_eq!(german.matches("Letzte 7 Tage").count(), 1);
+}
+
+#[test]
 fn very_large_rules_cost_a_bounded_page() {
     // Ten thousand listed days and a rule function over three years: the browser gets at
     // most 1,000 runs, and the page stays the size of one without them, give or take.
