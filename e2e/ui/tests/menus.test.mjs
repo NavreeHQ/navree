@@ -1260,9 +1260,9 @@ for (const name of NAMES) {
       });
     });
 
-    // ---- The reviewer's findings ------------------------------------------
+    // ---- Toasts across dialogs, users and pages; posts from a menu in a form; hostile names ----
 
-    describe("review fixes", () => {
+    describe("toasts, post items and hostile names", () => {
       let f;
       before(async () => {
         f = await start();
