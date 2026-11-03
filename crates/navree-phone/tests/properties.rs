@@ -145,3 +145,49 @@ fn an_argentine_landline_starting_with_15_reads_but_its_national_form_does_not()
     assert!(PhoneNumber::parse(&number.national(), Region::parse("AR")).is_err());
     reads_back(number);
 }
+
+/// Random national numbers for every region, half starting with its national
+/// prefix, read with the region's calling code: each valid one reads back
+/// from its own E.164 and international forms. `PHONE_SCAN` sets the numbers
+/// tried per region (the default keeps a debug build quick).
+#[test]
+fn every_valid_number_reads_back_from_its_own_e164() {
+    let per_region: usize = std::env::var("PHONE_SCAN")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1500);
+    let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut valid = 0;
+    let mut failures = Vec::new();
+    for region in Region::all() {
+        let prefix = region.national_prefix().unwrap_or("");
+        for i in 0..per_region {
+            let len = 4 + (next() % 10) as usize;
+            let mut nsn = if i % 2 == 0 {
+                prefix.to_owned()
+            } else {
+                String::new()
+            };
+            nsn.extend((0..len).map(|_| char::from(b'0' + (next() % 10) as u8)));
+            let Ok(number) = PhoneNumber::parse(&format!("+{}{nsn}", region.calling_code()), None)
+            else {
+                continue;
+            };
+            valid += 1;
+            for written in [number.as_str().to_owned(), number.international()] {
+                if PhoneNumber::parse(&written, None) != Ok(number) && failures.len() < 20 {
+                    failures.push(format!("{number} written {written:?}"));
+                }
+            }
+        }
+    }
+    println!("valid numbers: {valid}");
+    assert!(valid > per_region * 8, "{valid}");
+    assert!(failures.is_empty(), "{failures:#?}");
+}

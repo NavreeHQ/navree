@@ -108,8 +108,9 @@ pub(crate) fn parse(text: &str, region: Option<&'static Territory>) -> Result<Pa
         Err(error) => return Err(error),
     };
     // A number with its own calling code follows that code's main plan.
+    let code_given = code != 0;
     let mut plan = region;
-    if code != 0 {
+    if code_given {
         plan = meta::main_for(code);
     } else {
         nsn = normalize(&national);
@@ -121,7 +122,15 @@ pub(crate) fn parse(text: &str, region: Option<&'static Territory>) -> Result<Pa
     if nsn.len() < MIN_NSN {
         return Err(ParseError::TooShort);
     }
-    if let Some(plan) = plan {
+    // Written with its calling code and valid as it stands, a number keeps
+    // every digit: its E.164 must read back to it, even where its first
+    // digits look like the plan's national prefix (Belarus's premium numbers
+    // start with 8, its national prefix). `+44 (0) 20...` still loses its 0,
+    // since `02079460018` isn't valid.
+    let whole = code_given
+        && territory_of(code, nsn.as_bytes())
+            .is_some_and(|territory| crate::number::kind_of(territory, nsn.as_bytes()).is_some());
+    if let Some(plan) = plan.filter(|_| !whole) {
         let mut stripped = nsn.clone();
         strip_national_prefix(&mut stripped, plan);
         if !matches!(

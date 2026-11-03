@@ -363,3 +363,22 @@ fn stored_e164_reads_back_as_written_whatever_the_plans_say() {
         assert!(PhoneNumber::from_e164(bad).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn a_valid_number_with_its_calling_code_keeps_digits_that_look_like_a_national_prefix() {
+    // Belarus's national prefix is 8, and its premium numbers start with 8:
+    // `+3758102387619` is valid as it is and must read back from its E.164.
+    let typed = parse("+375 80 8102387619", None);
+    assert_eq!(typed.as_str(), "+3758102387619");
+    assert_eq!(typed.number_type(), Some(NumberType::PremiumRate));
+    assert_eq!(parse(typed.as_str(), None), typed);
+    assert_eq!(parse(&typed.international(), None), typed);
+    // A national prefix written after the code still goes, when the number
+    // isn't valid with it.
+    assert_eq!(
+        parse("+44 (0) 20 7946 0018", None).as_str(),
+        "+442079460018"
+    );
+    assert_eq!(parse("+44 07400 123456", None).as_str(), "+447400123456");
+    assert_eq!(parse("+7 8 495 123 45 67", None).as_str(), "+74951234567");
+}
