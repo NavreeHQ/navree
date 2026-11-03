@@ -9825,6 +9825,7 @@ version = "1.0.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "futures-util",
  "http",
  "navree",
  "serde",
