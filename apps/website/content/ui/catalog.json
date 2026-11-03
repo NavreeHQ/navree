@@ -7,7 +7,9 @@
       "components": [
         "button",
         "button-group",
-        "toggle"
+        "toggle",
+        "toggle-group",
+        "dropdown-menu"
       ]
     },
     {
@@ -57,6 +59,7 @@
       "title": "Feedback",
       "components": [
         "alert",
+        "toast",
         "empty",
         "progress",
         "skeleton",
@@ -94,6 +97,7 @@
       "title": "Navigation",
       "components": [
         "app-shell",
+        "tabs",
         "breadcrumb",
         "pagination",
         "command"
@@ -169,6 +173,56 @@
         "toggle/default",
         "toggle/states",
         "toggle/sizes"
+      ]
+    },
+    {
+      "id": "toggle-group",
+      "name": "ToggleGroup",
+      "url": "/docs/components/toggle-group/",
+      "summary": "A group of toggles that post as one field.",
+      "group": "actions",
+      "types": [
+        "ToggleGroup",
+        "ToggleItem",
+        "ToggleVariant",
+        "Orientation"
+      ],
+      "thumb": "toggle-group/thumb",
+      "anatomy": "toggle-group/default",
+      "examples": [
+        "toggle-group/thumb",
+        "toggle-group/default",
+        "toggle-group/multiple",
+        "toggle-group/looks",
+        "toggle-group/icons",
+        "toggle-group/vertical",
+        "toggle-group/states"
+      ]
+    },
+    {
+      "id": "dropdown-menu",
+      "name": "DropdownMenu",
+      "url": "/docs/components/dropdown-menu/",
+      "summary": "A button and the menu it opens.",
+      "group": "actions",
+      "types": [
+        "DropdownMenu",
+        "MenuItem",
+        "MenuCheckbox",
+        "MenuRadios",
+        "MenuGroup",
+        "MenuSub"
+      ],
+      "thumb": "dropdown-menu/thumb",
+      "anatomy": "dropdown-menu/default",
+      "examples": [
+        "dropdown-menu/thumb",
+        "dropdown-menu/default",
+        "dropdown-menu/groups",
+        "dropdown-menu/choices",
+        "dropdown-menu/submenu",
+        "dropdown-menu/destructive",
+        "dropdown-menu/row"
       ]
     },
     {
@@ -644,6 +698,28 @@
       ]
     },
     {
+      "id": "toast",
+      "name": "Toast",
+      "url": "/docs/components/toast/",
+      "summary": "A message that goes by itself.",
+      "group": "feedback",
+      "types": [
+        "Toast",
+        "ToastAction",
+        "ToastDuration",
+        "ToastPosition",
+        "Toaster"
+      ],
+      "thumb": "toast/thumb",
+      "anatomy": "toast/action",
+      "examples": [
+        "toast/thumb",
+        "toast/tones",
+        "toast/action",
+        "toast/live"
+      ]
+    },
+    {
       "id": "empty",
       "name": "Empty",
       "url": "/docs/components/empty/",
@@ -966,6 +1042,31 @@
       "anatomy": "app-shell/default",
       "examples": [
         "app-shell/default"
+      ]
+    },
+    {
+      "id": "tabs",
+      "name": "Tabs",
+      "url": "/docs/components/tabs/",
+      "summary": "A list of tabs and their panels.",
+      "group": "navigation",
+      "types": [
+        "Tabs",
+        "Tab",
+        "TabsVariant",
+        "Activation",
+        "Orientation"
+      ],
+      "thumb": "tabs/thumb",
+      "anatomy": "tabs/default",
+      "examples": [
+        "tabs/thumb",
+        "tabs/default",
+        "tabs/segmented",
+        "tabs/vertical",
+        "tabs/sizes",
+        "tabs/icons",
+        "tabs/manual"
       ]
     },
     {
@@ -2595,8 +2696,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -2688,8 +2789,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -2794,8 +2895,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -2900,8 +3001,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3013,8 +3114,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3170,8 +3271,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [
         "Clearable",
@@ -3197,8 +3298,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3290,8 +3391,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3409,8 +3510,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3515,8 +3616,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3627,8 +3728,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [
         "Invalid",
@@ -3652,8 +3753,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3811,8 +3912,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -3983,8 +4084,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -4155,8 +4256,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [
         "At most three",
@@ -4180,8 +4281,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -4298,8 +4399,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "select-da4950f69334.js"
+        "overlay-4f11b3d8e0d9.js",
+        "select-549f90926021.js"
       ],
       "captions": [],
       "slots": [
@@ -4454,7 +4555,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -4548,7 +4649,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -4655,7 +4756,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -4749,7 +4850,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -4843,7 +4944,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -4937,7 +5038,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5103,7 +5204,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5204,7 +5305,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "de",
@@ -5228,7 +5329,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-63f74eab1b40.js"
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "Read only",
@@ -5251,8 +5352,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5366,8 +5467,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5500,8 +5601,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5641,8 +5742,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "Invalid",
@@ -5666,8 +5767,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5781,8 +5882,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "de",
@@ -5806,8 +5907,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -5934,8 +6035,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6096,8 +6197,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6258,8 +6359,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6420,8 +6521,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6595,8 +6696,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6757,8 +6858,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -6925,8 +7026,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -7013,8 +7114,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -7114,8 +7215,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "en",
@@ -7139,8 +7240,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -7240,8 +7341,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [
         "Invalid",
@@ -7265,8 +7366,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
-        "dates-63f74eab1b40.js"
+        "overlay-4f11b3d8e0d9.js",
+        "dates-4305b001d48a.js"
       ],
       "captions": [],
       "slots": [
@@ -9775,7 +9876,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -9815,7 +9916,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -9881,7 +9982,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [
         "Top",
@@ -9906,7 +10007,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -9953,7 +10054,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -10033,7 +10134,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -10073,7 +10174,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js"
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -10908,8 +11009,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-e5b4eff2733d.js",
-        "overlay-e302c03dc72e.js"
+        "sidebar-7bbac922223d.js",
+        "overlay-4f11b3d8e0d9.js"
       ],
       "captions": [],
       "slots": [
@@ -11225,6 +11326,12 @@
               ]
             }
           ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
         }
       ]
     },
@@ -11345,6 +11452,1417 @@
         "One page"
       ],
       "slots": []
+    },
+    {
+      "id": "tabs/thumb",
+      "component": "tabs",
+      "slug": "thumb",
+      "title": "Tabs",
+      "kind": "single",
+      "code": "Tabs::new(\"tabs-thumb\", \"Deal sections\")\n    .tab(Tab::new(\"overview\", \"Overview\").panel(Text::muted(\"Stage, owner, value\")))\n    .tab(Tab::new(\"notes\", \"Notes\").panel(Text::muted(\"Notes about the deal\")))",
+      "src": "/ui-preview/tabs/thumb.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/default",
+      "component": "tabs",
+      "slug": "default",
+      "title": "Tabs",
+      "kind": "single",
+      "code": "Tabs::new(\"deal-tabs\", \"Deal sections\")\n    .tab(Tab::new(\"overview\", \"Overview\").panel(Text::muted(\"Acme renewal, in Proposal.\")))\n    .tab(Tab::new(\"notes\", \"Notes\").panel(Text::muted(\"Three notes, the last from Ada.\")))\n    .tab(Tab::new(\"files\", \"Files\").disabled(true))\n    .tab(Tab::new(\"history\", \"History\").panel(Text::muted(\"Every change to this deal.\")))",
+      "src": "/ui-preview/tabs/default.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 4,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/segmented",
+      "component": "tabs",
+      "slug": "segmented",
+      "title": "Segmented",
+      "kind": "single",
+      "code": "Tabs::new(\"range-tabs\", \"Range\")\n    .variant(TabsVariant::Segmented)\n    .tab(Tab::new(\"day\", \"Day\").panel(Text::muted(\"Today so far.\")))\n    .tab(Tab::new(\"week\", \"Week\").panel(Text::muted(\"The last seven days.\")))\n    .tab(Tab::new(\"month\", \"Month\").panel(Text::muted(\"The last thirty days.\")))",
+      "src": "/ui-preview/tabs/segmented.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/vertical",
+      "component": "tabs",
+      "slug": "vertical",
+      "title": "Vertical",
+      "kind": "single",
+      "code": "Tabs::new(\"settings-tabs\", \"Settings\")\n    .vertical()\n    .tab(Tab::new(\"profile\", \"Profile\").panel(Text::muted(\"Your name and photo.\")))\n    .tab(Tab::new(\"billing\", \"Billing\").panel(Text::muted(\"Plan, card and invoices.\")))\n    .tab(Tab::new(\"team\", \"Team\").panel(Text::muted(\"Who can see this workspace.\")))",
+      "src": "/ui-preview/tabs/vertical.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/sizes",
+      "component": "tabs",
+      "slug": "sizes",
+      "title": "Sizes",
+      "kind": "gallery",
+      "code": "[\n    (\"Small\", Size::Sm),\n    (\"Default\", Size::Md),\n    (\"Large\", Size::Lg),\n]\n.map(|(caption, size)| {\n    let id = format!(\"size-{}\", caption.to_lowercase());\n    (\n        caption,\n        Tabs::new(id.clone(), format!(\"{caption} tabs\"))\n            .size(size)\n            .tab(Tab::new(\"a\", \"First\").panel(Text::muted(\"The first panel.\")))\n            .tab(Tab::new(\"b\", \"Second\").panel(Text::muted(\"The second panel.\"))),\n    )\n})",
+      "src": "/ui-preview/tabs/sizes.html",
+      "height": 220,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [
+        "Small",
+        "Default",
+        "Large"
+      ],
+      "slots": []
+    },
+    {
+      "id": "tabs/icons",
+      "component": "tabs",
+      "slug": "icons",
+      "title": "Icons and counts",
+      "kind": "single",
+      "code": "Tabs::new(\"icon-tabs\", \"Inbox\")\n    .tab(\n        Tab::new(\"all\", \"All\")\n            .icon(icons::INBOX)\n            .count(\"24\")\n            .panel(Text::muted(\"Every message.\")),\n    )\n    .tab(\n        Tab::new(\"starred\", \"Starred\")\n            .icon(icons::STAR)\n            .count(\"3\")\n            .panel(Text::muted(\"The ones you kept.\")),\n    )\n    .tab(\n        Tab::icon_only(\"settings\", icons::SETTINGS, \"Inbox settings\")\n            .panel(Text::muted(\"Rules and labels.\")),\n    )",
+      "src": "/ui-preview/tabs/icons.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "tab-count",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/manual",
+      "component": "tabs",
+      "slug": "manual",
+      "title": "Manual activation",
+      "kind": "single",
+      "code": "Tabs::new(\"manual-tabs\", \"Reports\")\n    .activation(Activation::Manual)\n    .tab(Tab::new(\"sales\", \"Sales\").panel(Text::muted(\"Press Enter to open it.\")))\n    .tab(Tab::new(\"pipeline\", \"Pipeline\").panel(Text::muted(\"Arrow keys only move focus.\")))\n    .tab(Tab::new(\"forecast\", \"Forecast\").panel(Text::muted(\"Space opens it too.\")))",
+      "src": "/ui-preview/tabs/manual.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/thumb",
+      "component": "toggle-group",
+      "slug": "thumb",
+      "title": "A toggle group",
+      "kind": "single",
+      "code": "ToggleGroup::single(\"thumb-view\", \"Show as\")\n    .variant(ToggleVariant::Outline)\n    .joined()\n    .item(ToggleItem::new(\"list\", \"List\"))\n    .item(ToggleItem::new(\"grid\", \"Grid\"))\n    .value(\"list\")",
+      "src": "/ui-preview/toggle-group/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toggle-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle-group-item",
+              "tag": "label",
+              "count": 2,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/default",
+      "component": "toggle-group",
+      "slug": "default",
+      "title": "One choice",
+      "kind": "single",
+      "code": "ToggleGroup::single(\"view\", \"Show deals as\")\n    .variant(ToggleVariant::Outline)\n    .size(Size::Sm)\n    .joined()\n    .item(ToggleItem::new(\"list\", \"List\").icon(icons::LIST))\n    .item(ToggleItem::new(\"board\", \"Board\").icon(icons::LAYOUT_GRID))\n    .item(ToggleItem::new(\"chart\", \"Chart\"))\n    .value(\"board\")",
+      "src": "/ui-preview/toggle-group/default.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toggle-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle-group-item",
+              "tag": "label",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/multiple",
+      "component": "toggle-group",
+      "slug": "multiple",
+      "title": "Several choices",
+      "kind": "single",
+      "code": "ToggleGroup::multiple(\"days\", \"Working days\")\n    .variant(ToggleVariant::Outline)\n    .size(Size::Sm)\n    .item(ToggleItem::new(\"mon\", \"Mon\"))\n    .item(ToggleItem::new(\"tue\", \"Tue\"))\n    .item(ToggleItem::new(\"wed\", \"Wed\"))\n    .item(ToggleItem::new(\"thu\", \"Thu\"))\n    .item(ToggleItem::new(\"fri\", \"Fri\"))\n    .values([\"mon\", \"tue\", \"wed\", \"thu\"])",
+      "src": "/ui-preview/toggle-group/multiple.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toggle-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle-group-item",
+              "tag": "label",
+              "count": 5,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/looks",
+      "component": "toggle-group",
+      "slug": "looks",
+      "title": "Looks",
+      "kind": "gallery",
+      "code": "let group = |name: &'static str| {\n    ToggleGroup::single(name, \"Range\")\n        .item(ToggleItem::new(\"7\", \"7 days\"))\n        .item(ToggleItem::new(\"30\", \"30 days\"))\n        .item(ToggleItem::new(\"90\", \"90 days\"))\n        .value(\"30\")\n};\n[\n    (\"Default\", group(\"look-default\")),\n    (\n        \"Outline\",\n        group(\"look-outline\").variant(ToggleVariant::Outline),\n    ),\n    (\n        \"Outline, joined\",\n        group(\"look-joined\")\n            .variant(ToggleVariant::Outline)\n            .joined(),\n    ),\n    (\n        \"Small\",\n        group(\"look-small\")\n            .variant(ToggleVariant::Outline)\n            .joined()\n            .size(Size::Sm),\n    ),\n]",
+      "src": "/ui-preview/toggle-group/looks.html",
+      "height": 360,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [
+        "Default",
+        "Outline",
+        "Outline, joined",
+        "Small"
+      ],
+      "slots": []
+    },
+    {
+      "id": "toggle-group/icons",
+      "component": "toggle-group",
+      "slug": "icons",
+      "title": "Icons",
+      "kind": "single",
+      "code": "ToggleGroup::single(\"layout\", \"Layout\")\n    .variant(ToggleVariant::Outline)\n    .joined()\n    .item(ToggleItem::icon_only(\"list\", icons::LIST, \"As a list\"))\n    .item(ToggleItem::icon_only(\n        \"grid\",\n        icons::LAYOUT_GRID,\n        \"As a grid\",\n    ))\n    .item(ToggleItem::icon_only(\"table\", icons::TABLE, \"As a table\"))\n    .value(\"grid\")\n    .deselectable()",
+      "src": "/ui-preview/toggle-group/icons.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toggle-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle-group-item",
+              "tag": "label",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/vertical",
+      "component": "toggle-group",
+      "slug": "vertical",
+      "title": "Vertical",
+      "kind": "single",
+      "code": "ToggleGroup::multiple(\"format\", \"Text format\")\n    .variant(ToggleVariant::Outline)\n    .joined()\n    .vertical()\n    .item(ToggleItem::new(\"bold\", \"Bold\"))\n    .item(ToggleItem::new(\"italic\", \"Italic\"))\n    .item(ToggleItem::new(\"underline\", \"Underline\"))\n    .values([\"bold\"])",
+      "src": "/ui-preview/toggle-group/vertical.html",
+      "height": 160,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toggle-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle-group-item",
+              "tag": "label",
+              "count": 3,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle-group/states",
+      "component": "toggle-group",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"One item off\",\n        ToggleGroup::single(\"state-item\", \"Stage\")\n            .variant(ToggleVariant::Outline)\n            .joined()\n            .item(ToggleItem::new(\"lead\", \"Lead\"))\n            .item(ToggleItem::new(\"won\", \"Won\").disabled(true))\n            .item(ToggleItem::new(\"lost\", \"Lost\"))\n            .value(\"lead\"),\n    ),\n    (\n        \"The whole group\",\n        ToggleGroup::single(\"state-all\", \"Stage\")\n            .variant(ToggleVariant::Outline)\n            .joined()\n            .disabled(true)\n            .item(ToggleItem::new(\"lead\", \"Lead\"))\n            .item(ToggleItem::new(\"lost\", \"Lost\"))\n            .value(\"lost\"),\n    ),\n]",
+      "src": "/ui-preview/toggle-group/states.html",
+      "height": 200,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [
+        "One item off",
+        "The whole group"
+      ],
+      "slots": []
+    },
+    {
+      "id": "dropdown-menu/thumb",
+      "component": "dropdown-menu",
+      "slug": "thumb",
+      "title": "A menu",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"thumb-menu\", \"Actions\")\n    .item(MenuItem::link(\"Edit\", \"/deals/1/edit\"))\n    .item(MenuItem::action(\"Duplicate\"))\n    .item(MenuItem::action(\"Archive\"))",
+      "src": "/ui-preview/dropdown-menu/thumb.html",
+      "height": 170,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-item",
+              "tag": "a",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/default",
+      "component": "dropdown-menu",
+      "slug": "default",
+      "title": "A menu",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"deal-menu\", \"Actions\")\n    .caret()\n    .item(MenuItem::link(\"Edit\", \"/deals/42/edit\").icon(icons::PENCIL))\n    .item(MenuItem::action(\"Duplicate\").icon(icons::COPY))\n    .item(MenuItem::action(\"Archive\").icon(icons::ARCHIVE))\n    .separator()\n    .item(\n        MenuItem::post(\"Delete\", \"/deals/42/delete\")\n            .icon(icons::TRASH)\n            .destructive(),\n    )",
+      "src": "/ui-preview/dropdown-menu/default.html",
+      "height": 330,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": [
+            {
+              "slot": "icon",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            }
+          ]
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-item",
+              "tag": "a",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "menu-separator",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "menu-item",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/groups",
+      "component": "dropdown-menu",
+      "slug": "groups",
+      "title": "Groups and shortcuts",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"groups-menu\", \"Deal\")\n    .group(\n        MenuGroup::new(\"Edit\")\n            .item(MenuItem::action(\"Rename\").icon(icons::PENCIL).shortcut(\"R\"))\n            .item(\n                MenuItem::action(\"Duplicate\")\n                    .icon(icons::COPY)\n                    .shortcut(\"Ctrl+D\"),\n            ),\n    )\n    .separator()\n    .group(\n        MenuGroup::new(\"Share\")\n            .item(MenuItem::action(\"Copy link\").icon(icons::LINK))\n            .item(\n                MenuItem::link(\"Email the owner\", \"mailto:ada@example.com\").icon(icons::MAIL),\n            ),\n    )",
+      "src": "/ui-preview/dropdown-menu/groups.html",
+      "height": 370,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-group",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "menu-label",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-item",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-text",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-shortcut",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "menu-separator",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "menu-group",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "menu-label",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-item",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-text",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/choices",
+      "component": "dropdown-menu",
+      "slug": "choices",
+      "title": "Checkboxes and radios",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"choices-menu\", \"View\")\n    .checkbox(MenuCheckbox::new(\"archived\", \"Show archived\").checked(true))\n    .checkbox(MenuCheckbox::new(\"owner\", \"Show owner\").keep_open())\n    .separator()\n    .radios(\n        MenuRadios::new(\"sort\", \"Sort by\")\n            .option(\"name\", \"Name\")\n            .option(\"value\", \"Value\")\n            .option(\"closed\", \"Close date\")\n            .value(\"value\"),\n    )",
+      "src": "/ui-preview/dropdown-menu/choices.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-item",
+              "tag": "label",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "menu-mark",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "menu-separator",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "menu-group",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "menu-label",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-item",
+                  "tag": "label",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "menu-mark",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "menu-text",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/submenu",
+      "component": "dropdown-menu",
+      "slug": "submenu",
+      "title": "A submenu",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"sub-menu\", \"Move\")\n    .item(MenuItem::action(\"Rename\"))\n    .submenu(\n        MenuSub::new(\"Move to\")\n            .icon(icons::FOLDER)\n            .item(MenuItem::action(\"Inbox\"))\n            .item(MenuItem::action(\"Archive\"))\n            .submenu(\n                MenuSub::new(\"Label as\")\n                    .item(MenuItem::action(\"Urgent\"))\n                    .item(MenuItem::action(\"Later\")),\n            ),\n    )\n    .item(MenuItem::action(\"Delete\").destructive())",
+      "src": "/ui-preview/dropdown-menu/submenu.html",
+      "height": 200,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-item",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "dropdown-menu",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "menu-item",
+                  "tag": "button",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "menu-text",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "menu-item",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/destructive",
+      "component": "dropdown-menu",
+      "slug": "destructive",
+      "title": "Destructive and disabled",
+      "kind": "single",
+      "code": "DropdownMenu::new(\"danger-menu\", \"More\")\n    .item(MenuItem::action(\"Edit\"))\n    .item(MenuItem::action(\"Archive\").disabled(true))\n    .separator()\n    .item(MenuItem::action(\"Delete deal\").destructive())\n    .item(\n        MenuItem::action(\"Delete forever\")\n            .destructive()\n            .disabled(true),\n    )",
+      "src": "/ui-preview/dropdown-menu/destructive.html",
+      "height": 250,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        },
+        {
+          "slot": "dropdown-menu",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "menu-item",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "menu-separator",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "menu-item",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "menu-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dropdown-menu/row",
+      "component": "dropdown-menu",
+      "slug": "row",
+      "title": "A row's menu",
+      "kind": "single",
+      "code": "Table::new()\n    .caption(\"Deals\")\n    .head((TableHead::new(\"Deal\"), TableHead::new(\"Actions\")))\n    .rows(\n        [(\"Acme renewal\", 1), (\"Globex expansion\", 2)].map(|(title, id)| {\n            TableRowEl::new((\n                TableCell::new(title),\n                TableCell::new(\n                    DropdownMenu::icon(\n                        format!(\"row-menu-{id}\"),\n                        icons::ELLIPSIS,\n                        format!(\"Actions for {title}\"),\n                    )\n                    .size(Size::Sm)\n                    .align(PopupAlign::End)\n                    .item(MenuItem::link(\"Open\", format!(\"/deals/{id}\")))\n                    .item(\n                        MenuItem::post(\"Remove\", format!(\"/deals/{id}/remove\")).destructive(),\n                    ),\n                ),\n            ))\n        }),\n    )",
+      "src": "/ui-preview/dropdown-menu/row.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-4f11b3d8e0d9.js",
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "table-container",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table",
+              "tag": "table",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-head",
+                  "tag": "th",
+                  "count": 2,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "a",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "a",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toast/thumb",
+      "component": "toast",
+      "slug": "thumb",
+      "title": "A toast",
+      "kind": "single",
+      "code": "Toaster::new().toast(Toast::new(ToastTone::Success, \"Deal saved\"))",
+      "src": "/ui-preview/toast/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toast",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toast-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "toast-text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toast-close",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toast/tones",
+      "component": "toast",
+      "slug": "tones",
+      "title": "Tones",
+      "kind": "gallery",
+      "code": "[\n    (\"Info\", Toast::new(ToastTone::Info, \"Imports run at night.\")),\n    (\"Success\", Toast::new(ToastTone::Success, \"Deal created.\")),\n    (\n        \"Warning\",\n        Toast::new(ToastTone::Warning, \"Trial ends in 3 days.\"),\n    ),\n    (\"Danger\", Toast::new(ToastTone::Danger, \"Payment failed.\")),\n]\n.map(|(caption, toast)| (caption, Toaster::new().toast(toast)))",
+      "src": "/ui-preview/toast/tones.html",
+      "height": 320,
+      "layout": "center",
+      "cells": "wide",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Info",
+        "Success",
+        "Warning",
+        "Danger"
+      ],
+      "slots": []
+    },
+    {
+      "id": "toast/action",
+      "component": "toast",
+      "slug": "action",
+      "title": "A title and an action",
+      "kind": "single",
+      "code": "Toaster::new().toast(\n    Toast::new(ToastTone::Success, \"Acme renewal moved to the archive.\")\n        .title(\"Archived\")\n        .action(ToastAction::post(\"Undo\", \"/deals/42/restore\")),\n)",
+      "src": "/ui-preview/toast/action.html",
+      "height": 130,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toast",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toast-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "toast-title",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "toast-text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toast-action",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "toast-close",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toast/live",
+      "component": "toast",
+      "slug": "live",
+      "title": "From a command",
+      "kind": "single",
+      "code": "Row::gap(2).wrap().children((\n    Button::outline(\"Saved\").on_click(Cmd::toast(ToastTone::Success, \"Deal saved.\")),\n    Button::outline(\"Warning\")\n        .on_click(Cmd::toast(ToastTone::Warning, \"Trial ends in 3 days.\")),\n    Button::outline(\"Failed\").on_click(Cmd::toast(ToastTone::Danger, \"Payment failed.\")),\n))",
+      "src": "/ui-preview/toast/live.html",
+      "height": 230,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-bc7732a0fe80.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 3,
+              "children": []
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "table/thumb",
@@ -11484,7 +13002,7 @@
       "live": false,
       "width": 720,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -12114,7 +13632,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -12796,7 +14314,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -13581,7 +15099,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -14263,7 +15781,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -14893,7 +16411,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-e302c03dc72e.js",
+        "overlay-4f11b3d8e0d9.js",
         "table-b01452996568.js"
       ],
       "captions": [
@@ -15402,7 +16920,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-dd67b02be39c.js"
+        "core-bc7732a0fe80.js"
       ],
       "captions": [],
       "slots": [
@@ -15442,7 +16960,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-dd67b02be39c.js"
+        "core-bc7732a0fe80.js"
       ],
       "captions": [],
       "slots": [
@@ -15528,7 +17046,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-dd67b02be39c.js"
+        "core-bc7732a0fe80.js"
       ],
       "captions": [],
       "slots": [
@@ -15575,7 +17093,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-dd67b02be39c.js"
+        "core-bc7732a0fe80.js"
       ],
       "captions": [],
       "slots": [
@@ -15628,7 +17146,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-dd67b02be39c.js"
+        "core-bc7732a0fe80.js"
       ],
       "captions": [],
       "slots": [

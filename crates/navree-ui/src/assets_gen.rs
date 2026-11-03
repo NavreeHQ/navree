@@ -3,28 +3,31 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "8c32bf14c921";
+pub const BUILD: &str = "fd6b3360ca8c";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-dd67b02be39c.js";
+pub const CORE_URL: &str = "/_navree/ui/core-bc7732a0fe80.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-e5b4eff2733d.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-7bbac922223d.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-e302c03dc72e.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-4f11b3d8e0d9.js";
 
 /// The URL of `table.js`.
 pub const TABLE_URL: &str = "/_navree/ui/table-b01452996568.js";
 
 /// The URL of `select.js`.
-pub const SELECT_URL: &str = "/_navree/ui/select-da4950f69334.js";
+pub const SELECT_URL: &str = "/_navree/ui/select-549f90926021.js";
 
 /// The URL of `dates.js`.
-pub const DATES_URL: &str = "/_navree/ui/dates-63f74eab1b40.js";
+pub const DATES_URL: &str = "/_navree/ui/dates-4305b001d48a.js";
+
+/// The URL of `menus.js`.
+pub const MENUS_URL: &str = "/_navree/ui/menus-dffd26363290.js";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6c86994442f3.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-92d3d874b1b5.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -43,7 +46,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "dd67b02be39c",
+        hash: "bc7732a0fe80",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -52,7 +55,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "e5b4eff2733d",
+        hash: "7bbac922223d",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -61,7 +64,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "e302c03dc72e",
+        hash: "4f11b3d8e0d9",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -79,7 +82,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select",
         ext: "js",
-        hash: "da4950f69334",
+        hash: "549f90926021",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/select.js"),
         gzip: Some(include_bytes!("../dist/select.js.gz")),
@@ -88,16 +91,25 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "dates",
         ext: "js",
-        hash: "63f74eab1b40",
+        hash: "4305b001d48a",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/dates.js"),
         gzip: Some(include_bytes!("../dist/dates.js.gz")),
         brotli: Some(include_bytes!("../dist/dates.js.br")),
     },
     Asset {
+        name: "menus",
+        ext: "js",
+        hash: "dffd26363290",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/menus.js"),
+        gzip: Some(include_bytes!("../dist/menus.js.gz")),
+        brotli: Some(include_bytes!("../dist/menus.js.br")),
+    },
+    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "6c86994442f3",
+        hash: "92d3d874b1b5",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),

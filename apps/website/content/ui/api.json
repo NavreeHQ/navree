@@ -60,6 +60,27 @@
       }
     ]
   },
+  "Activation": {
+    "name": "Activation",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/tabs.rs",
+    "summary": "When a tab opens as the arrow keys move over it.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Automatic",
+        "doc": "Moving to a tab opens it: the default, right when the panels are ready at once.",
+        "default": true
+      },
+      {
+        "name": "Manual",
+        "doc": "Moving only moves focus; Enter or Space opens the tab. Right when opening one is slow, such as a panel loaded from the server.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Alert": {
     "name": "Alert",
     "kind": "struct",
@@ -1697,6 +1718,12 @@
         "doc": "Sets the text of `id` to `text`, as text."
       },
       {
+        "name": "toast",
+        "generics": "",
+        "args": "tone: ToastTone, text: impl Into<String>",
+        "doc": "Shows a toast saying `text`."
+      },
+      {
         "name": "count",
         "generics": "",
         "args": "id: impl Into<String>, max: impl Into<Option<u32>>",
@@ -1795,6 +1822,11 @@
       {
         "name": "Fill",
         "doc": "Fills the dialog, popover or details with this id from the row the element sits in, and opens it: a row's details with no request.",
+        "default": false
+      },
+      {
+        "name": "Toast",
+        "doc": "Shows a toast, with no request.",
         "default": false
       }
     ],
@@ -3304,6 +3336,120 @@
     "variants": [],
     "shared": []
   },
+  "DropdownMenu": {
+    "name": "DropdownMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "A button and the menu it opens.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>",
+        "doc": "A menu with the id `id`, opened by an outline button reading `label`."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "id: impl Into<String>, glyph: Icon, label: impl Into<String>",
+        "doc": "A menu opened by an icon button. The accessible label is required."
+      },
+      {
+        "name": "button",
+        "generics": "",
+        "args": "id: impl Into<String>, trigger: Button",
+        "doc": "A menu opened by `trigger`, which this makes the menu's button."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Sets the button's look."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the button's size."
+      },
+      {
+        "name": "caret",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a chevron to the button."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side it opens on (below by default)."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "Sets how it lines up along that side (the start by default; a menu on the last column of a table wants the end)."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the menu when the button's text doesn't."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when any item is chosen."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl Into<Node>",
+        "doc": "Adds something before the items that is not one: a name and an address."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: MenuItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a line between items."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "group: MenuGroup",
+        "doc": "Adds a group of items under a heading."
+      },
+      {
+        "name": "checkbox",
+        "generics": "",
+        "args": "checkbox: MenuCheckbox",
+        "doc": "Adds a choice that is on or off."
+      },
+      {
+        "name": "radios",
+        "generics": "",
+        "args": "radios: MenuRadios",
+        "doc": "Adds a set of choices of which one is on."
+      },
+      {
+        "name": "submenu",
+        "generics": "",
+        "args": "sub: MenuSub",
+        "doc": "Adds a submenu."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Empty": {
     "name": "Empty",
     "kind": "struct",
@@ -4465,6 +4611,227 @@
     ],
     "shared": []
   },
+  "MenuCheckbox": {
+    "name": "MenuCheckbox",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "A choice that is on or off, posting `name` when it is on.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<Node>",
+        "doc": "A checkbox item posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the value it posts when on."
+      },
+      {
+        "name": "checked",
+        "generics": "",
+        "args": "checked: bool",
+        "doc": "Starts on."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when this is chosen."
+      },
+      {
+        "name": "on_change",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands when it changes."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MenuGroup": {
+    "name": "MenuGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "Items under a heading.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A group headed `label`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "MenuItem": {
+    "name": "MenuItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "One thing a menu does: a link, an action in the browser, or a post.",
+    "constructors": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A link to `href`."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button with no destination of its own: give it `on_click` commands, or `opens_dialog`."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A button that posts to `href`. It posts through the page's one post form, which carries the session's token (see `View::csrf`), so the menu may stand in a form of its own and the item still posts on its own. It works with no script."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "icon_end",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon after the label."
+      },
+      {
+        "name": "shortcut",
+        "generics": "",
+        "args": "keys: impl Into<Cow<'static, str>>",
+        "doc": "Shows a hint of the shortcut that does the same thing. It binds nothing."
+      },
+      {
+        "name": "destructive",
+        "generics": "",
+        "args": "",
+        "doc": "Marks it as destroying something."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it: the arrow keys still reach it, as they should, but it does nothing."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when this is chosen."
+      },
+      {
+        "name": "on_click",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands in the browser when chosen."
+      },
+      {
+        "name": "opens_dialog",
+        "generics": "",
+        "args": "dialog: impl Into<String>",
+        "doc": "Opens the `<dialog>` with this id, natively, when chosen."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MenuRadios": {
+    "name": "MenuRadios",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "A set of choices of which one is on, under a heading.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<Node>",
+        "doc": "A set posting as `name`, headed `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<Node>",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "disabled_option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<Node>",
+        "doc": "Adds a choice that can't be taken."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Turns one on."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when a choice is made."
+      },
+      {
+        "name": "on_change",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands when the choice changes."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MenuSub": {
+    "name": "MenuSub",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/dropdown.rs",
+    "summary": "An item that opens a menu of its own.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A submenu opened by an item reading `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Message": {
     "name": "Message",
     "kind": "struct",
@@ -4786,6 +5153,12 @@
         "doc": "A toast."
       },
       {
+        "name": "toast_with",
+        "generics": "",
+        "args": "toast: Toast",
+        "doc": "A toast with a title, an action, a name or a time of its own."
+      },
+      {
         "name": "navigate",
         "generics": "",
         "args": "href: impl Into<LocalHref>",
@@ -4947,6 +5320,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Orientation": {
+    "name": "Orientation",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/tabs.rs",
+    "summary": "The way a list of tabs, or a group of toggles, runs.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Horizontal",
+        "doc": "Left to right (right to left in a right-to-left page): the default.",
+        "default": true
+      },
+      {
+        "name": "Vertical",
+        "doc": "Top to bottom.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Pagination": {
@@ -5426,6 +5820,12 @@
         "generics": "",
         "args": "tone: ToastTone, text: impl Into<String>",
         "doc": "Adds a toast. With JavaScript off, the next page shows it."
+      },
+      {
+        "name": "toast_with",
+        "generics": "",
+        "args": "toast: Toast",
+        "doc": "Adds a toast with a title, an action, a name or a time of its own. With JavaScript off, the next page shows its tone and text."
       },
       {
         "name": "status",
@@ -6153,6 +6553,72 @@
       }
     ]
   },
+  "Tab": {
+    "name": "Tab",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/tabs.rs",
+    "summary": "One tab and its panel.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl Into<String>, label: impl Into<Node>",
+        "doc": "A tab shown as `label`. `key` goes in the address (`?tab=key`) and picks the tab when the page is drawn."
+      },
+      {
+        "name": "icon_only",
+        "generics": "",
+        "args": "key: impl Into<String>, glyph: Icon, label: impl Into<String>",
+        "doc": "A tab with an icon and no text. It must say what it is, so the accessible label is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "icon_end",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon after the label."
+      },
+      {
+        "name": "count",
+        "generics": "",
+        "args": "count: impl Into<Cow<'static, str>>",
+        "doc": "Adds a count after the label (`\"12\"`, `\"99+\"`)."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it: no link, skipped by the arrow keys, never opened."
+      },
+      {
+        "name": "panel",
+        "generics": "",
+        "args": "panel: impl IntoNodes",
+        "doc": "Sets what the panel holds."
+      },
+      {
+        "name": "lazy",
+        "generics": "",
+        "args": "src: impl Into<Href>",
+        "doc": "Makes the panel load from `src` the first time the tab is shown, and keep what it got. `src` answers the panel's content as a fragment, or a page holding an element with the panel's id. With script off the tab is a link to the page, so give the tab that is open its `panel` too."
+      },
+      {
+        "name": "fresh",
+        "generics": "",
+        "args": "",
+        "doc": "Loads a lazy panel again each time its tab is shown."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Table": {
     "name": "Table",
     "kind": "struct",
@@ -6390,6 +6856,117 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Tabs": {
+    "name": "Tabs",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/tabs.rs",
+    "summary": "A list of tabs and their panels.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "Tabs with the id `id`, named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tab",
+        "generics": "",
+        "args": "tab: Tab",
+        "doc": "Adds a tab."
+      },
+      {
+        "name": "active",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Sets the open tab by its key. A key no enabled tab has opens the first one."
+      },
+      {
+        "name": "active_from",
+        "generics": "",
+        "args": "key: Option<&str>",
+        "doc": "Sets the open tab from the query parameter, which may be missing."
+      },
+      {
+        "name": "param",
+        "generics": "",
+        "args": "name: impl Into<Cow<'static, str>>",
+        "doc": "Names the query parameter that holds the open tab (`tab` by default). Two sets of tabs on one page want two names."
+      },
+      {
+        "name": "keep",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl Into<String>",
+        "doc": "Keeps another query parameter in every tab's link, such as a filter."
+      },
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: TabsVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Lays the list out down the side."
+      },
+      {
+        "name": "activation",
+        "generics": "",
+        "args": "activation: Activation",
+        "doc": "Sets when a tab opens as the arrow keys move over it."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size of the tabs."
+      },
+      {
+        "name": "stretch",
+        "generics": "",
+        "args": "",
+        "doc": "Shares the width of the list among the tabs."
+      },
+      {
+        "name": "findable",
+        "generics": "",
+        "args": "",
+        "doc": "Lets the browser's find-in-page search the panels that are not showing, and open the tab that matches."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "failed: impl Into<Cow<'static, str>>, retry: impl Into<Cow<'static, str>>",
+        "doc": "Sets the words of a panel that failed to load."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TabsVariant": {
+    "name": "TabsVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/tabs.rs",
+    "summary": "How the list of tabs looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Underline",
+        "doc": "A line under (or beside) the chosen tab: the default.",
+        "default": true
+      },
+      {
+        "name": "Segmented",
+        "doc": "The tabs sit in one box and the chosen one is raised, like a segmented control.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Text": {
     "name": "Text",
@@ -6772,6 +7349,203 @@
     "variants": [],
     "shared": []
   },
+  "Toast": {
+    "name": "Toast",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/toast.rs",
+    "summary": "A message that goes by itself.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "tone: ToastTone, text: impl Into<String>",
+        "doc": "A toast of `tone` saying `text`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A line above the text, in bold."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Names the toast. One with the same name replaces it, and its time starts again: \"Saving…\" becomes \"Saved\"."
+      },
+      {
+        "name": "duration",
+        "generics": "",
+        "args": "duration: ToastDuration",
+        "doc": "Sets how long it stays. Without this, a warning, an error or a toast with an action stays 8 seconds and any other 5."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: ToastAction",
+        "doc": "Offers one thing to do."
+      },
+      {
+        "name": "closable",
+        "generics": "",
+        "args": "closable: bool",
+        "doc": "Takes the close button away. A sticky toast keeps it whatever this says, since it could not go otherwise."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "",
+        "doc": "The tone."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "",
+        "doc": "The text."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ToastAction": {
+    "name": "ToastAction",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/toast.rs",
+    "summary": "The one thing a toast can offer to do: go somewhere, or post.",
+    "constructors": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<String>, href: impl Into<Href>",
+        "doc": "A link."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "label: impl Into<String>, href: impl Into<Href>",
+        "doc": "A button that posts to `href`, such as \"Undo\". The post answers ops, so it can replace the toast or raise another."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "ToastDuration": {
+    "name": "ToastDuration",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/toast.rs",
+    "summary": "How long a toast stays.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Brief",
+        "doc": "3 seconds.",
+        "default": false
+      },
+      {
+        "name": "Normal",
+        "doc": "5 seconds.",
+        "default": false
+      },
+      {
+        "name": "Long",
+        "doc": "8 seconds.",
+        "default": false
+      },
+      {
+        "name": "Sticky",
+        "doc": "Until the reader closes it. Use it for what must not be missed, and give it a way to close.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "ToastPosition": {
+    "name": "ToastPosition",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/toast.rs",
+    "summary": "Where the toasts stand on the screen.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "BottomEnd",
+        "doc": "The bottom, at the end of the line: the default.",
+        "default": true
+      },
+      {
+        "name": "BottomCenter",
+        "doc": "The bottom, centred.",
+        "default": false
+      },
+      {
+        "name": "BottomStart",
+        "doc": "The bottom, at the start of the line.",
+        "default": false
+      },
+      {
+        "name": "TopEnd",
+        "doc": "The top, at the end of the line.",
+        "default": false
+      },
+      {
+        "name": "TopCenter",
+        "doc": "The top, centred.",
+        "default": false
+      },
+      {
+        "name": "TopStart",
+        "doc": "The top, at the start of the line.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Toaster": {
+    "name": "Toaster",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/toast.rs",
+    "summary": "The place toasts show. It is a labelled region in every page that has the runtime, so what is added to it is announced; the shell puts one in each page, and a toast the last request left is already in it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty toaster at the bottom end of the screen."
+      }
+    ],
+    "methods": [
+      {
+        "name": "position",
+        "generics": "",
+        "args": "position: ToastPosition",
+        "doc": "Sets where the toasts stand."
+      },
+      {
+        "name": "toast",
+        "generics": "",
+        "args": "toast: Toast",
+        "doc": "Adds a toast that is showing from the first paint."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "region: impl Into<Cow<'static, str>>, dismiss: impl Into<Cow<'static, str>>",
+        "doc": "Sets the region's name and the close button's, for another language."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's CSRF token in the form of a post action."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Toggle": {
     "name": "Toggle",
     "kind": "struct",
@@ -6838,6 +7612,147 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "ToggleGroup": {
+    "name": "ToggleGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/toggle_group.rs",
+    "summary": "A group of toggles that post as one field.",
+    "constructors": [
+      {
+        "name": "single",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<String>",
+        "doc": "A group where one item is on at a time, posting as `name`. `label` names the group for assistive technology."
+      },
+      {
+        "name": "multiple",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<String>",
+        "doc": "A group where any number of items are on, each posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: ToggleItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Turns one item on (the first one named, for a single group)."
+      },
+      {
+        "name": "values",
+        "generics": "<S: Into<String>>",
+        "args": "values: impl IntoIterator<Item = S>",
+        "doc": "Turns these items on."
+      },
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ToggleVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the items."
+      },
+      {
+        "name": "joined",
+        "generics": "",
+        "args": "",
+        "doc": "Joins the items into one block, with no gap between them."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables every item."
+      },
+      {
+        "name": "deselectable",
+        "generics": "",
+        "args": "",
+        "doc": "Lets a click on the chosen item of a single group turn it off. It needs the script: with none, a radio stays on once chosen."
+      },
+      {
+        "name": "on_change",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands when the choice changes."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ToggleItem": {
+    "name": "ToggleItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/toggle_group.rs",
+    "summary": "One item of a `ToggleGroup`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<Node>",
+        "doc": "An item that posts `value` and shows `label`."
+      },
+      {
+        "name": "icon_only",
+        "generics": "",
+        "args": "value: impl Into<String>, glyph: Icon, label: impl Into<String>",
+        "doc": "An item with an icon and no text. It must say what it is, so the accessible label is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ToggleVariant": {
+    "name": "ToggleVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/toggle_group.rs",
+    "summary": "How a toggle group looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Default",
+        "doc": "No line round the items; the chosen one is filled.",
+        "default": true
+      },
+      {
+        "name": "Outline",
+        "doc": "A line round each item.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Tooltip": {
     "name": "Tooltip",
