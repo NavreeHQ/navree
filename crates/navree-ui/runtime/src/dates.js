@@ -5,7 +5,7 @@
 // browser's zone, its clock and `Date` never touch one. "Today" is what the server wrote
 // into the page. The server owns the rules and checks every value that comes back;
 // everything below only helps a person get to a value, and says so when it can't.
-import { all, attr, every, has, make, on, set, unset } from "./dom.js";
+import { active as activeElement, all, attr, every, has, make, on, set, unset } from "./dom.js";
 
 const E = Element.prototype;
 /** @param {Element} el @param {string} sel @returns {any} */
@@ -456,7 +456,8 @@ function visible(c, st) {
 
 /** One month, as the server draws it. @param {any} c @param {State} st @param {number} y @param {number} m @param {number} focus */
 function monthHtml(c, st, y, m, focus) {
-  const L = c.L, id = `${c.id}-cap-${ym(y, m)}`, editable = !c.ro && !c.off;
+  // The id is a page's own text, so it is escaped like every other word that goes into the markup.
+  const L = c.L, id = esc(`${c.id}-cap-${ym(y, m)}`), editable = !c.ro && !c.off;
   let cap;
   if (c.dd) {
     const lo = Math.max(1, c.R.min === null ? y - 100 : civil(c.R.min)[0]), hi = Math.min(9999, c.R.max === null ? y + 100 : civil(c.R.max)[0]);
@@ -507,9 +508,35 @@ function render(root) {
   const focus = pickFocus(c, st, vis);
   st.focus = focus;
   const box = q(root, "[data-slot=calendar-months]");
-  if (box) box.innerHTML = vis.map(([y, m]) => monthHtml(c, st, y, m, focus)).join("");
+  if (box) drawMonths(box, vis.map(([y, m]) => monthHtml(c, st, y, m, focus)));
   navState(root, c, st);
   paint(root);
+}
+/**
+ * Puts the months in the box. A month already there keeps its caption, which is a live
+ * region: its words change in place, so a screen reader announces the new month. Only when
+ * the number of months changes are they all drawn again.
+ * @param {Element} box @param {string[]} months
+ */
+function drawMonths(box, months) {
+  const now = /** @type {Element[]} */ ([...all(box, "[data-slot=calendar-month]")]);
+  const tpl = /** @type {HTMLTemplateElement} */ (make("template"));
+  tpl.innerHTML = months.join("");
+  const fresh = /** @type {Element[]} */ ([...DocumentFragment.prototype.querySelectorAll.call(tpl.content, "[data-slot=calendar-month]")]);
+  const caption = (/** @type {Element} */ m) => q(m, "[data-slot=calendar-caption]");
+  if (now.length !== fresh.length || now.some((m, i) => !caption(m) || attr(caption(m), "data-layout") !== attr(caption(fresh[i]), "data-layout"))) {
+    box.innerHTML = months.join("");
+    return;
+  }
+  now.forEach((m, i) => {
+    const f = fresh[i], old = caption(m), next = caption(f);
+    if (!old || !next) return;
+    set(m, "data-month", attr(f, "data-month") || "");
+    set(old, "id", next.id);
+    old.replaceChildren(...next.childNodes);
+    const table = q(m, "table"), replacement = q(f, "table");
+    if (table && replacement) table.replaceWith(replacement);
+  });
 }
 /** Turns the previous and next buttons on and off. @param {Element} root @param {any} c @param {State} st */
 function navState(root, c, st) {
@@ -552,7 +579,7 @@ function show(root, first) {
   if (!c) return;
   const st = stateOf(root, c);
   const [lo, hi] = navLimits(c.R);
-  const active = /** @type {Element} */ (document.activeElement);
+  const active = /** @type {Element} */ (activeElement());
   const inside = !!active && near(active, "[data-slot=calendar-months]") === q(root, "[data-slot=calendar-months]");
   const kind = active && root.contains(active) ? attr(active, "data-ui-cal") : null;
   st.first = Math.max(lo, Math.min(first, hi - c.months + 1));
@@ -835,7 +862,7 @@ function hostChanged(h, how) {
   if (kind === "picker") {
     const n = nativeOf(h), t = textOf(h), label = q(h, "[data-ui-label]");
     const z = fromIso(n?.value ?? null);
-    if (t && document.activeElement !== t) t.value = z === null ? "" : fmt(L, z);
+    if (t && activeElement() !== t) t.value = z === null ? "" : fmt(L, z);
     if (label) label.textContent = z === null ? attr(label, "data-empty") || "" : fmt(L, z);
     h.toggleAttribute("data-has-value", z !== null);
     good(h);
@@ -1209,11 +1236,23 @@ on(document, "toggle", (e) => {
 
 /** @type {WeakMap<Element, MutationObserver>} */
 const observers = new WeakMap();
+/**
+ * The hidden field carries no limits of its own while the box stands before it: a stored value
+ * that is now out of bounds, or a step counted from another start, would stop the form with no
+ * word said, and the box is where a person is told. The server checks the value either way.
+ * @param {Element} n
+ */
+function unlimit(n) {
+  for (const name of ["min", "max", "step"]) unset(n, name);
+}
 /** Sets up one picker: the hidden field stands behind the box. @param {Element} h */
 function enhance(h) {
   const kind = attr(h, "data-ui-dates");
   if (kind === "range") {
-    for (const n of /** @type {any} */ (all(h, "[data-ui-native]"))) n.required = false;
+    for (const n of /** @type {any} */ (all(h, "[data-ui-native]"))) {
+      n.required = false;
+      unlimit(n);
+    }
     return;
   }
   const n = nativeOf(h), t = textOf(h);
@@ -1223,6 +1262,7 @@ function enhance(h) {
   // The box is the field a person fills in, so it holds the requirement: the hidden one can't show a message.
   if (n.required && t) t.required = true;
   n.required = false;
+  unlimit(n);
   const L = locOf(h);
   if (kind === "time") {
     const open = /** @type {HTMLElement | null} */ (q(h, "[data-ui-act=open]"));
@@ -1237,13 +1277,24 @@ function enhance(h) {
     o.observe(n, { attributes: true, attributeFilter: ["aria-invalid", "aria-describedby"] });
     observers.set(h, o);
   }
-  if (L && document.activeElement !== t && !has(h, "data-ui-bad")) {
+  if (L && activeElement() !== t && !has(h, "data-ui-bad")) {
     if (kind === "time") {
       const v = nativeTime(n.value);
       if (v !== null) t.value = fmtTime(L, v, has(h, "data-seconds"));
     } else {
       const z = fromIso(n.value);
       if (z !== null) t.value = fmt(L, z);
+    }
+    // A value the page was drawn with that its rules now refuse (stored before they changed):
+    // say so at the box, where a person looks, unless the page has already said so.
+    if (!has(h, "data-ui-bad") && attr(n, "aria-invalid") !== "true") {
+      if (kind === "time") {
+        const v = nativeTime(n.value);
+        if (v !== null && timeBlocked(trules(h), v)) bad(h, L.L[19]);
+      } else {
+        const z = fromIso(n.value), cal = calOf(h), c = cal && cfg(cal);
+        if (z !== null && c && blocked(c.R, z)) bad(h, L.L[17]);
+      }
     }
   }
 }
