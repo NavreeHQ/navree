@@ -40,6 +40,8 @@ import matter from "gray-matter";
 import remarkGfm from "remark-gfm";
 
 import { sections } from "../../content/docs/manifest.ts";
+import { docFaq } from "../content/faq.ts";
+import { keyFactsMarkdown, mainPages } from "./site-facts.ts";
 import { site } from "../../site.config.ts";
 import { fileTreeText } from "./file-tree-source.ts";
 import {
@@ -111,21 +113,38 @@ function statusLine(page: AgentPage): string {
   return site.showPlannedBadges && page.planned ? "\n\nStatus: in development." : "";
 }
 
-/** One docs page as Markdown: its title, its description, then the body. */
+/** One docs page as Markdown: its title, its description, then the body and any questions the page answers. */
 export function pageMarkdown(page: AgentPage): string {
   const head = `# ${page.title}${page.description ? `\n\n> ${page.description}` : ""}${statusLine(page)}`;
   const body = mdxToMarkdown(page.source);
-  return `${head}\n\n${body}\n`;
+  const faq = docFaq(`${page.section}/${page.page}`);
+  const questions = faq
+    ? `\n\n## ${faq.heading}\n\n` +
+      faq.items
+        .map((item) => `### ${item.question}\n\n${item.answer}${item.link ? ` [${item.link.label}](${absoluteUrl(item.link.href)})` : ""}`)
+        .join("\n\n")
+    : "";
+  return `${head}\n\n${body}${questions}\n`;
 }
 
 // ------------------------------------------------------------- llms files
 
 export type SkillLink = { name: string; summary: string; url: string };
 
+/** A description cut to at most `max` characters at a word, with an ellipsis, for index lines. */
+function cap(text: string, max = 200): string {
+  const one = oneLine(text);
+  if (one.length <= max) return one;
+  return `${one.slice(0, max - 1).replace(/[\s,;:]+\S*$/, "")}…`;
+}
+
 /**
- * `/llms.txt` (https://llmstxt.org/): the name, a one-paragraph summary,
- * then one line per docs page, grouped by section in sidebar order, each
- * linking the page's Markdown. The agent skills follow when there are any.
+ * `/llms.txt` (https://llmstxt.org/): the name, a short summary in a block
+ * quote, the key facts, then lists of links in sections: the main pages, one
+ * line per docs page grouped by section in sidebar order (each linking the
+ * page's Markdown), and an Optional section with the longer files and the
+ * agent skills. Descriptions are cut to 200 characters so the file stays
+ * quick to read.
  */
 export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
   const out: string[] = [
@@ -133,10 +152,13 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
     "",
     `> ${site.headline} ${site.tagline}`,
     "",
-    site.description,
+    "## Key facts",
     "",
-    `Every link below is a docs page as Markdown. All of them in one file: ${site.url}/llms-full.txt. ` +
-      `Any page of ${site.url}/docs/ is also available as Markdown: replace the trailing slash of its URL with \`.md\`.`,
+    keyFactsMarkdown(),
+    "",
+    "## Main pages",
+    "",
+    ...mainPages.map((page) => `- [${page.title}](${site.url}${page.path}): ${page.summary}`),
   ];
   let section = "";
   for (const page of pages) {
@@ -144,17 +166,21 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
       section = page.section;
       out.push("", `## ${page.sectionTitle}`, "");
     }
-    out.push(`- [${page.title}](${site.url}${page.mdPath})${page.description ? `: ${page.description}` : ""}`);
+    out.push(`- [${page.title}](${site.url}${page.mdPath})${page.description ? `: ${cap(page.description)}` : ""}`);
   }
+  out.push(
+    "",
+    "## Optional",
+    "",
+    `- [Every docs page in one file](${site.url}/llms-full.txt): the whole documentation as Markdown, in the order of the sidebar.`,
+    `- [Sitemap](${site.url}/sitemap.xml): every page of the site with the date it last changed.`,
+    `- [Changelog feed](${site.url}/changelog/feed.xml): every new feature and fix, by day, as an Atom feed.`,
+  );
   if (skills.length) {
     out.push(
-      "",
-      "## Agent skills",
-      "",
-      `Step-by-step instructions for coding agents, one per common task. Index: ${site.url}/skills/index.json.`,
-      "",
+      `- [Agent skills index](${site.url}/skills/index.json): step-by-step instructions for coding agents, one per common task; install them with \`navree skills:install\`.`,
     );
-    for (const skill of skills) out.push(`- [${skill.name}](${skill.url}): ${skill.summary}`);
+    for (const skill of skills) out.push(`- [Skill ${skill.name}](${skill.url}): ${cap(skill.summary)}`);
   }
   return `${out.join("\n")}\n`;
 }
@@ -165,6 +191,10 @@ export function llmsFullTxt(pages: AgentPage[], markdown: Map<string, string>): 
     `# ${site.name} documentation`,
     "",
     `> ${site.headline} ${site.tagline}`,
+    "",
+    "## Key facts",
+    "",
+    keyFactsMarkdown(),
     "",
     `Every page of ${site.url}/docs/ in one file, in the order of the sidebar. Each page starts with its title and URL. ` +
       `The index of pages is ${site.url}/llms.txt.`,
