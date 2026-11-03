@@ -542,6 +542,7 @@ pub struct DataTable<'a, R, F = NoFilter> {
     live_from: Option<Href>,
     refreshable: bool,
     debounce: Option<u32>,
+    prefetch: bool,
     cell_uses: Cell<Uses>,
 }
 
@@ -589,6 +590,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             live_from: None,
             refreshable: false,
             debounce: None,
+            prefetch: false,
             cell_uses: Cell::new(Uses::NONE),
         }
     }
@@ -624,6 +626,15 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// applies at once. A longer wait suits a search the database is slow to answer.
     pub fn debounce(mut self, wait: std::time::Duration) -> Self {
         self.debounce = Some(u32::try_from(wait.as_millis().min(5000)).unwrap_or(5000));
+        self
+    }
+
+    /// Fetches the table's own links (sort, page, filter chips, details) when the
+    /// pointer rests on one or it takes focus, so the next state is often there before
+    /// the click. Off unless asked. They change nothing, but each fetch costs a page of
+    /// rows; a cell's own link, such as a row's page, is never fetched this way.
+    pub fn prefetch(mut self) -> Self {
+        self.prefetch = true;
         self
     }
 
@@ -2569,6 +2580,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr("id", self.id)
             .flag("data-ui-region", true)
             .flag("data-ui-table", true)
+            .flag("data-ui-prefetch", self.prefetch)
             .attr("data-ui-src", self.canonical())
             .attr("data-filter-key", self.query.filter_key())
             .attr_opt(

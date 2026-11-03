@@ -231,6 +231,7 @@ async fn deals_page(
     let can = CAN_ACT.load(Ordering::SeqCst);
     let mut table = DataTable::new("deals", &query, &page)
         .caption("Deals in the pipeline")
+        .prefetch()
         .options("company", options)
         .sticky_header()
         .height(TableHeight::Fill)

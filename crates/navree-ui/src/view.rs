@@ -26,8 +26,9 @@ const HEAD_BYTES: usize = 512;
 
 /// A whole page: `<head>` from the toolkit, `<body>` from you.
 ///
-/// A page whose tree needs no script ships none: its links are prefetched
-/// through the `Speculation-Rules` header, with no JavaScript. A page that
+/// A page whose tree needs no script ships none: the links it marks with
+/// `prefetch` are fetched ahead through the `Speculation-Rules` header, with no
+/// JavaScript. A page that
 /// needs the runtime loads it, and the runtime boosts its links.
 ///
 /// ```

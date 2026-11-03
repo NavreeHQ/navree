@@ -796,6 +796,17 @@ for (const browserName of browsers) {
       const unsafe = await page.locator("#deals a[data-ui-in-region]").evaluateAll((links) => links.map((link) => link.getAttribute("href")).filter((href) => /delete|archive|bulk/.test(href)));
       assert.deepEqual(unsafe, []);
       await close();
+      // A table that doesn't ask has nothing fetched ahead, its own links included.
+      const other = await open("/big-pages");
+      const quiet = [];
+      other.page.on("request", (request) => {
+        if (request.headers()["x-navree-prefetch"]) quiet.push(request.url());
+      });
+      await other.page.getByRole("link", { name: "Page 2", exact: true }).hover();
+      await other.page.locator("#big thead th[data-col=title] [data-slot=sort-link]").hover();
+      await other.page.waitForTimeout(250);
+      assert.deepEqual(quiet, []);
+      await other.close();
     });
 
     test("a user who loses permission mid-session: fetch and action are both handled", async () => {

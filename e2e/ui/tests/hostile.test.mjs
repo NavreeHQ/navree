@@ -314,6 +314,22 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`a region's own links are fetched ahead only when the region asks (${engine})`, async () => {
+      const name = key("regionahead");
+      route(`/${name}`, doc(`<div id="quiet" data-ui-region><a id="a" data-ui-in-region href="/${name}-a">a</a></div><div id="asks" data-ui-region data-ui-prefetch><a id="b" data-ui-in-region href="/${name}-b">b</a><a id="c" href="/${name}-c">c</a></div>`));
+      for (const path of ["a", "b", "c"]) route(`/${name}-${path}`, doc(`<h1>${path}</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      for (const id of ["a", "b", "c"]) {
+        await page.hover(`#${id}`);
+        await sleep(200);
+      }
+      assert.equal(hits(`/${name}-a`).length, 0, "a region that didn't ask");
+      assert.equal(hits(`/${name}-b`).length, 1, "a region that asked");
+      assert.equal(hits(`/${name}-b`)[0].headers["x-navree-prefetch"], "1");
+      assert.equal(hits(`/${name}-c`).length, 0, "a link of the page, in that region but not its own");
+      await context.close();
+    });
+
     test(`a marked link's prefetch says so, and the click reuses it (${engine})`, async () => {
       const name = key("marked");
       route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-next#top">next</a>`));
@@ -1179,11 +1195,16 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
-    test(`a sidebar link in the proof app is prefetched, marked (${engine})`, async () => {
+    test(`a sidebar link in the proof app is fetched ahead only when it asks (${engine})`, async () => {
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto(`${PROOF}/deals/new`);
       await page.waitForLoadState("networkidle");
+      const asked = [];
+      page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+      await page.hover('[data-slot=sidebar-item][href="/plain"]');
+      await sleep(250);
+      assert.deepEqual(asked.filter((path) => path === "/plain"), [], "an item that didn't ask");
       const seen = page.waitForRequest((request) => new URL(request.url()).pathname === "/gallery");
       await page.hover('[data-slot=sidebar-item][href="/gallery"]');
       const request = await seen;

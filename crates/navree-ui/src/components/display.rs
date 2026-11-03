@@ -322,7 +322,8 @@ impl Badge {
 pub struct Breadcrumb {
     el: Element,
     label: &'static str,
-    items: Vec<Element>,
+    items: Vec<(Node, Option<Href>)>,
+    prefetch: bool,
 }
 
 impl Breadcrumb {
@@ -332,6 +333,7 @@ impl Breadcrumb {
             el: el("nav").slot("breadcrumb"),
             label: "Breadcrumb",
             items: Vec::new(),
+            prefetch: false,
         }
     }
 
@@ -343,22 +345,41 @@ impl Breadcrumb {
 
     /// Adds a link.
     pub fn link(mut self, label: impl Into<Node>, href: impl Into<Href>) -> Self {
-        self.items
-            .push(el("li").child(el("a").href(href).prefetch().child(label.into())));
+        self.items.push((label.into(), Some(href.into())));
         self
     }
 
     /// Adds the current page.
     pub fn current(mut self, label: impl Into<Node>) -> Self {
-        self.items
-            .push(el("li").child(el("span").attr("aria-current", "page").child(label.into())));
+        self.items.push((label.into(), None));
+        self
+    }
+
+    /// Fetches the trail's links when the pointer rests on one or it takes focus, so
+    /// the page is often there before the click. Off unless asked, as for every link.
+    pub fn prefetch(mut self) -> Self {
+        self.prefetch = true;
         self
     }
 
     fn into_node(self) -> Node {
+        let prefetch = self.prefetch;
+        let items: Vec<Element> = self
+            .items
+            .into_iter()
+            .map(|(label, href)| {
+                el("li").child(match href {
+                    Some(href) => el("a")
+                        .href(href)
+                        .flag("data-ui-prefetch", prefetch)
+                        .child(label),
+                    None => el("span").attr("aria-current", "page").child(label),
+                })
+            })
+            .collect();
         self.el
             .attr("aria-label", self.label)
-            .child(el("ol").child(self.items))
+            .child(el("ol").child(items))
             .into()
     }
 }

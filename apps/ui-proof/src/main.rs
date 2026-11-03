@@ -52,7 +52,11 @@ fn shell() -> Shell {
         .group(
             NavGroup::new("System")
                 .item(NavItem::new("Plain page", "/plain").icon(icons::FILE))
-                .item(NavItem::new("Gallery", "/gallery").icon(icons::LAYOUT_GRID))
+                .item(
+                    NavItem::new("Gallery", "/gallery")
+                        .icon(icons::LAYOUT_GRID)
+                        .prefetch(),
+                )
                 .item(NavItem::new("Select", "/select").icon(icons::LIST))
                 .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG)),
         )

@@ -124,7 +124,7 @@ impl NavItem {
             glyph: None,
             count: None,
             sub: Vec::new(),
-            prefetch: Prefetch::Intent,
+            prefetch: Prefetch::No,
             current: None,
         }
     }
@@ -138,9 +138,17 @@ impl NavItem {
         self
     }
 
-    /// Keeps this link from being fetched ahead of a click. A sidebar item is
-    /// navigation and is fetched on hover or focus, so an item whose `GET` isn't
-    /// safe to repeat needs this.
+    /// Fetches this link when the pointer rests on it or it takes focus, so the page
+    /// is often there before the click. Nothing is fetched ahead unless asked, link by
+    /// link: only ask for a page whose `GET` changes nothing.
+    #[must_use]
+    pub fn prefetch(mut self) -> Self {
+        self.prefetch = Prefetch::Intent;
+        self
+    }
+
+    /// Fetches this link only when it is clicked, which is the default: undoes
+    /// [`prefetch`](Self::prefetch) and [`prefetch_eager`](Self::prefetch_eager).
     #[must_use]
     pub fn no_prefetch(mut self) -> Self {
         self.prefetch = Prefetch::No;
@@ -390,6 +398,7 @@ pub struct Shell {
     groups: Vec<NavGroup>,
     user: Option<UserMenu>,
     search: Option<Node>,
+    prefetch_home: bool,
 }
 
 impl Shell {
@@ -402,7 +411,16 @@ impl Shell {
             groups: Vec::new(),
             user: None,
             search: None,
+            prefetch_home: false,
         }
+    }
+
+    /// Fetches the page the app's name links to when the pointer rests on it or it
+    /// takes focus. Off unless asked, as for every link.
+    #[must_use]
+    pub fn prefetch_home(mut self) -> Self {
+        self.prefetch_home = true;
+        self
     }
 
     /// Sets the line below the app's name: a workspace, a plan.
@@ -466,7 +484,7 @@ impl Shell {
             .slot("sidebar-brand")
             .href(self.home.clone())
             .attr("title", self.name.clone())
-            .prefetch()
+            .flag("data-ui-prefetch", self.prefetch_home)
             .children((
                 el("span").slot("sidebar-logo").child(Node::Static(LOGO)),
                 el("span").slot("sidebar-brand-text").children((
@@ -534,6 +552,7 @@ pub struct AppPage {
     flash: Option<(AlertTone, String)>,
     csrf: Option<String>,
     crumbs: Vec<(Cow<'static, str>, Href)>,
+    prefetch_crumbs: bool,
     actions: Vec<Node>,
     body: Vec<Node>,
 }
@@ -555,6 +574,7 @@ impl AppPage {
             flash,
             csrf,
             crumbs: Vec::new(),
+            prefetch_crumbs: false,
             actions: Vec::new(),
             body: Vec::new(),
         }
@@ -563,6 +583,13 @@ impl AppPage {
     /// Adds a step to the breadcrumb, before this page.
     pub fn crumb(mut self, label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
         self.crumbs.push((label.into(), href.into()));
+        self
+    }
+
+    /// Fetches the breadcrumb's links when the pointer rests on one or it takes focus.
+    /// Off unless asked, as for every link.
+    pub fn prefetch_crumbs(mut self) -> Self {
+        self.prefetch_crumbs = true;
         self
     }
 
@@ -586,6 +613,9 @@ impl AppPage {
             crumbs = crumbs.link(label, href);
         }
         crumbs = crumbs.current(self.title.clone());
+        if self.prefetch_crumbs {
+            crumbs = crumbs.prefetch();
+        }
         let trigger = Button::icon_only(icons::PANEL_LEFT, "Toggle sidebar")
             .variant(ButtonVariant::Ghost)
             .size(Size::Sm)
@@ -748,7 +778,7 @@ mod tests {
             2,
             "the sub-item and the breadcrumb: {html}"
         );
-        assert!(html.contains(r#"<a data-slot="sidebar-sub-item" href="/deals/won" title="Won" aria-current="page" data-ui-prefetch>"#), "{html}");
+        assert!(html.contains(r#"<a data-slot="sidebar-sub-item" href="/deals/won" title="Won" aria-current="page">"#), "{html}");
         let html = shell().page("x", "/deals/12").to_view().to_html();
         assert!(
             html.contains(r#"href="/deals" title="Deals" aria-current="page""#),

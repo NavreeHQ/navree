@@ -329,13 +329,14 @@ function linkOf(target) {
 
 /**
  * The link to fetch ahead of a click. A GET can change state (a sign-out written
- * as a link, a delete), and hovering past one must do nothing, so only links marked
- * safe qualify: what the toolkit knows is navigation, and `data-ui-prefetch`.
+ * as a link, a delete), and a fetch ahead costs bytes, so nothing is fetched unless the
+ * page asks: a link marked `data-ui-prefetch`, or a region's own link (a table's sort
+ * and page links) in a region marked so.
  * @param {EventTarget | null} target
  */
 function safeLinkOf(target) {
   const a = linkOf(target);
-  return a && (a.hasAttribute("data-ui-prefetch") || a.hasAttribute("data-ui-in-region")) ? a : null;
+  return a && (a.hasAttribute("data-ui-prefetch") || (a.hasAttribute("data-ui-in-region") && a.closest("[data-ui-region][data-ui-prefetch]"))) ? a : null;
 }
 
 /** How many links a page may have fetched as soon as it is quiet. */

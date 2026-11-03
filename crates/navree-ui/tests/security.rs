@@ -755,25 +755,39 @@ fn the_speculation_rules_only_name_links_marked_safe() {
 }
 
 #[test]
-fn only_navigation_is_marked_for_prefetch() {
-    use navree_ui::{Breadcrumb, Button, NavGroup, NavItem, Shell, UserMenu};
+fn nothing_is_fetched_ahead_unless_it_asks() {
+    use navree_ui::{
+        Breadcrumb, Button, DataTable, NavGroup, NavItem, Shell, TableQuery, TableRow, UserMenu,
+    };
     let shell = Shell::new("A")
         .group(
             NavGroup::plain()
                 .item(NavItem::new("Deals", "/deals"))
-                .item(NavItem::new("Odd", "/odd").no_prefetch()),
+                .item(NavItem::new("Asked", "/asked").prefetch())
+                .item(NavItem::new("Undone", "/undone").prefetch().no_prefetch()),
         )
         .user(
             UserMenu::new("Ada", "a@b")
                 .link("Settings", "/settings")
                 .action("Sign out", "/sign-out"),
         );
-    let html = shell.page("Other", "/other").to_view().to_html();
+    let html = shell
+        .clone()
+        .page("Other", "/other")
+        .crumb("Home", "/home")
+        .to_view()
+        .to_html();
+    assert_eq!(
+        html.matches("data-ui-prefetch").count(),
+        1,
+        "only the item that asked: {html}"
+    );
     assert!(
-        html.contains(r#"href="/deals" title="Deals" data-ui-prefetch"#),
+        html.contains(r#"href="/asked" title="Asked" data-ui-prefetch>"#),
         "{html}"
     );
-    assert!(html.contains(r#"href="/odd" title="Odd">"#), "{html}");
+    assert!(html.contains(r#"href="/deals" title="Deals">"#), "{html}");
+    assert!(html.contains(r#"href="/undone" title="Undone">"#), "{html}");
     assert!(
         html.contains(r#"href="/settings">Settings"#),
         "a menu link is not marked: {html}"
@@ -790,12 +804,59 @@ fn only_navigation_is_marked_for_prefetch() {
         html.contains(r#"<button data-slot="menu-link" type="submit">Sign out</button>"#),
         "{html}"
     );
+    // The app's name and the breadcrumb, when the app and the page ask.
+    let html = shell
+        .prefetch_home()
+        .page("Other", "/other")
+        .crumb("Home", "/home")
+        .prefetch_crumbs()
+        .to_view()
+        .to_html();
+    assert!(
+        html.contains(r#"data-slot="sidebar-brand" href="/" title="A" data-ui-prefetch>"#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"<a href="/home" data-ui-prefetch>Home</a>"#),
+        "{html}"
+    );
     let html = render(&Button::primary("Open").href("/x").into());
     assert!(!html.contains("data-ui-prefetch"), "{html}");
     let html = render(&Button::primary("Open").href("/x").prefetch().into());
     assert!(html.contains("data-ui-prefetch"), "{html}");
     let html = render(&Breadcrumb::new().link("Deals", "/deals").into());
-    assert!(html.contains("data-ui-prefetch"), "{html}");
+    assert!(!html.contains("data-ui-prefetch"), "{html}");
+    let html = render(
+        &Breadcrumb::new()
+            .prefetch()
+            .link("Deals", "/deals")
+            .current("Acme")
+            .into(),
+    );
+    assert_eq!(html.matches("data-ui-prefetch").count(), 1, "{html}");
+
+    // A table's own links, only when the table asks: the mark is on the table, where
+    // the runtime reads it, and a cell's link never carries one.
+    #[derive(Clone, TableRow)]
+    struct Row {
+        #[col(skip)]
+        id: i64,
+        #[col(sortable, link = "/deals/{id}")]
+        title: String,
+    }
+    let rows = vec![Row {
+        id: 1,
+        title: "Acme".into(),
+    }];
+    let query = TableQuery::<Row>::parse("/deals", "");
+    let html = render(&DataTable::new("deals", &query, &rows).into());
+    assert!(!html.contains("data-ui-prefetch"), "{html}");
+    let html = render(&DataTable::new("deals", &query, &rows).prefetch().into());
+    assert_eq!(html.matches("data-ui-prefetch").count(), 1, "{html}");
+    assert!(
+        html.contains(r#"data-ui-table data-ui-prefetch"#),
+        "on the table itself: {html}"
+    );
 }
 
 /// Fetching with no hover costs a page's bytes on every visit: no link does it unless
@@ -818,10 +879,7 @@ fn nothing_is_fetched_eagerly_unless_a_link_asks() {
         html.contains(r#"href="/inbox" title="Inbox" data-ui-prefetch="eager""#),
         "{html}"
     );
-    assert!(
-        html.contains(r#"href="/deals" title="Deals" data-ui-prefetch>"#),
-        "{html}"
-    );
+    assert!(html.contains(r#"href="/deals" title="Deals">"#), "{html}");
     let html = render(&Button::primary("Open").href("/x").prefetch_eager().into());
     assert!(html.contains(r#"data-ui-prefetch="eager""#), "{html}");
     let html = render(&navree_ui::el("a").href("/x").prefetch_eager().into());
