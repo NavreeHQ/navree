@@ -525,14 +525,13 @@ on(document, "beforeinput", (e) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
-// The list is built, and aligned to the text's direction, before it opens, so
-// it is placed at its full size.
+// The list is built before it opens, so it is placed at its full size. The overlay
+// module lines its start edge up with the field's, whichever way the text runs.
 on(document, "beforetoggle", (e) => {
   const list = /** @type {HTMLElement} */ (e.target);
   if (/** @type {ToggleEvent} */ (e).newState !== "open" || !matches(list, "[data-slot=phone-countries]")) return;
   const root = /** @type {Element} */ (closest(list, "[data-ui-phone]"));
   build(root);
-  set(list, "data-align", getComputedStyle(root).direction === "rtl" ? "end" : "start");
   const search = /** @type {HTMLInputElement | null} */ (list.querySelector("[data-slot=phone-search]"));
   if (search) {
     search.value = attr(list, "data-typed") || "";
