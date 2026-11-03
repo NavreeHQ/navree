@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Faq } from "@/components/faq";
 import { AiSection } from "@/components/home/ai-section";
@@ -37,9 +37,11 @@ export const metadata: Metadata = pageMetadata({
  * summarize another page (architecture, AI, ecosystem, performance) render
  * their own content; each sits under a hairline divider drawn here.
  *
- * Every section below the hero is its own Suspense boundary. Nothing
- * suspends; the boundaries let React hydrate the page a section at a time,
- * in short tasks, instead of in one long one.
+ * No section sits in a Suspense boundary: several are async (their code is
+ * highlighted at build time), and a boundary around an async section is
+ * written as a hidden block that a script swaps in. With JavaScript off the
+ * page would show only its hero, and iframes in a hidden block load at once,
+ * whatever their `loading`.
  */
 export default function Home() {
   return (
@@ -95,10 +97,7 @@ export default function Home() {
   );
 }
 
-/**
- * One section, hydrated on its own. `divided` draws the hairline above the
- * sections that summarize another page.
- */
+/** One section. `divided` draws the hairline above the sections that summarize another page. */
 function Part({ children, divided }: { children: ReactNode; divided?: boolean }) {
-  return <Suspense>{divided ? <div className="cv-auto border-t border-line">{children}</div> : children}</Suspense>;
+  return divided ? <div className="cv-auto border-t border-line">{children}</div> : children;
 }

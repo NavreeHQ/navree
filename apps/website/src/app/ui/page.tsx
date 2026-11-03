@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Faq } from "@/components/faq";
 import { HomeSection, SectionHeading } from "@/components/home/parts";
@@ -78,7 +78,11 @@ export default function UiPage() {
   );
 }
 
-/** One section, hydrated on its own (see the homepage). */
+/**
+ * One section. Not a Suspense boundary: the async sections would be written as
+ * hidden blocks swapped in by a script, invisible with JavaScript off and
+ * loading every preview iframe at once (see the homepage).
+ */
 function Part({ children }: { children: ReactNode }) {
-  return <Suspense>{children}</Suspense>;
+  return children;
 }
