@@ -76,7 +76,8 @@ try {
         `--output-path=${output}`,
         "--quiet",
       ],
-      { encoding: "utf8", shell: process.platform === "win32", timeout: 5 * 60 * 1000 },
+      // `npx` is a script on Windows and needs a shell; a Node path with spaces must not go through one.
+      { encoding: "utf8", shell: process.platform === "win32" && cli[0] === "npx", timeout: 5 * 60 * 1000 },
     );
     if (run.status !== 0 || !fs.existsSync(output)) {
       problems.push(`${page}: Lighthouse did not finish (${(run.stderr || run.stdout || "no output").trim().split("\n").slice(-3).join(" | ")})`);
