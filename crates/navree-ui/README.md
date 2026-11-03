@@ -241,7 +241,11 @@ Field::new("starts", "Starts at").control(TimePicker::new("starts").step_minutes
   so no zone or clock moves a day. `.today(date)` is the page's own idea of today.
 - **The server decides.** A picker posts an ISO date or `HH:MM`; `DateRules` and `TimeRules` draw the
   calendar and check every value that comes back. In a `#[derive(Form)]`, `widget = date_picker` and
-  `widget = time_picker` draw the pickers.
+  `widget = time_picker` draw the pickers, and `date_rules = path` or `time_rules = path` gives a picker the
+  rules the field's `custom` rule holds the value to.
+- **One definition for a range.** `RangeRules` holds the days that can't be chosen and the least and most days a
+  range may hold: `DateRangePicker::limits(...)` draws it for the browser and `DateRangeQuery::checked(...)` holds
+  the request to it.
 - **JavaScript off.** A native `date` or `time` field stands in and posts the same value; `@media (scripting: none)` picks.
 - **Languages.** `DateLocale` holds names, the order of a typed date, the first weekday, the clock and
   the words on the controls, for 19 locales; `DateLocale::custom` takes any other.

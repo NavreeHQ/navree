@@ -59,6 +59,21 @@ The first click in the calendar starts a range and the second ends it, in either
 
 `.min(day)` and `.max(day)` bound the window, and `.min_days(n)` and `.max_days(n)` bound its length. While a range is half picked, the days that would break a limit look off. `.rules(DateRules)` adds weekdays and lists; a range may not hold a day that is off.
 
+Write the limits once, as a `RangeRules`, and give the same value to the picker and to the server's read:
+
+```rust
+fn window_limits() -> RangeRules {
+    RangeRules::new(DateRules::new().min(day(2020, 1, 1)).max(today).disable_weekdays([Weekday::Sun]))
+        .min_days(2)
+        .max_days(90)
+}
+
+let picker = DateRangePicker::new("from", "to").limits(window_limits()); // the browser holds a person to it
+let range = query.checked(&window_limits());                              // the server holds the request to it
+```
+
+`.limits(...)` sets the rules and both lengths in one call (a `Calendar` in range mode takes it too), and `least_days()` and `most_days()` read them back. A request that does not come from the picker is held to the same limits, because the browser's checks only help.
+
 <UiPreview example="date-range-picker/limits" />
 
 ## A report's window in the address
@@ -67,7 +82,9 @@ Put the picker in a `GET` form. Its two fields are the query, so back, forward, 
 
 <UiPreview example="date-range-picker/report" />
 
-On the server, `DateRangeQuery` reads the two parameters back. A value that doesn't parse drops the whole window rather than failing the request, and a pair given backwards is put right.
+On the server, `DateRangeQuery` reads the two parameters back. A value that doesn't parse, or a year outside 1 to 9999, drops the whole window rather than failing the request, a pair given backwards is put right, and a key sent twice (`?from=a&from=b`) is read as its first value, so a request can't make the extractor fail by repeating itself.
+
+`checked(&limits)` also holds the window to the limits the picker was given: it returns `Ok(None)` when there is no window, `Ok(Some(range))` when there is one the limits allow, and the reason in `Err` when there is one they refuse. `range_within(&limits)` is the same without the reason, for a page that would rather show its default window.
 
 ```rust
 async fn report(
@@ -75,13 +92,18 @@ async fn report(
     Query(query): Query<DateRangeQuery>,
     zone: CurrentZone, // navree-time: the person's or the workspace's zone
 ) -> Result<AppPage> {
-    let range = query.range(); // Option<DateRange>
+    let limits = window_limits();
+    let range = match query.checked(&limits) {
+        Ok(range) => range,                     // Option<DateRange>
+        Err(why) => return Ok(refused(&shell, why.message(&locale))),
+    };
     if let Some(range) = range {
         let (start, end) = range.utc_bounds(&zone.zone().tz()); // [start, end)
         // WHERE created_at >= start AND created_at < end
     }
     let picker = DateRangePicker::new("from", "to")
         .today(zone.today().date())
+        .limits(limits)
         .value_opt(range);
     // ...
 }

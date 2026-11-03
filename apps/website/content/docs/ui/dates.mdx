@@ -20,7 +20,9 @@ The browser only helps a person get to a value. What comes back is parsed and ch
 - A date is read with `chrono` as `YYYY-MM-DD`. A value that isn't a day, such as `2026-02-30`, is refused.
 - `DateRules` holds the limits, the weekdays, the lists and the function that the calendar was drawn with. `rules.check(day)` is the same question the calendar asked, so the page and the server can't disagree. A day outside the years 1 to 9999 is refused.
 - `TimeRules` does the same for a time.
-- In a form, `#[form(widget = date_picker)]` and `#[form(widget = time_picker)]` draw the pickers, the field's type reads the value, and `#[validate(custom(...))]` runs your rule. A message sits under the field.
+- In a form, `#[form(widget = date_picker)]` and `#[form(widget = time_picker)]` draw the pickers, the field's type reads the value, and `#[validate(custom(...))]` runs your rule. Add `date_rules = path` or `time_rules = path`, the function that gives the rules, and the picker is drawn with the same rules the `custom` rule holds the value to. A message sits under the field.
+- A range from a request is read with `DateRangeQuery` and held to a `RangeRules`, the same value the picker was given with `.limits(...)`, so the browser and the server can't differ. A year outside 1 to 9999 is no day in a range or a list, and a key sent twice is read as its first value.
+- A time is a time of day: a leap second (`16:59:60`) or a fraction of a second is refused.
 
 What a person types is never posted. The browser reads it by the locale's rules and writes an ISO date into the field behind it.
 

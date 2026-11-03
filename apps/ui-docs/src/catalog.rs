@@ -222,6 +222,7 @@ pub const COMPONENTS: &[Component] = &[
             "DatePreset",
             "DateRange",
             "DateRangeQuery",
+            "RangeRules",
         ],
         "thumb",
     )

@@ -92,7 +92,7 @@ When the text can't be read, or the day can't be chosen, the box is marked `aria
 struct Booking {
     /// Start date
     #[validate(custom(open_day))]
-    #[form(widget = date_picker, help = "A weekday in the next three months.")]
+    #[form(widget = date_picker, date_rules = open_days, help = "A weekday in the next three months.")]
     start: NaiveDate,
     /// End date
     #[validate(skip)]
@@ -100,10 +100,16 @@ struct Booking {
     end: Option<NaiveDate>,
 }
 
+fn open_days() -> DateRules {
+    DateRules::new().min(today).disable_weekdays([Weekday::Sat, Weekday::Sun])
+}
+
 fn open_day(day: &NaiveDate) -> Result<(), String> {
-    rules().check(*day).map_err(|e| e.message(&DateLocale::english()))
+    open_days().check(*day).map_err(|e| e.message(&DateLocale::english()))
 }
 ```
+
+`date_rules = open_days` gives the picker the same rules the `custom` rule holds the value to: the calendar draws the weekends off, and the server refuses one that is posted anyway. The function is written once and named twice. `time_rules = ...` does the same for a time picker.
 
 The server's message sits under the field, and the cursor goes to the box. A form sent back keeps what was typed, whether the browser sent the page again or the runtime added the errors.
 

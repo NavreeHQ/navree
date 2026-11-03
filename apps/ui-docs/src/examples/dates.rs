@@ -405,12 +405,13 @@ fn date_range_picker_confirm() -> DateRangePicker {
 
 fn date_range_picker_limits() -> DateRangePicker {
     let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();
+    // The limits are one value: the same one holds the request on the server.
+    let limits = RangeRules::new(DateRules::new().min(day(10, 15)).max(day(11, 20)))
+        .min_days(2)
+        .max_days(10);
     DateRangePicker::new("from", "to")
         .today(day(11, 3))
-        .min(day(10, 15))
-        .max(day(11, 20))
-        .min_days(2)
-        .max_days(10)
+        .limits(limits)
         .presets([
             DatePreset::Today,
             DatePreset::Last7Days,

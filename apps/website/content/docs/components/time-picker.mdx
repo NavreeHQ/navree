@@ -87,7 +87,7 @@ The list offers every multiple of the step in the day that can be chosen. `.step
 
 ## JavaScript off
 
-A native `<input type="time">` stands in and posts `HH:MM`. A native step is set only when the rules are strict or seconds are on, so a typed 10:07 isn't called a mismatch by the browser. In a form, a time that arrives as `14:30` is read as `14:30:00`.
+A native `<input type="time">` stands in and posts `HH:MM`. It is told what the server takes, and never less. A native step is set only when the rules are strict or seconds are on, so a typed 10:07 isn't called a mismatch by the browser. The browser counts a step from the field's least time and the server from midnight, so with a strict step the least time is put on the step (a least of 9:10 at quarter hours is told to the field as 9:15). A value, or a limit, with seconds gives the field a step of one second. With JavaScript on, the field behind the box carries no limits at all: a stored value that the rules now refuse is said at the box, in words, and the server decides either way. In a form, a time that arrives as `14:30` is read as `14:30:00`. A leap second (`16:59:60`) or a fraction of a second is not a time the picker posts, and the server refuses it.
 
 ## Keyboard and accessibility
 
