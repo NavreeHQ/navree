@@ -222,6 +222,8 @@ struct ExampleJson<'a> {
     cells: &'static str,
     show: bool,
     live: bool,
+    /// Drawn this wide and scaled to fit.
+    width: Option<u32>,
     /// The toolkit modules the preview loads.
     scripts: Vec<String>,
     captions: Vec<String>,
@@ -338,6 +340,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             cells: example.cells.as_str(),
             show: example.show,
             live: example.live,
+            width: example.width,
             scripts,
             captions,
             slots,

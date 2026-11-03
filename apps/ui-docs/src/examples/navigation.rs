@@ -10,10 +10,12 @@ pub fn all() -> Vec<Example> {
     vec![
         page!("app-shell", "thumb", "The app shell", app_shell_thumb)
             .fill()
-            .height(160),
+            .width(1024)
+            .height(560),
         page!("app-shell", "default", "The app shell", app_shell_default)
             .fill()
-            .height(560),
+            .width(1100)
+            .height(600),
         single!("breadcrumb", "default", "A trail", breadcrumb_default),
         single!("pagination", "default", "Page 5 of 12", pagination_default),
         gallery!(

@@ -232,7 +232,8 @@ pub const COMPONENTS: &[Component] = &[
         ],
         "thumb",
     )
-    .page("/docs/ui/layout/"),
+    .page("/docs/ui/layout/")
+    .parts("stack"),
     component("accordion", "Accordion", &["Accordion"], "default").parts("default"),
     component("collapsible", "Collapsible", &["Collapsible"], "default").parts("default"),
     component("scroll-area", "ScrollArea", &["ScrollArea"], "default").parts("default"),
@@ -353,6 +354,9 @@ pub struct Example {
     pub show: bool,
     /// Loads the core runtime: commands run in the preview.
     pub live: bool,
+    /// Drawn this many px wide and scaled to fit the column: for a whole page,
+    /// whose layout changes below 768px.
+    pub width: Option<u32>,
 }
 
 impl Example {
@@ -374,6 +378,7 @@ impl Example {
             cells: Cells::Narrow,
             show: false,
             live: false,
+            width: None,
         }
     }
 
@@ -414,6 +419,11 @@ impl Example {
 
     pub fn show(mut self) -> Self {
         self.show = true;
+        self
+    }
+
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
         self
     }
 
