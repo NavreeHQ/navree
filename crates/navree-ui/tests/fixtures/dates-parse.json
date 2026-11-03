@@ -1,0 +1,987 @@
+{
+ "today": "2026-11-03",
+ "dates": [
+  {
+   "locale": "en",
+   "text": "11/3/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11/03/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11-3-2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11.3.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11 3 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11,3,2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "2026-11-03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "2026/11/3",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "20261103",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11032026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "110326",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/26",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "Nov 3 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "Nov 3, 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "November 3, 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "3 Nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "3 nov 26",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "Tue, Nov 3, 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "Tuesday 3 November 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "3rd Nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "Nov 3rd, 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": " 11 / 3 / 2026 ",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11//3//2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "‎11/3/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "１１／３／２０２６",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/2026 ",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "NOVEMBER 3 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en",
+   "text": "sept 5 2026",
+   "ok": "2026-09-05"
+  },
+  {
+   "locale": "en",
+   "text": "Sep 5 2026",
+   "ok": "2026-09-05"
+  },
+  {
+   "locale": "en",
+   "text": "1/1/0001",
+   "ok": "0001-01-01"
+  },
+  {
+   "locale": "en",
+   "text": "12/31/9999",
+   "ok": "9999-12-31"
+  },
+  {
+   "locale": "en",
+   "text": "2/29/2024",
+   "ok": "2024-02-29"
+  },
+  {
+   "locale": "en",
+   "text": "2/29/2000",
+   "ok": "2000-02-29"
+  },
+  {
+   "locale": "en",
+   "text": "1/2/76",
+   "ok": "2076-01-02"
+  },
+  {
+   "locale": "en",
+   "text": "1/2/77",
+   "ok": "1977-01-02"
+  },
+  {
+   "locale": "en",
+   "text": "1/2/00",
+   "ok": "2000-01-02"
+  },
+  {
+   "locale": "en",
+   "text": "",
+   "err": "empty"
+  },
+  {
+   "locale": "en",
+   "text": "   ",
+   "err": "empty"
+  },
+  {
+   "locale": "en",
+   "text": "hello",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "3/11",
+   "err": "missing_year"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/202",
+   "err": "bad_year"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/20265",
+   "err": "bad_year"
+  },
+  {
+   "locale": "en",
+   "text": "0/0/0000",
+   "err": "bad_year"
+  },
+  {
+   "locale": "en",
+   "text": "1/1/10000",
+   "err": "bad_year"
+  },
+  {
+   "locale": "en",
+   "text": "0/3/2026",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "13/1/2026",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "4/31/2026",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "2/29/2025",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "2/29/2100",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "00/00/00",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "99/99/9999",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/2026x",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "11/3/2026 10:00",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "1/2/3/4",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "Nov Dec 2026",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "Nov 2026",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "2026",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "12345",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "3 Nov 5",
+   "err": "bad_year"
+  },
+  {
+   "locale": "en",
+   "text": "<script>",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "2026-13-01",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en",
+   "text": "2026-02-30",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "en-GB",
+   "text": "3/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en-GB",
+   "text": "03/11/26",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en-GB",
+   "text": "3 Nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "en-GB",
+   "text": "11/3/2026",
+   "ok": "2026-03-11"
+  },
+  {
+   "locale": "en-GB",
+   "text": "3 November 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "03.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3.11.26",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3. November 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3. Nov. 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "Dienstag, 3. November 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "03112026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "2026-11-03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3,11,2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "de",
+   "text": "3 März 2026",
+   "ok": "2026-03-03"
+  },
+  {
+   "locale": "de",
+   "text": "3 marz 2026",
+   "ok": "2026-03-03"
+  },
+  {
+   "locale": "de",
+   "text": "3.11.",
+   "err": "missing_year"
+  },
+  {
+   "locale": "de",
+   "text": "31.4.2026",
+   "err": "not_a_date"
+  },
+  {
+   "locale": "fr",
+   "text": "3/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 novembre 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 nov. 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 Novembre 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "fr",
+   "text": "mardi 3 novembre 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 févr. 2026",
+   "ok": "2026-02-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 fevrier 2026",
+   "ok": "2026-02-03"
+  },
+  {
+   "locale": "fr",
+   "text": "3 decembre 2026",
+   "ok": "2026-12-03"
+  },
+  {
+   "locale": "es",
+   "text": "3/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "es",
+   "text": "3 de noviembre de 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "es",
+   "text": "3 nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "es",
+   "text": "martes, 3 de noviembre de 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "es",
+   "text": "3 sept 2026",
+   "ok": "2026-09-03"
+  },
+  {
+   "locale": "it",
+   "text": "3/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "it",
+   "text": "3 novembre 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pt",
+   "text": "03/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pt",
+   "text": "3 de novembro de 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "nl",
+   "text": "3-11-2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "nl",
+   "text": "3 nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "nl",
+   "text": "3 november 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "sv",
+   "text": "2026-11-03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "sv",
+   "text": "26-11-03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "sv",
+   "text": "3 nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "sv",
+   "text": "20261103",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ja",
+   "text": "2026/11/03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ja",
+   "text": "2026年11月3日",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ja",
+   "text": "2026-11-3",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ja",
+   "text": "26/11/3",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "zh",
+   "text": "2026年11月3日",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "zh",
+   "text": "2026/11/3",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ko",
+   "text": "2026. 11. 3.",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ko",
+   "text": "2026. 11. 03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ko",
+   "text": "2026-11-03",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ar",
+   "text": "٣/١١/٢٠٢٦",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ar",
+   "text": "03/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ar",
+   "text": "3 نوفمبر 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ar",
+   "text": "‏٠٣/١١/٢٠٢٦‏",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "he",
+   "text": "3.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "he",
+   "text": "3 נובמבר 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "hi",
+   "text": "3/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "hi",
+   "text": "3 नवंबर 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "hi",
+   "text": "3 नव॰ 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "hi",
+   "text": "३/११/२०२६",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ru",
+   "text": "03.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ru",
+   "text": "3 ноября 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ru",
+   "text": "3 нояб. 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "ru",
+   "text": "вторник, 3 ноября 2026 г.",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pl",
+   "text": "3.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pl",
+   "text": "3 listopada 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pl",
+   "text": "3 lis 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "tr",
+   "text": "03.11.2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "tr",
+   "text": "3 Kasım 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "tr",
+   "text": "3 kasim 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "id",
+   "text": "03/11/2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "id",
+   "text": "3 November 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "id",
+   "text": "3 Nov 2026",
+   "ok": "2026-11-03"
+  },
+  {
+   "locale": "pl",
+   "text": "3 pazdziernika 2026",
+   "ok": "2026-10-03"
+  },
+  {
+   "locale": "sv",
+   "text": "03-11-2026",
+   "err": "unreadable"
+  },
+  {
+   "locale": "ja",
+   "text": "11/3/2026",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en-CA",
+   "text": "2026-11-03",
+   "ok": "2026-11-03"
+  }
+ ],
+ "times": [
+  {
+   "locale": "en",
+   "text": "9",
+   "ok": "09:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "9:30",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9:30 pm",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9:30pm",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9.30 PM",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9 pm",
+   "ok": "21:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "12 am",
+   "ok": "00:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "12 pm",
+   "ok": "12:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "12:30 am",
+   "ok": "00:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "12:30 p.m.",
+   "ok": "12:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "0930",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "930",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "21:30",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "21:30:15",
+   "ok": "21:30:15"
+  },
+  {
+   "locale": "en",
+   "text": "2130",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9h30",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "123456",
+   "ok": "12:34:56"
+  },
+  {
+   "locale": "en",
+   "text": "9:30 a",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "9p",
+   "ok": "21:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "٩:٣٠",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "0:00",
+   "ok": "00:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "23:59",
+   "ok": "23:59:00"
+  },
+  {
+   "locale": "en",
+   "text": "  9:05  ",
+   "ok": "09:05:00"
+  },
+  {
+   "locale": "en",
+   "text": "1:05 AM",
+   "ok": "01:05:00"
+  },
+  {
+   "locale": "en",
+   "text": "11:59 PM",
+   "ok": "23:59:00"
+  },
+  {
+   "locale": "en",
+   "text": "15",
+   "ok": "15:00:00"
+  },
+  {
+   "locale": "en",
+   "text": "９：３０",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "en",
+   "text": "24:00",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "25",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "9:60",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "9:30:60",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "13 pm",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "0 am",
+   "err": "out_of_range"
+  },
+  {
+   "locale": "en",
+   "text": "abc",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "",
+   "err": "empty"
+  },
+  {
+   "locale": "en",
+   "text": "9:30 xm",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "1:2:3:4",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "1234567",
+   "err": "unreadable"
+  },
+  {
+   "locale": "en",
+   "text": "pm",
+   "err": "unreadable"
+  },
+  {
+   "locale": "de",
+   "text": "9 Uhr 30",
+   "ok": "09:30:00"
+  },
+  {
+   "locale": "de",
+   "text": "14:30",
+   "ok": "14:30:00"
+  },
+  {
+   "locale": "de",
+   "text": "9:30 pm",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "ja",
+   "text": "午後3:05",
+   "ok": "15:05:00"
+  },
+  {
+   "locale": "ja",
+   "text": "午前12:05",
+   "ok": "00:05:00"
+  },
+  {
+   "locale": "ja",
+   "text": "15:05",
+   "ok": "15:05:00"
+  },
+  {
+   "locale": "ko",
+   "text": "오후 3:05",
+   "ok": "15:05:00"
+  },
+  {
+   "locale": "ko",
+   "text": "오전 12:05",
+   "ok": "00:05:00"
+  },
+  {
+   "locale": "ar",
+   "text": "٣:٣٠ م",
+   "ok": "15:30:00"
+  },
+  {
+   "locale": "ar",
+   "text": "٣:٣٠ ص",
+   "ok": "03:30:00"
+  },
+  {
+   "locale": "ar",
+   "text": "3:30 pm",
+   "ok": "15:30:00"
+  },
+  {
+   "locale": "es",
+   "text": "9:30 p. m.",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "en-GB",
+   "text": "17:45",
+   "ok": "17:45:00"
+  },
+  {
+   "locale": "en-GB",
+   "text": "5:45 pm",
+   "ok": "17:45:00"
+  },
+  {
+   "locale": "zh",
+   "text": "下午3:05",
+   "ok": "15:05:00"
+  },
+  {
+   "locale": "tr",
+   "text": "9:30 ÖS",
+   "ok": "21:30:00"
+  },
+  {
+   "locale": "sv",
+   "text": "9.30 em",
+   "ok": "21:30:00"
+  }
+ ]
+}

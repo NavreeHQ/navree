@@ -49,6 +49,7 @@ mod assets_gen;
 pub mod cmd;
 pub mod components;
 pub mod compress;
+pub mod dates;
 pub mod flags;
 pub mod form;
 pub mod html;
