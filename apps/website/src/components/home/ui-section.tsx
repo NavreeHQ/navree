@@ -15,8 +15,8 @@ const choices = [
   },
   {
     name: "Next.js (React)",
-    text: "A React app beside the API, with sign-in, a typed client, a DataTable and live channels.",
-    meta: "navree new --ui next",
+    text: "A React app beside the API. The starter signs users in through its own backend-for-frontend; @navree/next adds a typed client, a DataTable and live channels.",
+    meta: "navree new <name> --ui next",
     href: "/docs/frontend/nextjs/",
   },
   {

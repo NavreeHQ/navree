@@ -22,7 +22,7 @@ const options = [
     start: "navree new <name> --ui next",
     when: "Your team builds in React, or your screens need instant interactions in the browser.",
     gives:
-      "React and its libraries. `@navree/next` brings sign-in with refresh and two-factor, a typed client, a `DataTable`, live channels and abilities. The SaaS starter kit ships a full app.",
+      "React and its libraries. `--ui next` writes a Next.js app in `web/` with its own backend-for-frontend: a sign-in page and route handlers that keep the tokens in httpOnly cookies. Add `@navree/next` for two-factor, a typed client, a `DataTable`, live channels and abilities. The SaaS starter kit ships a full app.",
     costs: "A second app in a second language, with Node.js to run its server and a build step.",
     href: "/docs/frontend/nextjs/",
     link: "Next.js",
