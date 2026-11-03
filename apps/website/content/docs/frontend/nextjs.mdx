@@ -5,6 +5,12 @@ description: "`@navree/next`: the backend-for-frontend as route handlers, `auth(
 
 `@navree/next` puts a Next.js app (App Router) on a Navree API. The server side, `@navree/next/server`, mounts the [backend-for-frontend](/docs/frontend/auth-and-bff/) as route handlers, gives server components the signed-in user and a typed client, and guards pages in the proxy. The browser side is hooks and components: list queries in the URL, a data table, operations, workspaces and form errors, with abilities in `@navree/next/abilities` and real time in `@navree/next/realtime`.
 
+<Callout type="note" title="Apps made by navree new">
+
+`navree new --ui next` and the SaaS starter kit create `web/` with a backend-for-frontend of their own under `web/lib/`. They do not install `@navree/next`. [Moving an existing app onto the package](#moving-an-existing-app-onto-the-package) shows which pieces the package replaces.
+
+</Callout>
+
 ## Setting up
 
 <Steps>
@@ -270,9 +276,9 @@ onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) ||
 
 ## Moving an existing app onto the package
 
-The reference CRM front end, `apps/crm-web`, has these pieces as its own files. Moving it onto the packages replaces them one for one:
+An app that keeps these pieces in its own files can move onto the packages one for one. The reference CRM front end, `apps/crm-web`, is such an app:
 
-| `apps/crm-web` today | With the packages |
+| `apps/crm-web` | With the packages |
 |---|---|
 | `src/lib/bff/bff.ts`, `http-errors.ts`, `server.ts` | `createNavree()` in `src/lib/navree.ts` |
 | `src/app/api/[...path]/route.ts` and the four `src/app/api/auth/*/route.ts` | One catch-all exporting `navree.handlers` |
@@ -282,7 +288,7 @@ The reference CRM front end, `apps/crm-web`, has these pieces as its own files. 
 | `src/lib/api/form-errors.ts` | `applyFieldErrors` from `@navree/next` |
 | `src/lib/api/keys.ts` | `queryKeys("deals")` per resource |
 | `src/lib/casl/ability.ts` | `createAbility` and `AbilityProvider` |
-| `src/lib/realtime/pusher.ts`, `mock-bus.ts`, `realtime-bridge.tsx` | `RealtimeProvider`, `useChannel`, `createMemoryRealtime` |
+| `src/lib/realtime/pusher.ts`, `mock-bus.ts`, `src/components/app-shell/realtime-bridge.tsx` | `RealtimeProvider`, `useChannel`, `createMemoryRealtime` |
 | `src/components/data-table.tsx`, `pagination-bar.tsx`, `src/hooks/use-url-state.ts` | `DataTable`, `Pagination`, `useListQuery` (see [data tables](/docs/frontend/data-tables/)) |
 | The tokens in `src/app/globals.css`, `src/app/fonts.ts` | `@navree/theme/theme.css` and the fonts (see [theming](/docs/frontend/theming/)) |
 
@@ -303,3 +309,17 @@ expect(response.status).toBe(307);
 ```
 
 The package's own suite (`pnpm test` in `packages/js`) runs the same way, and `pnpm smoke` builds a small app on the package with `next build` and checks the running server.
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    `useListQuery` and `DataTable`: lists sorted and paged on the server, with the state in the URL.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The dark theme for Tailwind CSS 4 and shadcn/ui, and the fonts.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Right-to-left layouts and API errors translated by code with next-intl.
+  </LinkCard>
+</LinkCards>

@@ -5,6 +5,8 @@ description: "`@navree/nuxt`: a Nuxt module with the backend-for-frontend as Nit
 
 `@navree/nuxt` puts a Nuxt app on a Navree API with one line in `nuxt.config.ts`. Nitro serves the [backend-for-frontend](/docs/frontend/auth-and-bff/) at `/api/**` and `/broadcasting/auth`, a session gate keeps pages behind sign-in and refreshes expired tokens before a page renders, and the composables and `<NavreeDataTable>` are auto-imported. It works with server-side rendering on and off.
 
+There is no Nuxt starter kit and `navree new` has no `--ui nuxt`: create the Nuxt app yourself, then add the module. The reference CRM's Nuxt front end, `apps/crm-nuxt`, is a complete example.
+
 ## Setting up
 
 <Steps>
@@ -110,6 +112,7 @@ During server-side rendering the composables call the BFF through Nitro's `event
 ### The typed client and the workspace
 
 ```ts
+import { unwrap } from "@navree/client";
 import type { paths } from "~/lib/api/schema";
 
 const api = useNavreeClient<paths>();
@@ -189,9 +192,9 @@ The pieces are plain Vue and h3, for a Vue app with another server, or to mount 
 
 ## Moving an existing app onto the module
 
-The reference CRM's Nuxt front end, `apps/crm-nuxt`, has these pieces as its own files. With the module:
+An app that keeps these pieces in its own files can move onto the module one piece at a time. The reference CRM's Nuxt front end, `apps/crm-nuxt`, is such an app:
 
-| `apps/crm-nuxt` today | With the module |
+| `apps/crm-nuxt` | With the module |
 |---|---|
 | `server/lib/bff.ts`, `http-errors.ts`, `instance.ts` | The module's BFF (`navree.apiUrl`, `NAVREE_API_URL`) |
 | `server/api/[...path].ts`, `server/api/auth/*.post.ts`, `server/routes/broadcasting/auth.post.ts` | The module's routes |
@@ -223,3 +226,17 @@ expect(response.status).toBe(403);
 ```
 
 The composables mount in `@vue/test-utils` with a memory router. The package's `pnpm smoke` builds a small Nuxt app on the module and checks the gate, server rendering and the BFF routes of the running server.
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    `useListQuery` and `<NavreeDataTable>`: lists sorted and paged on the server, with the state in the URL.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The dark theme for Tailwind CSS 4 and shadcn-vue, and the fonts.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Right-to-left layouts and API errors translated by code with @nuxtjs/i18n.
+  </LinkCard>
+</LinkCards>

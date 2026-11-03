@@ -3,7 +3,7 @@ title: "Front end"
 description: "Five npm packages for web front ends on a Navree API: a typed client, the backend-for-frontend, Next.js and Nuxt integrations, and navree.com's dark theme."
 ---
 
-A Navree API is a bearer-token JSON API with an OpenAPI document, Navree's error shape, list queries, real-time channels over the Pusher protocol and operations you follow over server-sent events. A web front end needs the same pieces every time: a client typed from the document, a server that keeps the tokens out of the browser, sign-in with refresh and two-factor, abilities, live updates, data tables and a theme. The `@navree/*` packages are those pieces, tested once, so every front end on Navree works the same way.
+A Navree API is a bearer-token JSON API with an OpenAPI document, Navree's error shape, list queries, real-time channels over the Pusher protocol and operations you follow over server-sent events. A web front end needs the same pieces every time: a client typed from the document, a server that keeps the tokens out of the browser, sign-in with refresh and two-factor, abilities, live updates, data tables and a theme. The `@navree/*` packages are those pieces, tested once, so every front end on Navree works the same way. Screens drawn in Rust with Navree UI need none of this; [Choosing a UI](/docs/ui/choosing-a-ui/) compares the ways to draw them.
 
 <Diagram name="backend-for-frontend" />
 
@@ -49,6 +49,7 @@ navree openapi:client
   run      cargo run --quiet -- openapi:export web/src/lib/api/openapi.json
   wrote    web/src/lib/api/openapi.json
   wrote    web/src/lib/api/schema.d.ts
+  next     createNavreeClient<paths>() from @navree/client, with `import type { paths } from "./schema"`
 ```
 
 ## How a request travels

@@ -107,8 +107,10 @@ A heading click sends `sort` and drops `page` and `cursor`; shift-click adds the
 
 ```html title="web/app/pages/deals/index.vue"
 <script setup lang="ts">
+import { unwrap } from "@navree/client";
 import type { NavreeColumnDef } from "@navree/nuxt/vue";
-import type { Deal, paths } from "~/lib/api/types";
+import type { paths } from "~/lib/api/schema";
+import type { Deal } from "~/lib/api/types";
 
 const api = useNavreeClient<paths>();
 const list = useListQuery({ per_page: 25 });
@@ -166,3 +168,17 @@ const labels = {
   range: (from: number, to: number, total: number) => t("table.range", { from, to, total }),
 };
 ```
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/typed-client/" title="The typed client">
+    `listQuery()`, the page helpers and the query keys the tables are built on.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The tokens and utilities the table is styled with.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Translate the table's labels and format its numbers for the locale.
+  </LinkCard>
+</LinkCards>
