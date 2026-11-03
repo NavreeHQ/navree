@@ -685,14 +685,17 @@ pub(crate) fn manifest_dir(span: Span) -> syn::Result<PathBuf> {
 /// A path inside the crate: relative, with nothing that climbs out of it.
 fn inside(relative: &LitStr) -> syn::Result<PathBuf> {
     let path = PathBuf::from(relative.value());
+    // Forward slashes only, so a path means the same on every system: a backslash or a
+    // drive letter is a path on Windows and a file name elsewhere.
     let safe = !relative.value().is_empty()
+        && !relative.value().contains(['\\', ':', '\0'])
         && path
             .components()
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
     if !safe {
         return Err(syn::Error::new(
             relative.span(),
-            "the path is relative to your crate's Cargo.toml and stays inside the crate (no `..`, no absolute path)",
+            "the path is relative to your crate's Cargo.toml and stays inside the crate (forward slashes, no `..`, no absolute path)",
         ));
     }
     Ok(path)
