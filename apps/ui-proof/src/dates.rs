@@ -125,34 +125,29 @@ fn calendars() -> Element {
     )
 }
 
-fn pickers() -> Element {
-    let dp = |name: &'static str, label: &'static str| {
+fn dfield(
+    name: &'static str,
+    label: &'static str,
+    build: impl FnOnce(DatePicker) -> DatePicker,
+) -> Field {
+    Field::new(format!("fld-{name}"), label).control(build(
         DatePicker::new(name)
             .id(format!("dp-{name}"))
-            .today(today())
-            .label(label)
-    };
-    let field = |id: &'static str, label: &'static str, control: DatePicker| {
-        Field::new(id, label).control(control)
-    };
+            .today(today()),
+    ))
+}
+
+fn pickers() -> Element {
     section(
         "Date pickers",
         Grid::cols(3).gap(4).children((
-            dp("basic", "Basic date"),
-            dp("value", "Date with a value")
-                .value(day(2026, 11, 12))
-                .clearable()
-                .with_today(),
-            field(
-                "due",
-                "Due date",
-                DatePicker::new("due")
-                    .id("dp-due")
-                    .today(today())
-                    .required(),
-            )
-            .help("Type it as 11/30/2026, or pick it."),
-            Field::new("late", "Late date")
+            dfield("basic", "Basic date", |p| p),
+            dfield("value", "Date with a value", |p| {
+                p.value(day(2026, 11, 12)).clearable().with_today()
+            }),
+            dfield("due", "Due date", DatePicker::required)
+                .help("Type it as 11/30/2026, or pick it."),
+            Field::new("fld-late", "Late date")
                 .error("Choose a weekday in the next three months.")
                 .control(
                     DatePicker::new("late")
@@ -161,35 +156,39 @@ fn pickers() -> Element {
                         .value_text("garbage")
                         .invalid(true),
                 ),
-            dp("disabled", "Disabled")
-                .value(day(2026, 11, 12))
-                .disabled(true),
-            dp("readonly", "Read only")
-                .value(day(2026, 11, 12))
-                .read_only(),
-            dp("button", "Button style")
-                .style(PickerStyle::Button)
-                .clearable()
-                .placeholder("Pick a day"),
-            dp("de", "Deutsch")
-                .locale(DateLocale::of("de"))
-                .value(day(2026, 11, 12)),
-            dp("ar", "Arabic")
-                .locale(DateLocale::of("ar"))
-                .value(day(2026, 11, 12)),
-            dp("ja", "Japanese")
-                .locale(DateLocale::of("ja"))
-                .value(day(2026, 11, 12)),
-            dp("birth", "Date of birth")
-                .caption(CaptionLayout::Dropdowns)
-                .max(today())
-                .value(day(1990, 5, 17)),
-            dp("rules", "Weekdays in the window").rules(
-                DateRules::new()
-                    .min(day(2026, 11, 1))
-                    .max(day(2026, 12, 31))
-                    .disable_weekdays([Weekday::Sat, Weekday::Sun]),
-            ),
+            dfield("disabled", "Disabled", |p| {
+                p.value(day(2026, 11, 12)).disabled(true)
+            }),
+            dfield("readonly", "Read only", |p| {
+                p.value(day(2026, 11, 12)).read_only()
+            }),
+            dfield("button", "Button style", |p| {
+                p.style(PickerStyle::Button)
+                    .clearable()
+                    .placeholder("Pick a day")
+            }),
+            dfield("de", "Deutsch", |p| {
+                p.locale(DateLocale::of("de")).value(day(2026, 11, 12))
+            }),
+            dfield("ar", "Arabic", |p| {
+                p.locale(DateLocale::of("ar")).value(day(2026, 11, 12))
+            }),
+            dfield("ja", "Japanese", |p| {
+                p.locale(DateLocale::of("ja")).value(day(2026, 11, 12))
+            }),
+            dfield("birth", "Date of birth", |p| {
+                p.caption(CaptionLayout::Dropdowns)
+                    .max(today())
+                    .value(day(1990, 5, 17))
+            }),
+            dfield("rules", "Weekdays in the window", |p| {
+                p.rules(
+                    DateRules::new()
+                        .min(day(2026, 11, 1))
+                        .max(day(2026, 12, 31))
+                        .disable_weekdays([Weekday::Sat, Weekday::Sun]),
+                )
+            }),
         )),
     )
 }
@@ -235,42 +234,64 @@ fn ranges() -> Element {
     )
 }
 
+fn tfield(
+    name: &'static str,
+    label: &'static str,
+    build: impl FnOnce(TimePicker) -> TimePicker,
+) -> Field {
+    Field::new(format!("fld-{name}"), label)
+        .control(build(TimePicker::new(name).id(format!("tp-{name}"))))
+}
+
 fn times() -> Element {
-    let tp = |name: &'static str, label: &'static str| {
-        TimePicker::new(name).id(format!("tp-{name}")).label(label)
-    };
     section(
         "Time pickers",
         Grid::cols(3).gap(4).children((
-            tp("twelve", "Twelve hour").value(time(14, 30)),
-            tp("de", "Twenty-four hour")
-                .locale(DateLocale::of("de"))
-                .value(time(14, 30)),
-            tp("seconds", "With seconds")
-                .seconds()
-                .value(NaiveTime::from_hms_opt(14, 30, 15).unwrap_or(NaiveTime::MIN)),
-            tp("hours", "Office hours").rules(
-                TimeRules::new()
-                    .min(time(9, 0))
-                    .max(time(17, 0))
-                    .unavailable(time(12, 0), time(12, 59))
-                    .step_minutes(15),
-            ),
-            tp("strict", "Strict quarter hours")
-                .rules(TimeRules::new().step_minutes(15).strict_step()),
-            tp("zone", "In a zone")
-                .value(time(9, 0))
-                .zone_note("Times are in America/New_York (UTC-5 until 8 March)."),
-            tp("clear", "Clearable").value(time(8, 0)).clearable(),
-            tp("invalid", "Invalid").value_text("soon").invalid(true),
-            tp("disabled", "Disabled").value(time(8, 0)).disabled(true),
-            tp("ja", "Japanese")
-                .locale(DateLocale::of("ja"))
-                .value(time(15, 5)),
-            tp("ar", "Arabic")
-                .locale(DateLocale::of("ar"))
-                .value(time(15, 30)),
-            tp("fine", "Every minute").rules(TimeRules::new().step_minutes(1)),
+            tfield("twelve", "Twelve hour", |p| p.value(time(14, 30))),
+            tfield("h24", "Twenty-four hour", |p| {
+                p.locale(DateLocale::of("de")).value(time(14, 30))
+            }),
+            tfield("seconds", "With seconds", |p| {
+                p.seconds()
+                    .value(NaiveTime::from_hms_opt(14, 30, 15).unwrap_or(NaiveTime::MIN))
+            }),
+            tfield("hours", "Office hours", |p| {
+                p.rules(
+                    TimeRules::new()
+                        .min(time(9, 0))
+                        .max(time(17, 0))
+                        .unavailable(time(12, 0), time(12, 59))
+                        .step_minutes(15),
+                )
+            }),
+            tfield("strict", "Strict quarter hours", |p| {
+                p.rules(TimeRules::new().step_minutes(15).strict_step())
+            }),
+            tfield("zone", "In a zone", |p| {
+                p.value(time(9, 0))
+                    .zone_note("Times are in America/New_York (UTC-5 until 8 March).")
+            }),
+            tfield("clear", "Clearable", |p| p.value(time(8, 0)).clearable()),
+            Field::new("fld-invalid", "Invalid")
+                .error("Enter a time like 2:30 PM.")
+                .control(
+                    TimePicker::new("invalid")
+                        .id("tp-invalid")
+                        .value_text("soon")
+                        .invalid(true),
+                ),
+            tfield("tdisabled", "Disabled", |p| {
+                p.value(time(8, 0)).disabled(true)
+            }),
+            tfield("tja", "Japanese", |p| {
+                p.locale(DateLocale::of("ja")).value(time(15, 5))
+            }),
+            tfield("tar", "Arabic", |p| {
+                p.locale(DateLocale::of("ar")).value(time(15, 30))
+            }),
+            tfield("fine", "Every minute", |p| {
+                p.rules(TimeRules::new().step_minutes(1))
+            }),
         )),
     )
 }
@@ -349,29 +370,29 @@ pub fn form_store(
     submit: Result<Submit<Booking>, Rejected<Booking>>,
 ) -> Response {
     match submit {
-        Ok(Submit(booking)) => View::new("Booked")
-            .body(
-                el("main").slot("page").children((
-                    Heading::h1("Booked"),
-                    el("dl").attr("data-saved", "").children((
-                        el("dt").child("start"),
-                        el("dd")
-                            .attr("data-field", "start")
-                            .child(booking.start.to_string()),
-                        el("dt").child("end"),
-                        el("dd")
-                            .attr("data-field", "end")
-                            .child(booking.end.map(|d| d.to_string()).unwrap_or_default()),
-                        el("dt").child("arrives"),
-                        el("dd")
-                            .attr("data-field", "arrives")
-                            .child(booking.arrives.to_string()),
-                    )),
-                )),
-            )
-            .into_response(),
+        Ok(Submit(booking)) => Reply::redirect(format!(
+            "/dates/booked?start={}&end={}&arrives={}",
+            booking.start,
+            booking.end.map(|d| d.to_string()).unwrap_or_default(),
+            booking.arrives.format("%H:%M:%S"),
+        ))
+        .toast(ToastTone::Success, "Booked")
+        .into_response(),
         Err(rejected) => rejected.respond(|form| booking_page(shell, form)),
     }
+}
+
+/// `GET /dates/booked`: what the booking saved.
+pub fn booked(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
+    let get = |key: &str| params.get(key).cloned().unwrap_or_default();
+    shell.page("Booked").body(el("dl").attr("data-saved", "").children((
+        el("dt").child("start"),
+        el("dd").attr("data-field", "start").child(get("start")),
+        el("dt").child("end"),
+        el("dd").attr("data-field", "end").child(get("end")),
+        el("dt").child("arrives"),
+        el("dd").attr("data-field", "arrives").child(get("arrives")),
+    )))
 }
 
 /// `GET /dates/report`: the window is in the address.
@@ -462,7 +483,44 @@ pub fn month(params: &HashMap<String, String>) -> View {
     if get("rules").is_some() {
         calendar = calendar.rules(rules());
     }
-    View::new("Month").body(el("main").slot("page").child(calendar))
+    View::new("Month").body(
+        el("main")
+            .slot("page")
+            .children((calendar, Button::new("After").attr("id", "after"))),
+    )
+}
+
+/// `GET /dates/probe`: a date picker and a time picker in the locale the query names,
+/// for typing at in any language.
+pub fn probe(params: &HashMap<String, String>) -> View {
+    let locale = DateLocale::of(params.get("loc").map_or("en", String::as_str));
+    let rules = DateRules::new()
+        .min(day(2026, 10, 1))
+        .max(day(2027, 12, 31));
+    View::new("Probe").body(
+        el("main")
+            .slot("page")
+            .attr("dir", if locale.rtl { "rtl" } else { "ltr" })
+            .child(
+                el("form")
+                    .attr("id", "probe")
+                    .attr("method", "get")
+                    .attr("action", "/dates/probe")
+                    .children((
+                        DatePicker::new("d")
+                            .id("probe-date")
+                            .label("Date")
+                            .locale(locale.clone())
+                            .today(today())
+                            .rules(rules),
+                        TimePicker::new("t")
+                            .id("probe-time")
+                            .label("Time")
+                            .locale(locale),
+                        Button::primary("Send").submit(),
+                    )),
+            ),
+    )
 }
 
 pub struct DatePages;
@@ -502,10 +560,24 @@ impl Controller for DatePages {
             .public(),
             RouteDef::on(
                 Method::GET,
+                "!/dates/booked",
+                |shell: AppShell, Query(params): Query<HashMap<String, String>>| async move {
+                    booked(&shell, &params)
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
                 "!/dates/report",
                 |shell: AppShell, Query(params): Query<HashMap<String, String>>| async move {
                     report(&shell, &params)
                 },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/dates/probe",
+                |Query(params): Query<HashMap<String, String>>| async move { probe(&params) },
             )
             .public(),
             RouteDef::on(

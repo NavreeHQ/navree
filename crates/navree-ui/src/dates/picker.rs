@@ -374,7 +374,6 @@ impl DatePicker {
                     .attr("value", text.clone())
                     .attr_opt("aria-label", self.label.clone())
                     .attr_opt("aria-invalid", (self.invalid || raw).then_some("true"))
-                    .flag("required", self.required)
                     .flag("disabled", self.disabled)
                     .flag("readonly", self.read_only),
                 el("div")

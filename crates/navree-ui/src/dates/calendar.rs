@@ -400,10 +400,16 @@ impl Calendar {
         let first_day = self.first_day();
         let editable = !self.read_only && !self.disabled;
         let months_id = format!("{}-months", self.id);
-        let blocks: Vec<Element> = visible
-            .iter()
-            .map(|(y, m)| self.month_block(*y, *m, &chosen, focus, first_day, editable))
-            .collect();
+        // Inside a picker the months are the browser's to draw when the popover opens;
+        // the server sends the shell and nothing a page would never show.
+        let blocks: Vec<Element> = if self.embedded {
+            Vec::new()
+        } else {
+            visible
+                .iter()
+                .map(|(y, m)| self.month_block(*y, *m, &chosen, focus, first_day, editable))
+                .collect()
+        };
         let nav = (self.navigation && editable).then(|| self.nav(&visible));
         let mut root = self
             .el

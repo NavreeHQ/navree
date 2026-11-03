@@ -35,7 +35,7 @@
   &[data-pending]{background:var(--accent);color:var(--accent-ink)}
   &[aria-disabled=true]{color:var(--fg-3);opacity:.5;cursor:not-allowed;&:hover{background:transparent;color:var(--fg-3)}}
   &[data-disabled]{text-decoration:line-through}
-  &[data-outside]{color:var(--fg-3);opacity:.45;cursor:default;&:hover{background:transparent}}
+  &[data-outside]{color:var(--fg-3);cursor:default;&:hover{background:transparent}}
 }
 /* The band behind a range runs from the middle of its first day to the middle of its last. */
 [data-slot=calendar-grid] td:has([data-range-start]:not([data-range-end])){background:linear-gradient(to right,transparent 50%,var(--band) 50%)}
@@ -45,7 +45,7 @@
 [data-slot=calendar-grid] td:has([data-range-middle]){background:var(--band)}
 [data-slot=calendar-grid] td:has([data-preview]:not([data-range-start],[data-range-end])){background:var(--band)}
 [data-slot=calendar-foot]{display:flex;justify-content:center;padding-top:.5rem}
-[data-slot=calendar][data-disabled]{opacity:.55}
+[data-slot=calendar][data-disabled] [data-slot=calendar-day]{cursor:not-allowed}
 
 /* A picker: a box with a button, a popover holding the calendar. */
 [data-slot=date-picker],[data-slot=time-picker],[data-slot=date-range-picker]{position:relative;display:block;min-width:0}

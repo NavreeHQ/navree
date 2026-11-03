@@ -5,7 +5,7 @@
 // browser's zone, its clock and `Date` never touch one. "Today" is what the server wrote
 // into the page. The server owns the rules and checks every value that comes back;
 // everything below only helps a person get to a value, and says so when it can't.
-import { all, attr, has, make, on, set, unset } from "./dom.js";
+import { all, attr, every, has, make, on, set, unset } from "./dom.js";
 
 const E = Element.prototype;
 /** @param {Element} el @param {string} sel @returns {any} */
@@ -404,8 +404,7 @@ function readWork(c) {
 function stateOf(root, c) {
   let st = states.get(root);
   if (!st) {
-    const first = q(root, "[data-slot=calendar-month]");
-    const [y, m] = (attr(first, "data-month") || "").split("-").map(Number);
+    const [y, m] = (attr(root, "data-month") || "").split("-").map(Number);
     const f = q(root, "[data-slot=calendar-day][tabindex='0']");
     st = { first: y ? mIndex(y, m) : mIndex(...(/** @type {[number, number]} */ (civil(c.today).slice(0, 2)))), focus: f ? fromIso(attr(f, "data-date")) : null, hover: null, work: null, stash: null };
     states.set(root, st);
@@ -1203,6 +1202,8 @@ function enhance(h) {
   if (!n) return;
   set(n, "aria-hidden", "true");
   set(n, "tabindex", "-1");
+  // The box is the field a person fills in, so it holds the requirement: the hidden one can't show a message.
+  if (n.required && t) t.required = true;
   n.required = false;
   const L = locOf(h);
   if (kind === "time") {
@@ -1233,8 +1234,8 @@ function enhance(h) {
 const sigs = new WeakMap();
 /** After a morph: pickers and calendars take what the page now says. */
 function sync() {
-  for (const h of /** @type {any} */ (all(document, "[data-ui-dates=picker],[data-ui-dates=range],[data-ui-dates=time]"))) enhance(h);
-  for (const root of /** @type {any} */ (all(document, "[data-ui-dates=calendar]"))) {
+  for (const h of /** @type {any} */ (every("[data-ui-dates=picker],[data-ui-dates=range],[data-ui-dates=time]"))) enhance(h);
+  for (const root of /** @type {any} */ (every("[data-ui-dates=calendar]"))) {
     const st = states.get(root), sig = `${attr(root, "data-ui-rules")}|${attr(root, "data-today")}|${attr(root, "data-months")}`;
     if (!st || !sigs.has(root)) {
       sigs.set(root, sig);
