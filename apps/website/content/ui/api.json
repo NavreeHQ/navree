@@ -2991,6 +2991,12 @@
     ],
     "methods": [
       {
+        "name": "settable",
+        "generics": "",
+        "args": "",
+        "doc": "Lets `Cmd::value` set this field, when it is hidden (see `Element::settable`)."
+      },
+      {
         "name": "value",
         "generics": "",
         "args": "value: impl Into<String>",
