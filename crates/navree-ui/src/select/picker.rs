@@ -637,13 +637,16 @@ macro_rules! typed_methods {
             /// Offers to create the typed text on the server: the runtime posts
             /// `name=text` to `url` and the answer, an
             /// [`ChoiceList`](crate::select::ChoiceList) holding the new option, is chosen.
+            /// The route must check that the caller may create, and what the text is, as
+            /// any post: a browser can send to it whatever the row shows.
             pub fn create_url(mut self, url: impl Into<$crate::html::Href>) -> Self {
                 self.picker.create = $crate::select::picker::Create::Url(url.into());
                 self
             }
 
             /// Shows the create row switched off, with the reason, for someone who may
-            /// not create.
+            /// not create. It is a hint to the person and stops nobody: the route behind
+            /// [`create_url`](Self::create_url) must check permission itself.
             pub fn create_denied(mut self, reason: impl Into<String>) -> Self {
                 self.picker.create_denied = Some(reason.into());
                 self

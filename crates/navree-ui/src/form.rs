@@ -90,6 +90,9 @@ pub struct FormField {
     pub wide: bool,
     /// A select's or radio group's choices: `(value, label)`.
     pub options: &'static [(&'static str, &'static str)],
+    /// The most values a [`Many`] field takes: the browser stops at it, and
+    /// [`decode`] refuses a post that goes past it.
+    pub max: Option<u32>,
 }
 
 /// A struct that can be drawn as a form. `#[derive(Form)]` implements it.
@@ -655,6 +658,9 @@ impl<T: Form> FormView<T> {
                 if let Some(url) = self.searches.get(field.name) {
                     multi = multi.search(url.clone());
                 }
+                if let Some(max) = field.max {
+                    multi = multi.max(max);
+                }
                 multi.into()
             }
             Widget::Radio => {
@@ -972,6 +978,52 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
 /// is `false`, and a missing text field is empty. A pair that isn't one of `T`'s
 /// fields is dropped, so a field marked `#[form(skip)]` can't be set by the client.
 pub fn decode<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
+where
+    T: Form + DeserializeOwned + Validate,
+{
+    let over = over_limit::<T>(pairs);
+    match decode_values::<T>(pairs) {
+        Ok(value) if over.is_empty() => Ok(value),
+        Ok(_) => Err(over),
+        Err(mut errors) => {
+            for (name, texts) in over {
+                errors.entry(name).or_insert(texts);
+            }
+            Err(errors)
+        }
+    }
+}
+
+/// The values a list field holds in a post: not empty, and none that holds the
+/// separator, as [`decode`] reads them.
+fn list_values<'a>(pairs: &'a [(String, String)], name: &'a str) -> impl Iterator<Item = &'a str> {
+    pairs
+        .iter()
+        .filter(move |(field, _)| field == name)
+        .map(|(_, value)| value.as_str())
+        .filter(|value| !value.is_empty() && !value.contains(SEPARATOR))
+}
+
+/// The list fields that took more values than their limit. A limit the browser keeps
+/// is only a convenience, so the post is held to it too: with JavaScript off, this is
+/// the only check.
+fn over_limit<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
+    let mut errors = FieldErrors::new();
+    for field in T::FIELDS {
+        let (Widget::Multi, Some(max)) = (field.widget, field.max) else {
+            continue;
+        };
+        if list_values(pairs, field.name).count() > max as usize {
+            errors.insert(
+                field.name.to_owned(),
+                vec![format!("Choose at most {max}.")],
+            );
+        }
+    }
+    errors
+}
+
+fn decode_values<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
@@ -1301,6 +1353,41 @@ impl<T> std::fmt::Debug for Rejected<T> {
 }
 
 impl<T: Form> Rejected<T> {
+    /// A refusal of a form that decoded, for a reason found afterwards: a value that
+    /// isn't among the options the caller may pick (see `Choice::all_among` and
+    /// `OptionSource::all_pickable`), a name that is taken. It answers as a failed
+    /// rule does: the runtime gets ops that show `errors` under the fields, and
+    /// without JavaScript the form comes back with what was sent. Take the request's
+    /// `Parts` beside `Submit` to give it.
+    ///
+    /// ```ignore
+    /// async fn store(parts: Parts, Submit(deal): Submit<NewDeal>, uow: Uow) -> Result<Response> {
+    ///     if !PEOPLE.all_pickable(Person::query(), &deal.owner_id, &uow, OptionSource::as_int).await? {
+    ///         let errors = FieldErrors::from([("owner_id".to_owned(), vec!["Choose from the list.".to_owned()])]);
+    ///         return Ok(Rejected::after_decode(&deal, errors, &parts).into_response());
+    ///     }
+    ///     // ...
+    /// }
+    /// ```
+    pub fn after_decode(value: &T, errors: FieldErrors, parts: &Parts) -> Self {
+        let values = value
+            .values()
+            .into_iter()
+            .map(|(name, text)| (name.to_owned(), text))
+            .collect();
+        Self {
+            values: echo::<T>(values),
+            errors,
+            from_runtime: parts.headers.contains_key(UI_HEADER),
+            action: parts.uri.path_and_query().map_or_else(
+                || parts.uri.path().to_owned(),
+                |path| path.as_str().to_owned(),
+            ),
+            refused: None,
+            marker: PhantomData,
+        }
+    }
+
     /// The errors by field.
     pub fn errors(&self) -> &FieldErrors {
         &self.errors

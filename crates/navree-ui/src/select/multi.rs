@@ -56,7 +56,11 @@ impl MultiSelect {
         self
     }
 
-    /// Allows at most `n` choices. The other options are switched off at the limit.
+    /// Allows at most `n` choices. The other options are switched off at the limit, and
+    /// so is making a new one. This is the browser's help only: with JavaScript off, or
+    /// from a hand-made post, more can arrive. In a derived form, `#[form(max = n)]` on
+    /// the field holds the post to the limit too; otherwise check the count in the
+    /// handler.
     pub fn max(mut self, n: u32) -> Self {
         self.picker.max = Some(n);
         self

@@ -6,7 +6,7 @@
 //! the app's scoped query, so workspace scoping and row-level security hold, as
 //! for the data table.
 
-use navree_orm::{Builder, Executor, Filter, Model, Record, Result, col_as};
+use navree_orm::{Builder, Executor, Filter, Model, Record, Result, Value, col, col_as};
 
 use super::choice::Choice;
 use super::query::{ChoiceList, OptionQuery};
@@ -113,6 +113,82 @@ impl OptionSource {
         } else {
             list
         })
+    }
+}
+
+impl OptionSource {
+    /// Whether every one of `values` is an option this caller may pick: a row of
+    /// `builder`, which is the caller's own scoped query, with the value column
+    /// equal to it. Nothing a browser sends is known to be one of the options it
+    /// was given, so a handler asks this after reading a form, with the same
+    /// builder it answers searches with: a value from another workspace, one the
+    /// caller may not see, or one that never existed is not pickable.
+    ///
+    /// An empty value is no choice and is passed over: whether one is needed is the
+    /// field's own rule. `as_value` turns the text of a value into what the column
+    /// holds; [`as_int`](Self::as_int), [`as_uuid`](Self::as_uuid) and
+    /// [`as_text`](Self::as_text) are the usual ones, and a value that doesn't turn
+    /// into one is not pickable.
+    ///
+    /// ```ignore
+    /// let picked = deal.owner_id.iter();
+    /// if !PEOPLE.all_pickable(Person::query(), picked, &uow, OptionSource::as_int).await? {
+    ///     // Refuse it as a failed rule: see `Rejected::after_decode`.
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    /// Whatever the database reports.
+    pub async fn all_pickable<M, E, V>(
+        &self,
+        builder: Builder<M>,
+        values: impl IntoIterator<Item = V>,
+        exec: &E,
+        as_value: impl Fn(&str) -> Option<Value>,
+    ) -> Result<bool>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+        V: AsRef<str>,
+    {
+        let mut wanted: Vec<Value> = Vec::new();
+        for value in values {
+            let text = value.as_ref();
+            if text.is_empty() {
+                continue;
+            }
+            let Some(parsed) = as_value(text) else {
+                return Ok(false);
+            };
+            if !wanted.contains(&parsed) {
+                wanted.push(parsed);
+            }
+        }
+        if wanted.is_empty() {
+            return Ok(true);
+        }
+        let distinct = wanted.len() as u64;
+        let found = builder
+            .reorder()
+            .where_(col(column_of::<M>(self.value)).is_in(wanted))
+            .count(exec)
+            .await?;
+        Ok(found == distinct)
+    }
+
+    /// A value read as a whole number, for a column of `i64`.
+    pub fn as_int(text: &str) -> Option<Value> {
+        text.parse::<i64>().ok().map(Value::I64)
+    }
+
+    /// A value read as a UUID, for a column of `Uuid`.
+    pub fn as_uuid(text: &str) -> Option<Value> {
+        text.parse::<uuid::Uuid>().ok().map(Value::Uuid)
+    }
+
+    /// A value read as the text it is, for a column of text.
+    pub fn as_text(text: &str) -> Option<Value> {
+        Some(Value::String(text.to_owned()))
     }
 }
 

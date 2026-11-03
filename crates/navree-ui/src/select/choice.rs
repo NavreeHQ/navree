@@ -91,6 +91,33 @@ impl Choice {
         &self.value
     }
 
+    /// Whether every one of `values` is the value of one of `choices` that isn't
+    /// disabled: the check of a handler for a fixed list, since nothing a browser
+    /// sends is known to be one of the options it was given. An empty value is no
+    /// choice and passes; whether one is needed is the field's own rule. For a list
+    /// that comes from the database, see `OptionSource::all_pickable`.
+    ///
+    /// ```
+    /// use navree_ui::Choice;
+    ///
+    /// let stages = [Choice::new("lead", "Lead"), Choice::new("won", "Won").disabled(true)];
+    /// assert!(Choice::all_among(["lead"], &stages));
+    /// assert!(!Choice::all_among(["lead", "forged"], &stages));
+    /// assert!(!Choice::all_among(["won"], &stages), "a disabled one is not pickable");
+    /// ```
+    pub fn all_among<V: AsRef<str>>(
+        values: impl IntoIterator<Item = V>,
+        choices: &[Choice],
+    ) -> bool {
+        values.into_iter().all(|value| {
+            let value = value.as_ref();
+            value.is_empty()
+                || choices
+                    .iter()
+                    .any(|choice| !choice.disabled && choice.value == value)
+        })
+    }
+
     /// The label that is shown.
     pub fn label(&self) -> &str {
         &self.label

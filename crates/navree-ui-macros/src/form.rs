@@ -21,6 +21,7 @@ struct FieldHints {
     error: Option<LitStr>,
     addon: Option<LitStr>,
     rows: Option<LitInt>,
+    max: Option<LitInt>,
     widget: Option<Ident>,
     autofocus: bool,
     wide: bool,
@@ -40,13 +41,14 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "error" => out.error = Some(meta.value()?.parse()?),
                 "addon" => out.addon = Some(meta.value()?.parse()?),
                 "rows" => out.rows = Some(meta.value()?.parse()?),
+                "max" => out.max = Some(meta.value()?.parse()?),
                 "widget" => out.widget = Some(meta.value()?.parse()?),
                 "autofocus" => out.autofocus = true,
                 "wide" => out.wide = true,
                 "skip" => out.skip = true,
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, widget, autofocus, wide or skip"
+                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, autofocus, wide or skip"
                     )));
                 }
             }
@@ -192,6 +194,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             opt(hint.addon),
         );
         let (autofocus, wide) = (hint.autofocus, hint.wide);
+        let max = opt(hint.max);
         specs.push(quote! {
             #ui::form::FormField {
                 name: #name,
@@ -206,6 +209,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 autofocus: #autofocus,
                 wide: #wide,
                 options: #options,
+                max: #max,
             },
         });
         values.push(quote! {
