@@ -8,14 +8,20 @@ use navree_phone::PhoneNumber;
 
 use crate::value::{Field, FieldError, FieldKind, Kind, Value};
 
+/// Reads a stored number: E.164 exactly as written, whatever the plans
+/// compiled in now say (a range withdrawn in an update can't make a row
+/// unreadable); else any international form, valid or of a possible length.
 fn parse(text: &str) -> Result<PhoneNumber, FieldError> {
-    PhoneNumber::parse(text, None)
+    PhoneNumber::from_e164(text)
+        .or_else(|_| PhoneNumber::parse(text, None))
+        .or_else(|_| PhoneNumber::parse_possible(text, None))
         .map_err(|error| FieldError::Invalid(format!("`{text}` is not a phone number: {error}")))
 }
 
 /// A phone number, stored as its E.164 text (`+447400123456`). E.164 has no
-/// extension: keep one in a column of its own if it matters. Stored text
-/// that does not read as a number with its country code is a decode error
+/// extension: keep one in a column of its own if it matters. What was
+/// written reads back exactly, even under newer numbering plans; text that
+/// does not read as a number with its country code is a decode error
 /// naming the column.
 ///
 /// ```
@@ -26,6 +32,10 @@ fn parse(text: &str) -> Result<PhoneNumber, FieldError> {
 /// assert_eq!(number.to_value(), Value::from("+447400123456"));
 /// assert_eq!(PhoneNumber::from_value(Value::from("+447400123456")).unwrap(), number);
 /// assert!(PhoneNumber::from_value(Value::from("07400 123456")).is_err());
+///
+/// // A number the plans compiled in don't assign still loads as stored.
+/// let stored = PhoneNumber::from_value(Value::from("+441000000000")).unwrap();
+/// assert_eq!(stored.to_value(), Value::from("+441000000000"));
 /// ```
 impl Field for PhoneNumber {
     const KIND: FieldKind = FieldKind::Text;
