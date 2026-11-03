@@ -61,12 +61,16 @@ const columns: { title: string; links: FooterLink[] }[] = [
   },
 ];
 
-/** Internal pages go through the router; files (llms.txt) and other sites are plain links. */
+/**
+ * Internal pages go through the router; files (llms.txt) and other sites are
+ * plain links. The footer's pages aren't prefetched: reaching the bottom of a
+ * page would otherwise fetch every one of them.
+ */
 function FooterAnchor({ link }: { link: FooterLink }) {
   const className = "text-fg-2 transition-colors duration-200 hover:text-fg";
   const isPage = link.href.startsWith("/") && /\/(#[\w-]+)?$/.test(link.href);
   return isPage ? (
-    <Link href={link.href} className={className}>
+    <Link href={link.href} prefetch={false} className={className}>
       {link.label}
     </Link>
   ) : (

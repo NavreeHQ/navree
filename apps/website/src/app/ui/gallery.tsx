@@ -83,6 +83,7 @@ export function ComponentGallery() {
                   <li key={id} className="min-w-0">
                     <Link
                       href={c.url}
+                      prefetch={false}
                       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-ink-1 shadow-bezel transition-colors duration-200 hover:border-line-2"
                     >
                       <div className="relative h-[8.5rem] overflow-hidden border-b border-line bg-ink-0 sm:h-[10rem]" inert>
