@@ -46,7 +46,7 @@
 }
 [data-summary] [data-slot=chip]{display:none}
 [data-slot=select-trigger][aria-invalid=true],[data-slot=combobox-control]:has([aria-invalid=true]),[data-slot=multiselect-control]:has([aria-invalid=true]){border-color:var(--danger)}
-[data-disabled]{opacity:.5;cursor:not-allowed;& [data-slot=select-trigger],& [data-slot=combobox-control],& [data-slot=multiselect-control]{pointer-events:none}}
+[data-ui-picker][data-disabled]{opacity:.5;cursor:not-allowed;& [data-slot=select-trigger],& [data-slot=combobox-control],& [data-slot=multiselect-control]{pointer-events:none}}
 [data-readonly] [data-slot=select-trigger],[data-readonly] [data-slot=combobox-control],[data-readonly] [data-slot=multiselect-control]{background:var(--ink-2)}
 
 /* The popup: the browser's popover, placed by the overlay module. */
