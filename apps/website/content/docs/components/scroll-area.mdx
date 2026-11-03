@@ -15,7 +15,7 @@ ScrollArea::new("Activity").children(Text::muted("Ada moved Acme renewal to Prop
 
 ## When to use it
 
-Use it for a list that would otherwise make the page too long: a log, an activity feed. Give it a height through its container.
+Use it for a list that would otherwise make the page too long: a log, an activity feed. It scrolls only when its container limits its height: the toolkit sets none of its own, because the content security policy allows no `style` attribute.
 
 <UiChoose name="disclosure" current="ScrollArea" />
 
