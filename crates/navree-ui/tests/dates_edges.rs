@@ -159,7 +159,7 @@ fn a_range_or_a_list_from_a_request_stays_inside_the_years_the_calendar_draws() 
         parse_list("9999-12-31,0001-01-01", 10),
         Some(vec![day(1, 1, 1), day(9999, 12, 31)])
     );
-    // The reviewer's case: it panicked in a zone with an offset.
+    // A year far before 1 once panicked in a zone with an offset.
     let query = DateRangeQuery {
         from: Some("-262143-01-01".to_owned()),
         to: Some("2026-11-03".to_owned()),
