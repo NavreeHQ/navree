@@ -30,12 +30,12 @@ pub mod prelude {
     };
     pub use crate::icons;
     pub use crate::op::{Op, Reply, ToastTone, UrlMode};
+    #[cfg(feature = "phone")]
+    pub use crate::phone::{PhoneInput, PhoneLabels};
     pub use crate::select::{
         Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
         Select, SelectLabels,
     };
-    #[cfg(feature = "phone")]
-    pub use crate::phone::{PhoneInput, PhoneLabels};
     pub use crate::table::{
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
         TableHeight, TableLabels, TablePage, TableQuery,
