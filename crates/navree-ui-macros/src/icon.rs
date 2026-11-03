@@ -5,7 +5,10 @@
 //! line and the reason. What comes out is shapes and a `viewBox`, the same
 //! `Icon` a built-in icon is.
 
+use std::cell::Cell;
+use std::collections::HashSet;
 use std::fmt::Write as _;
+use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
 
 use proc_macro2::{Span, TokenStream};
@@ -18,6 +21,8 @@ const MAX_BYTES: usize = 256 * 1024;
 const MAX_ELEMENTS: usize = 2048;
 /// Deepest nesting.
 const MAX_DEPTH: usize = 8;
+/// Most attributes on one element.
+const MAX_ATTRS: usize = 64;
 /// Largest `viewBox` side.
 const MAX_BOX: f64 = 4096.0;
 
@@ -56,6 +61,8 @@ pub(crate) fn sanitize(source: &[u8]) -> Result<Sanitised, String> {
 struct Reader<'a> {
     text: &'a str,
     at: usize,
+    /// The line at `counted`: lines are counted forward from there, once, as `at` moves.
+    line_at: Cell<(usize, usize)>,
     elements: usize,
     /// Whether an XML declaration may still come: only before anything else.
     declaration_allowed: bool,
@@ -67,6 +74,7 @@ impl<'a> Reader<'a> {
         Self {
             text,
             at,
+            line_at: Cell::new((0, 1)),
             elements: 0,
             declaration_allowed: true,
         }
@@ -76,8 +84,16 @@ impl<'a> Reader<'a> {
         &self.text[self.at..]
     }
 
+    /// The line `at` is on. `at` only moves forward, so each byte is counted once.
     fn line(&self) -> usize {
-        self.text[..self.at].bytes().filter(|&b| b == b'\n').count() + 1
+        let (counted, line) = self.line_at.get();
+        let line = line
+            + self.text.as_bytes()[counted..self.at]
+                .iter()
+                .filter(|&&b| b == b'\n')
+                .count();
+        self.line_at.set((self.at, line));
+        line
     }
 
     fn fail<T>(&self, message: impl std::fmt::Display) -> Result<T, String> {
@@ -161,6 +177,7 @@ impl<'a> Reader<'a> {
             children: Vec::new(),
             line,
         };
+        let mut seen: HashSet<String> = HashSet::new();
         loop {
             self.skip_space();
             if self.rest().starts_with("/>") {
@@ -192,8 +209,14 @@ impl<'a> Reader<'a> {
             }
             let value = decode(raw).map_err(|e| format!("line {}: {e}", self.line()))?;
             self.at += end + 1;
-            if node.attrs.iter().any(|(existing, _)| *existing == attr) {
+            if !seen.insert(attr.clone()) {
                 return self.fail(format!("attribute {attr} twice"));
+            }
+            if seen.len() > MAX_ATTRS {
+                return self.fail(format!(
+                    "<{}> has more than {MAX_ATTRS} attributes",
+                    node.name
+                ));
             }
             node.attrs.push((attr, value));
         }
@@ -229,7 +252,15 @@ impl<'a> Reader<'a> {
         }
         // Only a title or description may hold text, and it is thrown away.
         if !matches!(node.name.as_str(), "title" | "desc") && !text.trim().is_empty() {
-            return self.fail(format!("<{}> holds text, which an icon cannot", node.name));
+            let name = node.name.as_str();
+            return Err(if allowed_element(name) {
+                format!(
+                    "line {}: <{name}> holds text, which an icon cannot",
+                    node.line
+                )
+            } else {
+                not_allowed(name, node.line)
+            });
         }
         Ok(node)
     }
@@ -358,6 +389,29 @@ fn hint(name: &str) -> &'static str {
     }
 }
 
+/// Elements an icon may hold: shapes and groups.
+fn allowed_element(name: &str) -> bool {
+    name == "g" || SHAPES.contains(&name)
+}
+
+/// Why an element is refused, with what to do instead.
+fn not_allowed(name: &str, line: usize) -> String {
+    format!(
+        "line {line}: <{name}> is not allowed in an icon: only shapes ({}) and <g>{}",
+        SHAPES.join(", "),
+        hint(name)
+    )
+}
+
+/// White space as XML has it, and nothing else: Unicode's `trim` takes `U+0085` and `U+00A0`.
+const XML_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
+
+/// A control character other than the white space XML allows.
+fn has_control(text: &str) -> bool {
+    text.chars()
+        .any(|c| c.is_control() && !XML_SPACE.contains(&c))
+}
+
 fn is_number(text: &str) -> bool {
     let t = text.strip_prefix(['+', '-']).unwrap_or(text);
     let (mantissa, exponent) = match t.find(['e', 'E']) {
@@ -383,7 +437,7 @@ fn is_length(text: &str) -> bool {
         .strip_suffix("px")
         .or_else(|| text.strip_suffix('%'))
         .unwrap_or(text);
-    is_number(t.trim())
+    is_number(t.trim_matches(XML_SPACE))
 }
 
 fn is_number_list(text: &str) -> bool {
@@ -406,7 +460,7 @@ fn is_colour(text: &str) -> bool {
 }
 
 fn is_transform(text: &str) -> bool {
-    let mut rest = text.trim();
+    let mut rest = text.trim_matches(XML_SPACE);
     if rest.is_empty() {
         return false;
     }
@@ -414,7 +468,7 @@ fn is_transform(text: &str) -> bool {
         let Some(open) = rest.find('(') else {
             return false;
         };
-        let name = rest[..open].trim();
+        let name = rest[..open].trim_matches(XML_SPACE);
         if !matches!(
             name,
             "translate" | "scale" | "rotate" | "skewX" | "skewY" | "matrix"
@@ -448,12 +502,15 @@ fn check_attr(element: &str, name: &str, value: &str) -> Result<bool, String> {
     if name == "style" {
         return Err("style is blocked by the content security policy: use attributes such as fill and stroke".to_owned());
     }
+    if has_control(value) {
+        return Err(format!("{name} holds a control character"));
+    }
     let ok = match name {
         "d" => {
             value.len() <= MAX_BYTES
                 && value.bytes().all(|b| {
                     b.is_ascii_digit()
-                        || b.is_ascii_whitespace()
+                        || matches!(b, b' ' | b'\t' | b'\r' | b'\n')
                         || matches!(
                             b,
                             b'M' | b'm'
@@ -527,12 +584,7 @@ fn write_shape(node: &Node, out: &mut String) -> Result<(), String> {
     }
     let is_group = name == "g";
     if !is_group && !SHAPES.contains(&name) {
-        return Err(format!(
-            "line {}: <{name}> is not allowed in an icon: only shapes ({}) and <g>{}",
-            node.line,
-            SHAPES.join(", "),
-            hint(name)
-        ));
+        return Err(not_allowed(name, node.line));
     }
     if !is_group
         && !node
@@ -576,15 +628,9 @@ fn view_box(root: &Node) -> Result<String, String> {
             .find(|(n, _)| n == name)
             .map(|(_, v)| v.as_str())
     };
-    let plain = |s: &str| {
-        let t = s.trim_start_matches(['-', '+']);
-        !t.is_empty()
-            && t.bytes().all(|b| b.is_ascii_digit() || b == b'.')
-            && t.matches('.').count() <= 1
-    };
-    let numbers: Vec<String> = if let Some(value) = attr("viewBox") {
+    let words: Vec<String> = if let Some(value) = attr("viewBox") {
         value
-            .split(|c: char| c.is_ascii_whitespace() || c == ',')
+            .split(|c: char| XML_SPACE.contains(&c) || c == ',')
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
             .collect()
@@ -594,19 +640,32 @@ fn view_box(root: &Node) -> Result<String, String> {
     } else {
         return Err("the <svg> has no viewBox (or width and height to make one from)".to_owned());
     };
-    if numbers.len() != 4 || !numbers.iter().all(|n| plain(n)) {
-        return Err(format!(
-            "the viewBox is not four plain numbers: {numbers:?}"
-        ));
-    }
-    let size = |s: &str| s.parse::<f64>().unwrap_or(0.0);
-    let (width, height) = (size(&numbers[2]), size(&numbers[3]));
+    // Each word is a number as SVG writes one, nothing else, and is written back plain.
+    let numbers: Option<Vec<f64>> = words
+        .iter()
+        .map(|word| {
+            if is_number(word) {
+                word.parse::<f64>().ok().filter(|n| n.is_finite())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let Some(numbers) = numbers.filter(|n| n.len() == 4) else {
+        return Err(format!("the viewBox is not four plain numbers: {words:?}"));
+    };
+    let (x, y, width, height) = (numbers[0], numbers[1], numbers[2], numbers[3]);
     if !(width > 0.0 && height > 0.0 && width <= MAX_BOX && height <= MAX_BOX) {
         return Err(format!(
             "the viewBox must be wider and taller than 0 and at most {MAX_BOX}"
         ));
     }
-    Ok(numbers.join(" "))
+    if x.abs() > MAX_BOX * 8.0 || y.abs() > MAX_BOX * 8.0 {
+        return Err(format!(
+            "the viewBox starts too far from the origin: {x} {y}"
+        ));
+    }
+    Ok(format!("{x} {y} {width} {height}"))
 }
 
 fn build(root: &Node) -> Result<Sanitised, String> {
@@ -721,14 +780,33 @@ fn icon_tokens(
     })
 }
 
+/// The file's bytes, once its size is known to fit: a huge file is refused unread.
+fn read_checked(path: &Path) -> Result<Vec<u8>, String> {
+    let failed = |e: std::io::Error| format!("{}: {e}", path.display());
+    let file = std::fs::File::open(path).map_err(failed)?;
+    let size = file.metadata().map_err(failed)?.len();
+    if size > MAX_BYTES as u64 {
+        return Err(format!(
+            "{}: the file is {size} bytes; an icon is at most {MAX_BYTES}",
+            path.display()
+        ));
+    }
+    let mut bytes = Vec::with_capacity(size as usize);
+    // Whatever the file grows to meanwhile, no more than one byte past the limit is read.
+    file.take(MAX_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(failed)?;
+    Ok(bytes)
+}
+
 pub(crate) fn file(
     ui: &TokenStream,
     manifest: &Path,
     relative: &LitStr,
 ) -> syn::Result<TokenStream> {
     let absolute = manifest.join(inside(relative)?);
-    let source = std::fs::read(&absolute)
-        .map_err(|e| syn::Error::new(relative.span(), format!("{}: {e}", absolute.display())))?;
+    let source =
+        read_checked(&absolute).map_err(|reason| syn::Error::new(relative.span(), reason))?;
     icon_tokens(ui, &absolute, &source, relative.span())
 }
 
@@ -801,8 +879,7 @@ pub(crate) fn set(
                 format!("{}: another file gives the constant {name}", path.display()),
             ));
         }
-        let source = std::fs::read(&path)
-            .map_err(|e| syn::Error::new(span, format!("{}: {e}", path.display())))?;
+        let source = read_checked(&path).map_err(|reason| syn::Error::new(span, reason))?;
         let value = icon_tokens(ui, &path, &source, span)?;
         let ident = syn::Ident::new(&name, span);
         let doc = format!("`{file_name}`.");
@@ -1109,6 +1186,175 @@ mod tests {
         ] {
             assert!(inside(&lit(bad)).is_err(), "{bad}");
         }
+    }
+
+    // ------------------------------------------------------ review findings
+
+    #[test]
+    fn a_viewbox_number_is_read_strictly() {
+        for bad in [
+            "--1 --1 24 24",
+            "+-1 0 24 24",
+            "1..2 0 24 24",
+            "1.2.3 0 24 24",
+            "- 0 24 24",
+            ". 0 24 24",
+            "1e 0 24 24",
+            "0x10 0 24 24",
+            "0 0 1e400 24",
+            "NaN 0 24 24",
+            "0 0 24 24 24",
+            "99999999 0 24 24",
+        ] {
+            let svg = format!(r#"<svg viewBox="{bad}"><path d="M1 1"/></svg>"#);
+            assert!(refused(&svg).contains("viewBox"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_viewbox_that_is_read_is_written_back_plain() {
+        for (given, written) in [
+            ("+0 0 24 24", "0 0 24 24"),
+            ("0 0 2.4e1 2.4e1", "0 0 24 24"),
+            ("-2 -2 36. 36.0", "-2 -2 36 36"),
+            ("0,0,.5,.5", "0 0 0.5 0.5"),
+        ] {
+            let svg = format!(r#"<svg viewBox="{given}"><path d="M1 1"/></svg>"#);
+            assert_eq!(ok(&svg).view_box, written, "{given}");
+        }
+    }
+
+    #[test]
+    fn a_control_character_never_reaches_the_output() {
+        let wrongs = [
+            '\u{1}', '\u{b}', '\u{c}', '\u{85}', '\u{7f}', '\u{a0}', '\u{2028}',
+        ];
+        for c in wrongs {
+            for template in [
+                "<circle r=\"{c}5\"/>",
+                "<circle r=\"5{c}\"/>",
+                "<circle r=\"5 {c}\"/>",
+                "<rect width=\"{c}10px\" height=\"1\"/>",
+                "<path d=\"M1 1{c}h4\"/>",
+                "<path d=\"{c}M1 1\"/>",
+                "<path d=\"M1 1\" transform=\"{c}translate(1)\"/>",
+                "<path d=\"M1 1\" transform=\"translate(1){c}\"/>",
+                "<path d=\"M1 1\" transform=\"translate{c}(1)\"/>",
+                "<polyline points=\"1 1{c}2 2\"/>",
+                "<path d=\"M1 1\" stroke-width=\"{c}1\"/>",
+                "<path d=\"M1 1\" opacity=\"1{c}\"/>",
+                "<path d=\"M1 1\" fill=\"#fff{c}\"/>",
+                "<path d=\"M1 1\" stroke-dasharray=\"1{c}2\"/>",
+            ] {
+                let svg = format!(
+                    r#"<svg viewBox="0 0 24 24">{}</svg>"#,
+                    template.replace("{c}", &c.to_string())
+                );
+                if let Ok(icon) = sanitize(svg.as_bytes()) {
+                    panic!("accepted {c:?} in {template}: {}", icon.shapes);
+                }
+            }
+        }
+        // The white space XML allows is still fine.
+        ok("<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\n\th4\r\nv4\"/></svg>");
+    }
+
+    /// An output made only of printable ASCII, tabs and newlines.
+    #[test]
+    fn whatever_is_accepted_is_plain_ascii() {
+        let icon = ok(ARROW);
+        assert!(
+            icon.shapes
+                .chars()
+                .all(|c| c.is_ascii() && (!c.is_control() || matches!(c, '\t' | '\n' | '\r'))),
+            "{}",
+            icon.shapes
+        );
+    }
+
+    #[test]
+    fn a_script_or_style_element_gets_its_own_reason() {
+        let wrap = |inner: &str| format!(r#"<svg viewBox="0 0 24 24">{inner}</svg>"#);
+        for (inner, said) in [
+            ("<script>alert(1)</script>", "scripts cannot run"),
+            ("<style>path{fill:red}</style>", "content security policy"),
+            ("<text>hi</text>", "convert text to outlines"),
+            (
+                "<foreignObject>hi</foreignObject>",
+                "cannot refer to another file",
+            ),
+            ("<widget>hi</widget>", "is not allowed in an icon"),
+        ] {
+            let reason = refused(&wrap(inner));
+            assert!(reason.starts_with("line 1:"), "{inner}: {reason}");
+            assert!(reason.contains(said), "{inner}: {reason}");
+        }
+        // A shape or group that holds text is a different reason.
+        assert!(refused(&wrap("<g>hi</g>")).contains("holds text"));
+        // The line is the element's own.
+        let reason = refused("<svg viewBox=\"0 0 24 24\">\n<script>\nalert(1)\n</script>\n</svg>");
+        assert!(reason.starts_with("line 2:"), "{reason}");
+    }
+
+    #[test]
+    fn a_big_file_is_read_in_a_blink() {
+        use std::time::Instant;
+        // 2,047 paths in the svg, spread over about 220 KB: every line count used to start over.
+        let pad = "x".repeat(70);
+        let many: String = (0..2047)
+            .map(|_| format!("<path d=\"M1 1\" data-pad=\"{pad}\"/>\n"))
+            .collect();
+        let svg = format!("<svg viewBox=\"0 0 24 24\">\n{many}</svg>");
+        assert!(
+            svg.len() > 150_000 && svg.len() < MAX_BYTES,
+            "{}",
+            svg.len()
+        );
+        let started = Instant::now();
+        ok(&svg);
+        assert!(
+            started.elapsed().as_millis() < 400,
+            "{:?}",
+            started.elapsed()
+        );
+
+        // One element with tens of thousands of attributes: refused, and quickly.
+        let flood: String = (0..20_000).map(|i| format!(" a{i}=\"1\"")).collect();
+        let svg = format!("<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\"{flood}/></svg>");
+        assert!(svg.len() < MAX_BYTES, "{}", svg.len());
+        let started = Instant::now();
+        assert!(refused(&svg).contains("attributes"));
+        assert!(
+            started.elapsed().as_millis() < 400,
+            "{:?}",
+            started.elapsed()
+        );
+
+        // The same attribute twice is still caught, among many.
+        let twice = format!(
+            "<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\" fill=\"none\" {} fill=\"none\"/></svg>",
+            (0..40)
+                .map(|i| format!("a{i}=\"1\""))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        assert!(refused(&twice).contains("twice"));
+    }
+
+    #[test]
+    fn a_file_is_measured_before_it_is_read() {
+        let dir = dir(&[("big.svg", GOOD)]);
+        let path = dir.join("icons").join("big.svg");
+        let file = std::fs::File::create(&path).unwrap();
+        // A sparse 40 MB file: reading it whole would be the mistake.
+        file.set_len(40 * 1024 * 1024).unwrap();
+        let error = read_checked(&path).unwrap_err();
+        assert!(
+            error.contains("big.svg") && error.contains("at most"),
+            "{error}"
+        );
+        std::fs::write(&path, GOOD).unwrap();
+        assert_eq!(read_checked(&path).unwrap(), GOOD.as_bytes());
     }
 
     // ---------------------------------------------------------- expansion
