@@ -282,9 +282,10 @@ export function toast(tone, text) {
  * @param {Document} doc
  */
 export function adoptToasts(doc) {
+  // A page with no toaster of its own (a sign-in page built by hand) still ends the last user's toasts.
+  sameUser();
   const from = [...body(doc).children].find((el) => attr(el, "data-slot") === "toaster");
   if (!from) return;
-  sameUser();
   const box = toaster();
   // What the page says about the region itself: where it stands, and its words, in the page's language.
   for (const field of ["data-position", "data-close", "aria-label"]) {

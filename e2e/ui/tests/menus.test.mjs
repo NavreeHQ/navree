@@ -34,6 +34,10 @@ for (const name of NAMES) {
     let browser;
     before(async () => {
       browser = await ENGINES[name].launch();
+      // The first page of a browser that has just started can take long on a busy machine: it is not what a test measures.
+      const warm = await browser.newContext();
+      await (await warm.newPage()).goto(BASE + "/menus", { timeout: 120000 });
+      await warm.close();
     });
     after(() => browser.close());
 
@@ -1398,6 +1402,20 @@ for (const name of NAMES) {
         await page.click("#out");
         await page.locator("main", { hasText: "Signed out." }).waitFor();
         assert.equal(await toasts(page).count(), 0, "another user's toast and its Undo are gone");
+        await page.done();
+      });
+
+      test("R3 a change of user drops the toasts even when the next page has no toaster of its own", async () => {
+        // A login page built by hand has no toaster: the standing one is still the last user's.
+        const bare = route(doc(`<main id="main"><p>Sign in.</p></main>`, { css: true }), { "set-cookie": "XSRF-TOKEN=fresh; Path=/" });
+        const first = withUser("one", `<button id="raise" ${stickyToast("Deleted.", { action: { label: "Undo", href: "/undo", post: true } })}>raise</button><a id="out" href="${bare}">sign out</a>`);
+        const page = await fixture(first);
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#out");
+        await page.locator("main", { hasText: "Sign in." }).waitFor();
+        assert.equal(await toasts(page).count(), 0, "nothing of the last user stays on the sign-in page");
+        assert.equal(await page.locator("[data-slot=toast-action]").count(), 0, "and no Undo");
         await page.done();
       });
 
