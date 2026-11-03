@@ -89,7 +89,7 @@ fn states() -> Element {
     if let Some(saved) = &saved {
         prefilled = prefilled.number(saved);
     }
-    el("section").attr("data-gallery", "Phone input").children((
+    let section = Stack::gap(4).children((
         Heading::h2("States"),
         Grid::cols(2).gap(4).children((
             Field::new("state-empty", "Empty, United Kingdom")
@@ -126,7 +126,10 @@ fn states() -> Element {
                 count: "{n} دولة".into(),
             }),
         )),
-    ))
+    ));
+    el("section")
+        .attr("data-gallery", "Phone input")
+        .child(section)
 }
 
 fn page(shell: &AppShell, form: FormView<NewContact>, saved: Option<&NewContact>) -> AppPage {
