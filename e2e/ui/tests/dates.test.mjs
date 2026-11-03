@@ -181,7 +181,8 @@ for (const browserName of browsers) {
       assert.equal(await caption(page, cal), "October 2026");
       assert.equal(await page.locator(`${cal} [data-ui-cal=prev]`).isDisabled(), true);
       for (const name of ["November 2026", "December 2026", "January 2027", "February 2027"]) {
-        await page.locator(`${cal} [data-ui-cal=next]`).click();
+        // The key, not the mouse: Playwright's Firefox can stall on clicks in quick succession.
+        await page.locator(`${cal} [data-ui-cal=next]`).press("Enter");
         assert.equal(await caption(page, cal), name);
       }
       assert.equal(await page.locator(`${cal} [data-ui-cal=next]`).isDisabled(), true);

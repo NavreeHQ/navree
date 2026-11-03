@@ -22,10 +22,12 @@ inBrowsers(({ open, browserName }) => {
       if (frame === page.mainFrame()) moved++;
     });
     // Turn every calendar a few months, and use the lists on the one with its month and year in lists.
+    // The key does to the page what a click does. (Playwright's Firefox can stall on mouse clicks in
+    // quick succession at one spot: the page has handled the first four and never hears the fifth.)
     const next = page.locator("[data-ui-cal=next]:visible");
     for (let i = 0; i < (await next.count()); i++) {
-      await next.nth(i).click();
-      await next.nth(i).click();
+      await next.nth(i).press("Enter");
+      await next.nth(i).press("Enter");
     }
     await page.locator("[data-ui-cal=month]:visible").first().selectOption("5");
     await page.locator("[data-ui-cal=year]:visible").first().selectOption("2030");
@@ -86,6 +88,25 @@ inBrowsers(({ open, browserName }) => {
     await page.locator("#dp-value-pop [data-ui-cal=next]").click();
     assert.equal(await page.evaluate(() => window.__pop === document.querySelector("#dp-value-pop [data-slot=calendar-caption]") && !!window.__pop.isConnected), true);
     assert.match(await page.locator("#dp-value-pop [data-slot=calendar-caption]").innerText(), /December 2026/);
+    await close();
+  });
+
+  test("a calendar with lists of months and years turns month after month, keeping its lists, and the lists are not a live region", async () => {
+    const { page, close } = await open("/dates");
+    const caption = page.locator("#cal-dob [data-slot=calendar-caption]");
+    assert.equal(await caption.getAttribute("aria-live"), null);
+    await page.evaluate(() => {
+      window.__lists = [...document.querySelectorAll("#cal-dob select")];
+    });
+    // May 1990, fourteen months on: July 1991. The button is pressed by its key, which the page
+    // answers as it does a click, because the module gives the button its focus back each turn.
+    for (let i = 0; i < 14; i++) await page.locator("#cal-dob [data-ui-cal=next]").press("Enter");
+    assert.equal(await page.locator("#cal-dob select[data-ui-cal=month]").inputValue(), "7");
+    assert.equal(await page.locator("#cal-dob select[data-ui-cal=year]").inputValue(), "1991");
+    assert.equal(await page.evaluate(() => window.__lists.length === 2 && window.__lists.every((list, i) => list === document.querySelectorAll("#cal-dob select")[i])), true, "the same two lists");
+    // A list of years that does change (the far end of the lists moves with the year) still takes its new options.
+    const years = await page.locator("#cal-dob select[data-ui-cal=year] option").evaluateAll((options) => [options[0].value, options.at(-1).value]);
+    assert.deepEqual(years, ["1891", "2026"], "a hundred years back from 1991, and up to the latest day allowed");
     await close();
   });
 

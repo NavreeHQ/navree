@@ -682,7 +682,6 @@ impl Calendar {
             .slot("calendar-caption")
             .id(caption_id.to_owned())
             .attr("data-layout", "dropdowns")
-            .attr("aria-live", "polite")
             .children((
                 select("month", &labels.month, months),
                 select("year", &labels.year, years),

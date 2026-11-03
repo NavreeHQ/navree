@@ -488,6 +488,20 @@ fn a_refused_range_says_why_in_the_words_of_each_language() {
 }
 
 #[test]
+fn only_a_caption_of_words_is_a_live_region() {
+    let words = html(Calendar::new("c").today(day(2026, 11, 3)));
+    assert!(open_tag(&words, "data-slot=\"calendar-caption\"").contains("aria-live=\"polite\""));
+    // The lists of months and years say the month by what they hold; a live region around two
+    // lists of two hundred options would be announced, and rebuilt, on every turn.
+    let lists = html(
+        Calendar::new("c")
+            .today(day(2026, 11, 3))
+            .caption(CaptionLayout::Dropdowns),
+    );
+    assert!(!open_tag(&lists, "data-layout=\"dropdowns\"").contains("aria-live"));
+}
+
+#[test]
 fn a_hostile_id_is_text_in_every_component_that_takes_one() {
     let nasty = "x\"><meta http-equiv=refresh content=\"0;url=https://example.com/\"><input name=role value=admin><a id=planted href=//evil.example/>x</a>";
     let today = day(2026, 11, 3);

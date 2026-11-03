@@ -464,7 +464,7 @@ function monthHtml(c, st, y, m, focus) {
     const [from, to] = hi - lo > 200 ? [Math.max(lo, y - 100), Math.min(hi, y + 100)] : [lo, hi];
     const opts = (/** @type {string[]} */ list, /** @type {number} */ cur, /** @type {number} */ base) => list.map((t, i) => `<option value="${base + i}"${base + i === cur ? " selected" : ""}>${esc(t)}</option>`).join("");
     const years = Array.from({ length: to - from + 1 }, (_, i) => String(from + i));
-    cap = `<div data-slot="calendar-caption" id="${id}" data-layout="dropdowns" aria-live="polite"><select data-slot="native-select" data-size="sm" data-ui-cal="month" aria-label="${esc(L.L[6])}">${opts(L.m, m, 1)}</select><select data-slot="native-select" data-size="sm" data-ui-cal="year" aria-label="${esc(L.L[7])}">${opts(years, y, from)}</select></div>`;
+    cap = `<div data-slot="calendar-caption" id="${id}" data-layout="dropdowns"><select data-slot="native-select" data-size="sm" data-ui-cal="month" aria-label="${esc(L.L[6])}">${opts(L.m, m, 1)}</select><select data-slot="native-select" data-size="sm" data-ui-cal="year" aria-label="${esc(L.L[7])}">${opts(years, y, from)}</select></div>`;
   } else cap = `<div data-slot="calendar-caption" id="${id}" aria-live="polite">${esc(caption(L, y, m))}</div>`;
   const head = Array.from({ length: 7 }, (_, i) => { const d = (c.ws + i) % 7; return `<th data-slot="calendar-weekday" scope="col" abbr="${esc(L.w[d])}">${esc(L.ws[d])}</th>`; }).join("");
   const first = days(y, m, 1);
@@ -533,7 +533,21 @@ function drawMonths(box, months) {
     if (!old || !next) return;
     set(m, "data-month", attr(f, "data-month") || "");
     set(old, "id", next.id);
-    old.replaceChildren(...next.childNodes);
+    if (attr(next, "data-layout") === "dropdowns") {
+      // The lists of months and years are not a live region: they say the month by what they
+      // hold. They stay, and only take their new value, unless the years on offer changed.
+      const lists = /** @type {HTMLSelectElement[]} */ ([...all(old, "select")]), fresh2 = /** @type {HTMLSelectElement[]} */ ([...all(next, "select")]);
+      lists.forEach((list, k) => {
+        const to = fresh2[k];
+        if (!to) return;
+        const value = to.value;
+        if (list.options.length === to.options.length && [...list.options].every((o, j) => o.value === to.options[j].value)) {
+          for (const o of list.options) o.toggleAttribute("selected", o.value === value);
+        } else list.replaceChildren(...to.childNodes);
+        // Moved options leave a list on its last one in some browsers: say which is chosen.
+        list.value = value;
+      });
+    } else old.replaceChildren(...next.childNodes);
     const table = q(m, "table"), replacement = q(f, "table");
     if (table && replacement) table.replaceWith(replacement);
   });
