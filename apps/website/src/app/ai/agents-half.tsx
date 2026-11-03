@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon } from "lucide-react";
+import { ArrowRightIcon, ArrowUpRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { CommandLine } from "@/components/ai/command-line";
@@ -71,6 +71,8 @@ function SkillsBlock() {
   // Two columns of rows on wide screens: fill the left column first.
   const half = Math.ceil(skills.length / 2);
   const columns = [skills.slice(0, half), skills.slice(half)];
+  // Phones show the first few rows and link the full list: all of them would run to several screens.
+  const onPhones = 12;
 
   return (
     <div className="grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-12">
@@ -127,11 +129,11 @@ function SkillsBlock() {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-1.5">
             {columns.map((column, c) => (
-              <ul key={c} className="grid min-w-0 grid-cols-1 content-start">
-                {column.map((skill) => {
+              <ul key={c} className={cn("grid min-w-0 grid-cols-1 content-start", c > 0 && "max-md:hidden")}>
+                {column.map((skill, i) => {
                   const umbrella = skill.name === "navree";
                   return (
-                    <li key={skill.name}>
+                    <li key={skill.name} className={cn(c === 0 && i >= onPhones && "max-md:hidden")}>
                       <a
                         href={skill.path}
                         className="group flex items-start gap-3 rounded-[0.625rem] px-3 py-2 transition-colors duration-150 hover:bg-ink-2 sm:py-2.5"
@@ -167,6 +169,13 @@ function SkillsBlock() {
               </ul>
             ))}
           </div>
+          <Link
+            href="/docs/ai/agent-skills/#the-skills"
+            className="flex items-center justify-between gap-3 rounded-[0.625rem] px-3 py-2.5 text-[0.8125rem] text-fg-2 transition-colors duration-150 hover:bg-ink-2 hover:text-fg md:hidden"
+          >
+            And {skills.length - onPhones} more, each with what it is for
+            <ArrowRightIcon aria-hidden className="size-3.5 shrink-0 text-fg-3" />
+          </Link>
         </WindowFrame>
       </BlurFade>
     </div>
