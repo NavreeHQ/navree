@@ -399,8 +399,8 @@ const items = (list) => /** @type {HTMLElement[]} */ ([...all(list, "[role=optio
 /** @param {HTMLElement} list */
 const shown = (list) => items(list).filter((item) => !item.hidden);
 
-/** Marks `item` as the one Enter picks. @param {HTMLElement} list @param {HTMLElement | undefined} item */
-function activate(list, item) {
+/** Marks `item` as the one Enter picks. @param {HTMLElement} list @param {HTMLElement | undefined} item @param {ScrollLogicalPosition} [block] */
+function activate(list, item, block = "nearest") {
   const search = list.querySelector("[data-slot=phone-search]");
   for (const other of all(list, "[data-active]")) unset(other, "data-active");
   if (!item || !search) {
@@ -409,7 +409,7 @@ function activate(list, item) {
   }
   set(item, "data-active", "");
   set(search, "aria-activedescendant", item.id);
-  item.scrollIntoView({ block: "nearest" });
+  item.scrollIntoView({ block });
 }
 
 /** Shows the countries the search finds. @param {Element} root @param {HTMLElement} list @param {string} query */
@@ -498,6 +498,16 @@ on(document, "beforeinput", (e) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
+// The list is built, and aligned to the text's direction, before it opens, so
+// it is placed at its full size.
+on(document, "beforetoggle", (e) => {
+  const list = /** @type {HTMLElement} */ (e.target);
+  if (/** @type {ToggleEvent} */ (e).newState !== "open" || !list.matches?.("[data-slot=phone-countries]")) return;
+  const root = /** @type {Element} */ (list.closest("[data-ui-phone]"));
+  build(root);
+  set(list, "data-align", getComputedStyle(root).direction === "rtl" ? "end" : "start");
+}, true);
+
 on(document, "toggle", (e) => {
   const list = /** @type {HTMLElement} */ (e.target);
   if (!list.matches?.("[data-slot=phone-countries]")) return;
@@ -513,7 +523,7 @@ on(document, "toggle", (e) => {
     unset(list, "data-typed");
     filter(root, list, search.value);
     const chosen = /** @type {HTMLElement | null} */ (list.querySelector("[aria-selected=true]:not([hidden])"));
-    if (chosen && !search.value) activate(list, chosen);
+    if (chosen && !search.value) activate(list, chosen, "center");
     search.focus();
   }
 }, true);
