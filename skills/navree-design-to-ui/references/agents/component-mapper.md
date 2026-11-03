@@ -13,8 +13,8 @@ Then one dispatch per screen: its page spec.
   the module, if they exist.
 - `references/components.md`, `references/spec-page.md`,
   `references/mistakes.md`, `references/building-pages.md`.
-- `crates/navree-ui/README.md` and `src/components/mod.rs`, to confirm a
-  component exists before naming it.
+- `crates/navree-ui/README.md`, `src/components/mod.rs` and
+  `src/select/mod.rs`, to confirm a component exists before naming it.
 
 ## Outputs
 

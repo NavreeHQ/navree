@@ -1,7 +1,7 @@
 # navree-ui components, and the design elements they take
 
 Phases 3 and 5. Every component here exists in `crates/navree-ui`
-(`src/components`, `src/form.rs`, `src/table`, `src/shell.rs`), imported
+(`src/components`, `src/form.rs`, `src/select`, `src/table`, `src/shell.rs`), imported
 from `navree::ui` (or `navree::ui::prelude::*`). A design element maps to
 one row. When no row fits, the element is a gap: record it with the
 "Coming" table at the end, never build a stand-in from raw elements, a
@@ -20,7 +20,7 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | App frame: sidebar, top bar, content | `Shell` (registered once), `AppShell` (extractor), `AppPage` | `shell.page(title).crumb(..).actions(..).body(..)` |
 | Sidebar group, link, nested link, count | `NavGroup::new(label)`, `NavGroup::plain()`, `NavItem::new(label, href).icon(..).count(..).sub(..)` | `NavItem::current(true)` when several links differ only in their query |
 | Product name, environment tag | `Shell::new(name)`, `.context("Production")` | the context is text, not a pill |
-| Search in the top bar | `Shell::search(node)` | the node is usually a form with `Input::search` |
+| Search in the top bar | `Shell::search(node)` | a form with `Input::search`, or a command palette: `Node::list((Command::trigger(id, label), palette))` |
 | User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)` | `action` posts; the avatar is an icon, never initials |
 | Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
 | Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
@@ -94,6 +94,7 @@ a gap: the set grows in the toolkit, not in the app.
 | Hover card | `HoverCard::new(id, trigger).body(..)` |
 | Accordion, disclosure | `Accordion::new().item(..).open_item(..).exclusive(name)`, `Collapsible::new(title).open(..).body(..)` |
 | Scrolling panel | `ScrollArea::new(label).children(..)` |
+| Command palette (Ctrl or Cmd and K) | `Command::new(id).placeholder(..).recent(n).group(CommandGroup::new(label).item(..))`; items are `CommandItem::link`, `post`, `run` and `disabled`, each with `.icon(..)`, `.shortcut("mod+shift+n")` and `.keywords(..)`; `Command::trigger(id, label)` is its button; `.source(url)` adds results from the server; `.csrf(token)` for posted items with script off |
 
 ## Forms
 
@@ -110,9 +111,10 @@ form can't be a struct.
 | Money | amount input, typed `12,500.50` | `Money` (minor units); its currency in an `addon` |
 | Calendar day, time, both | native date, time, date-time inputs | `NaiveDate`; `widget = time \| datetime` |
 | Yes or no | checkbox, or switch | `bool`; `widget = switch` |
-| One of a small fixed set | select, or radio buttons | an enum with `#[derive(Options)]`; `widget = radio` |
-| One of a set the server holds | select | `String` with `widget = select`; choices from `FormView::options(field, ..)` |
-| One of a large or growing set | combobox | **gap**: Combobox is coming (see below) |
+| One of a small fixed set | radio buttons when all of them are worth seeing, else a select | an enum with `#[derive(Options)]`: `widget = radio`; with no hint, the browser's select (`NativeSelect`); `widget = listbox`, the styled `Select` |
+| One of a short list the server holds (a few dozen at most) | select | `String` with `widget = select` or `listbox`; choices from `FormView::options(field, ..)` |
+| One of a large or growing set | combobox, searched on the server | `String` with `widget = combobox`; `FormView::search(field, url)`; the route answers `OptionQuery` with a `ChoiceList` built by `OptionSource` (below) |
+| Several of a set | multi-select, shown as chips | `Many<T>` (a multi-select with no hint); `#[form(max = n)]` limits it; options and search as for a combobox |
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
 | A file | file input | `Input::new(InputKind::File, name)` in a form of your own that posts `multipart/form-data` to an upload route (`navree-storage`): `Submit<T>` reads only urlencoded forms |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
@@ -121,8 +123,44 @@ By hand, when a form isn't a struct: `Field::new(id, label).help(..)
 .error_opt(..).required().control(..)`, `FieldSet::new(legend)`, `Label`,
 `Input::text(name)` (and `email`, `password`, `search`, `number`, `date`,
 `Input::new(InputKind::..)`), `Textarea`, `NativeSelect::new(name)
-.option(..).options(..).selected(..).prompt(..)`, `Checkbox`, `Switch`,
-`RadioGroup`.
+.option(..).options(..).selected(..).prompt(..)`, `Select::new(name)
+.option(..).placeholder(..).selected(..).clearable()`, `Combobox::new(name)
+.options(..).selected(..)`, `MultiSelect::new(name).options(..)
+.selected_values(..).max(n)`, `Checkbox`, `Switch`, `RadioGroup`.
+
+### Pickers over a large or growing set
+
+A picker over records the server holds is searched on the server, never
+filled with every row. Four parts, with the code in `building-pages.md`:
+
+- **The field:** `widget = combobox` (or a `Many<T>` multi-select) and
+  `FormView::search(field, "/companies/options")`. An edit form also gives
+  the chosen record's label with `FormView::options(field, [(id, name)])`;
+  without it the picker shows the id.
+- **The route:** it takes `OptionQuery` (the text, a limit of at most 50
+  and an offset; it never fails) and answers `ChoiceList`.
+  `OptionSource::new(value_column, label_column).search_in(&[..])` runs the
+  search on the caller's own scoped query (`Accessible<M, Read>`), so
+  workspace scoping and row-level security hold. The columns come from the
+  code, never from the request.
+- **The check on save:** a form reads the picked value as text and doesn't
+  know it is one of the options. The handler asks
+  `OptionSource::all_pickable(scoped_query, values, &uow, OptionSource::as_uuid)`
+  (`as_int` and `as_text` too) with the same scoped query, and answers a
+  failure with `Rejected::after_decode(&value, errors, &parts)`. For a
+  fixed list in the page, `Choice::all_among(values, &choices)` is the same
+  check. Never trust what the page showed.
+- **Without script:** a searched combobox shows its chosen option and can't
+  change it, because there is nothing to ask. A page that must work with
+  script off uses a select, which holds a short list, and says so in its
+  page spec.
+
+Options in the page (a `Select`, or a `Combobox` with `.options(..)`) suit
+lists up to about a thousand; past that, search on the server. A `Choice`
+can carry `.description(..)`, `.icon(..)`, `.avatar(src)` (a URL on this
+site) and `.keywords(..)`. `.creatable()` and `.create_url(url)` let the
+person add an option the list lacks; the route behind `create_url` must
+check that the caller may create.
 
 ## Lists
 
@@ -170,7 +208,6 @@ row in `GAPS.md` with an interim form the owner picks, or it waits.
 | Module (standard's order) | Covers in a design | Interim form, if the owner accepts one |
 |---|---|---|
 | Theme system and theme builder | a light theme, brand colours, other radii or fonts, other sidebar layouts, user themes | Navree's dark theme and tokens (`tokens.md`) |
-| Select, Combobox, Command | a styled select, type-to-search pickers over large tables, a command palette | `NativeSelect` or an `Options` enum for a small set; for a large set, wait, or a search page that links back |
 | Toast as a module | toasts with actions or that stay | `Reply::toast` (text and tone, shown on the next page or by the runtime) |
 | Tabs, DropdownMenu, ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
 | Charts and DateRange | line, area, pie and stacked charts, date-range pickers | `Stat` and `Bars`; two date inputs |
@@ -189,5 +226,5 @@ Also not there yet, outside the standard's list:
   fonts and images only from the app's own origin.
 - Web fonts other than Geist (and the system monospace stack).
 
-Check `crates/navree-ui/README.md` and `src/components/mod.rs` before
-naming a gap: the list shrinks as modules land.
+Check `crates/navree-ui/README.md`, `src/components/mod.rs` and
+`src/select/mod.rs` before naming a gap: the list shrinks as modules land.

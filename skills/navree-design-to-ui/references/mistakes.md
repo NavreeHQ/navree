@@ -51,7 +51,9 @@ holds, then compare with the control drawn.
 **Navree form:** the field's Rust type picks the control (`components.md`,
 Forms): `NaiveDate` a date input, `Money` an amount, `bool` a checkbox or
 switch, an `Options` enum a select or radios, `widget = email | tel | url`,
-`widget = textarea`, a reference a select with server-side choices.
+`widget = textarea`, a reference a select with server-side choices (a
+combobox searched on the server when the table is large, entry 4), several
+values a `Many<T>` multi-select.
 
 ## 4. A select over a large or growing table
 
@@ -63,9 +65,15 @@ how many there will be in a year.
 
 **Navree form:** a few dozen at most: a select whose choices come from the
 server (`FormView::options`, limited and ordered). More, or growing: a
-combobox that searches on the server, which is coming
-(`components.md`, Coming). Record the gap; don't ship a select of
-thousands.
+combobox that searches on the server (`widget = combobox`,
+`FormView::search`). Its route answers `OptionQuery` with a `ChoiceList`
+that `OptionSource` builds from the caller's own scoped query, so a user
+sees only the records they may read. The handler that saves the form checks
+every posted value with `OptionSource::all_pickable`, because a hand-made
+post can name any value, whatever the page showed. Several values: a
+`Many<T>` multi-select, held to its limit by `#[form(max = n)]`. Never ship
+a select of thousands (`components.md`, Pickers; code in
+`building-pages.md`).
 
 ## 5. Options typed into the design
 
@@ -77,9 +85,10 @@ a filter's checkbox list.
 
 **Navree form:** a fixed set the code owns is an `Options` enum (its
 values stored, its labels in the code). A set users or admins change is
-a table, read by the server for the form (`FormView::options`) and the
-filter (`DataTable::options`). The design's labels become the enum's
-labels or seed rows.
+a table, read by the server for the form (`FormView::options`, or a
+searched combobox when it is large, entry 4) and the filter
+(`DataTable::options`). The design's labels become the enum's labels or
+seed rows.
 
 ## 6. Missing states
 

@@ -131,9 +131,14 @@ For every page, as each role, in every state, at 1440 and 390:
   `wcag21aa`): no violation. Save the JSON in `06-verify/logs/axe/`.
 - **Keyboard:** Tab from the top reaches every control in reading order,
   each with a visible focus ring; dialogs take focus, keep it, and give it
-  back on Escape; the table's keys work when `keyboard_grid()` is on.
+  back on Escape; the table's keys work when `keyboard_grid()` is on. A
+  select, combobox or multi-select opens with the arrow keys, picks with
+  Enter and closes on Escape (a combobox narrows as you type); a command
+  palette opens on Ctrl or Cmd and K.
 - **JavaScript off:** search, filter, sort, pages and forms still work
-  (links and plain posts); errors still land under their fields.
+  (links and plain posts); errors still land under their fields. A select
+  posts its native `<select>`. A combobox searched on the server shows its
+  chosen option and can't change it; the page spec says so.
 - **390 pixels:** the page doesn't scroll sideways
   (`document.documentElement.scrollWidth <= innerWidth`); controls are at
   least 24 pixels tall; nothing overlaps.

@@ -162,7 +162,7 @@ pub struct DealInput {
     pub title: String,
     /// Company
     #[validate(length(min = 1))]
-    #[form(widget = select, prompt = "Choose a company", error = "Choose the company.")]
+    #[form(widget = combobox, placeholder = "Search companies", error = "Choose the company.")]
     pub company_id: String,
     /// Value
     #[validate(skip)]
@@ -182,8 +182,12 @@ pub struct DealInput {
 The type picks the control: `String` a text input, a number a number
 input, `bool` a checkbox, `Option<NaiveDate>` a date input, `Money` an
 amount typed like `12,500.50`, an enum with `Options` a select (or
-`widget = radio`). `widget = select` on a `String` takes its choices from
-the server through `FormView::options`, as below.
+`widget = radio`), a `Many<T>` a multi-select. `widget = select` (the
+browser's) or `listbox` (the styled `Select`) on a `String` takes its
+choices from the server through `FormView::options`: for a short list. The
+company here is a large, growing table, so it is `widget = combobox`: the
+choices are searched on the server, through `FormView::search` and an
+options route, as below.
 
 ## The pages
 
@@ -192,13 +196,15 @@ they sit at the site's root rather than under `/api`. Every route still
 needs its access attribute.
 
 ```rust
+use http::request::Parts;
 use navree::access::{Accessible, Create, Read};
 use navree::db::Uow;
 use navree::http::response::{IntoResponse, Response};
 use navree::orm::access::AccessibleQuery as _;
-use navree::ui::form::{FormView, Rejected};
+use navree::ui::form::{FieldErrors, FormView, Rejected};
 use navree::ui::{
-    AppPage, AppShell, Button, Card, DataTable, Empty, Reply, Submit, TableQuery, ToastTone,
+    AppPage, AppShell, Button, Card, Choice, ChoiceList, DataTable, Empty, OptionQuery,
+    OptionSource, Reply, Submit, TableQuery, ToastTone,
 };
 
 #[derive(Model, Clone, Debug, Default, Serialize)]
@@ -208,18 +214,13 @@ pub struct Company {
     pub name: String,
 }
 
-/// The company choices, from the database: never typed into the page.
-async fn company_options(uow: &Uow) -> Result<Vec<(String, String)>> {
-    let companies = Company::query().order_by("name").limit(500).get(uow).await?;
-    Ok(companies
-        .into_vec()
-        .into_iter()
-        .map(|company| (company.id.to_string(), company.name.clone()))
-        .collect())
-}
+/// Where the company combobox gets its options: the id is the value, the name
+/// is the label and what the typed text is looked for in. The columns are
+/// named here, in the code, never taken from the request.
+const COMPANIES: OptionSource = OptionSource::new("id", "name");
 
 /// The new-deal page, empty or sent back with errors (deals-new in pages/).
-fn form_page(shell: &AppShell, form: FormView<DealInput>, companies: Vec<(String, String)>) -> AppPage {
+fn form_page(shell: &AppShell, form: FormView<DealInput>) -> AppPage {
     shell
         .page("New deal")
         .crumb("Deals", "/deals")
@@ -228,7 +229,7 @@ fn form_page(shell: &AppShell, form: FormView<DealInput>, companies: Vec<(String
                 form.post("/deals")
                     .submit("Create deal")
                     .cancel("Cancel", "/deals")
-                    .options("company_id", companies),
+                    .search("company_id", "/companies/options"),
             ),
         )
 }
@@ -268,8 +269,27 @@ impl DealPages {
     /// `deals-new`.
     #[get("!/deals/new")]
     #[can(Create, Deal)]
-    async fn new(&self, shell: AppShell, uow: Uow) -> Result<AppPage> {
-        Ok(form_page(&shell, FormView::new(), company_options(&uow).await?))
+    async fn new(&self, shell: AppShell) -> Result<AppPage> {
+        Ok(form_page(&shell, FormView::new()))
+    }
+
+    /// The company combobox's options: the companies this user may read whose
+    /// name contains the text, a page at a time.
+    #[get("!/companies/options")]
+    #[can(Read, Company)]
+    async fn companies(
+        &self,
+        uow: Uow,
+        scope: Accessible<Company, Read>,
+        query: OptionQuery,
+    ) -> Result<ChoiceList> {
+        let choices = COMPANIES
+            .find(scope.query(), &query, &uow, "/companies/options", |record| {
+                let company = record.into_inner();
+                Choice::new(company.id.to_string(), company.name)
+            })
+            .await?;
+        Ok(choices)
     }
 
     /// Saves the form; with errors, the same page with each message under its field.
@@ -277,12 +297,30 @@ impl DealPages {
     #[can(Create, Deal)]
     async fn store(
         &self,
+        parts: Parts,
         shell: AppShell,
         uow: Uow,
+        companies: Accessible<Company, Read>,
         submit: Result<Submit<DealInput>, Rejected<DealInput>>,
     ) -> Result<Response> {
         match submit {
             Ok(Submit(input)) => {
+                // The form read the company as text. Nothing a browser posts is known
+                // to be one of the options it was shown, so ask the same scoped query
+                // the search answers with: another workspace's company, one this user
+                // may not read, and one that never existed are all refused.
+                let picked = [input.company_id.as_str()];
+                let pickable = COMPANIES
+                    .all_pickable(companies.query(), picked, &uow, OptionSource::as_uuid)
+                    .await?;
+                if !pickable {
+                    let errors = FieldErrors::from([(
+                        "company_id".to_owned(),
+                        vec!["Choose the company.".to_owned()],
+                    )]);
+                    return Ok(Rejected::after_decode(&input, errors, &parts)
+                        .respond(|form| form_page(&shell, form)));
+                }
                 let company_id = input
                     .company_id
                     .parse::<Uuid>()
@@ -305,16 +343,13 @@ impl DealPages {
                     .toast(ToastTone::Success, "Deal created")
                     .into_response())
             }
-            Err(rejected) => {
-                let companies = company_options(&uow).await?;
-                Ok(rejected.respond(|form| form_page(&shell, form, companies)))
-            }
+            Err(rejected) => Ok(rejected.respond(|form| form_page(&shell, form))),
         }
     }
 }
 
 #[module(
-    imports = [AccessModule::for_feature::<Deal>()],
+    imports = [AccessModule::for_feature::<Deal>(), AccessModule::for_feature::<Company>()],
     controllers = [DealPages],
 )]
 pub struct DealsModule;
@@ -330,6 +365,21 @@ What each part answers for:
   isn't a form (415) and a `GET` (405), and reads only the struct's
   fields. `Rejected` draws the same page again with what was typed and
   each error under its field: 422 with JavaScript off, ops with it on.
+- The company combobox asks `GET /companies/options?q=text`; `OptionQuery`
+  clips the text, caps the page at 50 and never fails. `OptionSource` runs
+  the search on `scope.query()`, the companies this user may read, so
+  workspace scoping and row-level security hold, and answers a `ChoiceList`
+  (a full page ends with "Show more"). `store` asks `all_pickable` with the
+  same scoped query before it saves, because a hand-made post can name any
+  company. `Rejected::after_decode` answers a failure as a failed rule
+  does: ops under the field with script on, the form again with what was
+  sent with it off. For a fixed list in the page, `Choice::all_among(values,
+  &choices)` is the same check with no database.
+- An edit page gives the combobox the label of the company already
+  chosen, `form.options("company_id", [(company.id.to_string(), name)])`,
+  or it shows the id. With script off a searched combobox shows that
+  company and can't change it: note it in the page spec, or use a select
+  where the table is short.
 - `Reply::redirect` stays on this site; `.toast(...)` shows on the next
   page, with JavaScript on or off.
 - Behind a session, give the form its token with JavaScript off:

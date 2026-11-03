@@ -23,7 +23,7 @@ covered, and prepare stop 2.
 # Gaps
 
 | ID | Module coming | Pages | What the design needs | Interim form | Owner |
-| GAP-01 | Select, Combobox, Command | deals-new, deals-edit | company picker over 3,000 companies | wait; or a search page that links back | |
+| GAP-01 | Tabs, DropdownMenu, ToggleGroup | deals-show | tabs for Overview, Activity and Files | tabs as links to separate URLs | |
 | GAP-04 | HTML error pages | every page | forbidden and not-found states inside the shell | Navree's JSON error until it lands | |
 ```
 
