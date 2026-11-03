@@ -3801,6 +3801,12 @@
     ],
     "methods": [
       {
+        "name": "phone_region",
+        "generics": "",
+        "args": "region: Option<navree_phone::Region>",
+        "doc": "The country a phone field starts on when its number has none: the workspace's or the user's (feature `phone`)."
+      },
+      {
         "name": "post",
         "generics": "",
         "args": "action: impl Into<Href>",
@@ -5384,6 +5390,136 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "PhoneInput": {
+    "name": "PhoneInput",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/phone.rs",
+    "summary": "A phone number input with a country picker.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "An input posting the number as `name` and the country as `{name}_country`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "region",
+        "generics": "",
+        "args": "region: Option<Region>",
+        "doc": "The country chosen when the field has no number of its own: the workspace's or the user's."
+      },
+      {
+        "name": "country",
+        "generics": "",
+        "args": "code: &str",
+        "doc": "The country chosen when the field has no number of its own, by its code (`\"GB\"`); an unknown code chooses none."
+      },
+      {
+        "name": "number",
+        "generics": "",
+        "args": "number: &PhoneNumber",
+        "doc": "Shows `number`, written the way its country writes it, with its country chosen."
+      },
+      {
+        "name": "phone",
+        "generics": "",
+        "args": "phone: &Phone",
+        "doc": "Shows `phone`, written the way its country writes it."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Shows what was typed, as typed (a rejected form shows it again). Text that is a valid number in the chosen country is written in that country's format."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<String>",
+        "doc": "The hint while empty. Without one, the chosen country's example mobile number."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a number."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the number and its country without letting them change; both still post."
+      },
+      {
+        "name": "autofocus",
+        "generics": "",
+        "args": "",
+        "doc": "Takes focus when the page loads."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it as failing validation."
+      },
+      {
+        "name": "preferred",
+        "generics": "",
+        "args": "regions: impl IntoIterator<Item = Region>",
+        "doc": "Countries listed first, above the rest."
+      },
+      {
+        "name": "countries",
+        "generics": "",
+        "args": "regions: impl IntoIterator<Item = Region>",
+        "doc": "Lists only these countries. It limits the list, not what can be typed: a number with another country's code still reads, so check the country on the server if it matters."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: PhoneLabels",
+        "doc": "Its words, for other languages."
+      },
+      {
+        "name": "flags",
+        "generics": "",
+        "args": "flag: fn(Region) -> Node",
+        "doc": "Draws each country's flag with `flag` (an SVG flag set) in place of the flag emoji. Every flag goes into the page once, in a template the list copies from."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "PhoneLabels": {
+    "name": "PhoneLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/phone.rs",
+    "summary": "What a `PhoneInput` says, for apps in other languages.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
   },
   "PickerStyle": {
     "name": "PickerStyle",

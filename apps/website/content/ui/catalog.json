@@ -27,6 +27,7 @@
         "checkbox",
         "switch",
         "radio-group",
+        "phone-input",
         "forms"
       ]
     },
@@ -423,6 +424,27 @@
         "radio-group/thumb",
         "radio-group/default",
         "radio-group/disabled"
+      ]
+    },
+    {
+      "id": "phone-input",
+      "name": "PhoneInput",
+      "url": "/docs/components/phone-input/",
+      "summary": "A phone number input with a country picker.",
+      "group": "inputs",
+      "types": [
+        "PhoneInput",
+        "PhoneLabels"
+      ],
+      "thumb": "phone-input/thumb",
+      "anatomy": "phone-input/thumb",
+      "examples": [
+        "phone-input/thumb",
+        "phone-input/default",
+        "phone-input/saved",
+        "phone-input/states",
+        "phone-input/preferred",
+        "phone-input/rtl"
       ]
     },
     {
@@ -2696,8 +2718,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -2789,8 +2811,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -2895,8 +2917,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3001,8 +3023,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3114,8 +3136,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3271,8 +3293,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [
         "Clearable",
@@ -3298,8 +3320,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3391,8 +3413,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3510,8 +3532,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3616,8 +3638,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3728,8 +3750,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [
         "Invalid",
@@ -3753,8 +3775,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -3912,8 +3934,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -4084,8 +4106,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -4256,8 +4278,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [
         "At most three",
@@ -4281,8 +4303,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -4399,8 +4421,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "select-549f90926021.js"
+        "overlay-ef4718e7fbcd.js",
+        "select-924b363a2786.js"
       ],
       "captions": [],
       "slots": [
@@ -4555,7 +4577,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -4649,7 +4671,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -4756,7 +4778,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -4850,7 +4872,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -4944,7 +4966,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5038,7 +5060,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5204,7 +5226,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5305,7 +5327,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "de",
@@ -5329,7 +5351,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-4305b001d48a.js"
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "Read only",
@@ -5352,8 +5374,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5467,8 +5489,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5601,8 +5623,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5742,8 +5764,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "Invalid",
@@ -5767,8 +5789,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -5882,8 +5904,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "de",
@@ -5907,8 +5929,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6035,8 +6057,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6197,8 +6219,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6359,8 +6381,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6521,8 +6543,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6696,8 +6718,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -6858,8 +6880,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -7026,8 +7048,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -7114,8 +7136,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -7215,8 +7237,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "en",
@@ -7240,8 +7262,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -7341,8 +7363,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [
         "Invalid",
@@ -7366,8 +7388,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
-        "dates-4305b001d48a.js"
+        "overlay-ef4718e7fbcd.js",
+        "dates-9d5bc15bcced.js"
       ],
       "captions": [],
       "slots": [
@@ -7440,6 +7462,504 @@
               "tag": "p",
               "count": 1,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phone-input/thumb",
+      "component": "phone-input",
+      "slug": "thumb",
+      "title": "A phone input",
+      "kind": "single",
+      "code": "PhoneInput::new(\"phone\").country(\"GB\")",
+      "src": "/ui-preview/phone-input/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "phone-input",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "phone-country",
+              "tag": "select",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-country-trigger",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "phone-flag",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-dial",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "phone-countries",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-e164",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-status",
+              "tag": "span",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phone-input/default",
+      "component": "phone-input",
+      "slug": "default",
+      "title": "A phone field",
+      "kind": "single",
+      "code": "Field::new(\"contact-mobile\", \"Mobile\")\n    .help(\"Type it as you would dial it, or paste it with its country code.\")\n    .control(PhoneInput::new(\"mobile\").country(\"GB\"))",
+      "src": "/ui-preview/phone-input/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-input",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "phone-country",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-country-trigger",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "phone-flag",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "phone-dial",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "phone-countries",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-e164",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-status",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phone-input/saved",
+      "component": "phone-input",
+      "slug": "saved",
+      "title": "A saved number",
+      "kind": "single",
+      "code": "let saved = PhoneNumber::parse(\"+1 650 253 0000\", None).ok();\nlet mut input = PhoneInput::new(\"office\").country(\"GB\");\nif let Some(saved) = &saved {\n    input = input.number(saved);\n}\nField::new(\"contact-office\", \"Office\").control(input)",
+      "src": "/ui-preview/phone-input/saved.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-input",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "phone-country",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-country-trigger",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "phone-flag",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "phone-dial",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "phone-countries",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-e164",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-status",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phone-input/states",
+      "component": "phone-input",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "vec![\n    (\"No country yet\", PhoneInput::new(\"a\").into()),\n    (\n        \"Invalid\",\n        Field::new(\"state-invalid\", \"Mobile\")\n            .error(\"Enter a valid number for France.\")\n            .control(\n                PhoneInput::new(\"b\")\n                    .country(\"FR\")\n                    .text(\"06 12\")\n                    .invalid(true),\n            )\n            .into(),\n    ),\n    (\n        \"Disabled\",\n        PhoneInput::new(\"c\").country(\"DE\").disabled(true).into(),\n    ),\n    (\n        \"Read only\",\n        PhoneInput::new(\"d\")\n            .country(\"IN\")\n            .text(\"098765 43210\")\n            .readonly()\n            .into(),\n    ),\n]",
+      "src": "/ui-preview/phone-input/states.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [
+        "No country yet",
+        "Invalid",
+        "Disabled",
+        "Read only"
+      ],
+      "slots": []
+    },
+    {
+      "id": "phone-input/preferred",
+      "component": "phone-input",
+      "slug": "preferred",
+      "title": "Suggested countries first",
+      "kind": "single",
+      "code": "PhoneInput::new(\"phone\").country(\"AE\").preferred(\n    [\"AE\", \"SA\", \"QA\", \"GB\", \"IN\"]\n        .into_iter()\n        .filter_map(Region::parse),\n)",
+      "src": "/ui-preview/phone-input/preferred.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "phone-input",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "phone-country",
+              "tag": "select",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-country-trigger",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "phone-flag",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-dial",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "phone-countries",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-e164",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "phone-status",
+              "tag": "span",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phone-input/rtl",
+      "component": "phone-input",
+      "slug": "rtl",
+      "title": "Right to left",
+      "kind": "single",
+      "code": "Direction::rtl(Field::new(\"rtl-mobile\", \"رقم الجوال\").control(\n    PhoneInput::new(\"mobile\").country(\"AE\").labels(PhoneLabels {\n        country: \"الدولة\".into(),\n        choose: \"الدولة\".into(),\n        preferred: \"مقترحة\".into(),\n        search: \"ابحث عن دولة\".into(),\n        empty: \"لا توجد دولة.\".into(),\n        country_set: \"تم اختيار {country}\".into(),\n        count: \"{n} دولة\".into(),\n    }),\n))",
+      "src": "/ui-preview/phone-input/rtl.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "phone-1a2381335368.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "direction",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "field",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "phone-input",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "phone-country",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "phone-country-trigger",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "phone-flag",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "phone-dial",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "phone-countries",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "phone-e164",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "phone-status",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
@@ -9876,7 +10396,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -9916,7 +10436,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -9982,7 +10502,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [
         "Top",
@@ -10007,7 +10527,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -10054,7 +10574,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -10134,7 +10654,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -10174,7 +10694,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js"
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -11009,8 +11529,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-7bbac922223d.js",
-        "overlay-4f11b3d8e0d9.js"
+        "sidebar-966046793f1a.js",
+        "overlay-ef4718e7fbcd.js"
       ],
       "captions": [],
       "slots": [
@@ -12061,7 +12581,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12109,7 +12629,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12195,7 +12715,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12306,7 +12826,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12412,7 +12932,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12531,7 +13051,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12598,7 +13118,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -12845,7 +13365,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [
@@ -13002,7 +13522,7 @@
       "live": false,
       "width": 720,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -13632,7 +14152,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -14314,7 +14834,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -15099,7 +15619,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -15781,7 +16301,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [],
@@ -16411,7 +16931,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-4f11b3d8e0d9.js",
+        "overlay-ef4718e7fbcd.js",
         "table-b01452996568.js"
       ],
       "captions": [
@@ -16920,7 +17440,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [
@@ -16960,7 +17480,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [
@@ -17046,7 +17566,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [
@@ -17093,7 +17613,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [
@@ -17146,7 +17666,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-bc7732a0fe80.js"
+        "core-6a7c572913de.js"
       ],
       "captions": [],
       "slots": [

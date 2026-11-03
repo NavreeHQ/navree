@@ -3,31 +3,39 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "fd6b3360ca8c";
+pub const BUILD: &str = "a74fa3b0ed12";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-bc7732a0fe80.js";
+pub const CORE_URL: &str = "/_navree/ui/core-6a7c572913de.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-7bbac922223d.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-966046793f1a.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-4f11b3d8e0d9.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-ef4718e7fbcd.js";
 
 /// The URL of `table.js`.
 pub const TABLE_URL: &str = "/_navree/ui/table-b01452996568.js";
 
 /// The URL of `select.js`.
-pub const SELECT_URL: &str = "/_navree/ui/select-549f90926021.js";
+pub const SELECT_URL: &str = "/_navree/ui/select-924b363a2786.js";
 
 /// The URL of `dates.js`.
-pub const DATES_URL: &str = "/_navree/ui/dates-4305b001d48a.js";
+pub const DATES_URL: &str = "/_navree/ui/dates-9d5bc15bcced.js";
 
 /// The URL of `menus.js`.
 pub const MENUS_URL: &str = "/_navree/ui/menus-dffd26363290.js";
 
+/// The URL of `phone.js`.
+#[cfg(feature = "phone")]
+pub const PHONE_URL: &str = "/_navree/ui/phone-1a2381335368.js";
+
+/// The URL of `phone-data.json`.
+#[cfg(feature = "phone")]
+pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
+
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-92d3d874b1b5.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-2adfc7966c22.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -46,7 +54,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "bc7732a0fe80",
+        hash: "6a7c572913de",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -55,7 +63,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "7bbac922223d",
+        hash: "966046793f1a",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -64,7 +72,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "4f11b3d8e0d9",
+        hash: "ef4718e7fbcd",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -82,7 +90,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select",
         ext: "js",
-        hash: "549f90926021",
+        hash: "924b363a2786",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/select.js"),
         gzip: Some(include_bytes!("../dist/select.js.gz")),
@@ -91,7 +99,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "dates",
         ext: "js",
-        hash: "4305b001d48a",
+        hash: "9d5bc15bcced",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/dates.js"),
         gzip: Some(include_bytes!("../dist/dates.js.gz")),
@@ -106,10 +114,30 @@ pub static FILES: &[Asset] = &[
         gzip: Some(include_bytes!("../dist/menus.js.gz")),
         brotli: Some(include_bytes!("../dist/menus.js.br")),
     },
+    #[cfg(feature = "phone")]
+    Asset {
+        name: "phone",
+        ext: "js",
+        hash: "1a2381335368",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/phone.js"),
+        gzip: Some(include_bytes!("../dist/phone.js.gz")),
+        brotli: Some(include_bytes!("../dist/phone.js.br")),
+    },
+    #[cfg(feature = "phone")]
+    Asset {
+        name: "phone-data",
+        ext: "json",
+        hash: "648e01c2d20f",
+        content_type: "application/json",
+        bytes: include_bytes!("../dist/phone-data.json"),
+        gzip: Some(include_bytes!("../dist/phone-data.json.gz")),
+        brotli: Some(include_bytes!("../dist/phone-data.json.br")),
+    },
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "92d3d874b1b5",
+        hash: "2adfc7966c22",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
