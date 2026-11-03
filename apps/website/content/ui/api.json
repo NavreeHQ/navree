@@ -1,0 +1,4501 @@
+{
+  "Accordion": {
+    "name": "Accordion",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "Sections that open and close: `<details>`, whose keyboard is the browser's. With `exclusive`, one open at a time through `name`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An accordion."
+      }
+    ],
+    "methods": [
+      {
+        "name": "exclusive",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "Allows one section open at a time, in the group `name`."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "title: impl Into<Node>, body: impl Into<Node>",
+        "doc": "Adds a section."
+      },
+      {
+        "name": "open_item",
+        "generics": "",
+        "args": "title: impl Into<Node>, body: impl Into<Node>",
+        "doc": "Adds a section that starts open."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Alert": {
+    "name": "Alert",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A message inside the page.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "tone: AlertTone",
+        "doc": "An alert meaning `tone`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Replaces the icon."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "Sets the title."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the description."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "AlertDialog": {
+    "name": "AlertDialog",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A dialog that must be answered: `alertdialog`, no close button, and a click outside doesn't dismiss it. Esc still cancels, as APG asks.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Node>, description: impl Into<Node>",
+        "doc": "An alert dialog with the id `id`. The title and description are required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "cancel",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Sets the cancel button's text."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl IntoNodes",
+        "doc": "Adds the answer: usually a form with a destructive button."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "AlertTone": {
+    "name": "AlertTone",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "What an `Alert` means.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Neutral",
+        "doc": "Plain information.",
+        "default": true
+      },
+      {
+        "name": "Success",
+        "doc": "It worked.",
+        "default": false
+      },
+      {
+        "name": "Warning",
+        "doc": "Something needs attention.",
+        "default": false
+      },
+      {
+        "name": "Danger",
+        "doc": "It failed.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Align": {
+    "name": "Align",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "Where items sit across a row or stack.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "At the start.",
+        "default": false
+      },
+      {
+        "name": "Center",
+        "doc": "In the middle.",
+        "default": false
+      },
+      {
+        "name": "End",
+        "doc": "At the end.",
+        "default": false
+      },
+      {
+        "name": "Stretch",
+        "doc": "Filling the space.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "AppPage": {
+    "name": "AppPage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "A page in the shell: what a handler returns.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "crumb",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a step to the breadcrumb, before this page."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds actions beside the page's heading."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the page."
+      },
+      {
+        "name": "to_view",
+        "generics": "",
+        "args": "",
+        "doc": "The whole document."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "AppShell": {
+    "name": "AppShell",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "The app's `Shell`, applied to this request: which link is active, whether the sidebar is collapsed, a toast left for this page.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "page",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "A page titled `title`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "AspectRatio": {
+    "name": "AspectRatio",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Content held to a shape. The ratios are a closed set because the content security policy allows no `style` attribute.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "ratio: Ratio, content: impl IntoNodes",
+        "doc": "Content in `ratio`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Attachment": {
+    "name": "Attachment",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A file shown as a small tile.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<Node>",
+        "doc": "A file called `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "meta",
+        "generics": "",
+        "args": "meta: impl Into<Node>",
+        "doc": "Adds what's known about it (`2.4 MB`)."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Replaces the icon."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Links the name to the file."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Adds a button: remove, retry."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Avatar": {
+    "name": "Avatar",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A picture of a person: an image, or a neutral icon when there is none. There is no way to put initials in it.",
+    "constructors": [
+      {
+        "name": "image",
+        "generics": "",
+        "args": "src: impl Into<Href>, alt: impl Into<String>",
+        "doc": "An image, described by `alt`."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "No image: the person icon, labelled `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Badge": {
+    "name": "Badge",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A short label beside something.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A badge saying `text`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: BadgeVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "BadgeVariant": {
+    "name": "BadgeVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How a `Badge` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Neutral",
+        "doc": "Filled, neutral: the default.",
+        "default": true
+      },
+      {
+        "name": "Outline",
+        "doc": "A line around it.",
+        "default": false
+      },
+      {
+        "name": "Success",
+        "doc": "Good news.",
+        "default": false
+      },
+      {
+        "name": "Warning",
+        "doc": "Needs attention.",
+        "default": false
+      },
+      {
+        "name": "Danger",
+        "doc": "Bad news.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Bars": {
+    "name": "Bars",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A small bar chart, drawn on the server as SVG: no script and no style attribute. The description is what assistive technology gets.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "description: impl Into<String>, values: &[u32]",
+        "doc": "`values` as bars, described by `description`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Breadcrumb": {
+    "name": "Breadcrumb",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Where this page sits: a list of links, ending in the current page.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty trail."
+      }
+    ],
+    "methods": [
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: &'static str",
+        "doc": "Names it, when a page has more than one: landmarks must differ."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "Adds a link."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Adds the current page."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Bubble": {
+    "name": "Bubble",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A chat bubble.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "side: BubbleSide, content: impl IntoNodes",
+        "doc": "A bubble holding `content`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "BubbleSide": {
+    "name": "BubbleSide",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Which way a chat bubble leans.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "Someone else's: the default.",
+        "default": true
+      },
+      {
+        "name": "End",
+        "doc": "Yours.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "BulkAction": {
+    "name": "BulkAction",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/table/view.rs",
+    "summary": "An action on the selected rows.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: &'static str, label: impl Into<Cow<'static, str>>",
+        "doc": "The action `id`, what the server reads, showing `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon."
+      },
+      {
+        "name": "destructive",
+        "generics": "",
+        "args": "",
+        "doc": "Marks it as destroying something."
+      },
+      {
+        "name": "confirm",
+        "generics": "",
+        "args": "question: impl Into<Cow<'static, str>>",
+        "doc": "Asks first. `{n}` in the text is how many rows."
+      },
+      {
+        "name": "denied",
+        "generics": "",
+        "args": "reason: impl Into<Cow<'static, str>>",
+        "doc": "Shows it disabled, with why. The handler checks again: this is courtesy."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Button": {
+    "name": "Button",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/actions.rs",
+    "summary": "A button, or a link that looks like one when it has an `href`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button with the default look."
+      },
+      {
+        "name": "primary",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "The one main action."
+      },
+      {
+        "name": "outline",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button with a line around it."
+      },
+      {
+        "name": "ghost",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button with no fill until hovered."
+      },
+      {
+        "name": "destructive",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button that destroys something."
+      },
+      {
+        "name": "icon_only",
+        "generics": "",
+        "args": "glyph: Icon, label: impl Into<String>",
+        "doc": "A button with an icon and no text. It must say what it does, so the accessible label is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "icon_end",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon after the label."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes this a link."
+      },
+      {
+        "name": "prefetch",
+        "generics": "",
+        "args": "",
+        "doc": "Says this link may be fetched ahead of a click (see `Element::prefetch`). Only for a link whose `GET` changes nothing."
+      },
+      {
+        "name": "submit",
+        "generics": "",
+        "args": "",
+        "doc": "Makes this submit its form."
+      },
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "kind: ButtonKind",
+        "doc": "Sets what it does in a form."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "",
+        "doc": "Fills the width."
+      },
+      {
+        "name": "pending",
+        "generics": "",
+        "args": "pending: bool",
+        "doc": "Shows the pending state from the first render."
+      },
+      {
+        "name": "opens_dialog",
+        "generics": "",
+        "args": "dialog: impl Into<String>",
+        "doc": "Opens the `<dialog>` with this id, natively, with no script."
+      },
+      {
+        "name": "closes_dialog",
+        "generics": "",
+        "args": "dialog: impl Into<String>",
+        "doc": "Closes the `<dialog>` with this id, natively, with no script."
+      },
+      {
+        "name": "on_click",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands in the browser when clicked."
+      },
+      {
+        "name": "named",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl Into<String>",
+        "doc": "Sets `form`, `name` and the like, on the button itself."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "ButtonGroup": {
+    "name": "ButtonGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/actions.rs",
+    "summary": "Buttons joined together. It needs a label, because a group is a landmark for assistive technology.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "A group labelled `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the buttons."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds buttons."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "ButtonKind": {
+    "name": "ButtonKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/actions.rs",
+    "summary": "What a `<button>` does in a form.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Button",
+        "doc": "Nothing by itself: the default.",
+        "default": true
+      },
+      {
+        "name": "Submit",
+        "doc": "Submits the form.",
+        "default": false
+      },
+      {
+        "name": "Reset",
+        "doc": "Resets the form.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "ButtonVariant": {
+    "name": "ButtonVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/actions.rs",
+    "summary": "How a button looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Primary",
+        "doc": "The one main action: green.",
+        "default": false
+      },
+      {
+        "name": "Secondary",
+        "doc": "A filled, quiet action: the default.",
+        "default": true
+      },
+      {
+        "name": "Outline",
+        "doc": "A line around it.",
+        "default": false
+      },
+      {
+        "name": "Ghost",
+        "doc": "No fill until hovered.",
+        "default": false
+      },
+      {
+        "name": "Destructive",
+        "doc": "Something that destroys.",
+        "default": false
+      },
+      {
+        "name": "Link",
+        "doc": "Looks like a link.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Card": {
+    "name": "Card",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A surface for related content.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty card."
+      },
+      {
+        "name": "titled",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A card with a title."
+      }
+    ],
+    "methods": [
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Sets the heading level of its title (2 by default, under a page's `h1`)."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "Sets the title."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Adds something to the header's end."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the body."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Checkbox": {
+    "name": "Checkbox",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "A checkbox.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A checkbox posting as `name`. Its value is `true`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "checked",
+        "generics": "",
+        "args": "checked: bool",
+        "doc": "Starts checked."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires it."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Puts it in a label with this text."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Cmd": {
+    "name": "Cmd",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/cmd.rs",
+    "summary": "One browser-side command.",
+    "constructors": [
+      {
+        "name": "toggle",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Toggles `hidden` on `id`."
+      },
+      {
+        "name": "show",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Removes `hidden` from `id`."
+      },
+      {
+        "name": "hide",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets `hidden` on `id`."
+      },
+      {
+        "name": "open",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Opens the dialog, popover or details `id`."
+      },
+      {
+        "name": "close",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Closes the dialog, popover or details `id`."
+      },
+      {
+        "name": "copy",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Copies `text`."
+      },
+      {
+        "name": "set_attr",
+        "generics": "",
+        "args": "target: impl Into<String>, name: &'static str, value: impl Into<String>",
+        "doc": "Sets attribute `name` of `target`."
+      },
+      {
+        "name": "remove_attr",
+        "generics": "",
+        "args": "target: impl Into<String>, name: &'static str",
+        "doc": "Removes attribute `name` of `target`."
+      },
+      {
+        "name": "toggle_attr",
+        "generics": "",
+        "args": "target: impl Into<String>, name: &'static str",
+        "doc": "Toggles attribute `name` of `target`."
+      },
+      {
+        "name": "dispatch",
+        "generics": "",
+        "args": "name: &'static str",
+        "doc": "Sends the custom event `name`."
+      },
+      {
+        "name": "focus",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Moves focus to `id`."
+      },
+      {
+        "name": "submit",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Submits the form `id`."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Toggle",
+        "doc": "Toggles `hidden` on the element with this id.",
+        "default": false
+      },
+      {
+        "name": "Show",
+        "doc": "Removes `hidden`.",
+        "default": false
+      },
+      {
+        "name": "Hide",
+        "doc": "Sets `hidden`.",
+        "default": false
+      },
+      {
+        "name": "Open",
+        "doc": "Opens a `<dialog>`, a popover or a `<details>`.",
+        "default": false
+      },
+      {
+        "name": "Close",
+        "doc": "Closes a `<dialog>`, a popover or a `<details>`.",
+        "default": false
+      },
+      {
+        "name": "Copy",
+        "doc": "Copies text to the clipboard.",
+        "default": false
+      },
+      {
+        "name": "SetAttr",
+        "doc": "Sets a state attribute: `data-*` other than the runtime's own `data-ui-*`, `aria-*`, `hidden`, `open` or `disabled`. Any other name is refused, here and in the runtime, so a command can't change where a thing points or what it runs.",
+        "default": false
+      },
+      {
+        "name": "RemoveAttr",
+        "doc": "Removes a state attribute (see `Cmd::SetAttr`).",
+        "default": false
+      },
+      {
+        "name": "ToggleAttr",
+        "doc": "Toggles a state attribute with no value, such as `data-open` (see `Cmd::SetAttr`).",
+        "default": false
+      },
+      {
+        "name": "Dispatch",
+        "doc": "Sends a custom event from the element, for an island to hear.",
+        "default": false
+      },
+      {
+        "name": "Focus",
+        "doc": "Moves focus to the element with this id.",
+        "default": false
+      },
+      {
+        "name": "Submit",
+        "doc": "Submits the form with this id.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Collapsible": {
+    "name": "Collapsible",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "One section that opens and closes.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A section titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "open",
+        "generics": "",
+        "args": "open: bool",
+        "doc": "Starts open."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the section."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Container": {
+    "name": "Container",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "Content centred up to a maximum width.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "A container of the default width."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: ContainerSize",
+        "doc": "Sets the maximum width."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds items."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "ContainerSize": {
+    "name": "ContainerSize",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "A width for `Container`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Sm",
+        "doc": "40rem: forms and reading.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "64rem.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "80rem: the default.",
+        "default": true
+      },
+      {
+        "name": "Full",
+        "doc": "The whole width.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "DataTable": {
+    "name": "DataTable",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/table/view.rs",
+    "summary": "A table with search, filters, sort links, selection and pagination, as one region.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: &'static str, query: &'a TableQuery<R, F>, data: impl Into<TableData<'a, R>>",
+        "doc": "The rows of this page; `id` names the region."
+      }
+    ],
+    "methods": [
+      {
+        "name": "cell",
+        "generics": "<N: Into<Node>>",
+        "args": "name: &'static str, draw: impl Fn(&R) -> N + 'a",
+        "doc": "Draws column `name` from the whole row, into anything that becomes a `Node`: a badge, an avatar, a list of tags, an `EditCell`. Files and labels still read the field's plain text. `#[col(cell = path)]` is the same in the definition; this form can use what the page knows, such as permissions."
+      },
+      {
+        "name": "live",
+        "generics": "",
+        "args": "every: Duration",
+        "doc": "Refetches the table this often while the page is visible, and shows that it's live, with a button to refresh now. Typing, focus, open menus and the selection are kept; a reply that a newer change overtook is dropped."
+      },
+      {
+        "name": "live_from",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Refetches the table whenever this server-sent event stream says something."
+      },
+      {
+        "name": "refreshable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a button that refetches the table."
+      },
+      {
+        "name": "filter_bar",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the filters in a bar over the table, where each user can pick which show and in what order. A filter holding a value always shows."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "total: u64",
+        "doc": "Sets how many rows there are across all pages."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "empty: Empty",
+        "doc": "Sets what shows when there are no rows and no filters."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: impl Into<Cow<'static, str>>",
+        "doc": "Names the table for assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &'a TableLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "filter_row",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the filters in a row under the headers."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "height: TableHeight",
+        "doc": "Sets how tall the scrolling part is."
+      },
+      {
+        "name": "sticky_header",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the header in view; with no height of its own, the table takes `TableHeight::Lg`."
+      },
+      {
+        "name": "bleed",
+        "generics": "",
+        "args": "",
+        "doc": "Runs the dividers out through a card's padding."
+      },
+      {
+        "name": "scroll_to",
+        "generics": "",
+        "args": "id: &'static str",
+        "doc": "Scrolls to the element with this id after a page change."
+      },
+      {
+        "name": "keyboard_grid",
+        "generics": "",
+        "args": "",
+        "doc": "Makes the body one tab stop with arrow keys, Home, End, Page Up and Page Down."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "message: impl Into<Cow<'static, str>>",
+        "doc": "Shows that the rows couldn't load, keeping the toolbar and filters so the user can change the query."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows skeleton rows: a first load still on its way."
+      },
+      {
+        "name": "bulk",
+        "generics": "",
+        "args": "url: impl Into<Href>, actions: impl IntoIterator<Item = BulkAction>",
+        "doc": "Adds selection, with actions posting to `url`. See `BulkRequest`."
+      },
+      {
+        "name": "can_select",
+        "generics": "",
+        "args": "can: bool",
+        "doc": "Whether this user can select at all. With `false`, no boxes and no actions."
+      },
+      {
+        "name": "without_select_all_matching",
+        "generics": "",
+        "args": "",
+        "doc": "Doesn't offer \"select all results\", where acting on a filter is unsafe."
+      },
+      {
+        "name": "selectable_if",
+        "generics": "",
+        "args": "can: impl Fn(&R) -> bool + 'a",
+        "doc": "Which rows can be ticked. Others show a disabled box. \"Select all results\" isn't offered, since no count of the selectable rows exists."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "The CSRF token, so the bulk form and a row's posts work with JavaScript off."
+      },
+      {
+        "name": "row_actions",
+        "generics": "",
+        "args": "actions: impl Fn(&R) -> Vec<RowAction> + 'a",
+        "doc": "Adds a menu to each row."
+      },
+      {
+        "name": "row_href",
+        "generics": "",
+        "args": "href: impl Fn(&R) -> String + 'a",
+        "doc": "Makes a click anywhere on a row, outside its controls, go here."
+      },
+      {
+        "name": "sticky_rows",
+        "generics": "",
+        "args": "sticky: impl Fn(&R) -> bool + 'a",
+        "doc": "Which rows stay in view while the table scrolls."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl Fn(&R) -> Node + 'a",
+        "doc": "What a row opens to. Only open rows are drawn: `open=` is in the URL."
+      },
+      {
+        "name": "export",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Adds a link to `url`, carrying the state. See `TableQuery::export_csv`."
+      },
+      {
+        "name": "options",
+        "generics": "",
+        "args": "column: &'static str, options: Vec<FilterOption>",
+        "doc": "Sets the choices of a filter whose choices come from the page."
+      },
+      {
+        "name": "foot",
+        "generics": "",
+        "args": "column: &'static str, cell: impl Into<Node>",
+        "doc": "Adds a footer cell under a column."
+      },
+      {
+        "name": "views",
+        "generics": "",
+        "args": "views: &'a [super::SavedView], url: impl Into<Href>",
+        "doc": "Offers saved views, saved by posting to `url`. See `SavedView`."
+      },
+      {
+        "name": "toolbar",
+        "generics": "",
+        "args": "controls: impl IntoNodes",
+        "doc": "Adds controls to the toolbar."
+      },
+      {
+        "name": "fixed_order",
+        "generics": "",
+        "args": "",
+        "doc": "Turns off dragging columns to a new order."
+      },
+      {
+        "name": "fixed_widths",
+        "generics": "",
+        "args": "",
+        "doc": "Turns off dragging columns to a new width."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Dialog": {
+    "name": "Dialog",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A modal dialog: the browser's `<dialog>`, which brings the focus trap, Esc, focus return and the inert page behind it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Node>",
+        "doc": "A dialog with the id `id`. The title is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the body."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Direction": {
+    "name": "Direction",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Sets the reading direction of what's inside.",
+    "constructors": [
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Right to left."
+      },
+      {
+        "name": "ltr",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Left to right."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Drawer": {
+    "name": "Drawer",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A dialog that rises from the bottom, for phones.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Node>",
+        "doc": "A drawer with the id `id`. The title is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the body."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Empty": {
+    "name": "Empty",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "What a list shows when it has nothing in it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A message saying `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds what to do next."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Field": {
+    "name": "Field",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "A control with its label, help and error, tied together with `for`, `aria-describedby` and `aria-invalid`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>",
+        "doc": "A field whose control gets the id `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "help",
+        "generics": "",
+        "args": "help: impl Into<Node>",
+        "doc": "Sets the help below the control."
+      },
+      {
+        "name": "error",
+        "generics": "",
+        "args": "error: impl Into<String>",
+        "doc": "Sets the error message."
+      },
+      {
+        "name": "error_opt",
+        "generics": "",
+        "args": "error: Option<String>",
+        "doc": "Sets the error message when there is one."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Marks the field required in its label."
+      },
+      {
+        "name": "control",
+        "generics": "",
+        "args": "control: impl Into<Node>",
+        "doc": "Sets the control: an input, or something holding one (an `InputGroup`)."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FieldSet": {
+    "name": "FieldSet",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "Fields that belong together, under one legend.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "legend: impl Into<Node>",
+        "doc": "A set described by `legend`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds fields."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FormView": {
+    "name": "FormView",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/form.rs",
+    "summary": "Draws a `Form`: a `<form>` that posts with or without the runtime.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty form."
+      }
+    ],
+    "methods": [
+      {
+        "name": "post",
+        "generics": "",
+        "args": "action: impl Into<Href>",
+        "doc": "Posts to `action`."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's CSRF token in the form as the field `_csrf`, which is how a plain form with JavaScript off proves it came from this site. The runtime sends the token as a header itself, so this costs nothing with JavaScript on."
+      },
+      {
+        "name": "submit",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Sets the submit button's text."
+      },
+      {
+        "name": "cancel",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "Adds a link back."
+      },
+      {
+        "name": "of",
+        "generics": "",
+        "args": "value: &T",
+        "doc": "Fills the form from a value."
+      },
+      {
+        "name": "with_values",
+        "generics": "",
+        "args": "values: Vec<(String, String)>",
+        "doc": "Fills the form from what was submitted."
+      },
+      {
+        "name": "with_errors",
+        "generics": "",
+        "args": "errors: BTreeMap<String, Vec<String>>",
+        "doc": "Shows errors under the fields."
+      },
+      {
+        "name": "options",
+        "generics": "",
+        "args": "field: &'static str, options: impl IntoIterator<Item =(String, String)>",
+        "doc": "Sets the choices of a select whose options come from the database."
+      },
+      {
+        "name": "one_column",
+        "generics": "",
+        "args": "",
+        "doc": "Puts every field on its own line."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Grid": {
+    "name": "Grid",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "A grid of equal columns, one column on phones.",
+    "constructors": [
+      {
+        "name": "cols",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "A grid of `columns` columns (1 to 6)."
+      }
+    ],
+    "methods": [
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "gap: u8",
+        "doc": "Sets the gap, in units of 4px."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds items."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Heading": {
+    "name": "Heading",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A heading. The level is the document's, the look follows it.",
+    "constructors": [
+      {
+        "name": "h1",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A page title: `<h1>`."
+      },
+      {
+        "name": "h2",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "`<h2>`."
+      },
+      {
+        "name": "h3",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "`<h3>`."
+      },
+      {
+        "name": "h4",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "`<h4>`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "HoverCard": {
+    "name": "HoverCard",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A popup on hover or focus with more about a link. Sighted mouse users get it; the same content must be reachable another way.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, trigger: impl Into<Node>",
+        "doc": "A card with the id `id` for `trigger`, usually a link."
+      }
+    ],
+    "methods": [
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the card."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Input": {
+    "name": "Input",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "A single-line input.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "kind: InputKind, name: impl Into<String>",
+        "doc": "An input of `kind` posting as `name`."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A text input."
+      },
+      {
+        "name": "email",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "An email input."
+      },
+      {
+        "name": "password",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A password input."
+      },
+      {
+        "name": "search",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A search input."
+      },
+      {
+        "name": "number",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A number input."
+      },
+      {
+        "name": "date",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A date input."
+      }
+    ],
+    "methods": [
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the value. A password input takes none: a page never holds a password."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<AttrValue>",
+        "doc": "Sets the hint shown while empty."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a value."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Makes it read-only."
+      },
+      {
+        "name": "autofocus",
+        "generics": "",
+        "args": "",
+        "doc": "Focuses it when the page loads."
+      },
+      {
+        "name": "autocomplete",
+        "generics": "",
+        "args": "hint: &'static str",
+        "doc": "Sets `autocomplete`."
+      },
+      {
+        "name": "inputmode",
+        "generics": "",
+        "args": "mode: &'static str",
+        "doc": "Sets `inputmode`."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "InputGroup": {
+    "name": "InputGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "An input with something fixed before or after it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "input: impl Into<Node>",
+        "doc": "A group around `input`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "start",
+        "generics": "",
+        "args": "addon: impl Into<Node>",
+        "doc": "Adds something before the input."
+      },
+      {
+        "name": "end",
+        "generics": "",
+        "args": "addon: impl Into<Node>",
+        "doc": "Adds something after the input."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "InputKind": {
+    "name": "InputKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "The kind of an `Input`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Text",
+        "doc": "Text.",
+        "default": true
+      },
+      {
+        "name": "Email",
+        "doc": "An email address.",
+        "default": false
+      },
+      {
+        "name": "Password",
+        "doc": "A password.",
+        "default": false
+      },
+      {
+        "name": "Search",
+        "doc": "A search.",
+        "default": false
+      },
+      {
+        "name": "Number",
+        "doc": "A number.",
+        "default": false
+      },
+      {
+        "name": "Url",
+        "doc": "A URL.",
+        "default": false
+      },
+      {
+        "name": "Tel",
+        "doc": "A phone number.",
+        "default": false
+      },
+      {
+        "name": "Date",
+        "doc": "A date.",
+        "default": false
+      },
+      {
+        "name": "Time",
+        "doc": "A time.",
+        "default": false
+      },
+      {
+        "name": "DateTime",
+        "doc": "A date and time.",
+        "default": false
+      },
+      {
+        "name": "File",
+        "doc": "A file.",
+        "default": false
+      },
+      {
+        "name": "Hidden",
+        "doc": "Not shown.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Item": {
+    "name": "Item",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A row with a title, a description, and things at either end.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A row titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ItemVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "media",
+        "generics": "",
+        "args": "media: impl Into<Node>",
+        "doc": "Adds an icon, or anything else, at the start."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds to the end."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the whole row a link."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "ItemVariant": {
+    "name": "ItemVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How an `Item` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Plain",
+        "doc": "No border: the default.",
+        "default": true
+      },
+      {
+        "name": "Outline",
+        "doc": "A line around it.",
+        "default": false
+      },
+      {
+        "name": "Muted",
+        "doc": "Filled.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Justify": {
+    "name": "Justify",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "How leftover space is shared along a row.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "At the start.",
+        "default": false
+      },
+      {
+        "name": "Center",
+        "doc": "In the middle.",
+        "default": false
+      },
+      {
+        "name": "End",
+        "doc": "At the end.",
+        "default": false
+      },
+      {
+        "name": "Between",
+        "doc": "Between the items.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Kbd": {
+    "name": "Kbd",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A key on the keyboard.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl Into<Node>",
+        "doc": "The key `key`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Label": {
+    "name": "Label",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "A label for the control with the id `control`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "control: impl Into<String>, text: impl Into<Node>",
+        "doc": "A label for the control `control`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Marker": {
+    "name": "Marker",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A small note in a stream: a date between messages, \"joined the chat\".",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "variant: MarkerVariant, text: impl Into<Node>",
+        "doc": "A marker saying `text`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "MarkerVariant": {
+    "name": "MarkerVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How a `Marker` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Plain",
+        "doc": "Just the text: the default.",
+        "default": true
+      },
+      {
+        "name": "Separator",
+        "doc": "Lines on both sides.",
+        "default": false
+      },
+      {
+        "name": "Border",
+        "doc": "A line below.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Message": {
+    "name": "Message",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A message in a conversation: who, when, and bubbles.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "side: BubbleSide",
+        "doc": "An empty message."
+      }
+    ],
+    "methods": [
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "avatar: impl Into<Node>",
+        "doc": "Sets the avatar."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl Into<Node>",
+        "doc": "Sets what goes above: usually who wrote it."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl Into<Node>",
+        "doc": "Sets what goes below: usually when."
+      },
+      {
+        "name": "content",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Adds bubbles and attachments."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "NativeSelect": {
+    "name": "NativeSelect",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "The browser's `<select>`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A select posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "options",
+        "generics": "",
+        "args": "options: impl IntoIterator<Item = OptionItem>",
+        "doc": "Adds choices."
+      },
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the chosen value."
+      },
+      {
+        "name": "prompt",
+        "generics": "",
+        "args": "prompt: impl Into<String>",
+        "doc": "Adds an empty first choice that says what to do."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a choice."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "NavGroup": {
+    "name": "NavGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "A labelled group of links in the sidebar.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "A group labelled `label`."
+      },
+      {
+        "name": "plain",
+        "generics": "",
+        "args": "",
+        "doc": "A group with no label."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: NavItem",
+        "doc": "Adds a link."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "NavItem": {
+    "name": "NavItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "One link in the sidebar.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "A link. Every top-level item should have an `icon`: the collapsed sidebar shows only that."
+      }
+    ],
+    "methods": [
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Says whether this is the current page, in place of what the path says. For links that differ only in their query (a list under several filters), which the path can't tell apart."
+      },
+      {
+        "name": "no_prefetch",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps this link from being fetched ahead of a click. A sidebar item is navigation and is fetched on hover or focus, so an item whose `GET` isn't safe to repeat needs this."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Sets the icon."
+      },
+      {
+        "name": "count",
+        "generics": "",
+        "args": "count: impl Into<Cow<'static, str>>",
+        "doc": "Adds a count at the end."
+      },
+      {
+        "name": "sub",
+        "generics": "",
+        "args": "item: NavItem",
+        "doc": "Adds an item below this one."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Op": {
+    "name": "Op",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/op.rs",
+    "summary": "One change to the page. The runtime handles exactly this list.",
+    "constructors": [
+      {
+        "name": "morph",
+        "generics": "",
+        "args": "target: impl Into<String>, node: &Node",
+        "doc": "Morphs element `target` into `node`."
+      },
+      {
+        "name": "replace",
+        "generics": "",
+        "args": "target: impl Into<String>, node: &Node",
+        "doc": "Replaces element `target` with `node`."
+      },
+      {
+        "name": "append",
+        "generics": "",
+        "args": "target: impl Into<String>, node: &Node",
+        "doc": "Adds `node` at the end of `target`."
+      },
+      {
+        "name": "prepend",
+        "generics": "",
+        "args": "target: impl Into<String>, node: &Node",
+        "doc": "Adds `node` at the start of `target`."
+      },
+      {
+        "name": "toast",
+        "generics": "",
+        "args": "tone: ToastTone, text: impl Into<String>",
+        "doc": "A toast."
+      },
+      {
+        "name": "navigate",
+        "generics": "",
+        "args": "href: impl Into<LocalHref>",
+        "doc": "Goes to `href`, on this site: a URL that would leave it goes nowhere."
+      },
+      {
+        "name": "navigate_external",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Leaves for `href`, which may be on another site. Never give this a URL from a request unchecked: that is an open redirect."
+      },
+      {
+        "name": "url",
+        "generics": "",
+        "args": "href: impl Into<LocalHref>, mode: UrlMode",
+        "doc": "Changes the address bar, on this site."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Morph",
+        "doc": "Morphs the element `target` into `html`, keeping focus, caret, selection, composition and typed values.",
+        "default": false
+      },
+      {
+        "name": "Replace",
+        "doc": "Replaces the element `target` outright.",
+        "default": false
+      },
+      {
+        "name": "Append",
+        "doc": "Adds `html` at the end of `target`.",
+        "default": false
+      },
+      {
+        "name": "Prepend",
+        "doc": "Adds `html` at the start of `target`.",
+        "default": false
+      },
+      {
+        "name": "Remove",
+        "doc": "Removes the element `target`.",
+        "default": false
+      },
+      {
+        "name": "Errors",
+        "doc": "Shows field errors in a form, or clears them when `fields` is empty.",
+        "default": false
+      },
+      {
+        "name": "Toast",
+        "doc": "Shows a toast, and announces it to assistive technology.",
+        "default": false
+      },
+      {
+        "name": "Open",
+        "doc": "Opens the dialog, popover or details `target`.",
+        "default": false
+      },
+      {
+        "name": "Close",
+        "doc": "Closes the dialog, popover or details `target`.",
+        "default": false
+      },
+      {
+        "name": "Focus",
+        "doc": "Moves focus to `target`.",
+        "default": false
+      },
+      {
+        "name": "Url",
+        "doc": "Changes the address bar without loading anything.",
+        "default": false
+      },
+      {
+        "name": "Navigate",
+        "doc": "Goes to `href`, on this site, the way a boosted link does. The runtime refuses another origin here.",
+        "default": false
+      },
+      {
+        "name": "NavigateExternal",
+        "doc": "Leaves for `href` on another site: a real navigation, with no request of the runtime's. Only `Op::navigate_external` and `Reply::redirect_external` write this.",
+        "default": false
+      },
+      {
+        "name": "Reload",
+        "doc": "Reloads the page.",
+        "default": false
+      },
+      {
+        "name": "Invalidate",
+        "doc": "Refetches the region `target`.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "OptionItem": {
+    "name": "OptionItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "One choice in a `NativeSelect` or a `RadioGroup`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "A choice."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "Pagination": {
+    "name": "Pagination",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Links between the pages of a list.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "page: u32, pages: u32, href: impl Fn(u32) -> String",
+        "doc": "Page `page` of `pages`; `href` gives each page's link."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Popover": {
+    "name": "Popover",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A popup with a click-outside and Esc dismissal, from the browser's `popover`, opened by a button.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, trigger: impl Into<Node>",
+        "doc": "A popover with the id `id`, opened by a button showing `trigger`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Sets the button's look."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the button's size."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side it opens on."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "Sets how it lines up along that side."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the popup for assistive technology, when the button's text doesn't."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the popup."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "PopupAlign": {
+    "name": "PopupAlign",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "Where a popup lines up along the side it opens on.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "With the start of what opens it.",
+        "default": false
+      },
+      {
+        "name": "Center",
+        "doc": "Centred: the default.",
+        "default": true
+      },
+      {
+        "name": "End",
+        "doc": "With the end.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Progress": {
+    "name": "Progress",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How far along something is: the browser's `<progress>`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "value: u32, max: u32, label: impl Into<String>",
+        "doc": "`value` out of `max`, named `label`."
+      },
+      {
+        "name": "indeterminate",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Going, with no known end."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "RadioGroup": {
+    "name": "RadioGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "One choice out of several, shown: a `fieldset` of native radios, whose keyboard is the browser's.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, legend: impl Into<Node>",
+        "doc": "A group posting as `name`, described by `legend`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "options",
+        "generics": "",
+        "args": "options: impl IntoIterator<Item = OptionItem>",
+        "doc": "Adds choices."
+      },
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the chosen value."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a choice."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables the group."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Ratio": {
+    "name": "Ratio",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A shape for `AspectRatio`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Square",
+        "doc": "1:1.",
+        "default": false
+      },
+      {
+        "name": "Video",
+        "doc": "16:9: the default.",
+        "default": true
+      },
+      {
+        "name": "Photo",
+        "doc": "4:3.",
+        "default": false
+      },
+      {
+        "name": "Wide",
+        "doc": "21:9.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Region": {
+    "name": "Region",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/table/region.rs",
+    "summary": "A named part of a page that updates by itself: fetched after paint, polled, or refetched when an op invalidates it. Its answer morphs in.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "A region named `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "src",
+        "generics": "",
+        "args": "src: impl Into<Href>",
+        "doc": "Sets where its content comes from: a page holding an element with this id, or a fragment, which is a page with no script of its own. A page with the runtime that lacks this id, or a redirect, is somewhere else: the user goes there, as when a session has ended."
+      },
+      {
+        "name": "lazy",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches it after paint, showing a skeleton until then."
+      },
+      {
+        "name": "poll",
+        "generics": "",
+        "args": "every: Duration",
+        "doc": "Refetches it this often, while the page is visible."
+      },
+      {
+        "name": "feed",
+        "generics": "",
+        "args": "into: impl Into<AttrValue>, after: impl Into<AttrValue>, empty: Option<&str>",
+        "doc": "Makes it a feed: each poll asks the source for what is newer than a cursor and adds it at the start of the element `into` inside the region, instead of fetching the whole region again."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds its content."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Reply": {
+    "name": "Reply",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/op.rs",
+    "summary": "What an action handler answers: ops for the runtime, and what a browser with JavaScript off gets instead.",
+    "constructors": [
+      {
+        "name": "redirect",
+        "generics": "",
+        "args": "href: impl Into<LocalHref>",
+        "doc": "Goes to `href`, on this site. A URL that would leave it (`//host`, `/\\\\host`, `https://host`) goes nowhere, so a `next` from a request can't send a user away. To leave on purpose, use `redirect_external`."
+      },
+      {
+        "name": "ops_or_redirect",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Applies ops; with JavaScript off, goes to `href`."
+      },
+      {
+        "name": "redirect_external",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Goes to `href`, which may be on another site: a sign-in provider, a payment page. Never give this a URL from a request unchecked: that is an open redirect."
+      },
+      {
+        "name": "view",
+        "generics": "",
+        "args": "view: View",
+        "doc": "Applies ops; with JavaScript off, shows `view`."
+      },
+      {
+        "name": "ops",
+        "generics": "",
+        "args": "ops: Vec<Op>",
+        "doc": "Applies ops; with JavaScript off, answers 204."
+      }
+    ],
+    "methods": [
+      {
+        "name": "op",
+        "generics": "",
+        "args": "op: Op",
+        "doc": "Adds an op."
+      },
+      {
+        "name": "morph",
+        "generics": "",
+        "args": "target: impl Into<String>, node: impl Into<Node>",
+        "doc": "Morphs element `target` into `node`."
+      },
+      {
+        "name": "toast",
+        "generics": "",
+        "args": "tone: ToastTone, text: impl Into<String>",
+        "doc": "Adds a toast. With JavaScript off, the next page shows it."
+      },
+      {
+        "name": "status",
+        "generics": "",
+        "args": "status: StatusCode",
+        "doc": "Sets the status of the ops response."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Row": {
+    "name": "Row",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "Items side by side.",
+    "constructors": [
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "gap: u8",
+        "doc": "A row with `gap` units of 4px between its items, centred across."
+      }
+    ],
+    "methods": [
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: Align",
+        "doc": "Sets where items sit across the row."
+      },
+      {
+        "name": "justify",
+        "generics": "",
+        "args": "justify: Justify",
+        "doc": "Sets how leftover space is shared."
+      },
+      {
+        "name": "wrap",
+        "generics": "",
+        "args": "",
+        "doc": "Lets items wrap onto more lines."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds items."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "RowAction": {
+    "name": "RowAction",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/table/view.rs",
+    "summary": "One thing a row's menu does.",
+    "constructors": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "A link."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "A button that posts to `href`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "destructive",
+        "generics": "",
+        "args": "",
+        "doc": "Marks it as destroying something."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ScrollArea": {
+    "name": "ScrollArea",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A scrolling region with thin scrollbars, reachable by keyboard.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "An area named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds content."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Separator": {
+    "name": "Separator",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A line between things.",
+    "constructors": [
+      {
+        "name": "horizontal",
+        "generics": "",
+        "args": "",
+        "doc": "A horizontal line."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "A vertical line, in a row."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Sheet": {
+    "name": "Sheet",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A dialog that slides in from an edge.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Node>",
+        "doc": "A sheet with the id `id`. The title is required."
+      }
+    ],
+    "methods": [
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: SheetSide",
+        "doc": "Sets the edge."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Sets the description."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the body."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds to the footer."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SheetSide": {
+    "name": "SheetSide",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "Which edge a `Sheet` comes from.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Right",
+        "doc": "The right: the default.",
+        "default": true
+      },
+      {
+        "name": "Left",
+        "doc": "The left.",
+        "default": false
+      },
+      {
+        "name": "Top",
+        "doc": "The top.",
+        "default": false
+      },
+      {
+        "name": "Bottom",
+        "doc": "The bottom.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Shell": {
+    "name": "Shell",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "The app's one shell definition. Register it as a provider so `AppShell` can find it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<Cow<'static, str>>",
+        "doc": "A shell for the app `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "context",
+        "generics": "",
+        "args": "context: impl Into<Cow<'static, str>>",
+        "doc": "Sets the line below the app's name: a workspace, a plan."
+      },
+      {
+        "name": "home",
+        "generics": "",
+        "args": "home: impl Into<Href>",
+        "doc": "Sets where the app's name links to, and which link only matches itself."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "group: NavGroup",
+        "doc": "Adds a group of links."
+      },
+      {
+        "name": "user",
+        "generics": "",
+        "args": "user: UserMenu",
+        "doc": "Sets the user at the foot."
+      },
+      {
+        "name": "search",
+        "generics": "",
+        "args": "search: impl Into<Node>",
+        "doc": "Adds search to the top bar."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>, path: impl Into<String>",
+        "doc": "A page of this shell at `path`, for use without the `AppShell` extractor."
+      },
+      {
+        "name": "for_request",
+        "generics": "",
+        "args": "path: impl Into<String>, headers: &HeaderMap",
+        "doc": "This shell applied to a request: which link is active, whether the sidebar is collapsed, a toast left for this page. It is what the `AppShell` extractor does for the app's own `Shell`, for a module that serves pages of its own and has no business registering one for the whole app (a debugging tool)."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Side": {
+    "name": "Side",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "Which side of what opens it a popup appears on.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Top",
+        "doc": "Above.",
+        "default": false
+      },
+      {
+        "name": "Bottom",
+        "doc": "Below: the default.",
+        "default": true
+      },
+      {
+        "name": "Left",
+        "doc": "To the left.",
+        "default": false
+      },
+      {
+        "name": "Right",
+        "doc": "To the right.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Size": {
+    "name": "Size",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/mod.rs",
+    "summary": "A control's size.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Xs",
+        "doc": "24px.",
+        "default": false
+      },
+      {
+        "name": "Sm",
+        "doc": "28px.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "32px: the default.",
+        "default": true
+      },
+      {
+        "name": "Lg",
+        "doc": "36px.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Skeleton": {
+    "name": "Skeleton",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A placeholder while content loads.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "shape: SkeletonShape",
+        "doc": "A placeholder of `shape`."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "SkeletonShape": {
+    "name": "SkeletonShape",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "The shape of a `Skeleton`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Line",
+        "doc": "A line of text: the default.",
+        "default": true
+      },
+      {
+        "name": "Short",
+        "doc": "A short line.",
+        "default": false
+      },
+      {
+        "name": "Block",
+        "doc": "A block filling its space.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Spinner": {
+    "name": "Spinner",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A sign that something is happening, named for assistive technology.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "A spinner saying `label` to assistive technology."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Stack": {
+    "name": "Stack",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/layout.rs",
+    "summary": "Items one above the other.",
+    "constructors": [
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "gap: u8",
+        "doc": "A stack with `gap` units of 4px between its items."
+      }
+    ],
+    "methods": [
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: Align",
+        "doc": "Sets where items sit."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "children: impl IntoNodes",
+        "doc": "Adds items."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Stat": {
+    "name": "Stat",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "One figure and what it is.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>, value: impl Into<Node>",
+        "doc": "The figure `value`, called `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "trend",
+        "generics": "",
+        "args": "text: impl Into<Node>, good: bool",
+        "doc": "Adds how it's moving; `good` colours it."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Switch": {
+    "name": "Switch",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "An on and off switch: a checkbox with the `switch` role.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A switch posting as `name`. Its value is `true`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "checked",
+        "generics": "",
+        "args": "checked: bool",
+        "doc": "Starts on."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "Puts it in a label with this text."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Table": {
+    "name": "Table",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A table of data. The wrapper scrolls on narrow screens.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty table."
+      }
+    ],
+    "methods": [
+      {
+        "name": "body_id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Gives the body an id, so `Region::feed` can add rows to it."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: impl Into<Node>",
+        "doc": "Sets the caption."
+      },
+      {
+        "name": "head",
+        "generics": "",
+        "args": "head: impl IntoNodes",
+        "doc": "Adds header cells."
+      },
+      {
+        "name": "rows",
+        "generics": "",
+        "args": "rows: impl IntoNodes",
+        "doc": "Adds rows."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "TableCell": {
+    "name": "TableCell",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A cell of a `Table`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "A cell holding `content`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "numeric",
+        "generics": "",
+        "args": "",
+        "doc": "Aligns it right in tabular figures, for numbers."
+      },
+      {
+        "name": "hide_on_mobile",
+        "generics": "",
+        "args": "",
+        "doc": "Hides it on phones."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "TableHead": {
+    "name": "TableHead",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A header cell of a `Table`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl IntoNodes",
+        "doc": "A column headed `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "numeric",
+        "generics": "",
+        "args": "",
+        "doc": "Aligns it right, for numbers."
+      },
+      {
+        "name": "hide_on_mobile",
+        "generics": "",
+        "args": "",
+        "doc": "Hides it on phones."
+      },
+      {
+        "name": "sort",
+        "generics": "",
+        "args": "ascending: bool",
+        "doc": "Sets how it's sorted now."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "TableRowEl": {
+    "name": "TableRowEl",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A row of a `Table`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "cells: impl IntoNodes",
+        "doc": "A row of cells."
+      }
+    ],
+    "methods": [
+      {
+        "name": "key",
+        "generics": "",
+        "args": "key: impl Into<AttrValue>",
+        "doc": "Gives it a stable key, so a morph keeps the row."
+      },
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "selected: bool",
+        "doc": "Marks it selected."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Text": {
+    "name": "Text",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "A paragraph, or inline text when `inline`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "text: impl IntoNodes",
+        "doc": "A paragraph."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "text: impl IntoNodes",
+        "doc": "Secondary text."
+      },
+      {
+        "name": "code",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Inline code."
+      }
+    ],
+    "methods": [
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: TextVariant",
+        "doc": "Sets the look."
+      },
+      {
+        "name": "inline",
+        "generics": "",
+        "args": "",
+        "doc": "Writes it inline: `<span>`."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "TextVariant": {
+    "name": "TextVariant",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "How a run of `Text` looks.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Body",
+        "doc": "Body text: the default.",
+        "default": true
+      },
+      {
+        "name": "Muted",
+        "doc": "Secondary, 13px.",
+        "default": false
+      },
+      {
+        "name": "Lead",
+        "doc": "An introduction, 16px.",
+        "default": false
+      },
+      {
+        "name": "Code",
+        "doc": "Mono.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Textarea": {
+    "name": "Textarea",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/inputs.rs",
+    "summary": "A multi-line input. It grows with its text where the browser can.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A textarea posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the value."
+      },
+      {
+        "name": "rows",
+        "generics": "",
+        "args": "rows: u32",
+        "doc": "Sets the number of rows."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<AttrValue>",
+        "doc": "Sets the hint shown while empty."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a value."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Toggle": {
+    "name": "Toggle",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/actions.rs",
+    "summary": "A two-state button. It is a checkbox underneath, so it posts with its form, keeps its state with no script and has the keyboard of a checkbox.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<Node>",
+        "doc": "A toggle posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "pressed",
+        "generics": "",
+        "args": "pressed: bool",
+        "doc": "Starts on."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Tooltip": {
+    "name": "Tooltip",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "A short description on hover and on focus, with the `tooltip` role.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, trigger: impl Into<Node>, text: impl Into<Node>",
+        "doc": "A tooltip with the id `id` saying `text` about `trigger`, a focusable element."
+      }
+    ],
+    "methods": [
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "UserMenu": {
+    "name": "UserMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "The user at the foot of the sidebar: an avatar, name and email, and a menu.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<Cow<'static, str>>, email: impl Into<Cow<'static, str>>",
+        "doc": "The user `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a link to the menu, for a page to read. It isn't fetched ahead of a click. Something that changes state, such as signing out, is an `action`."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a button that posts to `href`: signing out, switching workspace. It works with JavaScript off, carrying the session's token as a field when there is one."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  }
+}

@@ -1,0 +1,32 @@
+/*
+ * The frame around a preview on navree.com: the padding, the centring and the
+ * gallery's cells. Everything a component looks like comes from navree-ui.css,
+ * loaded before this file; this file only places it.
+ */
+html{height:100%}
+body[data-preview]{box-sizing:border-box;min-height:100%;margin:0;padding:24px;display:flex;flex-direction:column;justify-content:center}
+body[data-preview=fill]{padding:0;display:block}
+[data-preview-stage]{width:100%;min-width:0}
+body[data-preview=center] [data-preview-stage]{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px}
+
+/* A dialog, sheet or popover drawn in place, as it looks when open. Opening it
+   for real still works: these rules stop applying once it is open. */
+body[data-preview-show] [data-preview-stage]{flex-direction:column}
+[data-preview-show] :is([data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]):not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:32rem;height:auto;max-height:none;border-width:1px;border-radius:var(--radius-lg)}
+[data-preview-show] [data-slot=alert-dialog]:not([open]){max-width:26rem}
+[data-preview-show] [data-slot=sheet]:not([open]){max-width:24rem}
+[data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
+
+/* Galleries: one captioned cell per variant or state. */
+[data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}
+[data-preview-gallery=narrow]{--cell:140px}
+[data-preview-gallery=wide]{--cell:100%}
+[data-preview-gallery=icon]{--cell:112px;gap:8px}
+[data-preview-cell]{margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg)}
+[data-preview-cell-body]{flex:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:40px}
+[data-preview-gallery=wide] [data-preview-cell-body]{display:block}
+[data-preview-cell] figcaption{color:var(--fg-3);font:12px/1.4 var(--font-mono);text-align:center;overflow-wrap:anywhere}
+[data-preview-gallery=wide] figcaption{text-align:start}
+[data-preview-gallery=icon] [data-preview-cell]{gap:8px;padding:16px 8px 10px}
+[data-preview-gallery=icon] [data-preview-cell-body] [data-slot=icon]{width:20px;height:20px;color:var(--fg-1)}
+@media (max-width:480px){[data-preview-gallery=medium]{--cell:140px}[data-preview-cell]{padding:12px}}

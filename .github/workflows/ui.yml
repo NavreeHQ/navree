@@ -8,6 +8,8 @@ on:
       - "crates/navree-ui/**"
       - "crates/navree-ui-macros/**"
       - "apps/ui-proof/**"
+      - "apps/ui-docs/**"
+      - "apps/website/content/ui/**"
       - "e2e/ui/**"
       - ".github/workflows/ui.yml"
 
@@ -27,6 +29,19 @@ jobs:
         working-directory: crates/navree-ui/runtime
       - run: node build.mjs --check
         working-directory: crates/navree-ui/runtime
+
+  docs:
+    name: The website's UI docs are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      # Every example rendered again, the props tables read again from the
+      # source: fails when apps/website/content/ui differs. Rerun with
+      # `cargo run -p ui-docs`.
+      - run: cargo run -p ui-docs -- --check
 
   budgets:
     name: Speed budgets, release build
