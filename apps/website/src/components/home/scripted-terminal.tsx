@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 /** A command (typed after a `$` prompt) or a line of output (fades in). */
 export type TermLine = { cmd: string; className?: string } | { out: ReactNode; className?: string };
+
+/** Text with a line-break opportunity after each `/`, so a long URL wraps at a path segment. Adds no characters. */
+function breakable(text: string): ReactNode {
+  const parts = text.split("/");
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 ? (
+        <>
+          /<wbr />
+        </>
+      ) : null}
+    </Fragment>
+  ));
+}
 
 function Caret({ className }: { className?: string }) {
   return (
@@ -22,6 +37,9 @@ function Caret({ className }: { className?: string }) {
  *
  * Every line is in the HTML from the start (screen readers and search read
  * the whole session), so the server and the first client render agree.
+ * Long lines wrap instead of running off the edge: a command wraps at its
+ * path segments, under the prompt, and keeps every character, so what you
+ * copy is the command as written.
  * Hiding uses `motion-safe:` classes only: with reduced motion the session
  * is simply shown, complete and still, and nothing is animated.
  */
@@ -87,7 +105,7 @@ export function ScriptedTerminal({
         </div>
         {title ? <span className="font-mono text-xs text-fg-3">{title}</span> : null}
       </div>
-      <pre className="scroll-thin overflow-x-auto p-4 font-mono text-[0.8125rem] leading-relaxed sm:p-5">
+      <pre className="@container p-4 font-mono text-[0.8125rem] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] sm:p-5">
         <code className="grid gap-y-1">
           {lines.map((line, j) => {
             const active = started && !done && j === pos.line;
@@ -95,10 +113,10 @@ export function ScriptedTerminal({
             if ("cmd" in line) {
               const typed = active ? pos.char : line.cmd.length;
               return (
-                <span key={j} className={cn("block text-fg", !shown && "motion-safe:opacity-0", line.className)}>
+                <span key={j} className={cn("block pl-[2ch] -indent-[2ch] text-fg", !shown && "motion-safe:opacity-0", line.className)}>
                   <span className="text-fg-3 select-none">$ </span>
-                  {line.cmd.slice(0, typed)}
-                  <span className={active ? "motion-safe:opacity-0" : undefined}>{line.cmd.slice(typed)}</span>
+                  {breakable(line.cmd.slice(0, typed))}
+                  <span className={active ? "motion-safe:opacity-0" : undefined}>{breakable(line.cmd.slice(typed))}</span>
                   {active ? <Caret /> : null}
                 </span>
               );

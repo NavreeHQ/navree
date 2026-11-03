@@ -4,7 +4,10 @@ import { ScriptedTerminal, type TermLine } from "./scripted-terminal";
 
 /**
  * The next steps `navree new` prints for the SaaS kit on the default
- * database: the command, padded to 30 columns, then its comment.
+ * database: the command in a 30-column field, then its comment. Where the
+ * terminal is too narrow for the longest step (2 + 30 + 1 + 32 columns, about
+ * 32rem at this size), every comment goes under its command, so the steps
+ * line up either way.
  */
 const steps: [string, string][] = [
   ["navree dock up", "TimescaleDB and Mailpit"],
@@ -21,18 +24,18 @@ const steps: [string, string][] = [
  */
 const session: TermLine[] = [
   { cmd: site.install.cli },
-  { out: "   Installed package `navree-cli v1.0.0` (executable `navree`)" },
+  // Indented three columns, as cargo prints it; a wrapped line continues two further in.
+  { out: "Installed package `navree-cli v1.0.0` (executable `navree`)", className: "pl-[5ch] -indent-[2ch]" },
   { cmd: "navree new acme --kit saas", className: "mt-2" },
   { out: "Created acme in ~/code/acme (kit: saas)", className: "text-fg-2" },
   { out: "Next steps:", className: "mt-1" },
   { out: "  cd acme" },
   ...steps.map(([command, comment]): TermLine => ({
     out: (
-      <>
-        {"  "}
-        <span className="text-fg-1">{command}</span>
-        {`${" ".repeat(30 - command.length)} # ${comment}`}
-      </>
+      <span className="flex flex-col pl-[2ch] @min-[32rem]:flex-row @min-[32rem]:gap-x-[1ch]">
+        <span className="text-fg-1 @min-[32rem]:w-[30ch] @min-[32rem]:shrink-0">{command}</span>
+        <span className="min-w-0"># {comment}</span>
+      </span>
     ),
   })),
 ];
