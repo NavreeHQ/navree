@@ -48,14 +48,16 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   `pattern("...", browser)`. `FormView` draws it, `Submit<T>` reads it back and answers
   field errors under the inputs, or the page again with JavaScript off. A form on its
   way ignores a second submit that sends the same thing, and sends the latest one that
-  differs when the first answer is back.
+  differs when the first answer is back, to the same record on the same page. When it
+  can't, a toast says the change wasn't saved, and what was typed stays in the field.
 - **Tables.** One definition, `#[derive(TableRow)]`, drives the URL, the query, the
   drawing, the export and bulk actions. See [The data table](#the-data-table).
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
   no request: show, hide, open, focus, submit, copy, set a state attribute, and write
   text (`text`, `count`, `value` for a hidden field marked `settable`, `fill` a dialog from a row). The
   text commands set `textContent`, so nothing they write is read as markup, and they
-  refuse scripts, styles and the fields a user types in. `Op` is the closed list of what
+  refuse scripts, styles, the page's title, options, the fields a user types in and
+  editable content. `Op` is the closed list of what
   a server action sends back, with rendered HTML as payload. `Reply` carries ops and a
   fallback for JavaScript off.
   `Reply::redirect` and `Op::navigate` stay on this site, so a `next` from a request
