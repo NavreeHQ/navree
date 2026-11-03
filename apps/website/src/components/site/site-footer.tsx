@@ -1,55 +1,60 @@
 import Link from "next/link";
 
-import { site } from "@site";
+import { entry } from "@/content/ecosystem";
+import { repoBlob, site } from "@site";
 
 import { Logo } from "./logo";
 
 type FooterLink = { label: string; href: string };
 
+/** The first-party tools, in the order the launch names them; names and pages come from the ecosystem catalogue. */
+const tools = ["lighthouse", "logbook", "fleet", "helm", "harbor", "dock", "navigator"].map((slug) => {
+  const e = entry(slug);
+  return { label: e.name, href: e.href };
+});
+
+/**
+ * One column per journey: what Navree is (the header's pages), how to start
+ * (and bring what you have), the docs people open most, the tools, and the
+ * project itself.
+ */
 const columns: { title: string; links: FooterLink[] }[] = [
+  {
+    title: "Product",
+    links: site.nav.filter((item) => item.href !== "/docs/").map((item) => ({ label: item.label, href: item.href })),
+  },
+  {
+    title: "Start",
+    links: [
+      { label: "Installation", href: "/docs/getting-started/installation/" },
+      { label: "Your first app", href: "/docs/getting-started/your-first-app/" },
+      { label: "Starter kits", href: "/docs/getting-started/starter-kits/" },
+      { label: "Choosing a UI", href: "/docs/ui/choosing-a-ui/" },
+      { label: "Set up your agent", href: "/docs/ai/introduction/#set-up-your-agent" },
+      { label: "Bring your product", href: "/docs/getting-started/bring-your-product/" },
+      { label: "Bring your design", href: "/docs/getting-started/bring-your-design/" },
+    ],
+  },
   {
     title: "Docs",
     links: [
       { label: "Introduction", href: "/docs/prologue/introduction/" },
-      { label: "Installation", href: "/docs/getting-started/installation/" },
-      { label: "Your first app", href: "/docs/getting-started/your-first-app/" },
       { label: "Modules", href: "/docs/architecture/modules/" },
       { label: "Routing", href: "/docs/basics/routing/" },
+      { label: "ORM", href: "/docs/orm/getting-started/" },
       { label: "Workspaces", href: "/docs/workspaces/introduction/" },
-      { label: "Architecture patterns", href: "/docs/patterns/overview/" },
-    ],
-  },
-  {
-    title: "Ecosystem",
-    links: [
-      { label: "All packages and tools", href: "/ecosystem/" },
-      { label: "Lighthouse", href: "/docs/tools/lighthouse/" },
-      { label: "Fleet", href: "/docs/tools/fleet/" },
-      { label: "Helm", href: "/docs/tools/helm/" },
-      { label: "Harbor", href: "/docs/tools/harbor/" },
-      { label: "Search", href: "/docs/packages/search/" },
-      { label: "Billing", href: "/docs/packages/billing/" },
-    ],
-  },
-  {
-    title: "AI",
-    links: [
-      { label: "Navree for AI", href: "/ai/" },
-      { label: "Agent skills", href: "/docs/ai/agent-skills/" },
-      { label: "Navigator", href: "/docs/ai/navigator/" },
-      { label: "Docs for agents", href: "/docs/ai/docs-for-agents/" },
+      { label: "UI components", href: "/docs/components/overview/" },
       { label: "AI SDK", href: "/docs/ai/ai-sdk/" },
-      { label: "MCP servers", href: "/docs/ai/mcp-servers/" },
     ],
   },
+  { title: "Tools", links: tools },
   {
-    title: "Resources",
+    title: "Project",
     links: [
-      { label: "Navree UI", href: "/ui/" },
-      { label: "Performance", href: "/performance/" },
-      { label: "Architecture", href: "/architecture/" },
       { label: "Release notes", href: "/docs/prologue/release-notes/" },
       { label: "Roadmap", href: "/docs/prologue/roadmap/" },
+      { label: "Contributing", href: "/docs/prologue/contributing/" },
+      { label: "Security policy", href: repoBlob("SECURITY.md") },
       { label: "GitHub", href: site.repoUrl },
       { label: "llms.txt", href: "/llms.txt" },
     ],
@@ -59,7 +64,7 @@ const columns: { title: string; links: FooterLink[] }[] = [
 /** Internal pages go through the router; files (llms.txt) and other sites are plain links. */
 function FooterAnchor({ link }: { link: FooterLink }) {
   const className = "text-fg-2 transition-colors duration-200 hover:text-fg";
-  const isPage = link.href.startsWith("/") && link.href.endsWith("/");
+  const isPage = link.href.startsWith("/") && /\/(#[\w-]+)?$/.test(link.href);
   return isPage ? (
     <Link href={link.href} className={className}>
       {link.label}
@@ -78,8 +83,8 @@ export function SiteFooter() {
       <div aria-hidden className="container-site pointer-events-none absolute inset-x-0 -top-px">
         <div className="h-px w-24 bg-accent shadow-glow-sm" />
       </div>
-      <div className="container-site grid grid-cols-2 gap-x-6 gap-y-12 py-16 sm:gap-x-8 md:grid-cols-4 lg:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))] lg:py-20">
-        <div className="col-span-2 max-w-sm md:col-span-4 lg:col-span-1">
+      <div className="container-site grid grid-cols-2 gap-x-6 gap-y-12 py-16 sm:gap-x-8 md:grid-cols-3 lg:grid-cols-5 lg:py-20 xl:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,1fr))]">
+        <div className="col-span-2 max-w-sm md:col-span-3 lg:col-span-5 xl:col-span-1">
           <Link href="/" className="-ml-1 inline-flex rounded-md px-1 py-1" aria-label={`${site.name} home`}>
             <Logo />
           </Link>
