@@ -2405,7 +2405,7 @@
         ],
         "type": "object"
       },
-      "Vec": {
+      "Vec_LinkedAccount": {
         "items": {
           "description": "A linked provider account, as `GET /api/auth/social/accounts` lists it.",
           "properties": {
@@ -3180,6 +3180,44 @@
         }
       }
     },
+    "/admin/counts": {
+      "get": {
+        "operationId": "helm.counts",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/login": {
       "get": {
         "operationId": "helm.login",
@@ -3381,6 +3419,54 @@
     "/admin/resources/{resource}/actions": {
       "post": {
         "operationId": "helm.action",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/resources/{resource}/export.csv": {
+      "get": {
+        "operationId": "helm.export",
         "parameters": [
           {
             "in": "path",
@@ -3841,6 +3927,44 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/workspace": {
+      "post": {
+        "operationId": "helm.workspace",
         "responses": {
           "200": {
             "description": "OK"
@@ -5296,7 +5420,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Vec"
+                  "$ref": "#/components/schemas/Vec_LinkedAccount"
                 }
               }
             },
