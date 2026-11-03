@@ -353,6 +353,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `docx_read` | Word files: any bytes as a file, and any bytes as the main part of a well-formed package, within tight limits |
 | `sso_saml_response`, `sso_saml_metadata`, `sso_xml` | SAML responses, identity provider metadata, XML and Canonical XML |
 | `webhooks_signatures` | the signature headers and bodies of every incoming webhook verifier |
+| `phone_parse` | phone numbers from any text in any region: what parses fits its plan, is E.164 and reads back from every format it writes |
 | `validation_international` | E.164 phone numbers, names, countries, locales, sanitized HTML |
 | `validation_html` | the HTML sanitizer under policies built from the input: the output parses back to the tree it checked and holds nothing the policy doesn't allow |
 | `search_query` | query text and filter values rendered for each search engine |

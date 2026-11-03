@@ -31,10 +31,10 @@ pub struct Contact {
     pub mobile: Option<Phone>,
 }
 
-/// A contact whose number stays a string, checked by `rules::phone`.
+/// A contact whose number stays a string, checked by the `phone` rule.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct RawContact {
-    #[validate(custom(rules::phone))]
+    #[validate(phone)]
     pub phone: String,
 }
 
@@ -399,7 +399,7 @@ async fn phone_details() {
         json!({
             "e164": "+447400123456",
             "country_code": 44,
-            "national_number": 7_400_123_456_u64,
+            "national_number": "7400123456",
             "region": "GB",
             "international": "+44 7400 123456 x12",
             "national": "07400 123456 x12",

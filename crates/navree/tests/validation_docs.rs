@@ -256,7 +256,7 @@ fn the_types_and_builders_of_the_page() {
             phone.country_code(),
             phone.national_number()
         ),
-        ("+447400123456", 44, 7_400_123_456)
+        ("+447400123456", 44, "7400123456")
     );
     assert_eq!(phone.region(), Country::parse("GB").ok());
     assert_eq!(phone.international(), "+44 7400 123456 x12");

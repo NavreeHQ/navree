@@ -2,23 +2,14 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 
-use rlibphonenumber::{PhoneNumber, PhoneNumberFormat, Region};
+use navree_phone::{NumberType, PhoneFormat, PhoneNumber, Region};
 use serde::de::{self, Deserializer, Visitor};
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::failure::serde_error;
 use crate::{Country, context, fold_digits};
-
-/// Longer input is not a phone number (the limit of the reference library).
-const MAX_INPUT: usize = 250;
-
-/// The longest E.164 number: `+` and 15 digits (ITU-T E.164). The reference
-/// library's numbering plans allow more for a few countries, but a longer
-/// number is not E.164 and no SMS or voice provider takes it.
-const MAX_E164_LEN: usize = 16;
 
 /// A valid phone number, kept in E.164 form (`+447400123456`).
 ///
@@ -33,7 +24,9 @@ const MAX_E164_LEN: usize = 16;
 /// Inside the extractors an invalid number is a field error with the
 /// message key `phone` (`phone must be a valid phone number`). "Valid"
 /// means the number matches its region's numbering plan and fits E.164's
-/// 15 digits; nobody checks that it is in service.
+/// 15 digits; nobody checks that it is in service. The parsing and the
+/// plans are [`navree_phone`]'s, and [`number`](Phone::number) gives its
+/// [`PhoneNumber`].
 ///
 /// It serializes as the E.164 string, which is the form to store. The
 /// extension is not part of E.164: read it from
@@ -54,9 +47,8 @@ const MAX_E164_LEN: usize = 16;
 /// assert_eq!(Phone::parse("٠٥٠ ١٢٣ ٤٥٦٧", uae).unwrap().as_str(), "+971501234567");
 /// assert!(Phone::parse("050 123 4567", None).is_err());
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Phone {
-    e164: String,
     number: PhoneNumber,
 }
 
@@ -65,81 +57,80 @@ pub struct Phone {
 #[error("`{0}` is not a valid phone number")]
 pub struct InvalidPhone(String);
 
+/// The numbering plan region of a country, when it has a plan of its own
+/// (Antarctica, for one, has none).
+fn region_of(country: Country) -> Option<Region> {
+    Region::parse(country.as_str())
+}
+
 impl Phone {
     /// Parses `text`, reading a number without a country code in
     /// `default_region`.
     pub fn parse(text: &str, default_region: Option<Country>) -> Result<Phone, InvalidPhone> {
-        let invalid = || InvalidPhone(text.to_owned());
-        if text.len() > MAX_INPUT {
-            return Err(invalid());
-        }
-        let folded = fold_digits(text);
-        // A country without numbering metadata (AQ) gives no region, so a
-        // national number in it is invalid.
-        let region = default_region.and_then(|country| Region::from_code(country.as_str()).ok());
-        // A panic in the parser on odd input is just an invalid number.
-        let parsed = catch_unwind(AssertUnwindSafe(|| {
-            PhoneNumber::parse(folded.as_ref(), region)
-                .ok()
-                .filter(PhoneNumber::is_valid)
-        }));
-        let number = parsed.ok().flatten().ok_or_else(invalid)?;
-        let e164 = number.format_as(PhoneNumberFormat::E164).into_owned();
-        if e164.len() > MAX_E164_LEN {
-            return Err(invalid());
-        }
-        Ok(Phone { e164, number })
+        PhoneNumber::parse(text, default_region.and_then(region_of))
+            .map(|number| Phone { number })
+            .map_err(|_| InvalidPhone(text.to_owned()))
+    }
+
+    /// The parsed number, with everything [`navree_phone`] knows of it.
+    pub fn number(&self) -> &PhoneNumber {
+        &self.number
     }
 
     /// The E.164 form (`"+447400123456"`).
     pub fn as_str(&self) -> &str {
-        &self.e164
+        self.number.as_str()
     }
 
     /// The E.164 form, owned.
     pub fn into_string(self) -> String {
-        self.e164
+        self.number.as_str().to_owned()
     }
 
     /// The country calling code (`44`).
     pub fn country_code(&self) -> u16 {
-        // Calling codes have one to three digits.
-        u16::try_from(self.number.country_code).unwrap_or_default()
+        self.number.country_code()
     }
 
-    /// The national significant number (`7400123456`).
-    pub fn national_number(&self) -> u64 {
-        self.number.national_number
+    /// The national significant number (`"7400123456"`), with the leading
+    /// zero of plans that keep one (Italy's `"0612345678"`).
+    pub fn national_number(&self) -> &str {
+        self.number.national_number()
     }
 
     /// The region the number belongs to, when it is an ISO 3166-1 country
-    /// (`None` for non-geographic numbers and areas such as Kosovo).
+    /// (`None` for global service numbers and areas such as Kosovo).
     pub fn region(&self) -> Option<Country> {
-        let region = self.number.get_region_code()?;
-        Country::parse(region.as_region_str().as_str()).ok()
+        Country::parse(self.number.region()?.as_str()).ok()
+    }
+
+    /// The kind of line: mobile, fixed line, toll free and so on.
+    pub fn number_type(&self) -> NumberType {
+        // A parsed number fits its plan, so it always has a type.
+        self.number
+            .number_type()
+            .unwrap_or(NumberType::FixedLineOrMobile)
     }
 
     /// The extension (`"12"` from `ext. 12`), which E.164 leaves out.
     pub fn extension(&self) -> Option<&str> {
-        self.number
-            .extension
-            .as_deref()
-            .filter(|extension| !extension.is_empty())
+        self.number.extension()
     }
 
     /// The international format (`"+44 7400 123456"`), with the extension
     /// if any (`" x12"`).
     pub fn international(&self) -> String {
-        self.number
-            .format_as(PhoneNumberFormat::International)
-            .into_owned()
+        self.number.format(PhoneFormat::International)
     }
 
     /// The national format (`"07400 123456"`), with the extension if any.
     pub fn national(&self) -> String {
-        self.number
-            .format_as(PhoneNumberFormat::National)
-            .into_owned()
+        self.number.format(PhoneFormat::National)
+    }
+
+    /// The `tel:` URI (`"tel:+44-7400-123456"`), for links.
+    pub fn rfc3966(&self) -> String {
+        self.number.format(PhoneFormat::Rfc3966)
     }
 
     /// Whether `text` must be read in a region (no country code).
@@ -164,9 +155,21 @@ impl Phone {
     }
 }
 
+impl From<PhoneNumber> for Phone {
+    fn from(number: PhoneNumber) -> Self {
+        Phone { number }
+    }
+}
+
+impl From<Phone> for PhoneNumber {
+    fn from(phone: Phone) -> Self {
+        phone.number
+    }
+}
+
 impl PartialEq for Phone {
     fn eq(&self, other: &Self) -> bool {
-        self.e164 == other.e164 && self.extension() == other.extension()
+        self.number == other.number
     }
 }
 
@@ -174,22 +177,21 @@ impl Eq for Phone {}
 
 impl Hash for Phone {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.e164.hash(state);
-        self.extension().hash(state);
+        self.number.hash(state);
     }
 }
 
 impl fmt::Display for Phone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.e164)
+        f.write_str(self.as_str())
     }
 }
 
 impl fmt::Debug for Phone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.extension() {
-            Some(extension) => write!(f, "Phone({} ext. {extension})", self.e164),
-            None => write!(f, "Phone({})", self.e164),
+            Some(extension) => write!(f, "Phone({} ext. {extension})", self.as_str()),
+            None => write!(f, "Phone({})", self.as_str()),
         }
     }
 }
@@ -206,19 +208,19 @@ impl FromStr for Phone {
 
 impl AsRef<str> for Phone {
     fn as_ref(&self) -> &str {
-        &self.e164
+        self.as_str()
     }
 }
 
 impl From<Phone> for String {
     fn from(phone: Phone) -> Self {
-        phone.e164
+        phone.into_string()
     }
 }
 
 impl Serialize for Phone {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.e164)
+        serializer.serialize_str(self.as_str())
     }
 }
 
@@ -279,16 +281,15 @@ mod tests {
 
     #[test]
     fn a_number_longer_than_e164_allows_is_invalid() {
-        // Found by fuzzing: the reference library allows 15-digit national
-        // numbers in some countries, which makes 17 digits with the country
-        // code; E.164 stops at 15.
+        // Some plans allow 15-digit national numbers, which makes 17 digits
+        // with the country code; E.164 stops at 15.
         for input in ["+49917834278342582", "+49 917 834 278 342 582"] {
             assert!(Phone::parse(input, None).is_err(), "{input}");
         }
         // Whatever is accepted is `+` and at most 15 digits.
         for input in ["+4991783427834258", "+496912345678901", "+12015550123"] {
             if let Ok(phone) = Phone::parse(input, None) {
-                assert!(phone.as_str().len() <= MAX_E164_LEN, "{input}: {phone}");
+                assert!(phone.as_str().len() <= 16, "{input}: {phone}");
             }
         }
     }
@@ -351,7 +352,9 @@ mod tests {
         assert_eq!(phone.as_str(), "+447400123456");
         assert_eq!(phone.extension(), Some("12"));
         assert_eq!(phone.country_code(), 44);
-        assert_eq!(phone.national_number(), 7_400_123_456);
+        assert_eq!(phone.national_number(), "7400123456");
+        assert_eq!(phone.number_type(), navree_phone::NumberType::Mobile);
+        assert_eq!(phone.rfc3966(), "tel:+44-7400-123456;ext=12");
         assert_eq!(phone.region(), region("GB"));
         // The formats for people show the extension; E.164 can't.
         assert_eq!(phone.international(), "+44 7400 123456 x12");
@@ -361,14 +364,14 @@ mod tests {
             "+447400123456 Phone(+447400123456 ext. 12)"
         );
         assert_ne!(phone, Phone::parse("+447400123456", None).unwrap());
-        assert_eq!(String::from(phone.clone()), "+447400123456");
+        assert_eq!(String::from(phone), "+447400123456");
         assert_eq!(phone.into_string(), "+447400123456");
     }
 
     #[test]
     fn serde_uses_the_scope_region() {
         let phone: Phone = serde_json::from_str(r#""+44 7400 123456""#).unwrap();
-        assert_eq!(serde_json::to_value(&phone).unwrap(), "+447400123456");
+        assert_eq!(serde_json::to_value(phone).unwrap(), "+447400123456");
 
         let error = serde_json::from_str::<Phone>(r#""07400 123456""#).unwrap_err();
         assert!(

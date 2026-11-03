@@ -383,7 +383,13 @@ impl PhoneNumber {
         let number = PhoneNumber::from_parsed(&parsed)?;
         let main = meta::main_for(parsed.code).ok_or(ParseError::InvalidCountryCode)?;
         match parse::test_length(parsed.nsn.as_bytes(), main) {
-            Length::Possible => Ok(number),
+            // A number that fits only by its length can read as another
+            // from its own E.164 (a leading zero taken as a national prefix
+            // again): such text has no one meaning, and is refused.
+            Length::Possible => match parse::parse(number.as_str(), None) {
+                Ok(again) if again.code == parsed.code && again.nsn == parsed.nsn => Ok(number),
+                _ => Err(ParseError::Invalid),
+            },
             Length::TooShort => Err(ParseError::TooShort),
             Length::TooLong => Err(ParseError::TooLong),
             Length::LocalOnly | Length::Invalid => Err(ParseError::Invalid),

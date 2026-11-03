@@ -220,6 +220,23 @@ pub mod __private {
         ipv4, ipv6, length, pattern, range, required, same_as, starts_with, url,
     };
 
+    #[cfg(feature = "phone")]
+    pub use crate::rules::phone;
+
+    /// `#[validate(phone)]` without the `phone` feature: a type error that
+    /// says which feature to turn on.
+    #[cfg(not(feature = "phone"))]
+    pub fn phone<T: PhoneRuleNeedsTheFeature + ?Sized>(_value: &T) -> Result<(), crate::Violation> {
+        Ok(())
+    }
+
+    /// Implemented by nothing: see [`phone`].
+    #[cfg(not(feature = "phone"))]
+    #[diagnostic::on_unimplemented(
+        message = "`#[validate(phone)]` needs navree-validation's `phone` feature (`validation-phone` on the `navree` facade)"
+    )]
+    pub trait PhoneRuleNeedsTheFeature {}
+
     /// A `custom` rule's result, its error as a [`Violation`](crate::Violation).
     pub fn custom<E: Into<crate::Violation>>(
         result: Result<(), E>,

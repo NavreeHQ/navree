@@ -11,9 +11,9 @@ publish.workspace = true
 workspace = true
 
 [features]
-## `Phone`: E.164 phone numbers (rlibphonenumber, a port of libphonenumber) and
-## `rules::phone`.
-phone = ["dep:rlibphonenumber"]
+## `Phone`: E.164 phone numbers (navree-phone, on libphonenumber's numbering
+## plans) and `rules::phone`.
+phone = ["dep:navree-phone"]
 ## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (parsed with
 ## html5ever, URLs read with url).
 html = ["dep:html5ever", "dep:memchr", "dep:url"]
@@ -39,9 +39,9 @@ navree-config = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-phone = { workspace = true, optional = true }
 navree-time = { workspace = true, optional = true }
 navree-validation-macros = { workspace = true }
-rlibphonenumber = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }

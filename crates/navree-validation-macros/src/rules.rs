@@ -88,6 +88,7 @@ const TEXT_RULES: &[&str] = &[
     "ascii",
     "alphanumeric",
     "credit_card",
+    "phone",
 ];
 
 /// Rules that check text against a string.
@@ -95,8 +96,8 @@ const TEXT_WITH_RULES: &[&str] = &["contains", "starts_with", "ends_with"];
 
 /// Every field rule, for the unknown-rule message.
 const FIELD_RULES: &str = "skip, rename, required, length, range, email, url, ip, ipv4, ipv6, \
-     ascii, alphanumeric, credit_card, contains, starts_with, ends_with, pattern, same_as, \
-     custom, nested, each";
+     ascii, alphanumeric, credit_card, phone, contains, starts_with, ends_with, pattern, \
+     same_as, custom, nested, each";
 
 /// Where a list of rules appears.
 #[derive(Clone, Copy, PartialEq, Eq)]

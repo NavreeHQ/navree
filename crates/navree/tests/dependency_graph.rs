@@ -156,10 +156,11 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db", "navree-glob"]),
     // Its derive comes from navree-validation-macros; `Validate` for
     // navree-time's zones, days and day ranges (optional feature `time`;
-    // time never depends on validation).
+    // time never depends on validation); `Phone` reads numbers with
+    // navree-phone (optional feature `phone`).
     rule("navree-validation", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
-        "navree-validation-macros", "navree-time",
+        "navree-validation-macros", "navree-time", "navree-phone",
     ]),
     // The audit trail is a navree-orm model (`AuditRecord`), listed through
     // the ORM (same layer; the ORM never depends on audit) and written with

@@ -503,10 +503,6 @@ version = "0.24.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.dashmap]]
-version = "5.5.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.dashmap]]
 version = "6.2.1"
 criteria = "safe-to-deploy"
 
@@ -1740,14 +1736,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ring]]
 version = "0.17.14"
-criteria = "safe-to-deploy"
-
-[[exemptions.rlibphonenumber]]
-version = "2.2.15"
-criteria = "safe-to-deploy"
-
-[[exemptions.rlibphonenumber_macro]]
-version = "0.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.roxmltree]]

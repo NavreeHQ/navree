@@ -51,6 +51,7 @@ navree-micro = { path = "../crates/navree-micro" }
 navree-oauth = { path = "../crates/navree-oauth" }
 navree-openapi = { path = "../crates/navree-openapi" }
 navree-pdf = { path = "../crates/navree-pdf" }
+navree-phone = { path = "../crates/navree-phone" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
 navree-sheets = { path = "../crates/navree-sheets", features = ["fuzzing"] }
@@ -317,6 +318,13 @@ bench = false
 [[bin]]
 name = "validation_html"
 path = "fuzz_targets/validation_html.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "phone_parse"
+path = "fuzz_targets/phone_parse.rs"
 test = false
 doc = false
 bench = false

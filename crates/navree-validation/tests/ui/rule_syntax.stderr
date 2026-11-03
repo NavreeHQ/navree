@@ -1,4 +1,4 @@
-error: unknown rule `frobnicate`: expected one of skip, rename, required, length, range, email, url, ip, ipv4, ipv6, ascii, alphanumeric, credit_card, contains, starts_with, ends_with, pattern, same_as, custom, nested, each
+error: unknown rule `frobnicate`: expected one of skip, rename, required, length, range, email, url, ip, ipv4, ipv6, ascii, alphanumeric, credit_card, phone, contains, starts_with, ends_with, pattern, same_as, custom, nested, each
  --> tests/ui/rule_syntax.rs:7:16
   |
 7 |     #[validate(frobnicate)]

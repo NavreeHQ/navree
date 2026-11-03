@@ -312,6 +312,10 @@ pub use navree_media as media;
 /// navree-pdf re-exported whole.
 #[cfg(feature = "pdf")]
 pub use navree_pdf as pdf;
+/// Phone numbers (the `phone` feature, which `validation-phone` turns on):
+/// navree-phone re-exported whole, with its `serde` support.
+#[cfg(feature = "phone")]
+pub use navree_phone as phone;
 
 /// The template engine (the `template` feature, which `view`, `i18n` and
 /// `harbor` turn on): navree-template re-exported whole.

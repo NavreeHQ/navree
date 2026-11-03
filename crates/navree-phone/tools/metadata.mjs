@@ -634,8 +634,13 @@ ${wrap(codeTerritories, 16)}
     if (main === t) {
       entry.f = t.formats.map((f) => [f.pattern, f.format, f.leading, nationalFormat(f) || 0, f.optional ? 1 : 0]);
       if (t.intl.length) entry.i = t.intl.map((f) => [f.pattern, f.format, f.leading]);
+    } else if (!t.leading) {
+      // A territory that shares its code and has no leading digits of its
+      // own (Canada with the United States) is told apart by its lines.
+      const lines = ["fixedLine", "mobile"].map((type) => t.descs[type]?.pattern).filter(Boolean);
+      entry.tp = lines.map((p) => `(?:${p})`).join("|");
     }
-    for (const key of Object.keys(entry)) if (entry[key] === "" ) delete entry[key];
+    for (const key of Object.keys(entry)) if (entry[key] === "") delete entry[key];
     return entry;
   };
   const json = `${JSON.stringify({ v: RELEASE, t: geo.map(browserTerritory) })}\n`;

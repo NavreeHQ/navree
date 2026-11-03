@@ -371,6 +371,9 @@ ai = [
 ## PDF: reading, editing and the text of PDF files within a budget of memory
 ## and work (navree-pdf), under `documents` and `media`.
 pdf = ["dep:navree-pdf"]
+## Phone numbers: parsing, number types and formats on libphonenumber's
+## numbering plans (navree-phone), under `validation-phone`.
+phone = ["dep:navree-phone", "navree-phone/serde"]
 ## L6 (opt-in: not in `full`; the native PDF engine and the bundled fonts
 ## add to the build)
 ## Documents: PDF from HTML templates or `PdfDocument` (the native engine in
@@ -586,9 +589,9 @@ sqlite = ["db", "navree-db/sqlite", "navree-logbook?/sqlite"]
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
 mysql = ["db", "navree-db/mysql"]
-## navree-validation's `Phone`: E.164 phone numbers (the rlibphonenumber crate).
+## navree-validation's `Phone`: E.164 phone numbers (navree-phone).
 ## Pure Rust; in `full`.
-validation-phone = ["validation", "navree-validation/phone"]
+validation-phone = ["validation", "phone", "navree-validation/phone"]
 ## navree-validation's `SafeHtml`: rich text sanitized by the app's
 ## `HtmlPolicy` (Navree's own sanitizer on html5ever). Pure Rust; in `full`.
 validation-html = ["validation", "navree-validation/html"]
@@ -640,6 +643,7 @@ navree-dock = { workspace = true, optional = true }
 navree-domains = { workspace = true, optional = true }
 navree-documents = { workspace = true, optional = true }
 navree-pdf = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
 navree-template = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
