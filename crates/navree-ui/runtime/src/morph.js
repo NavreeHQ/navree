@@ -170,7 +170,11 @@ function morphChildren(a, b, ids) {
       if (old && nameOf(old) === nameOf(next) && !holds(old, a) && sameField(old, next)) {
         ids.delete(key);
         if (old !== cur) moveTo(a, old, cur);
-        morphElement(old, /** @type {Element} */ (next), ids);
+        // A keyed node that says the same as its new self stays as it is: the browser
+        // compares two trees faster than this walk changes nothing in them. Anything the
+        // runtime or the user set on it (a state attribute, a placed style) makes the two
+        // differ, and the walk runs as before.
+        if (!NP.isEqualNode.call(old, next)) morphElement(old, /** @type {Element} */ (next), ids);
         placed = old;
       } else placed = insertNew(a, next, cur, ids);
     } else {
