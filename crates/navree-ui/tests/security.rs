@@ -687,18 +687,29 @@ fn a_command_sets_only_state_attributes() {
         "http-equiv",
         "id",
     ] {
+        // Built by hand, past the constructors' check: the wire still refuses them.
+        let target = String::from("t");
         assert_eq!(
-            Commands::from(Cmd::set_attr("t", name, "x")).to_json(),
+            Commands::from(Cmd::SetAttr {
+                target: target.clone(),
+                name,
+                value: "x".into(),
+            })
+            .to_json(),
             "[]",
             "{name}"
         );
         assert_eq!(
-            Commands::from(Cmd::remove_attr("t", name)).to_json(),
+            Commands::from(Cmd::RemoveAttr {
+                target: target.clone(),
+                name,
+            })
+            .to_json(),
             "[]",
             "{name}"
         );
         assert_eq!(
-            Commands::from(Cmd::toggle_attr("t", name)).to_json(),
+            Commands::from(Cmd::ToggleAttr { target, name }).to_json(),
             "[]",
             "{name}"
         );
@@ -710,6 +721,30 @@ fn a_command_sets_only_state_attributes() {
             "{name}"
         );
     }
+}
+
+/// A command that names an attribute it may not touch is a mistake in the page's code:
+/// it says so where the command is built, instead of doing nothing in the browser.
+#[test]
+#[cfg(debug_assertions)]
+fn a_refused_attribute_fails_where_the_command_is_built() {
+    use navree_ui::Cmd;
+    for build in [
+        (|| drop(Cmd::set_attr("sort", "value", "amount"))) as fn(),
+        || drop(Cmd::remove_attr("a", "href")),
+        || drop(Cmd::toggle_attr("a", "data-ui-click")),
+    ] {
+        let failed = std::panic::catch_unwind(build).expect_err("refused at build time");
+        let message = failed.downcast_ref::<String>().cloned().unwrap_or_default();
+        assert!(message.contains("may not"), "{message}");
+    }
+    let failed = std::panic::catch_unwind(|| drop(Cmd::set_attr("sort", "value", "x")))
+        .expect_err("refused");
+    let message = failed.downcast_ref::<String>().cloned().unwrap_or_default();
+    assert!(
+        message.contains("Cmd::value"),
+        "points at the way that works: {message}"
+    );
 }
 
 #[test]

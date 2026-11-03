@@ -129,12 +129,14 @@ impl Cmd {
         Self::Copy(text.into())
     }
 
-    /// Sets attribute `name` of `target`.
+    /// Sets attribute `name` of `target`. A name a command may not touch is a mistake in
+    /// the page's code: a debug build stops on it here, and a release build sends nothing.
     pub fn set_attr(
         target: impl Into<String>,
         name: &'static str,
         value: impl Into<String>,
     ) -> Self {
+        refused(name);
         Self::SetAttr {
             target: target.into(),
             name,
@@ -142,16 +144,18 @@ impl Cmd {
         }
     }
 
-    /// Removes attribute `name` of `target`.
+    /// Removes attribute `name` of `target`, under the same rule as [`Cmd::set_attr`].
     pub fn remove_attr(target: impl Into<String>, name: &'static str) -> Self {
+        refused(name);
         Self::RemoveAttr {
             target: target.into(),
             name,
         }
     }
 
-    /// Toggles attribute `name` of `target`.
+    /// Toggles attribute `name` of `target`, under the same rule as [`Cmd::set_attr`].
     pub fn toggle_attr(target: impl Into<String>, name: &'static str) -> Self {
+        refused(name);
         Self::ToggleAttr {
             target: target.into(),
             name,
@@ -235,6 +239,20 @@ impl Cmd {
             Self::Fill(id) => json!(["fill", id]),
         })
     }
+}
+
+/// Stops a debug build on an attribute a command may not touch, saying what to use.
+fn refused(name: &str) {
+    debug_assert!(
+        is_state_attr(name),
+        "a command may not touch `{name}`: only `data-*` (not `data-ui-*`), `aria-*`, \
+         `hidden`, `open` and `disabled`.{}",
+        if name.eq_ignore_ascii_case("value") {
+            " A hidden field's value is set with Cmd::value."
+        } else {
+            ""
+        }
+    );
 }
 
 /// The attributes a command may touch. The runtime holds the same list.
