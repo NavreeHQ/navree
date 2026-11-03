@@ -18,6 +18,9 @@ use super::range::DateRange;
 /// every date against the whole of its rules.
 pub const MAX_CLIENT_RANGES: usize = 1000;
 
+/// The longest span a rule function is asked about a day at a time.
+const RULE_SPAN_CAP: i64 = 40_000;
+
 /// Why a date can't be chosen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -65,6 +68,85 @@ impl fmt::Display for DateError {
 impl std::error::Error for DateError {}
 
 type Rule = Arc<dyn Fn(NaiveDate) -> bool + Send + Sync>;
+
+/// The limits of a range, written once: the days that can't be chosen, and the fewest and most
+/// days a range may hold. Give it to a [`DateRangePicker`](super::DateRangePicker) with
+/// [`limits`](super::DateRangePicker::limits) and the browser holds a person to it; give the
+/// same value to [`DateRangeQuery::checked`](super::DateRangeQuery::checked) and the server
+/// holds the request to it. Nothing is said twice, so the two can't differ.
+///
+/// ```
+/// use navree_ui::dates::{DateRange, DateRangeQuery, DateRangePicker, DateRules, RangeRules};
+/// use chrono::{NaiveDate, Weekday};
+///
+/// let limits = RangeRules::new(DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun]))
+///     .min_days(2)
+///     .max_days(30);
+/// let picker = DateRangePicker::new("from", "to").limits(limits.clone());
+/// let query = DateRangeQuery { from: Some("2026-11-02".into()), to: Some("2026-11-04".into()) };
+/// assert_eq!(query.range_within(&limits), DateRange::parse("2026-11-02", "2026-11-04"));
+/// let too_short = DateRangeQuery { from: Some("2026-11-02".into()), to: Some("2026-11-02".into()) };
+/// assert_eq!(too_short.range_within(&limits), None);
+/// # let _ = picker;
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct RangeRules {
+    rules: DateRules,
+    min_days: Option<u32>,
+    max_days: Option<u32>,
+}
+
+impl RangeRules {
+    /// Limits that hold a range to `rules`: both ends and every day between.
+    pub fn new(rules: DateRules) -> Self {
+        Self {
+            rules,
+            min_days: None,
+            max_days: None,
+        }
+    }
+
+    /// The fewest days a range may hold (one at least).
+    #[must_use]
+    pub fn min_days(mut self, days: u32) -> Self {
+        self.min_days = Some(days.max(1));
+        self
+    }
+
+    /// The most days a range may hold (one at least).
+    #[must_use]
+    pub fn max_days(mut self, days: u32) -> Self {
+        self.max_days = Some(days.max(1));
+        self
+    }
+
+    /// The days that can't be chosen.
+    pub fn rules(&self) -> &DateRules {
+        &self.rules
+    }
+
+    /// The fewest days a range may hold, when limited.
+    pub fn least_days(&self) -> Option<u32> {
+        self.min_days
+    }
+
+    /// The most days a range may hold, when limited.
+    pub fn most_days(&self) -> Option<u32> {
+        self.max_days
+    }
+
+    /// Why `range` can't be chosen, or `Ok`: the check the browser makes as a range is
+    /// picked, made again by the server.
+    pub fn check(&self, range: &DateRange) -> Result<(), DateError> {
+        self.rules.check_range(range, self.min_days, self.max_days)
+    }
+}
+
+impl From<DateRules> for RangeRules {
+    fn from(rules: DateRules) -> Self {
+        Self::new(rules)
+    }
+}
 
 /// The days a calendar will not let a person choose.
 ///
@@ -246,16 +328,50 @@ impl DateRules {
         Ok(())
     }
 
-    /// Whether any day from `from` to `to` can't be chosen. A span of more than
-    /// 40,000 days counts as blocked.
+    /// Whether any day from `from` to `to` can't be chosen. The limits, the weekdays, the
+    /// listed days and the listed runs are asked as ranges, so the cost is that of the rules
+    /// and not of the days in the span. Only a rule function must be asked a day at a time,
+    /// and for that a span of more than 40,000 days (about 110 years, more than any calendar
+    /// the browser can show is given) counts as blocked.
     pub fn blocks_span(&self, from: NaiveDate, to: NaiveDate) -> bool {
         let (from, to) = (from.min(to), from.max(to));
-        if (to - from).num_days() > 40_000 {
+        if from < grid::earliest() || to > grid::latest() {
+            return true;
+        }
+        if self.min.is_some_and(|min| from < min) || self.max.is_some_and(|max| to > max) {
+            return true;
+        }
+        if self.weekdays != 0 {
+            // Seven days hold every weekday, so no more than seven need be looked at.
+            let mut day = from;
+            for _ in 0..=6 {
+                if day > to {
+                    break;
+                }
+                if self.weekdays & (1 << day.weekday().num_days_from_sunday()) != 0 {
+                    return true;
+                }
+                let Some(next) = day.succ_opt() else { break };
+                day = next;
+            }
+        }
+        if self.dates.range(from..=to).next().is_some()
+            || self
+                .ranges
+                .iter()
+                .any(|(first, last)| *first <= to && from <= *last)
+        {
+            return true;
+        }
+        let Some(rule) = &self.rule else {
+            return false;
+        };
+        if (to - from).num_days() > RULE_SPAN_CAP {
             return true;
         }
         let mut day = from;
         while day <= to {
-            if !self.allows(day) {
+            if rule(day) {
                 return true;
             }
             let Some(next) = day.succ_opt() else { break };
@@ -276,8 +392,12 @@ impl DateRules {
                 runs.push((from, to));
             }
         };
-        for day in self.dates.range(start..=end) {
-            push(*day, *day);
+        // A window turned inside out (a least day after its end) holds no day, and a range
+        // of a set with its ends the wrong way round is a panic.
+        if start <= end {
+            for day in self.dates.range(start..=end) {
+                push(*day, *day);
+            }
         }
         for (from, to) in &self.ranges {
             push(*from, *to);

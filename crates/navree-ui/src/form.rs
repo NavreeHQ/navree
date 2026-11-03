@@ -101,6 +101,13 @@ pub struct FormField {
     /// The most values a [`Many`] field takes: the browser stops at it, and
     /// [`decode`] refuses a post that goes past it.
     pub max: Option<u32>,
+    /// A date picker's rules, from `#[form(date_rules = path)]`: the function that gives the
+    /// days that can't be chosen. The picker draws them for the browser. Call the same
+    /// function in the field's `custom` rule and the server holds the value to them too, so
+    /// the rules are written once.
+    pub date_rules: Option<fn() -> crate::dates::DateRules>,
+    /// A time picker's rules, from `#[form(time_rules = path)]`, used the same way.
+    pub time_rules: Option<fn() -> crate::dates::TimeRules>,
 }
 
 /// A struct that can be drawn as a form. `#[derive(Form)]` implements it.
@@ -652,11 +659,9 @@ impl<T: Form> FormView<T> {
                     Some(text) => picker.value_text(text),
                     None => picker,
                 };
-                if let Some(day) = rules.min.and_then(|min| min.parse().ok()) {
-                    picker = picker.min(day);
-                }
-                if let Some(day) = rules.max.and_then(|max| max.parse().ok()) {
-                    picker = picker.max(day);
+                // The rules the server holds the value to, drawn into the picker for the browser.
+                if let Some(date_rules) = field.date_rules {
+                    picker = picker.rules(date_rules());
                 }
                 if let Some(text) = field.placeholder {
                     picker = picker.placeholder(text);
@@ -673,11 +678,8 @@ impl<T: Form> FormView<T> {
                 if let Some(text) = value {
                     picker = picker.value_text(text);
                 }
-                if let Some(time) = rules.min.and_then(|min| min.parse().ok()) {
-                    picker = picker.min(time);
-                }
-                if let Some(time) = rules.max.and_then(|max| max.parse().ok()) {
-                    picker = picker.max(time);
+                if let Some(time_rules) = field.time_rules {
+                    picker = picker.rules(time_rules());
                 }
                 if let Some(text) = field.placeholder {
                     picker = picker.placeholder(text);

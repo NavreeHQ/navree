@@ -19,6 +19,8 @@ pub enum TimeError {
     Unavailable,
     /// Not on a multiple of the step, where the step is strict.
     OffStep,
+    /// Not a time of day the picker posts: a leap second (`16:59:60`) or a fraction of a second.
+    NotATime,
 }
 
 impl TimeError {
@@ -35,11 +37,20 @@ impl fmt::Display for TimeError {
             Self::TooLate(max) => write!(f, "choose {max} or an earlier time"),
             Self::Unavailable => f.write_str("that time isn't available"),
             Self::OffStep => f.write_str("that time isn't on the step"),
+            Self::NotATime => f.write_str("that isn't a time of day the picker takes"),
         }
     }
 }
 
 impl std::error::Error for TimeError {}
+
+/// The attributes of a native time field.
+pub(crate) struct NativeLimits {
+    pub min: Option<String>,
+    pub max: Option<String>,
+    /// In seconds.
+    pub step: Option<u32>,
+}
 
 /// The minutes since midnight a step may be: any divisor of a day.
 fn valid_step(minutes: u32) -> bool {
@@ -137,6 +148,11 @@ impl TimeRules {
 
     /// Why `time` can't be chosen, or `Ok`.
     pub fn check(&self, time: NaiveTime) -> Result<(), TimeError> {
+        // A picker posts whole seconds. A leap second or a fraction is refused whatever the
+        // limits say: chrono reads `16:59:60`, and it sorts before 17:00:00.
+        if time.nanosecond() != 0 {
+            return Err(TimeError::NotATime);
+        }
         if let Some(min) = self.min
             && time < min
         {
@@ -173,6 +189,39 @@ impl TimeRules {
             .filter_map(|minute| NaiveTime::from_hms_opt(minute / 60, minute % 60, 0))
             .filter(|time| self.allows(*time))
             .collect()
+    }
+
+    /// What a native `type=time` field is told, so that what it takes is what the server
+    /// takes and never less. The native step counts from the field's least time, the server
+    /// from midnight, so a strict step puts the least on the step. Whole seconds (when the
+    /// picker takes them, a value has them, or a limit has them) need a step of one second.
+    pub(crate) fn native_limits(&self, seconds: bool) -> NativeLimits {
+        let has_seconds = |time: Option<NaiveTime>| time.is_some_and(|t| t.second() != 0);
+        let whole = seconds || has_seconds(self.min) || has_seconds(self.max);
+        let text = |time: NaiveTime| {
+            time.format(if whole { "%H:%M:%S" } else { "%H:%M" })
+                .to_string()
+        };
+        let step = if whole {
+            Some(1)
+        } else if self.strict {
+            Some(self.step * 60)
+        } else {
+            None
+        };
+        let min = match self.min {
+            Some(min) if self.strict && !whole => {
+                let aligned = minute_of(min).div_ceil(self.step) * self.step;
+                NaiveTime::from_hms_opt(aligned / 60, aligned % 60, 0).map(text)
+            }
+            Some(min) => Some(text(min)),
+            None => None,
+        };
+        NativeLimits {
+            min,
+            max: self.max.map(text),
+            step,
+        }
     }
 
     /// What the browser needs.

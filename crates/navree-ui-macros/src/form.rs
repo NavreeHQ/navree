@@ -23,6 +23,8 @@ struct FieldHints {
     rows: Option<LitInt>,
     max: Option<LitInt>,
     widget: Option<Ident>,
+    date_rules: Option<syn::Path>,
+    time_rules: Option<syn::Path>,
     autofocus: bool,
     wide: bool,
     skip: bool,
@@ -43,12 +45,14 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "rows" => out.rows = Some(meta.value()?.parse()?),
                 "max" => out.max = Some(meta.value()?.parse()?),
                 "widget" => out.widget = Some(meta.value()?.parse()?),
+                "date_rules" => out.date_rules = Some(meta.value()?.parse()?),
+                "time_rules" => out.time_rules = Some(meta.value()?.parse()?),
                 "autofocus" => out.autofocus = true,
                 "wide" => out.wide = true,
                 "skip" => out.skip = true,
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, autofocus, wide or skip"
+                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, date_rules, time_rules, autofocus, wide or skip"
                     )));
                 }
             }
@@ -197,6 +201,15 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         );
         let (autofocus, wide) = (hint.autofocus, hint.wide);
         let max = opt(hint.max);
+        let rules_of = |path: &Option<syn::Path>, kind: &str| match path {
+            Some(path) => {
+                let kind = Ident::new(kind, proc_macro2::Span::call_site());
+                quote!(::core::option::Option::Some(#path as fn() -> #ui::dates::#kind))
+            }
+            None => quote!(::core::option::Option::None),
+        };
+        let date_rules = rules_of(&hint.date_rules, "DateRules");
+        let time_rules = rules_of(&hint.time_rules, "TimeRules");
         specs.push(quote! {
             #ui::form::FormField {
                 name: #name,
@@ -212,6 +225,8 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 wide: #wide,
                 options: #options,
                 max: #max,
+                date_rules: #date_rules,
+                time_rules: #time_rules,
             },
         });
         values.push(quote! {

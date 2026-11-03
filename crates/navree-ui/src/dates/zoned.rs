@@ -75,28 +75,41 @@ pub fn resolve<Tz: TimeZone>(date: NaiveDate, time: NaiveTime, tz: &Tz) -> Resol
             first: first.with_timezone(&Utc),
             second: second.with_timezone(&Utc),
         },
-        LocalResult::None => {
-            // The offsets a day and a half either side are the ones before and after.
-            let before = offset_seconds(tz, &(local - Duration::hours(36)));
-            let after = offset_seconds(tz, &(local + Duration::hours(36)));
-            let shifted = local - Duration::seconds(before);
-            // The change happened in (local - after, local - before]: find the
-            // first second at the new offset.
-            let mut low = local - Duration::seconds(after);
-            let mut high = local - Duration::seconds(before);
-            while high - low > Duration::seconds(1) {
-                let middle = low + (high - low) / 2;
-                if offset_seconds(tz, &middle) == after {
-                    high = middle;
-                } else {
-                    low = middle;
-                }
-            }
-            Resolved::Gap {
-                transition: high.and_utc(),
-                shifted: shifted.and_utc(),
-            }
+        LocalResult::None => gap(local, tz),
+    }
+}
+
+/// A wall time the zone skipped: when the clocks jumped, and what the time reads with the
+/// offset from before. Every sum is checked, so a time at the very edge of what chrono can
+/// hold (where a zone with an offset may skip it for being out of reach) gets an answer
+/// and not a panic: there the time itself stands for both.
+fn gap<Tz: TimeZone>(local: NaiveDateTime, tz: &Tz) -> Resolved {
+    let by = |seconds: i64| local.checked_add_signed(Duration::seconds(seconds));
+    // The offsets a day and a half either side are the ones before and after.
+    let day_and_a_half = 36 * 3600;
+    let before = by(-day_and_a_half)
+        .map_or_else(|| offset_seconds(tz, &local), |at| offset_seconds(tz, &at));
+    let after = by(day_and_a_half).map_or(before, |at| offset_seconds(tz, &at));
+    // The change happened in (local - after, local - before]: find the first second at the
+    // new offset.
+    let (Some(shifted), Some(mut low), Some(mut high)) = (by(-before), by(-after), by(-before))
+    else {
+        return Resolved::Gap {
+            transition: local.and_utc(),
+            shifted: local.and_utc(),
+        };
+    };
+    while high - low > Duration::seconds(1) {
+        let middle = low + (high - low) / 2;
+        if offset_seconds(tz, &middle) == after {
+            high = middle;
+        } else {
+            low = middle;
         }
+    }
+    Resolved::Gap {
+        transition: high.and_utc(),
+        shifted: shifted.and_utc(),
     }
 }
 

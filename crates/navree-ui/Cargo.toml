@@ -38,6 +38,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 chrono-tz = { workspace = true }
+serde_urlencoded = { workspace = true }
 sha2 = { workspace = true }
 http-body-util = { workspace = true }
 navree-testing = { workspace = true }

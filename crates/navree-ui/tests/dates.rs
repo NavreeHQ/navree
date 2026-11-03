@@ -286,6 +286,24 @@ fn nothing_supplied_by_a_page_can_break_out() {
     assert!(!page.contains("<img"), "{page}");
     assert!(!page.contains("<script"));
     assert!(!page.contains(" style="));
+    // The id of a calendar is a page's own text too: it names each month's caption, which the
+    // browser draws again as a person turns the months (the browser suites drive that).
+    for by_id in [
+        html(Calendar::new(nasty).today(today()).months(2)),
+        html(
+            Calendar::new(nasty)
+                .today(today())
+                .caption(CaptionLayout::Dropdowns),
+        ),
+        html(
+            Calendar::new(nasty)
+                .today(today())
+                .mode(CalendarMode::Range),
+        ),
+    ] {
+        assert!(!by_id.contains("<img"), "{by_id}");
+        assert!(!by_id.contains("<script"));
+    }
     let picker = html(
         DatePicker::new(nasty)
             .id(nasty)

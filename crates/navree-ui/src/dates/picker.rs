@@ -12,28 +12,28 @@ use chrono::{NaiveDate, Utc, Weekday};
 use super::calendar::{Calendar, CalendarMode, CaptionLayout};
 use super::locale::DateLocale;
 use super::range::{DatePreset, DateRange};
-use super::rules::DateRules;
+use super::rules::{DateRules, RangeRules};
 use crate::components::{Button, ButtonVariant, Size};
 use crate::icons;
 use crate::node::{AttrValue, Element, Node, Uses, el, into_node};
 
-/// A safe id from a field name: letters, digits, `-` and `_` only.
+/// A safe id from a field name: letters, digits, `-` and `_` only, and a different id for a
+/// different name. A name of letters, digits and `_` is its own id; any other byte becomes
+/// `-` and its two hex digits, and `-` itself is such a byte, so no two names meet (`start
+/// date` and `start.date` do not both become `start-date`). No name is the empty id, `-`.
 pub(super) fn id_from(name: &str) -> String {
-    let id: String = name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    if id.is_empty() {
-        "field".to_owned()
-    } else {
-        id
+    if name.is_empty() {
+        return "-".to_owned();
     }
+    let mut id = String::with_capacity(name.len());
+    for byte in name.bytes() {
+        if byte.is_ascii_alphanumeric() || byte == b'_' {
+            id.push(char::from(byte));
+        } else {
+            id.push_str(&format!("-{byte:02x}"));
+        }
+    }
+    id
 }
 
 /// What a picker's control looks like.
@@ -569,6 +569,17 @@ impl DateRangePicker {
     /// Which days can't be chosen. A range may not hold a day that can't be chosen.
     pub fn rules(mut self, rules: DateRules) -> Self {
         self.rules = rules;
+        self
+    }
+
+    /// The days that can't be chosen and the least and most days a range may hold, as one
+    /// value. Hold the request to the same [`RangeRules`] with
+    /// [`DateRangeQuery::checked`](super::DateRangeQuery::checked): then what the browser
+    /// lets a person pick is what the server accepts.
+    pub fn limits(mut self, limits: RangeRules) -> Self {
+        self.rules = limits.rules().clone();
+        self.min_days = limits.least_days();
+        self.max_days = limits.most_days();
         self
     }
 

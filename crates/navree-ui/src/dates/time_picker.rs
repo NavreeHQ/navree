@@ -16,6 +16,11 @@ enum Given {
     Text(String),
 }
 
+/// A time without a leap second or a fraction: the picker takes and posts whole seconds.
+fn whole_seconds(time: NaiveTime) -> NaiveTime {
+    time.with_nanosecond(0).unwrap_or(time)
+}
+
 /// A time of day: hours and minutes, and seconds if asked.
 ///
 /// **A time here is a time on a wall.** It has no date and no zone, so `09:30` is
@@ -92,13 +97,13 @@ impl TimePicker {
 
     /// Sets the time.
     pub fn value(mut self, time: NaiveTime) -> Self {
-        self.value = Some(Given::Time(time));
+        self.value = Some(Given::Time(whole_seconds(time)));
         self
     }
 
     /// Sets the time, or leaves the picker empty.
     pub fn value_opt(mut self, time: Option<NaiveTime>) -> Self {
-        self.value = time.map(Given::Time);
+        self.value = time.map(|time| Given::Time(whole_seconds(time)));
         self
     }
 
@@ -112,7 +117,9 @@ impl TimePicker {
             Some(
                 NaiveTime::parse_from_str(text, "%H:%M:%S")
                     .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M"))
-                    .map_or_else(|_| Given::Text(text.to_owned()), Given::Time),
+                    .ok()
+                    .filter(|time| time.nanosecond() == 0)
+                    .map_or_else(|| Given::Text(text.to_owned()), Given::Time),
             )
         };
         self
@@ -241,34 +248,19 @@ impl TimePicker {
             None => (None, String::new(), false),
         };
         let has_value = native_value.is_some() || raw;
-        // The step on the native control would make a typed 10:07 a mismatch; it is
-        // set only when the rules are strict or seconds are asked for.
-        let native_step = if self.seconds {
-            Some(1)
-        } else if self.rules.client().get("strict").is_some() {
-            Some(i64::from(self.rules.step()) * 60)
-        } else {
-            None
-        };
+        // What the native control is told is what the server takes (see `native_limits`): a step
+        // only when the rules are strict or seconds are in play, counted from a least time on it.
+        let value_seconds = matches!(&self.value, Some(Given::Time(time)) if time.second() != 0);
+        let native_rules = self.rules.native_limits(self.seconds || value_seconds);
         let rules = self.rules.client();
         let native = el("input")
             .slot("input")
             .attr("type", "time")
             .attr("name", self.name.clone())
             .attr_opt("value", native_value)
-            .attr_opt(
-                "min",
-                rules["min"]
-                    .as_str()
-                    .map(|text| text.chars().take(5).collect::<String>()),
-            )
-            .attr_opt(
-                "max",
-                rules["max"]
-                    .as_str()
-                    .map(|text| text.chars().take(5).collect::<String>()),
-            )
-            .attr_opt("step", native_step)
+            .attr_opt("min", native_rules.min)
+            .attr_opt("max", native_rules.max)
+            .attr_opt("step", native_rules.step.map(i64::from))
             .attr_opt("aria-label", self.label.clone())
             .attr_opt("aria-invalid", self.invalid.then_some("true"))
             .attr("data-ui-native", "")

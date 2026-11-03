@@ -277,6 +277,15 @@ impl Calendar {
         self
     }
 
+    /// The days that can't be chosen and the least and most days a range may hold, as one
+    /// [`RangeRules`](super::RangeRules) (see [`DateRangePicker::limits`](super::DateRangePicker::limits)).
+    pub fn limits(mut self, limits: super::RangeRules) -> Self {
+        self.rules = limits.rules().clone();
+        self.min_days = limits.least_days();
+        self.max_days = limits.most_days();
+        self
+    }
+
     /// The fewest days a range may hold.
     pub fn min_days(mut self, days: u32) -> Self {
         self.min_days = Some(days.max(1));

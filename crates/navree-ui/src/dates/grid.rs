@@ -78,9 +78,12 @@ pub struct MonthGrid {
 /// assert_eq!(month_grid(2026, 2, Weekday::Sun, true).rows.len(), 6);
 /// ```
 pub fn month_grid(year: i32, month: u32, week_start: Weekday, fixed_weeks: bool) -> MonthGrid {
-    let first = NaiveDate::from_ymd_opt(year, month, 1)
-        .or_else(|| NaiveDate::from_ymd_opt(year, 1, 1))
-        .unwrap_or_else(earliest);
+    // A month outside the years the calendar draws is the nearest month it does draw, so
+    // the days around it are always days chrono can hold.
+    let year = year.clamp(FIRST_YEAR, LAST_YEAR);
+    // A month that doesn't exist is January.
+    let month = if (1..=12).contains(&month) { month } else { 1 };
+    let first = NaiveDate::from_ymd_opt(year, month, 1).unwrap_or_else(earliest);
     let lead = (first.weekday().num_days_from_sunday() + 7 - week_start.num_days_from_sunday()) % 7;
     let used = lead + days_in_month(first.year(), first.month());
     let rows_needed = if fixed_weeks { 6 } else { used.div_ceil(7) };

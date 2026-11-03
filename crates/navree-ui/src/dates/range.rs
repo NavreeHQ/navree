@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use super::grid::{self, add_months, days_in_month};
 use super::locale::DateLocale;
+use super::rules::{DateError, RangeRules};
 use super::zoned::{Resolved, resolve};
 
 /// From one day to another, both included. `from` is never after `to`.
@@ -58,8 +59,8 @@ impl DateRange {
     /// Reads two `YYYY-MM-DD` texts. One that doesn't parse gives `None`; a pair in
     /// the wrong order is put right.
     pub fn parse(from: &str, to: &str) -> Option<Self> {
-        let from = from.trim().parse().ok()?;
-        let to = to.trim().parse().ok()?;
+        let from = read_day(from)?;
+        let to = read_day(to)?;
         Some(Self::new(from, to))
     }
 
@@ -77,8 +78,12 @@ impl DateRange {
     /// ```
     pub fn utc_bounds<Tz: TimeZone>(&self, zone: &Tz) -> (DateTime<Utc>, DateTime<Utc>) {
         let start = start_of_day(self.from, zone);
-        let after = self.to.succ_opt().unwrap_or(self.to);
-        (start, start_of_day(after, zone))
+        // The last day chrono holds has no day after it: the range runs to the end of time.
+        let end = self
+            .to
+            .succ_opt()
+            .map_or(DateTime::<Utc>::MAX_UTC, |after| start_of_day(after, zone));
+        (start, end)
     }
 
     /// Every day in the range, in order.
@@ -88,6 +93,15 @@ impl DateRange {
             day.succ_opt().filter(|next| *next <= to)
         })
     }
+}
+
+/// A day as a request writes it: `YYYY-MM-DD`, and in the years a calendar draws, 1 to
+/// 9999. Another year is no day here, though chrono could hold it.
+fn read_day(text: &str) -> Option<NaiveDate> {
+    let day: NaiveDate = text.trim().parse().ok()?;
+    (grid::earliest()..=grid::latest())
+        .contains(&day)
+        .then_some(day)
 }
 
 /// Reads the dates a calendar of several days posts: ISO dates joined by commas. More
@@ -114,7 +128,7 @@ pub fn parse_list(text: &str, max: usize) -> Option<Vec<NaiveDate>> {
     }
     let mut days = std::collections::BTreeSet::new();
     for part in text.split(',') {
-        days.insert(part.trim().parse::<NaiveDate>().ok()?);
+        days.insert(read_day(part)?);
         if days.len() > max {
             return None;
         }
@@ -143,14 +157,51 @@ fn start_of_day<Tz: TimeZone>(day: NaiveDate, zone: &Tz) -> DateTime<Utc> {
 /// let bad: DateRangeQuery = serde_json::from_str(r#"{"from":"soon"}"#).unwrap();
 /// assert!(bad.range().is_none());
 /// ```
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DateRangeQuery {
     /// The first day.
-    #[serde(default)]
     pub from: Option<String>,
     /// The last day.
-    #[serde(default)]
     pub to: Option<String>,
+}
+
+/// A key that comes twice (`?from=a&from=b`) is not an error: the first one stands, and
+/// any other key is ignored. A request can't make the extractor fail by repeating itself.
+impl<'de> Deserialize<'de> for DateRangeQuery {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Reader;
+        impl<'de> serde::de::Visitor<'de> for Reader {
+            type Value = DateRangeQuery;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a query with `from` and `to`")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<DateRangeQuery, A::Error> {
+                let mut out = DateRangeQuery::default();
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "from" => {
+                            let value = map.next_value::<Option<String>>()?;
+                            out.from = out.from.or(value);
+                        }
+                        "to" => {
+                            let value = map.next_value::<Option<String>>()?;
+                            out.to = out.to.or(value);
+                        }
+                        _ => {
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(out)
+            }
+        }
+        deserializer.deserialize_map(Reader)
+    }
 }
 
 impl DateRangeQuery {
@@ -158,6 +209,23 @@ impl DateRangeQuery {
     /// anything else is no range, never an error.
     pub fn range(&self) -> Option<DateRange> {
         DateRange::parse(self.from.as_deref()?, self.to.as_deref()?)
+    }
+
+    /// The range held to `limits`: `Ok(None)` when there is no range (an end is missing or
+    /// not a date), `Ok(Some(range))` when there is one the limits allow, and the reason
+    /// in `Err` when there is one they refuse. The same [`RangeRules`] the picker was
+    /// given, so what the browser held a person to is what the server holds the request to.
+    pub fn checked(&self, limits: &RangeRules) -> Result<Option<DateRange>, DateError> {
+        match self.range() {
+            None => Ok(None),
+            Some(range) => limits.check(&range).map(|()| Some(range)),
+        }
+    }
+
+    /// The range, when it is one the limits allow; no range when it is not (a page that
+    /// would rather show its default window than an error).
+    pub fn range_within(&self, limits: &RangeRules) -> Option<DateRange> {
+        self.checked(limits).ok().flatten()
     }
 }
 
@@ -302,11 +370,14 @@ impl DatePreset {
         week_start: Weekday,
         earliest: Option<NaiveDate>,
     ) -> Option<DateRange> {
-        let days_ago = |n: i64| today - Duration::days(n);
+        // Every step back is checked: a `today` at the edge of what chrono holds has no day
+        // a week before it, and then there is no range, not a panic.
+        let back = |day: NaiveDate, n: i64| day.checked_sub_signed(Duration::days(n));
+        let days_ago = |n: i64| back(today, n);
         let week_begin = |day: NaiveDate| {
-            let back =
+            let since =
                 (day.weekday().num_days_from_sunday() + 7 - week_start.num_days_from_sunday()) % 7;
-            day - Duration::days(i64::from(back))
+            back(day, i64::from(since))
         };
         let month_range = |year: i32, month: u32, months: u32| -> Option<DateRange> {
             let from = NaiveDate::from_ymd_opt(year, month, 1)?;
@@ -321,15 +392,15 @@ impl DatePreset {
         let quarter_first = |year: i32, month: u32| (year, (month - 1) / 3 * 3 + 1);
         Some(match self {
             Self::Today => DateRange::single(today),
-            Self::Yesterday => DateRange::single(days_ago(1)),
-            Self::ThisWeek => DateRange::new(week_begin(today), today),
+            Self::Yesterday => DateRange::single(days_ago(1)?),
+            Self::ThisWeek => DateRange::new(week_begin(today)?, today),
             Self::LastWeek => {
-                let this = week_begin(today);
-                DateRange::new(this - Duration::days(7), this - Duration::days(1))
+                let this = week_begin(today)?;
+                DateRange::new(back(this, 7)?, back(this, 1)?)
             }
-            Self::Last7Days => DateRange::new(days_ago(6), today),
-            Self::Last14Days => DateRange::new(days_ago(13), today),
-            Self::Last30Days => DateRange::new(days_ago(29), today),
+            Self::Last7Days => DateRange::new(days_ago(6)?, today),
+            Self::Last14Days => DateRange::new(days_ago(13)?, today),
+            Self::Last30Days => DateRange::new(days_ago(29)?, today),
             Self::ThisMonth => DateRange::new(today.with_day(1)?, today),
             Self::LastMonth => {
                 let (year, month) = add_months(today.year(), today.month(), -1)?;
