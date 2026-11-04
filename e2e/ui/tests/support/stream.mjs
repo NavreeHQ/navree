@@ -11,13 +11,14 @@ const dist = (name) => readFileSync(join(crate, "dist", name));
 const FILES = {
   "/_navree/ui/core.js": ["text/javascript", dist("core.js")],
   "/_navree/ui/table.js": ["text/javascript", dist("table.js")],
+  "/_navree/ui/live.js": ["text/javascript", dist("live.js")],
   "/_navree/ui/navree-ui.css": ["text/css", dist("navree-ui.css")],
 };
 export const CSP = /PAGE_CSP: &str = "([^"]+)"/.exec(readFileSync(join(crate, "src/view.rs"), "utf8"))[1];
 
-/** A page with the core runtime, as `View` writes one. */
+/** A page with the core runtime and the live module, as `View` writes one for a live region. */
 export function page(body, { css = false } = {}) {
-  return `<!doctype html><html lang="en" data-build="b1"><head><meta charset="utf-8"><title>t</title>${css ? '<link rel="stylesheet" href="/_navree/ui/navree-ui.css">' : ""}<script type="module" src="/_navree/ui/core.js"></script></head><body data-ui-boost><main>${body}</main></body></html>`;
+  return `<!doctype html><html lang="en" data-build="b1"><head><meta charset="utf-8"><title>t</title>${css ? '<link rel="stylesheet" href="/_navree/ui/navree-ui.css">' : ""}<script type="module" src="/_navree/ui/core.js"></script><script type="module" src="/_navree/ui/live.js"></script></head><body data-ui-boost><main>${body}</main></body></html>`;
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
