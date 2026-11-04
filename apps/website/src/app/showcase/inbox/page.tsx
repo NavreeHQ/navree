@@ -123,9 +123,10 @@ function Hero() {
           </div>
           <div className="lg:col-span-5 lg:pb-2">
             <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-              The help desk of an invented booking company: conversations, a thread with notes and files, and the
-              customer beside it, in three panes you resize. New messages arrive while you type. Every list loads as you
-              read it, so the first screen costs one page whatever the desk holds.
+              The help desk of an invented Mohali software company, whose booking software runs clinics, studios and
+              academies across India: conversations, a thread with notes and files, and the customer beside it, in three
+              panes you resize. New messages arrive while you type. Every list loads as you read it, so the first screen
+              costs one page whatever the desk holds.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <PrimaryCta href="#run">Run it locally</PrimaryCta>

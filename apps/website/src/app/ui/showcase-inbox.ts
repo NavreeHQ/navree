@@ -8,7 +8,7 @@ export const inboxShowcase = {
   id: "inbox",
   app: "inbox-demo",
   title: "A support inbox that stays fast at 100,000 conversations",
-  lead: "Three panes you resize, a thread with notes and files, the customer beside it, and new messages arriving while you type. Every list loads as it is read, so the first screen costs one page whatever the desk holds.",
+  lead: "The support desk of an invented Mohali software company, in three panes you resize: a thread with notes and files, the customer beside it, and new messages arriving while you type. Every list loads as it is read, so the first screen costs one page whatever the desk holds.",
   points: [
     "A [SplitPane](/docs/components/split-pane/) dragged or moved with the keys, its sizes kept for each agent on the server",
     "[LazyList](/docs/components/lazy-list/) pages by cursor: fifty conversations, thirty messages, older ones above",
@@ -57,7 +57,7 @@ export const inboxApp = {
   app: "inbox-demo",
   name: "A support inbox",
   summary:
-    "Conversations, a thread and the customer in three panes you resize, live over server-sent events, proven at 100,000 conversations.",
+    "The support desk of an invented Mohali software company: conversations, a thread and the customer in three panes you resize, live over server-sent events, proven at 100,000 conversations.",
   facts: [
     { label: "Data", value: "SQLite, 100,000 conversations" },
     { label: "Messages", value: "About 5.5 million" },
