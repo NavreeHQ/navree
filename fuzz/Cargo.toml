@@ -60,6 +60,7 @@ navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
 navree-template = { path = "../crates/navree-template" }
 navree-testing = { path = "../crates/navree-testing" }
 navree-time = { path = "../crates/navree-time" }
+navree-ui = { path = "../crates/navree-ui" }
 navree-validation = { path = "../crates/navree-validation", features = ["phone", "html", "fuzzing"] }
 navree-webhooks = { path = "../crates/navree-webhooks" }
 rqrr = { version = "0.11.0", default-features = false }
@@ -102,6 +103,13 @@ bench = false
 [[bin]]
 name = "docx_read"
 path = "fuzz_targets/docx_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ui_return_to"
+path = "fuzz_targets/ui_return_to.rs"
 test = false
 doc = false
 bench = false

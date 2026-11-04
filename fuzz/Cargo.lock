@@ -3153,6 +3153,7 @@ dependencies = [
  "chrono",
  "http",
  "http-body",
+ "navree-config",
  "navree-http",
  "navree-kernel",
  "navree-ui-macros",
