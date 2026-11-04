@@ -15,8 +15,9 @@
 //! of the Markdown.
 //!
 //! The tests below check the skills' text: fences close, only Rust blocks
-//! carry `ignore`, line endings are LF, and local links and links to
-//! navree.com/docs resolve.
+//! carry `ignore`, line endings are LF, local links and links to
+//! navree.com/docs resolve, and the UI skill names every component of the
+//! UI docs' catalog.
 #![forbid(unsafe_code)]
 
 pub mod blocks;
@@ -178,5 +179,86 @@ mod tests {
             }
         }
         assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// Whether `word` stands in `text` as a whole word, not inside a longer name
+    /// (`Row` is not found in `TableRow`).
+    fn names(text: &str, word: &str, any_case: bool) -> bool {
+        let (text, word) = if any_case {
+            (text.to_ascii_lowercase(), word.to_ascii_lowercase())
+        } else {
+            (text.to_owned(), word.to_owned())
+        };
+        let part = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+        text.match_indices(&word).any(|(at, _)| {
+            !part(text[..at].chars().next_back()) && !part(text[at + word.len()..].chars().next())
+        })
+    }
+
+    // MOD-021: a component that ships in Navree UI is named in the skills that teach
+    // pages, so an agent never calls a shipped component missing.
+    #[test]
+    fn the_ui_skill_names_every_component_of_the_catalog() {
+        /// Catalog entries a page builder does not use by name, with the reason.
+        const NOT_BY_NAME: &[(&str, &str)] = &[(
+            "build-anything",
+            "a section of examples on the docs site (`/ui/#build-anything`), not a component",
+        )];
+
+        let catalog = std::fs::read_to_string(repo().join("apps/website/content/ui/catalog.json"))
+            .expect("the UI catalog, written by `cargo run -p ui-docs`");
+        let catalog: serde_json::Value = serde_json::from_str(&catalog).unwrap();
+        let components = catalog["components"].as_array().expect("components");
+        assert!(
+            components.len() > 60,
+            "{} catalog entries: is the catalog complete?",
+            components.len()
+        );
+
+        // The words the UI skill is checked against: its page, and the design skill's
+        // component and token references.
+        let mut text = String::new();
+        let mut found_skill = false;
+        for (name, page) in pages() {
+            if name == "skills/navree-ui/SKILL.md" {
+                found_skill = true;
+            }
+            if name == "skills/navree-ui/SKILL.md"
+                || name.starts_with("skills/navree-design-to-ui/references/")
+            {
+                text.push_str(&page);
+                text.push('\n');
+            }
+        }
+        assert!(found_skill, "skills/navree-ui/SKILL.md does not exist");
+
+        let mut missing = Vec::new();
+        for component in components {
+            let id = component["id"].as_str().expect("an id");
+            if NOT_BY_NAME.iter().any(|(skipped, _)| *skipped == id) {
+                continue;
+            }
+            let name = component["name"].as_str().expect("a name");
+            // "Heading and Text" and "Stack, Row, Grid and Container" name several
+            // components; a name of a page that is a phrase ("Theme builder") is one.
+            let grouped = !component["group"].is_null();
+            let terms: Vec<&str> = if grouped {
+                name.split(", ")
+                    .flat_map(|part| part.split(" and "))
+                    .collect()
+            } else {
+                vec![name]
+            };
+            for term in terms {
+                if !names(&text, term, term.contains(' ')) {
+                    missing.push(format!("{term} ({id})"));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "named in neither skills/navree-ui/SKILL.md nor skills/navree-design-to-ui/references/: {}",
+            missing.join(", ")
+        );
     }
 }
