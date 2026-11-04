@@ -40,6 +40,11 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=item-content]{flex:1;min-width:0}
 [data-slot=item-title]{color:var(--fg);font-weight:500}
 [data-slot=item-description]{color:var(--fg-2);font-size:13px}
+[data-slot=item-head]{display:flex;align-items:baseline;gap:.5rem;min-width:0;& > [data-slot=item-title]{flex:1;min-width:0}}
+[data-slot=item-aside]{flex:none;color:var(--fg-3);font-size:12px;white-space:nowrap}
+[data-slot=item-footer]{display:flex;flex-wrap:wrap;align-items:center;gap:.375rem;margin-top:.375rem}
+[data-slot=item]{&:has(> [data-slot=item-content] > [data-slot=item-footer]){align-items:flex-start}&[data-current]{background:var(--ink-2);border-color:var(--line-2)}&:is(a)[data-current]:hover{background:var(--ink-3)}&[data-unread] [data-slot=item-title]{font-weight:600}
+  &[data-truncate] :is([data-slot=item-title],[data-slot=item-description]){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 [data-slot=item-actions]{display:flex;gap:.5rem;flex:none}
 
 /* Small things */
@@ -74,7 +79,8 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=attachment-title]{color:var(--fg);font-weight:500}
 [data-slot=attachment-description]{color:var(--fg-2);font-size:12px}
 [data-slot=bubble]{display:flex;flex-direction:column;gap:.25rem;max-width:80%;&[data-align=end]{align-self:flex-end;& > [data-slot=bubble-content]{background:var(--ink-3);color:var(--fg)}}}
-[data-slot=bubble-content]{padding:.5rem .75rem;border-radius:var(--radius-lg);background:var(--ink-2)}
+[data-slot=bubble-content]{padding:.5rem .75rem;border-radius:var(--radius-lg);background:var(--ink-2);overflow-wrap:break-word;& > p + p{margin-top:.5rem}}
+[data-slot=bubble][data-variant=note] > [data-slot=bubble-content]{border:1px dashed color-mix(in oklab,var(--amber) 55%,transparent);background:color-mix(in oklab,var(--amber) 9%,var(--ink-1));color:var(--fg)}
 [data-slot=message]{display:flex;gap:.5rem;&[data-align=end]{flex-direction:row-reverse}}
 [data-slot=message-content]{display:flex;flex:1;flex-direction:column;gap:.375rem;min-width:0}
 [data-slot=message-header],[data-slot=message-footer]{color:var(--fg-3);font-size:12px;font-weight:500}

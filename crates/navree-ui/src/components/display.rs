@@ -501,6 +501,14 @@ impl Bubble {
         }
     }
 
+    /// Draws it as a note that only the team sees, set apart from what was said in the
+    /// conversation: a dashed line and an amber tint, never colour alone, so say it in
+    /// the message's header too.
+    pub fn note(mut self) -> Self {
+        self.el = self.el.attr("data-variant", "note");
+        self
+    }
+
     fn into_node(self) -> Node {
         self.el.into()
     }
@@ -716,9 +724,12 @@ pub struct Item {
     el: Element,
     media: Option<Node>,
     title: Node,
+    aside: Option<Node>,
     description: Option<Node>,
+    footer: Vec<Node>,
     actions: Vec<Node>,
     href: Option<Href>,
+    current: bool,
 }
 
 impl Item {
@@ -728,9 +739,12 @@ impl Item {
             el: el("div").slot("item"),
             media: None,
             title: title.into(),
+            aside: None,
             description: None,
+            footer: Vec::new(),
             actions: Vec::new(),
             href: None,
+            current: false,
         }
     }
 
@@ -768,19 +782,65 @@ impl Item {
         self
     }
 
+    /// Adds something small at the end of the title's line: a time, a timer.
+    pub fn aside(mut self, aside: impl Into<Node>) -> Self {
+        self.aside = Some(aside.into());
+        self
+    }
+
+    /// Adds a line under the description: badges, people.
+    pub fn footer(mut self, footer: impl IntoNodes) -> Self {
+        footer.push_into(&mut self.footer);
+        self
+    }
+
+    /// Marks it as the one open now: `aria-current="page"` on a link, and drawn so.
+    pub fn current(mut self, current: bool) -> Self {
+        self.current = current;
+        self
+    }
+
+    /// Marks it as new to the reader: its title stronger. Say so in words too, with a
+    /// count or a label, since weight alone tells a screen reader nothing.
+    pub fn unread(mut self, unread: bool) -> Self {
+        self.el = self.el.flag("data-unread", unread);
+        self
+    }
+
+    /// Keeps the title and the description to one line each, cut with an ellipsis: for a
+    /// long list read at a glance. The whole text stays in the page for assistive
+    /// technology and find in page.
+    pub fn truncate(mut self) -> Self {
+        self.el = self.el.flag("data-truncate", true);
+        self
+    }
+
     fn into_node(self) -> Node {
         let mut root = self.el;
         if let Some(href) = self.href {
             root.tag = "a";
             root = root.href(href);
+            if self.current {
+                root = root.attr("aria-current", "page");
+            }
         }
+        root = root.flag("data-current", self.current);
+        let title = el("div").slot("item-title").child(self.title);
+        let head: Node = match self.aside {
+            Some(aside) => el("div")
+                .slot("item-head")
+                .children((title, el("span").slot("item-aside").child(aside)))
+                .into(),
+            None => title.into(),
+        };
         root.children((
             self.media
                 .map(|media| el("div").slot("item-media").child(media)),
             el("div").slot("item-content").children((
-                el("div").slot("item-title").child(self.title),
+                head,
                 self.description
                     .map(|text| el("p").slot("item-description").child(text)),
+                (!self.footer.is_empty()).then(|| el("div").slot("item-footer").child(self.footer)),
             )),
             (!self.actions.is_empty()).then(|| el("div").slot("item-actions").child(self.actions)),
         ))

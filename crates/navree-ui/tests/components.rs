@@ -257,6 +257,34 @@ fn all() -> Vec<(&'static str, Node)> {
             .into(),
     ));
     out.push((
+        "split",
+        SplitPane::new("sp")
+            .grip()
+            .stack_below(SplitWidth::Md)
+            .save_to("/panes")
+            .pane(Pane::new("a", "A").size(30).collapsible().header("H").body("B"))
+            .pane(Pane::fill("b", "B").footer("F").from_end())
+            .into(),
+    ));
+    out.push((
+        "item",
+        Item::new("Row")
+            .href("/r")
+            .aside("2 min")
+            .description("More")
+            .footer(Badge::new("Tag"))
+            .current(true)
+            .unread(true)
+            .truncate()
+            .into(),
+    ));
+    out.push((
+        "bubble",
+        Bubble::new(BubbleSide::End, "Only the team sees this")
+            .note()
+            .into(),
+    ));
+    out.push((
         "toaster",
         Toaster::new()
             .toast(
@@ -539,4 +567,37 @@ fn layout_gaps_snap_to_the_scale() {
     assert!(render(&Stack::gap(7).into()).contains(r#"data-gap="8""#));
     assert!(render(&Stack::gap(200).into()).contains(r#"data-gap="16""#));
     assert!(render(&Grid::cols(9).into()).contains(r#"data-cols="6""#));
+}
+
+#[test]
+fn a_list_row_says_which_is_open_and_which_is_new() {
+    let html = render(
+        &Item::new("Card declined")
+            .href("/inbox/7")
+            .aside("4 min")
+            .description("The card on file was declined.")
+            .footer(Badge::new("Urgent"))
+            .current(true)
+            .unread(true)
+            .into(),
+    );
+    assert!(
+        html.starts_with(r#"<a data-slot="item" data-unread href="/inbox/7" aria-current="page" data-current>"#),
+        "{html}"
+    );
+    assert!(html.contains(r#"<div data-slot="item-head"><div data-slot="item-title">Card declined</div><span data-slot="item-aside">4 min</span></div>"#), "{html}");
+    assert!(html.contains(r#"<div data-slot="item-footer"><span data-slot="badge""#), "{html}");
+    // Not a link: no aria-current, and no head without an aside.
+    let html = render(&Item::new("Plain").current(true).into());
+    assert!(!html.contains("aria-current"), "{html}");
+    assert!(html.contains(r#"data-current><div data-slot="item-content"><div data-slot="item-title">Plain</div>"#), "{html}");
+}
+
+#[test]
+fn a_note_is_a_bubble_set_apart() {
+    let html = render(&Bubble::new(BubbleSide::Start, "Internal").note().into());
+    assert_eq!(
+        html,
+        r#"<div data-slot="bubble" data-variant="note"><div data-slot="bubble-content">Internal</div></div>"#
+    );
 }
