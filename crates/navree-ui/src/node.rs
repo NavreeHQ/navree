@@ -755,8 +755,14 @@ mod tests {
     fn a_hotkey_is_one_typed_character_and_loads_the_keys_module() {
         for key in ["j", "K", "/", "?", "1", "é"] {
             let element = el("a").hotkey(key);
-            assert_eq!(element.get("data-ui-hotkey"), Some(&AttrValue::Text(key.into())));
-            assert_eq!(element.get("aria-keyshortcuts"), Some(&AttrValue::Text(key.into())));
+            assert_eq!(
+                element.get("data-ui-hotkey"),
+                Some(&AttrValue::Text(key.into()))
+            );
+            assert_eq!(
+                element.get("aria-keyshortcuts"),
+                Some(&AttrValue::Text(key.into()))
+            );
             assert!(element.uses.has(Uses::KEYS));
         }
         for bad in ["", " ", "jk", "Enter", "\n", "\u{7}", "ctrl+k"] {

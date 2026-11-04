@@ -272,7 +272,10 @@ into_node!(Stack, Row, Grid, Container);
 /// assert_eq!(render(&only_with_script("Drag")), r#"<span data-script-only>Drag</span>"#);
 /// ```
 pub fn only_with_script(content: impl IntoNodes) -> Node {
-    el("span").flag("data-script-only", true).child(content).into()
+    el("span")
+        .flag("data-script-only", true)
+        .child(content)
+        .into()
 }
 
 /// Wraps `content` so it shows only when scripts don't run: a link to a page that does
@@ -284,5 +287,8 @@ pub fn only_with_script(content: impl IntoNodes) -> Node {
 /// assert_eq!(render(&only_without_script("Choose")), r#"<span data-noscript-only>Choose</span>"#);
 /// ```
 pub fn only_without_script(content: impl IntoNodes) -> Node {
-    el("span").flag("data-noscript-only", true).child(content).into()
+    el("span")
+        .flag("data-noscript-only", true)
+        .child(content)
+        .into()
 }

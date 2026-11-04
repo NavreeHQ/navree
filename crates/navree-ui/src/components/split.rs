@@ -444,7 +444,10 @@ impl SplitPane {
                         horizontal,
                         split.grip,
                     )
-                    .attr_opt("data-collapse-below", below[primary].map(SplitWidth::as_str))
+                    .attr_opt(
+                        "data-collapse-below",
+                        below[primary].map(SplitWidth::as_str),
+                    )
                     .into(),
                 );
             }
@@ -475,12 +478,18 @@ fn pane_node(pane: Pane, current: bool) -> Node {
             "data-split-basis",
             (!pane.fill).then(|| i64::from((pane.size + 5) / 10)),
         )
-        .attr_opt("data-split-size", (!pane.fill).then(|| i64::from(pane.size)))
+        .attr_opt(
+            "data-split-size",
+            (!pane.fill).then(|| i64::from(pane.size)),
+        )
         .attr("data-split-min", i64::from(pane.min))
         .attr("data-split-max", i64::from(pane.max))
         .flag("data-split-collapsible", pane.collapsible)
         .flag("data-collapsed", pane.collapsed)
-        .attr_opt("data-collapse-below", pane.collapse_below.map(SplitWidth::as_str))
+        .attr_opt(
+            "data-collapse-below",
+            pane.collapse_below.map(SplitWidth::as_str),
+        )
         .flag("data-split-current", current)
         // The pane a page is about shows, though it was collapsed: the link to it says so.
         .flag(
@@ -673,8 +682,7 @@ fn parse_tenths(text: &str) -> Option<u16> {
     if whole.is_empty() || fraction.len() > 1 || (text.contains('.') && fraction.is_empty()) {
         return None;
     }
-    if !whole.bytes().all(|b| b.is_ascii_digit()) || !fraction.bytes().all(|b| b.is_ascii_digit())
-    {
+    if !whole.bytes().all(|b| b.is_ascii_digit()) || !fraction.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     let whole: u16 = whole.parse().ok()?;
@@ -688,7 +696,7 @@ fn parse_tenths(text: &str) -> Option<u16> {
 }
 
 fn write_tenths(out: &mut String, value: u16) {
-    if value % 10 == 0 {
+    if value.is_multiple_of(10) {
         let _ = write!(out, "{}", value / 10);
     } else {
         let _ = write!(out, "{}.{}", value / 10, value % 10);
@@ -814,7 +822,11 @@ mod tests {
         assert!(html.contains(r#"data-split-basis="28""#));
         assert!(html.contains(r#"data-split-basis="24""#));
         assert!(html.contains(r#"<section data-slot="split-pane" id="thread" aria-label="Conversation" data-split-fill"#), "{html}");
-        assert!(crate::render::measure(&inbox().into()).uses.has(Uses::SPLIT));
+        assert!(
+            crate::render::measure(&inbox().into())
+                .uses
+                .has(Uses::SPLIT)
+        );
     }
 
     #[test]
@@ -823,10 +835,15 @@ mod tests {
         assert_eq!(html.matches("data-split-current").count(), 1);
         assert!(html.contains(r#"id="thread" aria-label="Conversation" data-split-fill data-split-min="300" data-split-max="900" data-split-current"#), "{html}");
         let html = render(&inbox().current("list").into());
-        assert!(html.contains(r#"data-split-max="400" data-split-current"#), "{html}");
+        assert!(
+            html.contains(r#"data-split-max="400" data-split-current"#),
+            "{html}"
+        );
         // A pane that isn't there is no current pane: the fill pane is.
         let html = render(&inbox().current("nope").into());
-        assert!(html.contains(r#"data-split-fill data-split-min="300" data-split-max="900" data-split-current"#));
+        assert!(html.contains(
+            r#"data-split-fill data-split-min="300" data-split-max="900" data-split-current"#
+        ));
     }
 
     #[test]
@@ -852,12 +869,17 @@ mod tests {
             .pane(Pane::new("b", "B").min(70))
             .pane(Pane::fill("c", "C").min(20));
         let settled = tight.settled();
-        assert_eq!(settled.panes.iter().map(|p| p.size).collect::<Vec<_>>(), vec![700, 700, 0]);
+        assert_eq!(
+            settled.panes.iter().map(|p| p.size).collect::<Vec<_>>(),
+            vec![700, 700, 0]
+        );
     }
 
     #[test]
     fn with_no_fill_pane_the_last_fills_and_with_two_the_first_does() {
-        let none = SplitPane::new("s").pane(Pane::new("a", "A")).pane(Pane::new("b", "B"));
+        let none = SplitPane::new("s")
+            .pane(Pane::new("a", "A"))
+            .pane(Pane::new("b", "B"));
         assert_eq!(none.fill_index(), 1);
         let html = render(&none.into());
         assert!(html.contains(r#"id="b" aria-label="B" data-split-fill"#));
@@ -900,7 +922,10 @@ mod tests {
         assert!(page.contains("data-split-collapsible data-collapsed"));
         assert!(page.contains(r#"data-split-basis="30""#));
         // What was kept reads back.
-        assert_eq!(SplitSizes::from_text(&sizes.to_text(), &layout), Some(sizes));
+        assert_eq!(
+            SplitSizes::from_text(&sizes.to_text(), &layout),
+            Some(sizes)
+        );
     }
 
     #[test]
@@ -926,13 +951,27 @@ mod tests {
             ("30,40,30", "x"),
             ("99999999999999999999,0,0", ""),
         ] {
-            assert_eq!(SplitSizes::read(sizes, collapsed, &layout), None, "{sizes:?} {collapsed:?}");
+            assert_eq!(
+                SplitSizes::read(sizes, collapsed, &layout),
+                None,
+                "{sizes:?} {collapsed:?}"
+            );
         }
         let long = "1,".repeat(200);
         assert_eq!(SplitSizes::read(&long, "", &layout), None);
-        assert_eq!(SplitSizes::read("30,40,30", "", &SplitPane::new("empty")), None);
+        assert_eq!(
+            SplitSizes::read("30,40,30", "", &SplitPane::new("empty")),
+            None
+        );
         // Saved sizes for another layout leave the page as it is drawn.
-        let other = SplitSizes::read("50,50", "", &SplitPane::new("x").pane(Pane::new("a", "A")).pane(Pane::fill("b", "B"))).unwrap();
+        let other = SplitSizes::read(
+            "50,50",
+            "",
+            &SplitPane::new("x")
+                .pane(Pane::new("a", "A"))
+                .pane(Pane::fill("b", "B")),
+        )
+        .unwrap();
         let page = render(&layout.sizes(&other).into());
         assert!(page.contains(r#"data-split-basis="28""#));
     }
@@ -985,11 +1024,17 @@ mod tests {
 
     #[test]
     fn a_toggle_names_the_pane_and_loads_the_module() {
-        let toggle = SplitPane::toggle(Button::outline("Customer").href("/inbox/7?pane=customer"), "customer");
+        let toggle = SplitPane::toggle(
+            Button::outline("Customer").href("/inbox/7?pane=customer"),
+            "customer",
+        );
         let node: Node = toggle.into();
         assert!(crate::render::measure(&node).uses.has(Uses::SPLIT));
         let html = render(&node);
-        assert!(html.contains(r#"data-ui-split-toggle="customer" aria-controls="customer""#), "{html}");
+        assert!(
+            html.contains(r#"data-ui-split-toggle="customer" aria-controls="customer""#),
+            "{html}"
+        );
     }
 
     #[test]
@@ -1019,7 +1064,12 @@ mod tests {
         assert!(html.contains(r#"data-height="md""#));
         assert!(html.contains(r#"aria-orientation="horizontal""#));
         assert!(html.contains(r#"<span data-slot="split-grip" aria-hidden="true"></span>"#));
-        let screen = render(&SplitPane::new("s").height(SplitHeight::Screen).pane(Pane::fill("a", "A")).into());
+        let screen = render(
+            &SplitPane::new("s")
+                .height(SplitHeight::Screen)
+                .pane(Pane::fill("a", "A"))
+                .into(),
+        );
         assert!(screen.contains("data-split-screen"));
     }
 

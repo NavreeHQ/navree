@@ -253,7 +253,12 @@ impl LazyList {
     /// `event`, or its unnamed ones): `src` with `dir=live&since=`. New items arrive at
     /// `new_at`'s end or in their place, changed ones move, gone ones go. The stream is
     /// a nudge: its payload is never read.
-    pub fn live_from(mut self, url: impl Into<Href>, event: Option<&'static str>, new_at: LazyEnd) -> Self {
+    pub fn live_from(
+        mut self,
+        url: impl Into<Href>,
+        event: Option<&'static str>,
+        new_at: LazyEnd,
+    ) -> Self {
         let event = event.filter(|name| valid_event_name(name));
         self.live = Some((url.into(), event, new_at));
         self
@@ -287,7 +292,11 @@ impl LazyList {
             .view
             .clone()
             .unwrap_or_else(|| self.src.as_str().to_owned());
-        let items_id = format!("{}-{}", self.id, crate::assets::content_hash(view.as_bytes()));
+        let items_id = format!(
+            "{}-{}",
+            self.id,
+            crate::assets::content_hash(view.as_bytes())
+        );
         let mut root = el("div")
             .slot("lazy-list")
             .attr("id", self.id.clone())
@@ -306,7 +315,11 @@ impl LazyList {
                 .attr_opt("data-ui-live-event", event)
                 .attr(
                     "data-ui-live-at",
-                    if new_at == LazyEnd::End { "end" } else { "start" },
+                    if new_at == LazyEnd::End {
+                        "end"
+                    } else {
+                        "start"
+                    },
                 )
                 .uses(Uses::LIVE);
         }
@@ -327,7 +340,10 @@ impl LazyList {
                 .attr("role", "list")
                 .attr("aria-label", self.label)
                 .child(self.items),
-            empty.then(|| self.empty.map(|node| el("div").slot("lazy-empty").child(node))),
+            empty.then(|| {
+                self.empty
+                    .map(|node| el("div").slot("lazy-empty").child(node))
+            }),
             Self::end_link("end", self.after, &self.labels.end),
             el("p")
                 .slot("lazy-status")
@@ -475,7 +491,10 @@ impl IntoResponse for LazyPage {
         let html = self.to_html();
         let mut response = (
             [
-                (CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
+                (
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                ),
                 (CACHE_CONTROL, HeaderValue::from_static("no-store")),
                 (CONTENT_SECURITY_POLICY, HeaderValue::from_static(PAGE_CSP)),
             ],
@@ -510,7 +529,10 @@ mod tests {
 
     fn list() -> LazyList {
         LazyList::new("l", "Things", "/things/rows")
-            .items((1..=3).map(|n| LazyItem::new(n.to_string(), format!("{n:04}"), format!("Thing {n}"))))
+            .items(
+                (1..=3)
+                    .map(|n| LazyItem::new(n.to_string(), format!("{n:04}"), format!("Thing {n}"))),
+            )
             .more_after("/things?before=0001")
     }
 
@@ -518,11 +540,21 @@ mod tests {
     fn the_first_page_is_drawn_with_a_link_to_the_next() {
         let html = render(&list().into());
         assert!(html.contains(r#"<div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/things/rows" data-ui-order="desc" data-ui-max="300" data-l-loaded"#), "{html}");
-        assert!(html.contains(r#"data-ui-keep data-ui-start-done data-gap="1""#), "the start is done and the end is not: {html}");
-        assert!(html.contains(r##"<a data-slot="lazy-more" data-dir="start" href="#" hidden>Load newer</a>"##), "{html}");
+        assert!(
+            html.contains(r#"data-ui-keep data-ui-start-done data-gap="1""#),
+            "the start is done and the end is not: {html}"
+        );
+        assert!(
+            html.contains(
+                r##"<a data-slot="lazy-more" data-dir="start" href="#" hidden>Load newer</a>"##
+            ),
+            "{html}"
+        );
         assert!(html.contains(r#"<a data-slot="lazy-more" data-dir="end" href="/things?before=0001">Load more</a>"#), "{html}");
         assert!(html.contains(r#"role="list" aria-label="Things"><li data-key="1" data-cursor="0001">Thing 1</li>"#), "{html}");
-        assert!(html.contains(r#"<p data-slot="lazy-status" role="status" aria-live="polite"></p>"#));
+        assert!(
+            html.contains(r#"<p data-slot="lazy-status" role="status" aria-live="polite"></p>"#)
+        );
         assert!(crate::render::measure(&list().into()).uses.has(Uses::LAZY));
         assert!(!crate::render::measure(&list().into()).uses.has(Uses::LIVE));
     }
@@ -538,10 +570,19 @@ mod tests {
         assert!(uses.has(Uses::LAZY) && uses.has(Uses::LIVE));
         let html = render(&node);
         assert!(html.contains(r#"data-ui-since="42""#));
-        assert!(html.contains(r#"data-ui-live-src="/events" data-ui-live-event="rows" data-ui-live-at="end""#), "{html}");
+        assert!(
+            html.contains(
+                r#"data-ui-live-src="/events" data-ui-live-event="rows" data-ui-live-at="end""#
+            ),
+            "{html}"
+        );
         assert!(html.contains(r#"data-ui-order="asc""#));
         // A name an event can't have is left out: the list follows unnamed events.
-        let html = render(&list().live_from("/events", Some("open"), LazyEnd::Start).into());
+        let html = render(
+            &list()
+                .live_from("/events", Some("open"), LazyEnd::Start)
+                .into(),
+        );
         assert!(!html.contains("data-ui-live-event"));
     }
 
@@ -565,24 +606,51 @@ mod tests {
         let long = "9".repeat(5000);
         let html = render(&LazyItem::new("k", &long, "t").into());
         assert!(html.contains(&format!("data-cursor=\"{}\"", "9".repeat(MAX_CURSOR))));
-        assert_eq!(LazyQuery::parse(&format!("dir=end&cursor={long}")).ask(), &LazyAsk::After("9".repeat(MAX_CURSOR)));
+        assert_eq!(
+            LazyQuery::parse(&format!("dir=end&cursor={long}")).ask(),
+            &LazyAsk::After("9".repeat(MAX_CURSOR))
+        );
     }
 
     #[test]
     fn a_query_reads_what_was_asked_and_never_fails() {
         assert_eq!(LazyQuery::parse("").ask(), &LazyAsk::First);
-        assert_eq!(LazyQuery::parse("dir=end&cursor=0042").ask(), &LazyAsk::After("0042".into()));
-        assert_eq!(LazyQuery::parse("cursor=0042&dir=start").ask(), &LazyAsk::Before("0042".into()));
-        assert_eq!(LazyQuery::parse("dir=live&since=17").ask(), &LazyAsk::Since("17".into()));
-        for odd in ["dir=end", "dir=end&cursor=", "dir=sideways&cursor=1", "dir=live", "dir=live&cursor=3", "%ff%fe=1", "dir=start&cursor=%00%01"] {
+        assert_eq!(
+            LazyQuery::parse("dir=end&cursor=0042").ask(),
+            &LazyAsk::After("0042".into())
+        );
+        assert_eq!(
+            LazyQuery::parse("cursor=0042&dir=start").ask(),
+            &LazyAsk::Before("0042".into())
+        );
+        assert_eq!(
+            LazyQuery::parse("dir=live&since=17").ask(),
+            &LazyAsk::Since("17".into())
+        );
+        for odd in [
+            "dir=end",
+            "dir=end&cursor=",
+            "dir=sideways&cursor=1",
+            "dir=live",
+            "dir=live&cursor=3",
+            "%ff%fe=1",
+            "dir=start&cursor=%00%01",
+        ] {
             assert_eq!(LazyQuery::parse(odd).ask(), &LazyAsk::First, "{odd}");
         }
         let live = LazyQuery::parse("dir=live&since=9&from=0099&to=0042");
         assert_eq!(live.window(), Some(("0099", "0042")));
-        assert_eq!(LazyQuery::parse("dir=end&cursor=1&from=1&to=2").window(), None);
+        assert_eq!(
+            LazyQuery::parse("dir=end&cursor=1&from=1&to=2").window(),
+            None
+        );
         assert_eq!(LazyQuery::parse("dir=live&since=9&from=1").window(), None);
         let many = "a=1&".repeat(500) + "dir=end&cursor=1";
-        assert_eq!(LazyQuery::parse(&many).ask(), &LazyAsk::First, "a query past 64 pairs reads no further");
+        assert_eq!(
+            LazyQuery::parse(&many).ask(),
+            &LazyAsk::First,
+            "a query past 64 pairs reads no further"
+        );
     }
 
     #[test]
@@ -590,9 +658,21 @@ mod tests {
         let response = LazyPage::new([LazyItem::new("1", "1", "One")], true).into_response();
         assert_eq!(response.headers()["x-ui-more"], "1");
         assert_eq!(response.headers()["cache-control"], "no-store");
-        assert!(response.headers()["content-type"].to_str().unwrap().starts_with("text/html"));
-        let changes = LazyPage::changes([LazyItem::new("2", "2", "Two")], "99", ["5".to_owned(), "7\"".to_owned()]);
-        assert_eq!(changes.to_html(), r#"<li data-key="2" data-cursor="2">Two</li>"#);
+        assert!(
+            response.headers()["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/html")
+        );
+        let changes = LazyPage::changes(
+            [LazyItem::new("2", "2", "Two")],
+            "99",
+            ["5".to_owned(), "7\"".to_owned()],
+        );
+        assert_eq!(
+            changes.to_html(),
+            r#"<li data-key="2" data-cursor="2">Two</li>"#
+        );
         let response = changes.into_response();
         assert_eq!(response.headers()["x-ui-since"], "99");
         assert_eq!(response.headers()["x-ui-gone"], "5,7\"");
@@ -609,7 +689,11 @@ mod tests {
             html[at..end].to_owned()
         };
         let mine = id(list().view("mine"));
-        assert_eq!(mine, id(list().view("mine").current("2")), "the same view, another item open");
+        assert_eq!(
+            mine,
+            id(list().view("mine").current("2")),
+            "the same view, another item open"
+        );
         assert_ne!(mine, id(list().view("all")));
         let html = render(&list().view("mine").current("2").into());
         assert!(html.contains(r#"data-ui-current="2""#));

@@ -262,7 +262,13 @@ fn all() -> Vec<(&'static str, Node)> {
             .grip()
             .stack_below(SplitWidth::Md)
             .save_to("/panes")
-            .pane(Pane::new("a", "A").size(30).collapsible().header("H").body("B"))
+            .pane(
+                Pane::new("a", "A")
+                    .size(30)
+                    .collapsible()
+                    .header("H")
+                    .body("B"),
+            )
             .pane(Pane::fill("b", "B").footer("F").from_end())
             .into(),
     ));
@@ -582,15 +588,25 @@ fn a_list_row_says_which_is_open_and_which_is_new() {
             .into(),
     );
     assert!(
-        html.starts_with(r#"<a data-slot="item" data-unread href="/inbox/7" aria-current="page" data-current>"#),
+        html.starts_with(
+            r#"<a data-slot="item" data-unread href="/inbox/7" aria-current="page" data-current>"#
+        ),
         "{html}"
     );
     assert!(html.contains(r#"<div data-slot="item-head"><div data-slot="item-title">Card declined</div><span data-slot="item-aside">4 min</span></div>"#), "{html}");
-    assert!(html.contains(r#"<div data-slot="item-footer"><span data-slot="badge""#), "{html}");
+    assert!(
+        html.contains(r#"<div data-slot="item-footer"><span data-slot="badge""#),
+        "{html}"
+    );
     // Not a link: no aria-current, and no head without an aside.
     let html = render(&Item::new("Plain").current(true).into());
     assert!(!html.contains("aria-current"), "{html}");
-    assert!(html.contains(r#"data-current><div data-slot="item-content"><div data-slot="item-title">Plain</div>"#), "{html}");
+    assert!(
+        html.contains(
+            r#"data-current><div data-slot="item-content"><div data-slot="item-title">Plain</div>"#
+        ),
+        "{html}"
+    );
 }
 
 #[test]
