@@ -3,8 +3,8 @@
  *
  *   node scripts/check-aeo.ts
  *
- * - The home page, `/ui/`, `/ai/` and the introduction of the docs each have
- *   a `FAQPage` with at least four questions;
+ * - The home page, `/ui/`, `/ai/`, `/about/` and the introduction of the
+ *   docs each have a `FAQPage` with at least four questions;
  * - every answer is 40 to 80 words, in the data and on the page, and the
  *   visible answer is the same text as the one in the structured data;
  * - every question is a heading (`<h3>`) on the page, and none repeats;
@@ -17,7 +17,7 @@ requireOut("check-aeo");
 
 const MIN_WORDS = 40;
 const MAX_WORDS = 80;
-const faqPages = ["/", "/ui/", "/ai/", "/docs/prologue/introduction/"];
+const faqPages = ["/", "/ui/", "/ai/", "/about/", "/docs/prologue/introduction/"];
 const howToPages = ["/docs/getting-started/installation/", "/docs/getting-started/your-first-app/"];
 
 const problems: string[] = [];

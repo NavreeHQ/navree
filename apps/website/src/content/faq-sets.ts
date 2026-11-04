@@ -1,8 +1,8 @@
 import { groups } from "@/components/ui-docs/data";
-import { aiFaq, homeFaq, introductionFaq, uiFaq, type FaqSet } from "@/content/faq";
+import { aboutFaq, aiFaq, homeFaq, introductionFaq, uiFaq, type FaqSet } from "@/content/faq";
 import { uiRoadmap } from "@/lib/ui-page-data";
 
-export type FaqName = "home" | "ui" | "ai" | "introduction";
+export type FaqName = "home" | "ui" | "ai" | "introduction" | "about";
 
 /**
  * Every set of questions, by name, for the pages that draw them. The Navree
@@ -11,5 +11,5 @@ export type FaqName = "home" | "ui" | "ai" | "introduction";
  * read by the script that writes the Markdown copies.
  */
 export function faqSets(): Record<FaqName, FaqSet> {
-  return { home: homeFaq, ui: uiFaq({ groups, roadmap: uiRoadmap() }), ai: aiFaq, introduction: introductionFaq };
+  return { home: homeFaq, ui: uiFaq({ groups, roadmap: uiRoadmap() }), ai: aiFaq, introduction: introductionFaq, about: aboutFaq };
 }

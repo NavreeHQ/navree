@@ -1,4 +1,5 @@
 import { site } from "../../site.config.ts";
+import { founder } from "./about.ts";
 
 /**
  * The questions the site answers on a page, as data. `Faq` (src/components/
@@ -198,6 +199,34 @@ export const introductionFaq: FaqSet = {
       answer:
         "Install the CLI, then build the task-list API in Your first app, which takes you from `navree new` to green tests. When you reach the screens, read Choosing a UI. For the ideas behind modules and providers, read the Architecture concepts section.",
       link: { href: "/docs/getting-started/your-first-app/", label: "Build your first app" },
+    },
+  ],
+};
+
+/** The about page (`/about/`): who built Navree, and where the name comes from. */
+export const aboutFaq: FaqSet = {
+  path: "/about/",
+  heading: "Questions about who built Navree",
+  items: [
+    {
+      question: "Who built Navree?",
+      answer: `${founder.name}, a serial entrepreneur and full-stack developer in ${founder.place}. He has spent fifteen years building software: six startups, products that serve millions of people and more than a hundred open-source packages, with Laravel, NestJS, React, Next.js, the cloud and DevOps. Navree puts what that work taught him into one framework, written in Rust.`,
+      link: { href: founder.github.url, label: `${founder.short} on GitHub` },
+    },
+    {
+      question: "Where does the name come from?",
+      answer: `From ${founder.name}'s daughter, Navreet: Navree is her name without its last letter. The picture on this page shows her beside her father at his desk, watching the screen and learning, with her younger brother Navraj on their father's lap. All three are drawn in ones and zeros, like the screen they are looking at.`,
+    },
+    {
+      question: "Why was Navree built?",
+      answer:
+        "To put fifteen years of lessons into one framework. Across six startups the same needs came back: one clear structure, mistakes caught by the compiler, security on by default, workspaces for teams, screens in the stack a team knows, the tools to run a product and help for coding agents. Navree builds each of them in, so a new product starts with them.",
+      link: { href: "#lessons", label: "Read the lessons" },
+    },
+    {
+      question: "How can I contact the person who built Navree?",
+      answer: `Write to ${founder.short} at ${founder.email}, or find him on GitHub as ${founder.github.handle}. To report a bug or ask for a feature, open an issue in the NavreeHQ/navree repository, so everyone with the same question can follow the answer. Report a security problem privately to security@navree.com instead, as the repository's security policy asks.`,
+      link: { href: `mailto:${founder.email}`, label: `Email ${founder.short}` },
     },
   ],
 };
