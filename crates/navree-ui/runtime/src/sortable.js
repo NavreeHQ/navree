@@ -393,7 +393,11 @@ function judge(region, batch) {
       say(root, fill(words(root).settled, about(item)));
       continue;
     }
-    if (!drawn) back(root, item, from);
+    if (!drawn) {
+      // Picked up again meanwhile: the drag ends, as the item goes back.
+      if (drag?.item === item) end();
+      back(root, item, from);
+    }
     say(root, fill(words(root).returned, about(item)));
     tell(root, drawn ? "failed" : "offline");
   }
@@ -731,8 +735,8 @@ function cancel(why = "") {
   end();
   back(root, item, from);
   if (mode === "keys") /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
-  const back = fill(words(root).cancelled, about(item));
-  say(root, why ? `${why} ${back}` : back);
+  const where = fill(words(root).cancelled, about(item));
+  say(root, why ? `${why} ${where}` : where);
   idle();
 }
 
