@@ -11,8 +11,9 @@
 //! before is still in that list, and the list has room and takes items.
 //! [`Move::place`] does the same for lists kept by rank, reading only what it
 //! needs, after locking the lists the move touches so that two moves at once run
-//! one after the other. With the `orm` feature, `lock_lists` takes that lock on
-//! PostgreSQL and MySQL and `renew_ranks` gives a list fresh ranks in one
+//! one after the other. With the `orm` feature, `transaction` runs a move in a
+//! transaction the toolkit begins, at READ COMMITTED with that lock taken first,
+//! `lock_lists` is the lock, and `renew_ranks` gives a list fresh ranks in one
 //! statement.
 
 use std::borrow::Cow;
@@ -31,7 +32,7 @@ mod ranked;
 
 pub use moves::{Landing, ListState, Move, MoveError, MoveRejected, Refusal};
 #[cfg(feature = "orm")]
-pub use orm::{lock_lists, renew_ranks};
+pub use orm::{lock_lists, renew_ranks, transaction};
 pub use ranked::{Placement, RANK_GAP, RankedLists, Spot, rank_between};
 
 /// How a sortable's lists sit.

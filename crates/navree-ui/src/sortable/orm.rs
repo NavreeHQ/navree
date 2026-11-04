@@ -1,75 +1,133 @@
-//! Moves kept in an SQL database, through navree-orm: the lock a move takes on the
-//! lists it touches, and fresh ranks for a whole list in one statement.
+//! Moves kept in an SQL database, through navree-orm: the transaction a move runs
+//! in, which the toolkit begins, the lock it takes there on the lists it touches,
+//! and fresh ranks for a whole list in one statement.
 
-use navree_orm::{Access, Column, Dialect, Executor, OrmError, Result, ValueFor, raw, table};
+use std::future::Future;
+
+use navree_db::{Backend, Db, IsolationLevel, Uow};
+use navree_orm::{
+    Access, Column, Dialect, Executor, OrmError, Result, ValueFor, raw, scalar, table,
+};
 
 use super::moves::Move;
 use super::ranked::RANK_GAP;
 
-/// Locks one row for each of `lists`, found by its `key` column, until the
-/// transaction ends: `SELECT ... FOR UPDATE` on PostgreSQL and MySQL, one list at a
-/// time in sorted order, so that two moves never wait for each other. On SQLite it
-/// does nothing: its write transactions (`BEGIN IMMEDIATE`, as every unit of work
-/// begins) already run one at a time. A list with no row locks nothing.
+/// How many times [`transaction`] runs a move, at most, when the database asks for
+/// it to run again.
+const ATTEMPTS: usize = 3;
+
+/// Runs `f` in a transaction that holds the lists a move touches: the safe way to
+/// check or place a move against a database. It
 ///
-/// Call it in the move's unit of work, before anything else reads there.
-/// [`RankedLists::lock`](super::RankedLists::lock) is the place for it:
+/// - begins a unit of work at READ COMMITTED on PostgreSQL and MySQL, whatever the
+///   server's or the pool's own level, and `BEGIN IMMEDIATE` on SQLite;
+/// - locks `lists` (rows found by their `key` column, see [`lock_lists`]) as its
+///   first statement;
+/// - only then hands the unit of work to `f`, and commits it when `f` returns
+///   `Ok`, or rolls it back;
+/// - runs it all again, up to three times in all, when the database asks for that:
+///   a deadlock, a serialization failure, or a lock not free in time.
+///
+/// So nothing can read before the lock, and every read after it sees the moves
+/// that held it before: at REPEATABLE READ (MySQL's default) or SERIALIZABLE a
+/// read would see what was there when the transaction began, and two moves could
+/// both take a list's last place. The unit of work carries the actor, request id
+/// and workspace of the task's current one, as a request's does. `f` may run more
+/// than once, so it does nothing outside the unit of work it is given.
 ///
 /// ```ignore
-/// impl RankedLists for Board<'_> {
-///     type Error = OrmError;
-///
-///     fn lock(&self, lists: &[&str]) -> impl Future<Output = Result<(), OrmError>> + Send {
-///         let (uow, lists) = (self.uow, lists.to_vec());
-///         async move { sortable::lock_lists(uow, &Column::KEY, lists).await }
+/// let landed = sortable::transaction(&db, &Column::KEY, mv.lists(), |uow| {
+///     let mv = mv.clone();
+///     async move {
+///         let lists = read_lists(&uow).await?; // under the lock, at READ COMMITTED
+///         Ok(mv.check(&lists))
 ///     }
-///     // spot, list, beside, nth, last
-/// }
+/// })
+/// .await?;
 /// ```
 ///
 /// # Errors
 ///
-/// The database's, when a read fails; [`OrmError::InvalidQuery`] for a column with
-/// no table; [`OrmError::Unsupported`] on a document store.
-pub async fn lock_lists<M, T, V, E>(
-    exec: &E,
+/// As [`lock_lists`]; `f`'s own error; the database's, when it begins or commits.
+pub async fn transaction<M, T, V, R, F, Fut>(
+    db: &Db,
     key: &Column<M, T>,
-    lists: impl IntoIterator<Item = V>,
-) -> Result<()>
+    lists: Vec<V>,
+    f: F,
+) -> Result<R>
 where
-    V: ValueFor<T> + Ord,
-    E: Executor + ?Sized,
+    V: ValueFor<T> + Ord + Clone,
+    F: Fn(Uow) -> Fut,
+    Fut: Future<Output = Result<R>>,
 {
-    if dialect(exec, "locking a list").await? == Dialect::Sqlite {
-        return Ok(());
+    let mut attempt = 1;
+    loop {
+        let uow = unit_of_work(db).await;
+        if db.backend() != Backend::Sqlite {
+            uow.set_isolation(IsolationLevel::ReadCommitted).await?;
+        }
+        let ran = uow
+            .scope(async {
+                lock_lists(&uow, key, lists.clone()).await?;
+                f(uow.clone()).await
+            })
+            .await;
+        let outcome = match ran {
+            Ok(value) => uow.commit().await.map(|()| value).map_err(OrmError::from),
+            Err(error) => {
+                // A failed rollback leaves nothing to keep: the connection is dropped.
+                let _ = uow.rollback().await;
+                Err(error)
+            }
+        };
+        match outcome {
+            Err(OrmError::Db(error)) if error.is_retryable() && attempt < ATTEMPTS => {
+                attempt += 1;
+            }
+            other => return other,
+        }
     }
-    let name = table_of(key)?;
-    let mut lists: Vec<V> = lists.into_iter().collect();
-    lists.sort();
-    lists.dedup();
-    for list in lists {
-        table(name)
-            .select([key.name()])
-            .where_(key.eq(list))
-            .lock_for_update()
-            .first(exec)
-            .await?;
-    }
-    Ok(())
 }
 
 impl Move {
-    /// Locks the lists the move touches ([`lists`](Self::lists)), each a row found
-    /// by its `key` column, until the transaction ends: the step before
-    /// [`check`](Self::check), for lists read whole. See [`lock_lists`].
+    /// Runs `f` in a transaction that holds the lists the move touches
+    /// ([`lists`](Self::lists)), each a row found by its `key` column: see
+    /// [`transaction`]. Check or place the move in `f`, and write it.
     ///
     /// ```ignore
-    /// db.transaction(|uow| async move {
-    ///     mv.lock(&uow, &Column::KEY).await?;
-    ///     let lists = read_lists(&uow).await?;
-    ///     match mv.check(&lists) { /* ... */ }
-    /// })
+    /// let placed = mv
+    ///     .transaction(&db, &Column::KEY, |uow| {
+    ///         let mv = mv.clone();
+    ///         async move {
+    ///             let placed = mv.place(&Board { uow: &uow }).await?;
+    ///             if let Ok(placement) = &placed {
+    ///                 write_rank(&uow, placement).await?;
+    ///             }
+    ///             Ok(placed)
+    ///         }
+    ///     })
+    ///     .await?;
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// As [`transaction`].
+    pub async fn transaction<M, R, F, Fut>(
+        &self,
+        db: &Db,
+        key: &Column<M, String>,
+        f: F,
+    ) -> Result<R>
+    where
+        F: Fn(Uow) -> Fut,
+        Fut: Future<Output = Result<R>>,
+    {
+        transaction(db, key, self.lists(), f).await
+    }
+
+    /// Locks the lists the move touches ([`lists`](Self::lists)), each a row found
+    /// by its `key` column, until the transaction ends: [`lock_lists`] for this
+    /// move. [`transaction`](Self::transaction) takes this lock itself.
     ///
     /// # Errors
     ///
@@ -82,13 +140,123 @@ impl Move {
     }
 }
 
+/// A new unit of work on `db`, for the actor, request id and workspace of the
+/// task's current one.
+async fn unit_of_work(db: &Db) -> Uow {
+    let Some(current) = Uow::current() else {
+        return db.uow(None, None).await;
+    };
+    let request = current.request_id().map(str::to_owned);
+    let uow = match (current.actor(), current.impersonator()) {
+        (Some(actor), Some(by)) => db.impersonated_uow(actor, by, request).await,
+        (actor, _) => db.uow(actor, request).await,
+    };
+    uow.set_workspace(current.workspace());
+    uow
+}
+
+/// Locks one row for each of `lists`, found by its `key` column, until the unit of
+/// work ends: `SELECT ... FOR UPDATE` on PostgreSQL and MySQL, one list at a time
+/// in sorted order, so that two moves never wait for each other. On SQLite, whose
+/// units of work begin `BEGIN IMMEDIATE` and so already run one at a time, the
+/// rows are only read. [`transaction`] calls it as its first statement: call it
+/// yourself only in [`RankedLists::lock`](super::RankedLists::lock), which
+/// [`Move::place`] calls first, as a second lock in the same transaction is
+/// granted at once.
+///
+/// The key column is the list's unique, indexed key (a primary key): on MySQL a
+/// `FOR UPDATE` on a column with no index locks every row it reads. And it is the
+/// key of a list the caller may move in: a key is locked across the whole table,
+/// so scope the keys to the caller's board or workspace before they get here.
+///
+/// It refuses, rather than lock nothing, when the lock would not hold:
+///
+/// - outside a unit of work, where a lock ends with its statement;
+/// - on PostgreSQL and MySQL, in a transaction that isn't READ COMMITTED, whose
+///   reads would keep a snapshot from before the lock (PostgreSQL's level is read
+///   from the transaction; MySQL's from the unit of work's chosen level, or else
+///   the session's);
+/// - when a list has no row.
+///
+/// # Errors
+///
+/// [`OrmError::InvalidQuery`] outside a unit of work, outside READ COMMITTED, or
+/// for a column with no table; [`OrmError::ModelNotFound`] (`is_not_found()`)
+/// naming the first list with no row; [`OrmError::Unsupported`] on a document
+/// store; the database's, when a read fails.
+pub async fn lock_lists<M, T, V, E>(
+    exec: &E,
+    key: &Column<M, T>,
+    lists: impl IntoIterator<Item = V>,
+) -> Result<()>
+where
+    V: ValueFor<T> + Ord,
+    E: Executor + ?Sized,
+{
+    let (dialect, uow) = {
+        let target = exec.target(Access::Read).await?;
+        let dialect = target.dialect().ok_or_else(|| OrmError::Unsupported {
+            feature: "locking a list".into(),
+            driver: "a document store".into(),
+        })?;
+        (dialect, target.uow().cloned())
+    };
+    let Some(uow) = uow else {
+        return Err(OrmError::InvalidQuery(
+            "a move's lists are locked in its unit of work: outside one, the lock would end with its statement. Run the move in `sortable::transaction` or `Move::transaction`".to_owned(),
+        ));
+    };
+    if dialect != Dialect::Sqlite {
+        read_committed(&uow, dialect).await?;
+    }
+    let name = table_of(key)?;
+    let mut lists: Vec<V> = lists.into_iter().collect();
+    lists.sort();
+    lists.dedup();
+    for list in lists {
+        let list: T = list.into_value_for();
+        let named = key.encode(&list).map_or_else(|error| error, |value| value.to_string());
+        let mut query = table(name).select([key.name()]).where_(key.eq(list));
+        if dialect != Dialect::Sqlite {
+            query = query.lock_for_update();
+        }
+        if query.first(exec).await?.is_none() {
+            return Err(OrmError::not_found(name.to_owned(), vec![named]));
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a transaction that isn't READ COMMITTED.
+async fn read_committed(uow: &Uow, dialect: Dialect) -> Result<()> {
+    let level = match (uow.isolation(), dialect) {
+        (Some(level), _) => level.as_sql().to_owned(),
+        (None, Dialect::Postgres) => scalar::<String, _>(
+            uow,
+            raw("SELECT current_setting('transaction_isolation')", Vec::<i64>::new()),
+        )
+        .await?
+        .unwrap_or_default(),
+        (None, _) => scalar::<String, _>(uow, raw("SELECT @@transaction_isolation", Vec::<i64>::new()))
+            .await?
+            .unwrap_or_default(),
+    };
+    let level = level.to_uppercase().replace(['-', '_'], " ");
+    if level == "READ COMMITTED" {
+        return Ok(());
+    }
+    Err(OrmError::InvalidQuery(format!(
+        "a move's lists are locked in a READ COMMITTED transaction, so that every read after the lock sees the moves that held it before; this one is {level}. Run the move in `sortable::transaction` or `Move::transaction`, which begin one"
+    )))
+}
+
 /// Gives every item of `list` a fresh rank, [`RANK_GAP`] apart from 0, in the
 /// order it has (by `rank`, then `id`), in one statement: for when two neighbours
 /// have no room left between them. Returns how many rows it changed.
 ///
 /// The ranks of a list pass through repeats while it runs, so the index on them
-/// must not be unique. Run it in the move's unit of work, after
-/// [`lock_lists`], then place the move again.
+/// must not be unique. Run it in the move's [`transaction`], under its lock, then
+/// place the move again.
 ///
 /// ```ignore
 /// sortable::renew_ranks(&uow, &Card::LIST, &Card::RANK, &Card::ID, "backlog").await?;

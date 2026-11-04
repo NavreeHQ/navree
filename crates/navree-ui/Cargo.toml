@@ -13,9 +13,10 @@ workspace = true
 [features]
 default = []
 ## The table's backend: `TableQuery::load`, `export_csv`, `BulkRequest::resolve`
-## and stored views, through navree-orm. The facade turns it on when both `ui`
-## and `orm` are on.
-orm = ["dep:navree-orm", "dep:base64"]
+## and stored views, through navree-orm; and the sortable's moves in a unit of
+## work of navree-db's (`sortable::transaction`). The facade turns it on when both
+## `ui` and `orm` are on.
+orm = ["dep:navree-orm", "dep:navree-db", "dep:base64"]
 ## `PhoneInput` and the phone widget of forms: a country picker, formatting
 ## as you type and E.164, on navree-phone. The facade turns it on when both
 ## `ui` and `validation-phone` are on.
@@ -23,6 +24,7 @@ phone = ["dep:navree-phone", "navree-validation/phone"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
+navree-db = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
 brotli = { workspace = true }

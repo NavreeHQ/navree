@@ -32,21 +32,31 @@ const MAX_PAIRS: usize = 32;
 /// Nothing in it is trusted: hold it against the lists as they are now, in the
 /// transaction that writes the new order, with the lists it touches locked first,
 /// so that two moves at once are applied one after the other and the second is
-/// checked against what the first left. [`place`](Self::place) takes that lock
-/// itself, through [`RankedLists::lock`]. For lists read whole, take it with
-/// `Move::lock` (the `orm` feature), then [`check`](Self::check):
+/// checked against what the first left. With the `orm` feature,
+/// `Move::transaction` is that transaction: it begins at READ COMMITTED, locks the
+/// lists as its first statement, and only then hands over the unit of work, in
+/// which you [`check`](Self::check) (lists read whole) or [`place`](Self::place)
+/// (lists kept by rank) the move and write it:
 ///
 /// ```ignore
-/// async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
-///     mv.lock(&uow, &Column::KEY).await?; // a row per list, before any read
-///     let lists = board_lists(&uow).await?; // Vec<ListState>, read in this transaction
-///     match mv.check(&lists) {
-///         Ok(landing) => {
-///             save_order(&uow, &landing).await?;
-///             Ok(mv.done("/board"))
-///         }
-///         Err(refusal) => Ok(mv.refused("/board", refusal.message())),
-///     }
+/// async fn moves(db: Db, mv: Move) -> Result<Reply> {
+///     let checked = mv
+///         .transaction(&db, &Column::KEY, |uow| {
+///             let mv = mv.clone();
+///             async move {
+///                 let lists = board_lists(&uow).await?; // Vec<ListState>, under the lock
+///                 let checked = mv.check(&lists);
+///                 if let Ok(landing) = &checked {
+///                     save_order(&uow, landing).await?;
+///                 }
+///                 Ok(checked)
+///             }
+///         })
+///         .await?;
+///     Ok(match checked {
+///         Ok(_) => mv.done("/board"),
+///         Err(refusal) => mv.refused("/board", refusal.message()),
+///     })
 /// }
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

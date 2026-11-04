@@ -35,8 +35,15 @@ pub trait RankedLists {
     ///
     /// With the `orm` feature, `sortable::lock_lists` does it with
     /// `SELECT ... FOR UPDATE` on one row per list on PostgreSQL and MySQL, and
-    /// nothing on SQLite, whose write transactions (`BEGIN IMMEDIATE`) already run
-    /// one at a time.
+    /// refuses a transaction whose reads would not see the moves before the lock;
+    /// on SQLite, whose write transactions (`BEGIN IMMEDIATE`) already run one at a
+    /// time, it only finds the rows. Run the move in `sortable::transaction` (or
+    /// `Move::transaction`), which takes this lock first and begins the
+    /// transaction at READ COMMITTED; a second lock in it is granted at once.
+    ///
+    /// A list's key names a list of the caller's: lock, count and find only in the
+    /// lists the caller may move in, and answer `None` from [`list`](Self::list)
+    /// for any other.
     fn lock(&self, lists: &[&str]) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Where `key` is now, or `None` when it is gone.
@@ -50,11 +57,15 @@ pub trait RankedLists {
         item: &str,
     ) -> impl Future<Output = Result<Option<(ListState, u64)>, Self::Error>> + Send;
 
-    /// The rank of the item next to `rank` in `list`: the nearest lower rank when
-    /// `lower`, otherwise the nearest higher one.
+    /// The rank of the item next to `anchor`, whose rank is `rank`, in `list`'s
+    /// order: the one just before it when `lower`, otherwise the one just after.
+    /// The order is by rank, then by what settles a tie (an id, say), so an item
+    /// tied with the anchor is its neighbour: two items of one rank leave no room
+    /// between them, and the list gets fresh ranks.
     fn beside(
         &self,
         list: &str,
+        anchor: &str,
         rank: i64,
         lower: bool,
         item: &str,
@@ -126,10 +137,12 @@ impl Move {
     ///
     /// It first locks the lists the move touches ([`RankedLists::lock`]), so two
     /// moves at once are placed one after the other. Run it in the transaction that
-    /// writes the rank. On MySQL, whose transactions keep reading what was there at
-    /// their first read (`REPEATABLE READ`, its default), place the move before
-    /// anything else reads in that transaction (or call `lock` yourself first), or
-    /// set `database.mysql.isolation_level = "read_committed"`.
+    /// writes the rank, and let the toolkit begin it: with the `orm` feature,
+    /// `Move::transaction` begins it at READ COMMITTED and takes the lock as its
+    /// first statement. At REPEATABLE READ (MySQL's default) or SERIALIZABLE, a
+    /// transaction keeps reading what was there when it began, on PostgreSQL even
+    /// when the lock is its first statement and on MySQL when anything read before
+    /// the lock: two moves could both take a list's last place.
     ///
     /// # Errors
     ///
@@ -174,15 +187,17 @@ impl Move {
         let to = self.to_list.as_str();
         let (lower, upper) = match (&self.before, &self.after, self.position) {
             (Some(anchor), _, _) => match lists.spot(anchor).await? {
-                Some(at) if at.list == to => {
-                    (lists.beside(to, at.rank, true, item).await?, Some(at.rank))
-                }
+                Some(at) if at.list == to => (
+                    lists.beside(to, anchor, at.rank, true, item).await?,
+                    Some(at.rank),
+                ),
                 _ => return Ok(Err(Refusal::Moved)),
             },
             (None, Some(anchor), _) => match lists.spot(anchor).await? {
-                Some(at) if at.list == to => {
-                    (Some(at.rank), lists.beside(to, at.rank, false, item).await?)
-                }
+                Some(at) if at.list == to => (
+                    Some(at.rank),
+                    lists.beside(to, anchor, at.rank, false, item).await?,
+                ),
                 _ => return Ok(Err(Refusal::Moved)),
             },
             (None, None, Some(position)) => {

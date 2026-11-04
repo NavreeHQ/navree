@@ -842,15 +842,28 @@ impl RankedLists for Ranks {
     async fn beside(
         &self,
         list: &str,
+        anchor: &str,
         rank: i64,
         lower: bool,
         item: &str,
     ) -> Result<Option<i64>, Self::Error> {
-        let ranks = self.sorted(list, item);
+        // In the list's order: by rank, a tie settled by where the item was put.
+        let mut order: Vec<(i64, usize, &str)> = self
+            .0
+            .iter()
+            .filter(|(l, _)| l.key == list)
+            .flat_map(|(_, items)| items.iter().enumerate())
+            .filter(|(_, (k, _))| k != item)
+            .map(|(at, (k, r))| (*r, at, k.as_str()))
+            .collect();
+        order.sort_unstable();
+        let Some(here) = order.iter().position(|(r, _, k)| *k == anchor && *r == rank) else {
+            return Ok(None);
+        };
         Ok(if lower {
-            ranks.into_iter().filter(|r| *r < rank).max()
+            here.checked_sub(1).map(|at| order[at].0)
         } else {
-            ranks.into_iter().filter(|r| *r > rank).min()
+            order.get(here + 1).map(|(r, ..)| *r)
         })
     }
 
@@ -914,12 +927,13 @@ impl RankedLists for Logged {
     async fn beside(
         &self,
         list: &str,
+        anchor: &str,
         rank: i64,
         lower: bool,
         item: &str,
     ) -> Result<Option<i64>, Self::Error> {
         self.note(format!("beside {list}"));
-        self.ranks.beside(list, rank, lower, item).await
+        self.ranks.beside(list, anchor, rank, lower, item).await
     }
 
     async fn nth(&self, list: &str, index: u64, item: &str) -> Result<Option<i64>, Self::Error> {
@@ -975,6 +989,30 @@ fn a_placed_move_locks_its_lists_in_order_before_it_reads_anything() {
         let log = asked(mv);
         assert!(log[0].starts_with("lock "), "{log:?}");
     }
+}
+
+#[test]
+fn a_move_between_tied_ranks_asks_for_fresh_ranks_first() {
+    // [1 at 0, 2 at 100, 3 at 100, 4 at 200]: nothing fits between 2 and 3.
+    let mut tied = Ranks::of(&[
+        ListState::new("a", "A", ["1", "2", "3", "4"]),
+        ListState::new("b", "B", ["5"]),
+    ]);
+    for (at, rank) in [0, 100, 100, 200].into_iter().enumerate() {
+        tied.0[0].1[at].1 = rank;
+    }
+    for mv in [
+        Move::new("5", "b", "a").before("3"),
+        Move::new("5", "b", "a").after("2"),
+    ] {
+        let placed = block_on(mv.place(&tied)).unwrap().unwrap();
+        assert_eq!(placed.rank, None, "{mv:?}");
+    }
+    // Next to a tie on its far side there is room.
+    let placed = block_on(Move::new("5", "b", "a").before("2").place(&tied))
+        .unwrap()
+        .unwrap();
+    assert_eq!(placed.rank, Some(50));
 }
 
 #[test]
