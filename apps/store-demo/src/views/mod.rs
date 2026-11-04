@@ -94,10 +94,12 @@ pub fn country_name(code: &str) -> &'static str {
     CountryCode::parse(code).map_or("Unknown", CountryCode::name)
 }
 
-/// `Ludhiana, Punjab` in India, `Dubai, United Arab Emirates` abroad.
+/// `Ludhiana, Punjab` in India, `Dubai, United Arab Emirates` abroad; a city that is
+/// a state of its own, `Delhi`, is named once.
 pub fn place_of(city: &str, state: &str, country: &str) -> String {
     match state_name(state) {
         "" | "Outside India" => place(city, country),
+        state if state == city => city.to_owned(),
         state => format!("{city}, {state}"),
     }
 }
@@ -153,6 +155,8 @@ mod tests {
         assert_eq!(money(-4_005), "-₹40.05");
         assert_eq!(place_of("Ludhiana", "PB", "IN"), "Ludhiana, Punjab");
         assert_eq!(place_of("Dubai", "EX", "AE"), "Dubai, United Arab Emirates");
+        assert_eq!(place_of("Delhi", "DL", "IN"), "Delhi");
+        assert_eq!(place_of("Chandigarh", "CH", "IN"), "Chandigarh");
         assert_eq!(units(1), "1 unit");
     }
 

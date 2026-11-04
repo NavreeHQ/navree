@@ -239,11 +239,7 @@ fn facts(view: &OrderView) -> FactGrid {
         });
     let from = FactCard::new("Ships from", city("IN", house.city))
         .icon(icons::WAREHOUSE)
-        .detail(format!(
-            "{} warehouse, {}",
-            house.city,
-            crate::data::state_name(house.state)
-        ));
+        .detail(warehouse_line(house));
     let step = Fulfilment::parse(&order.fulfilment);
     let to = FactCard::new("Ships to", city(&order.country, &order.city))
         .icon(icons::MAP_PIN)
@@ -683,9 +679,27 @@ pub fn order_page(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Eleme
         .child((order_detail(view, 2, today, false, parts), dialogs(view)))
 }
 
+/// `Ludhiana warehouse, Punjab`; a city that is a state of its own is named once,
+/// `Delhi warehouse`.
+fn warehouse_line(house: &crate::data::Warehouse) -> String {
+    match crate::data::state_name(house.state) {
+        state if state == house.city => format!("{} warehouse", house.city),
+        state => format!("{} warehouse, {state}", house.city),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_warehouse_names_its_state_unless_the_city_is_one() {
+        assert_eq!(
+            warehouse_line(warehouse("LDH")),
+            "Ludhiana warehouse, Punjab"
+        );
+        assert_eq!(warehouse_line(warehouse("DEL")), "Delhi warehouse");
+    }
 
     #[test]
     fn a_moment_reads_inside_a_sentence() {
