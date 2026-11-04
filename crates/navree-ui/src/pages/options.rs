@@ -1,7 +1,7 @@
 //! [`PagesOptions`]: where the error pages send people, what they show, and whether
 //! a development build shows more.
 
-use navree_config::Config;
+use navree_config::{Config, Environment};
 
 use super::labels::StateLabels;
 use crate::html::Href;
@@ -118,18 +118,14 @@ impl PagesOptions {
     }
 }
 
-/// The app's environment: top-level `env` (`APP_ENV`), else `app.env`; `None` when it names none.
+/// The app's environment (`APP_ENV` or `app.env`); `None` when it names none.
 fn environment(config: &Config) -> Option<String> {
-    config
-        .get_string("env")
-        .or_else(|| config.get_string("app.env"))
-        .map(|env| env.trim().to_owned())
-        .filter(|env| !env.is_empty())
+    config.environment().map(|env| env.to_string())
 }
 
-/// Whether `env` is `production`, in any case.
+/// Whether `env` takes the production behaviour (`production`, in any case).
 pub(crate) fn is_production(env: Option<&str>) -> bool {
-    env.is_some_and(|env| env.trim().eq_ignore_ascii_case("production"))
+    env.is_some_and(|env| Environment::parse(env).behaves_like_production())
 }
 
 /// Whether `address` can be a link target.

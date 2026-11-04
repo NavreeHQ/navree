@@ -260,7 +260,7 @@ impl Sso {
         let base_url = match &options.base_url {
             Some(url) => Some(url.clone()),
             None => match app.try_get::<Config>().await {
-                Some(config) => config.get_string("app.url"),
+                Some(config) => config.app_url(),
                 None => None,
             },
         }

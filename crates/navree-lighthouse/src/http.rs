@@ -78,7 +78,7 @@ impl State {
                     Some(config) => options
                         .url
                         .clone()
-                        .or_else(|| config.get_string("app.url"))
+                        .or_else(|| config.app_url())
                         .is_some_and(|url| url.starts_with("https://")),
                     None => false,
                 };

@@ -108,7 +108,7 @@ fn register(m: &mut ModuleBuilder, options: Option<MongoOptions>) {
                 if options.app_name.is_none()
                     && let Some(config) = app.try_get::<Config>().await
                 {
-                    options.app_name = config.get_string("app.name");
+                    options.app_name = config.app_name();
                 }
                 let telemetry = Telemetry::from_app(&app).await;
                 let db = MongoDb::connect_with(&options, telemetry)

@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use navree_config::Config;
+use navree_config::{Config, Environment};
 use navree_kernel::{AppContext, BoxError};
 
 use super::Migrator;
@@ -172,12 +172,10 @@ const DUMP: Spec = Spec {
     options: &[("path", Takes::Path)],
 };
 
-/// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
-pub(crate) async fn environment(ctx: &AppContext) -> Option<String> {
+/// The app's environment (`APP_ENV` or `app.env`), if it names one.
+pub(crate) async fn environment(ctx: &AppContext) -> Option<Environment> {
     let config = ctx.try_get::<Config>().await?;
-    config
-        .get_string("env")
-        .or_else(|| config.get_string("app.env"))
+    config.environment()
 }
 
 /// Refuses a destructive command in production unless `--force` is given.
@@ -186,7 +184,7 @@ async fn guard(ctx: &AppContext, spec: &Spec, parsed: &Parsed) -> Result<(), Box
         return Ok(());
     }
     match environment(ctx).await {
-        Some(env) if env.eq_ignore_ascii_case("production") => Err(format!(
+        Some(env) if env.behaves_like_production() => Err(format!(
             "{} would change or drop tables and this app runs in production (`env = \"{env}\"`); pass --force to run it anyway",
             spec.command
         )

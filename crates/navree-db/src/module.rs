@@ -358,7 +358,7 @@ async fn seed_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError
     }
     if !force
         && let Some(env) = crate::migrate::commands::environment(&ctx).await
-        && env.eq_ignore_ascii_case("production")
+        && env.behaves_like_production()
     {
         return Err(format!(
             "db:seed would write to the database and this app runs in production (`env = \"{env}\"`); pass --force to run it anyway"

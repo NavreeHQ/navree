@@ -278,11 +278,9 @@ impl Injectable for ApiDocs {
     }
 }
 
-/// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
+/// The app's environment (`APP_ENV` or `app.env`), if it names one.
 fn environment(config: &Config) -> Option<String> {
-    config
-        .get_string("env")
-        .or_else(|| config.get_string("app.env"))
+    config.environment().map(|env| env.to_string())
 }
 
 /// Builds the document at boot, so a schema conflict stops the app.

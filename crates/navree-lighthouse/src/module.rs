@@ -251,14 +251,14 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
         .release
         .clone()
         .filter(|release| !release.trim().is_empty())
-        .or_else(|| config.as_ref().and_then(|c| c.get_string("app.version")))
+        .or_else(|| config.as_ref().and_then(|c| c.app_version()))
         .unwrap_or_else(|| "unknown".to_owned());
     let base_url = match &options.url {
         Some(url) => url.trim_end_matches('/').to_owned(),
         None => {
             let app_url = config
                 .as_ref()
-                .and_then(|c| c.get_string("app.url"))
+                .and_then(|c| c.app_url())
                 .unwrap_or_default();
             format!("{}{}", app_url.trim_end_matches('/'), options.mount_path())
         }

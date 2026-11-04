@@ -7,7 +7,6 @@ use navree_contracts::Secret;
 use navree_kernel::{
     BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
-use serde::Deserialize;
 
 use crate::{AppKey, Encrypter, Hasher, HashingOptions, generate_key};
 
@@ -61,10 +60,9 @@ impl CryptoOptions {
 
     /// Reads the options from configuration:
     ///
-    /// - `app.key`, falling back to the top-level `key` (what the
-    ///   environment variable `APP_KEY` maps to); empty means not set;
-    /// - `app.previous_keys`, falling back to `previous_keys`
-    ///   (`APP_PREVIOUS_KEYS`): a list, or a comma-separated string;
+    /// - `app.key` (`APP_KEY`); empty means not set;
+    /// - `app.previous_keys` (`APP_PREVIOUS_KEYS`): a list, or a
+    ///   comma-separated string;
     /// - section `hashing` ([`HashingOptions`], every field optional).
     ///
     /// Errors name the configuration key, never its value.
@@ -77,19 +75,10 @@ impl CryptoOptions {
 
     /// The key options from configuration (hashing left at its defaults).
     fn keys_from_config(config: &Config) -> Result<Self, BoxError> {
-        let key = config
-            .get_string("app.key")
-            .or_else(|| config.get_string("key"))
-            .filter(|key| !key.trim().is_empty())
-            .map(Secret::new);
-        let previous_keys = previous_keys(config, "app.previous_keys")
-            .transpose()
-            .or_else(|| previous_keys(config, "previous_keys").transpose())
-            .transpose()?
-            .unwrap_or_default();
+        let app = config.app()?;
         Ok(Self {
-            key,
-            previous_keys,
+            key: app.key,
+            previous_keys: app.previous_keys,
             hashing: HashingOptions::default(),
         })
     }
@@ -126,39 +115,6 @@ impl CryptoOptions {
 /// Section `hashing` (absent: the defaults).
 fn hashing_from_config(config: &Config) -> Result<HashingOptions, BoxError> {
     Ok(config.section_or_default::<HashingOptions>("hashing")?)
-}
-
-/// `previous_keys` as configured: a list, or one comma-separated string.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum KeyList {
-    List(Vec<String>),
-    Joined(String),
-}
-
-/// Reads the key list at `path`; `None` when absent.
-fn previous_keys(config: &Config, path: &str) -> Result<Option<Vec<Secret<String>>>, BoxError> {
-    let list = match config.section::<Option<KeyList>>(path) {
-        Ok(list) => list,
-        Err(navree_config::ConfigError::MissingSection { .. }) => None,
-        Err(_) => {
-            return Err(
-                format!("`{path}` must be a list of keys or a comma-separated string").into(),
-            );
-        }
-    };
-    let keys = match list {
-        None => return Ok(None),
-        Some(KeyList::List(keys)) => keys,
-        Some(KeyList::Joined(joined)) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(Some(
-        keys.into_iter()
-            .map(|key| key.trim().to_owned())
-            .filter(|key| !key.is_empty())
-            .map(Secret::new)
-            .collect(),
-    ))
 }
 
 /// The global crypto module: provides and exports [`Encrypter`] and

@@ -239,7 +239,7 @@ async fn resolve_service(ctx: &AppContext, configured: &str) -> String {
         return configured.to_owned();
     }
     if let Some(config) = ctx.try_get::<navree_config::Config>().await
-        && let Some(name) = config.get_string("app.name")
+        && let Some(name) = config.app_name()
     {
         let name = sanitize(&name);
         if !name.is_empty() {

@@ -310,7 +310,7 @@ async fn pipeline(r: &Resolver, options: &MailOptions) -> Result<Pipeline, BoxEr
             None => app
                 .try_get::<Config>()
                 .await
-                .and_then(|config| config.get_string("app.url"))
+                .and_then(|config| config.app_url())
                 .filter(|url| !url.is_empty())
                 .ok_or("mail tracking needs `mail.tracking.base_url` or `app.url`")?,
         };

@@ -1,6 +1,6 @@
 //! [`ApiOptions`]: the `api` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, Environment};
 use serde::{Deserialize, Deserializer};
 
 /// OpenAPI document and docs UI settings (configuration section `api`;
@@ -93,7 +93,7 @@ impl ApiOptions {
 /// one), on in a debug build and off in a release build.
 fn on_by_default(env: Option<&str>, debug_build: bool) -> bool {
     match env.map(str::trim).filter(|env| !env.is_empty()) {
-        Some(env) => !env.eq_ignore_ascii_case("production"),
+        Some(env) => !Environment::parse(env).behaves_like_production(),
         None => debug_build,
     }
 }

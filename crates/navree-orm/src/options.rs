@@ -1,6 +1,6 @@
 //! [`OrmOptions`]: the `[orm]` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, Environment};
 use serde::{Deserialize, Serialize};
 
 /// The default number of records `model:prune` handles per chunk.
@@ -80,8 +80,9 @@ impl OrmOptions {
     /// Whether `strict` is on in environment `env` (`None` when the app
     /// names none): its own value, else on unless `env` is `production`.
     pub fn is_strict_in(&self, env: Option<&str>) -> bool {
-        self.strict
-            .unwrap_or_else(|| !env.is_some_and(|env| env.eq_ignore_ascii_case("production")))
+        self.strict.unwrap_or_else(|| {
+            !env.is_some_and(|env| Environment::parse(env).behaves_like_production())
+        })
     }
 }
 

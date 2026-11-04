@@ -133,7 +133,7 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
 }
 
 /// The temporary URL signing key: derived from the app key (the
-/// `Encrypter`'s, or `app.key` / `key` from configuration), else random.
+/// `Encrypter`'s, or `app.key` from configuration), else random.
 async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
     let app = r.app();
     if let Some(encrypter) = app.try_get::<Encrypter>().await
@@ -142,12 +142,9 @@ async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
         return Ok(key.to_vec());
     }
     if let Some(config) = app.try_get::<Config>().await
-        && let Some(raw) = ["app.key", "key"]
-            .into_iter()
-            .filter_map(|name| config.get_string(name))
-            .find(|key| !key.trim().is_empty())
+        && let Some(raw) = config.app_key()
     {
-        let key = AppKey::parse(&raw).map_err(|error| format!("`app.key`: {error}"))?;
+        let key = AppKey::parse(raw.expose()).map_err(|error| format!("`app.key`: {error}"))?;
         return Ok(Encrypter::new(key).derive_key(SIGNING_PURPOSE)?.to_vec());
     }
     tracing::warn!(

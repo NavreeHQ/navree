@@ -175,7 +175,7 @@ impl TracingOptions {
         if options.service_name.is_none() {
             options.service_name = env("OTEL_SERVICE_NAME")
                 .or_else(|| config.get_string("micro.service"))
-                .or_else(|| config.get_string("app.name"))
+                .or_else(|| config.app_name())
                 .or_else(binary_name);
         }
         options.check()?;

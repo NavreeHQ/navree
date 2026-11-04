@@ -91,7 +91,7 @@ impl Runtime {
             Some(base) => base.trim_end_matches('/').to_owned(),
             None => {
                 let app_url = match app.try_get::<Config>().await {
-                    Some(config) => config.get_string("app.url"),
+                    Some(config) => config.app_url(),
                     None => None,
                 };
                 match app_url {

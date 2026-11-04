@@ -145,7 +145,7 @@ fn register(m: &mut ModuleBuilder, options: Option<BillingOptions>) {
                     None => Arc::new(SystemClock),
                 };
                 let app_url = match app.try_get::<Config>().await {
-                    Some(config) => config.get_string("app.url"),
+                    Some(config) => config.app_url(),
                     None => None,
                 };
                 let (provider, fake) = provider(&options, &app, clock.clone()).await?;

@@ -462,7 +462,7 @@ impl fmt::Debug for Inbound {
 }
 
 /// The reply tokens of the app: a key derived from the application key
-/// (`CryptoModule`'s, or `app.key` / `key` from configuration).
+/// (`CryptoModule`'s, or `app.key` from configuration).
 pub(crate) async fn reply_tokens(r: &Resolver, ttl_days: u32) -> ReplyTokens {
     let app = r.app();
     let key = match app.try_get::<Encrypter>().await {
@@ -472,11 +472,9 @@ pub(crate) async fn reply_tokens(r: &Resolver, ttl_days: u32) -> ReplyTokens {
     let key = match key {
         Some(key) => Some(key),
         None => app.try_get::<Config>().await.and_then(|config| {
-            ["app.key", "key"]
-                .into_iter()
-                .filter_map(|name| config.get_string(name))
-                .find(|key| !key.trim().is_empty())
-                .and_then(|raw| AppKey::parse(&raw).ok())
+            config
+                .app_key()
+                .and_then(|raw| AppKey::parse(raw.expose()).ok())
                 .and_then(|key| Encrypter::new(key).derive_key(tokens::KEY_PURPOSE).ok())
         }),
     };

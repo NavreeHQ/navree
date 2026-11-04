@@ -62,7 +62,7 @@ impl Runtime {
             .filter_map(|host| normalize_host(host).ok())
             .collect();
         if let Some(config) = app.try_get::<Config>().await
-            && let Some(url) = config.get_string("app.url")
+            && let Some(url) = config.app_url()
             && let Ok(parsed) = url::Url::parse(url.trim())
             && let Some(host) = parsed.host_str().and_then(host_without_port)
             && normalize_host(&host).is_ok()

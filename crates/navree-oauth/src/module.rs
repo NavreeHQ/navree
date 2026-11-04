@@ -187,7 +187,7 @@ fn issuer(options: &OAuthOptions, config: Option<&Config>) -> String {
     if let Some(issuer) = &options.issuer {
         return issuer.clone();
     }
-    if let Some(url) = config.and_then(|config| config.get_string("app.url"))
+    if let Some(url) = config.and_then(|config| config.app_url())
         && !url.trim().is_empty()
     {
         return url;

@@ -131,17 +131,10 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
 }
 
 /// The signer for `http.signing_key`; else a key derived from the app key
-/// (`app.key`, or top-level `key`, i.e. `APP_KEY`), so signed URLs survive
-/// restarts; else a random per-process key.
+/// (`app.key`, i.e. `APP_KEY`), so signed URLs survive restarts; else a
+/// random per-process key.
 fn url_signer(options: &HttpOptions, config: Option<&Config>) -> UrlSigner {
-    let app_key = || {
-        let config = config?;
-        ["app.key", "key"]
-            .into_iter()
-            .filter_map(|key| config.get_string(key))
-            .map(|key| key.trim().to_owned())
-            .find(|key| !key.is_empty())
-    };
+    let app_key = || config?.app_key().map(|key| key.expose().clone());
     if let Some(key) = options.signing_key.as_ref().map(|k| k.expose().as_str())
         && !key.is_empty()
     {

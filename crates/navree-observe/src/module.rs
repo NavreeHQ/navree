@@ -170,7 +170,7 @@ async fn otlp_exporter(
     options: &TracingOptions,
 ) -> Result<Option<Arc<dyn SpanExport>>, BoxError> {
     let version = match app.try_get::<Config>().await {
-        Some(config) => config.get_string("app.version"),
+        Some(config) => config.app_version(),
         None => None,
     };
     let exporter = crate::otlp::OtlpExport::new(options, version)?;
