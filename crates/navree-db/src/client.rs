@@ -2,15 +2,18 @@
 //! `mysql`, `mariadb`, `sqlite3`, `mongosh`) for a connection URL, behind
 //! `navree db`.
 
+use std::fmt;
+
 use crate::DbError;
 
-use crate::options::scheme;
+use crate::options::{redact_url, scheme};
 
 /// A database client to run: the program, its arguments, and the
 /// environment that carries the password (the arguments of a running
 /// program are visible to other users of the machine; its environment is
-/// not).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// not). `Debug` masks the password, in the environment and in a URL
+/// argument.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ClientCommand {
     /// The program, found on `PATH`.
     pub program: String,
@@ -18,6 +21,25 @@ pub struct ClientCommand {
     pub args: Vec<String>,
     /// Environment variables to set for it.
     pub env: Vec<(String, String)>,
+}
+
+impl fmt::Debug for ClientCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let args: Vec<String> = self.args.iter().map(|arg| redact_url(arg)).collect();
+        let env: Vec<(&str, &str)> = self
+            .env
+            .iter()
+            .map(|(name, value)| match name.as_str() {
+                "PGPASSWORD" | "MYSQL_PWD" => (name.as_str(), "***"),
+                _ => (name.as_str(), value.as_str()),
+            })
+            .collect();
+        f.debug_struct("ClientCommand")
+            .field("program", &self.program)
+            .field("args", &args)
+            .field("env", &env)
+            .finish()
+    }
 }
 
 impl ClientCommand {
@@ -115,8 +137,9 @@ fn sqlite(url: &str) -> Result<ClientCommand, DbError> {
     })
 }
 
-/// The parts of `scheme://user:password@host:port/database?query`.
-#[derive(Debug, Default)]
+/// The parts of `scheme://user:password@host:port/database?query`. No
+/// `Debug`: it holds the password.
+#[derive(Default)]
 struct UrlParts {
     user: Option<String>,
     password: Option<String>,
@@ -221,6 +244,19 @@ mod tests {
 
     fn client(url: &str) -> ClientCommand {
         ClientCommand::for_url(url).unwrap()
+    }
+
+    #[test]
+    fn debug_never_shows_the_password() {
+        for url in [
+            "postgres://crm:pg-s3cret@db.internal:5432/crm",
+            "mysql://crm:my-s3cret@db.internal:3306/crm",
+            "mongodb://crm:mongo-s3cret@db.internal:27017/crm",
+        ] {
+            let printed = format!("{:?}", client(url));
+            assert!(!printed.contains("s3cret"), "{printed}");
+            assert!(printed.contains("db.internal"), "{printed}");
+        }
     }
 
     #[test]
