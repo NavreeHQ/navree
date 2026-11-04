@@ -5,7 +5,7 @@ description: "A Pusher-protocol WebSocket server inside your app: public, privat
 
 <Badge feature="realtime" /> When a deal moves on one person's board, everyone else looking at the board should see it move. `navree-realtime` makes that possible without an external service: it is a [Pusher](https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/)-protocol (version 7) WebSocket server that runs inside your app's own HTTP server. [pusher-js](https://github.com/pusher/pusher-js) and any other Pusher client connect to it unchanged.
 
-You get public, private and presence channels, an endpoint that authorises private channels with your own rules, broadcasting from any service, a signed relay so queue workers and the scheduler can broadcast too, and a way to end a user's subscriptions when their access changes.
+You get public, private and presence channels, an endpoint that authorises private channels with your own rules, broadcasting from any service, a signed relay so queue workers and the scheduler can broadcast too, and a way to end a user's subscriptions when their access changes. The same module is the [live hub](/docs/ui/live-hub/) of Navree UI pages: a page hears your broadcasts over server-sent events, through the same rules.
 
 <Callout type="note" title="Limits">
 
@@ -17,7 +17,7 @@ You get public, private and presence channels, an endpoint that authorises priva
 
 ## Configuration
 
-Add `RealtimeModule` next to `HttpModule`. Private and presence channels are authorised by an authenticated route, so the app also needs an authenticator, usually [`AuthModule`](/docs/security/authentication/) (which needs `CryptoModule` and `DatabaseModule`):
+Add `RealtimeModule` next to `HttpModule`. Private and presence channels are authorised by an authenticated route, so an app that uses them also needs an authenticator, usually [`AuthModule`](/docs/security/authentication/) (which needs `CryptoModule` and `DatabaseModule`). Without one, the route is not mounted and only public channels and topics can be heard:
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
@@ -53,16 +53,18 @@ relay_url = "auto"
 | `realtime.activity_timeout_secs` | `120` | Seconds of silence before the server pings a client (at least 1). |
 | `realtime.relay_url` | empty | Where other processes send their broadcasts: empty, `auto` or a URL. See [Broadcasting from workers](#broadcasting-from-workers). |
 | `realtime.backplane` | `none` | `none`, or `redis` to share broadcasts and presence between processes. Needs `realtime.secret`. See [Several serving processes](#several-serving-processes). |
+| `realtime.streams.*` | | The caps of the live streams pages listen to: `names` (32), `per_user` (16), `lifetime_secs` (3600) and `replay` (1024). See the [live hub](/docs/ui/live-hub/#backpressure-and-limits). |
 
 From the environment, lists are comma-separated: `APP_REALTIME__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. Invalid options fail the boot, naming the key and never echoing the secret. In code, use `RealtimeModule::for_root(RealtimeOptions { key, allowed_origins, ..RealtimeOptions::default() })`.
 
-`RealtimeModule` is global. It provides `Realtime` and `dyn Broadcaster` (the same instance) and mounts three routes, none of them under the API prefix:
+`RealtimeModule` is global. It provides `Realtime` and `dyn Broadcaster` (the same instance) and `Live`, the live hub's publisher, and mounts these routes, none of them under the API prefix:
 
 | Route | Access | Purpose |
 |---|---|---|
 | `GET /app/{key}` | public, origin-checked | The WebSocket. |
 | `POST /broadcasting/auth` | signed-in users | Signs private and presence subscriptions. |
 | `POST /apps/{app_id}/events` | public, signed | Receives broadcasts relayed by the app's other processes. |
+| `GET /broadcasting/stream` | public, origin-checked | The [live hub](/docs/ui/live-hub/): a server-sent event stream of topics and channels for a page. Private channels are checked here by the same authorisers. |
 
 ## Channels
 
@@ -535,6 +537,9 @@ The CRM's Playwright suite also checks the whole path in two real browsers: a de
 ## Related
 
 <LinkCards>
+  <LinkCard href="/docs/ui/live-hub/" title="Live hub">
+    Navree UI pages that hear your broadcasts and topics.
+  </LinkCard>
   <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
     Notifications broadcast on `private-users.{id}`.
   </LinkCard>

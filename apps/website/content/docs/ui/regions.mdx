@@ -47,22 +47,26 @@ Region::new("activity")
 
 ## Live from a stream
 
-`.live_from(url)` refetches the region whenever a server-sent event stream at `url` says something. With a feed (`.feed(...)`), the region asks only for the rows that are new.
+`.live_on(live)` refetches the region whenever its server-sent event stream says one of its names. With a feed (`.feed(...)`), the region asks only for the rows that are new. The stream is usually the app's [live hub](/docs/ui/live-hub/): your code nudges a topic (`live.nudge([Topic::workspace(id, "deals")])`), and every page showing it hears, scoped to the reader, from a request, a queue worker or another server.
 
 ```rust
+let stream = LiveStream::topics(["deals"]);
+
 Region::new("deals")
     .src("/fragments/deals")
-    .live_from("/events")
+    .live_on(stream.on("deals"))
 ```
+
+`.live_from(url)` follows any other stream on this site, and `.live_event(name)` picks its named events.
 
 An event is a nudge. Its payload is **never read**: nothing a stream says can put markup, a URL or a command in the page. The region fetches its own source, which is what your server meant to show. Send any data you like on the wire, or none.
 
 The stream's behaviour is the same for every region and every [DataTable](/docs/ui/data-table/) on the page:
 
 - **One connection per stream.** Regions that name the same stream share one connection.
-- **Named events.** `.live_event("deals")` listens for events sent as `event: deals` instead of the unnamed ones, so one stream can feed several regions, each its own. `open` and `error` can't be names: a browser reports the connection opening or failing under those, so a stream's own events of those names are ignored.
+- **Named events.** A region listens for its names (`stream.on("deals")`, or `.live_event("deals")` on another stream) instead of the unnamed events, so one stream can feed several regions, each its own. A region can listen for several (`stream.on("deal.42").event("clock")`). `open` and `error` can't be names: a browser reports the connection opening or failing under those, so a stream's own events of those names are ignored.
 - **Hidden pages hold nothing.** When the tab is hidden the connection closes. When it shows again the connection opens first, and once it is open each region fetches once to catch up, so nothing falls between the two. A stream that says nothing at all, or is down when the tab shows, is caught up anyway after 2.5 s, without waiting for it.
-- **Reconnecting.** A connection that fails or ends is tried again after 1 s, then 2 s, 4 s and so on up to 30 s, each with a little random delay so many pages don't return at once. **Only that timer reopens it**: a poll, a keystroke or a swap elsewhere on the page doesn't. A stream that says something and ends is tried on the same schedule, not at once. After it reconnects, each region fetches once, since events may have been lost. A connection that held for five seconds forgets its failures. A `retry:` line in the stream is not read: the browser keeps it to itself, and this schedule is the same in every browser.
+- **Reconnecting.** A connection that fails or ends is tried again after 1 s, then 2 s, 4 s and so on up to 30 s, each with a little random delay so many pages don't return at once. **Only that timer reopens it**: a poll, a keystroke or a swap elsewhere on the page doesn't. A stream that says something and ends is tried on the same schedule, not at once. After it reconnects, each region fetches once, since events may have been lost. On the [live hub](/docs/ui/live-hub/#coming-back-after-a-dropped-connection) the page sends the last id it heard instead, the hub says again only what was missed, and a region that missed nothing fetches nothing. A connection that held for five seconds forgets its failures. A `retry:` line in the stream is not read: the browser keeps it to itself, and this schedule is the same in every browser.
 - **A stream that says stop.** A stream that answers `204`, `401` or `403` is not tried again: the runtime asks once what a failed stream answers, and the dot says "Not live". That question gives up after 10 s if the stream answers nothing. Any other failure keeps the schedule above. A stream ended this way is tried again when the session changes (the reader signs in without leaving the page).
 - **One fetch at a time.** A region has one fetch of its own in flight. Events that come within 300 ms of the first one cost one fetch. Events that come while that fetch is out cost **one more** after it lands, however many there were, so a busy stream with a slow answer keeps the region current instead of starving it. A fetch is given up on after 15 s, so a server that never answers does not freeze the region: the next event fetches again.
 - **On this site only.** A stream address on another site is ignored.
@@ -72,7 +76,7 @@ The stream's behaviour is the same for every region and every [DataTable](/docs/
 
 <UiPreview example="regions/live" />
 
-The server side is any endpoint that answers with `text/event-stream`. With `navree::http`:
+With the [live hub](/docs/ui/live-hub/) there is nothing to write on the server but the nudge. Your own stream can be any endpoint that answers with `text/event-stream`. With `navree::http`:
 
 ```rust
 use std::convert::Infallible;
@@ -120,7 +124,7 @@ Region::new("revenue")
 
 ## Live tables
 
-A [DataTable](/docs/ui/data-table/) has its own `.live(every)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks, keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook. It shares the stream handling described above.
+A [DataTable](/docs/ui/data-table/) has its own `.live(every)`, `.live_on(live)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks (the [live hub](/docs/ui/live-hub/), or any other), keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook. It shares the stream handling described above.
 
 ## API
 

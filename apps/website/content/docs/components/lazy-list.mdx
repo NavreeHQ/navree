@@ -14,7 +14,7 @@ LazyList::new("conversations", "Conversations", "/inbox/rows")
     .items(first_page.iter().map(|row| LazyItem::new(row.id.to_string(), row.cursor(), draw(row))))
     .more_after(format!("/inbox?after={}", last.cursor()))
     .since(revision.to_string())
-    .live_from("/inbox/events", Some("conversations"), LazyEnd::Start)
+    .live_on(LiveStream::topics(["conversations"]).on("conversations"), LazyEnd::Start)
 ```
 
 ## Lazy is the default
@@ -54,7 +54,7 @@ A time in whole seconds ties when two things happen in the same second, and the 
 
 ## Live
 
-With `.since(revision)` and `.live_from(stream, event, end)`, the list asks what changed whenever the stream speaks. Answer with `LazyPage::changes(items, new_revision, gone_keys)`: an item the list has changes where it stands, node by node, so a focused link, a caret and the scroll stay where the reader left them; a new one goes where its cursor sorts, and a gone one goes. No item is ever in the list twice. Send only what changed. The ask carries the cursors of the window the page holds, `LazyQuery::window()`, so you can also send an item whose text moves with no write of its own, such as a clock counting down, when it reads differently than it did. An answer that holds only part of what changed says `.more(true)`, and the list asks again.
+With `.since(revision)` and `.live_on(live, end)`, the list asks what changed whenever its stream says one of its names: usually a topic on the app's [live hub](/docs/ui/live-hub/), which your code nudges when it writes (`.live_from(url, event, end)` follows any other stream). Answer with `LazyPage::changes(items, new_revision, gone_keys)`: an item the list has changes where it stands, node by node, so a focused link, a caret and the scroll stay where the reader left them; a new one goes where its cursor sorts, and a gone one goes. No item is ever in the list twice. Send only what changed. The ask carries the cursors of the window the page holds, `LazyQuery::window()`, so you can also send an item whose text moves with no write of its own, such as a clock counting down, when it reads differently than it did. An answer that holds only part of what changed says `.more(true)`, and the list asks again.
 
 ### Take the revision where it commits
 

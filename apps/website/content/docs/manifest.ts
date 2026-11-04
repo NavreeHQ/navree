@@ -229,6 +229,7 @@ export const sections: DocsSection[] = [
       "dates",
       "commands-and-ops",
       "regions",
+      "live-hub",
       "errors-and-states",
       "drag-and-drop",
       "coming-next",

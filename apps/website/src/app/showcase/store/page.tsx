@@ -165,7 +165,8 @@ const components: { name: string; href: string; use: string }[] = [
 ];
 
 const modules: { name: string; use: string }[] = [
-  { name: "HttpModule", use: "The routes, the server-sent event stream and the compressed answers" },
+  { name: "HttpModule", use: "The routes and the compressed answers" },
+  { name: "RealtimeModule", use: "The live hub: one server-sent event stream a page, nudged after each change commits" },
   { name: "DatabaseModule and the ORM", use: "Five models on SQLite, a transaction for the seed, and conditional updates so two refunds at once can't give back more than was paid" },
   { name: "UiModule", use: "The shell, the stylesheet and the scripts each page asks for" },
   { name: "Forms", use: "Submit and Validate read the refund and the restock, with the same checks with JavaScript off" },
