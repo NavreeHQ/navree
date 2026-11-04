@@ -132,8 +132,7 @@ pub fn inventory_table<'a>(
         .cell("restock", restock_cell)
         .filter_bar()
         .sticky_header()
-        .live_from("/events")
-        .live_event("inventory")
+        .live_on(crate::live::stream().on("inventory"))
         .empty(
             Empty::new("No product matches")
                 .icon(icons::PACKAGE_SEARCH)

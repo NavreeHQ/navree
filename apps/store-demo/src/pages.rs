@@ -10,7 +10,7 @@
 //! | `GET /inventory` | the products, with a restock form in each row |
 //! | `POST /inventory/{id}/restock` | adds units to a product |
 //! | `GET /fragments/...` | what the live parts fetch when the stream speaks |
-//! | `GET /events` | the server-sent event stream |
+//! | `GET /broadcasting/stream` | the live hub's stream (`RealtimeModule`): the topics `orders`, `activity`, `stats` and `inventory` |
 
 use std::sync::Arc;
 
@@ -385,7 +385,7 @@ impl Pages {
     ) -> Result<Response> {
         let (tone, title, text, status) = match outcome {
             Ok(done) => {
-                self.hub.nudge();
+                self.hub.nudge().await;
                 (ToastTone::Success, "Done", done.text, StatusCode::OK)
             }
             Err((order, refusal)) => {
@@ -529,7 +529,7 @@ impl Pages {
                 .status(StatusCode::NOT_FOUND)
                 .into_response());
         };
-        self.hub.nudge();
+        self.hub.nudge().await;
         let stock = Product::query()
             .find(&uow, id)
             .await?
@@ -582,14 +582,6 @@ impl Controller for Pages {
             RouteDef::on(Method::GET, "!/fragments/shelves", |uow: Uow| async move {
                 let (low, sellers) = shelf_lists(&uow).await?;
                 Ok::<_, AppError>(fragment("Shelves", shelves(&low, &sellers)))
-            })
-            .public(),
-            RouteDef::on(Method::GET, "!/events", {
-                let me = me.clone();
-                move |headers: HeaderMap| {
-                    let me = me.clone();
-                    async move { me.hub.stream(&headers) }
-                }
             })
             .public(),
             RouteDef::on(Method::GET, "!/orders", {
@@ -737,7 +729,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                         eprintln!("store-demo: reset failed: {error}");
                         AppError::internal(error.to_string())
                     })?;
-                    me.hub.nudge();
+                    me.hub.nudge().await;
                     Ok::<_, AppError>(StatusCode::NO_CONTENT)
                 }
             }

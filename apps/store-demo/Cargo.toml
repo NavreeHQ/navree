@@ -20,12 +20,11 @@ unsafe_code = "forbid"
 
 [dependencies]
 chrono = { workspace = true }
-futures-util = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "testing"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime", "testing"] }
 serde_json = { workspace = true }

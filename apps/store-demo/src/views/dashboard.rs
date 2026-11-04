@@ -105,8 +105,7 @@ pub fn figures(figures: &Figures) -> Grid {
 pub fn live_figures(counts: &Figures) -> Region {
     Region::new("figures")
         .src("/fragments/figures")
-        .live_from("/events")
-        .live_event("stats")
+        .live_on(crate::live::stream().on("stats"))
         .children(figures(counts))
 }
 
@@ -290,10 +289,9 @@ pub fn activity_feed(entries: &[FeedEntry], total: u64) -> Region {
         .in_region(
             "activity-region",
             "/fragments/activity",
-            "/events",
+            crate::live::stream().on("activity"),
             newest.to_string(),
         )
-        .live_event("activity")
 }
 
 /// A product that sold today: how many units, and what they brought in.
@@ -444,8 +442,7 @@ pub fn shelves(low: &[Product], sellers: &[Seller]) -> Stack {
 pub fn live_shelves(low: &[Product], sellers: &[Seller]) -> Region {
     Region::new("shelves")
         .src("/fragments/shelves")
-        .live_from("/events")
-        .live_event("stats")
+        .live_on(crate::live::stream().on("stats"))
         .children(shelves(low, sellers))
 }
 

@@ -173,8 +173,7 @@ pub fn orders_table<'a>(
         })
         .filter_bar()
         .sticky_header()
-        .live_from("/events")
-        .live_event("orders")
+        .live_on(crate::live::stream().on("orders"))
         .empty(
             Empty::new("No order matches")
                 .icon(icons::SEARCH_X)

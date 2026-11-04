@@ -1,25 +1,20 @@
 //! The shop as it runs: a simulator that places orders, moves them through the
-//! warehouse and restocks shelves while the app runs, and the server-sent event
-//! stream that tells every open page.
+//! warehouse and restocks shelves while the app runs, and the nudges that tell
+//! every open page, through the app's live hub (`RealtimeModule`).
 //!
-//! An event on the stream is only a nudge. The page never reads what it says:
-//! each live part of a page fetches its own fragment again, so the stream can't
-//! put anything in a page that the server didn't draw.
+//! A nudge says only that something changed. The page never reads it: each live
+//! part of a page fetches its own fragment again, so a nudge can't put anything
+//! in a page that the server didn't draw.
 
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use http::HeaderMap;
-use http::header::CONTENT_TYPE;
 use navree::db::{Db, DbError, ErrorKind, Executor as _};
-use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
-use navree::http::response::{IntoResponse, Response};
 use navree::orm::Model as _;
 use navree::prelude::BoxError;
-use tokio::sync::broadcast;
+use navree::realtime::{Live, Topic};
+use navree::ui::LiveStream;
 
 use crate::data::{
     self, Customer, Dice, Event, Fulfilment, Kind, Level, Line, Order, Payment, Product, STAFF,
@@ -27,12 +22,19 @@ use crate::data::{
 };
 use crate::shop;
 
-/// The names of the stream's events, one for each kind of live part.
-pub const STREAM_EVENTS: [&str; 4] = ["orders", "activity", "stats", "inventory"];
+/// The live topics, one for each kind of live part: `orders` (the table),
+/// `activity` (the feed), `stats` (the figures) and `inventory` (the products).
+/// The shop signs nobody in, so they are public.
+pub const TOPICS: [&str; 4] = ["orders", "activity", "stats", "inventory"];
+
+/// The stream every page listens on: all four topics, on one connection.
+pub fn stream() -> LiveStream {
+    LiveStream::topics(TOPICS)
+}
 
 /// What happens next, and who hears about it.
 pub struct Hub {
-    tx: broadcast::Sender<()>,
+    live: Option<Arc<Live>>,
     dice: Mutex<Dice>,
     next_event: AtomicI64,
     next_order: AtomicI64,
@@ -45,18 +47,31 @@ impl Default for Hub {
 }
 
 impl Hub {
+    /// A hub that tells nobody (the tests of the data).
     pub fn new() -> Self {
         Self {
-            tx: broadcast::channel(64).0,
+            live: None,
             dice: Mutex::new(Dice::new(2_026)),
             next_event: AtomicI64::new(1),
             next_order: AtomicI64::new(1),
         }
     }
 
-    /// Tells every open stream that the shop moved.
-    pub fn nudge(&self) {
-        let _ = self.tx.send(());
+    /// Tells the pages through the app's live hub.
+    pub fn with_live(mut self, live: Arc<Live>) -> Self {
+        self.live = Some(live);
+        self
+    }
+
+    /// Tells every open page that the shop moved: each kind of live part. In a
+    /// unit of work, once it commits.
+    pub async fn nudge(&self) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        if let Err(error) = live.nudge(TOPICS.map(Topic::public)).await {
+            eprintln!("store-demo: the pages could not be told: {error}");
+        }
     }
 
     /// The id the next event gets.
@@ -212,7 +227,7 @@ impl Hub {
             _ => None,
         };
         if event.is_some() {
-            self.nudge();
+            self.nudge().await;
         }
         Ok(event)
     }
@@ -503,37 +518,6 @@ impl Hub {
         }
     }
 
-    /// `GET /events`: the stream. Each change says it to every kind of live part:
-    /// `orders` (the table), `activity` (the feed), `stats` (the figures) and
-    /// `inventory` (the products).
-    pub fn stream(&self, headers: &HeaderMap) -> Response {
-        // The runtime asks once what a failed stream answers: say it's a stream.
-        if headers.contains_key("x-ui-probe") {
-            return ([(CONTENT_TYPE, "text/event-stream")], "").into_response();
-        }
-        let rx = self.tx.subscribe();
-        // A first comment goes out at once: Firefox reports a stream open only when
-        // its first bytes arrive.
-        let queue = VecDeque::from([Sse::default().comment("ready")]);
-        let events = futures_util::stream::unfold((rx, queue), |(mut rx, mut queue)| async move {
-            loop {
-                if let Some(event) = queue.pop_front() {
-                    return Some((Ok::<_, Infallible>(event), (rx, queue)));
-                }
-                match rx.recv().await {
-                    Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {
-                        for name in STREAM_EVENTS {
-                            queue.push_back(Sse::default().event(name).data("changed"));
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Closed) => return None,
-                }
-            }
-        });
-        SseResponse::new(events)
-            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-            .into_response()
-    }
 }
 
 /// Now, in unix seconds.
