@@ -29,15 +29,16 @@ const MAX_PAIRS: usize = 32;
 /// body that names no item, no list, a key longer than 256 bytes or a position
 /// that isn't a number gets 400.
 ///
-/// Nothing in it is trusted: [`check`](Self::check) it against the lists as they
-/// are now, in the transaction that writes the new order, after taking a lock on the
-/// lists it touches (SQLite's `BEGIN IMMEDIATE` is one; on PostgreSQL and MySQL take
-/// `SELECT ... FOR UPDATE` on a row per list, or an advisory lock), so that two
-/// moves at once are applied one after the other and the second is checked against
-/// what the first left.
+/// Nothing in it is trusted: hold it against the lists as they are now, in the
+/// transaction that writes the new order, with the lists it touches locked first,
+/// so that two moves at once are applied one after the other and the second is
+/// checked against what the first left. [`place`](Self::place) takes that lock
+/// itself, through [`RankedLists::lock`]. For lists read whole, take it with
+/// `Move::lock` (the `orm` feature), then [`check`](Self::check):
 ///
 /// ```ignore
 /// async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
+///     mv.lock(&uow, &Column::KEY).await?; // a row per list, before any read
 ///     let lists = board_lists(&uow).await?; // Vec<ListState>, read in this transaction
 ///     match mv.check(&lists) {
 ///         Ok(landing) => {
@@ -105,6 +106,22 @@ impl Move {
     pub fn at(mut self, position: u32) -> Self {
         self.position = Some(position);
         self
+    }
+
+    /// The lists the move touches, sorted and each once: the lists to lock, in the
+    /// order to lock them in, so that two moves never wait for each other.
+    ///
+    /// ```
+    /// use navree_ui::Move;
+    ///
+    /// assert_eq!(Move::new("12", "ready", "doing").lists(), ["doing", "ready"]);
+    /// assert_eq!(Move::new("12", "ready", "ready").lists(), ["ready"]);
+    /// ```
+    pub fn lists(&self) -> Vec<&str> {
+        let mut lists = vec![self.from_list.as_str(), self.to_list.as_str()];
+        lists.sort_unstable();
+        lists.dedup();
+        lists
     }
 
     /// Reads a move from a urlencoded body. The first value of each field counts;

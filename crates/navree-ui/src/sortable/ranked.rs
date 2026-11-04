@@ -27,6 +27,18 @@ pub trait RankedLists {
     /// What the store fails with.
     type Error;
 
+    /// Locks `lists` until the transaction ends, so that another move touching any
+    /// of them waits for this one and is then checked against what it left.
+    /// [`Move::place`] calls it first, before it reads anything. `lists` is sorted
+    /// and names each list once: lock them in that order, and two moves can never
+    /// wait for each other.
+    ///
+    /// With the `orm` feature, `sortable::lock_lists` does it with
+    /// `SELECT ... FOR UPDATE` on one row per list on PostgreSQL and MySQL, and
+    /// nothing on SQLite, whose write transactions (`BEGIN IMMEDIATE`) already run
+    /// one at a time.
+    fn lock(&self, lists: &[&str]) -> impl Future<Output = Result<(), Self::Error>> + Send;
+
     /// Where `key` is now, or `None` when it is gone.
     fn spot(&self, key: &str) -> impl Future<Output = Result<Option<Spot>, Self::Error>> + Send;
 
@@ -75,7 +87,9 @@ pub struct Placement {
     /// The list it is in now.
     pub to_list: String,
     /// Its new rank. `None` when its neighbours' ranks are next to each other: give
-    /// the list fresh ranks [`RANK_GAP`] apart, then place the move again.
+    /// the list fresh ranks [`RANK_GAP`] apart (with the `orm` feature,
+    /// `sortable::renew_ranks` does it in one statement), then place
+    /// the move again.
     pub rank: Option<i64>,
     /// Whether it moved at all.
     pub moved: bool,
@@ -110,18 +124,22 @@ impl Move {
     /// [`check`](Self::check): the item is where the browser saw it, its anchor is
     /// still in the list it goes to, and that list has room and takes items.
     ///
-    /// Run it in the transaction that writes the rank, after locking the lists it
-    /// touches (SQLite's `BEGIN IMMEDIATE`; `SELECT ... FOR UPDATE` on a row per list
-    /// or an advisory lock on PostgreSQL and MySQL), so two moves at once are placed
-    /// one after the other.
+    /// It first locks the lists the move touches ([`RankedLists::lock`]), so two
+    /// moves at once are placed one after the other. Run it in the transaction that
+    /// writes the rank. On MySQL, whose transactions keep reading what was there at
+    /// their first read (`REPEATABLE READ`, its default), place the move before
+    /// anything else reads in that transaction (or call `lock` yourself first), or
+    /// set `database.mysql.isolation_level = "read_committed"`.
     ///
     /// # Errors
     ///
-    /// The store's own error, when a read fails. A refusal is the inner `Err`.
+    /// The store's own error, when the lock or a read fails. A refusal is the inner
+    /// `Err`.
     pub async fn place<L: RankedLists + Sync>(
         &self,
         lists: &L,
     ) -> Result<Result<Placement, Refusal>, L::Error> {
+        lists.lock(&self.lists()).await?;
         let item = self.item.as_str();
         let Some(spot) = lists.spot(item).await? else {
             return Ok(Err(Refusal::Gone));

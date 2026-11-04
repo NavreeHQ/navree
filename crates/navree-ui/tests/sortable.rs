@@ -760,6 +760,11 @@ impl Ranks {
 impl RankedLists for Ranks {
     type Error = std::convert::Infallible;
 
+    /// Lists in memory are only this test's: nothing else moves them meanwhile.
+    async fn lock(&self, _lists: &[&str]) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
     async fn spot(&self, key: &str) -> Result<Option<Spot>, Self::Error> {
         Ok(self.0.iter().find_map(|(l, items)| {
             items.iter().find(|(k, _)| k == key).map(|(_, r)| Spot {
@@ -807,6 +812,106 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
         .build()
         .unwrap()
         .block_on(future)
+}
+
+/// Lists in memory that write down what a move asks of them, in order.
+struct Logged {
+    ranks: Ranks,
+    log: std::sync::Mutex<Vec<String>>,
+}
+
+impl Logged {
+    fn new(ranks: Ranks) -> Self {
+        Self {
+            ranks,
+            log: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    fn note(&self, line: String) {
+        self.log.lock().unwrap().push(line);
+    }
+
+    fn asked(&self) -> Vec<String> {
+        self.log.lock().unwrap().clone()
+    }
+}
+
+impl RankedLists for Logged {
+    type Error = std::convert::Infallible;
+
+    async fn lock(&self, lists: &[&str]) -> Result<(), Self::Error> {
+        self.note(format!("lock {}", lists.join(",")));
+        self.ranks.lock(lists).await
+    }
+
+    async fn spot(&self, key: &str) -> Result<Option<Spot>, Self::Error> {
+        self.note(format!("spot {key}"));
+        self.ranks.spot(key).await
+    }
+
+    async fn list(&self, key: &str, item: &str) -> Result<Option<(ListState, u64)>, Self::Error> {
+        self.note(format!("list {key}"));
+        self.ranks.list(key, item).await
+    }
+
+    async fn beside(
+        &self,
+        list: &str,
+        rank: i64,
+        lower: bool,
+        item: &str,
+    ) -> Result<Option<i64>, Self::Error> {
+        self.note(format!("beside {list}"));
+        self.ranks.beside(list, rank, lower, item).await
+    }
+
+    async fn nth(&self, list: &str, index: u64, item: &str) -> Result<Option<i64>, Self::Error> {
+        self.note(format!("nth {list}"));
+        self.ranks.nth(list, index, item).await
+    }
+
+    async fn last(&self, list: &str, item: &str) -> Result<Option<i64>, Self::Error> {
+        self.note(format!("last {list}"));
+        self.ranks.last(list, item).await
+    }
+}
+
+#[test]
+fn a_move_names_the_lists_it_touches_sorted_and_once() {
+    assert_eq!(Move::new("3", "ready", "doing").lists(), ["doing", "ready"]);
+    assert_eq!(Move::new("3", "doing", "ready").lists(), ["doing", "ready"]);
+    assert_eq!(Move::new("3", "ready", "ready").lists(), ["ready"]);
+}
+
+#[test]
+fn a_placed_move_locks_its_lists_in_order_before_it_reads_anything() {
+    let asked = |mv: Move| {
+        let store = Logged::new(Ranks::of(&lists()));
+        let _ = block_on(mv.place(&store)).unwrap();
+        store.asked()
+    };
+    // Between two lists: both, in key order, whichever way the move goes, and first.
+    for mv in [
+        Move::new("1", "ready", "doing").before("5"),
+        Move::new("4", "doing", "ready").after("1"),
+    ] {
+        let log = asked(mv);
+        assert_eq!(log[0], "lock doing,ready", "{log:?}");
+        assert_eq!(log.iter().filter(|l| l.starts_with("lock")).count(), 1, "{log:?}");
+    }
+    // Within a list: that list, once.
+    assert_eq!(asked(Move::new("3", "ready", "ready").at(1))[0], "lock ready");
+    // A move that is refused locks first too: what refuses it is read under the lock.
+    for mv in [
+        Move::new("1", "ready", "doing"),
+        Move::new("4", "ready", "ready"),
+        Move::new("99", "ready", "ready"),
+        Move::new("1", "ready", "nowhere"),
+    ] {
+        let log = asked(mv);
+        assert!(log[0].starts_with("lock "), "{log:?}");
+    }
 }
 
 #[test]
