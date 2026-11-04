@@ -74,8 +74,10 @@ export type Layout = {
   c: Float32Array;
   /** Picture x and y (for the landing time), column, row or flag. */
   d: Float32Array;
-  /** How many glyphs to draw at each step down in quality: all; without the dust; with half the dust and rain gone too. */
+  /** How many glyphs to draw at each step down in quality: all; without the dust; with half the opening's rain gone too. */
   steps: number[];
+  /** How many glyphs can still show once the opening is over (they come first: the opening's rain and dust follow). */
+  essential: number;
   /** The mask the picture's shader reads: red the screen's glass, green the edge rain zones. */
   mask: HTMLCanvasElement;
   /** The light: the middle of the screen, in the world. */
@@ -367,6 +369,7 @@ export async function buildLayout(
     c: pack("c"),
     d: pack("d"),
     steps: [count, essential.length + rain.length, essential.length + Math.round(rain.length / 2)],
+    essential: essential.length,
     mask,
     light: toWorld(LIGHT.x, LIGHT.y, LIGHT.z),
     typing,

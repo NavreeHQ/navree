@@ -22,9 +22,10 @@ import { BEATS } from "./scene/timeline";
  *   once per visit; a click on the picture skips it;
  * - it stops completely off screen and in a hidden tab;
  * - the camera follows the pointer and the scroll a little;
- * - it draws at most 60 frames a second (30 on phones and small CPUs), at
- *   most 1.5 device pixels per CSS pixel, and draws less when frames come
- *   late;
+ * - it draws at most 60 frames a second during the opening and while the
+ *   pointer or the scroll moves the camera, 30 otherwise (and always on
+ *   phones and small CPUs), at most 1.5 device pixels per CSS pixel, and
+ *   draws less when frames come late;
  * - the button pauses and plays it; a paused visitor stays paused on the
  *   next visit (and the scene isn't even loaded until they press play).
  *
@@ -127,7 +128,10 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
     let interrupted = false;
     // Frame budget, and stepping down when frames come late.
     const coarse = window.matchMedia("(pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 4) < 6;
-    let interval = 1000 / (coarse ? 30 : 60);
+    // The fastest it draws while something moves; settled and still, it draws at CALM.
+    let fastest = 1000 / (coarse ? 30 : 60);
+    const CALM = 1000 / 30;
+    let lastInput = -Infinity;
     let ratio = Math.min(window.devicePixelRatio || 1, MAX_RATIO);
     let step = 0;
     let late = 0;
@@ -145,6 +149,7 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
       raf = 0;
       if (!scene || !running()) return;
       raf = requestAnimationFrame(frame);
+      const interval = t < BEATS.settled || now - lastInput < 1500 ? fastest : Math.max(fastest, CALM);
       if (now - lastDraw < interval - 2) return;
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       // Late frames: after a second of them, draw less (pixels first, then glyphs, then frames).
@@ -175,8 +180,8 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
         scene.resize(size.width, size.height, ratio);
       } else if (scene.setStep(step + 1)) {
         step++;
-      } else if (interval < 30) {
-        interval = 1000 / 30;
+      } else {
+        fastest = CALM;
       }
     };
 
@@ -288,9 +293,14 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
     };
     const onPointer = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
+      lastInput = performance.now();
       const cy = size.top + size.height / 2 - window.scrollY;
       target.x = Math.max(-1, Math.min(1, (e.clientX / window.innerWidth) * 2 - 1)) * SWAY.x;
       target.y = Math.max(-1, Math.min(1, -(e.clientY - cy) / (window.innerHeight / 2))) * SWAY.y;
+    };
+    // Scrolling moves the camera too, so it draws at full rate while the page scrolls.
+    const onScroll = () => {
+      lastInput = performance.now();
     };
     const onResize = () => {
       measure();
@@ -316,6 +326,7 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
     document.addEventListener("visibilitychange", sync);
     motion.addEventListener("change", onMotion);
     window.addEventListener("pointermove", onPointer, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
     wrapper.addEventListener("click", skip);
     if (capture) {
       onScreen = true;
@@ -328,6 +339,7 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
       document.removeEventListener("visibilitychange", sync);
       motion.removeEventListener("change", onMotion);
       window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("scroll", onScroll);
       wrapper.removeEventListener("click", skip);
       stopForGood();
       api.current = null;

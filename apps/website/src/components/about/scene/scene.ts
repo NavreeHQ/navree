@@ -239,6 +239,7 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
   await yieldToMain();
 
   let disposed = false;
+  let stepCount = layout.count;
   return {
     get glyphs() {
       return glyphGeometry.instanceCount;
@@ -266,6 +267,8 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
       glyphUniforms.uRain.value = lv.rain;
       glyphUniforms.uPulseIndex.value = pulseIndex + 1;
       glyphUniforms.uRound.value = u;
+      // Once the opening is over, its rain and dust are gone: draw only what can still show.
+      glyphGeometry.instanceCount = t < BEATS.settled ? stepCount : Math.min(stepCount, layout.essential);
       glyphUniforms.uCodeShown.value = shown;
 
       const cam = cameraAt(t);
@@ -284,7 +287,7 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
     setStep(step) {
       const count = layout.steps[step];
       if (count === undefined) return false;
-      glyphGeometry.instanceCount = count;
+      stepCount = count;
       return true;
     },
     dispose() {
