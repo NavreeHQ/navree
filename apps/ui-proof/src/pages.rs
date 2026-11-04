@@ -7,12 +7,16 @@
 //! | `/pages/status/{code}` | a page route that ends in that status |
 //! | `/pages/user` | a page that needs a signed-in user |
 //! | `/pages/leak`, `/pages/panic` | a failure with secrets in it |
-//! | `/pages/regions` | regions whose fetches end in each status, and one that polls |
+//! | `/pages/regions` | regions whose fetches end in each status; ones that poll a page that is gone, a server that keeps failing (500), one that asks to wait (429 with `Retry-After`) and a shut door that opens; a feed that gets 403; a region cut off, and one that gets an HTTP error that is not a state |
 //! | `/pages/actions` | forms whose posts end in each status |
 //! | `/pages/rows` | a table with locked, missing and empty rows |
 //! | `/sign-in` | the sign-in page: it reads `next` and goes back there |
+//! | `/pages/frag/{code}`, `/pages/frag/{name}` | the fragments the regions fetch: a status, or `ok`, `flaky`, `offline`, `poll500`, `poll429`, `door`, `feed403`, `json500` |
+//! | `/pages/status/{code}`, `/pages/user`, `/pages/leak`, `/pages/panic`, `/pages/data` | page routes that end in an error (`/pages/data` is `json_only`) |
+//! | `/pages/act/{code}` | the posts of `/pages/actions` |
 //!
-//! `GET /pages/hits` says how many times each fragment was asked for.
+//! `GET /pages/hits` says how many times each fragment was asked for; `POST /pages/reset` clears
+//! the counts and the fragments that change as they are asked.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -75,6 +79,8 @@ impl Authenticator for CookieAuth {
 static HITS: Mutex<BTreeMap<String, u64>> = Mutex::new(BTreeMap::new());
 /// How many times the flaky fragment has been asked for.
 static FLAKY: AtomicU64 = AtomicU64::new(0);
+/// How many times the door has been asked for.
+static DOOR: AtomicU64 = AtomicU64::new(0);
 
 fn hit(name: &str) -> u64 {
     let mut hits = HITS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -326,6 +332,69 @@ fn regions(shell: &AppShell) -> AppPage {
                 ),
             ),
             section(
+                "region-poll500",
+                "A polled region whose server keeps failing",
+                Card::titled("Poll 500").body(
+                    Region::new("r-poll500")
+                        .src("/pages/frag/poll500")
+                        .poll(Duration::from_millis(300))
+                        .children(Text::new("Waiting.")),
+                ),
+            ),
+            section(
+                "region-poll429",
+                "A polled region that is asked to wait",
+                Card::titled("Poll 429").body(
+                    Region::new("r-poll429")
+                        .src("/pages/frag/poll429")
+                        .poll(Duration::from_millis(300))
+                        .children(Text::new("Waiting.")),
+                ),
+            ),
+            section(
+                "region-door",
+                "A polled region that is shut once, then opens",
+                Card::titled("Door").body(
+                    Region::new("r-door")
+                        .src("/pages/frag/door")
+                        .poll(Duration::from_millis(300))
+                        .children(Text::new("Waiting.")),
+                ),
+            ),
+            section(
+                "region-feed403",
+                "A polled feed that gets a 403",
+                Card::titled("Feed").body(
+                    Region::new("r-feed403")
+                        .src("/pages/frag/feed403")
+                        .poll(Duration::from_millis(300))
+                        .feed("feed-rows", "0", None)
+                        .children(
+                            el("ul")
+                                .attr("id", "feed-rows")
+                                .child(el("li").child("A row")),
+                        ),
+                ),
+            ),
+            section(
+                "region-http",
+                "Two regions that get an HTTP error that is not a state",
+                Grid::cols(2).gap(4).children((
+                    Card::titled("Offline wording").body(
+                        Region::new("r-http-offline")
+                            .src("/pages/frag/json500")
+                            .lazy()
+                            .when_offline(),
+                    ),
+                    Card::titled("Any failure").body(
+                        Region::new("r-http-any")
+                            .src("/pages/frag/json500")
+                            .lazy()
+                            .when_failed(State::of(StateKind::Failed)),
+                    ),
+                )),
+            ),
+            section(
                 "region-ok",
                 "A region that works",
                 Card::titled("Fine").body(Region::new("r-ok").src("/pages/frag/ok").lazy()),
@@ -374,7 +443,7 @@ struct SignInForm {
 }
 
 fn sign_in(shell: &AppShell, next: Option<&str>, ended: bool) -> AppPage {
-    let kept = next.and_then(ReturnTo::parse);
+    let kept = next.and_then(|raw| ReturnTo::parse_for(raw, "/sign-in"));
     let form = el("form")
         .attr("method", "post")
         .attr("action", "/sign-in")
@@ -490,6 +559,40 @@ impl Controller for StatePages {
                 fragment(Alert::new(AlertTone::Success).title("This region loaded."))
             })
             .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/poll500", || async {
+                hit("poll500");
+                Err::<Response, _>(AppError::internal(SECRET))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/poll429", || async {
+                hit("poll429");
+                Err::<Response, _>(AppError::too_many_requests(Duration::from_secs(4)))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/door", || async {
+                hit("door");
+                if DOOR.fetch_add(1, Ordering::SeqCst) < 1 {
+                    return Err(AppError::forbidden());
+                }
+                Ok(fragment(
+                    Region::new("r-door")
+                        .src("/pages/frag/door")
+                        .poll(Duration::from_millis(300))
+                        .children(Alert::new(AlertTone::Success).title("The door is open.")),
+                ))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/feed403", || async {
+                hit("feed403");
+                Err::<Response, _>(AppError::forbidden())
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/json500", || async {
+                hit("json500");
+                Err::<Response, _>(AppError::internal(SECRET))
+            })
+            .public()
+            .json_only(),
             RouteDef::on(Method::GET, "!/pages/frag/offline", || async {
                 hit("offline");
                 fragment(Alert::new(AlertTone::Success).title("This region is back."))
@@ -528,6 +631,7 @@ impl Controller for StatePages {
             RouteDef::on(Method::POST, "!/pages/reset", || async {
                 HITS.lock().unwrap_or_else(PoisonError::into_inner).clear();
                 FLAKY.store(0, Ordering::SeqCst);
+                DOOR.store(0, Ordering::SeqCst);
                 StatusCode::NO_CONTENT
             })
             .public(),
@@ -551,8 +655,12 @@ impl Controller for StatePages {
                         .filter(char::is_ascii_alphanumeric)
                         .take(16)
                         .collect();
-                    let mut reply = Reply::redirect(ReturnTo::resolve(form.next.as_deref(), "/"))
-                        .into_response();
+                    let mut reply = Reply::redirect(ReturnTo::resolve_for(
+                        form.next.as_deref(),
+                        "/sign-in",
+                        "/",
+                    ))
+                    .into_response();
                     if let Ok(value) = http::HeaderValue::from_str(&cookie(&name, 3600)) {
                         reply.headers_mut().append(http::header::SET_COOKIE, value);
                     }

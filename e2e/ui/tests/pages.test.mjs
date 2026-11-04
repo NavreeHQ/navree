@@ -526,6 +526,7 @@ for (const name of NAMES) {
         await page.goto(BASE + "/pages/regions");
         const region = page.locator("#r-offline");
         await until(() => region.evaluate((el) => el.hasAttribute("data-ui-failed")), "the region to be marked failed");
+        assert.equal(await region.getAttribute("data-ui-failed"), "0", "nothing answered");
         const failed = region.locator("[data-slot=region-failed]");
         assert.equal(await failed.isVisible(), true);
         assert.match(await failed.innerText(), /You're offline/);
@@ -648,6 +649,204 @@ for (const name of NAMES) {
         assert.deepEqual(await axe(page), []);
         await shot(page, "sign-in-notice-390");
         await page.done();
+      });
+    });
+
+    // ---- Polled regions, boosted links to a missing page, the copy button ----------------
+
+    describe("polling and the rest of the review", () => {
+      /** How many times the server has been asked for `name`. */
+      const asked = async (name) => (await hits())[name] || 0;
+
+      /** Watches what the announcer is told from now on. */
+      const listen = (page) =>
+        page.evaluate(() => {
+          window.__said = [];
+          const watch = (el) => new MutationObserver(() => window.__said.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+          const live = document.querySelector("[data-slot=announcer]");
+          if (live) watch(live);
+          else
+            new MutationObserver((records, me) => {
+              const el = document.querySelector("[data-slot=announcer]");
+              if (el) {
+                me.disconnect();
+                window.__said.push(el.textContent);
+                watch(el);
+              }
+            }).observe(document.body, { childList: true });
+        });
+
+      test("a polled region whose server keeps failing backs off and says it once", async () => {
+        await reset();
+        const page = await open("/pages/regions", { user: true });
+        await page.waitForSelector("#r-poll500 [data-slot=state]");
+        // The other regions of the page tell their first answers in the same round; this is about the next.
+        await sleep(1000);
+        await listen(page);
+        const before = await asked("poll500");
+        await sleep(3000);
+        const fetches = (await asked("poll500")) - before;
+        // Every 300 ms would be ten; each failure doubles the wait.
+        assert.ok(fetches <= 4, `${fetches} fetches in 3 s`);
+        assert.deepEqual(await page.evaluate(() => window.__said), [], "the same answer is not said again");
+        // The page and the state are still there, and Try again still works by hand.
+        assert.equal(await page.locator("#r-poll500 [data-slot=state][data-kind=failed]").count(), 1);
+        const by = await asked("poll500");
+        await page.locator("#r-poll500").getByRole("button", { name: "Try again" }).click();
+        await until(async () => (await asked("poll500")) > by, "a fetch by hand");
+        await page.done();
+      });
+
+      test("a region that is asked to wait waits as long as Retry-After says", async () => {
+        await reset();
+        const page = await open("/pages/regions", { user: true });
+        await page.waitForSelector("#r-poll429 [data-slot=state][data-kind=rate-limited]");
+        const before = await asked("poll429");
+        await sleep(3000);
+        assert.equal((await asked("poll429")) - before, 0, "nothing for the 4 seconds it asked for");
+        await page.done();
+      });
+
+      test("a shut door stops its poll, and opens a poll again when the page is shown again", async () => {
+        await reset();
+        const page = await open("/pages/regions", { user: true });
+        await page.waitForSelector("#r-door [data-slot=state][data-kind=forbidden]");
+        assert.equal(await page.locator("#r-door").evaluate((el) => el.hasAttribute("data-ui-poll")), false, "stopped");
+        const shut = await asked("door");
+        await sleep(1200);
+        assert.equal(await asked("door"), shut, "no more knocking");
+        // The same page again, by a boosted link: the region is drawn again, with its poll.
+        await page.evaluate(() => {
+          window.__kept = "same document";
+          const a = document.createElement("a");
+          a.href = "/pages/regions";
+          a.textContent = "again";
+          document.querySelector("main").append(a);
+          a.click();
+        });
+        await until(async () => (await asked("door")) > shut, "the poll to start again");
+        await until(() => page.locator("#r-door [data-slot=alert]").count(), "the door to open");
+        assert.equal(await page.evaluate(() => window.__kept), "same document", "no page load");
+        const open_ = await asked("door");
+        await until(async () => (await asked("door")) > open_, "it to keep polling while it is open");
+        await page.done();
+      });
+
+      test("a polled feed that gets a 403 stops, and no error is added as a row", async () => {
+        await reset();
+        const page = await open("/pages/regions", { user: true });
+        await until(async () => (await asked("feed403")) >= 1, "the feed's first fetch");
+        await sleep(300);
+        const shut = await asked("feed403");
+        await sleep(1500);
+        assert.equal(await asked("feed403"), shut, "it stopped");
+        assert.equal(await page.locator("#feed-rows > li").count(), 1, "no state among the rows");
+        assert.equal(await page.locator("#r-feed403 [data-slot=state]").count(), 0);
+        assert.equal(await page.locator("#r-feed403").evaluate((el) => el.hasAttribute("data-ui-poll")), false);
+        await page.done();
+      });
+
+      test("an HTTP error that is not a state is not being offline", async () => {
+        await reset();
+        const page = await open("/pages/regions", { user: true });
+        await until(() => page.locator("#r-http-any").evaluate((el) => el.hasAttribute("data-ui-failed")), "both regions to fail");
+        assert.equal(await page.locator("#r-http-any").getAttribute("data-ui-failed"), "500");
+        assert.equal(await page.locator("#r-http-offline").getAttribute("data-ui-failed"), "500");
+        assert.equal(await page.locator("#r-http-offline [data-slot=region-failed]").isVisible(), false, "the offline words are for no connection");
+        assert.equal(await page.locator("#r-http-any [data-slot=region-failed]").isVisible(), true);
+        assert.match(await page.locator("#r-http-any [data-slot=region-failed]").innerText(), /Something went wrong/);
+        await page.done();
+      });
+
+      test("a region cut off is marked as having no answer", async () => {
+        await reset();
+        const context = await browser.newContext();
+        contexts.push(context);
+        const page = await context.newPage();
+        await context.addCookies([{ name: "proof_user", value: "ada", url: BASE }]);
+        await page.route("**/pages/frag/offline", (route) => route.abort());
+        await page.goto(BASE + "/pages/regions");
+        await until(() => page.locator("#r-offline").evaluate((el) => el.hasAttribute("data-ui-failed")), "the mark");
+        assert.equal(await page.locator("#r-offline").getAttribute("data-ui-failed"), "0");
+      });
+
+      for (const user of [false, true]) {
+        test(`a boosted link to a missing page is one request (${user ? "signed in" : "guest"})`, async () => {
+          const page = await open("/pages", { user });
+          const asking = [];
+          page.on("request", (r) => {
+            if (r.url().includes("/no/such/page")) asking.push(`${r.method()} ${r.resourceType()}`);
+          });
+          await page.evaluate(() => {
+            window.__kept = "same document";
+            const a = document.createElement("a");
+            a.href = "/no/such/page";
+            a.textContent = "missing";
+            document.querySelector("main").append(a);
+            a.click();
+          });
+          await page.waitForURL(BASE + "/no/such/page");
+          await until(async () => (await page.title()) === "Page not found", "the title");
+          await sleep(500);
+          assert.equal(asking.length, 1, `requests: ${asking}`);
+          assert.equal(await page.evaluate(() => window.__kept), "same document", "shown in place, not loaded");
+          assert.equal(await page.locator("[data-slot=sidebar]").count(), user ? 1 : 0);
+          await page.done();
+        });
+      }
+
+      test("the button that copies the reference is there only when a script can run it", async () => {
+        const off = await open("/pages/status/500", { expect: 500, user: true, javaScriptEnabled: false });
+        assert.equal(await off.locator("[data-slot=state-reference] [data-slot=button]").isVisible(), false);
+        assert.equal(await off.locator("[data-slot=state-reference] code").isVisible(), true, "the reference itself is");
+        await off.done();
+        const on = await open("/pages/status/500", { expect: 500, user: true });
+        assert.equal(await on.locator("[data-slot=state-reference] [data-slot=button]").isVisible(), true);
+        await on.done();
+      });
+
+      test("polling polite: a live table and a feed behind a server that says 403 or 500", async () => {
+        const server = await start();
+        try {
+          const page_ = (inner) => fixturePage(inner);
+          server.routes.set("/", (req, res) => {
+            server.html(
+              res,
+              page_(
+                `<main><div id="t" data-ui-region data-ui-table data-ui-src="/shut" data-ui-poll="200"><div data-slot="table-alert" hidden><span data-slot="alert-text"></span></div></div>` +
+                  `<div id="t500" data-ui-region data-ui-table data-ui-src="/fail" data-ui-poll="200"></div>` +
+                  `<div id="f" data-ui-region data-ui-src="/feed" data-ui-feed="rows" data-ui-after="0" data-ui-poll="200"><ul id="rows"><li>one</li></ul></div></main>`,
+              ),
+            );
+          });
+          server.routes.set("/shut", (req, res) => {
+            res.writeHead(403, { "content-type": "text/html", "x-navree-state": "403" });
+            res.end("<p>no</p>");
+          });
+          server.routes.set("/fail", (req, res) => {
+            res.writeHead(500, { "content-type": "text/html", "x-navree-state": "500" });
+            res.end("<p>broken</p>");
+          });
+          server.routes.set("/feed", (req, res) => {
+            res.writeHead(403, { "content-type": "text/html", "x-navree-state": "403" });
+            res.end(`<li id="intruder">a state</li>`);
+          });
+          const context = await browser.newContext();
+          contexts.push(context);
+          const page = await context.newPage();
+          await page.goto(server.origin + "/");
+          await sleep(3000);
+          const count = (path) => server.log.filter((entry) => entry.path.startsWith(path)).length;
+          assert.ok(count("/shut") <= 2, `a live table behind a 403 asked ${count("/shut")} times`);
+          assert.ok(count("/feed") <= 2, `a feed behind a 403 asked ${count("/feed")} times`);
+          assert.ok(count("/fail") <= 5, `a live table behind a 500 asked ${count("/fail")} times (one every 200 ms would be 15)`);
+          assert.equal(await page.locator("#intruder").count(), 0, "an error is not a row");
+          const feedAsk = server.log.find((entry) => entry.path.startsWith("/feed"));
+          assert.equal(feedAsk.headers["x-navree-region"], "f", "a feed names itself too");
+          assert.equal(feedAsk.headers["x-navree-from"], "/");
+        } finally {
+          server.close();
+        }
       });
     });
 
