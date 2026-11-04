@@ -75,7 +75,7 @@ jobs:
       - run: cargo build --release -p campaign-demo
       - run: npm ci
         working-directory: e2e/ui
-      - run: npx playwright install --with-deps chromium firefox
+      - run: npx playwright install --with-deps chromium firefox webkit
         working-directory: e2e/ui
       - name: Run the suites against the proof app
         run: |
