@@ -46,8 +46,8 @@ function Screen({ id, title, caption }: { id: string; title: string; caption: Re
 /** The figures measured on the running app. */
 const numbers = [
   { value: "20,000", label: "cards", text: "with 40,000 comments and 92,000 lines of history, written at start in about 2 s" },
-  { value: "7.6 KB", label: "first page, brotli", text: "157 KB of HTML: the first 20 cards of each column" },
-  { value: "5.2 KB", label: "sortable module, brotli", text: "loaded only by pages that have a sortable" },
+  { value: "7.6 KB", label: "first page, brotli", text: "158 KB of HTML: the first 20 cards of each column" },
+  { value: "5.5 KB", label: "sortable module, brotli", text: "loaded only by pages that have a sortable" },
   { value: "22,651", label: "DOM nodes", text: "after scrolling two columns of thousands to their cap of 200 cards each" },
 ];
 
