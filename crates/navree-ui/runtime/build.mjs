@@ -106,6 +106,10 @@ const FILES = [
   ["keys", "js", "text/javascript; charset=utf-8", await js("keys.js")],
   ["lazy", "js", "text/javascript; charset=utf-8", await js("lazy.js")],
   ["sortable", "js", "text/javascript; charset=utf-8", await js("sortable.js")],
+  ["upload", "js", "text/javascript; charset=utf-8", await js("upload.js")],
+  ["otp", "js", "text/javascript; charset=utf-8", await js("otp.js")],
+  ["carousel", "js", "text/javascript; charset=utf-8", await js("carousel.js")],
+  ["menubar", "js", "text/javascript; charset=utf-8", await js("menubar.js")],
   ["phone", "js", "text/javascript; charset=utf-8", await js("phone.js", { PHONE_DATA_FILE }), "phone"],
   // The numbering plans the phone module formats with, written by
   // crates/navree-phone/tools/metadata.mjs.
@@ -114,6 +118,13 @@ const FILES = [
   ["speculation", "json", "application/speculationrules+json", speculation],
   // The theme builder's styles, linked only where the builder is drawn.
   ["theme-builder", "css", "text/css; charset=utf-8", await extraCss(["theme-builder-tokens.css", "theme-builder.css"])],
+  // The styles of Markdown and of a code block, linked only where one is drawn.
+  ["markdown", "css", "text/css; charset=utf-8", await extraCss(["markdown.css"])],
+  // A module's own styles are named after its script, with `-styles`, and share its bit.
+  ["upload-styles", "css", "text/css; charset=utf-8", await extraCss(["upload.css"])],
+  ["otp-styles", "css", "text/css; charset=utf-8", await extraCss(["otp.css"])],
+  ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
+  ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
 ];
 
 /** Files kept byte for byte: no compression gain, or already compressed. */

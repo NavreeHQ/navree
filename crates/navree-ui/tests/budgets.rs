@@ -274,6 +274,41 @@ fn a_page_with_a_slider_a_tree_or_a_toolbar_loads_its_module_and_nothing_else() 
     assert!(!stepper.to_html().contains("<script"));
 }
 
+#[test]
+fn the_upload_module_is_at_most_3_kb_gzip() {
+    assert!(size("upload") <= 3 * 1024, "{}", size("upload"));
+}
+
+#[test]
+fn the_otp_module_is_at_most_1_kb_gzip() {
+    assert!(size("otp") <= 1024, "{}", size("otp"));
+}
+
+#[test]
+fn the_carousel_module_is_at_most_2_kb_gzip() {
+    assert!(size("carousel") <= 2 * 1024, "{}", size("carousel"));
+}
+
+#[test]
+fn the_menubar_module_is_at_most_3_kb_gzip() {
+    assert!(size("menubar") <= 3 * 1024, "{}", size("menubar"));
+}
+
+/// Each of these components links a stylesheet of its own instead of growing the one every
+/// page loads, so the one stays where it was.
+#[test]
+fn the_modules_styles_are_at_most_3_kb_gzip_each() {
+    for name in [
+        "markdown",
+        "upload-styles",
+        "otp-styles",
+        "carousel-styles",
+        "menubar-styles",
+    ] {
+        assert!(size(name) <= 3 * 1024, "{name}: {}", size(name));
+    }
+}
+
 /// The bits are one each, so a page asks for exactly what it names.
 #[test]
 fn no_two_modules_share_a_bit() {
@@ -289,6 +324,15 @@ fn no_two_modules_share_a_bit() {
         Uses::SLIDER,
         Uses::TREE,
         Uses::TOOLBAR,
+        Uses::SORTABLE,
+        Uses::SPLIT,
+        Uses::KEYS,
+        Uses::LAZY,
+        Uses::MARKDOWN,
+        Uses::UPLOAD,
+        Uses::OTP,
+        Uses::CAROUSEL,
+        Uses::MENUBAR,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

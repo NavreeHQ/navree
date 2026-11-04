@@ -260,6 +260,21 @@ impl Uses {
     /// The lazy module: lists that load pages by cursor as they are read, keep the
     /// reader's place, drop what is far off screen, and merge live changes.
     pub const LAZY: Self = Self(1 << 18);
+    /// The markdown stylesheet: no script, only the styles of rendered Markdown and of
+    /// a highlighted code block, linked on a page that draws one.
+    pub const MARKDOWN: Self = Self(1 << 19);
+    /// The upload module: a drop area, a list of the chosen files, progress over a
+    /// plain form post, and large files sent in chunks. Its stylesheet comes with it.
+    pub const UPLOAD: Self = Self(1 << 20);
+    /// The one-time code module: digits only, a pasted code cleaned, and a form sent
+    /// when the code is whole. Its stylesheet comes with it.
+    pub const OTP: Self = Self(1 << 21);
+    /// The carousel module: the buttons, the slide pickers, the keys of the pattern and
+    /// automatic rotation that stops for the reader. Its stylesheet comes with it.
+    pub const CAROUSEL: Self = Self(1 << 22);
+    /// The menu bar module: context menus, menu bars and the navigation menu, on the
+    /// dropdown menu's own popups. Its stylesheet comes with it.
+    pub const MENUBAR: Self = Self(1 << 23);
 
     /// Both sets together.
     #[must_use]
@@ -841,6 +856,41 @@ mod tests {
         }
         assert_eq!(Uses::SPLIT.0 & Uses::KEYS.0, 0);
         assert_eq!((Uses::SPLIT.0 | Uses::KEYS.0) & Uses::LAZY.0, 0);
+    }
+
+    #[test]
+    fn the_markdown_upload_code_carousel_and_menu_bar_modules_have_bits_of_their_own() {
+        let older = [
+            Uses::CORE,
+            Uses::SIDEBAR,
+            Uses::OVERLAY,
+            Uses::TABLE,
+            Uses::SELECT,
+            Uses::MENUS,
+            Uses::LIVE,
+            Uses::DATES,
+            Uses::PHONE,
+            Uses::THEME_BUILDER,
+            Uses::SLIDER,
+            Uses::TREE,
+            Uses::TOOLBAR,
+            Uses::SORTABLE,
+            Uses::SPLIT,
+            Uses::KEYS,
+            Uses::LAZY,
+        ];
+        let newer = [
+            Uses::MARKDOWN,
+            Uses::UPLOAD,
+            Uses::OTP,
+            Uses::CAROUSEL,
+            Uses::MENUBAR,
+        ];
+        for (at, module) in newer.iter().enumerate() {
+            assert_eq!(module.0.count_ones(), 1);
+            assert!(older.iter().all(|other| other.0 & module.0 == 0));
+            assert!(newer[at + 1..].iter().all(|other| other.0 & module.0 == 0));
+        }
     }
 
     #[test]

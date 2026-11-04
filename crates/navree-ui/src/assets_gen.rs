@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "fe2d0c589ce9";
+pub const BUILD: &str = "3e3b8eeb7121";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-f11bb7046e31.js";
@@ -18,7 +18,7 @@ pub const OVERLAY_URL: &str = "/_navree/ui/overlay-6bca78094f80.js";
 pub const TABLE_URL: &str = "/_navree/ui/table-89cd45739353.js";
 
 /// The URL of `live.js`.
-pub const LIVE_URL: &str = "/_navree/ui/live-d20e376033ec.js";
+pub const LIVE_URL: &str = "/_navree/ui/live-f4befda157ae.js";
 
 /// The URL of `select.js`.
 pub const SELECT_URL: &str = "/_navree/ui/select-2b8575f514e5.js";
@@ -50,6 +50,18 @@ pub const LAZY_URL: &str = "/_navree/ui/lazy-ba1f5afc8f4f.js";
 /// The URL of `sortable.js`.
 pub const SORTABLE_URL: &str = "/_navree/ui/sortable-93a3a8e67f6a.js";
 
+/// The URL of `upload.js`.
+pub const UPLOAD_URL: &str = "/_navree/ui/upload-cbf29ce48422.js";
+
+/// The URL of `otp.js`.
+pub const OTP_URL: &str = "/_navree/ui/otp-cbf29ce48422.js";
+
+/// The URL of `carousel.js`.
+pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-cbf29ce48422.js";
+
+/// The URL of `menubar.js`.
+pub const MENUBAR_URL: &str = "/_navree/ui/menubar-cbf29ce48422.js";
+
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
 pub const PHONE_URL: &str = "/_navree/ui/phone-60d54e29c4fa.js";
@@ -66,6 +78,21 @@ pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 
 /// The URL of `theme-builder.css`.
 pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-19b5a39e758f.css";
+
+/// The URL of `markdown.css`.
+pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-cbf29ce48422.css";
+
+/// The URL of `upload-styles.css`.
+pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-cbf29ce48422.css";
+
+/// The URL of `otp-styles.css`.
+pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-cbf29ce48422.css";
+
+/// The URL of `carousel-styles.css`.
+pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-cbf29ce48422.css";
+
+/// The URL of `menubar-styles.css`.
+pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-cbf29ce48422.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -117,7 +144,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "live",
         ext: "js",
-        hash: "d20e376033ec",
+        hash: "f4befda157ae",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/live.js"),
         gzip: Some(include_bytes!("../dist/live.js.gz")),
@@ -213,6 +240,42 @@ pub static FILES: &[Asset] = &[
         gzip: Some(include_bytes!("../dist/sortable.js.gz")),
         brotli: Some(include_bytes!("../dist/sortable.js.br")),
     },
+    Asset {
+        name: "upload",
+        ext: "js",
+        hash: "cbf29ce48422",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/upload.js"),
+        gzip: Some(include_bytes!("../dist/upload.js.gz")),
+        brotli: Some(include_bytes!("../dist/upload.js.br")),
+    },
+    Asset {
+        name: "otp",
+        ext: "js",
+        hash: "cbf29ce48422",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/otp.js"),
+        gzip: Some(include_bytes!("../dist/otp.js.gz")),
+        brotli: Some(include_bytes!("../dist/otp.js.br")),
+    },
+    Asset {
+        name: "carousel",
+        ext: "js",
+        hash: "cbf29ce48422",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/carousel.js"),
+        gzip: Some(include_bytes!("../dist/carousel.js.gz")),
+        brotli: Some(include_bytes!("../dist/carousel.js.br")),
+    },
+    Asset {
+        name: "menubar",
+        ext: "js",
+        hash: "cbf29ce48422",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/menubar.js"),
+        gzip: Some(include_bytes!("../dist/menubar.js.gz")),
+        brotli: Some(include_bytes!("../dist/menubar.js.br")),
+    },
     #[cfg(feature = "phone")]
     Asset {
         name: "phone",
@@ -259,6 +322,51 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/theme-builder.css"),
         gzip: Some(include_bytes!("../dist/theme-builder.css.gz")),
         brotli: Some(include_bytes!("../dist/theme-builder.css.br")),
+    },
+    Asset {
+        name: "markdown",
+        ext: "css",
+        hash: "cbf29ce48422",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/markdown.css"),
+        gzip: Some(include_bytes!("../dist/markdown.css.gz")),
+        brotli: Some(include_bytes!("../dist/markdown.css.br")),
+    },
+    Asset {
+        name: "upload-styles",
+        ext: "css",
+        hash: "cbf29ce48422",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/upload-styles.css"),
+        gzip: Some(include_bytes!("../dist/upload-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/upload-styles.css.br")),
+    },
+    Asset {
+        name: "otp-styles",
+        ext: "css",
+        hash: "cbf29ce48422",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/otp-styles.css"),
+        gzip: Some(include_bytes!("../dist/otp-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/otp-styles.css.br")),
+    },
+    Asset {
+        name: "carousel-styles",
+        ext: "css",
+        hash: "cbf29ce48422",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/carousel-styles.css"),
+        gzip: Some(include_bytes!("../dist/carousel-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/carousel-styles.css.br")),
+    },
+    Asset {
+        name: "menubar-styles",
+        ext: "css",
+        hash: "cbf29ce48422",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/menubar-styles.css"),
+        gzip: Some(include_bytes!("../dist/menubar-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/menubar-styles.css.br")),
     },
     Asset {
         name: "geist",

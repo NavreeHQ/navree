@@ -21,12 +21,17 @@ orm = ["dep:navree-orm", "dep:navree-db", "dep:base64"]
 ## as you type and E.164, on navree-phone. The facade turns it on when both
 ## `ui` and `validation-phone` are on.
 phone = ["dep:navree-phone", "navree-validation/phone"]
+## `Uploads`: the files an `Upload` sends, received through navree-storage with the
+## size, count and type limits checked on the server, and large files put together
+## from chunks. The facade turns it on when both `ui` and `storage` are on.
+storage = ["dep:navree-storage"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
+navree-storage = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -40,6 +45,8 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-ui-macros = { workspace = true }
 navree-validation = { workspace = true }
+# `Markdown`: CommonMark read into events, written back through the toolkit's one escaping path.
+pulldown-cmark = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

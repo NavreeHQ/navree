@@ -541,6 +541,10 @@ fn stylesheet() -> String {
         .collect();
     files.sort();
     files.push(root.join("extra/theme-builder.css"));
+    // The modules that link a stylesheet of their own draw colours too.
+    for name in ["markdown", "upload", "otp", "carousel", "menubar"] {
+        files.push(root.join(format!("extra/{name}.css")));
+    }
     files
         .iter()
         .map(|path| std::fs::read_to_string(path).unwrap().replace("\r\n", "\n"))

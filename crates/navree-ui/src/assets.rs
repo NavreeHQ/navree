@@ -81,6 +81,10 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::KEYS, KEYS_URL),
         (Uses::LAZY, LAZY_URL),
         (Uses::SORTABLE, SORTABLE_URL),
+        (Uses::UPLOAD, UPLOAD_URL),
+        (Uses::OTP, OTP_URL),
+        (Uses::CAROUSEL, CAROUSEL_URL),
+        (Uses::MENUBAR, MENUBAR_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]
@@ -96,7 +100,15 @@ pub fn stylesheets(uses: Uses) -> impl Iterator<Item = &'static str> {
 
 /// Every module stylesheet, with the bit of [`Uses`] that links it.
 fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
-    [(Uses::THEME_BUILDER, THEME_BUILDER_URL)].into_iter()
+    [
+        (Uses::THEME_BUILDER, THEME_BUILDER_URL),
+        (Uses::MARKDOWN, MARKDOWN_URL),
+        (Uses::UPLOAD, UPLOAD_STYLES_URL),
+        (Uses::OTP, OTP_STYLES_URL),
+        (Uses::CAROUSEL, CAROUSEL_STYLES_URL),
+        (Uses::MENUBAR, MENUBAR_STYLES_URL),
+    ]
+    .into_iter()
 }
 
 /// Finds the file behind `core-3f9a1c07b2de.js`: the file, and whether the
@@ -187,14 +199,29 @@ mod tests {
     use super::*;
 
     /// Two modules on one bit would each load the other's file: every module that
-    /// loads a script or links a stylesheet has a bit of its own.
+    /// loads a script or links a stylesheet has a bit of its own. A module with both
+    /// uses one bit for the two, and then the stylesheet is named after the script.
     #[test]
     fn every_module_has_a_bit_of_its_own() {
-        let mut taken = 0_u32;
-        for (bit, url) in modules().chain(sheet_modules()) {
-            assert_eq!(bit.0.count_ones(), 1, "{url} is loaded by one bit");
-            assert_eq!(taken & bit.0, 0, "{url} shares its bit with another module");
-            taken |= bit.0;
+        let lists: [Vec<(Uses, &str)>; 2] = [modules().collect(), sheet_modules().collect()];
+        for list in &lists {
+            let mut taken = 0_u32;
+            for (bit, url) in list {
+                assert_eq!(bit.0.count_ones(), 1, "{url} is loaded by one bit");
+                assert_eq!(taken & bit.0, 0, "{url} shares its bit with another module");
+                taken |= bit.0;
+            }
+        }
+        for (bit, script) in &lists[0] {
+            for (sheet_bit, sheet) in &lists[1] {
+                if bit == sheet_bit {
+                    let stem = script.rsplit_once('-').map_or(*script, |(stem, _)| stem);
+                    assert!(
+                        sheet.starts_with(&format!("{stem}-")),
+                        "{script} and {sheet} share a bit but not a name"
+                    );
+                }
+            }
         }
     }
 

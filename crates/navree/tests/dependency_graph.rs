@@ -203,8 +203,9 @@ const HIERARCHY: &[Rule] = &[
     // depends on the UI), and the sortable's moves run in a unit of work of
     // navree-db's (optional, with the ORM), which it begins at READ COMMITTED.
     // Its phone input (optional feature `phone`) reads and writes numbers with
-    // navree-phone.
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone"]),
+    // navree-phone. Its uploads (optional feature `storage`) are received through
+    // navree-storage's disks and upload rules.
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
@@ -479,7 +480,9 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-orm", "navree-storage", "navree-queue", "navree-pdf",
     ]),
     // Helm: the admin panel over navree-orm models (their queries, access
-    // filters and subjects). navree-crypto seals its session cookie; with
+    // filters and subjects). Markdown fields are written by navree-ui's
+    // Markdown renderer, so one set of rules decides what a link or raw HTML may be.
+    // navree-crypto seals its session cookie; with
     // its `settings` feature, the Settings screens edit navree-settings'
     // types (organizations and workspaces named by navree-workspace). Metric
     // results are kept in a navree-bounded cache.
@@ -487,7 +490,7 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
-        "navree-settings", "navree-orm",
+        "navree-settings", "navree-orm", "navree-ui",
     ]),
     // Workflows: durable runs stored through navree-db, woken by
     // navree-events listeners and the `workflows:tick` schedule
