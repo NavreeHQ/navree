@@ -58,9 +58,9 @@ async fn save(Form(fields): Form<SaveFields>) -> Reply {
 | Corners | Sharp (0 and 0 px), Small (2 and 4), Default (4 and 6), Round (6 and 8), Rounder (8 and 12) |
 | Density | Compact, Default, Comfortable: controls and space at 7/8, 1 and 9/8; text keeps its size |
 | Font | Geist, which ships with the toolkit, or the System, Humanist, Geometric or Serif stack, which download nothing |
-| Every colour | Each of the 28 colour tokens, light and dark, as `#rgb`, `#rrggbb` or `rgb(r, g, b)` |
+| Every colour | Each of the 31 colour tokens, light and dark, as `#rgb`, `#rrggbb` or `rgb(r, g, b)` |
 
-An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on every surface; the focus ring reaches 3:1 on every surface. On hover the accent moves away from its text, so the text reads better on hover, never worse.
+An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on every surface; the focus ring reaches 3:1 on every surface. On hover the accent moves away from its text, so the text reads better on hover, never worse. The chart colours stay the base theme's when you pick an accent: they are one set, chosen so neighbouring series stay apart for colour-blind readers, and an accent dropped into it could repeat a hue. Set them by hand to change them.
 
 ## Export
 

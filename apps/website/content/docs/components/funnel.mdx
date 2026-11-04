@@ -18,7 +18,7 @@ Funnel::new("Campaign funnel")
     .stage(Stage::new("Converted", 96).tone(Tone::Success))
 ```
 
-It is an ordered list, so it reads in order without the picture. The stages step through one hue, faintest first, so the order is also in the color. `Stage::tone(Tone)` colors a stage by what it means, such as the last as a success.
+It is an ordered list, so it reads in order without the picture. The stages step through one hue, faintest first, so the order is also in the color; the faintest still reaches 2:1 on the page or card under it. `Stage::tone(Tone)` colors a stage by what it means, such as the last as a success.
 
 ## When to use it
 

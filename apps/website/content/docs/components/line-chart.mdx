@@ -61,6 +61,8 @@ The labels go into the summary too: "Marked: Holiday, Reminder sent, Target (80)
 
 `Series::tone(Tone)` colors a series by what it means: `Tone::Success`, `Tone::Warning`, `Tone::Danger` or `Tone::Info`. The legend adds the tone's icon, so the meaning never rests on color alone. `Series::color(slot)` pins a series to one of the eight categorical colors, so it keeps its color when other series come and go.
 
+The eight colors are the theme's `--chart-1` to `--chart-8`. Every built-in theme uses the same eight in the same order, and a test in the crate measures them in light and dark: each reaches 3:1 on the page, on cards and in the tooltip, and each stays apart from the next, the eighth from the first too, for readers with protanopia or deuteranopia.
+
 <UiPreview example="line-chart/toggles" />
 
 ## More than eight series

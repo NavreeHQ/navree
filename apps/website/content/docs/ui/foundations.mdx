@@ -21,11 +21,11 @@ Every token has a light value and a dark one, and a page shows one or the other 
 | `ring` | The focus ring |
 | `success`, `amber`, `danger`, `info` | Good news, warnings, failures, information |
 | `violet`, `cyan`, `rose` | Tones for labels |
-| `chart-1` to `chart-5`, `bar` | Chart series, and neutral bars |
+| `chart-1` to `chart-8`, `bar` | Chart series, in the order series take them, and neutral bars |
 
 - **Green is for one thing at a time:** the primary action of a view, the focus ring, and good news (a won deal, a rising figure). Navigation, selection and hover use the ink steps, never green.
 - **Amber warns, red fails or destroys.** A destructive button and a failed alert are red; a warning is amber.
-- **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1 in both modes of every built-in theme, and the focus ring and chart colours reach 3:1, checked by a test in the crate and measured again in real browsers.
+- **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1 in both modes of every built-in theme, and the focus ring and chart colours reach 3:1, checked by a test in the crate and measured again in real browsers. The chart colours are also measured as a set: each stays apart from the next for readers with protanopia or deuteranopia and for everyone else, sits in one band of lightness, and has enough colour not to read as grey.
 
 <UiPreview example="foundations/colour" />
 
