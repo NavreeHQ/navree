@@ -212,6 +212,8 @@ fn build() -> Vec<Pair> {
             add(T(fg), Tint(Token::Accent, 30, surface), text);
         }
     }
+    // An internal note in a conversation: the text on the panel with 9% amber mixed in.
+    add(T(Token::Fg), Mix(Token::Amber, 9, Token::Ink1), text);
     // A tone's icon in its tinted circle (activity, timeline, fact cards).
     for tone in TONES.into_iter().chain([Token::AccentText, Token::Fg3]) {
         for percent in [14, 15, 16] {
