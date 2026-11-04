@@ -1,32 +1,35 @@
-//! The board as it changes: the event stream that tells every open page, and a
-//! teammate who moves a card now and then while the app runs.
+//! The board as it changes: the nudge that tells every open page, through the
+//! app's live hub (`RealtimeModule`), and a teammate who moves a card now and then
+//! while the app runs.
 //!
-//! An event on the stream is only a nudge. The page never reads what it says: the
-//! board fetches itself again, so the stream can't put anything in a page that the
-//! server didn't draw.
+//! A nudge says only that the board changed. The page never reads it: the board
+//! fetches itself again, so a nudge can't put anything in a page that the server
+//! didn't draw.
 
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use http::HeaderMap;
-use http::header::CONTENT_TYPE;
 use navree::db::{Db, Executor as _};
-use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
-use navree::http::response::{IntoResponse, Response};
 use navree::orm::Model as _;
 use navree::prelude::BoxError;
-use navree::ui::{Move, sortable};
-use tokio::sync::broadcast;
+use navree::realtime::{Live, Topic};
+use navree::ui::{LiveStream, Move, sortable};
 
 use crate::data::{self, Activity, Card, Check, Column, ColumnRow, Comment, Person};
 use crate::store;
 
+/// The live topic of the board. The board signs nobody in, so it is public.
+pub const TOPIC: &str = "board";
+
+/// The stream a board page listens on.
+pub fn stream() -> LiveStream {
+    LiveStream::topics([TOPIC])
+}
+
 /// Who hears about changes, and the teammate's dice.
 pub struct Hub {
-    tx: broadcast::Sender<()>,
+    live: Option<Arc<Live>>,
     dice: Mutex<u64>,
     /// How long the next moves wait before they are answered, for the browser tests.
     pub delay_ms: AtomicU64,
@@ -39,17 +42,29 @@ impl Default for Hub {
 }
 
 impl Hub {
+    /// A hub that tells nobody (the tests of the data).
     pub fn new() -> Self {
         Self {
-            tx: broadcast::channel(64).0,
+            live: None,
             dice: Mutex::new(0x2026_1104),
             delay_ms: AtomicU64::new(0),
         }
     }
 
-    /// Tells every open stream that the board changed.
-    pub fn nudge(&self) {
-        let _ = self.tx.send(());
+    /// Tells the pages through the app's live hub.
+    pub fn with_live(mut self, live: Arc<Live>) -> Self {
+        self.live = Some(live);
+        self
+    }
+
+    /// Tells every open board that it changed. In a unit of work, once it commits.
+    pub async fn nudge(&self) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        if let Err(error) = live.nudge([Topic::public(TOPIC)]).await {
+            eprintln!("board-demo: the pages could not be told: {error}");
+        }
     }
 
     /// A number below `n`, from a small fixed sequence, so a run can be replayed.
@@ -151,7 +166,7 @@ impl Hub {
         })
         .await?;
         if moved && nudge {
-            self.nudge();
+            self.nudge().await;
         }
         Ok(moved)
     }
@@ -194,33 +209,6 @@ impl Hub {
         }
     }
 
-    /// `GET /events`: the stream. Each change of the board is one event.
-    pub fn stream(&self, headers: &HeaderMap) -> Response {
-        // The runtime asks once what a failed stream answers: say it's a stream.
-        if headers.contains_key("x-ui-probe") {
-            return ([(CONTENT_TYPE, "text/event-stream")], "").into_response();
-        }
-        let rx = self.tx.subscribe();
-        // A first comment goes out at once: Firefox reports a stream open only when
-        // its first bytes arrive.
-        let queue = VecDeque::from([Sse::default().comment("ready")]);
-        let events = futures_util::stream::unfold((rx, queue), |(mut rx, mut queue)| async move {
-            loop {
-                if let Some(event) = queue.pop_front() {
-                    return Some((Ok::<_, Infallible>(event), (rx, queue)));
-                }
-                match rx.recv().await {
-                    Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {
-                        queue.push_back(Sse::default().data("changed"));
-                    }
-                    Err(broadcast::error::RecvError::Closed) => return None,
-                }
-            }
-        });
-        SseResponse::new(events)
-            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-            .into_response()
-    }
 }
 
 /// Now, in unix seconds.

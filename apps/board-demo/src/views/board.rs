@@ -316,7 +316,7 @@ pub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveD
     pairs.extend(shown_pairs(data));
     Region::new(REGION)
         .src(format!("/fragments/board{}", query(&pairs)))
-        .live_from("/events")
+        .live_on(crate::live::stream().on(crate::live::TOPIC))
         .children(Stack::gap(2).children((live_state(), columns(data, viewer, filters, today))))
 }
 

@@ -15,7 +15,7 @@
 //! | `POST /checks/{id}/done` | a line ticked or not |
 //! | `POST /cards/{id}/comments` | a comment |
 //! | `POST /as/{id}` | shows the board as someone else: a lead, or a member who can't close cards (a member until then) |
-//! | `GET /events` | the server-sent event stream |
+//! | `GET /broadcasting/stream` | the live hub's stream (`RealtimeModule`): the topic `board` |
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -240,7 +240,7 @@ impl Pages {
         match no_column(placed).map_err(failed)? {
             Ok(placement) => {
                 if placement.moved {
-                    self.hub.nudge();
+                    self.hub.nudge().await;
                 }
                 Ok(mv.done(page))
             }
@@ -291,7 +291,7 @@ impl Pages {
         };
         let reply = match placed {
             Some(Ok(_)) => {
-                self.hub.nudge();
+                self.hub.nudge().await;
                 mv.done(page)
                     .toast(ToastTone::Success, format!("Moved to {to}."))
             }
@@ -445,7 +445,7 @@ impl Pages {
         Ok(match outcome {
             Ok(moved) => {
                 if moved {
-                    self.hub.nudge();
+                    self.hub.nudge().await;
                 }
                 mv.done(page)
             }
@@ -472,7 +472,7 @@ impl Pages {
             )
             .await?;
         }
-        self.hub.nudge();
+        self.hub.nudge().await;
         let Some(card) = store::card(&uow, found.card_id).await? else {
             return Ok(Reply::ops_or_redirect("/"));
         };
@@ -504,7 +504,7 @@ impl Pages {
             }
         };
         store::comment(&uow, id, viewer.id, now(), comment.body.trim().to_owned()).await?;
-        self.hub.nudge();
+        self.hub.nudge().await;
         let card = store::card(&uow, id).await?.unwrap_or(card);
         // Replaced, not morphed: a morph keeps what was typed, and the box should empty.
         Ok(Reply::ops_or_redirect(format!("/cards/{id}"))
@@ -670,14 +670,6 @@ impl Controller for Pages {
                 }
             })
             .public(),
-            RouteDef::on(Method::GET, "!/events", {
-                let me = me.clone();
-                move |headers: HeaderMap| {
-                    let me = me.clone();
-                    async move { me.hub.stream(&headers) }
-                }
-            })
-            .public(),
             RouteDef::on(
                 Method::POST,
                 "!/sign-out",
@@ -746,7 +738,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 let me = me.clone();
                 async move {
                     me.hub.seed(&me.db, now()).await.map_err(failed)?;
-                    me.hub.nudge();
+                    me.hub.nudge().await;
                     Ok::<_, AppError>(StatusCode::NO_CONTENT)
                 }
             }
