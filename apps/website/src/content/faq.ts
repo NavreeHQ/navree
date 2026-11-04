@@ -70,14 +70,39 @@ export const homeFaq: FaqSet = {
   ],
 };
 
-/** What the Navree UI questions are computed from: the catalogue's groups and the "Coming next" table, read where they are owned. */
+/** What the Navree UI questions are computed from: the catalogue's groups, the "Coming next" table and the example apps, read where they are owned. */
 export type UiFaqInput = {
   groups: { title: string; components: unknown[] }[];
   roadmap: { text: string; status: string }[];
+  /** The apps of `src/app/ui/showcases.ts`, in order. */
+  apps: { name: string; kind: string; ui: string; hardest: string }[];
 };
 
+/** `a, b and c`; `a, x; b, y; and c, z` when the items hold commas themselves. */
+function andList(items: string[]): string {
+  if (items.length < 2) return items.join("");
+  const semi = items.some((item) => item.includes(","));
+  return `${items.slice(0, -1).join(semi ? "; " : ", ")}${semi ? "; and " : " and "}${items.at(-1)}`;
+}
+/** `A store's back office` as `a store's back office`. */
+const inSentence = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+/** "What can I build with Navree UI?", answered from the apps themselves. */
+function whatYouCanBuild(apps: UiFaqInput["apps"]): string {
+  const drawn = apps.filter((app) => app.ui === "Navree UI");
+  const others = apps.filter((app) => app.ui !== "Navree UI");
+  // One app gets its hardest fact; several are named, so the answer stays under 80 words.
+  const named = drawn.map((app) => `${app.name}, ${inSentence(app.kind)}${drawn.length === 1 ? ` (${app.hardest})` : ""}`);
+  return [
+    "Whole products: tables over lakhs of rows, drawers over their pages, forms the server checks again and live feeds.",
+    `The repository has ${drawn.length === 1 ? "an example app" : `${drawn.length} example apps`} drawn with Navree UI: ${andList(named)}.`,
+    ...others.map((app) => `${app.name} is ${inSentence(app.kind)} on a Navree API, with ${app.ui.replace(" · ", " and ")} front ends.`),
+    "Each one runs on your machine, with its code in the repository.",
+  ].join(" ");
+}
+
 /** Navree UI: the counts come from the catalogue and the roadmap that own them. */
-export function uiFaq({ groups, roadmap }: UiFaqInput): FaqSet {
+export function uiFaq({ groups, roadmap, apps }: UiFaqInput): FaqSet {
   const count = groups.reduce((n, g) => n + g.components.length, 0);
   const names = groups.map((g) => g.title.toLowerCase());
   const by = (status: string) => roadmap.filter((item) => item.status === status).length;
@@ -91,6 +116,11 @@ export function uiFaq({ groups, roadmap }: UiFaqInput): FaqSet {
         answer:
           "Navree UI is the screen toolkit in Navree (`navree::ui`, the `ui` feature, on by default). You write typed Rust components, the server renders them to HTML in the same binary as your API, and one stylesheet and a small runtime make them interactive. A strict content security policy applies to every page.",
         link: { href: "/docs/ui/overview/", label: "Read how it works" },
+      },
+      {
+        question: "What can I build with Navree UI?",
+        answer: whatYouCanBuild(apps),
+        link: { href: "/showcase/", label: "See every example app" },
       },
       {
         question: "How many components does Navree UI have?",

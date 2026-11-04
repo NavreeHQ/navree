@@ -46,7 +46,7 @@ export function keyFactsMarkdown(): string {
 /** The site's main pages that are not docs pages, with one line each, for `llms.txt`. */
 export const mainPages: { title: string; path: string; summary: string }[] = [
   { title: "Home", path: "/", summary: `What ${site.name} is, what comes in the box, and how to start.` },
-  { title: "Navree UI", path: "/ui/", summary: "Typed Rust components rendered on the server: how it works, every component with a live preview, what comes next." },
+  { title: "Navree UI", path: "/ui/", summary: "Typed Rust components rendered on the server: a store's back office built with them and the code of its hardest parts, every component with a live preview, how it works and what comes next." },
   { title: "Navree for AI", path: "/ai/", summary: "Agent skills, the Navigator MCP server and docs for models, and the AI SDK for your product." },
   { title: "Architecture", path: "/architecture/", summary: "The system shapes you can build with one framework, from a modular monolith to microservices; how each draws its screens; and the rules every Navree app follows, each with its test." },
   { title: "Ecosystem", path: "/ecosystem/", summary: "The first-party packages and tools: monitoring, admin, queues, debugging, deployment and more." },
