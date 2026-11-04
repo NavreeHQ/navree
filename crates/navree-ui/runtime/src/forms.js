@@ -98,11 +98,22 @@ async function send(form, submitter) {
   const one = sendOf(form, submitter);
   sending.set(one, said(form, submitter));
   const before = active();
-  let answered = false;
+  let answered = false, status = 0;
   /** Whether the answer left this page as it was: ops that don't lead away. */
   let kept = false;
   /** Whether the user was told the save failed. */
   let told = false;
+  /** Whether the send was said to be over, and whether a failure is this runtime's to tell. */
+  let said = false, mine = true;
+  /**
+   * Says the send is over. A module that cancels the event tells the user what went
+   * wrong itself: a sortable asks the server where the item is first.
+   * @param {boolean} ok
+   */
+  const over = (ok) => {
+    said = true;
+    return emit(new CustomEvent("ui:sent", { cancelable: true, detail: { form, ok, status } }));
+  };
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
@@ -121,19 +132,20 @@ async function send(form, submitter) {
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
     const response = await (method === "GET" ? fetch(url, init) : whileWriting(() => fetch(url, init)));
     answered = true;
+    status = response.status;
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
-    emit(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
+    mine = over(response.ok);
     // Errors take focus only for a save the user asked for, and only if the user is
     // still where the save left them: never from a field they moved to, or typed on in.
     if (type.startsWith(OPS)) kept = !applyEnvelope(await response.json(), { focus: !!submitter && active() === before });
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url, keep: response.url === location.href });
-    else if (!response.ok) toast("danger", "That didn't work. Try again.");
+    else if (!response.ok && mine) toast("danger", "That didn't work. Try again.");
     startRegions();
   } catch {
     pending(form, submitter, false);
-    emit(new CustomEvent("ui:sent", { detail: { form, ok: false } }));
-    toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
+    if (!said) mine = over(false);
+    if (mine) toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
     told = true;
   } finally {
     sending.delete(one);

@@ -3,9 +3,11 @@
 //
 // A drop moves the item in the page at once, fills in the item's own move form and
 // posts it through the core runtime, one move at a time for each sortable, so the
-// server sees them in the order they were made. A refusal, a failure or no answer
-// in time puts the item back where the server last had it. The server has the
-// last word: here a list's limit and its refusal only show while dragging.
+// server sees them in the order they were made. A refusal puts the item back where
+// the server last had it. A failure, or no answer in time, may still have landed:
+// the lists are drawn again from the server before anything is said, and only a
+// move that didn't land is. The server has the last word: here a list's limit and
+// its refusal only show while dragging.
 //
 // Pointer: a press that moves 4 px with a mouse or a pen starts a drag. On touch the
 // handle starts one at once, and anywhere else on the item a press held still for
@@ -202,6 +204,14 @@ function put(list, item, before) {
   if (focused && !holds(item, active())) /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
 }
 
+/** Puts `item` back at `place`, sliding there, and says the counts again. @param {Element} root @param {HTMLElement} item @param {Place} place */
+function back(root, item, place) {
+  const before = measure(root);
+  restore(root, item, place);
+  slide(before);
+  count(root);
+}
+
 /** Puts `item` back at `place`, if its list is still there. @param {Element} root @param {HTMLElement} item @param {Place} place */
 function restore(root, item, place) {
   const list = listsOf(root).find((l) => listKey(l) === place.list);
@@ -335,12 +345,63 @@ function settle(root, item, ok) {
     waiting.add(region);
     recheck.set(region, { root, key: keyOf(item) });
   }
-  const before = measure(root);
-  restore(root, item, record.back);
-  slide(before);
-  count(root);
+  back(root, item, record.back);
   say(root, fill(words(root).returned, about(item)));
 }
+
+/**
+ * A move that got no answer, or a failure from the server, may have landed all the same.
+ * Nothing is said yet: the item stays where it was dropped, and once nothing else in its
+ * region is moving the region is drawn again from the server. Then the item is where the
+ * server has it: where it was dropped means the move landed, and nothing went wrong. A
+ * move that didn't land, or a region that can't be fetched, is said, and the latter puts
+ * the item back.
+ * @param {Element} root @param {HTMLElement} item
+ */
+function ask(root, item) {
+  const record = records.get(item);
+  const region = closest(root, "[data-ui-region]");
+  if (!record) return;
+  if (!region) {
+    settle(root, item, false);
+    tell(root, "offline");
+    return;
+  }
+  const q = queueOf(root);
+  // Its later moves were made from where this one put it: they go, and are said to.
+  const more = q.waiting.some((m) => m.item === item);
+  q.waiting = q.waiting.filter((m) => m.item !== item);
+  records.delete(item);
+  if (drag?.item === item) end();
+  asks.set(region, [...(asks.get(region) || []), { root, key: keyOf(item), to: record.to[0], from: record.back, more }]);
+  waiting.add(region);
+}
+
+/** @typedef {{root: Element, key: string, to: Place, from: Place, more: boolean}} Ask a move to learn the fate of: where it went, and where it came from */
+
+/** Judges `batch`, the moves `region` was drawn again for: drawn, unless it couldn't be fetched. @param {Element} region @param {Ask[]} batch */
+function judge(region, batch) {
+  const drawn = asking.get(region) && !has(region, "data-ui-failed");
+  asking.delete(region);
+  for (const { root, key, to, from, more } of batch) {
+    // A drawing keeps the lists' elements: the item is found in them, where the server has it.
+    const item = root.isConnected && itemsOfRoot(root).find((i) => keyOf(i) === key);
+    if (!item) continue;
+    unset(item, "data-pending");
+    const at = placeOf(item);
+    if (drawn && !more && at.list === to.list && (at.next === to.next || at.prev === to.prev)) {
+      say(root, fill(words(root).settled, about(item)));
+      continue;
+    }
+    if (!drawn) back(root, item, from);
+    say(root, fill(words(root).returned, about(item)));
+    tell(root, drawn ? "failed" : "offline");
+  }
+  idle();
+}
+
+/** Shows the toast of `root`'s words `which`, through the core runtime. @param {Element} root @param {string} which */
+const tell = (root, which) => fire(document, new CustomEvent("ui:toast", { detail: { tone: "danger", text: words(root)[which] } }));
 
 /* Redraws: a region that follows a stream waits while a drag or a move is under way, and
    what a redraw moves slides into place. */
@@ -349,9 +410,13 @@ function settle(root, item, ok) {
 const recheck = new Map();
 /** Regions whose redraw waits for the sortables in them. @type {Set<Element>} */
 const waiting = new Set();
+/** The moves each region is to be drawn again for, to learn whether they landed. @type {Map<Element, Ask[]>} */
+const asks = new Map();
+/** The regions being drawn again for `asks`, and whether the server's drawing has come. @type {Map<Element, boolean>} */
+const asking = new Map();
 /** @param {Element} region */
 const busyIn = (region) => {
-  if (drag && holds(region, drag.root)) return true;
+  if (asking.has(region) || (drag && holds(region, drag.root))) return true;
   for (const root of all(region, ROOT)) {
     const q = queues.get(root);
     if (q && (q.sending || q.waiting.length)) return true;
@@ -364,7 +429,16 @@ function idle() {
   for (const region of [...waiting]) {
     if (busyIn(region)) continue;
     waiting.delete(region);
-    if (region.isConnected) fire(region, new CustomEvent("ui:refresh", { bubbles: true }));
+    if (!region.isConnected) continue;
+    /** @type {{done?: Promise<void>}} */
+    const detail = {};
+    fire(region, new CustomEvent("ui:refresh", { bubbles: true, detail }));
+    const batch = asks.get(region);
+    if (!batch) continue;
+    // Asked about once drawn: a move asked about meanwhile waits for the next drawing.
+    asks.delete(region);
+    asking.set(region, false);
+    Promise.resolve(detail.done).finally(() => judge(region, batch));
   }
 }
 on(document, "ui:refresh", (e) => {
@@ -379,6 +453,7 @@ let redraw = null;
 on(document, "ui:before-swap", (e) => {
   const target = /** @type {CustomEvent} */ (e).detail;
   if (!(target instanceof Element)) return;
+  if (asking.has(target)) asking.set(target, true);
   const roots = [...all(target, ROOT)];
   const around = closest(target, ROOT);
   if (around) roots.push(around);
@@ -654,10 +729,7 @@ function cancel(why = "") {
   if (!drag) return;
   const { root, item, from, mode } = drag;
   end();
-  const before = measure(root);
-  restore(root, item, from);
-  slide(before);
-  count(root);
+  back(root, item, from);
   if (mode === "keys") /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
   const back = fill(words(root).cancelled, about(item));
   say(root, why ? `${why} ${back}` : back);
@@ -877,7 +949,7 @@ on(document, "focusout", (e) => {
 /* The server's answer */
 
 on(document, "ui:sent", (e) => {
-  const { form, ok } = /** @type {CustomEvent} */ (e).detail || {};
+  const { form, ok, status } = /** @type {CustomEvent} */ (e).detail || {};
   if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-move")) return;
   const root = formRoot.get(form);
   if (!root) return;
@@ -885,6 +957,11 @@ on(document, "ui:sent", (e) => {
   const sent = q.sending;
   if (!sent || sent.form !== form) return;
   q.sending = null;
-  settle(root, sent.item, !!ok);
+  // A refusal (4xx) is the server's answer; no answer, or its failure, is a question.
+  if (ok || (status >= 400 && status < 500)) settle(root, sent.item, !!ok);
+  else {
+    e.preventDefault();
+    ask(root, sent.item);
+  }
   pump(root);
 });

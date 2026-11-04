@@ -184,6 +184,10 @@ fn the_words_reach_the_browser_as_json_in_an_attribute() {
     let html = html(board().labels(labels));
     assert!(html.contains("data-l=\"{&quot;"), "{html}");
     assert!(html.contains("Levantado {item}"));
+    // The toasts the module shows itself, for a move with no answer, are words too.
+    let html = html_of(board());
+    assert!(html.contains("&quot;failed&quot;:&quot;That move wasn&#39;t saved. Try again.&quot;"), "{html}");
+    assert!(html.contains("&quot;offline&quot;:&quot;No connection. That move may not have been saved.&quot;"), "{html}");
 }
 
 #[test]

@@ -415,6 +415,11 @@ export function startToasts() {
     const t = e.detail?.form instanceof Element ? Element.prototype.closest.call(e.detail.form, "[data-slot=toast]") : null;
     if (t && holds(host, t)) dismiss(t);
   });
+  // A module's own toast, as words: `{tone, text}` in the event's detail.
+  on(document, "ui:toast", (e) => {
+    const spec = /** @type {CustomEvent} */ (e).detail;
+    if (spec && typeof spec.text === "string") toast(String(spec.tone), spec.text);
+  });
   on(document, "visibilitychange", () => {
     host?.toggleAttribute("data-paused", hidden());
     if (!hidden()) sameUser();

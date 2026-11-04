@@ -185,9 +185,11 @@ fn a_split_and_a_hotkey_load_their_own_modules_only() {
     assert!(!html.contains(assets::SPLIT_URL) && !html.contains(assets::KEYS_URL));
 }
 
+/// Pointer, touch and keys, the queue of moves, the redraws, and a move with no
+/// answer asked about by drawing the lists again before anything is said.
 #[test]
-fn the_sortable_module_is_at_most_6_kb_gzip() {
-    assert!(size("sortable") <= 6 * 1024, "{}", size("sortable"));
+fn the_sortable_module_is_at_most_7_kb_gzip() {
+    assert!(size("sortable") <= 7 * 1024, "{}", size("sortable"));
 }
 
 /// A sortable that moves loads the core runtime, which posts its moves, and its own
