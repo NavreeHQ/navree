@@ -58,6 +58,13 @@ pub fn get(name: &str) -> Option<&'static Asset> {
 
 /// The module scripts a page with `uses` loads.
 pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
+    modules()
+        .filter(move |(bit, _)| uses.has(*bit))
+        .map(|(_, url)| url)
+}
+
+/// Every module script, with the bit of [`Uses`] that loads it.
+fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
     [
         (Uses::CORE, CORE_URL),
         (Uses::SIDEBAR, SIDEBAR_URL),
@@ -77,8 +84,6 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::PHONE, PHONE_URL),
     ]
     .into_iter()
-    .filter(move |(bit, _)| uses.has(*bit))
-    .map(|(_, url)| url)
 }
 
 /// The stylesheets a page with `uses` links after the toolkit's own.
@@ -175,6 +180,18 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Two modules on one bit would each load the other's script: every module that
+    /// loads a script has a bit of its own.
+    #[test]
+    fn every_module_has_a_bit_of_its_own() {
+        let mut taken = 0_u32;
+        for (bit, url) in modules() {
+            assert_eq!(bit.0.count_ones(), 1, "{url} is loaded by one bit");
+            assert_eq!(taken & bit.0, 0, "{url} shares its bit with another module");
+            taken |= bit.0;
+        }
+    }
 
     #[test]
     fn hashes_match_the_files() {

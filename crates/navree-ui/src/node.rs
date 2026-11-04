@@ -570,6 +570,36 @@ impl Element {
             .uses(Uses::KEYS)
     }
 
+    /// Makes `key` a shortcut for this element, as [`hotkey`](Self::hotkey) does, that
+    /// works only while the focus is inside the element whose id is `scope`: for a key
+    /// that changes something, such as closing the conversation the reader is in, so it
+    /// can't act from anywhere on the page. An invalid key or scope leaves the element as
+    /// it was.
+    ///
+    /// Single keys need a way to be turned off for the people who can't use them (WCAG
+    /// 2.1.4): keep each person's choice, and draw no hotkeys for someone who turned them
+    /// off.
+    ///
+    /// ```
+    /// use navree_ui::{el, render};
+    ///
+    /// let html = render(&el("button").hotkey_within("e", "thread").child("Close").into());
+    /// assert!(html.contains(r#"data-ui-hotkey="e" aria-keyshortcuts="e" data-ui-hotkey-scope="thread""#));
+    /// ```
+    #[must_use]
+    pub fn hotkey_within(self, key: &str, scope: &str) -> Self {
+        let scope_ok = !scope.is_empty()
+            && scope.len() <= 64
+            && scope
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | ':' | '.'));
+        if !valid_hotkey(key) || !scope_ok {
+            return self;
+        }
+        self.hotkey(key)
+            .attr("data-ui-hotkey-scope", scope.to_owned())
+    }
+
     /// Says this page must load `uses` when this element is on it.
     #[inline]
     #[must_use]
@@ -770,6 +800,19 @@ mod tests {
             assert!(element.get("data-ui-hotkey").is_none(), "{bad:?}");
             assert!(element.uses.is_none(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn a_scoped_hotkey_names_its_scope_and_refuses_a_bad_one() {
+        let html = crate::render(&el("button").hotkey_within("e", "thread").into());
+        assert!(html.contains(r#"data-ui-hotkey="e""#), "{html}");
+        assert!(html.contains(r#"data-ui-hotkey-scope="thread""#), "{html}");
+        for bad in ["", "a b", "x\"y", &"z".repeat(65)] {
+            let html = crate::render(&el("button").hotkey_within("e", bad).into());
+            assert!(!html.contains("data-ui-hotkey"), "{bad}: {html}");
+        }
+        let html = crate::render(&el("button").hotkey_within("two", "thread").into());
+        assert!(!html.contains("data-ui-hotkey"), "{html}");
     }
 
     #[test]

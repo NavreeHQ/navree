@@ -143,6 +143,14 @@ macro_rules! root_methods {
                 self
             }
 
+            /// Makes `key` a shortcut that works only while the focus is inside the
+            /// element whose id is `scope`: see
+            /// [`Element::hotkey_within`](crate::Element::hotkey_within).
+            pub fn hotkey_within(mut self, key: &str, scope: &str) -> Self {
+                self.el = self.el.hotkey_within(key, scope);
+                self
+            }
+
             /// Takes `columns` columns of a [`Grid`](crate::Grid).
             pub fn span(mut self, columns: u8) -> Self {
                 self.el = self.el.attr("data-span", $crate::components::layout::span_name(columns));

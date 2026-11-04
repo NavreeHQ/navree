@@ -325,6 +325,16 @@ impl NavItem {
 pub struct NavGroup {
     label: Option<Cow<'static, str>>,
     items: Vec<NavItem>,
+    live: Option<GroupLive>,
+}
+
+/// Where a live group fetches itself again, and the stream that tells it to.
+#[derive(Clone, Debug)]
+struct GroupLive {
+    id: String,
+    src: Href,
+    stream: Href,
+    event: Option<&'static str>,
 }
 
 impl NavGroup {
@@ -333,6 +343,7 @@ impl NavGroup {
         Self {
             label: Some(label.into()),
             items: Vec::new(),
+            live: None,
         }
     }
 
@@ -341,6 +352,7 @@ impl NavGroup {
         Self {
             label: None,
             items: Vec::new(),
+            live: None,
         }
     }
 
@@ -348,6 +360,28 @@ impl NavGroup {
     #[must_use]
     pub fn item(mut self, item: NavItem) -> Self {
         self.items.push(item);
+        self
+    }
+
+    /// Keeps the group's counts current: the group is a region named `id` that fetches
+    /// `src` again whenever the server-sent event stream `stream` says `event` (or
+    /// anything, with `None`), and takes the element with the same id from the answer. Any
+    /// page of the app with this group answers; a page with nothing else in it is cheap.
+    /// As with every live region, the stream is only a nudge.
+    #[must_use]
+    pub fn live(
+        mut self,
+        id: impl Into<String>,
+        src: impl Into<Href>,
+        stream: impl Into<Href>,
+        event: Option<&'static str>,
+    ) -> Self {
+        self.live = Some(GroupLive {
+            id: id.into(),
+            src: src.into(),
+            stream: stream.into(),
+            event: event.filter(|name| crate::table::region::valid_event_name(name)),
+        });
         self
     }
 }
@@ -686,7 +720,17 @@ impl Shell {
             .groups
             .iter()
             .map(|group| {
-                el("div").slot("sidebar-group").children((
+                let mut div = el("div").slot("sidebar-group");
+                if let Some(live) = &group.live {
+                    div = div
+                        .attr("id", live.id.clone())
+                        .flag("data-ui-region", true)
+                        .attr("data-ui-src", live.src.clone())
+                        .attr("data-ui-live-src", live.stream.clone())
+                        .attr_opt("data-ui-live-event", live.event)
+                        .uses(Uses::CORE.with(Uses::LIVE));
+                }
+                div.children((
                     group
                         .label
                         .clone()
@@ -1242,6 +1286,38 @@ mod tests {
         assert!(
             html.contains(r#"href="/" title="Home" aria-current="page""#),
             "{html}"
+        );
+    }
+
+    #[test]
+    fn a_live_group_is_a_region_its_stream_refreshes() {
+        let live = Shell::new("Acme").group(
+            NavGroup::new("Inbox")
+                .item(NavItem::new("Open", "/inbox").count("12"))
+                .live(
+                    "views",
+                    "/inbox/fragments/views",
+                    "/inbox/events",
+                    Some("conversations"),
+                ),
+        );
+        let view = live.page("x", "/inbox").to_view();
+        let html = view.to_html();
+        assert!(html.contains(r#"<div data-slot="sidebar-group" id="views" data-ui-region data-ui-src="/inbox/fragments/views" data-ui-live-src="/inbox/events" data-ui-live-event="conversations">"#), "{html}");
+        assert!(view.uses().has(Uses::LIVE));
+        // A name an event can't have is left out: the group follows every event.
+        let html = Shell::new("Acme")
+            .group(NavGroup::plain().live("v", "/v", "/e", Some("open")))
+            .page("x", "/")
+            .to_view()
+            .to_html();
+        assert!(!html.contains("data-ui-live-event"), "{html}");
+        assert!(
+            !shell()
+                .page("x", "/")
+                .to_view()
+                .to_html()
+                .contains("data-ui-region")
         );
     }
 
