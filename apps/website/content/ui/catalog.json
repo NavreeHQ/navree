@@ -15377,7 +15377,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -19471,7 +19471,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -19512,7 +19512,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -19599,7 +19599,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -19647,7 +19647,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -19701,7 +19701,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-223ca5bb14e1.js"
+        "core-0efae007ae69.js"
       ],
       "captions": [],
       "slots": [
@@ -20376,7 +20376,7 @@
       "slug": "store-drawer",
       "title": "An order in a drawer over the orders",
       "kind": "single",
-      "code": "/// The drawer a row of the table opens, filled for one order: over the table,\n/// 60% of the screen wide.\npub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Sheet {\n    let order = &view.order;\n    Sheet::new(DRAWER, format!(\"Order {}\", order.number))\n        .width(SheetWidth::Xl)\n        .description(format!(\n            \"{} for {} in {}\",\n            units(order.items),\n            order.customer,\n            place_of(&order.city, &order.state, &order.country)\n        ))\n        .body((order_detail(view, 3, today, true, parts), dialogs(view)))\n}\n\n/// Everything about one order: the summary and the actions, four facts, the\n/// items, the steps, the customer's other orders and the notes. `level` is the\n/// level of the headings inside, under the drawer's title or the page's.\npub fn order_detail(\n    view: &OrderView,\n    level: u8,\n    today: NaiveDate,\n    open_as_page: bool,\n    parts: Parts<'_>,\n) -> Stack {\n    let order = &view.order;\n    let id = order.id;\n    let history: Node = match parts {\n        Parts::Lazy => Region::new(STEPS)\n            .src(format!(\"/orders/{id}/steps\"))\n            .lazy()\n            .into(),\n        Parts::Inline { history, .. } => steps(order, history, level + 1).into(),\n    };\n    let others: Node = match parts {\n        Parts::Lazy => Region::new(OTHERS)\n            .src(format!(\"/orders/{id}/others\"))\n            .lazy()\n            .into(),\n        Parts::Inline { others, .. } => other_orders(others, today),\n    };\n    Stack::gap(4).children((\n        summary(view, today),\n        toolbar(view, open_as_page),\n        facts(view),\n        lines_card(view, level),\n        Card::titled(\"Progress\")\n            .heading(level)\n            .description(match Fulfilment::parse(&order.fulfilment) {\n                _ if Status::parse(&order.status) == Status::Cancelled => {\n                    \"Cancelled before it shipped\".to_owned()\n                }\n                Fulfilment::Delivered => \"Delivered\".to_owned(),\n                step => format!(\"{} so far\", step.label()),\n            })\n            .body(history),\n        Card::titled(format!(\"More from {}\", order.customer))\n            .heading(level)\n            .description(format!(\n                \"{} {} in all\",\n                thousands(i64::try_from(view.orders).unwrap_or(0)),\n                if view.orders == 1 { \"order\" } else { \"orders\" }\n            ))\n            .body(others),\n        notes(view, level),\n    ))\n}\n\n/// Who bought it, how they paid, and where it goes.\nfn facts(view: &OrderView) -> FactGrid {\n    let order = &view.order;\n    let house = warehouse(&order.warehouse);\n    let customer = FactCard::new(\"Customer\", order.customer.clone())\n        .icon(icons::USER)\n        .tone(Tone::Info)\n        .detail(order.email.clone())\n        .detail(crate::data::phone_text(&view.phone))\n        .detail(match view.since {\n            Some(day) => format!(\n                \"{} {} since {}\",\n                thousands(i64::try_from(view.orders).unwrap_or(0)),\n                if view.orders == 1 { \"order\" } else { \"orders\" },\n                day.format(\"%b %Y\")\n            ),\n            None => \"First order\".to_owned(),\n        });\n    let paid = Payment::parse(&order.payment);\n    let payment = FactCard::new(\"Payment\", paid_with(order))\n        .icon(method_icon(&order.method))\n        .tone(paid.tone())\n        .detail(match paid {\n            Payment::Pending if order.method == \"cod\" => {\n                format!(\"{} to collect on delivery\", money(order.total))\n            }\n            Payment::Pending => format!(\"{} expected\", money(order.total)),\n            _ => format!(\"{} paid\", money(order.total)),\n        })\n        .detail(match paid {\n            Payment::Refunded => \"Refunded in full\".to_owned(),\n            Payment::PartiallyRefunded => format!(\"{} refunded\", money(order.refunded)),\n            Payment::Pending => \"Nothing paid yet\".to_owned(),\n            Payment::Paid => \"Nothing refunded\".to_owned(),\n        });\n    let from = FactCard::new(\"Ships from\", city(\"IN\", house.city))\n        .icon(icons::WAREHOUSE)\n        .detail(format!(\n            \"{} warehouse, {}\",\n            house.city,\n            crate::data::state_name(house.state)\n        ));\n    let step = Fulfilment::parse(&order.fulfilment);\n    let to = FactCard::new(\"Ships to\", city(&order.country, &order.city))\n        .icon(icons::MAP_PIN)\n        .tone(Tone::named(\"violet\"))\n        .detail(if order.pin.is_empty() {\n            country_name(&order.country).to_owned()\n        } else {\n            format!(\n                \"{}, PIN {}\",\n                crate::data::state_name(&order.state),\n                order.pin\n            )\n        })\n        .detail(if order.tracking.is_empty() {\n            match step {\n                _ if Status::parse(&order.status) == Status::Cancelled => \"Not shipping\".to_owned(),\n                _ => format!(\"{}, once packed\", house.carrier),\n            }\n        } else {\n            format!(\"{} · {}\", house.carrier, order.tracking)\n        });\n    FactGrid::new().cols(2).cards([customer, payment, from, to])\n}",
+      "code": "/// The drawer a row of the table opens, filled for one order: over the table,\n/// 60% of the screen wide.\npub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Sheet {\n    let order = &view.order;\n    Sheet::new(DRAWER, format!(\"Order {}\", order.number))\n        .width(SheetWidth::Xl)\n        .description(format!(\n            \"{} for {} in {}\",\n            units(order.items),\n            order.customer,\n            place_of(&order.city, &order.state, &order.country)\n        ))\n        .body((order_detail(view, 3, today, true, parts), dialogs(view)))\n}\n\n/// Everything about one order: the summary and the actions, four facts, the\n/// items, the steps, the customer's other orders and the notes. `level` is the\n/// level of the headings inside, under the drawer's title or the page's.\npub fn order_detail(\n    view: &OrderView,\n    level: u8,\n    today: NaiveDate,\n    open_as_page: bool,\n    parts: Parts<'_>,\n) -> Stack {\n    let order = &view.order;\n    let id = order.id;\n    let history: Node = match parts {\n        Parts::Lazy => Region::new(STEPS)\n            .src(format!(\"/orders/{id}/steps\"))\n            .lazy()\n            .into(),\n        Parts::Inline { history, .. } => steps(order, history, level + 1).into(),\n    };\n    let others: Node = match parts {\n        Parts::Lazy => Region::new(OTHERS)\n            .src(format!(\"/orders/{id}/others\"))\n            .lazy()\n            .into(),\n        Parts::Inline { others, .. } => other_orders(others, today),\n    };\n    Stack::gap(4).children((\n        summary(view, today),\n        toolbar(view, open_as_page),\n        facts(view),\n        lines_card(view, level),\n        Card::titled(\"Progress\")\n            .heading(level)\n            .description(match Fulfilment::parse(&order.fulfilment) {\n                _ if Status::parse(&order.status) == Status::Cancelled => {\n                    \"Cancelled before it shipped\".to_owned()\n                }\n                Fulfilment::Delivered => \"Delivered\".to_owned(),\n                step => format!(\"{} so far\", step.label()),\n            })\n            .body(history),\n        Card::titled(format!(\"More from {}\", order.customer))\n            .heading(level)\n            .description(format!(\n                \"{} {} in all\",\n                thousands(i64::try_from(view.orders).unwrap_or(0)),\n                if view.orders == 1 { \"order\" } else { \"orders\" }\n            ))\n            .body(others),\n        notes(view, level),\n    ))\n}\n\n/// Who bought it, how they paid, and where it goes.\nfn facts(view: &OrderView) -> FactGrid {\n    let order = &view.order;\n    let house = warehouse(&order.warehouse);\n    let customer = FactCard::new(\"Customer\", order.customer.clone())\n        .icon(icons::USER)\n        .tone(Tone::Info)\n        .detail(order.email.clone())\n        .detail(crate::data::phone_text(&view.phone))\n        .detail(match view.since {\n            Some(day) => format!(\n                \"{} {} since {}\",\n                thousands(i64::try_from(view.orders).unwrap_or(0)),\n                if view.orders == 1 { \"order\" } else { \"orders\" },\n                day.format(\"%b %Y\")\n            ),\n            None => \"First order\".to_owned(),\n        });\n    let paid = Payment::parse(&order.payment);\n    let payment = FactCard::new(\"Payment\", paid_with(order))\n        .icon(method_icon(&order.method))\n        .tone(paid.tone())\n        .detail(match paid {\n            Payment::Pending if order.method == \"cod\" => {\n                format!(\"{} to collect on delivery\", money(order.total))\n            }\n            Payment::Pending => format!(\"{} expected\", money(order.total)),\n            _ => format!(\"{} paid\", money(order.total)),\n        })\n        .detail(match paid {\n            Payment::Refunded => \"Refunded in full\".to_owned(),\n            Payment::PartiallyRefunded => format!(\"{} refunded\", money(order.refunded)),\n            Payment::Pending => \"Nothing paid yet\".to_owned(),\n            Payment::Paid => \"Nothing refunded\".to_owned(),\n        });\n    let from = FactCard::new(\"Ships from\", city(\"IN\", house.city))\n        .icon(icons::WAREHOUSE)\n        .detail(warehouse_line(house));\n    let step = Fulfilment::parse(&order.fulfilment);\n    let to = FactCard::new(\"Ships to\", city(&order.country, &order.city))\n        .icon(icons::MAP_PIN)\n        .tone(Tone::named(\"violet\"))\n        .detail(if order.pin.is_empty() {\n            country_name(&order.country).to_owned()\n        } else {\n            format!(\n                \"{}, PIN {}\",\n                crate::data::state_name(&order.state),\n                order.pin\n            )\n        })\n        .detail(if order.tracking.is_empty() {\n            match step {\n                _ if Status::parse(&order.status) == Status::Cancelled => \"Not shipping\".to_owned(),\n                _ => format!(\"{}, once packed\", house.carrier),\n            }\n        } else {\n            format!(\"{} · {}\", house.carrier, order.tracking)\n        });\n    FactGrid::new().cols(2).cards([customer, payment, from, to])\n}",
       "src": "/ui-preview/build-anything/store-drawer.html",
       "height": 860,
       "layout": "fill",
