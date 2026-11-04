@@ -1,5 +1,5 @@
-// The store app in real browsers: a dashboard with its feed live over server-sent
-// events, 200,000 orders in a table paged by cursor, an order in a drawer over the
+// The store app in real browsers: a dashboard with its sales charts and its feed live
+// over server-sent events, 200,000 orders in a table paged by cursor, an order in a drawer over the
 // table with refunds, cancels and resends checked on the server, and inventory
 // with a restock in each row. Needs the app serving with its simulator off and its
 // test hooks on:
@@ -231,6 +231,113 @@ for (const name of NAMES) {
         });
       }
     }
+
+    // ---- The sales charts on the dashboard ------------------------------------------
+
+    /** A chart's table, row by row: the row's header, then each value as the eye reads it. */
+    const chartTable = (page, fig) =>
+      page.evaluate((fig) => {
+        const table = document.querySelector(`#${fig} [data-slot=chart-table] table`);
+        const text = (cell) => (cell.querySelector("[aria-hidden=true]") || cell).textContent.trim();
+        return [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("th,td")].map(text));
+      }, fig);
+    /** `1,24,050` as a number. */
+    const figure = (text) => Number(text.replace(/[₹,]/g, ""));
+    /** Rupees grouped the Indian way: the last three digits, then pairs. */
+    const RUPEES = /^₹(?:\d{1,2},(?:\d{2},)*\d{3}|\d{1,3})$/;
+    /** Today in India: `4 Nov` for 4 November. */
+    const todayInIndia = () => {
+      const at = new Date(Date.now() + 5.5 * 3600 * 1000);
+      return `${at.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][at.getUTCMonth()]}`;
+    };
+
+    test("the dashboard's charts: 30 days on India's clock, rupees in lakh, and how customers pay", async () => {
+      const page = await open("/");
+      for (const fig of ["sales-revenue", "sales-orders", "sales-methods"]) {
+        assert.equal(await page.locator(`#${fig} svg[data-slot=chart-plot], #${fig} svg`).first().isVisible(), true, `${fig} is drawn`);
+      }
+      // Revenue: a row a day, the last today, each in rupees with Indian groups.
+      const revenue = await chartTable(page, "sales-revenue");
+      assert.equal(revenue.length, 30, "thirty days");
+      assert.ok(revenue.at(-1)[0].startsWith(todayInIndia()), `the last day is today in India: ${revenue.at(-1)[0]}`);
+      for (const [day, value] of revenue) assert.match(value, RUPEES, `${day}: ${value}`);
+      assert.ok(revenue.some(([, value]) => figure(value) >= 100000), "a day of a lakh or more, written with lakh groups");
+      // The axis is written short, in lakh (or crore).
+      const ticks = await page.locator("#sales-revenue svg text").allTextContents();
+      assert.ok(ticks.some((t) => /^₹\d+(\.\d+)?(L|Cr)$/.test(t.trim())), `the axis in lakh or crore: ${ticks.join(" ")}`);
+      // Orders: today's bar is today's figure.
+      const orders = await chartTable(page, "sales-orders");
+      assert.equal(orders.length, 30);
+      assert.deepEqual(orders.map((row) => row[0]), revenue.map((row) => row[0]), "the same days");
+      const stat = await page.locator("[data-slot=stat]", { hasText: "Orders today" }).locator("[data-slot=stat-value]").textContent();
+      assert.equal(figure(orders.at(-1)[1]), figure(stat), "today's bar is the Orders today figure");
+      const earned = await page.locator("[data-slot=stat]", { hasText: "Revenue today" }).locator("[data-slot=stat-value]").textContent();
+      assert.equal(figure(revenue.at(-1)[1]), Math.round(figure(earned)), "today's revenue is the Revenue today figure, to the rupee");
+      // How customers pay: the three ways, adding up to every order of the 30 days.
+      const methods = await chartTable(page, "sales-methods");
+      assert.deepEqual(methods.map((row) => row[0]), ["UPI", "Card", "Cash on delivery"]);
+      const paid = methods.reduce((sum, row) => sum + figure(row[1]), 0);
+      assert.equal(paid, orders.reduce((sum, row) => sum + figure(row[1]), 0), "each order paid one way");
+      assert.ok(paid >= 10000, `the 30 days hold tens of thousands of orders: ${paid}`);
+      for (const [way, count] of methods) assert.match(count, /^(?:\d{1,2},(?:\d{2},)*\d{3}|\d{1,3})$/, `${way}: ${count} in Indian groups`);
+      const centre = await page.locator("#sales-methods [data-slot=chart-donut-center] strong").textContent();
+      assert.equal(figure(centre.trim()), paid, `the ring's centre says every order: ${centre}`);
+      await shot(page, "dashboard-charts");
+      await page.done();
+    });
+
+    test("a new order grows today's bar over the stream", async () => {
+      const page = await open("/");
+      await live(page, "sales");
+      const today = () => page.evaluate(() => {
+        const rows = document.querySelectorAll("#sales-orders [data-slot=chart-table] tbody tr");
+        return Number(rows[rows.length - 1].querySelector("td").textContent.replace(/,/g, ""));
+      });
+      const before = await today();
+      await step("placed");
+      await until(
+        page,
+        (count) => {
+          const rows = document.querySelectorAll("#sales-orders [data-slot=chart-table] tbody tr");
+          return Number(rows[rows.length - 1].querySelector("td").textContent.replace(/,/g, "")) > count;
+        },
+        before,
+        "today's bar to count the new order",
+      );
+      assert.ok((await today()) > before);
+      await page.done();
+    });
+
+    test("the keys read the charts a day at a time, and the tooltip says what the table says", async () => {
+      const page = await open("/");
+      const body = page.locator("#sales-orders [data-slot=chart-body]");
+      await until(page, () => document.querySelector("#sales-orders [data-slot=chart-body]")?.getAttribute("tabindex") === "0", null, "the chart to be a tab stop");
+      await body.focus();
+      await page.keyboard.press("End");
+      const orders = await chartTable(page, "sales-orders");
+      const tip = page.locator("#sales-orders [data-slot=chart-tip][data-open]");
+      await tip.waitFor();
+      assert.equal((await tip.locator("[data-tip=head]").textContent()).trim(), orders.at(-1)[0], "the last day");
+      assert.equal((await tip.locator("[data-tip=row] strong").first().textContent()).trim(), orders.at(-1)[1], "today's orders");
+      await page.keyboard.press("Home");
+      await until(page, (head) => document.querySelector("#sales-orders [data-tip=head]")?.textContent.trim() === head, orders[0][0], "the first day");
+      await page.keyboard.press("Escape");
+      await until(page, () => !document.querySelector("#sales-orders [data-slot=chart-tip][data-open]"), null, "the tooltip to close");
+      await page.done();
+    });
+
+    test("with JavaScript off the charts are drawn and their tables open from a switch", async () => {
+      const page = await open("/", { javaScriptEnabled: false });
+      for (const fig of ["sales-revenue", "sales-orders", "sales-methods"]) {
+        assert.ok((await page.locator(`#${fig} svg`).count()) > 0, `${fig} is drawn`);
+        const toggle = page.locator(`#${fig} [data-slot=chart-table-switch]`);
+        assert.equal(await toggle.isChecked(), false);
+        await page.locator(`#${fig} [data-slot=chart-table-label]`).click();
+        assert.equal(await toggle.isChecked(), true);
+        assert.equal(await page.locator(`#${fig} [data-slot=chart-table] table`).isVisible(), true, `${fig}: the table shows`);
+      }
+      await page.done();
+    });
 
     // ---- The orders, on the server ---------------------------------------------------
 
