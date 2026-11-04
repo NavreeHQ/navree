@@ -21,5 +21,6 @@ mod resolution;
 mod routes;
 mod servers;
 mod services;
+mod switching;
 mod telemetry;
 mod zones;
