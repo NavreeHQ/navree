@@ -29,6 +29,7 @@
 //! | `/upload` | file uploads: a photo, documents with chunks, a form sent by hand, a field in a form, and the states |
 //! | `/otp` | one-time code fields of every length and state, a form that posts them and one that sends itself |
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
+//! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -44,6 +45,7 @@ use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, ico
 
 mod acme_theme;
 mod bench;
+mod charts;
 mod dashboard;
 mod dates;
 mod deal_form;
@@ -97,7 +99,9 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("One-time codes", "/otp").icon(icons::SHIELD_ALERT))
                 .item(NavItem::new("Carousels", "/carousel").icon(icons::LAYOUT_GRID))
                 .item(NavItem::new("Upload", "/upload").icon(icons::UPLOAD))
-                .item(NavItem::new("Markdown", "/markdown").icon(icons::FILE)),
+                .item(NavItem::new("Markdown", "/markdown").icon(icons::FILE))
+                .item(NavItem::new("Charts", "/charts").icon(icons::CHART_LINE))
+                .item(NavItem::new("Report", "/charts/report").icon(icons::CHART_COLUMN)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -136,7 +140,8 @@ impl Module for ProofModule {
             .controller::<flow::FlowPages>()
             .controller::<otp_carousel::CodePages>()
             .controller::<upload::UploadPages>()
-            .controller::<markdown::MarkdownPages>();
+            .controller::<markdown::MarkdownPages>()
+            .controller::<charts::ChartPages>();
     }
 }
 
