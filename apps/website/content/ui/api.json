@@ -53,6 +53,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -351,6 +363,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -404,6 +428,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -682,6 +718,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -749,6 +797,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -802,6 +862,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -889,6 +961,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -967,6 +1051,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1034,6 +1130,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1054,7 +1162,14 @@
         "doc": "A bubble holding `content`."
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "note",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it as a note that only the team sees, set apart from what was said in the conversation: a dashed line and an amber tint, never colour alone, so say it in the message's header too."
+      }
+    ],
     "variants": [],
     "shared": [
       {
@@ -1074,6 +1189,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -1386,6 +1513,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1439,6 +1578,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -1838,6 +1989,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1903,6 +2066,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -2377,6 +2552,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2640,6 +2827,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -3768,6 +3967,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3814,6 +4025,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -4079,6 +4302,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -4431,6 +4666,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4490,6 +4737,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -4596,6 +4855,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4643,6 +4914,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -4734,6 +5017,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -5095,6 +5390,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5155,6 +5462,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5202,6 +5521,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -5373,6 +5704,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5426,6 +5769,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -5549,6 +5904,36 @@
         "generics": "",
         "args": "href: impl Into<Href>",
         "doc": "Makes the whole row a link."
+      },
+      {
+        "name": "aside",
+        "generics": "",
+        "args": "aside: impl Into<Node>",
+        "doc": "Adds something small at the end of the title's line: a time, a timer."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds a line under the description: badges, people."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Marks it as the one open now: `aria-current=\"page\"` on a link, and drawn so."
+      },
+      {
+        "name": "unread",
+        "generics": "",
+        "args": "unread: bool",
+        "doc": "Marks it as new to the reader: its title stronger. Say so in words too, with a count or a label, since weight alone tells a screen reader nothing."
+      },
+      {
+        "name": "truncate",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title and the description to one line each, cut with an ellipsis: for a long list read at a glance. The whole text stays in the page for assistive technology and find in page."
       }
     ],
     "variants": [],
@@ -5570,6 +5955,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -5671,6 +6068,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5723,12 +6132,286 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "LazyEnd": {
+    "name": "LazyEnd",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "Which end of the list a live change arrives at, when it is new.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "The top: the newest conversation of an inbox.",
+        "default": true
+      },
+      {
+        "name": "End",
+        "doc": "The bottom: the newest message of a conversation.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "LazyItem": {
+    "name": "LazyItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "One item of a `LazyList`: its key (the record it shows, unique in the list), its cursor (where it sorts), and what it draws.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl AsRef<str>, cursor: impl AsRef<str>, content: impl IntoNodes",
+        "doc": "An item for the record `key`, sorting at `cursor`, drawing `content`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<crate::node::AttrValue>",
+        "doc": "Sets an attribute on the item."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<crate::node::AttrValue>",
+        "doc": "Sets the item's `id`, for links and tests to find it."
+      },
+      {
+        "name": "announce",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "What a list that announces new items says when this item arrives on its own: `New message from Harleen Kaur`. Without it the list's own words are said."
+      },
+      {
+        "name": "quiet",
+        "generics": "",
+        "args": "",
+        "doc": "Arrives without being announced: something the reader did themselves, such as their own reply."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "LazyLabels": {
+    "name": "LazyLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "What the ends of a list say.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "LazyList": {
+    "name": "LazyList",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "A list that loads as it is read, in pages, by cursor. See the module's docs.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>, src: impl Into<Href>",
+        "doc": "A list named `id` in the page and `label` for assistive technology, whose pages come from `src`. The runtime asks `src` with `dir=start` or `dir=end` and the `cursor` of the item at that end, or with `dir=live` and `since`; read it with `LazyQuery`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "announce_new",
+        "generics": "",
+        "args": "many: impl Into<String>, one: impl Into<String>",
+        "doc": "Announces items that arrive live, politely and once they stop coming (a second after the last, five at most after the first): `many` with `{n}` filled in, or for one item its own words (`LazyItem::announce`), else `one`. Items that are only changed, or quiet, are not announced. Without this a live list changes silently."
+      },
+      {
+        "name": "seen_by",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Tells the server, with a `POST` to `url`, that the reader has seen what the list shows: once when the page shows it, and again when new items arrive, only while the page is in sight, one at a time. For marking a conversation read. With no script nothing is posted: offer a form for it."
+      },
+      {
+        "name": "view",
+        "generics": "",
+        "args": "view: impl Into<String>",
+        "doc": "Names what the list shows: its filters, its search. A page drawn again for the same view keeps the items the reader loaded and where they scrolled, so opening an item deep in the list doesn't take the reader back to the top; a page for another view draws its own first page. The source by default."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "key: impl AsRef<str>",
+        "doc": "The item the page is about: its first link says `aria-current=\"page\"` and is drawn so, and the mark moves when a page for another item keeps the list."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "gap: u8",
+        "doc": "Sets the space between items, as `Stack::gap` does: 1 by default."
+      },
+      {
+        "name": "order",
+        "generics": "",
+        "args": "order: LazyOrder",
+        "doc": "Sets which way the cursors run: `LazyOrder::Descending` by default."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = LazyItem>",
+        "doc": "Adds the first page's items."
+      },
+      {
+        "name": "more_before",
+        "generics": "",
+        "args": "page: impl Into<Href>",
+        "doc": "Says there is more before the first item, and where a page with no script finds it. Leave it out when the list starts at its start."
+      },
+      {
+        "name": "more_after",
+        "generics": "",
+        "args": "page: impl Into<Href>",
+        "doc": "Says there is more after the last item, and where a page with no script finds it."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "most: u32",
+        "doc": "Keeps at most `most` items in the page (300 by default, at least 50): past that, items far off screen at the other end are dropped, and fetched again when the reader scrolls back."
+      },
+      {
+        "name": "since",
+        "generics": "",
+        "args": "revision: impl AsRef<str>",
+        "doc": "The revision the items are at: a live fetch asks for what changed since."
+      },
+      {
+        "name": "live_from",
+        "generics": "",
+        "args": "url: impl Into<Href>, event: Option<&'static str>, new_at: LazyEnd",
+        "doc": "Merges what changed whenever this server-sent event stream speaks (its event `event`, or its unnamed ones): `src` with `dir=live&since=`. New items arrive at `new_at`'s end or in their place, changed ones move, gone ones go. The stream is a nudge: its payload is never read."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "empty: impl Into<Node>",
+        "doc": "What shows when the list has nothing in it."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: LazyLabels",
+        "doc": "Replaces the words at the ends and in announcements."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "LazyOrder": {
+    "name": "LazyOrder",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "Which way the cursors run down the list.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Descending",
+        "doc": "The first item has the greatest cursor: newest first, an inbox.",
+        "default": true
+      },
+      {
+        "name": "Ascending",
+        "doc": "The first item has the least cursor: oldest first, a conversation.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "LazyPage": {
+    "name": "LazyPage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "An answer to a `LazyQuery`: items as markup, and whether there is more that way, or, for a live ask, the new revision and the keys that left the list.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = LazyItem>, more: bool",
+        "doc": "A page of items, in the list's order, and whether more lie beyond them."
+      },
+      {
+        "name": "changes",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = LazyItem>, since: impl AsRef<str>, gone: impl IntoIterator<Item = String>",
+        "doc": "What changed since a live ask's revision: the items as they are now, the revision they are at, and the keys of items that left the list. An answer that holds only part of what changed says so with `more`, and the runtime asks again from the revision it gave."
+      }
+    ],
+    "methods": [
+      {
+        "name": "more",
+        "generics": "",
+        "args": "more: bool",
+        "doc": "Says whether more lies beyond these items: for a page, more in the list that way; for changes, more changes after the revision this answer gives."
+      },
+      {
+        "name": "to_html",
+        "generics": "",
+        "args": "",
+        "doc": "The items as markup."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "LazyQuery": {
+    "name": "LazyQuery",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/lazy.rs",
+    "summary": "What the runtime asks of a list's source: `?dir=end&cursor=...`, `?dir=start&cursor=...` or `?dir=live&since=...`. It never fails: anything else is `LazyAsk::First`. Cursors are clipped to printable ASCII and `MAX_CURSOR` bytes; they are the app's own words, so the handler reads them as it wrote them and binds them in its query.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "query: &str",
+        "doc": "Reads a query string."
+      }
+    ],
+    "methods": [
+      {
+        "name": "window",
+        "generics": "",
+        "args": "",
+        "doc": "For a live ask, the cursors of the first and last items the page holds: the window it has loaded, in which the server may draw again what changed with no write of its own, such as a clock counting down."
+      },
+      {
+        "name": "ask",
+        "generics": "",
+        "args": "",
+        "doc": "What was asked."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Marker": {
     "name": "Marker",
@@ -5763,6 +6446,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -6109,6 +6804,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -6330,6 +7037,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -6362,6 +7081,12 @@
         "generics": "",
         "args": "item: NavItem",
         "doc": "Adds a link."
+      },
+      {
+        "name": "live",
+        "generics": "",
+        "args": "id: impl Into<String>, src: impl Into<Href>, stream: impl Into<Href>, event: Option<&'static str>",
+        "doc": "Keeps the group's counts current: the group is a region named `id` that fetches `src` again whenever the server-sent event stream `stream` says `event` (or anything, with `None`), and takes the element with the same id from the answer. Any page of the app with this group answers; a page with nothing else in it is cheap. As with every live region, the stream is only a nudge."
       }
     ],
     "variants": [],
@@ -6808,6 +7533,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -6864,6 +7601,102 @@
         "generics": "",
         "args": "",
         "doc": "What the accent is mixed toward on hover: away from the text on it, so the text reads better on hover, never worse. Black under light text, white under dark text."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Pane": {
+    "name": "Pane",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "One pane of a `SplitPane`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A pane with a size, named `id` in the page and `label` for assistive technology. It is 30% wide until `size` says otherwise, and at least 10%."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "The pane that takes what the others leave. A split has one: the first pane made with this, or the last pane when none is."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "percent: u8",
+        "doc": "Its size, in percent of the split."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "percent: u8",
+        "doc": "The least it may be, in percent. For the fill pane, the least it is left."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "percent: u8",
+        "doc": "The most it may be, in percent."
+      },
+      {
+        "name": "collapsible",
+        "generics": "",
+        "args": "",
+        "doc": "Lets it collapse to nothing: Enter on its separator, dragging it under its least, or a toggle. It comes back at the size it had."
+      },
+      {
+        "name": "collapsed",
+        "generics": "",
+        "args": "collapsed: bool",
+        "doc": "Draws it collapsed, if it is collapsible."
+      },
+      {
+        "name": "collapse_below",
+        "generics": "",
+        "args": "width: SplitWidth",
+        "doc": "Collapses it while the split is narrower than `width`. A toggle, or Enter on its separator, still opens it. A pane that does this is collapsible."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl IntoNodes",
+        "doc": "Adds to the top of the pane, which stays put while the body scrolls."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the pane's body, which scrolls on its own."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds to the bottom of the pane, which stays put while the body scrolls."
+      },
+      {
+        "name": "from_end",
+        "generics": "",
+        "args": "",
+        "doc": "Starts the body scrolled to its end, and keeps it there as content is added at the end: a conversation, a log. Someone who scrolled up stays where they are."
+      },
+      {
+        "name": "body_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the body and makes it a tab stop, so it can be scrolled with the keys when nothing in it takes focus."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "Its id in the page."
       }
     ],
     "variants": [],
@@ -7092,6 +7925,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -7166,6 +8011,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -7237,6 +8094,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -7730,6 +8599,12 @@
         "doc": "Lets items wrap onto more lines."
       },
       {
+        "name": "scroll_on_phones",
+        "generics": "",
+        "args": "",
+        "doc": "Lets items wrap onto more lines, but on a phone (under 640 px) keeps them on one line that scrolls sideways: for a row of actions above content that needs the room, such as a conversation's messages."
+      },
+      {
         "name": "children",
         "generics": "",
         "args": "children: impl IntoNodes",
@@ -7755,6 +8630,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -7852,6 +8739,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -7981,6 +8880,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -8201,6 +9112,12 @@
         "generics": "",
         "args": "",
         "doc": "The themes a reader may choose."
+      },
+      {
+        "name": "toasts",
+        "generics": "",
+        "args": "position: crate::components::ToastPosition",
+        "doc": "Where the pages' toasts appear: at the bottom, at the end, unless the app keeps something there that a toast must not cover, such as a composer's Send button."
       },
       {
         "name": "prefetch_home",
@@ -8457,6 +9374,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -8852,12 +9781,266 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "SplitHeight": {
+    "name": "SplitHeight",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "How tall a split is.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Auto",
+        "doc": "As tall as its content: the default, for panes side by side.",
+        "default": true
+      },
+      {
+        "name": "Sm",
+        "doc": "20rem.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "32rem.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "44rem.",
+        "default": false
+      },
+      {
+        "name": "Screen",
+        "doc": "The rest of the screen: in the app shell, what the top bar and the page's heading leave; elsewhere, the whole screen. Each pane scrolls on its own, like an app.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "SplitPane": {
+    "name": "SplitPane",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "Panes with separators between them.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A split named `id` in the page. The id is what its saves say they are for."
+      },
+      {
+        "name": "toggle",
+        "generics": "",
+        "args": "button: Button, pane: &str",
+        "doc": "A `Button` that opens or collapses the pane named `pane`, with no request. Give it an `href` for JavaScript off and for stacked panes, where it is a link: a page that shows that pane, made current."
+      },
+      {
+        "name": "stacked_only",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Wraps `content` so it shows only while the split around it shows its panes one at a time: a link back to the list from a detail pane."
+      },
+      {
+        "name": "side_by_side_only",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Wraps `content` so it shows only while the split around it shows its panes side by side."
+      }
+    ],
+    "methods": [
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the panes one above another, with the separators between them moved up and down. Give it a `height`."
+      },
+      {
+        "name": "pane",
+        "generics": "",
+        "args": "pane: Pane",
+        "doc": "Adds a pane."
+      },
+      {
+        "name": "pane_with",
+        "generics": "",
+        "args": "id: &str, fill: impl FnOnce(Pane) -> Pane",
+        "doc": "Fills in the pane named `id`: a layout written once, for the page and for reading a save, and the content added where the page is drawn."
+      },
+      {
+        "name": "stack_below",
+        "generics": "",
+        "args": "width: SplitWidth",
+        "doc": "Shows one pane at a time while the split is narrower than `width`: the current one. The separators go, and the page links the panes."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "The pane the page is about: the one shown when the panes stack, and shown even if it is collapsed. The fill pane when not said."
+      },
+      {
+        "name": "save_to",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Posts the sizes to `url` when a person changes them: `split`, `sizes` (a percent for each pane, one decimal) and `collapsed` (the indexes of the collapsed panes). Read it with `SplitSave`. The URL must be on this site."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "height: SplitHeight",
+        "doc": "Sets how tall it is."
+      },
+      {
+        "name": "grip",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a grip on each separator, a hint that it moves."
+      },
+      {
+        "name": "sizes",
+        "generics": "",
+        "args": "saved: &SplitSizes",
+        "doc": "Draws it with sizes a person saved. Sizes that no longer fit the layout are left out, so a saved size never breaks a page."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "Its id."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SplitSave": {
+    "name": "SplitSave",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "What a split's separators post when a person changes the sizes. It answers forgery as a form does: a post from another site gets 403, anything but a urlencoded body 415, a `GET` 405, and a body over 4 KiB 413.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "body: &[u8]",
+        "doc": "Reads a save from a urlencoded body. `None` when a field is missing or doubled."
+      }
+    ],
+    "methods": [
+      {
+        "name": "split",
+        "generics": "",
+        "args": "",
+        "doc": "The split it says it is for."
+      },
+      {
+        "name": "sizes_for",
+        "generics": "",
+        "args": "split: &SplitPane",
+        "doc": "The sizes, if this save is for `split` and they read: see `SplitSizes::read`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SplitSizes": {
+    "name": "SplitSizes",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "Sizes a person chose, read from a save and checked against the layout. Draw a page with them through `SplitPane::sizes`, and keep them with `to_text`.",
+    "constructors": [
+      {
+        "name": "read",
+        "generics": "",
+        "args": "sizes: &str, collapsed: &str, split: &SplitPane",
+        "doc": "The sizes in `sizes` (a percent per pane, at most one decimal, from 0 to 100) and the panes named collapsed in `collapsed` (their indexes), for `split`. `None` when they don't read: another number of sizes, a size that isn't a number in range, an index past the end or doubled, or a pane collapsed that may not be. Sizes that read are held to the layout's rules, as the page draws them."
+      },
+      {
+        "name": "from_text",
+        "generics": "",
+        "args": "text: &str, split: &SplitPane",
+        "doc": "Sizes kept with `to_text`, read again for `split`. `None` when they no longer fit it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "to_text",
+        "generics": "",
+        "args": "",
+        "doc": "The sizes as one line of text, to keep: `\"28,48,24;2\"`."
+      },
+      {
+        "name": "tenths",
+        "generics": "",
+        "args": "",
+        "doc": "Each pane's size in tenths of a percent, the fill pane's included. A collapsed pane keeps the size it comes back at."
+      },
+      {
+        "name": "is_collapsed",
+        "generics": "",
+        "args": "index: usize",
+        "doc": "Whether the pane at `index` is collapsed."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SplitWidth": {
+    "name": "SplitWidth",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/split.rs",
+    "summary": "A width of the split itself, not of the window: the split follows its own room, so a split beside a sidebar stacks when the room left is narrow.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "pixels",
+        "generics": "",
+        "args": "",
+        "doc": "The width in CSS pixels."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Sm",
+        "doc": "640px.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "768px.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "1024px.",
+        "default": false
+      },
+      {
+        "name": "Xl",
+        "doc": "1280px.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Stack": {
     "name": "Stack",
@@ -8907,6 +10090,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -8954,6 +10149,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -9474,6 +10681,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -9607,6 +10826,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -9660,6 +10891,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -9723,6 +10966,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -9776,6 +11031,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -9956,6 +11223,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -10058,6 +11337,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
@@ -11044,6 +12335,18 @@
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -11653,6 +12956,18 @@
         "generics": "",
         "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
         "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
       },
       {
         "name": "span",
