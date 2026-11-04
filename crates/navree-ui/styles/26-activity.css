@@ -127,9 +127,13 @@ dd,dl{margin:0}
 [data-slot=fact-grid]{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),1fr));gap:.75rem;
   @media (min-width:768px){&[data-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}&[data-cols="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}&[data-cols="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}&[data-cols="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}&[data-cols="6"]{grid-template-columns:repeat(6,minmax(0,1fr))}}
 }
-[data-slot=fact-card]{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;padding:.875rem 1rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1);min-width:0;&[data-icon]{grid-template-columns:auto minmax(0,1fr);column-gap:.75rem}}
-[data-slot=fact-icon]{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:var(--radius);background:color-mix(in oklab,var(--tone) 14%,var(--ink-2));color:var(--tone-text)}
+/* A row, not a grid: a flex container's narrowest width keeps its longest word, so a
+   card in a table cell, an auto column or a row beside other content never squeezes a
+   word apart; the body may still shrink, so a word too long for the card breaks inside it. */
+[data-slot=fact-card]{display:flex;align-items:flex-start;gap:.75rem;padding:.875rem 1rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1)}
+[data-slot=fact-body]{flex:1 1 auto;min-width:0}
+[data-slot=fact-icon]{flex:none;display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:var(--radius);background:color-mix(in oklab,var(--tone) 14%,var(--ink-2));color:var(--tone-text)}
 [data-slot=fact-body] > div{display:flex;flex-direction:column;gap:.125rem;min-width:0}
-[data-slot=fact-label]{color:var(--fg-3);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;overflow-wrap:anywhere}
-[data-slot=fact-value]{color:var(--fg);font-size:1.125rem;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
-[data-slot=fact-detail]{color:var(--fg-2);font-size:13px;overflow-wrap:anywhere}
+[data-slot=fact-label]{color:var(--fg-3);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;overflow-wrap:break-word}
+[data-slot=fact-value]{color:var(--fg);font-size:1.125rem;font-weight:600;line-height:1.35;overflow-wrap:break-word}
+[data-slot=fact-detail]{color:var(--fg-2);font-size:13px;overflow-wrap:break-word}

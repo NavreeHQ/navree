@@ -3,7 +3,7 @@
 //!
 //! | Page | Shows |
 //! |---|---|
-//! | `/display` | every component, with `?case=` for one state (`empty`, `one`, `many`, `long`, `rtl`, `hostile`, `hidden`, `loading`, `failed`) |
+//! | `/display` | every component, with `?case=` for one state (`empty`, `one`, `many`, `long`, `rtl`, `hostile`, `hidden`, `loading`, `failed`, `words`) |
 //! | `/display/live` | a live feed and a live table on one stream; `?window=5|20|all` |
 //! | `/display/people/{n}` | a recipient: outcome chips, fact cards and a timeline |
 //! | `/display/events` | the event stream (`text/event-stream`) |
@@ -684,6 +684,43 @@ fn facts_5() -> FactGrid {
     ])
 }
 
+/// A place: a flag beside a city, as an app puts one in a fact card's value.
+fn city_fact() -> FactCard {
+    FactCard::new(
+        "Ships to",
+        Row::gap(2)
+            .align(Align::Center)
+            .children((flag("AR"), Text::new("Buenos Aires").inline())),
+    )
+    .icon(icons::MAP_PIN)
+    .detail("Argentina")
+}
+
+/// Fact cards where the space they get depends on their own content: a table's
+/// cell, a row beside a long sentence, and a grid of a fixed card width with a
+/// long unbroken address in it.
+fn facts_in_tight_places() -> Vec<Node> {
+    let sentence = "Ordered three times this year, always shipped from the Rotterdam warehouse, and paid by card on every order.";
+    vec![
+        Table::new()
+            .caption("A fact card in a table's cell")
+            .head((TableHead::new("Place"), TableHead::new("Note")))
+            .rows(TableRowEl::new((
+                TableCell::new(city_fact()),
+                TableCell::new(sentence),
+            )))
+            .into(),
+        Row::gap(3)
+            .attr("id", "words-row")
+            .children((city_fact(), Text::new(sentence)))
+            .into(),
+        FactGrid::new()
+            .attr("id", "words-grid")
+            .card(city_fact().detail("customer.service.team.northwest@fernhill-supply.example.com"))
+            .into(),
+    ]
+}
+
 fn facts_long() -> FactGrid {
     FactGrid::new().cards([
         FactCard::new(LONG, LONG).icon(icons::MAP_PIN).detail(LONG),
@@ -846,6 +883,7 @@ fn cases(name: &str) -> Vec<Element> {
             "Hidden",
             (hidden_timeline(), sample_feed("hidden-feed")),
         )],
+        "words" => vec![section("Words", facts_in_tight_places())],
         "loading" => vec![section(
             "Loading",
             (

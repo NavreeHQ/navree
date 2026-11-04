@@ -289,6 +289,50 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("fact card text wraps between words, and breaks a word only when it can't fit", async () => {
+        for (const width of [1440, 390]) {
+          const page = await open("/display?case=words", { viewport: { width, height: 900 } });
+          const found = await page.evaluate(() => {
+            const midWord = [];
+            for (const card of document.querySelectorAll("[data-slot=fact-card]")) {
+              const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+              for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                let top = null;
+                for (let i = 0; i < node.data.length; i++) {
+                  const range = document.createRange();
+                  range.setStart(node, i);
+                  range.setEnd(node, i + 1);
+                  const rect = range.getClientRects()[0];
+                  if (!rect) continue;
+                  // A line that starts inside a word, where a whole word would have fitted.
+                  const word = node.data.slice(0, i).split(/\s/).pop() + node.data.slice(i).split(/\s/)[0];
+                  const room = node.parentElement.closest("dd, dt").getBoundingClientRect().width;
+                  const measure = document.createElement("span");
+                  measure.textContent = word;
+                  // Set through the CSSOM, which the policy allows: an unwrapped word's width.
+                  measure.style.whiteSpace = "nowrap";
+                  measure.style.position = "absolute";
+                  node.parentElement.append(measure);
+                  const needs = measure.getBoundingClientRect().width;
+                  measure.remove();
+                  if (top !== null && rect.top > top + 2 && /\S/.test(node.data[i - 1]) && /\S/.test(node.data[i]) && needs <= room) {
+                    midWord.push(`${node.data.slice(0, i)}|${node.data.slice(i)}`);
+                  }
+                  top = rect.top;
+                }
+              }
+            }
+            const grid = document.querySelector("#words-grid [data-slot=fact-card]");
+            return { midWord, overflows: grid.scrollWidth > grid.clientWidth + 1 };
+          });
+          assert.deepEqual(found.midWord, [], `${width} px: no word broken where it fits`);
+          assert.equal(found.overflows, false, `${width} px: an address longer than the card breaks inside the card`);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width} px: no sideways scroll`);
+          await shot(page, `case-words-${width}`);
+          await page.done();
+        }
+      });
+
       test("outcome chips say yes or no to a screen reader, and a dot or tone never stands alone", async () => {
         const page = await open("/display");
         const chips = await page.evaluate(() => [...document.querySelectorAll("[data-variant=outcome]")].map((c) => c.textContent.trim()));
