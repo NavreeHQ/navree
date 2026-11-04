@@ -22,7 +22,8 @@ The server decides from what asked. A route marked `page()` or `json_only()` is 
 
 | The request | The answer |
 |---|---|
-| A route marked `json_only()`, or a client that asks for JSON alone | the JSON error body, unchanged |
+| A route marked `json_only()` | the JSON error body, for every client, the runtime included |
+| A client that asks for JSON alone, on a page route or an unmarked one | the JSON error body |
 | A route under `http.api_prefix` that is not marked `page()` | the JSON error body, even for a browser |
 | A browser opening a page, with or without JavaScript | a page |
 | A boosted link | the same page, which the runtime shows in place: the shell stays, the title changes and the page is announced |
@@ -33,17 +34,25 @@ The server decides from what asked. A route marked `page()` or `json_only()` is 
 RouteDef::on(Method::GET, "!/deals/{id}", show).authenticated().page()
 ```
 
-A page route answers a client that asks for JSON alone with JSON. Without a mark, `*/*` and no `Accept` header are JSON, and a browser's `text/html` is a page.
+Without a mark, `*/*` and no `Accept` header are JSON, and a browser's `text/html` is a page. A route's mark decides for every error it is the route of, including one raised before the route runs: a refused CSRF token, a rate limit, a failed sign-in check, a method the route does not take (a 405 follows the route of the first method the path takes), and a panic.
+
+The runtime's own requests carry `X-Navree-UI`, and what they ask for is decided by that header whatever `Accept` says: a boosted link, a region fetch and a form posted through the runtime get a page, a state and a toast even when they also send `Accept: application/json`, on an API path too. Only `json_only()` overrides it. A client of your API that sends `X-Navree-UI` is asking for what the runtime asks for.
+
+A JSON error answered by an app with error pages carries `Vary: Accept, X-Navree-UI` and `Cache-Control: no-store`, so a cache keeps the page and the JSON of one address apart, and keeps neither.
 
 ## In the shell, or on its own
 
-A signed-in user gets the page inside the [app shell](/docs/ui/app-shell/): the sidebar and top bar stay, the short title is the page's heading, and the state sits below it. The app needs a `Shell` provider for this, as it does for any page. If it builds the shell per request, contribute an `ErrorShell`:
+A signed-in user gets the page inside the [app shell](/docs/ui/app-shell/): the sidebar and top bar stay, the short title is the page's heading, and the state sits below it. The app needs a `Shell` provider for this, as it does for any page. If it builds the shell per request, contribute an `ErrorShell`. It gets the request's `ErrorContext`, owned:
 
 ```rust
 m.contribute(ErrorShell::new(|request| async move { shell_for(request.user).await }));
 ```
 
-A guest gets a page on its own: the same stylesheet, one `h1` and no script. So does a 401, a 429 and a 503 for anyone, because those must work when much else does not, and so does a panic.
+The builder runs only for an error, and it has one second. One that is slower, that panics or that returns `None` leaves the page on its own, with no sidebar, and never turns the answer into JSON.
+
+A guest gets a page on its own: the same stylesheet, one `h1` and no script. So does a 401, a 429 and a 503 for anyone, because those must work when much else does not, and so does a panic. The page carries the build, so a boosted link to it is shown in place and costs one request.
+
+After a form posted without JavaScript, the page offers Home and a plain sign-in, and no Reload or Try again: a link would repeat the request as a `GET` of an address that only takes a `POST`.
 
 ## Sign in, and back to where you were
 
@@ -55,10 +64,12 @@ sign_in = "/sign-in"
 sign_in_redirect = false   # true sends a guest straight there with a 303
 ```
 
-Your sign-in page reads `next` with `ReturnTo`, which accepts only an address on your site. Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example` or an encoded slash, is dropped and the user lands on your fallback.
+With `sign_in_redirect` on, a guest is redirected only from another page: when the sign-in address itself answers a 401, the page is shown, not a redirect to itself.
+
+Your sign-in page reads `next` with `ReturnTo`, which accepts only an address on your site: one path with a single leading slash, no scheme, backslash, control character or dot segment (checked on the path as a browser reads it, so `/a%3F/..//evil.example` is refused). Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example` or an encoded slash, is dropped and the user lands on your fallback. `resolve_for` also drops the sign-in page and anything below it, however it is spelled, which would send the user round in a circle.
 
 ```rust
-let target = ReturnTo::resolve(form.next.as_deref(), "/");
+let target = ReturnTo::resolve_for(form.next.as_deref(), "/sign-in", "/");
 Reply::redirect(target)
 ```
 
@@ -70,7 +81,7 @@ A 500, and any 5xx but a 503, shows fixed words. The error's source, its message
 
 Every page shows a reference, the request id from the `X-Request-Id` header, so a user can quote it and you can find the log line. In the shell it has a Copy button.
 
-A debug build can show more. Turn on `ui.debug` (on by default only in a build with debug assertions) and a block marked "Development only" lists the status, route, message and cause. Never turn it on where users can see it.
+A debug build can show more. Turn on `ui.debug` (on by default only in a build with debug assertions) and a block marked "Development only" lists the status, route, message and cause. Production is final: when the app's `env` (or `app.env`) is `production`, in any case, the block is never shown, whatever the build, the configuration or the code ask for. Never turn it on where users can see it.
 
 ## Inside a page
 
@@ -87,7 +98,7 @@ The same state fits wherever a place has nothing to show.
 
 ## A region that gets an error
 
-A [region](/docs/ui/regions/) that gets a 401, 403, 404, 410, 429, 500 or 503 shows the state in place, keeps its card, and announces it once. Its Try again button fetches the region again. A region that polls stops on a 401, 403, 404 or 410: a door that is shut stays shut.
+A [region](/docs/ui/regions/) that gets a 401, 403, 404, 410, 429, 500 or 503 shows the state in place, keeps its card, and announces it once. Its Try again button fetches the region again. A region that polls (and a feed, and a table that refreshes itself) stops on a 401, 403, 404 or 410: a door that is shut stays shut, and the poll starts again when the page that holds the region is shown again. On a 429, 500, 503 or any other failure the poll waits twice as long each time, up to five minutes, or as long as `Retry-After` says (up to an hour), and a state it has already said is not announced again on every poll.
 
 ## An action that gets an error
 

@@ -25,16 +25,16 @@ Use it for a part of a page that a guest can see the frame of. A whole page for 
 
 ## The way back
 
-`ReturnTo` accepts only an address on your site: one path, starting with a single slash, with no second slash or backslash, no scheme, no space or control character, no dot segment, and nothing that says so once its `%xx` escapes are read. It is at most 2,048 bytes.
+`ReturnTo` accepts only an address on your site: one path, starting with a single slash, with no second slash or backslash, no scheme, no space or control character, no dot segment, and nothing that says so once its `%xx` escapes are read. The path is cut at the `?` as written, before any escape is read, so an escaped `?` stays text in a segment and the dot segments after it still count. It is at most 2,048 bytes.
 
 ```rust
 async fn sign_in(Form(form): Form<SignIn>) -> Reply {
     // ... check the password ...
-    Reply::redirect(ReturnTo::resolve(form.next.as_deref(), "/"))
+    Reply::redirect(ReturnTo::resolve_for(form.next.as_deref(), "/sign-in", "/"))
 }
 ```
 
-Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example`, `javascript:alert(1)`, `/%2f/evil.example` or the sign-in page itself, is dropped. `resolve` then gives your fallback. Check `next` again in the handler that reads it: a hidden field can be changed.
+Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example`, `javascript:alert(1)`, `/%2f/evil.example` or the sign-in page itself, is dropped. `resolve_for` then gives your fallback; `resolve` does the same without knowing where the sign-in page is. Check `next` again in the handler that reads it: a hidden field can be changed.
 
 ## After a session ends
 

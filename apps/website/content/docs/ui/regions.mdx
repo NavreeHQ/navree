@@ -107,9 +107,9 @@ An action's reply can name regions to refetch with an `invalidate` op, so a chan
 
 ## When a fetch fails
 
-When your app answers a region's fetch with an error (a 401, 403, 404, 410, 429, 500 or 503), the runtime shows the state the server drew where the region was, keeps the card around it, and says what happened once. The Try again button fetches the region again. A region that polls stops asking after a 401, 403, 404 or 410. See [Errors and states](/docs/ui/errors-and-states/#a-region-that-gets-an-error).
+When your app answers a region's fetch with an error (a 401, 403, 404, 410, 429, 500 or 503), the runtime shows the state the server drew where the region was, keeps the card around it, and says what happened once. The Try again button fetches the region again. A region that polls stops asking after a 401, 403, 404 or 410, and starts again when the page that holds it is shown again. After a 429, 500, 503 or any other failure it waits longer each time (twice as long, up to five minutes) or as long as `Retry-After` says, and says what happened once, not on every poll. A feed and a table that refreshes itself follow the same rules. See [Errors and states](/docs/ui/errors-and-states/#a-region-that-gets-an-error).
 
-When nothing answers at all (the connection failed, the request ran out of time, a proxy answered in its own words), the region keeps what it had and `.when_failed(state)` shows a state beside it. `.when_offline()` is that with "You're offline" and a Try again button.
+When the fetch fails in a way the server did not draw (the connection failed, the request ran out of time, a proxy answered in its own words), the region keeps what it had and `.when_failed(state)` shows a state beside it. `.when_offline()` is that with "You're offline" and a Try again button, shown only when the browser could not reach the server at all: a request that ran out of time, or an answer that was an error but not a state, is not being offline, so use `.when_failed(state)` with your own words for those.
 
 ```rust
 Region::new("revenue")
