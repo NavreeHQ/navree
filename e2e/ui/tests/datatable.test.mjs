@@ -25,8 +25,10 @@ const post = (path) => fetch(BASE + path, { method: "POST" }).then((r) => r.text
 const get = (path) => fetch(BASE + path).then((r) => r.text());
 const reset = () => post("/__t/reset");
 
-/** Runs axe. Violations come back as short lines. */
+/** Runs axe once running animations and transitions have ended, so it reads final colours. Violations come back as short lines. */
 async function axe(page) {
+  // An animation that never ends (a spinner) is not waited for.
+  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? 0)).map((a) => a.finished.catch(() => {}))));
   await page.evaluate(axeSource);
   return page.evaluate(async () => {
     const out = await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] });
