@@ -23,7 +23,7 @@ import { PatternNav } from "./pattern-nav";
 export const metadata: Metadata = pageMetadata({
   title: "Architecture: from monolith to microservices",
   description:
-    "Build a modular monolith, microservices, a multi-tenant SaaS, an event-driven system, an API-first backend or a backend for frontend with one framework.",
+    "Six backend shapes from one framework, monolith to microservices; screens in Navree UI, Next.js or Nuxt; and the rules every app follows, with their tests.",
   path: "/architecture/",
 });
 

@@ -48,7 +48,7 @@ export const mainPages: { title: string; path: string; summary: string }[] = [
   { title: "Home", path: "/", summary: `What ${site.name} is, what comes in the box, and how to start.` },
   { title: "Navree UI", path: "/ui/", summary: "Typed Rust components rendered on the server: how it works, every component with a live preview, what comes next." },
   { title: "Navree for AI", path: "/ai/", summary: "Agent skills, the Navigator MCP server and docs for models, and the AI SDK for your product." },
-  { title: "Architecture", path: "/architecture/", summary: "The system shapes you can build, from a modular monolith to microservices, with one framework." },
+  { title: "Architecture", path: "/architecture/", summary: "The system shapes you can build with one framework, from a modular monolith to microservices; how each draws its screens; and the rules every Navree app follows, each with its test." },
   { title: "Ecosystem", path: "/ecosystem/", summary: "The first-party packages and tools: monitoring, admin, queues, debugging, deployment and more." },
   { title: "Performance", path: "/performance/", summary: "Measured results on a CRM-style API, with the workload, the method and how to repeat the run." },
   { title: "Showcase", path: "/showcase/", summary: "The reference CRM with its Next.js and Nuxt front ends, example apps drawn with Navree UI, and the first-party tools built on Navree." },
