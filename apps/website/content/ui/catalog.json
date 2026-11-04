@@ -1614,7 +1614,8 @@
         "flags/shapes",
         "flags/places",
         "flags/in-components",
-        "flags/from-data"
+        "flags/from-data",
+        "flags/with-icons"
       ]
     },
     {
@@ -32577,6 +32578,59 @@
               "tag": "svg",
               "count": 3,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags/with-icons",
+      "component": "flags",
+      "slug": "with-icons",
+      "title": "India first, its region, and icons",
+      "kind": "single",
+      "code": "let region = [\n    \"NP\", \"BT\", \"BD\", \"LK\", // neighbours\n    \"AE\", \"SG\", \"JP\", \"GB\", \"US\", // partners\n];\nlet tags = [\n    Badge::new(\"Store\").icon(icons::STORE),\n    Badge::new(\"Shipped\").icon(icons::TRUCK),\n    Badge::new(\"Paid\").icon(icons::INDIAN_RUPEE),\n    Badge::new(\"Ludhiana\").icon(icons::MAP_PIN),\n];\nStack::gap(4).children((\n    flag!(\"IN\").size(FlagSize::Xl),\n    Row::gap(2).children(region.map(Flag::country)),\n    Row::gap(2).children(tags),\n))",
+      "src": "/ui-preview/flags/with-icons.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "flag",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "row",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "badge",
+                  "tag": "span",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }

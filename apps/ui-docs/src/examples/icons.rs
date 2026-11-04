@@ -28,6 +28,13 @@ pub fn all() -> Vec<Example> {
         )
         .start(),
         single!("flags", "from-data", "A code from data", flags_from_data),
+        single!(
+            "flags",
+            "with-icons",
+            "India first, its region, and icons",
+            flags_with_icons
+        )
+        .start(),
     ]
 }
 
@@ -135,6 +142,24 @@ fn flags_in_components() -> Stack {
                     TableCell::new("9,215").numeric(),
                 )),
             )),
+    ))
+}
+
+fn flags_with_icons() -> Stack {
+    let region = [
+        "NP", "BT", "BD", "LK", // neighbours
+        "AE", "SG", "JP", "GB", "US", // partners
+    ];
+    let tags = [
+        Badge::new("Store").icon(icons::STORE),
+        Badge::new("Shipped").icon(icons::TRUCK),
+        Badge::new("Paid").icon(icons::INDIAN_RUPEE),
+        Badge::new("Ludhiana").icon(icons::MAP_PIN),
+    ];
+    Stack::gap(4).children((
+        flag!("IN").size(FlagSize::Xl),
+        Row::gap(2).children(region.map(Flag::country)),
+        Row::gap(2).children(tags),
     ))
 }
 
