@@ -71,6 +71,11 @@ Typing ranks the items: those whose label starts with the text, then whose words
 `.source(url)` adds results from the server below the page's own items. The runtime asks `url?q=text` after a short pause, ignores a late answer, and shows the groups of the [ChoiceList](/docs/components/combobox/#searching-on-the-server) that comes back. A choice made `.link(href)` is an item that goes to that page:
 
 ```rust
+use navree::prelude::*;
+use navree::ui::*;
+
+const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
+
 async fn palette_search(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
     // People whose name contains the text, as links
     let people = PEOPLE

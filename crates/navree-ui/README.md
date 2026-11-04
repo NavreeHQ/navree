@@ -201,10 +201,10 @@ Field::new("deal-owner", "Owner").control(
 )
 
 async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
-    PEOPLE.find(Person::query(), &query, &uow, "/people/options", |r| {
+    Ok(PEOPLE.find(Person::query(), &query, &uow, "/people/options", |r| {
         let person = r.into_inner();
         Choice::new(person.id.to_string(), person.name)
-    }).await
+    }).await?)
 }
 ```
 

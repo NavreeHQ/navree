@@ -21,12 +21,12 @@ use super::query::{ChoiceList, OptionQuery};
 /// const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
 ///
 /// async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
-///     PEOPLE
+///     Ok(PEOPLE
 ///         .find(Person::query(), &query, &uow, "/people/options", |record| {
 ///             let person = record.into_inner();
 ///             Choice::new(person.id.to_string(), person.name)
 ///         })
-///         .await
+///         .await?)
 /// }
 /// ```
 #[derive(Clone, Copy, Debug)]
