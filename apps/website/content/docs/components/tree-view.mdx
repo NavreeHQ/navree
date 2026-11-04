@@ -65,13 +65,23 @@ Virtual scrolling is left out on purpose: it hides items from find-in-page and f
 
 ## Choosing
 
-`.select(TreeSelect::Multiple)` puts a checkbox on each node, and `TreeSelect::Single` a radio. They are the browser's inputs, so they post as the tree's name with no script. With many, `.cascade()` makes a choice in a branch reach everything under it, and shows a branch with some of its children chosen as half chosen. A disabled node is not the person's to change, and does not count towards its parent.
+`.select(TreeSelect::Multiple)` puts a checkbox on each node, and `TreeSelect::Single` a radio. They are the browser's inputs, so they post as the tree's name with no script. With many, `.cascade()` makes a choice in a branch reach what is under it that the person can choose, and shows a branch with some of its children chosen as half chosen.
+
+A parent is **whole** only when every child is chosen. A disabled child that is not chosen keeps it half chosen, and so does a Show more row or a count above what is drawn, so a parent never stands for what the person could not choose or was not shown. A half chosen parent posts nothing for itself, only the children that are chosen. Pressing a parent when everything it can reach is already chosen clears them.
 
 <UiPreview example="tree-view/multiple" />
 
 <UiPreview example="tree-view/single" />
 
-A branch that is chosen before its children arrive stands for them: they are chosen when they load. On the server a chosen branch posts its own id, so `TreeSelection::roots(parent)` gives the chosen nodes none of whose ancestors is chosen, which is what a cascading choice means.
+A lazy branch that is chosen before its children arrive opens by itself and waits: its box does not post until the children are here, and then they are chosen, so what is chosen is what was shown. If they never come the branch is not chosen. Ctrl+A and a range choose what is showing, and leave a branch whose children have not been fetched alone.
+
+A node that is chosen and disabled (`.selected(true).disabled(true)`) posts a hidden copy of itself, for as long as it stays chosen, so a save does not drop it. (A single choice tree is left out: a hidden copy beside a radio would post as well as whatever is chosen next.)
+
+### What a chosen branch means on the server
+
+A whole branch posts its own id along with its chosen children, and `TreeSelection::roots(parent)` gives the chosen nodes none of whose ancestors is chosen. That reduction is only a way of reading the post. A chosen branch must stand for **what the caller may choose under it, and no more**: when you expand it, leave out what is disabled for the caller, what they could not see, and what is not theirs. The post is the browser's, and anyone can send an id of a branch with anything under it.
+
+Check in the handler that answers a lazy branch (`parent` in the query) that the caller may see that `parent`, and answer only the children they may see. A `first_unknown` check is not enough: it asks whether the id is in the tree, not whether it is the caller's to see.
 
 Read what was posted with `TreeSelection`:
 
@@ -99,7 +109,7 @@ let state = TreeState::from_query("/files", &query);
 Tree::new("files", "Files").state(state) /* ... */
 ```
 
-`TreeState` keeps at most 200 open branches and drops ids over 256 bytes, so an address can't be used to make a page enormous.
+Every caret repeats the whole address, so what it holds is bounded: at most 200 open branches of 256 bytes each and 2 KiB (`MAX_OPEN_BYTES`) in all, and at most 20 other fields and 1 KiB of them (`MAX_QUERY_BYTES`). What does not fit is left out of the links, and an address can't be used to make a page enormous. The links are local: a path that is not (`//host/x`, a scheme) is not used, and they are `?open=...` on the page the person is on.
 
 ## Right to left
 

@@ -43,12 +43,22 @@ A step lives at `{base}/{draft id}/{step id}`. The wizard decides what a post me
 ```rust
 use navree::ui::*;
 
-// GET {base}/start: a new draft, and its first step.
-async fn start(store: Drafts, me: User) -> Reply {
+// GET {base}/start: the draft the person already has open, else a new one and its first step.
+async fn start(store: Drafts, session: Session, me: User) -> Result<Reply> {
     let wizard = deal_wizard();
+    // The draft's id is kept in the session, so coming back to "New deal" goes back to the draft
+    // instead of starting another one every time.
+    if let Some(id) = session.get::<String>("deal_draft") {
+        if let Some(draft) = store.load(&me.id, &id).await? {
+            if !draft.submitted {
+                return Ok(Reply::redirect(wizard.url(&draft.id, &wizard.entry(&draft))));
+            }
+        }
+    }
     let draft = wizard.start();
     store.save(&me.id, &draft, None).await?;
-    Reply::redirect(wizard.url(&draft.id, &draft.step))
+    session.insert("deal_draft", &draft.id)?;
+    Ok(Reply::redirect(wizard.url(&draft.id, &draft.step)))
 }
 
 // GET {base}/{id}/{step}: the step as a page.
@@ -110,7 +120,7 @@ The wizard draws a [Stepper](/docs/components/stepper/) of its steps, with their
 
 Steps are done in order by default. `.free()` lets them be opened in any order; Finish still checks every step. `.review()` ends with a summary. `.vertical()` puts the stepper at the side.
 
-An **optional** step (`WizardStep::of::<Extras>(...).optional()`) can be passed over without opening it, and if it was opened it must be valid.
+An **optional** step (`WizardStep::of::<Extras>(...).optional()`) can be passed over without opening it. If it holds an answer, however the person left it (Next, Back, the stepper or Save), the answer must be valid: the stepper shows the step as having an error, the steps after it stay closed, the review flags it, and Finish refuses it. A step left with nothing in it is skipped.
 
 ## The review
 
@@ -122,7 +132,7 @@ The review step shows every step's answers as text: a choice by its label, a swi
 
 <UiPreview example="wizard/errors" />
 
-A `Draft` is plain data, with `serde`: an id, a revision, the step the person is on, and each step's last answers. Keep it where you keep other things. `MemoryDrafts` holds drafts in memory, bounded in count and in age, for tests and for an app with one process. For a real app, implement `DraftStore` over a table: `load`, `save` and `discard`, with an owner on each, so one person's draft id finds nothing for another person.
+A `Draft` is plain data, with `serde`: an id, a revision, the step the person is on, and each step's last answers. Keep it where you keep other things. `MemoryDrafts` holds drafts in memory, bounded in count and in age, for tests and for an app with one process: when it is full, a new draft takes the place of the one touched longest ago (an owner at their limit of 100 gives up their own oldest first), so a full store never locks everyone else out. A person whose draft was forgotten finds nothing when they come back, as with one past its age. For a real app, implement `DraftStore` over a table: `load`, `save` and `discard`, with an owner on each, so one person's draft id finds nothing for another person.
 
 ```rust
 use navree::ui::flow::{Draft, DraftError, DraftStore};
@@ -134,7 +144,7 @@ use navree::ui::flow::{Draft, DraftError, DraftStore};
 
 What a draft holds is limited, since it is built from what a visitor posts: at most 256 KiB in all, 64 KiB for one value and 1,000 values for one step. A post that would go past that is refused and changes nothing. Only the fields of the step are kept, so extra fields in a post go nowhere.
 
-**Passwords and files are read to check the step and are never kept.** A step with a password in it is done if it passed when it was tried; the person types the password again if they leave and return, and what it got wrong is kept as words, not as the value. If the wizard's last act needs a password, ask for it in the form that finishes, not in a step.
+**Passwords and files are read to check the step and are never kept.** A step with a password in it is done if it passed when it was tried; the person types the password again if they leave and return, and what it got wrong is kept as words, not as the value. A rule's words can say the value back ("hunter2 is on the list of common passwords"), so the value is replaced with dots in the words before they are kept. If the wizard's last act needs a password, ask for it in the form that finishes, not in a step.
 
 ## Two windows, and a double click
 

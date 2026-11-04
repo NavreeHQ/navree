@@ -76,7 +76,7 @@ match grid.read(&pairs, "volume") {
 }
 ```
 
-`check` reads one text, `read` finds the field in a form's pairs (the same field twice is an error, not a choice), and `read_range` and `check_range` read a range's two values and hold them to their order and their gap. A text must be plain digits with an optional sign and point: `1e3`, `0x10`, `NaN`, spaces and thousands separators are refused, and no number has more than 20 digits before the point or 9 after it. `grid.message(error, &labels)` writes the error in words.
+`check` reads one text, `read` finds the field in a form's pairs (the same field twice is an error, not a choice), and `read_range` and `check_range` read a range's two values and hold them to their order and their gap. The text is read the way a browser writes a number: a slider that takes any value (`any_step()`) posts what a drag lands on, a long fraction such as `0.5033333333333333`, and a very small step is posted with an exponent (`1e-7`). The server reads both, and rounds to 9 decimals (half away from zero), so `0.30000000000000004` is `0.3` on a grid of tenths. Nothing else is a number: `0x10`, `NaN`, `Infinity`, spaces and thousands separators are refused, and no number has more than 20 digits before the point, a text over 128 bytes, or an exponent past 400. `grid.message(error, &labels)` writes the error in words.
 
 <UiPreview example="slider/check" />
 
@@ -109,11 +109,13 @@ struct Settings {
 | `Home`, `End` | Go to the least or the most. |
 | `Page Up`, `Page Down` | Move by the larger step. |
 | `Shift` with an arrow | Moves by the larger step. |
+| Any arrow, on a slider that takes any value | Moves by a hundredth of the track, and Shift or Page by a tenth, the same in every browser. |
 
 - Each thumb is a slider with its own value. In a range they are named "minimum" and "maximum" after the slider's label, and keep their order in the tab sequence whatever their values.
 - `aria-valuetext` is written when the value has a prefix, a suffix or a name.
 - The thumbs are 24 px tall, so they are large enough to press.
-- The value beside the slider is an `<output>` for the thumb or thumbs.
+- The value beside the slider is an `<output>` for the thumb or thumbs. It is written from the number, with the decimals of the step (the shortest text, up to nine places, for a slider that takes any value), and never as an exponent.
+- `SliderLabels { decimal_point: ",".into(), .. }` writes what the person reads with a comma, in the value, the value text and the messages. What is posted always has a point.
 
 </UiA11y>
 
