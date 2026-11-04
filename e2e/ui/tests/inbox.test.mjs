@@ -197,6 +197,9 @@ for (const name of NAMES) {
             assert.equal(await sideways(page), false, `${path} scrolls sideways`);
             await shot(page, `${path.replace(/[/?=]/g, "_")}-${theme}-${width}`);
             await page.done();
+            // Each page holds an event stream open: closing it keeps WebKit, whose contexts
+            // share one pool of six connections to a host, from running out.
+            await page.context().close();
           }
         });
       }
@@ -291,8 +294,10 @@ for (const name of NAMES) {
       // Past the most, it stops there.
       await drag("#inbox-separator-0", 600);
       assert.equal(await page.locator("#inbox-separator-0").getAttribute("aria-valuenow"), "44");
-      // The customer pane, dragged to the right edge, shuts.
-      await drag("#inbox-separator-1", 400);
+      // The customer pane, dragged to the window's right edge, shuts. (Past the window,
+      // Firefox under automation reports the pointer at 0 and never lets it go.)
+      const edge = await page.locator("#inbox-separator-1").boundingBox();
+      await drag("#inbox-separator-1", 1436 - (edge.x + edge.width / 2));
       assert.equal(await visible(page, "#customer"), false);
       await until(page, async () => /;2$/.test(await (await fetch("/__test/layout/1")).text()), null, "the collapsed pane saved");
       // The Customer button opens it again, with no request.
@@ -302,6 +307,8 @@ for (const name of NAMES) {
       assert.equal(await visible(page, "#customer"), true);
       assert.equal(requests, 0);
       assert.equal(await page.locator("[data-ui-split-toggle=customer]").getAttribute("aria-expanded"), "true");
+      // Opened again is saved too; waiting for it keeps this page's last save out of the next test.
+      await until(page, async () => /;$/.test(await (await fetch("/__test/layout/1")).text()), null, "the opened pane saved");
       assert.ok(width > 0);
       await page.done();
     });
@@ -739,6 +746,13 @@ for (const name of NAMES) {
 
     test("with JavaScript off every action is a link or a form", async () => {
       const page = await open("/inbox", { javaScriptEnabled: false });
+      // A form posted with no script: the click can return before the browser leaves the
+      // page (WebKit does), so wait for the page that answers to load.
+      const submit = async (target) => {
+        const loaded = page.waitForEvent("load");
+        await target.click();
+        await loaded;
+      };
       // The panes keep their sizes; the separators are lines, not controls.
       assert.equal(await page.locator("#inbox-separator-0").getAttribute("tabindex"), null);
       assert.equal(await page.locator("#conversations").isVisible(), true);
@@ -752,37 +766,33 @@ for (const name of NAMES) {
       await page.waitForURL(new RegExp(`/inbox/${id}`));
       // Reply.
       await page.locator("#composer-body").fill("Answered with no script at all.");
-      await page.locator("#composer").getByRole("button", { name: "Send" }).click();
-      await page.waitForLoadState();
+      await submit(page.locator("#composer").getByRole("button", { name: "Send" }));
       assert.equal((await held(id)).last.body, "Answered with no script at all.");
       assert.match(await page.locator("#thread-messages").textContent(), /Answered with no script at all\./);
       assert.match(await page.locator("body").textContent(), /Your reply is on its way/);
       // A saved reply, put in the text by a form post.
       await page.locator("#composer-body").fill("Hi,");
       await page.getByRole("button", { name: "Saved replies" }).click();
-      await page.getByRole("button", { name: "Passed to engineering" }).click();
-      await page.waitForLoadState();
+      await submit(page.getByRole("button", { name: "Passed to engineering" }));
       assert.match(await page.locator("#composer-body").inputValue(), /^Hi,\n\nI've passed this to our engineers/);
       // Assign through the page that lists the team.
       await page.locator("[popovertarget=assign-popover]").click();
       await page.getByRole("link", { name: "Choose from the whole team" }).click();
       await page.waitForURL(new RegExp(`/inbox/${id}/assign`));
       await page.locator("input[name=q]").fill("Aisha");
-      await page.getByRole("button", { name: "Search" }).click();
-      await page.getByRole("button", { name: "Assign to Aisha Bello" }).click();
-      await page.waitForURL(new RegExp(`/inbox/${id}`));
+      await submit(page.getByRole("button", { name: "Search" }));
+      await submit(page.getByRole("button", { name: "Assign to Aisha Bello" }));
+      await page.waitForURL(new RegExp(`/inbox/${id}(\\?|$)`));
       assert.equal((await held(id)).conversation.assignee_id, 6);
       // Status from the menu, which is the browser's own popover.
       await page.getByRole("button", { name: /status, change it/ }).click();
-      await page.getByRole("menuitem", { name: "Mark closed" }).click();
-      await page.waitForLoadState();
+      await submit(page.getByRole("menuitem", { name: "Mark closed" }));
       assert.equal((await held(id)).conversation.status, "closed");
       // Snooze with the browser's own date field.
       const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
       await page.locator("[popovertarget=snooze-popover]").click();
       await page.locator("#snooze input[type=date]").fill(day);
-      await page.locator("#snooze").getByRole("button", { name: "Snooze", exact: true }).click();
-      await page.waitForLoadState();
+      await submit(page.locator("#snooze").getByRole("button", { name: "Snooze", exact: true }));
       assert.equal((await held(id)).conversation.snoozed_until, day);
       await page.done();
     });
