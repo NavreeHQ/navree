@@ -721,7 +721,6 @@ name = "board-demo"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "futures-util",
  "http",
  "navree",
  "serde",
@@ -3266,7 +3265,6 @@ name = "inbox-demo"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "futures-util",
  "http",
  "navree",
  "serde",
@@ -8805,7 +8803,6 @@ name = "store-demo"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "futures-util",
  "http",
  "navree",
  "serde",

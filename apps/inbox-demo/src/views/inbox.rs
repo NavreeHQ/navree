@@ -97,15 +97,13 @@ pub fn page_title(page: &Inbox<'_>) -> String {
     )
 }
 
-/// The stream a page listens to.
+/// The address of the stream a page listens on: the app's live hub, for the lists
+/// and, with a conversation open, that conversation, its customer and the clock.
 pub fn stream_url(open: Option<&OpenThread>) -> String {
-    match open {
-        Some(thread) => format!(
-            "/inbox/events?open={}&customer={}",
-            thread.conversation.id, thread.customer.id
-        ),
-        None => "/inbox/events".to_owned(),
-    }
+    crate::live::page_stream(open.map(|thread| (thread.conversation.id, thread.customer.id)))
+        .href()
+        .as_str()
+        .to_owned()
 }
 
 /// The address of the page, without the pane.
@@ -133,11 +131,12 @@ pub fn head_region(open: &Open<'_>) -> Region {
             open.conversation.id,
             query_of(open.filters)
         ))
-        .live_from(format!(
-            "/inbox/events?open={}&customer={}",
-            open.conversation.id, open.customer.id
-        ))
-        .live_event("thread")
+        // Its changes, and the clock for its timers.
+        .live_on(
+            crate::live::page_stream(Some((open.conversation.id, open.customer.id)))
+                .on(crate::live::conversation_topic(open.conversation.id))
+                .event(crate::live::CLOCK),
+        )
         .children(thread_head(open))
 }
 
@@ -154,10 +153,10 @@ pub fn customer_region(
             "/inbox/{conversation}/fragments/customer{}",
             query_of(filters)
         ))
-        .live_from(format!(
-            "/inbox/events?open={conversation}&customer={customer}"
-        ))
-        .live_event("customer");
+        .live_on(
+            crate::live::page_stream(Some((conversation, customer)))
+                .on(crate::live::customer_topic(customer)),
+        );
     match view {
         Some(view) => region.children(customer_body(view, conversation, filters, now)),
         None => region.lazy(),

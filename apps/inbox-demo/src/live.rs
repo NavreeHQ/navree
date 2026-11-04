@@ -1,12 +1,15 @@
 //! The desk as it happens: customers write, teammates answer and close, the clock on
 //! each conversation runs down, and a snoozed conversation comes back on its day. Every
-//! change goes to every open page over a server-sent event stream.
+//! change goes to every open page through the app's live hub (`RealtimeModule`).
 //!
-//! An event is only a nudge. A page never reads what it says: each live part of a
-//! page fetches its own fragment again, so the stream can't put anything in a page
-//! that the server didn't draw. A stream is for one page: it says `conversations` for
-//! any change, and `thread` and `customer` only when the change is to the conversation
-//! or the customer that page has open, and more than its being read.
+//! A nudge says only that something changed. A page never reads it: each live part of
+//! a page fetches its own fragment again, so a nudge can't put anything in a page that
+//! the server didn't draw. The topics: `conversations` for any change, which the lists
+//! hear; `conversation.<id>` and `customer.<id>` when the change is to that
+//! conversation or customer, and more than its being read; and `clock` when the timers
+//! move. A page listens to the lists and, with a conversation open, to that
+//! conversation, its customer and the clock (see [`page_stream`]). The desk signs
+//! nobody in, so the topics are public.
 //!
 //! **Every write takes its numbers where it commits.** A live list asks for what changed
 //! since the newest revision it has seen, and an open conversation for the messages after
@@ -24,20 +27,14 @@
 //! So ids and revisions become visible in the order they commit, and a reader that moves
 //! its cursor to the newest it saw can't skip one.
 
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use futures_util::FutureExt as _;
-use http::HeaderMap;
-use http::header::CONTENT_TYPE;
 use navree::db::{Db, Executor as _, ExecutorExt as _, Statement, Uow, Value};
-use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
-use navree::http::response::{IntoResponse, Response};
 use navree::orm::{Expr, Model as _};
 use navree::prelude::BoxError;
-use tokio::sync::broadcast;
+use navree::realtime::{Live, Topic};
+use navree::ui::LiveStream;
 
 use crate::data::{
     self, Agent, Attachment, Author, Conversation, Customer, CustomerEvent, Dice, EventKind,
@@ -173,11 +170,58 @@ pub fn plus_one(column: &'static str) -> Expr {
     Expr::raw(format!("\"{column}\" + 1"), Vec::<Value>::new())
 }
 
+/// The topic every list hears: any change to any conversation, and the clock.
+pub const LISTS: &str = "conversations";
+
+/// The topic of the clock: every timer on every page.
+pub const CLOCK: &str = "clock";
+
+/// The topic of one conversation: its heading and its messages.
+pub fn conversation_topic(id: i64) -> String {
+    format!("conversation.{id}")
+}
+
+/// The topic of one customer: the customer pane.
+pub fn customer_topic(id: i64) -> String {
+    format!("customer.{id}")
+}
+
+/// The stream a page listens on: the lists and, with a conversation open (its id and
+/// its customer's), that conversation, its customer and the clock. One connection.
+pub fn page_stream(open: Option<(i64, i64)>) -> LiveStream {
+    let stream = LiveStream::topics([LISTS]);
+    match open {
+        Some((conversation, customer)) => stream.with_topics([
+            conversation_topic(conversation),
+            customer_topic(customer),
+            CLOCK.to_owned(),
+        ]),
+        None => stream,
+    }
+}
+
+/// The topics `change` tells: the lists always; the clock when it ticked; the
+/// conversation and the customer when more than its being read changed.
+pub fn topics_of(change: Change) -> Vec<String> {
+    let mut topics = vec![LISTS.to_owned()];
+    if change == Change::TICK {
+        topics.push(CLOCK.to_owned());
+    } else if !change.lists_only {
+        if change.conversation > 0 {
+            topics.push(conversation_topic(change.conversation));
+        }
+        if change.customer > 0 {
+            topics.push(customer_topic(change.customer));
+        }
+    }
+    topics
+}
+
 /// What happens next, and who hears about it.
 pub struct Hub {
     /// Held while the desk is written afresh: one at a time.
     pub writing: tokio::sync::Mutex<()>,
-    tx: broadcast::Sender<Change>,
+    live: Option<Arc<Live>>,
     dice: Mutex<Dice>,
 }
 
@@ -188,33 +232,32 @@ impl Default for Hub {
 }
 
 impl Hub {
+    /// A hub that tells nobody (the tests of the data).
     pub fn new() -> Self {
         Self {
             writing: tokio::sync::Mutex::new(()),
-            tx: broadcast::channel(256).0,
+            live: None,
             dice: Mutex::new(Dice::new(4_111)),
         }
     }
 
-    /// Tells every open stream that `change` happened, once it can be read. A write
-    /// runs in its unit of work, which commits after it: a page told sooner asks before
-    /// the commit, misses the change, and has no reason to ask again. So inside a unit
-    /// of work the news waits for the commit, and goes nowhere on a rollback. Outside
-    /// one (the clock) nothing was written.
-    pub fn tell(&self, change: Change) {
-        match Uow::current() {
-            Some(uow) => {
-                let tx = self.tx.clone();
-                uow.after_commit(move || {
-                    async move {
-                        let _ = tx.send(change);
-                    }
-                    .boxed()
-                });
-            }
-            None => {
-                let _ = self.tx.send(change);
-            }
+    /// Tells the pages through the app's live hub.
+    pub fn with_live(mut self, live: Arc<Live>) -> Self {
+        self.live = Some(live);
+        self
+    }
+
+    /// Tells every open page that `change` happened, once it can be read: the live
+    /// hub holds a nudge made in a unit of work until it commits, and drops it on a
+    /// rollback, because a page told sooner would ask before the commit, miss the
+    /// change, and have no reason to ask again. Outside one (the clock) it goes now.
+    pub async fn tell(&self, change: Change) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        let topics = topics_of(change).into_iter().map(Topic::public);
+        if let Err(error) = live.nudge(topics).await {
+            eprintln!("inbox-demo: the pages could not be told: {error}");
         }
     }
 
@@ -340,7 +383,7 @@ impl Hub {
                 }
             };
             if let Some(change) = change {
-                self.tell(change);
+                self.tell(change).await;
             }
             Ok(change)
         })
@@ -686,7 +729,8 @@ impl Hub {
                             ],
                         )
                         .await?;
-                    self.tell(Change::of(conversation.id, conversation.customer_id));
+                    self.tell(Change::of(conversation.id, conversation.customer_id))
+                        .await;
                 }
                 Ok(due.len())
             })
@@ -715,7 +759,7 @@ impl Hub {
     pub async fn tick(self: Arc<Self>, every: Duration) {
         loop {
             tokio::time::sleep(every).await;
-            self.tell(Change::TICK);
+            self.tell(Change::TICK).await;
         }
     }
 
@@ -732,53 +776,6 @@ impl Hub {
             tokio::time::sleep(every).await;
         }
     }
-
-    /// `GET /inbox/events?open=<conversation>&customer=<customer>`: the stream for one
-    /// page. `conversations` for every change, `thread` and `customer` for the page's
-    /// own conversation and customer, and all three for the clock.
-    pub fn stream(&self, headers: &HeaderMap, open: i64, customer: i64) -> Response {
-        // The runtime asks once what a failed stream answers: say it's a stream.
-        if headers.contains_key("x-ui-probe") {
-            return ([(CONTENT_TYPE, "text/event-stream")], "").into_response();
-        }
-        let rx = self.tx.subscribe();
-        // A first comment goes out at once: Firefox reports a stream open only when its
-        // first bytes arrive.
-        let queue = VecDeque::from([Sse::default().comment("ready")]);
-        let events =
-            futures_util::stream::unfold((rx, queue), move |(mut rx, mut queue)| async move {
-                loop {
-                    if let Some(event) = queue.pop_front() {
-                        return Some((Ok::<_, Infallible>(event), (rx, queue)));
-                    }
-                    let (lists, thread, person) = match rx.recv().await {
-                        Ok(change) if change == Change::TICK => (true, open > 0, false),
-                        Ok(change) => (
-                            true,
-                            open > 0 && change.conversation == open && !change.lists_only,
-                            customer > 0 && change.customer == customer && !change.lists_only,
-                        ),
-                        // Missed some: everything may have changed.
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            (true, open > 0, customer > 0)
-                        }
-                        Err(broadcast::error::RecvError::Closed) => return None,
-                    };
-                    for (yes, name) in [
-                        (lists, "conversations"),
-                        (thread, "thread"),
-                        (person, "customer"),
-                    ] {
-                        if yes {
-                            queue.push_back(Sse::default().event(name).data("changed"));
-                        }
-                    }
-                }
-            });
-        SseResponse::new(events)
-            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-            .into_response()
-    }
 }
 
 /// Now, in unix seconds.
@@ -788,34 +785,28 @@ pub fn now() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use navree::db::{Db, DbOptions};
-
     use super::*;
 
-    #[tokio::test]
-    async fn a_change_told_in_a_request_is_heard_after_its_commit_and_never_after_a_rollback() {
-        let db = Db::connect(&DbOptions {
-            url: "sqlite::memory:".into(),
-            ..DbOptions::default()
-        })
-        .await
-        .expect("an in-memory database");
-        let hub = Hub::new();
-        let mut heard = hub.tx.subscribe();
-        let change = Change::of(7, 3);
-        let uow = db.uow(None, None).await;
-        uow.scope(async { hub.tell(change) }).await;
-        assert!(heard.try_recv().is_err(), "nothing before the commit");
-        uow.commit().await.expect("the commit");
-        assert_eq!(heard.try_recv().ok(), Some(change));
-
-        let uow = db.uow(None, None).await;
-        uow.scope(async { hub.tell(change) }).await;
-        uow.rollback().await.expect("the rollback");
-        assert!(heard.try_recv().is_err(), "nothing after a rollback");
-
-        // Outside a unit of work nothing was written: at once.
-        hub.tell(change);
-        assert_eq!(heard.try_recv().ok(), Some(change));
+    #[test]
+    fn each_change_tells_the_lists_and_only_the_parts_it_touched() {
+        // MOD-004: the topics replace the page streams' filters.
+        assert_eq!(
+            topics_of(Change::of(7, 3)),
+            ["conversations", "conversation.7", "customer.3"]
+        );
+        assert_eq!(
+            topics_of(Change::read(7, 3)),
+            ["conversations"],
+            "being read changes only what the lists show"
+        );
+        assert_eq!(topics_of(Change::TICK), ["conversations", "clock"]);
+        assert_eq!(
+            page_stream(Some((7, 3))).href().as_str(),
+            "/broadcasting/stream?topics=conversations,conversation.7,customer.3,clock"
+        );
+        assert_eq!(
+            page_stream(None).href().as_str(),
+            "/broadcasting/stream?topics=conversations"
+        );
     }
 }

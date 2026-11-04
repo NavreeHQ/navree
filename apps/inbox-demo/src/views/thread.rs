@@ -503,7 +503,10 @@ pub fn thread_lazy(
                 .map(|item| message_item(item, window.files, now, me)),
         )
         .since(window.messages.last().map_or(0, |last| last.id).to_string())
-        .live_from(stream.to_owned(), Some("thread"), LazyEnd::End)
+        .live_on(
+            Live::new(stream.to_owned()).event(crate::live::conversation_topic(id)),
+            LazyEnd::End,
+        )
         .announce_new("{n} new messages", "A new message")
         .seen_by(format!("/inbox/{id}/seen"))
         .max(400)

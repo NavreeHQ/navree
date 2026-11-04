@@ -7,7 +7,7 @@
 //! | `GET /inbox/{id}` | the panes with a conversation open (`?pane=customer` or `conversations` for phones); it changes nothing |
 //! | `GET /inbox/rows`, `/inbox/{id}/messages` | the list's and the thread's pages, and what changed since a revision |
 //! | `GET /inbox/fragments/{summary,views}`, `/inbox/{id}/fragments/{head,customer}` | what the live parts fetch |
-//! | `GET /inbox/events` | the server-sent event stream for one page |
+//! | `GET /broadcasting/stream` | the live hub's stream (`RealtimeModule`): `conversations`, and with a conversation open `conversation.<id>`, `customer.<id>` and `clock` |
 //! | `POST /inbox/{id}/reply` | a reply or a note, or a saved reply put in the composer |
 //! | `POST /inbox/{id}/assign`, `/assign/me`; `GET /inbox/{id}/assign` | assigning, and the page that does it with no script |
 //! | `POST /inbox/{id}/status/{status}`, `/priority/{priority}`, `/snooze`, `/snooze/{preset}` | the rest of what an agent does |
@@ -89,8 +89,6 @@ struct ListQuery {
     q: Option<String>,
     channel: Option<String>,
     priority: Option<String>,
-    open: Option<String>,
-    customer: Option<String>,
     pane: Option<String>,
     /// With no script: the list from after this cursor, or up to it.
     rows_after: Option<String>,
@@ -108,10 +106,6 @@ impl ListQuery {
             self.channel.as_deref(),
             self.priority.as_deref(),
         )
-    }
-
-    fn number(text: Option<&str>) -> Option<i64> {
-        text.and_then(|text| text.parse().ok()).filter(|n| *n > 0)
     }
 
     /// Which part of the list the page draws.
@@ -792,7 +786,7 @@ impl Pages {
             .where_(Conversation::ID.eq(id))
             .update(&uow, sets)
             .await?;
-        self.hub.tell(Change::of(id, found.customer_id));
+        self.hub.tell(Change::of(id, found.customer_id)).await;
         let customer = Customer::query()
             .find(&uow, found.customer_id)
             .await?
@@ -851,7 +845,7 @@ impl Pages {
         Message::query()
             .insert(uow, [event_line(id, &me, line, at)])
             .await?;
-        self.hub.tell(Change::of(id, found.customer_id));
+        self.hub.tell(Change::of(id, found.customer_id)).await;
         let toast = match &agent {
             Some(agent) => Toast::new(ToastTone::Success, format!("{} has it now.", agent.name))
                 .title("Assigned"),
@@ -969,7 +963,7 @@ impl Pages {
                 )
                 .await?;
         }
-        self.hub.tell(Change::of(id, found.customer_id));
+        self.hub.tell(Change::of(id, found.customer_id)).await;
         let toast = match status {
             Status::Closed => Toast::new(
                 ToastTone::Success,
@@ -1027,7 +1021,7 @@ impl Pages {
                 )],
             )
             .await?;
-        self.hub.tell(Change::of(id, found.customer_id));
+        self.hub.tell(Change::of(id, found.customer_id)).await;
         let toast = Toast::new(
             ToastTone::Info,
             format!("Priority is {} now.", priority.label().to_lowercase()),
@@ -1081,7 +1075,7 @@ impl Pages {
                 )],
             )
             .await?;
-        self.hub.tell(Change::of(id, found.customer_id));
+        self.hub.tell(Change::of(id, found.customer_id)).await;
         let toast =
             Toast::new(ToastTone::Info, format!("It comes back on {label}.")).title("Snoozed");
         let reply = self
@@ -1239,7 +1233,7 @@ impl Pages {
                 .await?;
             // Only the lists show what is read: the page's own heading, messages and
             // customer stay as they are, with whatever the agent has open in them.
-            self.hub.tell(Change::read(id, found.customer_id));
+            self.hub.tell(Change::read(id, found.customer_id)).await;
         }
         if headers.contains_key("x-navree-ui") {
             return Ok(StatusCode::NO_CONTENT.into_response());
@@ -1383,10 +1377,10 @@ impl Controller for Pages {
                     Some(id) => conversation(uow, id).await?,
                     None => None,
                 };
-                let stream = open.map_or_else(
-                    || "/inbox/events".to_owned(),
-                    |found| format!("/inbox/events?open={}&customer={}", found.id, found.customer_id),
-                );
+                let stream = crate::live::page_stream(open.map(|found| (found.id, found.customer_id)))
+                    .href()
+                    .as_str()
+                    .to_owned();
                 Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, &stream)).into_response()))
             }),
             route!(me, Method::GET, "!/inbox/fragments/views", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
@@ -1401,10 +1395,10 @@ impl Controller for Pages {
                     Some(id) => conversation(uow, id).await?,
                     None => None,
                 };
-                let stream = open.map_or_else(
-                    || "/inbox/events".to_owned(),
-                    |found| format!("/inbox/events?open={}&customer={}", found.id, found.customer_id),
-                );
+                let stream = crate::live::page_stream(open.map(|found| (found.id, found.customer_id)))
+                    .href()
+                    .as_str()
+                    .to_owned();
                 let page = shell(&me, &team, counts, view, Some(&stream))
                     .for_request(views_src(view), &headers)
                     .page(view.label())
@@ -1431,11 +1425,6 @@ impl Controller for Pages {
                     }
                     None => Ok(StatusCode::NOT_FOUND.into_response()),
                 }
-            }),
-            route!(me, Method::GET, "!/inbox/events", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
-                let open = ListQuery::number(query.open.as_deref()).unwrap_or(0);
-                let customer = ListQuery::number(query.customer.as_deref()).unwrap_or(0);
-                pages.hub.stream(&headers, open, customer)
             }),
             route!(me, Method::GET, "!/inbox/agents/options", pages, [query: OptionQuery] => {
                 let uow = &*pages.db;
@@ -1583,7 +1572,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             }))
         }),
         route!(me, Method::POST, "!/__test/tick", pages, [] => {
-            pages.hub.tell(Change::TICK);
+            pages.hub.tell(Change::TICK).await;
             StatusCode::NO_CONTENT
         }),
         route!(me, Method::POST, "!/__test/sla", pages, [uow: Uow, Query(query): Query<StepQuery>] => {
@@ -1604,7 +1593,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 )
                 .await?;
             if let Some(found) = found {
-                pages.hub.tell(Change::of(id, found.customer_id));
+                pages.hub.tell(Change::of(id, found.customer_id)).await;
             }
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
         }),
@@ -1629,7 +1618,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 eprintln!("inbox-demo: reset failed: {error}");
                 AppError::internal(error)
             })?;
-            pages.hub.tell(Change::TICK);
+            pages.hub.tell(Change::TICK).await;
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
         }),
         route!(me, Method::GET, "!/__test/conversation/{id}", pages, [uow: Uow, Path(id): Path<i64>] => {

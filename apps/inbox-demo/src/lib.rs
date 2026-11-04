@@ -47,11 +47,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree::BoxFuture;
 use navree::db::{DatabaseModule, Db};
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
+use navree::realtime::Live;
 use navree::ui::UiModule;
+use navree::{BoxFuture, ProviderKey};
 
 pub mod data;
 pub mod live;
@@ -182,7 +183,13 @@ pub struct InboxModule {
 
 impl Module for InboxModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.value(Hub::new());
+        // The hub tells the pages through the app's live hub.
+        m.factory(
+            Factory::<Hub>::new(|r: Resolver| async move {
+                Ok(Arc::new(Hub::new().with_live(r.get::<Live>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Live>()]),
+        );
         m.value(self.settings.clone());
         m.provider::<Seeder>().lifecycle::<Seeder>();
         m.controller::<pages::Pages>();
@@ -214,5 +221,7 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
         .module(UiModule::from_config())
+        // The live hub: pages listen on `GET /broadcasting/stream`.
+        .module(RealtimeModule::from_config())
         .module(InboxModule { settings })
 }
