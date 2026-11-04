@@ -114,6 +114,19 @@ impl Meta {
         self
     }
 
+    /// Facts in a row that wraps: under a card's title, beside a record's name.
+    /// Nothing at all when there are none.
+    ///
+    /// ```
+    /// use navree_ui::{Meta, icons, render};
+    ///
+    /// let facts = Meta::list([Meta::icon(icons::LIST_CHECKS, "2/3"), Meta::new("Due today")]);
+    /// assert!(render(&facts).contains(r#"<ul data-slot="meta">"#));
+    /// ```
+    pub fn list(items: impl IntoIterator<Item = Meta>) -> Node {
+        meta_list(items.into_iter().collect()).unwrap_or(Node::Empty)
+    }
+
     pub(crate) fn into_item(self) -> Node {
         el("li")
             .slot("meta-item")

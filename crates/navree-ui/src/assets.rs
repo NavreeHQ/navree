@@ -80,6 +80,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::SPLIT, SPLIT_URL),
         (Uses::KEYS, KEYS_URL),
         (Uses::LAZY, LAZY_URL),
+        (Uses::SORTABLE, SORTABLE_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]

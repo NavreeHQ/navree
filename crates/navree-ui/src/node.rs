@@ -257,6 +257,9 @@ impl Uses {
     /// The lazy module: lists that load pages by cursor as they are read, keep the
     /// reader's place, drop what is far off screen, and merge live changes.
     pub const LAZY: Self = Self(1 << 18);
+    /// The sortable module: lists and boards whose items move by pointer, touch
+    /// or keys, each move posted to the server.
+    pub const SORTABLE: Self = Self(1 << 16);
 
     /// Both sets together.
     #[must_use]

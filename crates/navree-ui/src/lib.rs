@@ -15,6 +15,7 @@
 //!   themes of your own, light, dark and system, and the theme builder.
 //! - [`form`]: `#[derive(Form)]`, [`FormView`], [`Submit`]. [`table`]:
 //!   `#[derive(TableRow)]`, [`DataTable`], [`TableQuery`], [`Region`].
+//! - [`sortable`]: [`Sortable`] lists and boards, and the [`Move`] each drop posts.
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //! - [`pages`]: what the app shows when a request ends in an error, or a place has
@@ -44,6 +45,9 @@ pub mod prelude {
     pub use crate::select::{
         Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
         Select, SelectLabels,
+    };
+    pub use crate::sortable::{
+        Landing, ListState, Move, Refusal, SortItem, SortLabels, SortLayout, SortList, Sortable,
     };
     pub use crate::table::{
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
@@ -78,6 +82,7 @@ pub mod phone;
 pub mod render;
 pub mod select;
 pub mod shell;
+pub mod sortable;
 pub mod table;
 pub mod test_view;
 pub mod theme;
@@ -112,6 +117,10 @@ pub use select::{
     Select, SelectLabels,
 };
 pub use shell::{AppPage, AppShell, Collapse, NavGroup, NavItem, Shell, ShellLayout, UserMenu};
+pub use sortable::{
+    Landing, ListState, Move, MoveError, MoveRejected, Refusal, SortItem, SortLabels, SortLayout,
+    SortList, Sortable,
+};
 pub use table::{
     BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,
     TableLabels, TablePage, TableQuery,

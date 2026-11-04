@@ -265,6 +265,8 @@ function resetControls(root) {
  * so controls take their new attributes and what was typed goes.
  */
 export function morph(from, to, how = {}) {
+  // A module that animates what moves (a sortable) measures it here, before the change.
+  emit(new CustomEvent("ui:before-swap", { detail: from }));
   resetting = !!how.reset;
   const active = /** @type {HTMLInputElement | null} */ (activeElement());
   const inField = active && "selectionStart" in active;

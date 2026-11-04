@@ -105,6 +105,7 @@ const FILES = [
   ["split", "js", "text/javascript; charset=utf-8", await js("split.js")],
   ["keys", "js", "text/javascript; charset=utf-8", await js("keys.js")],
   ["lazy", "js", "text/javascript; charset=utf-8", await js("lazy.js")],
+  ["sortable", "js", "text/javascript; charset=utf-8", await js("sortable.js")],
   ["phone", "js", "text/javascript; charset=utf-8", await js("phone.js", { PHONE_DATA_FILE }), "phone"],
   // The numbering plans the phone module formats with, written by
   // crates/navree-phone/tools/metadata.mjs.

@@ -113,6 +113,9 @@ async function send(form, submitter) {
     if (token) headers["x-xsrf-token"] = token;
     /** @type {RequestInit} */
     const init = { method, headers };
+    // A form that says how long it waits gives up then, and counts as failed: a move put back, not one left pending.
+    const wait = Number(attr(form, "data-ui-deadline"));
+    if (wait > 0 && typeof AbortSignal.timeout === "function") init.signal = AbortSignal.timeout(wait);
     const url = new URL(action, location.href);
     if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));

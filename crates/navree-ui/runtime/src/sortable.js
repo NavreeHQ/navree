@@ -1,0 +1,784 @@
+// Sortable lists and boards: items move within a list and between lists, by
+// pointer, touch or keys.
+//
+// A drop moves the item in the page at once, fills in the item's own move form and
+// posts it through the core runtime, one move at a time for each sortable, so the
+// server sees them in the order they were made. A refusal, a failure or no answer
+// in time puts the item back where the server last had it. The server has the
+// last word: here a list's limit and its refusal only show while dragging.
+//
+// Pointer: a press that moves 4 px with a mouse or a pen starts a drag. On touch the
+// handle starts one at once, and anywhere else on the item a press held still for
+// 300 ms does, so a swipe still scrolls the page. Keys, on the handle: Space or Enter
+// picks the item up, the arrows move it (left and right to the next list that takes
+// it), Home and End go to the ends, Space or Enter drops it, Escape puts it back.
+// Every step is said in the sortable's own live region.
+//
+// Every read of the page goes through the prototypes, so no element named like a
+// method (`<img name="elementFromPoint">`, `<input name="requestSubmit">`) changes
+// what this does.
+import { active, all, attr, body, closest, field, has, holds, on, root as docRoot, set, unset } from "./dom.js";
+
+const ROOT = "[data-ui-sortable]";
+const LIST = "[data-slot=sortable-list]";
+const BOX = "[data-slot=sortable-items]";
+const ITEM = "[data-slot=sortable-item]";
+const HANDLE = "[data-slot=sortable-handle]";
+const FORM = "form[data-ui-move]";
+/** What a press on starts no drag: the item's own controls, its handle aside. */
+const CONTROL = "button,input,select,textarea,summary,label,option,[contenteditable],[data-ui-nodrag],[data-slot=sortable-move]";
+const SLOP = 4, TOUCH_SLOP = 8, HOLD = 300, EDGE = 48, STEP = 18, EASE = 180;
+
+const DP = Document.prototype, NP = Node.prototype, TP = EventTarget.prototype;
+const fromPoint = /** @type {(x: number, y: number) => Element | null} */ ((x, y) => DP.elementFromPoint.call(document, x, y));
+/** @param {Node} parent @param {Node} node @param {Node | null} before */
+const insert = (parent, node, before) => {
+  const own = /** @type {any} */ (Element.prototype).moveBefore;
+  if (own && parent.isConnected && node.isConnected) {
+    try {
+      own.call(parent, node, before);
+      return;
+    } catch {}
+  }
+  NP.insertBefore.call(parent, node, before);
+};
+/** @param {EventTarget} target @param {Event} event */
+const fire = (target, event) => TP.dispatchEvent.call(target, event);
+const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** @typedef {{list: string, next: string}} Place where an item is: its list's key, and the key of the item after it ("" for none) */
+/** @typedef {{root: Element, item: HTMLElement, mode: "pointer" | "keys", from: Place, over: Element | null, refused: string, ghost?: HTMLElement, id?: number, dx: number, dy: number, x: number, y: number, frame: number, dirty: boolean, scrollers: Element[], said: Element | null}} Drag */
+
+/** The drag under way: one at a time in a page. @type {Drag | null} */
+let drag = null;
+/** A press that may become a drag. @type {{item: HTMLElement, root: Element, id: number, x: number, y: number, touch: boolean, handle: boolean, timer: number} | null} */
+let press = null;
+/** The click that ends a pointer drag is not a click on the item. */
+let swallow = false;
+/** Set while this module moves the focused handle, which blurs it for a moment in an engine with no `moveBefore`. */
+let moving = false;
+
+/** @param {Element} el */
+const keyOf = (el) => attr(el, "data-key") || "";
+/** @param {Element} list */
+const listKey = (list) => attr(list, "data-list") || "";
+/** @param {Element} el */
+const shown = (el) => el.getClientRects().length > 0;
+/** The lists of `root`, not those of a sortable inside one of its items. @param {Element} root */
+const listsOf = (root) => [...all(root, LIST)].filter((list) => closest(list, ROOT) === root);
+/** @param {Element} list @returns {HTMLElement[]} */
+const itemsOf = (list) => /** @type {HTMLElement[]} */ ([...all(list, ITEM)].filter((item) => closest(item, LIST) === list));
+/** @param {Element} list */
+const boxOf = (list) => [...all(list, BOX)].find((box) => closest(box, LIST) === list) || null;
+/** @param {Element} item */
+const listOf = (item) => closest(item, LIST);
+/** How many items `list` holds: those drawn, and those a filter left out. @param {Element} list @param {Element | null} [leaving] */
+const sizeOf = (list, leaving = null) => {
+  const hidden = attr(list, "data-hidden");
+  return itemsOf(list).filter((i) => i !== leaving).length + (hidden && /^\d+$/.test(hidden) ? Number(hidden) : 0);
+};
+/** @param {Element} list */
+const titleOf = (list) => ([...all(list, "[data-slot=sortable-list-title]")].find((t) => closest(t, LIST) === list)?.textContent || listKey(list)).trim();
+/** @param {Element} item */
+const nextOf = (item) => {
+  for (let at = item.nextElementSibling; at; at = at.nextElementSibling) if (attr(at, "data-slot") === "sortable-item") return at;
+  return null;
+};
+/** @param {Element} item @returns {Place} */
+const placeOf = (item) => {
+  const list = listOf(item), next = nextOf(item);
+  return { list: list ? listKey(list) : "", next: next ? keyOf(next) : "" };
+};
+/** @param {Place} a @param {Place} b */
+const samePlace = (a, b) => a.list === b.list && a.next === b.next;
+
+/** The words of `root`. @type {WeakMap<Element, Record<string, string>>} */
+const wordsOf = new WeakMap();
+/** @param {Element} root @returns {Record<string, string>} */
+function words(root) {
+  let found = wordsOf.get(root);
+  if (!found) {
+    try {
+      const parsed = JSON.parse(attr(root, "data-l") || "{}");
+      found = parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      found = {};
+    }
+    wordsOf.set(root, /** @type {Record<string, string>} */ (found));
+  }
+  return /** @type {Record<string, string>} */ (found);
+}
+/** @param {unknown} text @param {Record<string, string | number>} values */
+const fill = (text, values) => String(text ?? "").replace(/\{(\w+)\}/g, (all, name) => (name in values ? String(values[name]) : all));
+
+/** What to say about `item` where it is now. @param {Element} item */
+function about(item) {
+  const list = listOf(item);
+  const items = list ? itemsOf(list).filter((i) => i === item || shown(i)) : [];
+  return { item: attr(item, "data-name") || keyOf(item), list: list ? titleOf(list) : "", position: items.indexOf(/** @type {HTMLElement} */ (item)) + 1, total: items.length };
+}
+
+/** Says `text` in `root`'s live region. The same words twice are still said: a mark is added in turn. @param {Element} root @param {string} text */
+function say(root, text) {
+  const status = [...all(root, "[data-slot=sortable-status]")].find((s) => closest(s, ROOT) === root);
+  if (!status || !text) return;
+  status.textContent = status.textContent === text ? text + " " : text;
+}
+
+/** Why `list` won't take `item` brought from `origin`, or "" when it will. @param {Element} root @param {Element} list @param {Element} item @param {string} origin */
+function refusal(root, list, item, origin) {
+  if (listKey(list) === origin) return "";
+  const refuse = attr(list, "data-refuse");
+  if (refuse) return refuse;
+  const limit = attr(list, "data-limit");
+  if (limit !== null && /^\d+$/.test(limit) && sizeOf(list, item) >= Number(limit)) {
+    return fill(words(root).full, { list: titleOf(list), limit });
+  }
+  return "";
+}
+
+/** Where every item of `scope` is drawn now. @param {Element} scope */
+function measure(scope) {
+  /** @type {Map<Element, DOMRect>} */
+  const rects = new Map();
+  for (const item of all(scope, ITEM)) if (!has(item, "data-ghost")) rects.set(item, item.getBoundingClientRect());
+  return rects;
+}
+
+/**
+ * Slides each item from where it was to where it is: the change is made at once and
+ * drawn as a move. Items with no place before fade in.
+ * @param {Map<Element, DOMRect>} before @param {Iterable<Element>} [now] @param {Element | null} [skip]
+ */
+function slide(before, now = before.keys(), skip = null) {
+  if (still()) return;
+  for (const item of now) {
+    if (item === skip || !item.isConnected || !shown(item)) continue;
+    const was = before.get(item);
+    if (!was) {
+      item.animate([{ opacity: 0 }, { opacity: 1 }], { duration: EASE });
+      continue;
+    }
+    const is = item.getBoundingClientRect();
+    const dx = was.left - is.left, dy = was.top - is.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+    item.animate([{ translate: `${dx}px ${dy}px` }, { translate: "0 0" }], { duration: EASE, easing: "cubic-bezier(.2,.7,.2,1)" });
+  }
+}
+
+/** Puts `item` in `list` before `before` (null: last). @param {Element} list @param {Element} item @param {Element | null} before */
+function put(list, item, before) {
+  const box = boxOf(list);
+  if (!box) return;
+  const at = before && before.parentNode === box ? before : null;
+  if (item.parentNode === box && (at ? item.nextElementSibling === at : !item.nextElementSibling)) return;
+  const focused = holds(item, active());
+  moving = true;
+  try {
+    insert(box, item, at);
+  } finally {
+    moving = false;
+  }
+  if (focused && !holds(item, active())) /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
+}
+
+/** Puts `item` back at `place`, if its list is still there. @param {Element} root @param {HTMLElement} item @param {Place} place */
+function restore(root, item, place) {
+  const list = listsOf(root).find((l) => listKey(l) === place.list);
+  if (!list) return;
+  const next = place.next ? itemsOf(list).find((i) => keyOf(i) === place.next && i !== item) || null : null;
+  put(list, item, next);
+}
+
+/** Writes each list's count as the page shows it now. @param {Element} root */
+function count(root) {
+  const w = words(root);
+  for (const list of listsOf(root)) {
+    const n = sizeOf(list);
+    const limit = attr(list, "data-limit");
+    const has = limit !== null && /^\d+$/.test(limit);
+    const box = [...all(list, "[data-slot=sortable-count]")].find((c) => closest(c, LIST) === list);
+    if (!box) continue;
+    const values = { count: n, limit: limit || "" };
+    const shownCount = all(box, "[data-count]")[0], text = all(box, "[data-count-text]")[0];
+    if (shownCount) shownCount.textContent = fill(has ? w.countLimit : w.count, values);
+    if (text) text.textContent = fill(w.countText, values);
+    box.toggleAttribute("data-full", has && n >= Number(limit));
+    box.toggleAttribute("data-over", has && n > Number(limit));
+  }
+}
+
+/** Marks the list under the pointer: taking the item, or refusing it with its reason. @param {Element} root @param {Element | null} list @param {string} why */
+function mark(root, list, why) {
+  for (const l of listsOf(root)) {
+    l.toggleAttribute("data-over", l === list && !why);
+    if (l === list && why) set(l, "data-refusing", why);
+    else unset(l, "data-refusing");
+  }
+}
+
+/* The queue: one move on its way for each sortable, in the order they were made. */
+
+/** @typedef {{item: HTMLElement, form: HTMLFormElement, fields: Record<string, string>, to: Place}} Sent */
+/** @type {WeakMap<Element, {sending: Sent | null, waiting: Sent[]}>} */
+const queues = new WeakMap();
+/** @param {Element} root */
+const queueOf = (root) => {
+  let q = queues.get(root);
+  if (!q) queues.set(root, (q = { sending: null, waiting: [] }));
+  return q;
+};
+/** Which sortable each move form posts for, even once a redraw has taken it out. @type {WeakMap<Element, Element>} */
+const formRoot = new WeakMap();
+/**
+ * What the server last agreed for each item with moves on their way: where it goes
+ * back to if one is refused, and where the moves sent go.
+ * @type {WeakMap<Element, {back: Place, to: Place[]}>}
+ */
+const records = new WeakMap();
+
+/** Posts the move of `item` from `from` to where it is now. @param {Element} root @param {HTMLElement} item @param {Place} from */
+function commit(root, item, from) {
+  const form = /** @type {HTMLFormElement | undefined} */ ([...all(item, FORM)].find((f) => closest(f, ITEM) === item));
+  const to = placeOf(item);
+  if (!form || samePlace(from, to)) return;
+  const record = records.get(item) || { back: from, to: [] };
+  record.to.push(to);
+  records.set(item, record);
+  set(item, "data-pending", "");
+  formRoot.set(form, root);
+  queueOf(root).waiting.push({ item, form, to, fields: { item: keyOf(item), from_list: from.list, to_list: to.list, before: to.next, position: "" } });
+  pump(root);
+}
+
+/** Sends the next move of `root` when none is on its way. @param {Element} root */
+function pump(root) {
+  const q = queueOf(root);
+  while (!q.sending) {
+    const next = q.waiting.shift();
+    if (!next) {
+      idle();
+      return;
+    }
+    if (!next.form.isConnected) {
+      settle(root, next.item, false);
+      continue;
+    }
+    q.sending = next;
+    for (const [name, value] of Object.entries(next.fields)) {
+      const control = /** @type {HTMLInputElement | HTMLSelectElement | null} */ (field(next.form, name));
+      if (!control) continue;
+      // A list that was full when the page was drawn has its choice switched off, and a
+      // choice switched off is not sent.
+      if (control instanceof HTMLSelectElement) for (const option of control.options) if (option.value === value) option.disabled = false;
+      control.value = value;
+    }
+    try {
+      HTMLFormElement.prototype.requestSubmit.call(next.form);
+    } catch {
+      q.sending = null;
+      settle(root, next.item, false);
+    }
+  }
+}
+
+/**
+ * The server answered a move of `item`, or gave none. Taken: it stays. Refused or
+ * failed: it goes back to where the server last had it, and its other moves are
+ * dropped: they were made from a place that never was.
+ * @param {Element} root @param {HTMLElement} item @param {boolean} ok
+ */
+function settle(root, item, ok) {
+  const record = records.get(item);
+  if (!record) return;
+  if (ok) {
+    const done = record.to.shift();
+    if (done) record.back = done;
+    if (!record.to.length) {
+      records.delete(item);
+      unset(item, "data-pending");
+    }
+    return;
+  }
+  const q = queueOf(root);
+  q.waiting = q.waiting.filter((m) => m.item !== item);
+  records.delete(item);
+  unset(item, "data-pending");
+  if (!item.isConnected) return;
+  if (drag?.item === item) end();
+  const before = measure(root);
+  restore(root, item, record.back);
+  slide(before);
+  count(root);
+  say(root, fill(words(root).returned, about(item)));
+}
+
+/* Redraws: a region that follows a stream waits while a drag or a move is under way, and
+   what a redraw moves slides into place. */
+
+/** Regions whose redraw waits for the sortables in them. @type {Set<Element>} */
+const waiting = new Set();
+/** @param {Element} region */
+const busyIn = (region) => {
+  if (drag && holds(region, drag.root)) return true;
+  for (const root of all(region, ROOT)) {
+    const q = queues.get(root);
+    if (q && (q.sending || q.waiting.length)) return true;
+  }
+  return false;
+};
+/** Redraws the regions that waited, once nothing in them is moving. */
+function idle() {
+  if (drag) return;
+  for (const region of [...waiting]) {
+    if (busyIn(region)) continue;
+    waiting.delete(region);
+    if (region.isConnected) fire(region, new CustomEvent("ui:refresh", { bubbles: true }));
+  }
+}
+on(document, "ui:refresh", (e) => {
+  const region = closest(e.target, "[data-ui-region]");
+  if (!region || !busyIn(region)) return;
+  e.stopImmediatePropagation();
+  waiting.add(region);
+}, true);
+
+/** Where the items were before a redraw. @type {{rects: Map<Element, DOMRect>, roots: Element[]} | null} */
+let redraw = null;
+on(document, "ui:before-swap", (e) => {
+  const target = /** @type {CustomEvent} */ (e).detail;
+  if (!(target instanceof Element)) return;
+  const roots = [...all(target, ROOT)];
+  const around = closest(target, ROOT);
+  if (around) roots.push(around);
+  if (!roots.length) return;
+  const rects = new Map();
+  for (const root of roots) for (const [item, rect] of measure(root)) rects.set(item, rect);
+  redraw = { rects, roots };
+});
+on(document, "ui:swap", () => {
+  if (drag) {
+    if (!drag.item.isConnected || !drag.root.isConnected) end();
+    else set(drag.item, drag.mode === "keys" ? "data-lifted" : "data-dragging", "");
+  }
+  const was = redraw;
+  redraw = null;
+  if (!was) return;
+  const now = was.roots.filter((r) => r.isConnected).flatMap((r) => [...all(r, ITEM)]);
+  slide(was.rects, now, drag?.item);
+});
+
+/* Pointer and touch */
+
+/** The elements that scroll while a drag nears their edge: the lists, the board, its ancestors, the page. @param {Element} root */
+function scrollersOf(root) {
+  /** @param {Element} el */
+  const scrolls = (el) => {
+    const style = getComputedStyle(el);
+    return (/auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth) || (/auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight);
+  };
+  const found = [...all(root, `${LIST},${BOX}`)].filter(scrolls);
+  for (let el = /** @type {Element | null} */ (root); el && el !== docRoot(); el = el.parentElement) if (scrolls(el)) found.push(el);
+  found.push(docRoot());
+  return found;
+}
+
+/** How far to scroll this frame, `d` px from an edge. @param {number} d */
+const speed = (d) => (d < EDGE ? Math.ceil((1 - Math.max(d, 0) / EDGE) * STEP) : 0);
+
+/** Scrolls what the pointer is near the edge of. True when something moved. @param {number} x @param {number} y */
+function scroll(x, y) {
+  if (!drag) return false;
+  let moved = false;
+  for (const el of drag.scrollers) {
+    const page = el === docRoot();
+    const r = page ? { left: 0, top: 0, right: innerWidth, bottom: innerHeight } : el.getBoundingClientRect();
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+    const dx = speed(r.right - x) - speed(x - r.left), dy = speed(r.bottom - y) - speed(y - r.top);
+    if (!dx && !dy) continue;
+    const left = el.scrollLeft, top = el.scrollTop;
+    el.scrollBy(dx, dy);
+    moved ||= el.scrollLeft !== left || el.scrollTop !== top;
+  }
+  return moved;
+}
+
+/** A copy of the item that follows the pointer, in the top layer, with nothing in it that acts. @param {HTMLElement} item */
+function ghostOf(item) {
+  const ghost = /** @type {HTMLElement} */ (NP.cloneNode.call(item, true));
+  for (const el of all(ghost, "form,details,[data-slot=sortable-status]")) el.remove();
+  for (const el of [ghost, ...all(ghost, "[id],[name]")]) {
+    unset(el, "id");
+    unset(el, "name");
+  }
+  set(ghost, "data-ghost", "");
+  set(ghost, "aria-hidden", "true");
+  set(ghost, "popover", "manual");
+  ghost.inert = true;
+  ghost.style.width = item.getBoundingClientRect().width + "px";
+  return ghost;
+}
+
+/** Starts a pointer drag from the press, the pointer at `x`, `y`. @param {number} x @param {number} y */
+function begin(x, y) {
+  if (!press || drag) return;
+  const { item, root, id } = press;
+  clearTimeout(press.timer);
+  const from = press;
+  press = null;
+  if (!item.isConnected || has(item, "data-locked")) return;
+  const rect = item.getBoundingClientRect();
+  const ghost = ghostOf(item);
+  // In the body, so no redraw of the lists takes it, and in the top layer, so it shows over a dialog.
+  set(ghost, "dir", getComputedStyle(root).direction);
+  body().append(ghost);
+  try {
+    ghost.showPopover();
+  } catch {}
+  drag = {
+    root, item, mode: "pointer", from: placeOf(item), over: listOf(item), refused: "", ghost, id,
+    dx: from.x - rect.left, dy: from.y - rect.top, x, y, frame: 0, dirty: true, scrollers: scrollersOf(root), said: null,
+  };
+  try {
+    item.setPointerCapture(id);
+  } catch {}
+  set(item, "data-dragging", "");
+  set(root, "data-dragging", "");
+  say(root, fill(words(root).picked, about(item)));
+  tick();
+}
+
+/** One frame of a pointer drag: the copy follows, the page scrolls near an edge, the item finds its place. */
+function tick() {
+  if (!drag || drag.mode !== "pointer" || !drag.ghost) return;
+  drag.ghost.style.translate = `${drag.x - drag.dx}px ${drag.y - drag.dy}px`;
+  if (scroll(drag.x, drag.y) || drag.dirty) {
+    drag.dirty = false;
+    place(drag.x, drag.y);
+  }
+  if (drag) drag.frame = requestAnimationFrame(tick);
+}
+
+/** Moves the dragged item to where the pointer is over a list that takes it. @param {number} x @param {number} y */
+function place(x, y) {
+  if (!drag) return;
+  const { root, item } = drag;
+  const at = fromPoint(x, y);
+  let list = at && closest(at, LIST);
+  if (list && closest(list, ROOT) !== root) list = null;
+  if (!list) {
+    mark(root, null, "");
+    drag.over = null;
+    drag.refused = "";
+    return;
+  }
+  const why = refusal(root, list, item, drag.from.list);
+  mark(root, list, why);
+  drag.refused = why;
+  if (why) {
+    drag.over = null;
+    if (drag.said !== list) say(root, why);
+    drag.said = list;
+    return;
+  }
+  drag.said = null;
+  drag.over = list;
+  let before = null;
+  for (const other of itemsOf(list)) {
+    if (other === item || !shown(other)) continue;
+    const r = other.getBoundingClientRect();
+    if (y < r.top + r.height / 2) {
+      before = other;
+      break;
+    }
+  }
+  if (listOf(item) === list && nextOf(item) === before) return;
+  const rects = measure(root);
+  put(list, item, before);
+  slide(rects, rects.keys(), item);
+  count(root);
+}
+
+/** Cancels a press that never became a drag. */
+function unpress() {
+  if (press) clearTimeout(press.timer);
+  press = null;
+}
+
+/** Ends a drag of either kind: the copy goes, the marks go. */
+function end() {
+  if (!drag) return;
+  const { root, item, ghost, frame } = drag;
+  cancelAnimationFrame(frame);
+  drag = null;
+  unset(item, "data-dragging");
+  unset(item, "data-lifted");
+  unset(root, "data-dragging");
+  mark(root, null, "");
+  if (ghost) {
+    try {
+      ghost.hidePopover();
+    } catch {}
+    ghost.remove();
+  }
+}
+
+/** Drops the item where it is, or puts it back if it was let go over a list that refuses it. */
+function drop() {
+  if (!drag) return;
+  const { root, item, from, refused, ghost, mode } = drag;
+  if (refused) {
+    cancel(refused);
+    return;
+  }
+  const fly = ghost && !still() ? ghost : null;
+  if (fly) {
+    // The copy settles into the item's place, then goes.
+    const to = item.getBoundingClientRect();
+    cancelAnimationFrame(drag.frame);
+    drag.ghost = undefined;
+    const run = fly.animate([{ translate: fly.style.translate }, { translate: `${to.left}px ${to.top}px` }], { duration: 140, easing: "ease-out" });
+    const gone = () => {
+      try {
+        fly.hidePopover();
+      } catch {}
+      fly.remove();
+    };
+    run.onfinish = gone;
+    run.oncancel = gone;
+  }
+  end();
+  if (mode === "keys") /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
+  say(root, fill(words(root).dropped, about(item)));
+  commit(root, item, from);
+  count(root);
+  idle();
+}
+
+/** Puts the item back where the drag began. @param {string} [why] what to say first */
+function cancel(why = "") {
+  if (!drag) return;
+  const { root, item, from, mode } = drag;
+  end();
+  const before = measure(root);
+  restore(root, item, from);
+  slide(before);
+  count(root);
+  if (mode === "keys") /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
+  const back = fill(words(root).cancelled, about(item));
+  say(root, why ? `${why} ${back}` : back);
+  idle();
+}
+
+on(document, "pointerdown", (e) => {
+  if (drag) {
+    // A press elsewhere ends a move made with the keys.
+    if (drag.mode === "keys" && !holds(drag.item, /** @type {Node} */ (e.target))) cancel();
+    return;
+  }
+  unpress();
+  if (e.button !== 0 || !e.isPrimary) return;
+  const item = /** @type {HTMLElement | null} */ (closest(e.target, ITEM));
+  const root = item && closest(item, ROOT);
+  if (!item || !root || has(item, "data-ghost")) return;
+  const handle = closest(e.target, HANDLE);
+  // A control marked `data-ui-drag` (a card's title, a button) still starts a drag: a press that moves.
+  const control = closest(e.target, CONTROL), free = closest(e.target, "[data-ui-drag]");
+  if (control && control !== handle && holds(item, control) && !(free && holds(item, free))) return;
+  if (handle && closest(handle, ITEM) !== item) return;
+  if (has(item, "data-locked")) return;
+  const touch = e.pointerType === "touch";
+  press = { item, root, id: e.pointerId, x: e.clientX, y: e.clientY, touch, handle: !!handle, timer: 0 };
+  if (touch && !handle) press.timer = /** @type {any} */ (setTimeout(() => press && begin(press.x, press.y), HOLD));
+});
+
+on(document, "pointermove", (e) => {
+  if (press && e.pointerId === press.id && !drag) {
+    const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+    // A touch that moves before it is held is a scroll.
+    if (press.touch && !press.handle) {
+      if (moved > TOUCH_SLOP) unpress();
+      return;
+    }
+    if (moved > SLOP) begin(e.clientX, e.clientY);
+  }
+  if (drag?.mode === "pointer" && e.pointerId === drag.id) {
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    drag.dirty = true;
+  }
+});
+
+on(document, "pointerup", (e) => {
+  if (press && e.pointerId === press.id) unpress();
+  if (drag?.mode === "pointer" && e.pointerId === drag.id) {
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    place(drag.x, drag.y);
+    drop();
+    swallow = true;
+    setTimeout(() => (swallow = false));
+  }
+});
+
+on(document, "pointercancel", (e) => {
+  if (press && e.pointerId === press.id) unpress();
+  if (drag?.mode === "pointer" && e.pointerId === drag.id) cancel();
+});
+
+on(window, "blur", () => {
+  unpress();
+  if (drag?.mode === "pointer") cancel();
+});
+
+// The click that ends a drag, on the link the drag began on, goes nowhere.
+on(document, "click", (e) => {
+  if (!swallow) return;
+  swallow = false;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+
+// Links and pictures in an item are the browser's own drags: this one is the item's.
+on(document, "dragstart", (e) => {
+  const item = closest(e.target, ITEM);
+  if (item && closest(item, ROOT)) e.preventDefault();
+});
+
+// A drag on touch holds the page still; a long press opens no menu.
+on(document, "touchmove", (e) => {
+  if (drag?.mode === "pointer" || (press?.touch && press.handle)) e.preventDefault();
+}, { passive: false });
+on(document, "contextmenu", (e) => {
+  if (drag || press?.touch) e.preventDefault();
+});
+
+/* Keys */
+
+/** Picks `item` up with the keys. @param {Element} root @param {HTMLElement} item */
+function lift(root, item) {
+  drag = { root, item, mode: "keys", from: placeOf(item), over: listOf(item), refused: "", dx: 0, dy: 0, x: 0, y: 0, frame: 0, dirty: false, scrollers: [], said: null };
+  set(item, "data-lifted", "");
+  say(root, fill(words(root).picked, about(item)));
+}
+
+/** Moves the lifted item to `before` in `list`, in sight, the focus on its handle. @param {Element} list @param {Element | null} before */
+function shift(list, before) {
+  if (!drag) return;
+  const { root, item } = drag;
+  const rects = measure(root);
+  put(list, item, before);
+  slide(rects);
+  count(root);
+  item.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+/** One step with the keys: `by` places up or down in the list, or to the first or last with `to`. @param {number} by @param {"first" | "last"} [to] */
+function step(by, to) {
+  if (!drag) return;
+  const { root, item } = drag;
+  const list = listOf(item);
+  if (!list) return;
+  const items = itemsOf(list).filter((i) => i === item || shown(i));
+  const at = items.indexOf(item);
+  const goal = to === "first" ? 0 : to === "last" ? items.length - 1 : Math.max(0, Math.min(items.length - 1, at + by));
+  if (goal !== at) {
+    const others = items.filter((i) => i !== item);
+    shift(list, others[goal] || null);
+  }
+  say(root, fill(words(root).moved, about(item)));
+}
+
+/** Moves the lifted item to the next list that takes it, `by` 1 or -1, at the same place. @param {number} by */
+function hop(by) {
+  if (!drag) return;
+  const { root, item } = drag;
+  const lists = listsOf(root);
+  const here = listOf(item);
+  if (!here) return;
+  const items = itemsOf(here).filter((i) => i === item || shown(i));
+  const at = items.indexOf(item);
+  const passed = [];
+  for (let i = lists.indexOf(here) + by; i >= 0 && i < lists.length; i += by) {
+    const why = refusal(root, lists[i], item, drag.from.list);
+    if (why) {
+      passed.push(why);
+      continue;
+    }
+    const others = itemsOf(lists[i]).filter((o) => o !== item && shown(o));
+    shift(lists[i], others[Math.min(at, others.length)] || null);
+    say(root, [...passed, fill(words(root).moved, about(item))].join(" "));
+    return;
+  }
+  say(root, passed[0] || fill(words(root).moved, about(item)));
+}
+
+on(document, "keydown", (e) => {
+  if (drag?.mode === "pointer") {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+    return;
+  }
+  const handle = closest(e.target, HANDLE);
+  if (drag?.mode === "keys") {
+    if (!handle || closest(handle, ITEM) !== drag.item) return;
+    const rtl = getComputedStyle(drag.root).direction === "rtl";
+    switch (e.key) {
+      case " ":
+      case "Enter": drop(); break;
+      case "Escape": cancel(); break;
+      case "ArrowUp": step(-1); break;
+      case "ArrowDown": step(1); break;
+      case "ArrowLeft": hop(rtl ? 1 : -1); break;
+      case "ArrowRight": hop(rtl ? -1 : 1); break;
+      case "Home": step(0, "first"); break;
+      case "End": step(0, "last"); break;
+      case "Tab": cancel(); return;
+      default: return;
+    }
+    e.preventDefault();
+    return;
+  }
+  if (!handle || (e.key !== " " && e.key !== "Enter") || e.repeat) return;
+  const item = /** @type {HTMLElement | null} */ (closest(handle, ITEM));
+  const root = item && closest(item, ROOT);
+  if (!item || !root) return;
+  e.preventDefault();
+  const locked = attr(item, "data-locked");
+  if (locked !== null) {
+    say(root, `${fill(words(root).locked, about(item))} ${locked}`.trim());
+    return;
+  }
+  lift(root, item);
+});
+
+// The handle's own click does nothing: Space and Enter are handled as they go down.
+on(document, "click", (e) => {
+  if (closest(e.target, HANDLE) && closest(e.target, ROOT)) e.preventDefault();
+});
+
+// Leaving the handle while a move with the keys is under way puts the item back.
+on(document, "focusout", (e) => {
+  if (drag?.mode !== "keys" || moving || !holds(drag.item, /** @type {Node} */ (e.target))) return;
+  const lifted = drag.item;
+  setTimeout(() => {
+    if (drag?.item === lifted && !holds(lifted, active())) cancel();
+  });
+});
+
+/* The server's answer */
+
+on(document, "ui:sent", (e) => {
+  const { form, ok } = /** @type {CustomEvent} */ (e).detail || {};
+  if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-move")) return;
+  const root = formRoot.get(form);
+  if (!root) return;
+  const q = queueOf(root);
+  const sent = q.sending;
+  if (!sent || sent.form !== form) return;
+  q.sending = null;
+  settle(root, sent.item, !!ok);
+  pump(root);
+});
