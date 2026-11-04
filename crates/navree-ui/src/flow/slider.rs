@@ -135,7 +135,11 @@ impl SliderSpec {
     /// Sets the step. A step of zero or less is 1, as in HTML.
     pub fn step(mut self, step: impl Into<Decimal>) -> Self {
         let step = step.into();
-        self.step = Some(if step > Decimal::ZERO { step } else { Decimal::ONE });
+        self.step = Some(if step > Decimal::ZERO {
+            step
+        } else {
+            Decimal::ONE
+        });
         self
     }
 
@@ -191,9 +195,9 @@ impl SliderSpec {
     pub fn allows(&self, value: Decimal) -> bool {
         value >= self.min
             && value <= self.max
-            && self.step.is_none_or(|step| {
-                (value.units() - self.min.units()).rem_euclid(step.units()) == 0
-            })
+            && self
+                .step
+                .is_none_or(|step| (value.units() - self.min.units()).rem_euclid(step.units()) == 0)
     }
 
     /// Reads one value from text and holds it to the grid.
@@ -345,7 +349,11 @@ impl Slider {
             range,
             spec,
             low: spec.minimum(),
-            high: if range { spec.maximum() } else { spec.minimum() },
+            high: if range {
+                spec.maximum()
+            } else {
+                spec.minimum()
+            },
             id: None,
             label: None,
             labelled_by: None,
@@ -576,7 +584,13 @@ impl Slider {
             let safe: String = self
                 .name
                 .chars()
-                .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
                 .collect();
             format!("slider-{safe}")
         });
@@ -622,9 +636,7 @@ impl Slider {
                     .attr("aria-labelledby", format!("{by} {id}"))
                     .attr("aria-label", word.to_string()),
                 (Some(by), _, false) => input.attr("aria-labelledby", by.clone()),
-                (None, Some(label), true) => {
-                    input.attr("aria-label", format!("{label} {word}"))
-                }
+                (None, Some(label), true) => input.attr("aria-label", format!("{label} {word}")),
                 (None, Some(label), false) => input.attr("aria-label", label.clone()),
                 (None, None, true) => input.attr("aria-label", word.to_string()),
                 (None, None, false) => input,
@@ -718,9 +730,13 @@ impl Slider {
             .attr("data-to", self.labels.range_to.to_string())
             .uses(Uses::SLIDER)
             .children((
-                el("div")
-                    .slot("slider-control")
-                    .children((graphic, thumbs.into_iter().map(|(input, ..)| input).collect::<Vec<_>>())),
+                el("div").slot("slider-control").children((
+                    graphic,
+                    thumbs
+                        .into_iter()
+                        .map(|(input, ..)| input)
+                        .collect::<Vec<_>>(),
+                )),
                 marks.0,
                 output,
                 hidden,
@@ -753,13 +769,14 @@ impl Slider {
             }
         }
         // Names of steps are drawn when there are few enough to read.
-        if !self.names.is_empty() && self.names.len() <= 12 {
-            if let Some(step) = spec.step_size() {
-                for (at, name) in self.names.iter().enumerate() {
-                    let units = spec.minimum().units() + at as i128 * step.units();
-                    if units <= spec.maximum().units() {
-                        marks.push((spec.percent(Decimal::from_units(units)), Some(name.clone())));
-                    }
+        if !self.names.is_empty()
+            && self.names.len() <= 12
+            && let Some(step) = spec.step_size()
+        {
+            for (at, name) in self.names.iter().enumerate() {
+                let units = spec.minimum().units() + at as i128 * step.units();
+                if units <= spec.maximum().units() {
+                    marks.push((spec.percent(Decimal::from_units(units)), Some(name.clone())));
                 }
             }
         }
@@ -840,7 +857,12 @@ mod tests {
 
     #[test]
     fn a_range_is_two_native_ranges_with_names_for_each_end() {
-        let out = html(Slider::range("price").label("Price").values(20, 80).max(100));
+        let out = html(
+            Slider::range("price")
+                .label("Price")
+                .values(20, 80)
+                .max(100),
+        );
         assert_eq!(out.matches(r#"type="range""#).count(), 2, "{out}");
         assert!(out.contains(r#"name="price_min""#), "{out}");
         assert!(out.contains(r#"name="price_max""#), "{out}");
@@ -853,7 +875,10 @@ mod tests {
     fn the_filled_part_is_drawn_in_attributes_not_style() {
         let out = html(Slider::new("v").value(40));
         assert!(!out.contains("style="), "{out}");
-        assert!(out.contains(r#"data-slot="slider-fill" x="0%" y="10" width="40%""#), "{out}");
+        assert!(
+            out.contains(r#"data-slot="slider-fill" x="0%" y="10" width="40%""#),
+            "{out}"
+        );
         let range = html(Slider::range("r").values(25, 75));
         assert!(range.contains(r#"x="25%" y="10" width="50%""#), "{range}");
     }
@@ -903,10 +928,23 @@ mod tests {
             (f64::NEG_INFINITY, f64::INFINITY, 0.0),
             (-1e300, 1e300, 1e-300),
         ] {
-            let out = html(Slider::new("v").min(min).max(max).step(step).ticks_every(1).value(f64::NAN));
+            let out = html(
+                Slider::new("v")
+                    .min(min)
+                    .max(max)
+                    .step(step)
+                    .ticks_every(1)
+                    .value(f64::NAN),
+            );
             assert!(out.contains("<input"), "{out}");
         }
-        let out = html(Slider::range("r").min(i64::MIN).max(u64::MAX).step(1).ticks_every(1));
+        let out = html(
+            Slider::range("r")
+                .min(i64::MIN)
+                .max(u64::MAX)
+                .step(1)
+                .ticks_every(1),
+        );
         assert!(out.matches("<line").count() <= 202, "{out}");
     }
 
@@ -917,11 +955,24 @@ mod tests {
         assert_eq!(out.matches("<line").count(), 10, "{out}");
         assert!(out.contains(r#"x1="50%""#), "{out}");
         assert!(out.contains(r#"data-dir="rtl""#), "{out}");
-        let marked = html(Slider::new("v").mark(0, "0").mark(50, "Half").mark(500, "Off"));
+        let marked = html(
+            Slider::new("v")
+                .mark(0, "0")
+                .mark(50, "Half")
+                .mark(500, "Off"),
+        );
         assert_eq!(marked.matches(">Half</text>").count(), 2, "{marked}");
-        assert!(!marked.contains("Off"), "a mark off the track is left out: {marked}");
+        assert!(
+            !marked.contains("Off"),
+            "a mark off the track is left out: {marked}"
+        );
         assert!(marked.contains("data-labelled"), "{marked}");
-        let named = html(Slider::new("v").max(2).names(["Low", "Mid", "High"]).value(1));
+        let named = html(
+            Slider::new("v")
+                .max(2)
+                .names(["Low", "Mid", "High"])
+                .value(1),
+        );
         assert!(named.contains(r#"aria-valuetext="Mid""#), "{named}");
         assert_eq!(named.matches(">High</text>").count(), 2, "{named}");
         assert!(named.contains(">Mid</output>"), "{named}");
@@ -930,7 +981,11 @@ mod tests {
     #[test]
     fn a_fine_grid_gets_at_most_101_ticks() {
         let out = html(Slider::new("v").max(1_000_000).ticks_every(1));
-        assert!(out.matches("<line").count() <= 202, "{}", out.matches("<line").count());
+        assert!(
+            out.matches("<line").count() <= 202,
+            "{}",
+            out.matches("<line").count()
+        );
     }
 
     #[test]
@@ -948,16 +1003,28 @@ mod tests {
         assert!(!off.contains("name="), "{off}");
         let still = html(Slider::range("r").values(1, 9).readonly());
         assert!(still.contains("disabled"), "{still}");
-        assert!(still.contains(r#"type="hidden" name="r_min" value="1""#), "{still}");
-        assert!(still.contains(r#"type="hidden" name="r_max" value="9""#), "{still}");
+        assert!(
+            still.contains(r#"type="hidden" name="r_min" value="1""#),
+            "{still}"
+        );
+        assert!(
+            still.contains(r#"type="hidden" name="r_max" value="9""#),
+            "{still}"
+        );
     }
 
     #[test]
     fn a_visible_label_names_the_thumbs() {
         let out = html(Slider::range("p").labelled_by("price-label"));
-        assert!(out.contains(r#"aria-labelledby="price-label slider-p-min""#), "{out}");
+        assert!(
+            out.contains(r#"aria-labelledby="price-label slider-p-min""#),
+            "{out}"
+        );
         let single = html(Slider::new("p").labelled_by("price-label"));
-        assert!(single.contains(r#"aria-labelledby="price-label""#), "{single}");
+        assert!(
+            single.contains(r#"aria-labelledby="price-label""#),
+            "{single}"
+        );
     }
 
     #[test]
@@ -989,8 +1056,13 @@ mod tests {
         assert_eq!(grid.check("-5"), Err(SliderError::TooLow));
         assert_eq!(grid.check("105"), Err(SliderError::TooHigh));
         assert_eq!(grid.check(""), Err(SliderError::Missing));
-        for text in ["1e2", "0x10", "NaN", "10 ", " 10", "5px", "1,5", "--5", "ten"] {
-            assert!(matches!(grid.check(text), Err(SliderError::NotANumber(_))), "{text}");
+        for text in [
+            "1e2", "0x10", "NaN", "10 ", " 10", "5px", "1,5", "--5", "ten",
+        ] {
+            assert!(
+                matches!(grid.check(text), Err(SliderError::NotANumber(_))),
+                "{text}"
+            );
         }
         let tenths = SliderSpec::new(0, 1).step(0.1_f64);
         assert!(tenths.check("0.3").is_ok());
@@ -1003,17 +1075,30 @@ mod tests {
         assert!(offset.check("18").is_ok());
         assert!(offset.check("23").is_err());
         // Any step allows any value inside.
-        assert!(SliderSpec::new(0, 1).any_step().check("0.123456789").is_ok());
-        assert!(SliderSpec::new(0, 1).any_step().check("1.000000001").is_err());
+        assert!(
+            SliderSpec::new(0, 1)
+                .any_step()
+                .check("0.123456789")
+                .is_ok()
+        );
+        assert!(
+            SliderSpec::new(0, 1)
+                .any_step()
+                .check("1.000000001")
+                .is_err()
+        );
     }
 
     #[test]
     fn a_range_is_held_to_its_order_and_its_gap() {
         let grid = SliderSpec::new(0, 100).step(10).min_gap(2);
-        assert_eq!(grid.check_range("20", "60"), Ok((Decimal::from(20), Decimal::from(60))));
+        assert_eq!(
+            grid.check_range("20", "60"),
+            Ok((Decimal::from(20), Decimal::from(60)))
+        );
         assert_eq!(grid.check_range("60", "20"), Err(SliderError::LowAboveHigh));
         assert_eq!(grid.check_range("20", "30"), Err(SliderError::TooClose));
-        assert_eq!(grid.check_range("20", "40").is_ok(), true);
+        assert!(grid.check_range("20", "40").is_ok());
         assert_eq!(grid.check_range("20", ""), Err(SliderError::Missing));
         assert_eq!(grid.check_range("21", "60"), Err(SliderError::OffStep));
     }
@@ -1024,14 +1109,23 @@ mod tests {
         let pair = |k: &str, v: &str| (k.to_owned(), v.to_owned());
         assert_eq!(grid.read(&[pair("v", "3")], "v"), Ok(Decimal::from(3)));
         assert_eq!(grid.read(&[], "v"), Err(SliderError::Missing));
-        assert_eq!(grid.read(&[pair("v", "3"), pair("v", "4")], "v"), Err(SliderError::Duplicate));
+        assert_eq!(
+            grid.read(&[pair("v", "3"), pair("v", "4")], "v"),
+            Err(SliderError::Duplicate)
+        );
         assert_eq!(
             grid.read_range(&[pair("r_min", "2"), pair("r_max", "8")], "r"),
             Ok((Decimal::from(2), Decimal::from(8)))
         );
-        assert_eq!(grid.read_range(&[pair("r_min", "2")], "r"), Err(SliderError::Missing));
         assert_eq!(
-            grid.read_range(&[pair("r_min", "2"), pair("r_max", "8"), pair("r_max", "9")], "r"),
+            grid.read_range(&[pair("r_min", "2")], "r"),
+            Err(SliderError::Missing)
+        );
+        assert_eq!(
+            grid.read_range(
+                &[pair("r_min", "2"), pair("r_max", "8"), pair("r_max", "9")],
+                "r"
+            ),
             Err(SliderError::Duplicate)
         );
     }
@@ -1040,10 +1134,22 @@ mod tests {
     fn errors_say_what_the_grid_is() {
         let grid = SliderSpec::new(0, 100).step(5).min_gap(2);
         let labels = SliderLabels::default();
-        assert_eq!(grid.message(SliderError::TooLow, &labels), "Choose 0 or more.");
-        assert_eq!(grid.message(SliderError::TooHigh, &labels), "Choose 100 or less.");
-        assert_eq!(grid.message(SliderError::OffStep, &labels), "Choose a value in steps of 5.");
-        assert_eq!(grid.message(SliderError::TooClose, &labels), "The two values must be at least 10 apart.");
+        assert_eq!(
+            grid.message(SliderError::TooLow, &labels),
+            "Choose 0 or more."
+        );
+        assert_eq!(
+            grid.message(SliderError::TooHigh, &labels),
+            "Choose 100 or less."
+        );
+        assert_eq!(
+            grid.message(SliderError::OffStep, &labels),
+            "Choose a value in steps of 5."
+        );
+        assert_eq!(
+            grid.message(SliderError::TooClose, &labels),
+            "The two values must be at least 10 apart."
+        );
     }
 
     /// A small generator, so the properties run the same everywhere.

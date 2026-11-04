@@ -152,7 +152,7 @@ impl Decimal {
             return 0;
         }
         let mut digits = FRACTION_DIGITS;
-        while units % 10 == 0 {
+        while units.is_multiple_of(10) {
             units /= 10;
             digits -= 1;
         }
@@ -171,7 +171,10 @@ impl Decimal {
             return format!("{sign}{whole}");
         }
         let fraction = (rounded % ONE) / unit;
-        format!("{sign}{whole}.{fraction:0width$}", width = decimals as usize)
+        format!(
+            "{sign}{whole}.{fraction:0width$}",
+            width = decimals as usize
+        )
     }
 }
 
@@ -311,16 +314,28 @@ mod tests {
             assert!(text.parse::<Decimal>().is_err(), "{text:?}");
         }
         assert_eq!("".parse::<Decimal>(), Err(DecimalError::Empty));
-        assert_eq!("1.0000000001".parse::<Decimal>(), Err(DecimalError::TooLong));
-        assert_eq!("100000000000000000000".parse::<Decimal>(), Err(DecimalError::TooLong));
+        assert_eq!(
+            "1.0000000001".parse::<Decimal>(),
+            Err(DecimalError::TooLong)
+        );
+        assert_eq!(
+            "100000000000000000000".parse::<Decimal>(),
+            Err(DecimalError::TooLong)
+        );
         assert!("99999999999999999999.999999999".parse::<Decimal>().is_ok());
     }
 
     #[test]
     fn floats_in_are_held_inside_and_nan_is_zero() {
         assert_eq!(Decimal::from(f64::NAN), Decimal::ZERO);
-        assert_eq!(Decimal::from(f64::INFINITY).to_string(), "99999999999999999999.999999999");
-        assert_eq!(Decimal::from(f64::NEG_INFINITY).to_string(), "-99999999999999999999.999999999");
+        assert_eq!(
+            Decimal::from(f64::INFINITY).to_string(),
+            "99999999999999999999.999999999"
+        );
+        assert_eq!(
+            Decimal::from(f64::NEG_INFINITY).to_string(),
+            "-99999999999999999999.999999999"
+        );
         assert_eq!(Decimal::from(f64::MAX), Decimal::from(f64::INFINITY));
         assert_eq!(Decimal::from(0.1_f64).to_string(), "0.1");
         assert_eq!(Decimal::from(0.1_f32).to_string(), "0.1");
@@ -389,7 +404,11 @@ mod tests {
             if let Ok(value) = text.parse::<Decimal>() {
                 parsed += 1;
                 let written = value.to_string();
-                assert_eq!(written.parse::<Decimal>(), Ok(value), "{text:?} -> {written}");
+                assert_eq!(
+                    written.parse::<Decimal>(),
+                    Ok(value),
+                    "{text:?} -> {written}"
+                );
                 assert!(!written.contains(['e', 'E']), "{written}");
             }
         }
@@ -404,9 +423,15 @@ mod tests {
             let step = Decimal(1 + (rng.next() % 5_000_000_000) as i128);
             let value = Decimal::from_f64((rng.next() % 4_000_000) as f64 / 1000.0 - 2000.0);
             let snapped = value.snapped(min, step);
-            assert!(snapped.minus(min).unwrap().is_multiple_of(step), "{min} {step} {value}");
+            assert!(
+                snapped.minus(min).unwrap().is_multiple_of(step),
+                "{min} {step} {value}"
+            );
             // No farther than half a step.
-            assert!((snapped.units() - value.units()).abs() * 2 <= step.units(), "{min} {step} {value}");
+            assert!(
+                (snapped.units() - value.units()).abs() * 2 <= step.units(),
+                "{min} {step} {value}"
+            );
         }
     }
 }

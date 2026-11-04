@@ -337,7 +337,10 @@ fn item(at: usize, step: Step, state: StepState, labels: &StepperLabels) -> Elem
         .child(
             trigger
                 .slot("step-trigger")
-                .attr_opt("aria-current", (state == StepState::Current).then_some("step"))
+                .attr_opt(
+                    "aria-current",
+                    (state == StepState::Current).then_some("step"),
+                )
                 .flag("data-disabled", state == StepState::Disabled)
                 .children(body),
         )
@@ -394,7 +397,11 @@ mod tests {
         let out = html(
             Stepper::new("S")
                 .step(Step::new("A").link("/a").state(StepState::Disabled))
-                .step(Step::new("B").submit("_wizard", "goto:b").state(StepState::Disabled)),
+                .step(
+                    Step::new("B")
+                        .submit("_wizard", "goto:b")
+                        .state(StepState::Disabled),
+                ),
         );
         assert!(!out.contains("href="), "{out}");
         assert!(out.contains("disabled"), "{out}");
@@ -445,7 +452,10 @@ mod tests {
     fn a_horizontal_stepper_writes_the_count_and_a_vertical_one_does_not() {
         let out = html(three().current(1));
         assert!(out.contains("Step 2 of 3"), "{out}");
-        assert!(out.contains(r#"data-slot="stepper-count" aria-hidden="true""#), "{out}");
+        assert!(
+            out.contains(r#"data-slot="stepper-count" aria-hidden="true""#),
+            "{out}"
+        );
         assert!(!html(three().current(1).vertical()).contains("stepper-count"));
         assert!(!html(three().current(1).no_count()).contains("stepper-count"));
         assert!(!html(three()).contains("stepper-count"), "no current step");
@@ -462,7 +472,9 @@ mod tests {
 
     #[test]
     fn one_step_and_many_steps_render() {
-        assert!(html(Stepper::new("one").step(Step::new("Only")).current(0)).contains("Step 1 of 1"));
+        assert!(
+            html(Stepper::new("one").step(Step::new("Only")).current(0)).contains("Step 1 of 1")
+        );
         let many = Stepper::new("many").steps((0..50).map(|n| Step::new(format!("Step {n}"))));
         let out = html(many.current(25));
         assert_eq!(out.matches("<li").count(), 50);

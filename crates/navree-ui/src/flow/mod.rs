@@ -26,7 +26,8 @@ mod tree;
 mod wizard;
 
 pub use draft::{
-    Draft, DraftError, DraftStore, MAX_DRAFT_BYTES, MemoryDrafts, StepRecord, is_draft_id, is_step_id,
+    Draft, DraftError, DraftStore, MAX_DRAFT_BYTES, MemoryDrafts, StepRecord, is_draft_id,
+    is_step_id,
 };
 pub use number::{Decimal, DecimalError};
 pub use slider::{Slider, SliderError, SliderLabels, SliderSpec};

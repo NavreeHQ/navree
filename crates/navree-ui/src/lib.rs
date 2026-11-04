@@ -31,8 +31,8 @@ pub mod prelude {
     pub use crate::dates::{Calendar, DatePicker, DateRangePicker, TimePicker};
     pub use crate::flow::{
         Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
-        StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode, TreeSelect, TreeSelection,
-        TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
+        StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
+        TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
     };
     pub use crate::form::{
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
@@ -88,8 +88,8 @@ pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
 pub use flow::{
     Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
-    StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode, TreeSelect, TreeSelection,
-    TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
+    StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
+    TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
 pub use form::{FormView, Money, Submit};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
