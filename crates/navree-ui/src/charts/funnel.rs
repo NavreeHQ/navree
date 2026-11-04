@@ -41,6 +41,9 @@ impl Stage {
     }
 }
 
+/// The most stages a funnel draws: a process with more is a table.
+pub const MAX_STAGES: usize = 12;
+
 /// Stages of an ordered process as bars from one baseline, each as wide as its share
 /// of the first stage, with its count, that share and the share of the stage before.
 /// An ordered list, so it reads in order without the picture; the stages step through
@@ -105,11 +108,13 @@ impl Funnel {
     fn into_node(self) -> Node {
         let mut this = self;
         let drawn = this.draw();
-        let height = (this.stages.len() as u32 * 44).max(88);
+        let height = (this.stages.len().min(MAX_STAGES) as u32 * 44).max(88);
         frame(this.common, drawn, "funnel", height)
     }
 
     fn draw(&mut self) -> Option<Drawn> {
+        let total = self.stages.len();
+        self.stages.truncate(MAX_STAGES);
         if self.stages.is_empty() || self.stages.iter().all(|s| s.value.is_none()) {
             return None;
         }
@@ -251,7 +256,12 @@ impl Funnel {
             summary,
             table,
             height: (count as u32 * 44).max(88),
-            note: None,
+            note: (total > count).then(|| {
+                fill(
+                    &labels.stages_cut,
+                    &[("shown", &count.to_string()), ("total", &total.to_string())],
+                )
+            }),
             interactive: true,
         })
     }

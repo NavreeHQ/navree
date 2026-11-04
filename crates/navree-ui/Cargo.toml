@@ -29,6 +29,8 @@ storage = ["dep:navree-storage"]
 [dependencies]
 base64 = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
+# A report names its zone to the database from the zone itself.
+chrono-tz = { workspace = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
@@ -56,7 +58,6 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-chrono-tz = { workspace = true }
 serde_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
 # Its own `phone` and `storage` features, for the tests of the phone input and the uploads.

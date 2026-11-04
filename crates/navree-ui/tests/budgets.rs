@@ -640,6 +640,37 @@ mod times {
         assert!(time < Duration::from_millis(100), "{time:?}");
     }
 
+    /// A random walk of a million points: every bucket has its own peak, the shape that
+    /// costs downsampling most.
+    #[test]
+    fn a_million_point_random_walk_renders_in_under_100_ms() {
+        use navree_ui::charts::{Chart, Series};
+        let n = 1_000_000;
+        let mut seed: u64 = 7;
+        let mut level = 0.0;
+        let ys: Vec<f64> = (0..n)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                level += (seed >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+                level
+            })
+            .collect();
+        let xs: Vec<f64> = (0..n).map(|i| i as f64).collect();
+        let time = best(5, || {
+            navree_ui::render(
+                &Chart::line("A random walk")
+                    .numbers(xs.iter().copied())
+                    .y_zero(false)
+                    .series(Series::new("Walk", ys.iter().copied()))
+                    .into(),
+            )
+        });
+        println!("a million-point random walk renders in {time:?}");
+        assert!(time < Duration::from_millis(100), "{time:?}");
+    }
+
     /// A page with a phone input and a saved number: the 245 countries of
     /// its select, the number read and written in its country's format.
     #[test]

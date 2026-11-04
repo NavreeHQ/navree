@@ -56,8 +56,8 @@ pub use cartesian::{Annotation, At, Chart, Merge, Series};
 pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
-pub use funnel::{Funnel, Stage};
-pub use report::{Bucket, Report, ReportQuery};
+pub use funnel::{Funnel, MAX_STAGES, Stage};
+pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
 #[cfg(feature = "orm")]
 pub use report_orm::{Bucketing, Metric, TimeColumn};
 pub use scale::Grain;
@@ -126,6 +126,10 @@ pub struct ChartLabels {
     pub one_point: Cow<'static, str>,
     /// A week's name: `Week of {date}`.
     pub week_of: Cow<'static, str>,
+    /// An hour the clocks showed twice, the second time: `{time}, second time`.
+    pub again: Cow<'static, str>,
+    /// Under a funnel with more stages than it draws: `{shown}`, `{total}`.
+    pub stages_cut: Cow<'static, str>,
 }
 
 impl Default for ChartLabels {
@@ -173,6 +177,8 @@ impl ChartLabels {
             summary_marks: Cow::Borrowed("Marked: {marks}."),
             one_point: Cow::Borrowed("A line needs two values; one is shown."),
             week_of: Cow::Borrowed("Week of {date}"),
+            again: Cow::Borrowed("{time}, second time"),
+            stages_cut: Cow::Borrowed("The first {shown} of {total} stages are drawn."),
         }
     }
 }
@@ -273,22 +279,26 @@ impl Common {
         }
     }
 
-    /// The figure's id: the one given, kept to safe characters, or one made from the
-    /// title.
+    /// The figure's id: the one given, kept to letters, digits, `-` and `_` of any
+    /// script; or one made from the title, its words joined by `-` and a short hash of
+    /// the whole title after them, so titles in any script, and titles that differ only
+    /// in what an id can't hold, give different ids.
     pub fn id(&self) -> String {
+        let given = self.id.is_some();
         let source = self.id.as_deref().unwrap_or(&self.title);
-        let mut out = String::with_capacity(source.len().min(48) + 6);
+        let mut out = String::with_capacity(source.len().min(96) + 16);
         let mut dash = false;
-        for c in source.chars() {
-            if out.len() >= 48 {
+        for (count, c) in source.chars().enumerate() {
+            if count >= 48 {
                 break;
             }
-            if c.is_ascii_alphanumeric() || (self.id.is_some() && c == '_') {
-                out.push(if self.id.is_some() {
-                    c
+            if c.is_alphanumeric() || (given && c == '_') {
+                // A given id keeps its case: the app may style or link to it.
+                if given {
+                    out.push(c);
                 } else {
-                    c.to_ascii_lowercase()
-                });
+                    out.extend(c.to_lowercase());
+                }
                 dash = false;
             } else if !dash && !out.is_empty() {
                 out.push('-');
@@ -298,10 +308,23 @@ impl Common {
         while out.ends_with('-') {
             out.pop();
         }
-        if self.id.is_none() || !out.starts_with(|c: char| c.is_ascii_alphabetic()) {
-            out.insert_str(0, "chart-");
+        if given {
+            if !out.starts_with(char::is_alphabetic) {
+                out.insert_str(0, "chart-");
+            }
+            return out;
         }
-        out
+        // FNV-1a over the whole title: six hex digits tell titles apart.
+        let mut hash: u32 = 0x811c_9dc5;
+        for byte in self.title.bytes() {
+            hash ^= u32::from(byte);
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+        if out.is_empty() {
+            format!("chart-{:06x}", hash & 0x00ff_ffff)
+        } else {
+            format!("chart-{out}-{:06x}", hash & 0x00ff_ffff)
+        }
     }
 }
 
@@ -666,6 +689,7 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                     .attr("data-h", i64::from(height))
                     .attr("role", "status")
                     .children((
+                        spacer(height),
                         el("div").slot("skeleton").attr("data-shape", "block"),
                         el("span")
                             .attr("data-sr", "")
@@ -681,17 +705,20 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                 .attr("data-h", i64::from(height))
                 .attr("role", "alert")
                 .children((
-                    crate::components::icon(icons::CIRCLE_ALERT),
-                    el("strong").child(labels.failed.clone()),
-                    reason.clone().map(|r| el("span").child(r)),
-                    retry.clone().map(|href| {
-                        el("a")
-                            .href(href)
-                            .slot("button")
-                            .attr("data-variant", "outline")
-                            .attr("data-size", "sm")
-                            .child(labels.retry.clone())
-                    }),
+                    spacer(height),
+                    el("div").slot("chart-state-body").children((
+                        crate::components::icon(icons::CIRCLE_ALERT),
+                        el("strong").child(labels.failed.clone()),
+                        reason.clone().map(|r| el("span").child(r)),
+                        retry.clone().map(|href| {
+                            el("a")
+                                .href(href)
+                                .slot("button")
+                                .attr("data-variant", "outline")
+                                .attr("data-size", "sm")
+                                .child(labels.retry.clone())
+                        }),
+                    )),
                 )),
         )),
         (State::Ready, None) => {
@@ -708,9 +735,12 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                     .attr("data-state", "empty")
                     .attr("data-h", i64::from(height))
                     .children((
-                        crate::components::icon(icons::CHART_NO_AXES_COLUMN),
-                        el("strong").child(heading),
-                        text.map(|t| el("span").child(t)),
+                        spacer(height),
+                        el("div").slot("chart-state-body").children((
+                            crate::components::icon(icons::CHART_NO_AXES_COLUMN),
+                            el("strong").child(heading),
+                            text.map(|t| el("span").child(t)),
+                        )),
                     )),
             ))
         }
@@ -794,6 +824,16 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
     figure.child(content).into()
 }
 
+/// An empty picture as tall as the chart would be: a state takes the drawing's place
+/// to the pixel, so the page doesn't move when the data comes, and no style attribute
+/// is needed to say how tall.
+fn spacer(height: u32) -> Element {
+    svg()
+        .slot("chart-spacer")
+        .attr("width", "0")
+        .attr("height", i64::from(height.clamp(16, 4000)))
+}
+
 /// Writes a coordinate with at most `places` decimals and no trailing zeros.
 pub(crate) fn num(out: &mut String, value: f64, places: usize) {
     use std::fmt::Write as _;
@@ -865,12 +905,55 @@ mod tests {
             c.id = id.map(str::to_owned);
             c.id()
         };
-        assert_eq!(id("Opens by hour", None), "chart-opens-by-hour");
-        assert_eq!(id("\"><script>", None), "chart-script");
-        assert_eq!(id("", None), "chart-");
+        assert!(id("Opens by hour", None).starts_with("chart-opens-by-hour-"));
+        assert!(id("\"><script>", None).starts_with("chart-script-"));
+        assert!(id("", None).starts_with("chart-"));
         assert_eq!(id("x", Some("opens")), "opens");
         assert_eq!(id("x", Some("9 lives \"<b>")), "chart-9-lives-b");
-        assert!(id(&"a".repeat(500), None).len() < 60);
+        assert!(id(&"a".repeat(500), None).len() < 70);
+        // An id holds nothing a selector, a `for` or an `aria-*` list would trip on.
+        for title in ["a b", "\"'<>&", "tab\there", "x\u{200b}y"] {
+            let made = id(title, None);
+            assert!(
+                !made
+                    .chars()
+                    .any(|c| c.is_whitespace() || "\"'<>&\u{200b}".contains(c)),
+                "{made}"
+            );
+        }
+    }
+
+    #[test]
+    fn titles_in_any_script_give_their_own_ids() {
+        let id = |title: &str| Common::new(title.to_owned()).id();
+        // Russian, Japanese, Hindi (Devanagari) and Punjabi (Gurmukhi).
+        let titles = [
+            "Продажи",
+            "Выручка",
+            "売上",
+            "利益",
+            "बिक्री",
+            "राजस्व",
+            "ਵਿਕਰੀ",
+            "ਆਮਦਨ",
+        ];
+        let ids: Vec<String> = titles.iter().map(|t| id(t)).collect();
+        let mut unique = ids.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), titles.len(), "{ids:?}");
+        assert!(ids[0].starts_with("chart-продажи-"), "{ids:?}");
+        assert!(ids[2].starts_with("chart-売上-"), "{ids:?}");
+        // The same title gives the same id on every render, so a morph keeps it.
+        assert_eq!(id("ਵਿਕਰੀ"), id("ਵਿਕਰੀ"));
+        // Titles an id can't tell apart by their letters still differ.
+        assert_ne!(id("Sales!"), id("Sales?"));
+        // A given id keeps its own script.
+        let mut c = Common::new("x".to_owned());
+        c.id = Some("ਵਿਕਰੀ_2026".to_owned());
+        assert_eq!(c.id(), "ਵਿਕਰੀ_2026");
+        c.id = Some("salesChart".to_owned());
+        assert_eq!(c.id(), "salesChart");
     }
 
     #[test]

@@ -161,19 +161,33 @@ impl Donut {
                 .filter_map(|i| parts[*i].1)
                 .sum();
             let mut kept: Vec<(String, Option<f64>, Color)> = Vec::new();
+            // Parts that draw nothing stay in the table of a short list only.
+            let short = parts.len() <= 2 * self.most;
             for (at, part) in parts.into_iter().enumerate() {
-                if keep.contains(&at) || positive(part.1).is_none() {
+                if keep.contains(&at) || (short && positive(part.1).is_none()) {
                     kept.push(part);
                 }
             }
             kept.push((labels.other.to_string(), Some(rest), Color::Other));
             parts = kept;
         }
-        let total: f64 = parts.iter().filter_map(|p| positive(p.1)).sum();
-        if !(total > 0.0 && total.is_finite()) {
+        // Shares are worked out against the largest part, so parts near the largest
+        // number a float holds still add up; only the total shown may be too large.
+        let top = parts
+            .iter()
+            .filter_map(|p| positive(p.1))
+            .fold(0.0_f64, f64::max);
+        if !(top > 0.0 && top.is_finite()) {
             return None;
         }
-        let share = |v: f64| NumberFormat::percent().format(v / total, &numbers);
+        let scaled: f64 = parts
+            .iter()
+            .filter_map(|p| positive(p.1))
+            .map(|v| v / top)
+            .sum();
+        let fraction = |v: f64| (v / top) / scaled;
+        let total = top * scaled;
+        let share = |v: f64| NumberFormat::percent().format(fraction(v), &numbers);
 
         // The slices, clockwise from twelve o'clock.
         let outer = 100.0;
@@ -182,7 +196,7 @@ impl Donut {
         let mut slices: Vec<Node> = Vec::new();
         for (at, (_, value, color)) in parts.iter().enumerate() {
             let Some(v) = positive(*value) else { continue };
-            let sweep = v / total * std::f64::consts::TAU;
+            let sweep = fraction(v) * std::f64::consts::TAU;
             let end = start + sweep;
             let d = arc(start, end, outer, inner);
             slices.push(

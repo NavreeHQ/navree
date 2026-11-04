@@ -611,8 +611,18 @@ fn no_data_breaks_a_chart() {
         if seq.below(4) == 0 {
             chart = chart.y_min(seq.value()).y_max(seq.value());
         }
-        if seq.below(4) == 0 {
-            chart = chart.format(NumberFormat::percent());
+        chart = chart.format(match seq.below(9) {
+            0 => NumberFormat::percent(),
+            1 => NumberFormat::percent_of_100().compact(Compact::Always),
+            2 => NumberFormat::number().compact(Compact::Always),
+            3 => NumberFormat::number().compact(Compact::Never),
+            4 => NumberFormat::currency("$").fixed(),
+            5 => NumberFormat::integer().compact(Compact::Always),
+            6 => NumberFormat::decimals(12).suffix(" ms"),
+            _ => NumberFormat::number(),
+        });
+        if seq.below(3) == 0 {
+            chart = chart.locale(["en", "en-IN", "de", "fr", "ar", "hi", "ja", "xx"][seq.below(8)]);
         }
         let out = html(
             chart
@@ -629,19 +639,194 @@ fn no_data_breaks_a_chart() {
             }
         }
 
-        let mut donut = Donut::new("d");
+        let short = NumberFormat::number().compact(Compact::Always);
+        let mut donut = Donut::new("d").format(short.clone());
         for p in 0..seq.below(12) {
             donut = donut.part(format!("p{p}"), seq.value());
         }
         assert!(html(donut.max_parts(seq.below(10))).starts_with("<figure"));
-        let mut funnel = Funnel::new("f");
-        for p in 0..seq.below(8) {
+        let mut funnel = Funnel::new("f").format(short.clone());
+        for p in 0..seq.below(20) {
             funnel = funnel.stage(Stage::new(format!("s{p}"), seq.value()));
         }
         assert!(html(funnel).starts_with("<figure"));
         let values: Vec<Option<f64>> = (0..seq.below(300)).map(|_| seq.value()).collect();
-        assert!(html(Sparkline::new("s", values)).starts_with("<figure"));
+        assert!(html(Sparkline::new("s", values).format(short)).starts_with("<figure"));
     }
+}
+
+#[test]
+fn compact_numbers_never_overflow_the_stack() {
+    let out = html(
+        Chart::bar("Small and large")
+            .categories(["a", "b", "c"])
+            .format(NumberFormat::number().compact(Compact::Always))
+            .series(Series::new("s", [5.0, 1_200.0, 3_400_000.0])),
+    );
+    assert!(
+        out.contains(">5</td>") && out.contains(">1.2K</td>") && out.contains(">3.4M</td>"),
+        "{out}"
+    );
+}
+
+#[test]
+fn two_charts_titled_in_other_scripts_never_share_an_id() {
+    let ids = |title: &str| {
+        let out = html(
+            Chart::line(title.to_owned())
+                .categories(["a", "b"])
+                .toggles()
+                .series(Series::new("A", [1, 2]))
+                .series(Series::new("B", [2, 1])),
+        );
+        let mut found: Vec<String> = out
+            .match_indices(" id=\"")
+            .map(|(at, m)| {
+                out[at + m.len()..]
+                    .split('"')
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+            .collect();
+        found.sort();
+        found
+    };
+    for (a, b) in [
+        ("Продажи", "Выручка"),
+        ("बिक्री", "राजस्व"),
+        ("ਵਿਕਰੀ", "ਆਮਦਨ"),
+        ("売上", "利益"),
+    ] {
+        let (a, b) = (ids(a), ids(b));
+        assert!(a.iter().all(|id| !b.contains(id)), "{a:?} and {b:?}");
+        // The table switch's `for`, the legend's and the names point inside their own chart.
+        assert!(a.iter().any(|id| id.ends_with("-table-switch")));
+    }
+}
+
+#[test]
+fn the_hour_the_clocks_repeat_has_its_own_name() {
+    use chrono::Utc;
+    let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+    let report = Report::new(
+        navree_ui::dates::DateRange::single(day(1)),
+        Grain::Hour,
+        &ny,
+    );
+    let out = html(
+        report
+            .chart(Chart::line("Hours"))
+            .series(Series::new("a", vec![1; report.buckets().len()])),
+    );
+    let mut heads: Vec<&str> = out
+        .match_indices("<th scope=\"row\">")
+        .map(|(at, m)| {
+            let rest = &out[at + m.len()..];
+            &rest[..rest.find('<').unwrap()]
+        })
+        .collect();
+    assert_eq!(heads.len(), 25);
+    assert!(
+        heads.contains(&"Nov 1, 2026, 1:00 AM, second time"),
+        "{heads:?}"
+    );
+    heads.sort();
+    heads.dedup();
+    assert_eq!(heads.len(), 25, "every row its own name");
+    let _ = Utc;
+}
+
+#[test]
+fn a_funnel_draws_at_most_its_limit_and_says_so() {
+    let mut funnel = Funnel::new("Many");
+    for at in 0..200 {
+        funnel = funnel.stage(Stage::new(format!("Stage {at}"), 1000 - at));
+    }
+    let out = html(funnel);
+    assert_eq!(out.matches("data-slot=\"chart-stage\"").count(), MAX_STAGES);
+    assert!(out.contains("The first 12 of 200 stages are drawn."));
+}
+
+#[test]
+fn a_donut_of_the_largest_numbers_still_draws() {
+    let out = html(
+        Donut::new("Huge")
+            .part("a", f64::MAX)
+            .part("b", f64::MAX)
+            .part("c", 1.0),
+    );
+    assert!(out.contains("data-slot=\"chart-slice\""), "{out}");
+    assert!(out.contains("50%"), "each half: {out}");
+    // A long list of parts that draw nothing doesn't fill the table.
+    let mut many = Donut::new("Many").part("Big", 10);
+    for at in 0..10_000 {
+        many = many.part(format!("Zero {at}"), 0);
+    }
+    for at in 0..20 {
+        many = many.part(format!("Small {at}"), 1);
+    }
+    let out = html(many);
+    assert!(table_rows(&out) <= 8, "{}", table_rows(&out));
+}
+
+#[test]
+fn a_state_keeps_the_height_of_its_chart() {
+    for (node, height) in [
+        (Node::from(Chart::line("x").height(300).loading()), 332),
+        (Node::from(Chart::line("x").height(120).failed(None)), 152),
+        (
+            Node::from(
+                Chart::bar("x")
+                    .categories(Vec::<String>::new())
+                    .series(Series::new("s", Vec::<f64>::new())),
+            ),
+            232,
+        ),
+    ] {
+        let out = html(node);
+        assert!(
+            out.contains(&format!(
+                "data-slot=\"chart-spacer\" width=\"0\" height=\"{height}\""
+            )),
+            "{out}"
+        );
+    }
+}
+
+#[test]
+fn annotations_find_their_rows_after_the_rows_are_reduced() {
+    // 1,000 days merged into 100 bars: an event on day 555 sits on the bar that holds it.
+    let days: Vec<NaiveDate> = (0..1000)
+        .map(|i| day(1) - Duration::days(999 - i))
+        .collect();
+    let out = html(
+        Chart::bar("x")
+            .days(days)
+            .max_bars(100)
+            .series(Series::new("s", vec![1; 1000]))
+            .annotation(Annotation::event(At::Index(555), "Here")),
+    );
+    assert!(
+        out.contains("x1=\"55.5%\""),
+        "bar 55 of 100 is centred at 55.5%: {out}"
+    );
+    // A category line reduced to fewer points keeps each point where its category stood.
+    let names: Vec<String> = (0..2000).map(|i| format!("c{i}")).collect();
+    let out = html(
+        Chart::line("x")
+            .categories(names)
+            .max_points(64)
+            .series(Series::new(
+                "s",
+                (0..2000).map(|i| (i % 50) as f64).collect::<Vec<_>>(),
+            ))
+            .annotation(Annotation::event("c1000", "Middle")),
+    );
+    assert!(
+        out.contains("x1=\"50.025%\""),
+        "category 1000 of 2000: {out}"
+    );
 }
 
 #[test]

@@ -571,8 +571,14 @@ impl Chart {
             X::Times(times) => match times.get(at).copied().and_then(time_of) {
                 Some(t) => {
                     let name = time_name(t, grain, &self.common.dates);
-                    if grain == Grain::Week {
+                    let name = if grain == Grain::Week {
                         fill(&self.common.labels.week_of, &[("date", &name)])
+                    } else {
+                        name
+                    };
+                    // The clocks went back: the second of two equal times is that hour again.
+                    if at > 0 && times.get(at - 1) == times.get(at) {
+                        fill(&self.common.labels.again, &[("time", &name)])
                     } else {
                         name
                     }
@@ -820,8 +826,9 @@ impl Chart {
                             linear_x(t[range.start] as f64, t[0] as f64, t[n - 1] as f64)
                         }
                         X::Numbers(v) => linear_x(v[range.start], v[0], v[n - 1]),
-                        _ if m == 1 => 50.0,
-                        _ => at as f64 * 100.0 / (m - 1) as f64,
+                        // A kept row stands where its data row stood.
+                        _ if n == 1 => 50.0,
+                        _ => range.start as f64 * 100.0 / (n - 1) as f64,
                     }
                 };
                 Row {
@@ -1549,11 +1556,30 @@ impl Chart {
         let rows = plan.rows;
         let bars = self.kind == Kind::Bar;
         let pos = |x: f64| if self.rtl { 100.0 - x } else { x };
+        // The band that holds data row `i`: bars that merged it, or the Other bar.
+        let band = |i: usize| -> Option<f64> {
+            let r = rows.partition_point(|row| row.start <= i).checked_sub(1)?;
+            rows.get(r).map(|row| row.x)
+        };
+        // Where data row `i` stands, whatever rows the drawing kept.
+        let place = |i: usize| -> Option<f64> {
+            if i >= rows_n {
+                return None;
+            }
+            if bars {
+                return band(i);
+            }
+            Some(pos(match &self.x {
+                X::Times(t) => linear_x(t[i] as f64, t[0] as f64, t[rows_n - 1] as f64),
+                X::Numbers(v) => linear_x(v[i], v[0], v[rows_n - 1]),
+                _ if rows_n <= 1 => 50.0,
+                _ => i as f64 * 100.0 / (rows_n - 1) as f64,
+            }))
+        };
         match (at, &self.x) {
-            (At::Index(i), _) => rows.get(*i).map(|r| r.x),
+            (At::Index(i), _) => place(*i),
             (At::Category(name), X::Categories(names)) => {
-                let i = names.iter().position(|c| c == name)?;
-                rows.get(i).map(|r| r.x)
+                place(names.iter().position(|c| c == name)?)
             }
             (At::Time(t), X::Times(times)) => {
                 let t = seconds_of(*t);
@@ -1562,7 +1588,7 @@ impl Chart {
                         .iter()
                         .position(|v| *v >= t)
                         .unwrap_or(times.len().saturating_sub(1));
-                    rows.get(i.min(rows.len().saturating_sub(1))).map(|r| r.x)
+                    band(i.min(rows_n.saturating_sub(1)))
                 } else {
                     let (lo, hi) = (*times.first()?, *times.get(rows_n.saturating_sub(1))?);
                     (lo..=hi)

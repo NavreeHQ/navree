@@ -89,6 +89,8 @@ function show(body, i, keyed) {
   const figure = /** @type {Element} */ (body.parentElement);
   for (const marked of all(body, "[data-active]")) unset(marked, "data-active");
   const how = mode(body);
+  // The chart's own height, before any tooltip grew it.
+  /** @type {HTMLElement} */ (body).style.minHeight = "";
   const box = body.getBoundingClientRect();
   let ax = 0, ay = 0;
   if (how === "point" || how === "band") {
@@ -172,6 +174,7 @@ function hide(body) {
   for (const el of all(body, "[data-slot=chart-cursor],[data-slot=chart-dot]")) set(el, "visibility", "hidden");
   const tip = one(body, "[data-slot=chart-tip]");
   if (tip) unset(tip, "data-open");
+  /** @type {HTMLElement} */ (body).style.minHeight = "";
 }
 
 /** The value under the pointer. @param {Element} body @param {PointerEvent} e */
@@ -216,7 +219,10 @@ on(document, "pointermove", (e) => {
 
 on(document, "pointerout", (e) => {
   const body = closest(e.target, BODY);
-  if (body && !holds(body, /** @type {Node | null} */ (e.relatedTarget)) && body !== active()) hide(body);
+  if (!body || holds(body, /** @type {Node | null} */ (e.relatedTarget))) return;
+  // A move that came in the same frame as the leave is not drawn after it.
+  if (latest && closest(latest.target, BODY) === body) latest = null;
+  if (body !== active()) hide(body);
 }, { passive: true });
 
 on(document, "focusin", (e) => {

@@ -103,11 +103,12 @@
 [data-tip=row]{display:flex;align-items:center;gap:.5rem;& strong{font-weight:600;font-variant-numeric:tabular-nums}& span:last-child{color:var(--fg-2);overflow-wrap:anywhere}}
 
 /* Loading, failed, empty: the chart's place is kept. */
-[data-slot=chart-state]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.375rem;min-height:14.5rem;padding:1rem;border:1px dashed var(--line-2);border-radius:var(--radius-lg);color:var(--fg-2);font-size:13px;text-align:center;& > [data-slot=icon]{width:20px;height:20px;color:var(--fg-3)}& strong{color:var(--fg);font-weight:600}}
-[data-slot=chart-state][data-state=loading]{align-items:stretch;padding:0;border:0;& > [data-slot=skeleton]{flex:1;height:auto;min-height:14.5rem;border-radius:var(--radius-lg)}}
-[data-slot=chart-state][data-state=failed] > [data-slot=icon]{color:var(--danger)}
-[data-kind=donut] [data-slot=chart-state],[data-kind=funnel] [data-slot=chart-state]{min-height:10.5rem;& > [data-slot=skeleton]{min-height:10.5rem}}
-[data-kind=sparkline] [data-slot=chart-state]{min-height:2rem;padding:0;border:0;& > [data-slot=skeleton]{min-height:2rem}}
+[data-slot=chart-state]{display:grid;outline:1px dashed var(--line-2);outline-offset:-1px;border-radius:var(--radius-lg);color:var(--fg-2);font-size:13px;text-align:center;& > *{grid-area:1/1}}
+[data-slot=chart-spacer]{display:block}
+[data-slot=chart-state-body]{place-self:center;display:flex;flex-direction:column;align-items:center;gap:.375rem;padding:1rem;& > [data-slot=icon]{width:20px;height:20px;color:var(--fg-3)}& strong{color:var(--fg);font-weight:600}}
+[data-slot=chart-state][data-state=loading]{outline:0;& > [data-slot=skeleton]{place-self:stretch;height:auto;border-radius:var(--radius-lg)}}
+[data-slot=chart-state][data-state=failed] [data-slot=chart-state-body] > [data-slot=icon]{color:var(--danger)}
+[data-kind=sparkline] [data-slot=chart-state]{outline:0}
 [data-kind=sparkline]{gap:0}
 [data-ui-region][aria-busy=true] [data-slot=chart-body]{opacity:.6;transition:opacity .2s}
 

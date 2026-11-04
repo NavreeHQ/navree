@@ -2,7 +2,8 @@
 //! picker that wrote it, cut into periods of a grain in the report's zone.
 
 use chrono::{
-    DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, Weekday,
+    DateTime, Datelike, Duration, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc,
+    Weekday,
 };
 use serde::Deserialize;
 
@@ -11,9 +12,61 @@ use super::{Chart, Series};
 use crate::dates::{DateError, DatePreset, DateRange, DateRangePicker, DateRangeQuery, RangeRules};
 use crate::node::Node;
 
-/// The most periods a report draws. A grain asked for in the URL that would make
-/// more is not used.
+/// The most periods a report draws. A grain that would make more gives way to the
+/// finest coarser one that doesn't; a window too long even for years is cut to its
+/// last 400 years, and [`Report::cut`] says so.
 pub const MAX_BUCKETS: usize = 400;
+
+/// A time zone a report counts in, and its name in the IANA database when it has one.
+///
+/// The name comes from the zone itself, so what a database is told can never differ
+/// from the zone the periods were cut in. `Utc` is `UTC`, a `chrono_tz::Tz` is its own
+/// name (`Asia/Kolkata`), and a fixed offset other than zero has none: TimescaleDB
+/// can't be given it, and the report buckets with bound comparisons instead, which are
+/// as exact.
+pub trait ReportZone: TimeZone {
+    /// The zone's IANA name, when it has one.
+    fn iana_name(&self) -> Option<&'static str>;
+}
+
+impl ReportZone for Utc {
+    fn iana_name(&self) -> Option<&'static str> {
+        Some("UTC")
+    }
+}
+
+impl ReportZone for FixedOffset {
+    fn iana_name(&self) -> Option<&'static str> {
+        (self.local_minus_utc() == 0).then_some("UTC")
+    }
+}
+
+impl ReportZone for chrono_tz::Tz {
+    fn iana_name(&self) -> Option<&'static str> {
+        Some(self.name())
+    }
+}
+
+/// The earliest instant a report counts from: what every database the ORM speaks to can
+/// store.
+fn earliest() -> DateTime<Utc> {
+    NaiveDate::from_ymd_opt(1, 1, 1)
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map_or(DateTime::<Utc>::MIN_UTC, |at| at.and_utc())
+}
+
+/// The last instant a report counts to (the end of 9999-12-31 in UTC, to the
+/// microsecond): a window that ends later in its own zone stops here.
+pub(crate) fn latest_instant() -> DateTime<Utc> {
+    NaiveDate::from_ymd_opt(9999, 12, 31)
+        .and_then(|d| d.and_hms_micro_opt(23, 59, 59, 999_999))
+        .map_or(DateTime::<Utc>::MAX_UTC, |at| at.and_utc())
+}
+
+/// `at`, inside what a report can count.
+fn clamp(at: DateTime<Utc>) -> DateTime<Utc> {
+    at.clamp(earliest(), latest_instant())
+}
 
 /// What a report reads from its URL: `from` and `to` (the window, both days included)
 /// and `grain` (`hour`, `day`, `week`, `month`). A key that comes twice keeps its
@@ -116,45 +169,46 @@ pub struct Bucket {
 pub struct Report {
     range: DateRange,
     grain: Grain,
+    asked: Grain,
     auto: Grain,
+    cut: Option<DateRange>,
     buckets: Vec<Bucket>,
     refused: Option<DateError>,
     from_url: bool,
     week_start: Weekday,
-    zone: Option<String>,
+    zone: Option<&'static str>,
     today: NaiveDate,
     limits: Option<RangeRules>,
     default: Option<DatePreset>,
 }
 
 impl Report {
-    /// A report over `range` at `grain`, in `zone`.
-    pub fn new<Tz: TimeZone>(range: DateRange, grain: Grain, zone: &Tz) -> Self {
-        Self::build(
-            range,
-            grain,
-            Grain::for_days(range.day_count()),
-            Weekday::Mon,
-            zone,
-        )
+    /// A report over `range` at `grain`, in `zone`. A grain that would cut the window
+    /// into more than [`MAX_BUCKETS`] periods gives way to the finest one that doesn't
+    /// ([`grain`](Self::grain) says which), and a window too long even for years keeps
+    /// its last 400 ([`cut`](Self::cut) says so).
+    pub fn new<Tz: ReportZone>(range: DateRange, grain: Grain, zone: &Tz) -> Self {
+        Self::build(range, grain, Weekday::Mon, zone)
     }
 
-    fn build<Tz: TimeZone>(
+    fn build<Tz: ReportZone>(
         range: DateRange,
-        grain: Grain,
-        auto: Grain,
+        asked: Grain,
         week_start: Weekday,
         zone: &Tz,
     ) -> Self {
+        let (window, grain, buckets) = plan(range, asked, week_start, zone);
         Self {
-            buckets: buckets(range, grain, week_start, zone),
-            range,
+            buckets,
+            range: window,
             grain,
-            auto,
+            asked,
+            auto: Grain::for_days(range.day_count()),
+            cut: (window != range).then_some(range),
             refused: None,
             from_url: false,
             week_start,
-            zone: None,
+            zone: zone.iana_name(),
             today: range.to,
             limits: None,
             default: None,
@@ -164,7 +218,7 @@ impl Report {
     /// The report a request asks for: its window when `limits` allow it, `default`
     /// counted from `today` when the URL has none or one they refuse (which
     /// [`refused`](Self::refused) then says), and its grain when it fits.
-    pub fn from_query<Tz: TimeZone>(
+    pub fn from_query<Tz: ReportZone>(
         query: &ReportQuery,
         limits: &RangeRules,
         today: NaiveDate,
@@ -175,7 +229,7 @@ impl Report {
     }
 
     /// [`from_query`](Self::from_query) with weeks starting on `week_start`.
-    pub fn from_query_starting<Tz: TimeZone>(
+    pub fn from_query_starting<Tz: ReportZone>(
         query: &ReportQuery,
         limits: &RangeRules,
         today: NaiveDate,
@@ -198,7 +252,7 @@ impl Report {
             .as_deref()
             .and_then(Grain::from_key)
             .filter(|grain| fits(range, *grain));
-        let mut report = Self::build(range, asked.unwrap_or(auto), auto, week_start, zone);
+        let mut report = Self::build(range, asked.unwrap_or(auto), week_start, zone);
         report.refused = refused;
         report.from_url = from_url;
         report.today = today;
@@ -207,27 +261,33 @@ impl Report {
         report
     }
 
-    /// Names the zone the periods are in (`Asia/Kolkata`), which TimescaleDB is given
-    /// to bucket in that zone. Without a name a report on a zone other than UTC
-    /// buckets with bound comparisons, which are as exact.
-    pub fn zone_name(mut self, name: impl Into<String>) -> Self {
-        self.zone = Some(name.into()).filter(|n| valid_zone_name(n));
-        self
-    }
-
-    /// The zone's name, when given.
+    /// The IANA name of the zone the periods are in, from the zone itself; `None` for a
+    /// fixed offset other than UTC.
     pub fn zone(&self) -> Option<&str> {
-        self.zone.as_deref()
+        self.zone
     }
 
-    /// The window.
+    /// The window counted: the one asked for, or its last 400 years when it was longer
+    /// than that (see [`cut`](Self::cut)).
     pub fn range(&self) -> DateRange {
         self.range
     }
 
-    /// The period the window is cut into.
+    /// The window asked for, when it was too long to count by years and was cut to its
+    /// last 400: the page should say so.
+    pub fn cut(&self) -> Option<DateRange> {
+        self.cut
+    }
+
+    /// The period the window is cut into: the grain asked for, or a coarser one when
+    /// that would have made more than [`MAX_BUCKETS`] periods.
     pub fn grain(&self) -> Grain {
         self.grain
+    }
+
+    /// The grain asked for, before the limit on periods.
+    pub fn asked_grain(&self) -> Grain {
+        self.asked
     }
 
     /// The grain the window's length picks.
@@ -429,29 +489,44 @@ fn fits(range: DateRange, grain: Grain) -> bool {
         && (count >= 2 || grain == Grain::for_days(range.day_count()))
 }
 
-/// Whether `name` looks like a zone name a database can be given: `Area/City`,
-/// letters, digits, `_+-/`.
-fn valid_zone_name(name: &str) -> bool {
-    (1..=64).contains(&name.len())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '+' | '-' | '/'))
-}
-
 /// The first instant of a day in a zone.
 fn start_of<Tz: TimeZone>(day: NaiveDate, zone: &Tz) -> DateTime<Utc> {
     DateRange::single(day).utc_bounds(zone).0
 }
 
-/// The periods of `range` at `grain` in `zone`. Each is clipped to the window, and
-/// named by its start on the zone's clock.
+/// The window, grain and periods a report counts: `asked` when it makes at most
+/// [`MAX_BUCKETS`] periods of `range`, else the finest coarser grain that does, and when
+/// not even years do, years over the last 400 of them.
+fn plan<Tz: TimeZone>(
+    range: DateRange,
+    asked: Grain,
+    week_start: Weekday,
+    zone: &Tz,
+) -> (DateRange, Grain, Vec<Bucket>) {
+    for grain in Grain::ALL.into_iter().filter(|g| *g >= asked) {
+        if let Some(found) = buckets(range, grain, week_start, zone) {
+            return (range, grain, found);
+        }
+    }
+    let from = NaiveDate::from_ymd_opt(range.to.year() - (MAX_BUCKETS as i32 - 1), 1, 1)
+        .map_or(range.from, |first| first.max(range.from));
+    let cut = DateRange::new(from, range.to);
+    let found = buckets(cut, Grain::Year, week_start, zone).unwrap_or_default();
+    (cut, Grain::Year, found)
+}
+
+/// The periods of `range` at `grain` in `zone`, or `None` when there would be more than
+/// [`MAX_BUCKETS`]. Each is clipped to the window, and named by its start on the zone's
+/// clock. No instant is earlier than 0001-01-01 or later than the end of 9999-12-31,
+/// in UTC.
 fn buckets<Tz: TimeZone>(
     range: DateRange,
     grain: Grain,
     week_start: Weekday,
     zone: &Tz,
-) -> Vec<Bucket> {
+) -> Option<Vec<Bucket>> {
     let (start, end) = range.utc_bounds(zone);
+    let (start, end) = (clamp(start), clamp(end));
     let mut out = Vec::new();
     let local = |at: DateTime<Utc>| at.with_timezone(zone).naive_local();
     match grain {
@@ -460,7 +535,10 @@ fn buckets<Tz: TimeZone>(
             // 25-hour day 25, and a zone half an hour off UTC stays on its own hours.
             let step = Duration::seconds(grain.seconds());
             let mut at = start;
-            while at < end && out.len() < MAX_BUCKETS * 60 {
+            while at < end {
+                if out.len() == MAX_BUCKETS {
+                    return None;
+                }
                 let next = (at + step).min(end);
                 out.push(Bucket {
                     start: at,
@@ -473,13 +551,14 @@ fn buckets<Tz: TimeZone>(
         Grain::Day | Grain::Week | Grain::Month | Grain::Quarter | Grain::Year => {
             let first = period_start(range.from, grain, week_start);
             let mut day = first;
-            while day <= range.to && out.len() < 100_000 {
-                let Some(next) = period_next(day, grain) else {
-                    break;
-                };
-                let a = start_of(day.max(range.from), zone);
-                let b = match next.checked_sub_signed(Duration::days(1)) {
-                    Some(last) if last < range.to => start_of(next, zone),
+            while day <= range.to {
+                if out.len() == MAX_BUCKETS {
+                    return None;
+                }
+                let next = period_next(day, grain);
+                let a = clamp(start_of(day.max(range.from), zone));
+                let b = match next.and_then(|n| n.checked_sub_signed(Duration::days(1))) {
+                    Some(last) if last < range.to => next.map_or(end, |n| clamp(start_of(n, zone))),
                     _ => end,
                 };
                 out.push(Bucket {
@@ -487,11 +566,14 @@ fn buckets<Tz: TimeZone>(
                     end: b,
                     local: day.and_time(NaiveTime::MIN),
                 });
-                day = next;
+                match next {
+                    Some(next) => day = next,
+                    None => break,
+                }
             }
         }
     }
-    out
+    Some(out)
 }
 
 /// The first day of the period `day` is in.
@@ -714,6 +796,113 @@ mod tests {
         ] {
             let report = Report::new(DateRange::new(a, b), grain, &Utc);
             assert!(!report.buckets().is_empty());
+            assert!(report.buckets().len() <= MAX_BUCKETS);
         }
+    }
+
+    #[test]
+    fn no_grain_makes_more_than_the_most_periods() {
+        // Asked in code: the grain gives way, and the whole window is still counted.
+        for (range, grain, became) in [
+            (
+                DateRange::new(day(1700, 1, 1), day(2026, 12, 31)),
+                Grain::Day,
+                Grain::Year,
+            ),
+            (
+                DateRange::new(day(2000, 1, 1), day(2026, 12, 31)),
+                Grain::Hour,
+                Grain::Month,
+            ),
+            (
+                DateRange::new(day(2026, 1, 1), day(2026, 3, 31)),
+                Grain::Minute,
+                Grain::Day,
+            ),
+            (
+                DateRange::new(day(2025, 1, 1), day(2026, 12, 31)),
+                Grain::Day,
+                Grain::Week,
+            ),
+            (
+                DateRange::new(day(2026, 1, 1), day(2026, 12, 31)),
+                Grain::Day,
+                Grain::Day,
+            ),
+        ] {
+            let report = Report::new(range, grain, &Utc);
+            assert_eq!(report.grain(), became, "{range:?} {grain:?}");
+            assert_eq!(report.asked_grain(), grain);
+            assert!(report.buckets().len() <= MAX_BUCKETS);
+            assert_eq!(report.bounds(), range.utc_bounds(&Utc), "every day counted");
+            assert_eq!(report.cut(), None);
+        }
+        // From a URL: the automatic grain is held to the limit too.
+        let open = RangeRules::new(crate::dates::DateRules::new());
+        let wide = ReportQuery {
+            from: Some("0001-01-01".into()),
+            to: Some("9999-12-31".into()),
+            grain: Some("hour".into()),
+        };
+        let report =
+            Report::from_query(&wide, &open, day(2026, 11, 4), DatePreset::Last30Days, &Utc);
+        assert_eq!(report.grain(), Grain::Year);
+        assert_eq!(report.buckets().len(), MAX_BUCKETS, "the last 400 years");
+        assert_eq!(
+            report.range(),
+            DateRange::new(day(9600, 1, 1), day(9999, 12, 31))
+        );
+        assert_eq!(
+            report.cut(),
+            Some(DateRange::new(day(1, 1, 1), day(9999, 12, 31))),
+            "and it says so"
+        );
+    }
+
+    #[test]
+    fn no_instant_falls_outside_what_a_database_stores() {
+        let ny: Tz = "America/New_York".parse().unwrap();
+        let kiritimati: Tz = "Pacific/Kiritimati".parse().unwrap();
+        // Behind UTC the window's end is past the limit and stops there; ahead of it, it ends
+        // before.
+        for (zone, ends) in [
+            (ny, "9999-12-31 23:59:59.999999"),
+            (kiritimati, "9999-12-31 10:00:00.000000"),
+        ] {
+            let report = Report::new(
+                DateRange::new(day(9999, 12, 30), day(9999, 12, 31)),
+                Grain::Day,
+                &zone,
+            );
+            let (_, end) = report.bounds();
+            assert_eq!(end.format("%Y-%m-%d %H:%M:%S%.6f").to_string(), ends);
+            let report = Report::new(
+                DateRange::new(day(1, 1, 1), day(1, 1, 2)),
+                Grain::Day,
+                &zone,
+            );
+            let (start, _) = report.bounds();
+            assert_eq!(start.format("%Y-%m-%d").to_string(), "0001-01-01");
+            assert!(report.buckets().iter().all(|b| b.start <= b.end));
+        }
+    }
+
+    #[test]
+    fn the_zone_names_itself() {
+        let range = DateRange::single(day(2026, 11, 1));
+        let ny: Tz = "America/New_York".parse().unwrap();
+        assert_eq!(
+            Report::new(range, Grain::Day, &ny).zone(),
+            Some("America/New_York")
+        );
+        assert_eq!(Report::new(range, Grain::Day, &Utc).zone(), Some("UTC"));
+        let east = chrono::FixedOffset::east_opt(5 * 3600).unwrap();
+        assert_eq!(
+            Report::new(range, Grain::Day, &east).zone(),
+            None,
+            "an offset has no name a database knows"
+        );
+        let zero = chrono::FixedOffset::east_opt(0).unwrap();
+        assert_eq!(Report::new(range, Grain::Day, &zero).zone(), Some("UTC"));
     }
 }
