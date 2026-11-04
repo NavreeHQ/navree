@@ -582,7 +582,8 @@ mod tests {
             Err(ImportError::Contrast(list)) => {
                 assert!(
                     list.iter()
-                        .any(|s| s.pair.text == Token::Fg3 && s.side == Side::Light)
+                        .any(|s| s.pair.text == crate::theme::Paint::Token(Token::Fg3)
+                            && s.side == Side::Light)
                 );
             }
             other => panic!("{other:?}"),

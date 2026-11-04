@@ -12,8 +12,8 @@
 use navree_http::extract::urlencoded;
 
 use super::{
-    Appearance, Density, Font, Mode, Neutral, PAIRS, PairKind, Radius, Rgb, SWATCHES, Shortfall,
-    Side, Swatch, Theme, ThemeId, ThemeSpec, Token, TokenGroup,
+    Appearance, Density, Font, Mode, Neutral, Paint, Pair, PairKind, Radius, Rgb, SWATCHES,
+    Shortfall, Side, Swatch, Theme, ThemeId, ThemeSpec, Token, TokenGroup, pairs,
 };
 use crate::cmd::{Cmd, Trigger};
 use crate::components::{
@@ -405,6 +405,9 @@ fn clip(text: &str, most: usize) -> String {
 #[must_use]
 pub struct ThemeBuilder {
     draft: BuilderDraft,
+    /// The draft's values and the theme it draws in, worked out once per render.
+    spec: ThemeSpec,
+    shown: Theme,
     action: Href,
     save: Option<Href>,
     import: Option<Href>,
@@ -417,8 +420,11 @@ pub struct ThemeBuilder {
 impl ThemeBuilder {
     /// The builder for `draft`, on the page at `path`.
     pub fn new(draft: &BuilderDraft, path: &str) -> Self {
+        let shown = draft.draft();
         Self {
             draft: draft.clone(),
+            spec: *shown.spec(),
+            shown,
             action: Href::from(path),
             save: None,
             import: None,
@@ -457,7 +463,7 @@ impl ThemeBuilder {
     /// `page` with the builder in it, drawn in the draft when its text passes
     /// (else in the base theme), in the draft's mode, layout and density.
     pub fn page(self, page: AppPage) -> AppPage {
-        let draft = self.draft.draft();
+        let draft = self.shown.clone();
         let passes = draft.spec().text_passes();
         let shown = if passes {
             draft.clone()
@@ -561,7 +567,8 @@ impl ThemeBuilder {
 
     fn form(&self) -> Element {
         let draft = &self.draft;
-        let spec = draft.spec();
+        let spec = self.spec;
+        let key = self.shown.key();
         let accent_value = match draft.accent {
             Accent::Base => "base".to_owned(),
             Accent::Swatch(swatch) => swatch.id.to_owned(),
@@ -695,7 +702,7 @@ impl ThemeBuilder {
                             el("td").children((
                                 el("span")
                                     .slot("theme-cell-swatch")
-                                    .attr("data-theme", draft.draft().key().to_owned())
+                                    .attr("data-theme", key.to_owned())
                                     .attr("data-mode", side.as_str())
                                     .attr("aria-hidden", "true")
                                     .child(
@@ -894,7 +901,7 @@ impl ThemeBuilder {
     }
 
     fn preview(&self) -> Element {
-        let key = self.draft.draft().key().to_owned();
+        let key = self.shown.key().to_owned();
         el("div").slot("theme-preview").children((
             el("h2").slot("theme-section-title").child("Preview"),
             el("p").slot("theme-help").attr("data-state", "note").child(
@@ -913,8 +920,8 @@ impl ThemeBuilder {
     }
 
     fn report(&self) -> Element {
-        let draft = self.draft.draft();
-        let spec = draft.spec();
+        let draft = &self.shown;
+        let spec = self.spec;
         let shortfalls = spec.shortfalls();
         let failing_text = shortfalls
             .iter()
@@ -948,74 +955,83 @@ impl ThemeBuilder {
                 }
             )
         };
-        let rows = |side: Side| -> Vec<Element> {
+        let row = |side: Side, pair: &Pair| -> Element {
             let palette = spec.palette(side);
-            PAIRS
-                .iter()
-                .map(|pair| {
-                    let ratio = palette.get(pair.text).contrast(palette.get(pair.on));
-                    let ok = ratio >= pair.min;
-                    el("tr")
-                        .attr_opt(
-                            "data-fails",
-                            (!ok).then_some(match pair.kind {
-                                PairKind::Text => "text",
-                                PairKind::Graphic => "graphic",
-                            }),
-                        )
-                        .children((
-                            el("td").flag("inert", true).child(
-                                el("span")
-                                    .slot("theme-contrast-sample")
-                                    .attr("data-theme", draft.key().to_owned())
-                                    .attr("data-mode", side.as_str())
-                                    .attr("data-fg", pair.text.name())
-                                    .attr("data-token", pair.on.name())
-                                    .attr("aria-hidden", "true")
-                                    .child("Aa"),
-                            ),
-                            el("td").children((
-                                el("code").child(pair.text.name()),
-                                " on ",
-                                el("code").child(pair.on.name()),
-                            )),
-                            el("td")
-                                .slot("theme-contrast-ratio")
-                                .child(format!("{ratio:.2}:1")),
-                            el("td").child(if ok {
-                                Badge::new("Passes").variant(BadgeVariant::Success)
-                            } else if pair.kind == PairKind::Text {
-                                Badge::new(format!("Needs {:.1}", pair.min))
-                                    .variant(BadgeVariant::Danger)
-                            } else {
-                                Badge::new(format!("Under {:.0}:1", pair.min))
-                                    .variant(BadgeVariant::Warning)
-                            }),
-                        ))
-                })
-                .collect()
+            let ratio = pair.ratio(palette, side);
+            let ok = ratio >= pair.min;
+            el("tr")
+                .attr_opt(
+                    "data-fails",
+                    (!ok).then_some(match pair.kind {
+                        PairKind::Text => "text",
+                        PairKind::Graphic => "graphic",
+                    }),
+                )
+                .children((
+                    el("td")
+                        .flag("inert", true)
+                        .child(sample(draft.key(), side, pair)),
+                    el("td").children((
+                        el("code").child(pair.text.describe()),
+                        " on ",
+                        el("code").child(pair.on.describe()),
+                    )),
+                    el("td")
+                        .slot("theme-contrast-ratio")
+                        .child(format!("{ratio:.2}:1")),
+                    el("td").child(if ok {
+                        Badge::new("Passes").variant(BadgeVariant::Success)
+                    } else if pair.kind == PairKind::Text {
+                        Badge::new(format!("Needs {:.1}", pair.min)).variant(BadgeVariant::Danger)
+                    } else {
+                        Badge::new(format!("Under {:.0}:1", pair.min))
+                            .variant(BadgeVariant::Warning)
+                    }),
+                ))
+        };
+        let head = || {
+            el("thead").child(
+                el("tr").children((
+                    el("th")
+                        .attr("scope", "col")
+                        .child(el("span").slot("theme-sr").child("Sample")),
+                    el("th").attr("scope", "col").child("Pair"),
+                    el("th").attr("scope", "col").child("Ratio"),
+                    el("th")
+                        .attr("scope", "col")
+                        .child(el("span").slot("theme-sr").child("Result")),
+                )),
+            )
         };
         let tables: Vec<Element> = Side::BOTH
             .into_iter()
             .map(|side| {
-                el("table").slot("theme-contrast-table").children((
-                    el("caption").child(match side {
-                        Side::Light => "Light",
-                        Side::Dark => "Dark",
+                let name = match side {
+                    Side::Light => "Light",
+                    Side::Dark => "Dark",
+                };
+                let failing: Vec<Element> = shortfalls
+                    .iter()
+                    .filter(|shortfall| shortfall.side == side)
+                    .map(|shortfall| row(side, &shortfall.pair))
+                    .collect();
+                let all: Vec<Element> = pairs().iter().map(|pair| row(side, pair)).collect();
+                el("div").slot("theme-contrast-side").children((
+                    (!failing.is_empty()).then(|| {
+                        el("table").slot("theme-contrast-table").children((
+                            el("caption").child(format!("{name}: what falls short")),
+                            head(),
+                            el("tbody").child(failing),
+                        ))
                     }),
-                    el("thead").child(
-                        el("tr").children((
-                            el("th")
-                                .attr("scope", "col")
-                                .child(el("span").slot("theme-sr").child("Sample")),
-                            el("th").attr("scope", "col").child("Pair"),
-                            el("th").attr("scope", "col").child("Ratio"),
-                            el("th")
-                                .attr("scope", "col")
-                                .child(el("span").slot("theme-sr").child("Result")),
+                    el("details").slot("theme-contrast-all").children((
+                        el("summary").child(format!("{name}: all {} pairs", pairs().len())),
+                        el("table").slot("theme-contrast-table").children((
+                            el("caption").child(format!("{name}: every pair")),
+                            head(),
+                            el("tbody").child(all),
                         )),
-                    ),
-                    el("tbody").child(rows(side)),
+                    )),
                 ))
             })
             .collect();
@@ -1155,6 +1171,30 @@ impl ThemeBuilder {
                 import,
             ))
     }
+}
+
+/// The swatch of a pair, drawn in the draft with no style attribute: the text in
+/// its main token, on its surface, with a tint or mix laid on through the
+/// builder stylesheet's `data-tint` and `data-pct` rules.
+fn sample(key: &str, side: Side, pair: &Pair) -> Element {
+    let main = |paint: Paint| match paint {
+        Paint::Token(token) | Paint::Mix(token, _, _) | Paint::Hover(token, _) => token,
+        Paint::Tint(token, _, _) => token,
+    };
+    let swatch = el("span")
+        .slot("theme-contrast-sample")
+        .attr("data-theme", key.to_owned())
+        .attr("data-mode", side.as_str())
+        .attr("data-fg", main(pair.text).name())
+        .attr("aria-hidden", "true");
+    let swatch = match pair.on {
+        Paint::Token(token) | Paint::Hover(token, _) => swatch.attr("data-token", token.name()),
+        Paint::Tint(tint, percent, under) | Paint::Mix(tint, percent, under) => swatch
+            .attr("data-token", under.name())
+            .attr("data-tint", tint.name())
+            .attr("data-pct", percent.to_string()),
+    };
+    swatch.child("Aa")
 }
 
 impl From<ThemeBuilder> for Node {
@@ -1332,6 +1372,30 @@ mod tests {
             "no save button while text fails"
         );
         assert!(html.contains(r#"data-fails="text""#));
+    }
+
+    #[test]
+    fn a_grey_page_with_white_cards_is_refused_for_what_the_page_draws() {
+        // The page's own text, a field's error and the destructive button all sit
+        // on the page, not on a card: a grey page with a bright danger fails there.
+        let draft = BuilderDraft::from_query(
+            "base=navree&mode=light&l.ink-0=%23eceeed&l.ink-1=%23ffffff&l.danger=%23d92d20&id=grey",
+        );
+        let Err(BuildError::Contrast(list)) = draft.to_theme() else {
+            panic!("the gate passed a draft whose danger text fails on the page");
+        };
+        let failing: Vec<String> = list
+            .iter()
+            .map(|s| format!("{} on {}", s.pair.text.describe(), s.pair.on.describe()))
+            .collect();
+        assert!(
+            failing.iter().any(|f| f == "danger on ink-0"),
+            "{failing:?}"
+        );
+        assert!(
+            failing.iter().any(|f| f.starts_with("danger on danger ")),
+            "the destructive button's own tint: {failing:?}"
+        );
     }
 
     #[test]

@@ -28,12 +28,13 @@ const SHOTS = process.env.UI_SHOTS;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const here = dirname(fileURLToPath(import.meta.url));
-const themeRs = readFileSync(join(here, "../../../crates/navree-ui/src/theme/mod.rs"), "utf8");
-/** `AccentText` as the custom property's name, `accent-text`. */
-const kebab = (name) => name.replace(/(?<=.)([A-Z0-9])/g, "-$1").toLowerCase();
-/** Every pair the components draw, read from the toolkit's one list: text at 4.5:1, graphics at 3:1. */
-const PAIRS = [...themeRs.matchAll(/(text|graphic)\(Token::(\w+), Token::(\w+)\)/g)].map((m) => ({ kind: m[1], fg: kebab(m[2]), bg: kebab(m[3]), min: m[1] === "text" ? 4.5 : 3 }));
-assert.ok(PAIRS.length >= 20, "the pairs were read from the source");
+/**
+ * Every pair the components draw, written from the toolkit's one list (which a
+ * test keeps in step with the stylesheet): each colour as CSS, tints and mixes
+ * included, text at 4.5:1 and graphics at 3:1.
+ */
+const PAIRS = JSON.parse(readFileSync(join(here, "support/pairs.json"), "utf8"));
+assert.ok(PAIRS.length >= 100, "the pairs were read");
 const BUILT_IN = ["navree", "neutral", "ocean", "violet", "sunset", "rose", "contrast"];
 
 async function axe(page) {
@@ -154,14 +155,25 @@ for (const name of NAMES) {
         return out;
       });
 
-    /** Every pair's contrast, measured from the colours the page resolves, below its minimum. */
+    /**
+     * Every pair's contrast below its minimum, measured from the colours the
+     * browser itself resolves and mixes: each paint is set on a probe, and the
+     * computed colour is drawn to a canvas to read it back as sRGB.
+     */
     const shortfalls = (page) =>
       page.evaluate((pairs) => {
         const probe = document.createElement("span");
         document.body.append(probe);
-        const rgb = (token) => {
-          probe.style.color = `var(--${token})`;
-          const [r, g, b] = getComputedStyle(probe).color.match(/[\d.]+/g).map(Number);
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const rgb = (paint) => {
+          probe.style.color = paint;
+          ctx.clearRect(0, 0, 1, 1);
+          ctx.fillStyle = "#000";
+          ctx.fillStyle = getComputedStyle(probe).color;
+          ctx.fillRect(0, 0, 1, 1);
+          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
           return [r, g, b];
         };
         const lum = ([r, g, b]) => {
@@ -172,7 +184,7 @@ for (const name of NAMES) {
           const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((p, q) => q - p);
           return (x + 0.05) / (y + 0.05);
         };
-        const out = pairs.filter((p) => ratio(p.fg, p.bg) < p.min - 0.01).map((p) => `${p.fg} on ${p.bg}: ${ratio(p.fg, p.bg).toFixed(2)}`);
+        const out = pairs.filter((p) => ratio(p.text, p.on) < p.min - 0.01).map((p) => `${p.name}: ${ratio(p.text, p.on).toFixed(2)}`);
         probe.remove();
         return out;
       }, PAIRS);

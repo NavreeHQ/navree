@@ -21,7 +21,7 @@ pub fn acme_theme() -> Theme {
             rgb(0x929299), // fg-3
             rgb(0x7c5cff), // accent
             rgb(0x000000), // accent-ink
-            rgb(0x868686), // accent-text
+            rgb(0x856eff), // accent-text
             rgb(0x7c5cff), // ring
             rgb(0x3dff8f), // success
             rgb(0xffbf5e), // amber
@@ -53,9 +53,9 @@ pub fn acme_theme() -> Theme {
             rgb(0x000000), // accent-ink
             rgb(0x684fd4), // accent-text
             rgb(0x7c5cff), // ring
-            rgb(0x0b7a3e), // success
-            rgb(0x8a5a00), // amber
-            rgb(0xb3261e), // danger
+            rgb(0x096835), // success
+            rgb(0x7e5200), // amber
+            rgb(0x9e2119), // danger
             rgb(0x0b5cad), // info
             rgb(0x6b46c1), // violet
             rgb(0x0a6b78), // cyan

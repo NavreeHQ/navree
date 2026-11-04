@@ -44,11 +44,11 @@ pub const TOKENS: &[Token] = &[
     t("fg-3", "#8a968f", "#55615b"),
     t("accent", "#3dff8f", "#0b7a3e"),
     t("accent-ink", "#03130a", "#ffffff"),
-    t("accent-text", "#3dff8f", "#0b7a3e"),
+    t("accent-text", "#3dff8f", "#0b763c"),
     t("ring", "#3dff8f", "#0b7a3e"),
-    t("success", "#3dff8f", "#0b7a3e"),
-    t("amber", "#ffbf5e", "#8a5a00"),
-    t("danger", "#ff6b6b", "#b3261e"),
+    t("success", "#3dff8f", "#096835"),
+    t("amber", "#ffbf5e", "#7e5200"),
+    t("danger", "#ff6b6b", "#9e2119"),
     t("info", "#6cb6ff", "#0b5cad"),
     t("violet", "#b79cff", "#6b46c1"),
     t("cyan", "#4fd6e6", "#0a6b78"),
@@ -191,19 +191,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_text_pair_reaches_aa() {
-        for theme in [|t: &Token| t.dark, |t: &Token| t.light] {
-            for pair in crate::theme::PAIRS {
-                let value = |name: &str| TOKENS.iter().find(|t| t.name == name).map(theme).unwrap();
-                let ratio = contrast(value(pair.text.name()), value(pair.on.name())).unwrap();
-                assert!(
-                    ratio >= pair.min,
-                    "{} on {} is {ratio:.2}:1",
-                    pair.text.name(),
-                    pair.on.name()
-                );
-            }
-        }
+    fn every_pair_reaches_its_ratio_in_both_palettes() {
+        let shortfalls = crate::theme::Theme::NAVREE.spec().shortfalls();
+        assert!(shortfalls.is_empty(), "{shortfalls:?}");
     }
 
     #[test]
@@ -216,8 +206,40 @@ mod tests {
     const WRITE: &str =
         "rerun: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored";
 
-    /// The generated files and what each is made from: the stylesheet's tokens, and
-    /// the blocks of the `@navree/theme` package.
+    /// Every contrast pair as the browser suite measures it: each paint as CSS,
+    /// one pair a line.
+    fn pairs_json() -> String {
+        let lines: Vec<String> = crate::theme::pairs()
+            .iter()
+            .map(|pair| {
+                serde_json::json!({
+                    "name": format!("{} on {}", pair.text.describe(), pair.on.describe()),
+                    "text": pair.text.css(),
+                    "on": pair.on.css(),
+                    "min": pair.min,
+                    "kind": match pair.kind {
+                        crate::theme::PairKind::Text => "text",
+                        crate::theme::PairKind::Graphic => "graphic",
+                    },
+                })
+                .to_string()
+            })
+            .collect();
+        format!(
+            "[
+{}
+]
+",
+            lines.join(
+                ",
+"
+            )
+        )
+    }
+
+    /// The generated files and what each is made from: the stylesheet's tokens,
+    /// the blocks of the `@navree/theme` package, and the contrast pairs the
+    /// browser suite measures.
     fn generated() -> Vec<(std::path::PathBuf, String)> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let theme = root.join("../../packages/js/theme");
@@ -241,6 +263,10 @@ mod tests {
             spliced("css/theme.css", theme_css(false)),
             spliced("css/tokens.css", theme_css(true)),
             spliced("src/index.ts", theme_ts()),
+            (
+                root.join("../../e2e/ui/tests/support/pairs.json"),
+                pairs_json(),
+            ),
         ]
     }
 

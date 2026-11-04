@@ -6,11 +6,11 @@
  */
 /* Buttons */
 [data-slot=button]{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;height:2rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:14px;font-weight:500;line-height:1;white-space:nowrap;text-decoration:none;cursor:pointer;user-select:none;transition:background-color .1s,border-color .1s,color .1s;
-  &:hover{background:var(--line-2)}
+  &:hover{background:color-mix(in oklab,var(--ink-3) 85%,var(--fg))}
   &[data-variant=primary]{background:var(--accent);color:var(--accent-ink);&:hover{background:color-mix(in oklab,var(--accent) 86%,var(--hover-mix))}}
   &[data-variant=outline]{background:transparent;border-color:var(--line-2);&:hover{background:var(--ink-2)}}
   &[data-variant=ghost]{background:transparent;color:var(--fg-2);&:hover{background:var(--ink-2);color:var(--fg)}}
-  &[data-variant=destructive]{background:color-mix(in oklab,var(--danger) 14%,transparent);color:var(--danger);&:hover{background:color-mix(in oklab,var(--danger) 24%,transparent)}}
+  &[data-variant=destructive]{background:color-mix(in oklab,var(--danger) 10%,transparent);color:var(--danger);&:hover{background:color-mix(in oklab,var(--danger) 18%,transparent)}}
   &[data-variant=link]{background:transparent;color:var(--fg);padding-inline:0;&:hover{text-decoration:underline;text-underline-offset:4px}}
   &[data-size=xs]{height:1.5rem;padding:0 .5rem;font-size:12px;gap:.25rem}
   &[data-size=sm]{height:1.75rem;padding:0 .625rem;font-size:13px;gap:.375rem}

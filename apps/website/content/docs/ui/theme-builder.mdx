@@ -58,7 +58,7 @@ async fn save(Form(fields): Form<SaveFields>) -> Reply {
 | Font | Geist, which ships with the toolkit, or the System, Humanist, Geometric or Serif stack, which download nothing |
 | Every colour | Each of the 28 colour tokens, light and dark, as `#rgb`, `#rrggbb` or `rgb(r, g, b)` |
 
-An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on the page and on cards; the focus ring reaches 3:1.
+An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on every surface; the focus ring reaches 3:1 on every surface. On hover the accent moves away from its text, so the text reads better on hover, never worse.
 
 ## Export
 
@@ -69,7 +69,7 @@ When the draft's text passes, the builder shows it two ways, each with a Copy bu
 
 ## Contrast
 
-The check covers every pair the components draw, in both palettes: body, secondary and hint text on the page, on cards and on hover; text on the accent; the accent as text; and each tone. Text must reach 4.5:1 or the theme is refused. The focus ring and the chart colours should reach 3:1; under it, the builder warns.
+The check covers every pair the components draw, in both palettes, worked out from the stylesheet itself: a test reads every rule, finds what colour sits on what, and fails when a pair it finds isn't checked. So the list holds each text colour on the page, on cards, on hover and on a selected row; text on the accent at rest and on hover; a button's text on its hover; and each tinted background, such as a destructive button at rest and on hover, a field's error, a badge and a search match, laid over each surface it can sit on. Text must reach 4.5:1 or the theme is refused: a grey page under white cards with a bright red fails on the page, where the body text and a field's error sit, even when the cards pass. The focus ring, marks in the accent and the chart colours should reach 3:1; under it, the builder warns. The report lists the pairs that fail in each palette, and every pair under a disclosure below them.
 
 ## Values from outside
 

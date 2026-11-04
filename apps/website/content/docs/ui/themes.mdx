@@ -17,9 +17,9 @@ A theme is a typed Rust value: a palette of colour tokens for light and one for 
 | Violet | `Theme::VIOLET` | Cool greys and a violet accent |
 | Sunset | `Theme::SUNSET` | Warm greys and an orange accent |
 | Rose | `Theme::ROSE` | Neutral greys and a rose accent |
-| High contrast | `Theme::CONTRAST` | Text at 7:1 or more, borders at 3:1, a bright accent |
+| High contrast | `Theme::CONTRAST` | Every text pair at 7:1 or more, at rest, on hover and on tints; borders at 3:1; a bright accent |
 
-Every one ships in the toolkit's stylesheet, so choosing one costs no request. A test checks every text pair of every theme at WCAG AA (4.5:1) in both palettes, and the focus ring and chart colours at 3:1.
+Every one ships in the toolkit's stylesheet, so choosing one costs no request. A test checks every text pair of every theme at WCAG AA (4.5:1) in both palettes, tinted backgrounds and hover states included, and the focus ring and chart colours at 3:1. The pairs come from the stylesheet: another test reads what each rule draws on what, and fails when a pair isn't on the list.
 
 <UiPreview example="themes/light" />
 

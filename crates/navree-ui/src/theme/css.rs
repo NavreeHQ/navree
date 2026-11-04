@@ -55,10 +55,8 @@ pub fn token_layer() -> String {
             .map_or("", |token| token.dark);
         let _ = write!(out, ";--{name}:{value}");
     }
-    let _ = write!(
-        out,
-        ";--hover-mix:light-dark(#000000,#ffffff);--scrim:{SCRIM}"
-    );
+    hover_mix(&mut out, base);
+    let _ = write!(out, ";--scrim:{SCRIM}");
     images(&mut out, base, Side::Dark);
     out.push_str("}\n");
     out.push_str(":where([data-mode=dark]){color-scheme:dark}\n");
@@ -132,6 +130,23 @@ fn helpers(out: &mut String) {
 ",
         );
     }
+    // A pair's swatch with a tint or mix on its surface: the tint's token and share.
+    for token in Token::ALL {
+        let name = token.name();
+        let _ = writeln!(out, ":where([data-tint={name}]){{--tint:var(--{name})}}");
+    }
+    let mut shares: Vec<u8> = super::pairs()
+        .iter()
+        .filter_map(|pair| match pair.on {
+            super::Paint::Tint(_, percent, _) | super::Paint::Mix(_, percent, _) => Some(percent),
+            _ => None,
+        })
+        .collect();
+    shares.sort_unstable();
+    shares.dedup();
+    for percent in shares {
+        let _ = writeln!(out, ":where([data-pct=\"{percent}\"]){{--pct:{percent}%}}");
+    }
     // A swatch of each family of greys: its strongest border, which shows the tint.
     for neutral in super::Neutral::ALL {
         let mut spec = *Theme::NAVREE.spec();
@@ -177,6 +192,12 @@ fn theme_rules(out: &mut String, key: &str, spec: &ThemeSpec, base: Option<&Them
     let start = out.len();
     colours(out, spec, base);
     corners_and_font(out, spec, base);
+    if base.is_none_or(|base| {
+        base.light.hover_mix() != spec.light.hover_mix()
+            || base.dark.hover_mix() != spec.dark.hover_mix()
+    }) {
+        hover_mix(out, spec);
+    }
     let dark_images = base.is_none_or(|base| images_differ(spec, base, Side::Dark));
     if dark_images {
         images(out, spec, Side::Dark);
@@ -218,6 +239,15 @@ fn colours(out: &mut String, spec: &ThemeSpec, base: Option<&ThemeSpec>) {
             out.push(')');
         }
     }
+}
+
+/// `;--hover-mix:light-dark(light,dark)`: away from the text on the accent.
+fn hover_mix(out: &mut String, spec: &ThemeSpec) {
+    out.push_str(";--hover-mix:light-dark(");
+    spec.light.hover_mix().write_hex(out);
+    out.push(',');
+    spec.dark.hover_mix().write_hex(out);
+    out.push(')');
 }
 
 fn corners_and_font(out: &mut String, spec: &ThemeSpec, base: Option<&ThemeSpec>) {

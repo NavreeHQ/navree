@@ -32,6 +32,7 @@ mod codec;
 mod colour;
 mod css;
 mod menu;
+mod pairs;
 
 use std::sync::{Arc, LazyLock};
 
@@ -43,6 +44,7 @@ pub use codec::{ImportError, ThemeId};
 pub use colour::{ColourError, Rgb};
 pub use css::{builder_layer, token_layer};
 pub use menu::ThemeMenu;
+pub use pairs::{Paint, Pair, PairKind, SURFACES, TONES, pairs};
 
 pub(crate) use appearance::{read_setting, respond_setting};
 pub(crate) use css::respond as respond_sheet;
@@ -330,24 +332,50 @@ impl Palette {
     /// Sets the accent to `fill` and derives what reads on and around it: the
     /// text on it (white where white reads, else a deep shade of its hue), the
     /// accent as text (moved toward the page's text until it reaches 4.5:1 on
-    /// the page and on cards) and the focus ring (3:1 on the page and cards).
+    /// every surface) and the focus ring (3:1 on every surface).
     pub fn derive_accent(&mut self, fill: Rgb) {
         let toward = self.get(Token::Fg);
-        let surfaces = [
-            self.get(Token::Ink0),
-            self.get(Token::Ink1),
-            self.get(Token::Ink3),
-        ];
+        let surfaces = pairs::SURFACES.map(|surface| self.get(surface));
         self.set(Token::Accent, fill);
         self.set(Token::AccentInk, fill.ink());
         self.set(
             Token::AccentText,
             fill.until_contrast(&surfaces, 4.5, toward),
         );
-        self.set(
-            Token::Ring,
-            fill.until_contrast(&surfaces[..2], 3.0, toward),
-        );
+        self.set(Token::Ring, fill.until_contrast(&surfaces, 3.0, toward));
+    }
+
+    /// What the accent is mixed toward on hover: away from the text on it, so the
+    /// text reads better on hover, never worse. Black under light text, white
+    /// under dark text.
+    pub fn hover_mix(&self) -> Rgb {
+        if self.get(Token::AccentInk).luminance() > 0.5 {
+            Rgb::BLACK
+        } else {
+            Rgb::WHITE
+        }
+    }
+
+    /// Moves `token` toward `toward` until every text pair it draws reaches
+    /// `ratio` in this palette, as `side`.
+    fn settle(&mut self, token: Token, ratio: f64, toward: Rgb, side: Side) {
+        let start = self.get(token);
+        let reads = |palette: &Self| {
+            pairs::pairs()
+                .iter()
+                .filter(|pair| pair.kind == PairKind::Text)
+                .filter(|pair| pairs::draws(pair.text, token) || pairs::draws(pair.on, token))
+                .all(|pair| pair.ratio(palette, side) >= ratio)
+        };
+        for step in 0..=50 {
+            let mut next = *self;
+            next.set(token, start.mix(toward, f64::from(step) / 50.0));
+            if reads(&next) {
+                *self = next;
+                return;
+            }
+        }
+        self.set(token, toward);
     }
 }
 
@@ -622,8 +650,8 @@ impl ThemeSpec {
             .into_iter()
             .flat_map(|side| {
                 let palette = *self.palette(side);
-                PAIRS.iter().filter_map(move |pair| {
-                    let ratio = palette.get(pair.text).contrast(palette.get(pair.on));
+                pairs().iter().filter_map(move |pair| {
+                    let ratio = pair.ratio(&palette, side);
                     (ratio < pair.min).then_some(Shortfall {
                         side,
                         pair: *pair,
@@ -642,78 +670,6 @@ impl ThemeSpec {
             .all(|shortfall| shortfall.pair.kind != PairKind::Text)
     }
 }
-
-/// What a contrast pair is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PairKind {
-    /// Text, which must reach WCAG AA (4.5:1): a theme that fails one is refused.
-    Text,
-    /// A focus ring or a chart colour, which should reach 3:1: a warning.
-    Graphic,
-}
-
-/// A colour that is drawn on another, and the ratio it needs.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Pair {
-    /// The colour drawn.
-    pub text: Token,
-    /// The colour under it.
-    pub on: Token,
-    /// The ratio it needs.
-    pub min: f64,
-    /// Text or a graphic.
-    pub kind: PairKind,
-}
-
-const fn text(text: Token, on: Token) -> Pair {
-    Pair {
-        text,
-        on,
-        min: 4.5,
-        kind: PairKind::Text,
-    }
-}
-
-const fn graphic(text: Token, on: Token) -> Pair {
-    Pair {
-        text,
-        on,
-        min: 3.0,
-        kind: PairKind::Graphic,
-    }
-}
-
-/// Every pair the components draw, checked in both palettes of every theme.
-pub const PAIRS: &[Pair] = &[
-    text(Token::Fg, Token::Ink0),
-    text(Token::Fg, Token::Ink1),
-    text(Token::Fg, Token::Ink2),
-    text(Token::Fg, Token::Ink3),
-    text(Token::Fg1, Token::Ink1),
-    text(Token::Fg2, Token::Ink1),
-    text(Token::Fg2, Token::Ink2),
-    text(Token::Fg2, Token::Ink3),
-    text(Token::Fg3, Token::Ink0),
-    text(Token::Fg3, Token::Ink1),
-    text(Token::Fg3, Token::Ink3),
-    text(Token::AccentInk, Token::Accent),
-    text(Token::AccentText, Token::Ink0),
-    text(Token::AccentText, Token::Ink1),
-    text(Token::Success, Token::Ink1),
-    text(Token::Amber, Token::Ink1),
-    text(Token::Danger, Token::Ink1),
-    text(Token::Info, Token::Ink1),
-    text(Token::Violet, Token::Ink1),
-    text(Token::Cyan, Token::Ink1),
-    text(Token::Rose, Token::Ink1),
-    graphic(Token::Ring, Token::Ink0),
-    graphic(Token::Ring, Token::Ink1),
-    graphic(Token::Chart1, Token::Ink1),
-    graphic(Token::Chart2, Token::Ink1),
-    graphic(Token::Chart3, Token::Ink1),
-    graphic(Token::Chart4, Token::Ink1),
-    graphic(Token::Chart5, Token::Ink1),
-];
 
 /// A pair that falls short in one palette.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1175,7 +1131,7 @@ fn navree() -> ThemeSpec {
 }
 
 /// The success green of every theme whose accent isn't green.
-const SUCCESS: (Rgb, Rgb) = (Rgb::hex(0x5ee08f), Rgb::hex(0x137a3f));
+const SUCCESS: (Rgb, Rgb) = (Rgb::hex(0x5ee08f), Rgb::hex(0x106836));
 
 /// Sets the charts to the colours of `tones`, in order.
 fn charts(spec: &mut ThemeSpec, tones: [Token; 5]) {
@@ -1292,8 +1248,8 @@ fn contrast(spec: &mut ThemeSpec) {
         &[
             (Token::Ink0, 0x000000),
             (Token::Ink1, 0x0a0a0a),
-            (Token::Ink2, 0x161616),
-            (Token::Ink3, 0x222222),
+            (Token::Ink2, 0x121212),
+            (Token::Ink3, 0x1c1c1c),
             (Token::Line, 0x6e6e6e),
             (Token::Line2, 0x8c8c8c),
             (Token::Line3, 0xa8a8a8),
@@ -1330,30 +1286,17 @@ fn contrast(spec: &mut ThemeSpec) {
     );
     spec.dark.derive_accent(Rgb::hex(0xffe066));
     spec.light.derive_accent(Rgb::hex(0x0a3fd0));
-    // Every tone is deepened in light until it reads at 7:1 on the darkest surface.
-    let surfaces = [spec.light.get(Token::Ink0), spec.light.get(Token::Ink3)];
-    for tone in [
-        Token::Success,
-        Token::Amber,
-        Token::Danger,
-        Token::Info,
-        Token::Violet,
-        Token::Cyan,
-        Token::Rose,
-        Token::AccentText,
-    ] {
-        let deeper = spec
-            .light
-            .get(tone)
-            .until_contrast(&surfaces, 7.0, Rgb::BLACK);
-        spec.light.set(tone, deeper);
+    // Every text colour, then every tone and the accent as text, moved until
+    // each text pair it draws reads at 7:1: deeper in light, brighter in dark.
+    let text = [Token::Fg1, Token::Fg2, Token::Fg3];
+    for token in text
+        .into_iter()
+        .chain(pairs::TONES)
+        .chain([Token::AccentText])
+    {
+        spec.light.settle(token, 7.0, Rgb::BLACK, Side::Light);
+        spec.dark.settle(token, 7.0, Rgb::WHITE, Side::Dark);
     }
-    let dark_surfaces = [spec.dark.get(Token::Ink0), spec.dark.get(Token::Ink3)];
-    let fixed = spec
-        .dark
-        .get(Token::AccentText)
-        .until_contrast(&dark_surfaces, 7.0, Rgb::WHITE);
-    spec.dark.set(Token::AccentText, fixed);
     charts(
         spec,
         [
@@ -1424,8 +1367,8 @@ mod tests {
                     .map(|s| format!(
                         "{} {} on {} is {:.2}:1",
                         s.side.as_str(),
-                        s.pair.text.name(),
-                        s.pair.on.name(),
+                        s.pair.text.describe(),
+                        s.pair.on.describe(),
                         s.ratio
                     ))
                     .collect::<Vec<_>>()
@@ -1438,14 +1381,14 @@ mod tests {
         let spec = Theme::CONTRAST.spec();
         for side in Side::BOTH {
             let palette = spec.palette(side);
-            for pair in PAIRS.iter().filter(|pair| pair.kind == PairKind::Text) {
-                let ratio = palette.get(pair.text).contrast(palette.get(pair.on));
+            for pair in pairs().iter().filter(|pair| pair.kind == PairKind::Text) {
+                let ratio = pair.ratio(palette, side);
                 assert!(
                     ratio >= 7.0,
                     "{} {} on {}: {ratio:.2}",
                     side.as_str(),
-                    pair.text.name(),
-                    pair.on.name()
+                    pair.text.describe(),
+                    pair.on.describe()
                 );
             }
             for line in [Token::Line, Token::Line2] {
