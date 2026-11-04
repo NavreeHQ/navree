@@ -337,9 +337,18 @@ Sortable::new("sprint", "Sprint board")
     .post("/board/moves")
     .list(SortList::new("ready", "Ready").limit(5).items(cards))
 
-async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
-    Ok(match mv.check(&lists_now(&uow).await?) {
-        Ok(landing) => { save(&uow, &landing).await?; mv.done("/board") }
+async fn moves(db: Db, mv: Move) -> Result<Reply> {
+    // READ COMMITTED, a row per list locked first, then the check and the write.
+    let checked = mv.transaction(&db, &Column::KEY, |uow| {
+        let mv = mv.clone();
+        async move {
+            let checked = mv.check(&lists_now(&uow).await?);
+            if let Ok(landing) = &checked { save(&uow, landing).await?; }
+            Ok(checked)
+        }
+    }).await?;
+    Ok(match checked {
+        Ok(_) => mv.done("/board"),
         Err(refusal) => mv.refused("/board", refusal.message()),
     })
 }
@@ -350,9 +359,14 @@ async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
   arrows move it (left and right to the next list that takes it), Space or Enter drops it, Escape puts
   it back. Every step is said in the sortable's own live region.
 - **The server decides.** A drop moves the item at once and posts a `Move` through the item's own form,
-  one at a time per sortable. A refusal, a failure or no answer in 15 s puts it back where the server
-  last had it. `Move::check` holds a move to the lists as they are now: the item is where the browser saw
-  it, the item it was dropped beside is still there, and the list has room and takes items.
+  one at a time per sortable. A refusal puts it back where the server last had it. A failure, or no
+  answer in 15 s, may have landed: the item stays where it was dropped, the lists are drawn again from
+  the server, and only a move that didn't land is said. `Move::check` holds a move to the lists as they
+  are now: the item is where the browser saw it, the item it was dropped beside is still there, and the
+  list has room and takes items.
+- **Two moves at once.** `Move::transaction` (the `orm` feature) runs the check and the write at READ
+  COMMITTED with a row per list locked first, so two moves at once run one after the other, and runs
+  again when the database asks. A list's keys must be the caller's own: scope them to the board.
 - **Long lists.** `SortList::total`, `more` and `end_note` draw a list a page at a time, and
   `Sortable::page` answers the next page as ops. `Move::place` checks a move against lists kept by rank,
   reading only the neighbours it needs.

@@ -60,19 +60,30 @@ Each item carries a small form behind a **Move** disclosure: a list to move it t
 ## The server's side
 
 ```rust
-async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
-    let lists = board_lists(&uow).await?; // Vec<ListState>, read in this transaction
-    Ok(match mv.check(&lists) {
-        Ok(landing) => {
-            save_order(&uow, &landing).await?;
-            mv.done("/board")
-        }
+async fn moves(db: Db, mv: Move) -> Result<Reply> {
+    // READ COMMITTED, the lists' rows locked first, then this: two moves at once
+    // run one after the other.
+    let checked = mv
+        .transaction(&db, &Column::KEY, |uow| {
+            let mv = mv.clone();
+            async move {
+                let lists = board_lists(&uow).await?; // Vec<ListState>, under the lock
+                let checked = mv.check(&lists);
+                if let Ok(landing) = &checked {
+                    save_order(&uow, landing).await?;
+                }
+                Ok(checked)
+            }
+        })
+        .await?;
+    Ok(match checked {
+        Ok(_) => mv.done("/board"),
         Err(refusal) => mv.refused("/board", refusal.message()),
     })
 }
 ```
 
-`Move` reads a form post and refuses forgery the way [`Submit`](/docs/ui/forms/) does. `check` refuses a move when the item is no longer in the list the browser saw it in, when the item it was dropped beside has left that list, when the list is full or closed to it, and when the item or list is gone. For lists too long to read whole, `Move::place` reads only the neighbours it needs and gives the item a rank between theirs. [Drag and drop](/docs/ui/drag-and-drop/) explains both.
+`Move` reads a form post and refuses forgery the way [`Submit`](/docs/ui/forms/) does. `Move::transaction` (the `orm` feature) is the transaction to check it in: it begins at READ COMMITTED, locks a row per list the move touches before anything is read, and runs again when the database asks. `check` refuses a move when the item is no longer in the list the browser saw it in, when the item it was dropped beside has left that list, when the list is full or closed to it, and when the item or list is gone. For lists too long to read whole, `Move::place` reads only the neighbours it needs and gives the item a rank between theirs. [Drag and drop](/docs/ui/drag-and-drop/) explains both.
 
 ## Keyboard and accessibility
 

@@ -26,18 +26,29 @@ The form people use with JavaScript off sends a `position` instead, and the serv
 
 ## Checking a move
 
-Lock the lists the move touches, read them in the transaction that writes the move, and hold the move to them:
+Run the move in `Move::transaction`, read the lists there, and hold the move to them. The transaction locks the lists the move touches before you read anything:
 
 ```rust
-mv.lock(&uow, &Column::KEY).await?; // a row per list, before anything is read
-let lists = vec![
-    ListState::new("ready", "Ready", ready_keys).limit(5),
-    ListState::new("doing", "In progress", doing_keys).limit(3),
-    ListState::new("done", "Done", done_keys).refuse_if(!user.is_lead(), "Only a lead can move cards to Done."),
-];
-match mv.check(&lists) {
-    Ok(landing) => save(landing.to_list, landing.order),
-    Err(refusal) => return Ok(mv.refused("/board", refusal.message())),
+let checked = mv
+    .transaction(&db, &Column::KEY, |uow| {
+        let mv = mv.clone();
+        async move {
+            let lists = vec![
+                ListState::new("ready", "Ready", ready_keys(&uow).await?).limit(5),
+                ListState::new("doing", "In progress", doing_keys(&uow).await?).limit(3),
+                ListState::new("done", "Done", done_keys(&uow).await?)
+                    .refuse_if(!user.is_lead(), "Only a lead can move cards to Done."),
+            ];
+            let checked = mv.check(&lists);
+            if let Ok(landing) = &checked {
+                save(&uow, &landing.to_list, &landing.order).await?;
+            }
+            Ok(checked)
+        }
+    })
+    .await?;
+if let Err(refusal) = checked {
+    return Ok(mv.refused("/board", refusal.message()));
 }
 ```
 
@@ -55,34 +66,53 @@ impl RankedLists for MyStore<'_> {
         let (uow, lists) = (self.uow, lists.to_vec());
         async move { sortable::lock_lists(uow, &Column::KEY, lists).await }
     }
-    // spot(key), list(key, item), beside(list, rank, lower, item), nth(list, index, item), last(list, item)
+    // spot(key), list(key, item), beside(list, anchor, rank, lower, item),
+    // nth(list, index, item), last(list, item)
 }
 
-match mv.place(&store).await? {
-    Ok(Placement { rank: Some(rank), .. }) => write_rank(rank),
-    Ok(Placement { rank: None, to_list, .. }) => {
-        sortable::renew_ranks(&uow, &Card::LIST, &Card::RANK, &Card::ID, to_list).await?;
-        // then place it again
-    }
-    Err(refusal) => /* refused */,
-}
+let placed = mv
+    .transaction(&db, &Column::KEY, |uow| {
+        let mv = mv.clone();
+        async move {
+            let store = MyStore { uow: &uow };
+            let mut placed = mv.place(&store).await?;
+            if let Ok(Placement { rank: None, to_list, .. }) = &placed {
+                sortable::renew_ranks(&uow, &Card::LIST, &Card::RANK, &Card::ID, to_list.clone()).await?;
+                placed = mv.place(&store).await?;
+            }
+            if let Ok(placement) = &placed {
+                write_rank(&uow, placement).await?;
+            }
+            Ok(placed)
+        }
+    })
+    .await?;
 ```
 
-New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have no room left between them, the placement says so and you give that list fresh ranks. `sortable::renew_ranks` does it in one statement: the list is numbered once by `ROW_NUMBER()` and every rank is written by one `UPDATE`, so a column of 12,000 cards takes a fraction of a second instead of 12,000 round trips. The ranks pass through repeats while it runs, so keep the index on `(list, rank, id)` not unique.
+New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have no room left between them, the placement says so and you give that list fresh ranks. `beside` reads in the list's order, by rank and then by id, so two items that share a rank (left by a writer that skipped the lock) leave no room either, and get fresh ranks too. `sortable::renew_ranks` does it in one statement: the list is numbered once by `ROW_NUMBER()` and every rank is written by one `UPDATE`, so a column of 12,000 cards takes a fraction of a second instead of 12,000 round trips. The ranks pass through repeats while it runs, so keep the index on `(list, rank, id)` not unique. A renewal rewrites the whole list under its lock: other moves into that list wait for it. It comes after about 16 moves dropped into the same gap, so a list where people work at speed renews rarely; one person dragging into one gap again and again makes it renew every 16 moves or so.
 
 ## Two moves at once
 
-Run the check and the write in one transaction that locks the lists the move touches before it reads them. `Move::place` takes that lock itself: before it reads anything it calls your store's `lock` with the lists, sorted and each named once, so two moves never wait for each other. With the `orm` feature, `sortable::lock_lists` is the lock: `SELECT ... FOR UPDATE` on one row per list on PostgreSQL and MySQL, one list at a time in that order, and nothing on SQLite, where Navree's units of work start with `BEGIN IMMEDIATE` and so already run one at a time. For lists you read whole, `mv.lock(&uow, &Column::KEY)` takes the same lock before you read them and call `check`.
+Run the check and the write in `Move::transaction` (or `sortable::transaction` for any set of rows). It owns the transaction, so the safe order is the only one you can write:
 
-Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both drop into the same gap, they get ranks of their own; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in. Without the lock, twenty moves racing for the one free place in a column on PostgreSQL or MySQL can all be taken.
+- it begins the transaction at READ COMMITTED on PostgreSQL and MySQL, whatever the server's or the pool's own level, and with `BEGIN IMMEDIATE` on SQLite;
+- its first statement locks the lists the move touches, with `SELECT ... FOR UPDATE` on one row per list, one list at a time in sorted order, so two moves never wait for each other;
+- only then does it hand you the unit of work, so nothing you read can come from before the lock;
+- it runs again, up to three times in all, when the database asks for that: a deadlock, a serialization failure, or a lock not free in time.
 
-On MySQL, a transaction keeps reading what was there at its first read (`REPEATABLE READ`, its default). Take the lock before anything else reads in the move's transaction, as `place` does when it comes first, or set `database.mysql.isolation_level = "read_committed"`.
+READ COMMITTED is the level because every statement then reads what is committed when it starts. At REPEATABLE READ or SERIALIZABLE, a transaction keeps reading what was there when it began: on PostgreSQL that is its first statement, even when it is the lock, and on MySQL its first read. Two moves at once could then both see a list's last free place. With the lock held, READ COMMITTED is all the order a move needs.
 
-In one page, moves go to the server one at a time, in the order they were made. A refused move puts its item back where the server last had it, and drops that item's other moves.
+`sortable::lock_lists` is the lock itself, and `Move::place` calls it through your store's `lock` as a second lock in the same transaction, which is granted at once. It refuses rather than lock nothing: outside a unit of work, in a transaction that isn't READ COMMITTED, and for a list with no row. A move naming a list that has no row fails as not found (`is_not_found()`): answer it as a list that isn't there any more.
+
+Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both drop into the same gap, they get ranks of their own; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in. Without the lock, twenty moves racing for the one free place in a column on PostgreSQL or MySQL can all be taken; with it, one is, at every isolation level a pool can be set to.
+
+A list's key is locked across the whole table, so keep the keys to what the caller may move: look the list up within the caller's board or workspace in your store, and answer `None` from `RankedLists::list` for any other. The key column is the list's unique, indexed key: on MySQL a `FOR UPDATE` on a column with no index locks every row it reads.
+
+In one page, moves go to the server one at a time, in the order they were made. A refused move puts its item back where the server last had it, and drops that item's other moves. When the sortable is in a region, the lists are then drawn again from the server, and the board says where the item really is, or that it is no longer shown here when the server has it further down a long list or out of a filter; if the keys were on it, they go to the card that took its place.
 
 ## When no answer comes
 
-A move waits 15 seconds for its answer (`Sortable::deadline_ms`). A move with no answer, or with a failure from the server, may have landed all the same, so nothing is said yet: the item stays where it was dropped, and the lists are drawn again from the server. If the item is where it was dropped, the move landed and nothing went wrong. If it isn't, the page says the move wasn't saved, with a toast, and the item is where the server has it. If the server can't be reached to ask, or the sortable is in no [region](/docs/ui/regions/) to draw again, the item goes back to where the server last had it, and the toast says so. The core runtime leaves the telling to the sortable: its own "No connection" toast is not shown for a move.
+A move waits 15 seconds for its answer (`Sortable::deadline_ms`). A move with no answer, or with a failure from the server, may have landed all the same, so nothing is said yet: the item stays where it was dropped, and the lists are drawn again from the server. If the item is where it was dropped, the move landed and nothing went wrong. If it isn't, the page says the move wasn't saved, with a toast, and the item is where the server has it. If the server can't be reached to ask, or the sortable is in no [region](/docs/ui/regions/) to draw again, the item goes back to where the server last had it, and the toast says so: "No connection" when no answer came, "That move wasn't saved" when the server answered with a failure. The core runtime leaves the telling to the sortable: its own "No connection" toast is not shown for a move.
 
 ## Live for everyone
 
@@ -90,4 +120,4 @@ Put the board in a [region](/docs/ui/regions/) that follows a server-sent event 
 
 ## Lazy columns
 
-Draw the first cards of each column and end it with `SortList::more(...)`: a form the page submits as it scrolls into sight, whose cursor is the last card drawn. Read it as "after this card, wherever it is now": look the card up, and page after its current rank. Fresh ranks between two pages then skip nothing, where a cursor of the old rank would skip the cards that moved up past it. If the card has left the column, carry on after as many cards as the page holds. Answer with `Sortable::page(key)`. Cap how many a column keeps in the page with `SortList::end_note(...)`, and let filters and search find the rest. The example board holds 20,000 cards this way.
+Draw the first cards of each column and end it with `SortList::more(...)`: a form the page submits as it scrolls into sight, whose cursor is the last card drawn. Read it as "after this card, wherever it is now": look the card up in this column, within what the caller may see, and page after its current rank and id, in one statement so fresh ranks can't come between the two. Fresh ranks between two pages then skip nothing, where a cursor of the old rank would skip the cards that moved up past it. If the card has left the column, carry on from one card before as many as the page holds: the page joins a repeat without it, where a gap would hide a card. Answer with `Sortable::page(key)`. Cap how many a column keeps in the page with `SortList::end_note(...)`, and let filters and search find the rest. The example board holds 20,000 cards this way.
