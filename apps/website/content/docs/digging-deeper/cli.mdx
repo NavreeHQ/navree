@@ -77,7 +77,7 @@ Options:
   -h, --help     Print help
   -V, --version  Print version
 
-Every other command runs in the app binary: `navree <command> [args...]` is `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, model:show, queue:work, schedule:run, routes, openapi:export, key:generate, <module>:<command>, ...). `navree list` shows the app's commands.
+Every other command runs in the app binary: `navree <command> [args...]` is `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, model:show, queue:work, schedule:run, routes, openapi:export, key:generate, config:show, config:check, <module>:<command>, ...). `navree list` shows the app's commands.
 ```
 
 ## Creating an app
@@ -293,7 +293,7 @@ fn main() -> Result<(), navree::kernel::BoxError> {
 
 - With no command, it runs `serve` when a module registers it (`HttpModule` does), otherwise it prints the help.
 - `help` (also `list`, `--help` and `-h`) lists every command, `check [--graph]` validates the module graph, and `introspect --json` prints the module graph and the commands as JSON; none of them boots the app. Through the CLI, use `navree list`: `navree help` and `navree --help` print the CLI's own help.
-- Every other command **boots the whole app** (configuration, database, every module), runs, then shuts the app down gracefully. A command therefore needs a working configuration and database, even `key:generate`.
+- Every other command **boots the whole app** (configuration, database, every module), runs, then shuts the app down gracefully. A command therefore needs a working configuration and database, even `key:generate`. The exception is a command a module marks as offline (`CommandSpec::offline()`): it runs against the module graph, builds only the providers it asks for and runs no lifecycle hook. `config:show` and `config:check` are offline, so they work without a database.
 - An unknown command fails before the app boots. A failing command prints its error and exits with status 1. The error is printed in its `Debug` form, because `main` returns it (`Error: UnknownCommand { name: "x" }`). Ctrl-C (and `SIGTERM` on Unix) stops long-running commands such as `serve` and `queue:work` gracefully.
 
 This is an excerpt of `list` in the reference CRM, which uses most modules:
@@ -366,6 +366,7 @@ Each module registers its own commands, so `list` shows only those of the module
 | `routes [--json]` | `HttpModule` | `navree routes` prints every route with its name, access rule and module. |
 | `down [--retry SECS] [--message TEXT]`, `up` | `HttpModule` | See [Maintenance mode](/docs/digging-deeper/maintenance-mode/). |
 | `key:generate` | `CryptoModule` | Prints a new `base64:...` key for `APP_KEY`. See [Encryption and hashing](/docs/security/encryption-and-hashing/). |
+| `config:show [section] [--defaults] [--origin] [--json]`, `config:check [--env <name>]` | `ConfigModule` | Print the effective configuration with secrets masked, or check it without starting the app. See [Looking at the configuration](/docs/getting-started/configuration/#looking-at-the-configuration). |
 | `migrate`, `migrate:install`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:status`, `schema:dump` | `DatabaseModule` | See [Migrations](/docs/database/migrations/). |
 | `migrate:fresh [--seed] [--drop-views] [--drop-types]` | `DatabaseModule` | Drops every table, then migrates (and seeds). |
 | `db:seed [name...] [--database <name>] [--force]` | `DatabaseModule` | Runs every seeder, or only the named ones, on the default database or the one named. In production it needs `--force`. See [Seeding](/docs/database/seeding-and-factories/). |

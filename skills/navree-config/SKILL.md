@@ -22,8 +22,24 @@ leaves out: a new app's TOML sets `http.addr`, `http.api_prefix`, `database.url`
 `database.migrate_on_boot`, `log.level`, `mail.transport`, `queue.driver`,
 `auth.registration` and `api.title`, and changing those in `.env` has no
 effect. Edit the TOML file, remove the key from it, or use a real
-environment variable. Paths are relative to the working directory: run the
-app from its root.
+environment variable. When a key is set in both with different values, the
+boot logs a warning that names the key, the `.env` entry and the file.
+Paths are relative to the working directory: run the app from its root.
+
+Look at the result with `navree config:show [section] [--defaults]
+[--origin] [--json]` (secrets are masked, there is no option to show them)
+and check it with `navree config:check [--env production]`: all invalid
+sections at once, keys and sections that nothing reads (usually typos; the
+boot warns about them too), hidden `.env` values, and for production the
+unsafe settings (no `app.key`, a SQLite `database.url`, `mail.transport =
+"log"`). Both run without booting the app.
+
+The `app` section is typed (`config.app()`, `AppOptions`): `app.name`,
+`app.url` (an absolute http or https address), `app.version`, `app.env`,
+`app.key`, `app.previous_keys`. `APP_URL`, `APP_NAME`, `APP_VERSION`,
+`APP_ENV`, `APP_KEY` and `APP_PREVIOUS_KEYS` set them. `config.environment()`
+returns the `Environment`; ask `behaves_like_production()` instead of
+comparing names.
 
 Tables merge key by key; arrays, scalars and `null` replace whole; a source
 that swaps a table for a scalar (or back) replaces the whole subtree. A
@@ -125,7 +141,8 @@ secret-looking URL parameters (`?token=`): give secrets secret-looking names.
 
 ## Custom sources and environments
 
-There is no `APP_ENV` switch. Add a per-environment file yourself:
+`APP_ENV` (or `app.env`) names the environment but does not pick a file.
+Add a per-environment file yourself:
 
 ```rust
 use navree::config::ConfigSources;
@@ -177,6 +194,8 @@ To boot the whole app, build sources with `ConfigSources::new().set(..)`
 ## Common mistakes
 
 - Expecting `.env` to override `config/app.toml`.
+- A typo in a key or section name: it is not an error, only a boot warning
+  (`navree config:check` fails on it).
 - Secrets in `config/app.toml` (committed): use `.env` or the environment,
   and `Secret<T>` in your section.
 - A section struct without `#[serde(default)]` and a missing key: the boot fails.

@@ -3,7 +3,7 @@ title: "Configuration"
 description: "Typed configuration from `.env`, `config/app.toml` and `APP_*` environment variables: precedence, nesting, value conversion, limits, the application key and your own sections."
 ---
 
-Every setting of a Navree app lives in one configuration tree. The app builds it at boot from a `.env` file, `config/app.toml` and `APP_*` environment variables, and each module reads its own section of it as a typed Rust struct. A missing setting falls back to the module's default, and a setting of the wrong type, or one its module rejects, stops the boot with a message that names the section.
+Every setting of a Navree app lives in one configuration tree. The app builds it at boot from a `.env` file, `config/app.toml` and `APP_*` environment variables, and each module reads its own section of it as a typed Rust struct. A missing setting falls back to the module's default, and a setting of the wrong type, or one its module rejects, stops the boot with a message that names the section. When several sections are wrong, the message lists all of them, so one run shows everything to fix.
 
 `navree-config` does the loading, and `ConfigModule` makes the result available to every other module. The loader is Navree's own: the `toml` and `serde_json` crates parse the files, and everything after parsing is Navree's code (merging, the environment mapping, the conversion of values to your types, the limits and the error messages).
 
@@ -34,7 +34,9 @@ A source that turns a table into a scalar or an array, or back, replaces the who
 
 <Callout type="warning" title="`.env` doesn't override `config/app.toml`">
 
-`.env` is read first, so a key that `config/app.toml` also sets keeps the TOML value. A new app's `config/app.toml` sets `http.addr`, `database.url`, `log.level` and `mail.transport`, so changing `APP_HTTP__ADDR`, `APP_DATABASE__URL`, `APP_LOG__LEVEL` or `APP_MAIL__TRANSPORT` in `.env` has no effect unless you remove the key from the TOML file. Real environment variables do override the TOML file; that is how `navree dev` hands the settings of [Dock](/docs/tools/dock/)'s services to the app. Put a setting in either `config/app.toml` or `.env`, not both, and use `.env` for keys the TOML file doesn't set, such as `APP_KEY`.
+`.env` is read first, so a key that `config/app.toml` also sets keeps the TOML value. A new app's `config/app.toml` sets `http.addr`, `database.url`, `log.level` and `mail.transport`, so its `.env` leaves those four out: change them in the TOML file, or with a real environment variable. Real environment variables do override the TOML file; that is how `navree dev` hands the settings of [Dock](/docs/tools/dock/)'s services to the app. Put a setting in either `config/app.toml` or `.env`, not both, and use `.env` for keys the TOML file doesn't set, such as `APP_KEY`.
+
+If you do set a key in both with different values, the app boots and logs a warning that names the key, the `.env` entry (file, line and variable) and the config file that hides it. `navree config:check` lists the same keys.
 
 </Callout>
 
@@ -125,6 +127,33 @@ undocumented = ["/_lighthouse*", "/_logbook*"]
 ```
 
 Keys keep the case you write them in. Everything a module doesn't find falls back to its default, so the file only needs the settings you change. Keep secrets out of it: it is committed.
+
+A key or table that no module reads is almost always a typo (`[databse]`, `max_conections`). The app boots, and logs a warning that names it and, when one is close, the name it probably meant. `navree config:check` fails on it. See [Looking at the configuration](#looking-at-the-configuration).
+
+## The `app` section
+
+The `app` section says what the app is called, where it lives and which environment it runs in:
+
+```toml title="config/app.toml"
+[app]
+name = "planner"
+url = "https://planner.example.com"
+version = "1.4.0"
+env = "production"
+```
+
+| Key | Short variable | Meaning |
+|---|---|---|
+| `app.name` | `APP_NAME` | The app's name. The microservice name and the telemetry service name default to it. |
+| `app.url` | `APP_URL` | The address people reach the app at, as an absolute `http://` or `https://` URL. Mail, sign-in callbacks and the dashboards build their links from it. |
+| `app.version` | `APP_VERSION` | The app's version, reported by telemetry and Lighthouse. |
+| `app.env` | `APP_ENV` | The environment's name: `local`, `testing`, `staging`, `production` or any other. See [Environments](#environments). |
+| `app.key` | `APP_KEY` | The [application key](#the-application-key). Keep it out of files. |
+| `app.previous_keys` | `APP_PREVIOUS_KEYS` | Keys that still decrypt, a list or a comma-separated string. |
+
+The short variable and the full one (`APP_APP__URL`) set the same key. When both are set, the source that is read later wins; within one source `app.url` wins, except for the environment, where `APP_ENV` wins. A blank value counts as not set. A URL that isn't an absolute `http` or `https` address, or an environment name with spaces, stops the boot and names the key.
+
+Read the section in code with `config.app()`, which returns the validated `AppOptions`, or inject `Arc<AppOptions>`. `config.environment()` returns the `Environment`, and `Environment::behaves_like_production()` is what the modules ask.
 
 ## The application key
 
@@ -373,6 +402,32 @@ pub fn sources() -> ConfigSources {
 
 A missing `config/<env>.toml` is skipped like any missing file, and `config/<env>.json` works the same way. `APP_ENV` here is read from the process environment, not from `.env`. The `.env` file and the `APP_*` variables do set the `env` key, so the modules above see it either way.
 
+## Looking at the configuration
+
+Two commands read the configuration without starting the app: they open no database connection and start no server. Run them from the app's directory.
+
+`navree config:show [section] [--defaults] [--origin] [--json]` prints the effective configuration: every key a source sets, with its value. `--origin` adds where each value came from (`.env:3 (APP_MAIL__FROM)`, `config/app.toml`, `environment (APP_DATABASE__URL)`). `--defaults` adds the defaults of the sections that publish them. `--json` prints JSON. A section name limits the output to its keys.
+
+```text
+$ navree config:show app --defaults --origin
+app.env            "production"  environment (APP_ENV)
+app.key            (unset)       default
+app.name           "planner"     config/app.toml
+app.previous_keys  []            default
+app.url            (unset)       default
+app.version        (unset)       default
+```
+
+Secrets are masked and there is no option that shows them. A key whose name looks secret (the words in [Keeping secrets out of logs](#keeping-secrets-out-of-logs)) prints as `[redacted] (set)` or `(unset)`, and the password of a URL is replaced.
+
+`navree config:check [--env production]` reads every section the app registers and prints all the problems together:
+
+- sections that fail to read or validate, each with its message;
+- keys and sections that nothing reads, with the closest name that is read;
+- `.env` entries that a config file hides (a warning).
+
+With `--env production`, or when `app.env` is `production`, it also checks the settings that are unsafe in production: no `app.key`, a SQLite `database.url` and `mail.transport = "log"` fail the check; a missing or non-https `app.url`, an unset `database.url` and a `debug` log level are notes. The check exits with 0 when nothing fails and 1 otherwise, so it fits a CI step or a check before a deploy. Warnings and notes don't change the exit code. The sections the framework's own modules read are always known; register your own with `m.config::<T>()` so the check can read them. The check finds a mistyped key inside a section when the app registers that section; the boot warning finds it in every section the app reads.
+
 ## Limits
 
 A load refuses input that is too big or too deep, so a broken or hostile file can't exhaust memory or the stack:
@@ -396,7 +451,7 @@ Each module documents its section on its own page:
 
 | Section | Module | Page |
 |---|---|---|
-| `app` (`key`, `previous_keys`, `url`) | several | [Encryption and hashing](/docs/security/encryption-and-hashing/) |
+| `app` (`name`, `url`, `version`, `env`, `key`, `previous_keys`) | `ConfigModule` | [The `app` section](#the-app-section), [Encryption and hashing](/docs/security/encryption-and-hashing/) |
 | `http` | `HttpModule` | [Routing](/docs/basics/routing/), [Rate limiting](/docs/basics/rate-limiting/), [CORS and security headers](/docs/basics/cors-and-security-headers/), [Connection limits](/docs/getting-started/deployment/#connection-limits) (`http.server`) |
 | `log` | `LoggerModule` | [Logging](/docs/basics/logging/) |
 | `hashing` | `CryptoModule` | [Encryption and hashing](/docs/security/encryption-and-hashing/) |
