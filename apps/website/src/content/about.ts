@@ -119,16 +119,16 @@ export const lessons: Lesson[] = [
   },
 ];
 
-/** The picture's text for screen readers, and its caption. */
+/** The picture's text for screen readers (its `alt`), and its caption. */
 export const picture = {
-  title: "A father at his computer with his son and daughter, drawn in ones and zeros",
-  desc:
-    "Seen from behind, a man with short, thick hair and a full beard sits in an office chair pulled up to his desk, one hand on the mouse, " +
-    "facing a glowing monitor with lines of code and a small Navree logo on it. " +
-    "His young son, a small Sikh boy with his hair tied in a topknot under a white cloth, sits on his lap, his head turned to the screen beside his father's shoulder. " +
-    "His daughter, with two long braids down her back, stands beside the chair with a hand on the edge of the desk, watching the screen and learning. " +
-    "All three are glowing green silhouettes made of 0 and 1 digits that fall slowly like rain, lit by the screen.",
-  caption: `${founder.short} at his desk, Navraj on his lap and Navreet beside him, drawn in ones and zeros.`,
+  alt:
+    "Seen from behind and a little to the side, a man with short, thick hair and a full beard, nothing on his head, sits in a mesh office chair at a desk, " +
+    "his right hand on the keyboard, facing a glowing monitor in the middle of the picture with Navree code on its screen. " +
+    "His young son, a small Sikh boy with his hair in a topknot under a glowing white patka, sits on his lap and watches the screen. " +
+    "His daughter, older and taller, stands on the right with two long braids down her back, one hand on the desk, watching and learning. " +
+    "A plant and a mug sit at the right end of the desk. Everything is drawn in glowing green lines, the clothes are made of columns of 0 and 1 digits, " +
+    "and digits fall like rain at the left and right edges.",
+  caption: `${founder.short} at his desk, Navraj on his lap and Navreet beside him, drawn in light and ones and zeros.`,
 };
 
 /** Where to report a problem in Navree itself. */
