@@ -2456,6 +2456,7 @@ dependencies = [
  "navree-template",
  "navree-testing",
  "navree-time",
+ "navree-ui",
  "navree-validation",
  "navree-webhooks",
  "rqrr",
