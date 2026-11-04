@@ -7,10 +7,10 @@ use crate::data::{
     Agent, Attachment, Conversation, Customer, CustomerEvent, Message, Priority, SAVED, Status,
 };
 use crate::views::customer::{CUSTOMER, customer_body, customer_head};
-use crate::views::list::{ListRow, list_header, list_region};
+use crate::views::list::{LIST_BODY, ListPage, Summary, list_header, list_lazy, summary_region};
 use crate::views::thread::{
-    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, MESSAGES, Open, composer, thread_head,
-    thread_messages,
+    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, Open, Window, composer, thread_head,
+    thread_lazy,
 };
 use crate::views::{Filters, View};
 
@@ -41,22 +41,36 @@ pub fn layout() -> SplitPane {
         )
 }
 
-/// A conversation that is open, with all it shows.
+/// A conversation that is open, with the part of it a page shows.
 pub struct OpenThread {
     pub conversation: Conversation,
     pub customer: Customer,
     pub assignee: Option<(i64, String)>,
+    /// The window of messages: the newest, unless the page asked for older ones.
     pub messages: Vec<Message>,
     pub files: Vec<Attachment>,
+    pub older: bool,
+    pub newer: bool,
+    /// The conversations either side of it in the view: newer, then older.
+    pub neighbours: (Option<i64>, Option<i64>),
+}
+
+/// What the customer pane shows, loaded after the page.
+pub struct CustomerView {
+    pub customer: Customer,
     pub history: Vec<CustomerEvent>,
-    /// The customer's conversations, this one too, newest first.
+    /// Their conversations, newest first.
     pub theirs: Vec<Conversation>,
+    /// How many are open, and how many of those are past due.
+    pub open: u64,
+    pub overdue: u64,
 }
 
 /// The page's state.
 pub struct Inbox<'a> {
     pub filters: &'a Filters,
-    pub rows: &'a [ListRow],
+    pub list: ListPage<'a>,
+    pub summary: Summary,
     pub open: Option<&'a OpenThread>,
     /// Which pane the page is about: the one shown when the panes stack.
     pub pane: &'a str,
@@ -87,6 +101,15 @@ fn page_path(open: Option<&OpenThread>) -> String {
     )
 }
 
+fn query_of(filters: &Filters) -> String {
+    let query = filters.query();
+    if query.is_empty() {
+        String::new()
+    } else {
+        format!("?{query}")
+    }
+}
+
 /// The heading region of the open conversation.
 pub fn head_region(open: &Open<'_>) -> Region {
     Region::new(HEAD)
@@ -103,42 +126,36 @@ pub fn head_region(open: &Open<'_>) -> Region {
         .children(thread_head(open))
 }
 
-fn query_of(filters: &Filters) -> String {
-    let query = filters.query();
-    if query.is_empty() {
-        String::new()
-    } else {
-        format!("?{query}")
+/// The customer region: fetched after the page, and again when the customer changes.
+pub fn customer_region(conversation: i64, customer: i64, filters: &Filters, view: Option<&CustomerView>, now: i64) -> Region {
+    let region = Region::new(CUSTOMER)
+        .src(format!(
+            "/inbox/{conversation}/fragments/customer{}",
+            query_of(filters)
+        ))
+        .live_from(format!("/inbox/events?open={conversation}&customer={customer}"))
+        .live_event("customer");
+    match view {
+        Some(view) => region.children(customer_body(view, conversation, filters, now)),
+        None => region.lazy(),
     }
 }
 
-/// The messages region of the open conversation.
-pub fn messages_region(thread: &OpenThread, today: NaiveDate) -> Region {
-    Region::new(MESSAGES)
-        .src(format!("/inbox/{}/fragments/messages", thread.conversation.id))
-        .live_from(stream_url(Some(thread)))
-        .live_event("thread")
-        .children(thread_messages(&thread.messages, &thread.files, today))
-}
-
-/// The customer region of the open conversation.
-pub fn customer_region(thread: &OpenThread, filters: &Filters, now: i64) -> Region {
-    Region::new(CUSTOMER)
-        .src(format!(
-            "/inbox/{}/fragments/customer{}",
-            thread.conversation.id,
-            query_of(filters)
+/// The count and the list, which the filters redraw together.
+pub fn list_body(page: &Inbox<'_>, stream: &str) -> Node {
+    el("div")
+        .attr("id", LIST_BODY)
+        .children((
+            summary_region(page.summary, page.filters, stream),
+            list_lazy(
+                &page.list,
+                page.filters,
+                page.open.map(|thread| thread.conversation.id),
+                page.now,
+                stream,
+            ),
         ))
-        .live_from(stream_url(Some(thread)))
-        .live_event("customer")
-        .children(customer_body(
-            &thread.customer,
-            &thread.theirs,
-            &thread.history,
-            thread.conversation.id,
-            filters,
-            now,
-        ))
+        .into()
 }
 
 /// The panes, drawn with the agent's sizes.
@@ -150,13 +167,8 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
         split = split.sizes(sizes);
     }
     let split = split.current(page.pane).pane_with("conversations", |pane| {
-        pane.header(list_header(page.filters, &path)).body(list_region(
-            page.rows,
-            page.filters,
-            page.open.map(|thread| thread.conversation.id),
-            page.now,
-            &stream,
-        ))
+        pane.header(list_header(page.filters, &path))
+            .body(list_body(page, &stream))
     });
     match page.open {
         Some(thread) => {
@@ -167,12 +179,19 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
                 filters: page.filters,
                 now: page.now,
                 today: page.today,
+                neighbours: thread.neighbours,
             };
             let back = page.filters.href(&path);
+            let window = Window {
+                messages: &thread.messages,
+                files: &thread.files,
+                older: thread.older,
+                newer: thread.newer,
+            };
             split
                 .pane_with("thread", |pane| {
                     pane.header(head_region(&open))
-                        .body(messages_region(thread, page.today))
+                        .body(thread_lazy(&thread.conversation, &window, &stream, page.now))
                         .from_end()
                         .body_label("Messages")
                         .footer(composer(
@@ -183,8 +202,13 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
                         ))
                 })
                 .pane_with("customer", |pane| {
-                    pane.header(customer_head(&thread.customer, &back))
-                        .body(customer_region(thread, page.filters, page.now))
+                    pane.header(customer_head(&thread.customer, &back)).body(customer_region(
+                        thread.conversation.id,
+                        thread.customer.id,
+                        page.filters,
+                        None,
+                        page.now,
+                    ))
                 })
         }
         None => split
@@ -315,8 +339,8 @@ pub fn shortcuts() -> Dialog {
                 .caption("Keyboard shortcuts")
                 .head((TableHead::new("Key"), TableHead::new("Does")))
                 .rows([
-                    row(&["j"], "Open the next conversation in the list"),
-                    row(&["k"], "Open the previous conversation"),
+                    row(&["j"], "Open the next, older conversation in the list"),
+                    row(&["k"], "Open the newer conversation above"),
                     row(&["r"], "Write a reply"),
                     row(&["e"], "Close the conversation, or reopen it"),
                     row(&["/"], "Search the conversations"),

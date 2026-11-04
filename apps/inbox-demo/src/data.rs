@@ -80,6 +80,50 @@ pub struct Conversation {
     pub unread: i64,
     /// The latest message, short, for the list.
     pub preview: String,
+    /// The desk's revision when it last changed: a live list asks what changed since.
+    pub rev: i64,
+    /// How many messages it holds.
+    pub messages: i64,
+    /// Which list it is in: `open` (open or pending), `snoozed` or `closed`.
+    pub inbox: String,
+}
+
+impl Conversation {
+    /// Where it sorts in a list, newest activity first: its last activity and its id,
+    /// padded so the text sorts as the numbers do.
+    pub fn cursor(&self) -> String {
+        format!("{:012}{:012}", self.last_at.max(0), self.id.max(0))
+    }
+}
+
+/// A conversation's cursor read back: its last activity and its id.
+pub fn read_cursor(cursor: &str) -> Option<(i64, i64)> {
+    if cursor.len() != 24 || !cursor.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some((cursor[..12].parse().ok()?, cursor[12..].parse().ok()?))
+}
+
+/// A message's cursor: its id, padded.
+pub fn message_cursor(id: i64) -> String {
+    format!("{:012}", id.max(0))
+}
+
+/// A message's cursor read back.
+pub fn read_message_cursor(cursor: &str) -> Option<i64> {
+    if cursor.is_empty() || cursor.len() > 12 || !cursor.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    cursor.parse().ok()
+}
+
+/// The list a status puts a conversation in.
+pub fn inbox_of(status: &str) -> &'static str {
+    match Status::parse(status) {
+        Some(Status::Snoozed) => "snoozed",
+        Some(Status::Closed) => "closed",
+        _ => "open",
+    }
 }
 
 /// One thing said, or done, in a conversation.
@@ -1192,6 +1236,9 @@ pub fn seed(now: i64) -> Seed {
                 0
             };
             conversations.push(Conversation {
+                rev: 1,
+                messages: i64::try_from(lines.len()).unwrap_or(0),
+                inbox: inbox_of(status.key()).to_owned(),
                 id,
                 customer_id: customer.id,
                 subject: topic.subject.to_owned(),

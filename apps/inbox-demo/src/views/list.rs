@@ -1,15 +1,23 @@
-//! The conversations pane: the view's heading, the filters, and the list that follows
-//! the stream. Each row is a link to its conversation, with what an agent scans for:
-//! who wrote, about what, how long ago, what is new, how urgent, and how long is left
-//! to answer.
+//! The conversations pane: the view's heading, the filters, a line that counts what is
+//! waiting, and the list, which loads fifty conversations at a time as the agent scrolls
+//! and merges what changes live.
+//!
+//! Each row is a link to its conversation, with what an agent scans for: who wrote,
+//! about what, how long ago, what is new, how urgent, and how long is left to answer.
 
 use navree::ui::*;
 
 use crate::data::{Channel, Conversation, Priority, Sla, Status};
-use crate::views::{Filters, View, ago, only_first_name};
+use crate::views::{Filters, View, ago, encode, only_first_name, thousands};
 
-/// The list's region.
+/// The list.
 pub const LIST: &str = "conversation-list";
+/// What the filters redraw: the count and the list.
+pub const LIST_BODY: &str = "list-body";
+/// The count.
+pub const SUMMARY: &str = "list-summary";
+/// How many conversations a page of the list holds.
+pub const PAGE: u64 = 50;
 
 /// A conversation as the list shows it.
 #[derive(Clone, Debug, Default)]
@@ -18,6 +26,14 @@ pub struct ListRow {
     pub customer: String,
     pub company: String,
     pub assignee: Option<String>,
+}
+
+/// What the line over the list says.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Summary {
+    pub total: u64,
+    pub unread: u64,
+    pub overdue: u64,
 }
 
 /// The heading and the filters. The filters are a form that works without script;
@@ -41,7 +57,7 @@ pub fn list_header(filters: &Filters, path: &str) -> Node {
                 .attr("action", path.to_owned())
                 .attr("role", "search")
                 .attr("aria-label", "Filter conversations")
-                .attr("data-ui-target", LIST)
+                .attr("data-ui-target", LIST_BODY)
                 .attr("data-ui-debounce", 250_i64)
                 .children((
                     (filters.view != View::All).then(|| {
@@ -88,11 +104,18 @@ fn badges(row: &ListRow, now: i64) -> Vec<Node> {
         );
     }
     if let Some(sla) = Sla::of(conversation, now) {
+        let state = if sla.breached() {
+            "overdue"
+        } else if sla.at_risk() {
+            "soon"
+        } else {
+            "running"
+        };
         out.push(
             Badge::new(sla.text())
                 .tone(sla.tone())
                 .icon(icons::CLOCK)
-                .attr("data-sla", if sla.breached() { "overdue" } else if sla.at_risk() { "soon" } else { "running" })
+                .attr("data-sla", state)
                 .into(),
         );
     }
@@ -120,14 +143,14 @@ fn badges(row: &ListRow, now: i64) -> Vec<Node> {
     out
 }
 
-/// One row. `hotkey` is `j` for the row after the open one and `k` for the one before.
-pub fn conversation_row(
+/// One row, as an item of the lazy list. `hotkey` makes a key open it.
+pub fn conversation_item(
     row: &ListRow,
     filters: &Filters,
     open: Option<i64>,
     now: i64,
     hotkey: Option<&str>,
-) -> Node {
+) -> LazyItem {
     let conversation = &row.conversation;
     let channel = Channel::parse(&conversation.channel).unwrap_or(Channel::Chat);
     let mut item = Item::new(row.customer.clone())
@@ -142,91 +165,117 @@ pub fn conversation_row(
     if let Some(key) = hotkey {
         item = item.hotkey(key);
     }
-    el("li")
-        .attr("id", format!("conversation-{}", conversation.id))
-        .attr("data-key", conversation.id)
-        .child(item)
-        .into()
+    LazyItem::new(conversation.id.to_string(), conversation.cursor(), item)
+        .id(format!("conversation-{}", conversation.id))
 }
 
-/// What the list holds right now: a line that counts it, and the rows.
-pub fn list_body(rows: &[ListRow], filters: &Filters, open: Option<i64>, now: i64) -> Node {
-    let at = open.and_then(|id| rows.iter().position(|row| row.conversation.id == id));
-    let key_for = |index: usize| match at {
-        Some(at) if index + 1 == at => Some("k"),
-        Some(at) if index == at + 1 => Some("j"),
-        None if index == 0 => Some("j"),
-        _ => None,
+/// The line that counts the view.
+pub fn summary_line(summary: Summary, filters: &Filters) -> Node {
+    let noun = if summary.total == 1 {
+        "conversation"
+    } else {
+        "conversations"
     };
-    let unread: i64 = rows.iter().map(|row| row.conversation.unread).sum();
-    let overdue = rows
-        .iter()
-        .filter(|row| Sla::of(&row.conversation, now).is_some_and(Sla::breached))
-        .count();
-    let mut summary = format!(
-        "{} conversation{}",
-        rows.len(),
-        if rows.len() == 1 { "" } else { "s" }
-    );
-    if unread > 0 {
-        summary.push_str(&format!(" · {unread} new"));
+    let mut text = if filters.narrowed() {
+        format!("{} {noun} match", thousands(summary.total))
+    } else {
+        format!("{} {noun}", thousands(summary.total))
+    };
+    if summary.unread > 0 {
+        text.push_str(&format!(" · {} new", thousands(summary.unread)));
     }
-    if overdue > 0 {
-        summary.push_str(&format!(" · {overdue} overdue"));
+    if summary.overdue > 0 {
+        text.push_str(&format!(" · {} overdue", thousands(summary.overdue)));
     }
-    if rows.is_empty() {
-        let empty = if filters.narrowed() {
+    Text::muted(text).into()
+}
+
+/// The count in its region: drawn again when the desk moves.
+pub fn summary_region(summary: Summary, filters: &Filters, stream: &str) -> Region {
+    let query = filters.query();
+    let src = if query.is_empty() {
+        "/inbox/fragments/summary".to_owned()
+    } else {
+        format!("/inbox/fragments/summary?{query}")
+    };
+    Region::new(SUMMARY)
+        .src(src)
+        .live_from(stream.to_owned())
+        .live_event("conversations")
+        .children(summary_line(summary, filters))
+}
+
+/// Where a list's rows come from: the same filters, as the view.
+pub fn rows_src(filters: &Filters) -> String {
+    let query = filters.query();
+    if query.is_empty() {
+        "/inbox/rows".to_owned()
+    } else {
+        format!("/inbox/rows?{query}")
+    }
+}
+
+/// A page of the list, for its first draw: the rows, whether more come after, whether
+/// this page starts somewhere down the list (with JavaScript off), and the revision.
+pub struct ListPage<'a> {
+    pub rows: &'a [ListRow],
+    pub more_after: bool,
+    pub more_before: bool,
+    pub since: i64,
+}
+
+/// The list: lazy, live, and kept as the agent left it while they open conversations.
+pub fn list_lazy(page: &ListPage<'_>, filters: &Filters, open: Option<i64>, now: i64, stream: &str) -> LazyList {
+    let path = match open {
+        Some(id) => format!("/inbox/{id}"),
+        None => "/inbox".to_owned(),
+    };
+    let window = |param: &str, cursor: String| {
+        let base = filters.href(&path);
+        let sep = if base.contains('?') { '&' } else { '?' };
+        format!("{base}{sep}{param}={}", encode(&cursor))
+    };
+    let mut list = LazyList::new(LIST, "Conversations", rows_src(filters))
+        .view(filters.query())
+        .items(page.rows.iter().enumerate().map(|(at, row)| {
+            // Nothing open: j opens the first.
+            let key = (open.is_none() && at == 0 && !page.more_before).then_some("j");
+            conversation_item(row, filters, open, now, key)
+        }))
+        .since(page.since.to_string())
+        .live_from(stream.to_owned(), Some("conversations"), LazyEnd::Start)
+        .max(300)
+        .labels(LazyLabels {
+            start: "Show newer conversations".to_owned(),
+            end: "Show more conversations".to_owned(),
+            loaded: "{n} more conversations".to_owned(),
+            ..LazyLabels::default()
+        })
+        .empty(if filters.narrowed() {
             Empty::new("Nothing matches")
                 .icon(icons::SEARCH)
                 .description("No conversation in this view matches the search and filters.")
-                .actions(Button::outline("Clear the filters").href(Filters::with_view(filters.view).href("/inbox")))
+                .actions(
+                    Button::outline("Clear the filters")
+                        .href(Filters::with_view(filters.view).href("/inbox")),
+                )
         } else {
             Empty::new("All caught up")
                 .icon(icons::INBOX)
                 .description("Nothing is waiting in this view. New conversations show up here as they arrive.")
-        };
-        return Stack::gap(2)
-            .children((Text::muted(summary).attr("id", "list-summary"), empty))
-            .into();
+        });
+    if let Some(id) = open {
+        list = list.current(id.to_string());
     }
-    Stack::gap(2)
-        .children((
-            Text::muted(summary).attr("id", "list-summary"),
-            el("ul")
-                .slot("stack")
-                .attr("data-gap", "1")
-                .attr("aria-label", "Conversations")
-                .children(
-                    rows.iter()
-                        .enumerate()
-                        .map(|(index, row)| conversation_row(row, filters, open, now, key_for(index)))
-                        .collect::<Vec<Node>>(),
-                ),
-        ))
-        .into()
-}
-
-/// The list in its region: fetched again when the stream says the desk moved.
-pub fn list_region(
-    rows: &[ListRow],
-    filters: &Filters,
-    open: Option<i64>,
-    now: i64,
-    stream: &str,
-) -> Region {
-    let query = filters.query();
-    let base = match open {
-        Some(id) => format!("/inbox/fragments/list?open={id}"),
-        None => "/inbox/fragments/list".to_owned(),
-    };
-    let src = match (query.is_empty(), open.is_some()) {
-        (true, _) => base,
-        (false, true) => format!("{base}&{query}"),
-        (false, false) => format!("{base}?{query}"),
-    };
-    Region::new(LIST)
-        .src(src)
-        .live_from(stream.to_owned())
-        .live_event("conversations")
-        .children(list_body(rows, filters, open, now))
+    if page.more_after
+        && let Some(last) = page.rows.last()
+    {
+        list = list.more_after(window("rows_after", last.conversation.cursor()));
+    }
+    if page.more_before
+        && let Some(first) = page.rows.first()
+    {
+        list = list.more_before(window("rows_before", first.conversation.cursor()));
+    }
+    list
 }

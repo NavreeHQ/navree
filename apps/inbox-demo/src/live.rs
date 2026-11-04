@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
-use navree::db::{Db, Executor as _};
+use navree::db::{Db, Executor as _, ExecutorExt as _};
 use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
 use navree::http::response::{IntoResponse, Response};
 use navree::orm::Model as _;
@@ -25,8 +25,9 @@ use tokio::sync::broadcast;
 
 use crate::data::{
     self, Agent, Attachment, Author, Conversation, Customer, CustomerEvent, Dice, EventKind,
-    Message, Priority, Status, TOPICS, preview_of,
+    Message, Priority, Status, TOPICS, inbox_of, preview_of,
 };
+use crate::scale;
 
 /// What changed: a conversation and its customer, or `0` for the clock.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +106,7 @@ const NOTES: [&str; 4] = [
 pub struct Hub {
     tx: broadcast::Sender<Change>,
     dice: Mutex<Dice>,
+    next_rev: AtomicI64,
     next_message: AtomicI64,
     next_attachment: AtomicI64,
     next_event: AtomicI64,
@@ -122,6 +124,7 @@ impl Hub {
         Self {
             tx: broadcast::channel(256).0,
             dice: Mutex::new(Dice::new(4_111)),
+            next_rev: AtomicI64::new(2),
             next_message: AtomicI64::new(1),
             next_attachment: AtomicI64::new(1),
             next_event: AtomicI64::new(1),
@@ -141,6 +144,17 @@ impl Hub {
             .below(n)
     }
 
+    /// The next revision of the desk: every change to a conversation takes one, so a
+    /// live list can ask for what changed since the one it has.
+    pub fn rev(&self) -> i64 {
+        self.next_rev.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// The revision a page drawn now is at.
+    pub fn current_rev(&self) -> i64 {
+        self.next_rev.load(Ordering::SeqCst) - 1
+    }
+
     /// A message id no one has used.
     pub fn message_id(&self) -> i64 {
         self.next_message.fetch_add(1, Ordering::SeqCst)
@@ -151,10 +165,11 @@ impl Hub {
         self.next_event.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Creates the tables, empty.
+    /// Creates the tables, empty. The indexes come after the rows: see [`Hub::seed`].
     pub async fn create(&self, db: &Db) -> Result<(), BoxError> {
         let pool = db.pool();
         for statement in [
+            "DROP TABLE IF EXISTS conversations_fts",
             "DROP TABLE IF EXISTS layouts",
             "DROP TABLE IF EXISTS customer_events",
             "DROP TABLE IF EXISTS attachments",
@@ -163,35 +178,25 @@ impl Hub {
             "DROP TABLE IF EXISTS customers",
             "DROP TABLE IF EXISTS agents",
             "CREATE TABLE agents (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, team TEXT NOT NULL, active BOOLEAN NOT NULL)",
-            "CREATE INDEX agents_name ON agents (name, id)",
             "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL, plan TEXT NOT NULL, lifetime_cents INTEGER NOT NULL, seats INTEGER NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE, tags TEXT NOT NULL)",
-            "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL)",
-            "CREATE INDEX conversations_status ON conversations (status, last_at, id)",
-            "CREATE INDEX conversations_assignee ON conversations (assignee_id, status, last_at)",
-            "CREATE INDEX conversations_customer ON conversations (customer_id, last_at)",
+            "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL, rev INTEGER NOT NULL, messages INTEGER NOT NULL, inbox TEXT NOT NULL)",
             "CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, kind TEXT NOT NULL, author TEXT NOT NULL, agent_id INTEGER, body TEXT NOT NULL, at INTEGER NOT NULL)",
-            "CREATE INDEX messages_conversation ON messages (conversation_id, at, id)",
             "CREATE TABLE attachments (id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL, conversation_id INTEGER NOT NULL, name TEXT NOT NULL, bytes INTEGER NOT NULL)",
-            "CREATE INDEX attachments_conversation ON attachments (conversation_id, message_id)",
             "CREATE TABLE customer_events (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL)",
-            "CREATE INDEX customer_events_customer ON customer_events (customer_id, at)",
             "CREATE TABLE layouts (id INTEGER PRIMARY KEY, agent_id INTEGER NOT NULL, split TEXT NOT NULL, sizes TEXT NOT NULL)",
             "CREATE UNIQUE INDEX layouts_agent ON layouts (agent_id, split)",
+            // The search: subjects, names and companies, with accents folded.
+            "CREATE VIRTUAL TABLE conversations_fts USING fts5 (subject, customer, company, content = '', tokenize = 'unicode61 remove_diacritics 2')",
         ] {
             pool.execute_script(statement).await?;
         }
         Ok(())
     }
 
-    /// Writes the desk afresh as it stands at `now`.
-    pub async fn seed(&self, db: &Db, now: i64) -> Result<(), BoxError> {
-        data::Layout::query().delete(db).await?;
-        CustomerEvent::query().delete(db).await?;
-        Attachment::query().delete(db).await?;
-        Message::query().delete(db).await?;
-        Conversation::query().delete(db).await?;
-        Customer::query().delete(db).await?;
-        Agent::query().delete(db).await?;
+    /// Writes the desk afresh as it stands at `now`: the hand-written conversations,
+    /// then `scale` generated ones (see [`scale::seed`]), then the indexes.
+    pub async fn seed(&self, db: &Db, now: i64, scale: i64) -> Result<scale::Made, BoxError> {
+        self.create(db).await?;
         let seed = data::seed(now);
         Agent::query().insert(db, seed.agents.clone()).await?;
         Customer::query().insert(db, seed.customers.clone()).await?;
@@ -209,15 +214,31 @@ impl Hub {
         for chunk in seed.events.chunks(100) {
             CustomerEvent::query().insert(db, chunk.to_vec()).await?;
         }
-        let next = |n: usize| i64::try_from(n).unwrap_or(0) + 1;
-        let max_message = seed.messages.iter().map(|m| m.id).max().unwrap_or(0);
-        self.next_message.store(max_message + 1, Ordering::SeqCst);
+        let today = data::day_of(now)
+            .unwrap_or_default()
+            .format("%Y-%m-%d")
+            .to_string();
+        let made = scale::seed(db, now, &today, scale).await?;
+        for statement in scale::INDEXES {
+            db.pool().execute_script(statement).await?;
+        }
+        let most = |table: &'static str| async move {
+            db.pool()
+                .fetch_scalar::<i64>(&navree::db::Statement::text(format!(
+                    "SELECT COALESCE(MAX(id), 0) FROM {table}"
+                )))
+                .await
+        };
+        self.next_message
+            .store(most("messages").await? + 1, Ordering::SeqCst);
         self.next_attachment
-            .store(next(seed.attachments.len()), Ordering::SeqCst);
-        self.next_event.store(next(seed.events.len()), Ordering::SeqCst);
+            .store(most("attachments").await? + 1, Ordering::SeqCst);
+        self.next_event
+            .store(most("customer_events").await? + 1, Ordering::SeqCst);
         self.next_conversation
-            .store(next(seed.conversations.len()), Ordering::SeqCst);
-        Ok(())
+            .store(most("conversations").await? + 1, Ordering::SeqCst);
+        self.next_rev.store(2, Ordering::SeqCst);
+        Ok(made)
     }
 
     /// One thing happens: `what` when given, otherwise whatever the dice say; in
@@ -252,6 +273,7 @@ impl Hub {
 
     async fn new_conversation(&self, db: &Db, now: i64) -> Result<Option<Change>, BoxError> {
         let customers: Vec<Customer> = Customer::query()
+            .where_(Customer::ID.lt(scale::FIRST_CUSTOMER))
             .order_by("id")
             .get(db)
             .await?
@@ -293,10 +315,24 @@ impl Hub {
                     snoozed_until: None,
                     unread: 1,
                     preview: preview_of(first.body),
+                    rev: self.rev(),
+                    messages: 1,
+                    inbox: "open".to_owned(),
                 }],
             )
             .await?;
         Message::query().insert(db, [message.clone()]).await?;
+        db.pool()
+            .execute(&navree::db::Statement::portable(
+                "INSERT INTO conversations_fts (rowid, subject, customer, company) VALUES (?, ?, ?, ?)",
+                [
+                    navree::db::Value::I64(id),
+                    navree::db::Value::String(topic.subject.to_owned()),
+                    navree::db::Value::String(customer.name.clone()),
+                    navree::db::Value::String(customer.company.clone()),
+                ],
+            ))
+            .await?;
         if let Some((name, bytes)) = first.file {
             Attachment::query()
                 .insert(
@@ -340,24 +376,29 @@ impl Hub {
         assigned: bool,
     ) -> Result<Option<Conversation>, BoxError> {
         let keys: Vec<&str> = statuses.iter().map(|status| status.key()).collect();
-        let mut query = Conversation::query().where_(Conversation::STATUS.is_in(keys));
+        let mut query = Conversation::query().where_(Conversation::STATUS.is_in(keys.clone()));
         if assigned {
             query = query.where_(Conversation::ASSIGNEE_ID.is_not_null());
         }
         if let Some(id) = on {
             return Ok(query.find(db, id).await?.map(|record| record.into_inner()));
         }
-        let count = query.clone().count(db).await?;
-        if count == 0 {
+        // Among the dozen most recent: what a teammate or a customer is in the middle of.
+        let recent: Vec<Conversation> = query
+            .order_by_desc("last_at")
+            .order_by_desc("id")
+            .limit(12)
+            .get(db)
+            .await?
+            .into_vec()
+            .into_iter()
+            .map(|record| record.into_inner())
+            .collect();
+        if recent.is_empty() {
             return Ok(None);
         }
-        Ok(query
-            .order_by_desc("last_at")
-            .order_by("id")
-            .offset(self.roll(count.min(12)))
-            .first(db)
-            .await?
-            .map(|record| record.into_inner()))
+        let at = usize::try_from(self.roll(recent.len() as u64)).unwrap_or(0);
+        Ok(recent.into_iter().nth(at))
     }
 
     async fn customer_reply(
@@ -414,6 +455,9 @@ impl Hub {
                     Conversation::SLA_FROM.set(Some(from)),
                     Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
                     Conversation::PREVIEW.set(preview_of(body)),
+                    Conversation::REV.set(self.rev()),
+                    Conversation::MESSAGES.set(conversation.messages + 1),
+                    Conversation::INBOX.set("open".to_owned()),
                 ],
             )
             .await?;
@@ -479,7 +523,10 @@ impl Hub {
         let answered = matches!(kind, Author::Agent) || status == Status::Closed;
         let mut sets = vec![
             Conversation::STATUS.set(status.key().to_owned()),
+            Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(now),
+            Conversation::REV.set(self.rev()),
+            Conversation::MESSAGES.set(conversation.messages + 1),
         ];
         if answered {
             sets.push(Conversation::SLA_DUE.set(None::<i64>));

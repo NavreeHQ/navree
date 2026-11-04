@@ -11,9 +11,9 @@ use serde::Deserialize;
 
 use crate::data::{
     Attachment as FileRow, Author, Channel, Conversation, Customer, Message as MessageRow,
-    Priority, SAVED, Sla, Status, day_of,
+    Priority, SAVED, Sla, Status, message_cursor,
 };
-use crate::views::{Filters, clock, file_icon, file_size};
+use crate::views::{Filters, file_icon, file_size, thousands, written};
 
 /// The heading's region.
 pub const HEAD: &str = "thread-head";
@@ -85,6 +85,8 @@ pub struct Open<'a> {
     pub filters: &'a Filters,
     pub now: i64,
     pub today: NaiveDate,
+    /// The conversations either side of this one in the view: newer, then older.
+    pub neighbours: (Option<i64>, Option<i64>),
 }
 
 /// A form that posts to `action`, through the runtime when it runs.
@@ -113,8 +115,8 @@ fn assign(open: &Open<'_>) -> Popover {
         .assignee
         .as_ref()
         .map_or_else(|| "Assign".to_owned(), |(_, name)| name.clone());
-    Popover::new("assign-popover", label)
-        .label("Assign this conversation")
+    Popover::new("assign-popover", label.clone())
+        .label(format!("{label}, assign this conversation"))
         .variant(ButtonVariant::Outline)
         .size(Size::Sm)
         .align(PopupAlign::Start)
@@ -144,7 +146,10 @@ fn status_menu(conversation: &Conversation) -> DropdownMenu {
     let now = Status::parse(&conversation.status).unwrap_or(Status::Open);
     let mut menu = DropdownMenu::button(
         "status-menu",
-        Button::outline(now.label()).icon(now.icon()).size(Size::Sm),
+        Button::outline(now.label())
+            .icon(now.icon())
+            .size(Size::Sm)
+            .attr("aria-label", format!("{} status, change it", now.label())),
     )
     .label("Change the status")
     .caret();
@@ -167,7 +172,10 @@ fn priority_menu(conversation: &Conversation) -> DropdownMenu {
     let now = Priority::parse(&conversation.priority).unwrap_or(Priority::Normal);
     let mut menu = DropdownMenu::button(
         "priority-menu",
-        Button::outline(now.label()).icon(now.icon()).size(Size::Sm),
+        Button::outline(now.label())
+            .icon(now.icon())
+            .size(Size::Sm)
+            .attr("aria-label", format!("{} priority, change it", now.label())),
     )
     .label("Change the priority")
     .caret();
@@ -191,7 +199,7 @@ fn snooze(open: &Open<'_>) -> Popover {
         .checked_add_signed(chrono::Duration::days(SNOOZE_DAYS))
         .unwrap_or(open.today);
     Popover::new("snooze-popover", "Snooze")
-        .label("Snooze this conversation")
+        .label("Snooze, put this conversation aside until a day")
         .variant(ButtonVariant::Outline)
         .size(Size::Sm)
         .align(PopupAlign::Start)
@@ -281,20 +289,40 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                 .into(),
         );
     }
+    let filters = open.filters;
+    let step = |id: Option<i64>, glyph, label: &str, key: &str| {
+        let button = Button::icon_only(glyph, label.to_owned())
+            .variant(ButtonVariant::Ghost)
+            .size(Size::Sm)
+            .hotkey(key);
+        match id {
+            Some(id) => button.href(filters.href(&format!("/inbox/{id}"))),
+            None => button.disabled(true),
+        }
+    };
     Stack::gap(2)
         .children((
-            SplitPane::stacked_only(
-                Row::gap(2).children(
+            Row::gap(1).justify(Justify::Between).children((
+                SplitPane::stacked_only(
                     Button::ghost("Conversations")
                         .icon(icons::ARROW_LEFT)
                         .size(Size::Sm)
                         .href(open.filters.href("/inbox")),
                 ),
-            ),
+                el("span"),
+                Row::gap(1).children((
+                    step(open.neighbours.0, icons::CHEVRON_UP, "Newer conversation", "k"),
+                    step(open.neighbours.1, icons::CHEVRON_DOWN, "Older conversation", "j"),
+                )),
+            )),
             Heading::h2(conversation.subject.clone()).id("thread-subject"),
             Text::muted(format!(
-                "{} at {} · #{}",
-                open.customer.name, open.customer.company, conversation.id
+                "{} at {} · #{} · {} message{}",
+                open.customer.name,
+                open.customer.company,
+                conversation.id,
+                thousands(u64::try_from(conversation.messages).unwrap_or(0)),
+                if conversation.messages == 1 { "" } else { "s" }
             )),
             Row::gap(2).wrap().children(badges),
             Row::gap(2).wrap().children((
@@ -326,14 +354,17 @@ fn paragraphs(body: &str) -> Vec<Node> {
 
 /// One message: the customer's on one side, the team's on the other, notes set apart,
 /// and what happened as a line between them.
-fn message(message: &MessageRow, files: &[&FileRow]) -> Node {
+fn message(message: &MessageRow, files: &[&FileRow], now: i64) -> Node {
     let author = Author::parse(&message.kind);
     if author == Author::Event {
-        return Marker::new(
-            MarkerVariant::Separator,
-            format!("{} · {}", message.body, clock(message.at)),
-        )
-        .into();
+        return el("div")
+            .attr("id", format!("message-{}", message.id))
+            .attr("data-author", "event")
+            .child(Marker::new(
+                MarkerVariant::Separator,
+                format!("{} · {}", message.body, written(message.at, now)),
+            ))
+            .into();
     }
     let side = if author == Author::Customer {
         BubbleSide::Start
@@ -380,35 +411,54 @@ fn message(message: &MessageRow, files: &[&FileRow]) -> Node {
                     bubble,
                     (!chips.is_empty()).then(|| Row::gap(2).wrap().children(chips)),
                 ))
-                .footer(el("time").child(clock(message.at))),
+                .footer(el("time").child(written(message.at, now))),
         )
         .into()
 }
 
-/// Everything said, oldest first, with a line for each day.
-pub fn thread_messages(messages: &[MessageRow], files: &[FileRow], today: NaiveDate) -> Node {
-    let mut out: Vec<Node> = Vec::with_capacity(messages.len() + 4);
-    let mut last_day: Option<NaiveDate> = None;
-    for item in messages {
-        let day = day_of(item.at);
-        if day != last_day {
-            let label = match day {
-                Some(day) if day == today => "Today".to_owned(),
-                Some(day) if today.pred_opt() == Some(day) => "Yesterday".to_owned(),
-                Some(day) => day.format("%A, %-d %B").to_string(),
-                None => String::new(),
-            };
-            out.push(Marker::new(MarkerVariant::Separator, label).into());
-            last_day = day;
-        }
-        let mine: Vec<&FileRow> = files.iter().filter(|file| file.message_id == item.id).collect();
-        out.push(message(item, &mine));
+/// One message as an item of the lazy list.
+pub fn message_item(item: &MessageRow, files: &[FileRow], now: i64) -> LazyItem {
+    let mine: Vec<&FileRow> = files.iter().filter(|file| file.message_id == item.id).collect();
+    LazyItem::new(item.id.to_string(), message_cursor(item.id), message(item, &mine, now))
+}
+
+/// The newest messages of a conversation and the window of them a page holds: older
+/// ones load as the agent scrolls up, and new ones arrive at the end.
+pub struct Window<'a> {
+    pub messages: &'a [MessageRow],
+    pub files: &'a [FileRow],
+    pub older: bool,
+    pub newer: bool,
+}
+
+/// The messages, oldest first: a lazy list that starts at the newest.
+pub fn thread_lazy(conversation: &Conversation, window: &Window<'_>, stream: &str, now: i64) -> LazyList {
+    let id = conversation.id;
+    let mut list = LazyList::new(MESSAGES, "Messages", format!("/inbox/{id}/messages"))
+        .order(LazyOrder::Ascending)
+        .view(format!("conversation-{id}"))
+        .gap(4)
+        .items(window.messages.iter().map(|item| message_item(item, window.files, now)))
+        .since(window.messages.last().map_or(0, |last| last.id).to_string())
+        .live_from(stream.to_owned(), Some("thread"), LazyEnd::End)
+        .max(400)
+        .labels(LazyLabels {
+            start: "Show earlier messages".to_owned(),
+            end: "Show newer messages".to_owned(),
+            loaded: "{n} more messages".to_owned(),
+            ..LazyLabels::default()
+        });
+    if window.older
+        && let Some(first) = window.messages.first()
+    {
+        list = list.more_before(format!("/inbox/{id}?older={}", message_cursor(first.id)));
     }
-    Stack::gap(4)
-        .attr("id", "thread-list")
-        .attr("data-count", messages.len() as i64)
-        .children(out)
-        .into()
+    if window.newer
+        && let Some(last) = window.messages.last()
+    {
+        list = list.more_after(format!("/inbox/{id}?newer={}", message_cursor(last.id)));
+    }
+    list
 }
 
 /// The composer: a reply or an internal note, saved replies to start from, and Send.

@@ -208,6 +208,37 @@ pub fn shell(me: &Agent, team: &[Agent], counts: ViewCounts, current: View) -> S
         .user(menu)
 }
 
+/// `1,240`.
+pub fn thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (at, digit) in digits.chars().enumerate() {
+        if at > 0 && (digits.len() - at).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
+/// When a message was written, for its footer: `Today, 09:41`, `Yesterday, 18:02`,
+/// `3 Nov, 09:41`, or `12 Mar 2025, 09:41` in another year.
+pub fn written(at: i64, now: i64) -> String {
+    let (Some(day), Some(today)) = (crate::data::day_of(at), crate::data::day_of(now)) else {
+        return String::new();
+    };
+    let time = clock(at);
+    if day == today {
+        format!("Today, {time}")
+    } else if today.pred_opt() == Some(day) {
+        format!("Yesterday, {time}")
+    } else if day.format("%Y").to_string() == today.format("%Y").to_string() {
+        format!("{}, {time}", day.format("%-d %b"))
+    } else {
+        format!("{}, {time}", day.format("%-d %b %Y"))
+    }
+}
+
 /// `Priya` for `Priya Raman`.
 pub fn only_first_name(name: &str) -> String {
     name.split_whitespace().next().unwrap_or(name).to_owned()

@@ -27,7 +27,11 @@
 //! - **No JavaScript**: every action is a link or a form.
 //!
 //! The data is SQLite, written afresh at every start (`INBOX_DATABASE_URL`,
-//! `sqlite://target/inbox-demo.db?mode=rwc` by default). A simulator makes customers
+//! `sqlite://target/inbox-demo.db?mode=rwc` by default): the hand-written conversations
+//! and 100,000 generated ones of 10 to 100 messages each, about 5.5 million messages
+//! (`INBOX_SCALE=<conversations>` for another size, `0` for none). Everything long loads
+//! as it is read: fifty conversations at a time, thirty messages at a time, by cursor,
+//! and the customer pane after the page. A simulator makes customers
 //! and teammates act every few seconds (`INBOX_SIMULATOR=<milliseconds>`, 6000 by
 //! default, or `off`), and the clock redraws the timers every 30 seconds
 //! (`INBOX_TICK=<milliseconds>` or `off`). There is no sign-in: a visitor works as
@@ -46,6 +50,8 @@ use navree::ui::UiModule;
 pub mod data;
 pub mod live;
 pub mod pages;
+pub mod queries;
+pub mod scale;
 pub mod views;
 
 use live::{Hub, now};
@@ -59,6 +65,8 @@ pub struct Settings {
     pub tick_every: Option<Duration>,
     /// Serves the routes the browser tests drive the app with (`/__test/...`).
     pub test_hooks: bool,
+    /// How many generated conversations the desk holds beside the hand-written ones.
+    pub scale: i64,
 }
 
 impl Default for Settings {
@@ -67,6 +75,7 @@ impl Default for Settings {
             simulate_every: Some(Duration::from_secs(6)),
             tick_every: Some(Duration::from_secs(30)),
             test_hooks: false,
+            scale: scale::FULL,
         }
     }
 }
@@ -84,12 +93,16 @@ fn every(name: &str, default: Duration, least: u64) -> Option<Duration> {
 }
 
 impl Settings {
-    /// From `INBOX_SIMULATOR`, `INBOX_TICK` and `INBOX_TEST_HOOKS`.
+    /// From `INBOX_SIMULATOR`, `INBOX_TICK`, `INBOX_TEST_HOOKS` and `INBOX_SCALE`.
     pub fn from_env() -> Self {
         Self {
             simulate_every: every("INBOX_SIMULATOR", Duration::from_secs(6), 500),
             tick_every: every("INBOX_TICK", Duration::from_secs(30), 1000),
             test_hooks: std::env::var_os("INBOX_TEST_HOOKS").is_some(),
+            scale: std::env::var("INBOX_SCALE")
+                .ok()
+                .and_then(|n| n.replace(['_', ','], "").parse().ok())
+                .map_or(scale::FULL, |n: i64| n.clamp(0, 1_000_000)),
         }
     }
 }
@@ -105,8 +118,16 @@ pub struct Seeder {
 impl Lifecycle for Seeder {
     fn on_init(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
-            self.hub.create(&self.db).await?;
-            self.hub.seed(&self.db, now()).await
+            let started = std::time::Instant::now();
+            let made = self.hub.seed(&self.db, now(), self.settings.scale).await?;
+            eprintln!(
+                "inbox-demo: wrote {} generated conversations, {} messages and {} customers in {:.1} s",
+                made.conversations,
+                made.messages,
+                made.customers,
+                started.elapsed().as_secs_f64()
+            );
+            Ok(())
         })
     }
 

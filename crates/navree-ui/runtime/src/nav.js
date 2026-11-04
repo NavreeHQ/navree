@@ -492,6 +492,12 @@ export async function refresh(id, polled = false) {
   const el = byId(id);
   const src = el?.getAttribute("data-ui-src");
   if (!el || !src) return;
+  // A lazy list fetches what changed since its revision, not its first page again.
+  if (el.hasAttribute("data-ui-lazy-list")) {
+    const detail = /** @type {{done?: Promise<unknown>}} */ ({});
+    el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
+    return detail.done;
+  }
   const mine = (regions.get(id) || 0) + 1;
   regions.set(id, mine);
   el.removeAttribute("data-ui-failed");

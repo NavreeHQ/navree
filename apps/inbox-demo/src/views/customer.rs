@@ -4,10 +4,11 @@
 use navree::ui::*;
 
 use crate::data::{
-    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Sla, Status, ZONE,
+    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Status, ZONE,
     thousands_of_cents,
 };
-use crate::views::{Filters, ago, place};
+use crate::views::inbox::CustomerView;
+use crate::views::{Filters, ago, place, thousands};
 
 /// The pane's region.
 pub const CUSTOMER: &str = "customer-pane";
@@ -37,13 +38,10 @@ pub fn customer_head(customer: &Customer, back: &str) -> Node {
 }
 
 /// The facts an agent checks first: the plan, the money, and what else is open.
-fn facts(customer: &Customer, open: &[&Conversation], now: i64) -> FactGrid {
+fn facts(view: &CustomerView) -> FactGrid {
+    let customer = &view.customer;
     let plan = Plan::parse(&customer.plan);
     let monthly = plan.seat_cents() * customer.seats;
-    let overdue = open
-        .iter()
-        .filter(|conversation| Sla::of(conversation, now).is_some_and(Sla::breached))
-        .count();
     FactGrid::new().cards([
         FactCard::new("Plan", plan.label())
             .icon(icons::LAYERS)
@@ -62,17 +60,17 @@ fn facts(customer: &Customer, open: &[&Conversation], now: i64) -> FactGrid {
         .icon(icons::WALLET)
         .tone(Tone::Success)
         .detail(format!("${} a month", thousands_of_cents(monthly))),
-        FactCard::new("Open conversations", open.len().to_string())
+        FactCard::new("Open conversations", thousands(view.open))
             .icon(icons::MESSAGES_SQUARE)
-            .tone(if overdue > 0 {
+            .tone(if view.overdue > 0 {
                 Tone::Danger
             } else {
                 Tone::Warning
             })
-            .detail(match overdue {
+            .detail(match view.overdue {
                 0 => "None past due".to_owned(),
                 1 => "1 past due".to_owned(),
-                n => format!("{n} past due"),
+                n => format!("{} past due", thousands(n)),
             }),
         FactCard::new(
             "Location",
@@ -123,23 +121,8 @@ fn step(event: &CustomerEvent) -> TimelineEvent {
 }
 
 /// The pane's live part: the facts, the tags, the other conversations and the story.
-pub fn customer_body(
-    customer: &Customer,
-    conversations: &[Conversation],
-    events: &[CustomerEvent],
-    current: i64,
-    filters: &Filters,
-    now: i64,
-) -> Node {
-    let open: Vec<&Conversation> = conversations
-        .iter()
-        .filter(|conversation| {
-            matches!(
-                Status::parse(&conversation.status),
-                Some(Status::Open | Status::Pending)
-            )
-        })
-        .collect();
+pub fn customer_body(view: &CustomerView, current: i64, filters: &Filters, now: i64) -> Node {
+    let customer = &view.customer;
     let tags: Vec<Node> = customer
         .tags
         .split(',')
@@ -154,7 +137,7 @@ pub fn customer_body(
         .collect();
     Stack::gap(4)
         .children((
-            facts(customer, &open, now),
+            facts(view),
             Stack::gap(2).children((
                 Heading::h3("Tags"),
                 if tags.is_empty() {
@@ -165,13 +148,13 @@ pub fn customer_body(
             )),
             Stack::gap(2).children((
                 Heading::h3("Other conversations"),
-                others(conversations, current, filters, now),
+                others(&view.theirs, current, filters, now),
             )),
             Timeline::new("customer-timeline", "Account history")
                 .heading(3)
                 .newest_first()
                 .time_zone(ZONE, OFFSET)
-                .events(events.iter().map(step)),
+                .events(view.history.iter().map(step)),
         ))
         .into()
 }

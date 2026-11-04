@@ -35,18 +35,19 @@ use serde::Deserialize;
 use crate::Settings;
 use crate::data::{
     Agent, Attachment, Author, Conversation, Customer, CustomerEvent, DEFAULT_AGENT, EventKind,
-    Layout, Message, Priority, Status, day_of, preview_of, saved,
+    Layout, Message, Priority, Status, day_of, inbox_of, preview_of, saved,
 };
 use crate::live::{Change, Happening, Hub, now};
+use crate::queries;
 use crate::views::customer::CUSTOMER;
 use crate::views::inbox::{
     Inbox, OpenThread, SPLIT, assign_page, customer_region, head_region, inbox_split, layout,
-    messages_region, page_actions, palette, shortcuts,
+    page_actions, palette, shortcuts,
 };
-use crate::views::list::{LIST, ListRow, list_region};
+use crate::views::list::{LIST, ListPage, conversation_item, summary_region};
 use crate::views::thread::{
     AssignForm, ActForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
-    SnoozeForm, composer,
+    SnoozeForm, composer, message_item,
 };
 use crate::views::{Filters, View, ViewCounts, shell};
 
@@ -81,6 +82,12 @@ struct ListQuery {
     open: Option<String>,
     customer: Option<String>,
     pane: Option<String>,
+    /// With no script: the list from after this cursor, or up to it.
+    rows_after: Option<String>,
+    rows_before: Option<String>,
+    /// With no script: the messages before this cursor, or after it.
+    older: Option<String>,
+    newer: Option<String>,
 }
 
 impl ListQuery {
@@ -95,6 +102,24 @@ impl ListQuery {
 
     fn number(text: Option<&str>) -> Option<i64> {
         text.and_then(|text| text.parse().ok()).filter(|n| *n > 0)
+    }
+
+    /// Which part of the list the page draws.
+    fn list_ask(&self) -> LazyAsk {
+        match (&self.rows_after, &self.rows_before) {
+            (Some(cursor), _) => LazyAsk::After(cursor.chars().take(64).collect()),
+            (None, Some(cursor)) => LazyAsk::Before(cursor.chars().take(64).collect()),
+            _ => LazyAsk::First,
+        }
+    }
+
+    /// Which part of the conversation the page draws.
+    fn thread_ask(&self) -> LazyAsk {
+        match (&self.older, &self.newer) {
+            (Some(cursor), _) => LazyAsk::Before(cursor.chars().take(64).collect()),
+            (None, Some(cursor)) => LazyAsk::After(cursor.chars().take(64).collect()),
+            _ => LazyAsk::First,
+        }
     }
 }
 
@@ -126,6 +151,15 @@ fn filters_of_referer(headers: &HeaderMap) -> Filters {
     let query = referer.split_once('?').map_or("", |(_, query)| query);
     let query: ListQuery = serde_urlencoded_lite(query);
     query.filters()
+}
+
+/// The conversation open in the page a request came from, from its address.
+fn filters_of_referer_open(headers: &HeaderMap) -> Option<i64> {
+    let referer = headers.get(REFERER)?.to_str().ok()?;
+    let path = referer.split_once("://").map_or(referer, |(_, rest)| rest);
+    let path = path.split_once('/').map_or("", |(_, path)| path);
+    let path = path.split(['?', '#']).next().unwrap_or("");
+    path.strip_prefix("inbox/")?.parse().ok()
 }
 
 /// A query string read into a `ListQuery`, leniently.
@@ -213,79 +247,6 @@ async fn team(uow: &Uow) -> Result<Vec<Agent>> {
         .collect())
 }
 
-/// The conversations the list shows, newest first.
-async fn rows(uow: &Uow, filters: &Filters, me: i64) -> Result<Vec<ListRow>> {
-    let open_or_pending = [Status::Open.key(), Status::Pending.key()];
-    let mut query = Conversation::query();
-    query = match filters.view {
-        View::All => query.where_(Conversation::STATUS.is_in(open_or_pending)),
-        View::Mine => query
-            .where_(Conversation::STATUS.is_in(open_or_pending))
-            .where_(Conversation::ASSIGNEE_ID.eq(Some(me))),
-        View::Unassigned => query
-            .where_(Conversation::STATUS.eq(Status::Open.key()))
-            .where_(Conversation::ASSIGNEE_ID.is_null()),
-        View::Snoozed => query.where_(Conversation::STATUS.eq(Status::Snoozed.key())),
-        View::Closed => query.where_(Conversation::STATUS.eq(Status::Closed.key())),
-    };
-    if !filters.channel.is_empty() {
-        query = query.where_(Conversation::CHANNEL.eq(filters.channel.clone()));
-    }
-    if !filters.priority.is_empty() {
-        query = query.where_(Conversation::PRIORITY.eq(filters.priority.clone()));
-    }
-    if !filters.q.is_empty() {
-        let found: Vec<i64> = Customer::query()
-            .where_(Filter::any([
-                Customer::NAME.contains_ignore_case(filters.q.clone()),
-                Customer::COMPANY.contains_ignore_case(filters.q.clone()),
-            ]))
-            .get(uow)
-            .await?
-            .into_vec()
-            .into_iter()
-            .map(|record| record.id)
-            .collect();
-        query = query.where_(Filter::any([
-            Conversation::SUBJECT.contains_ignore_case(filters.q.clone()),
-            Conversation::CUSTOMER_ID.is_in(found),
-        ]));
-    }
-    let conversations: Vec<Conversation> = query
-        .order_by_desc("last_at")
-        .order_by_desc("id")
-        .limit(200)
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let customers: Vec<Customer> = Customer::query()
-        .find_many(uow, conversations.iter().map(|c| c.customer_id).collect::<Vec<i64>>())
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let agents = team(uow).await?;
-    Ok(conversations
-        .into_iter()
-        .map(|conversation| {
-            let customer = customers.iter().find(|c| c.id == conversation.customer_id);
-            ListRow {
-                customer: customer.map_or_else(|| "Someone".to_owned(), |c| c.name.clone()),
-                company: customer.map_or_else(String::new, |c| c.company.clone()),
-                assignee: conversation
-                    .assignee_id
-                    .and_then(|id| agents.iter().find(|agent| agent.id == id))
-                    .map(|agent| agent.name.clone()),
-                conversation,
-            }
-        })
-        .collect())
-}
-
 /// How many conversations each view holds.
 async fn counts(uow: &Uow, me: i64) -> Result<ViewCounts> {
     let open_or_pending = [Status::Open.key(), Status::Pending.key()];
@@ -318,8 +279,14 @@ async fn conversation(uow: &Uow, id: i64) -> Result<Option<Conversation>> {
         .map(|record| record.into_inner()))
 }
 
-/// Everything an open conversation shows.
-async fn open_thread(uow: &Uow, id: i64) -> Result<Option<OpenThread>> {
+/// An open conversation: the window of messages `ask` names, and its neighbours in the view.
+async fn open_thread(
+    uow: &Uow,
+    id: i64,
+    ask: &LazyAsk,
+    filters: &Filters,
+    me: i64,
+) -> Result<Option<OpenThread>> {
     let Some(conversation) = conversation(uow, id).await? else {
         return Ok(None);
     };
@@ -337,55 +304,33 @@ async fn open_thread(uow: &Uow, id: i64) -> Result<Option<OpenThread>> {
             .map(|record| (record.id, record.name.clone())),
         None => None,
     };
-    let messages = Message::query()
-        .where_(Message::CONVERSATION_ID.eq(id))
-        .order_by("at")
-        .order_by("id")
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let files = Attachment::query()
-        .where_(Attachment::CONVERSATION_ID.eq(id))
-        .order_by("id")
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let history = CustomerEvent::query()
-        .where_(CustomerEvent::CUSTOMER_ID.eq(customer.id))
-        .order_by("at")
-        .order_by("id")
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let theirs = Conversation::query()
-        .where_(Conversation::CUSTOMER_ID.eq(customer.id))
-        .order_by_desc("last_at")
-        .order_by_desc("id")
-        .limit(20)
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
+    let (messages, files, older, newer) = queries::thread_window(uow, id, ask).await?;
+    let neighbours = queries::neighbours(uow, filters, me, &conversation).await?;
     Ok(Some(OpenThread {
         conversation,
         customer,
         assignee,
         messages,
         files,
-        history,
-        theirs,
+        older,
+        newer,
+        neighbours,
     }))
+}
+
+/// The customer pane of conversation `id`.
+async fn customer_of(uow: &Uow, id: i64) -> Result<Option<crate::views::inbox::CustomerView>> {
+    let Some(found) = conversation(uow, id).await? else {
+        return Ok(None);
+    };
+    let Some(customer) = Customer::query()
+        .find(uow, found.customer_id)
+        .await?
+        .map(|record| record.into_inner())
+    else {
+        return Ok(None);
+    };
+    Ok(Some(queries::customer_view(uow, customer, now()).await?))
 }
 
 /// The sizes the agent saved for their panes.
@@ -407,6 +352,7 @@ fn open_of<'a>(thread: &'a OpenThread, filters: &'a Filters) -> Open<'a> {
         filters,
         now: now(),
         today: today(),
+        neighbours: thread.neighbours,
     }
 }
 
@@ -445,6 +391,26 @@ struct PageInput<'a> {
     draft: String,
     kind: String,
     error: Option<String>,
+    list: LazyAsk,
+    thread: LazyAsk,
+}
+
+impl<'a> PageInput<'a> {
+    /// A page of conversation `open` (or none), the list and the thread from the start.
+    fn new(headers: &'a HeaderMap, path: String, filters: Filters, open: Option<i64>) -> Self {
+        Self {
+            headers,
+            path,
+            filters,
+            open,
+            pane: None,
+            draft: String::new(),
+            kind: "reply".to_owned(),
+            error: None,
+            list: LazyAsk::First,
+            thread: LazyAsk::First,
+        }
+    }
 }
 
 impl Pages {
@@ -453,9 +419,13 @@ impl Pages {
         let me = who(uow, input.headers).await?;
         let team = team(uow).await?;
         let counts = counts(uow, me.id).await?;
-        let rows = rows(uow, &input.filters, me.id).await?;
+        let since = self.hub.current_rev();
+        let now = now();
+        let (rows, more_after, more_before) =
+            queries::list_page(uow, &input.filters, me.id, &input.list).await?;
+        let summary = queries::summary(uow, &input.filters, me.id, now).await?;
         let thread = match input.open {
-            Some(id) => match open_thread(uow, id).await? {
+            Some(id) => match open_thread(uow, id, &input.thread, &input.filters, me.id).await? {
                 Some(thread) => Some(thread),
                 None => return Ok(self.missing(&me, &team, counts, &input)),
             },
@@ -467,10 +437,15 @@ impl Pages {
             (Some("conversations"), _) | (_, None) => "conversations",
             _ => "thread",
         };
-        let now = now();
         let page = Inbox {
             filters: &input.filters,
-            rows: &rows,
+            list: ListPage {
+                rows: &rows,
+                more_after,
+                more_before,
+                since,
+            },
+            summary,
             open: thread.as_ref(),
             pane,
             now,
@@ -481,7 +456,7 @@ impl Pages {
         };
         let split = inbox_split(&page, sizes.as_ref());
         let title = input.filters.view.label().to_owned();
-        let shell = shell(&me, &team, counts, input.filters.view).for_request(input.path, input.headers);
+        let shell = shell(&me, &team, counts, input.filters.view).for_request(input.path.clone(), input.headers);
         let view = shell
             .page(title)
             .actions(page_actions())
@@ -514,31 +489,22 @@ impl Pages {
         {
             Conversation::query()
                 .where_(Conversation::ID.eq(id))
-                .update(&uow, [Conversation::UNREAD.set(0_i64)])
+                .update(&uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(self.hub.rev())])
                 .await?;
             self.hub.tell(Change {
                 conversation: id,
                 customer: found.customer_id,
             });
         }
-        self.page(
-            &uow,
-            PageInput {
-                headers: &headers,
-                path,
-                filters: query.filters(),
-                open: Some(id),
-                pane: query.pane.clone(),
-                draft: String::new(),
-                kind: "reply".to_owned(),
-                error: None,
-            },
-        )
-        .await
+        let mut input = PageInput::new(&headers, path, query.filters(), Some(id));
+        input.pane = query.pane.clone();
+        input.list = query.list_ask();
+        input.thread = query.thread_ask();
+        self.page(&uow, input).await
     }
 
-    /// What an action answers: the heading and the messages drawn again, the list asked
-    /// to fetch itself, and a toast; with no script, the conversation's page.
+    /// What an action answers: the heading and the customer drawn again, the list and the
+    /// messages asked for what changed, and a toast; with no script, the conversation's page.
     async fn after(
         &self,
         uow: &Uow,
@@ -548,17 +514,24 @@ impl Pages {
         messages: bool,
     ) -> Result<Reply> {
         let filters = filters_of_referer(headers);
-        let Some(thread) = open_thread(uow, id).await? else {
+        let me = who(uow, headers).await?;
+        let Some(thread) = open_thread(uow, id, &LazyAsk::First, &filters, me.id).await? else {
             return Ok(Reply::ops_or_redirect("/inbox").toast_with(toast));
         };
+        let view = customer_of(uow, id).await?;
         let mut reply = Reply::ops_or_redirect(filters.href(&format!("/inbox/{id}")))
             .morph(HEAD, head_region(&open_of(&thread, &filters)))
-            .morph(CUSTOMER, customer_region(&thread, &filters, now()))
+            .morph(
+                CUSTOMER,
+                customer_region(id, thread.customer.id, &filters, view.as_ref(), now()),
+            )
             .op(Op::Invalidate {
                 target: LIST.to_owned(),
             });
         if messages {
-            reply = reply.morph(MESSAGES, messages_region(&thread, today()));
+            reply = reply.op(Op::Invalidate {
+                target: MESSAGES.to_owned(),
+            });
         }
         Ok(reply.toast_with(toast))
     }
@@ -614,21 +587,10 @@ impl Pages {
                 .toast(ToastTone::Info, format!("Added “{}”. Edit it, then send.", chosen.title))
                 .into_response());
             }
-            return self
-                .page(
-                    &uow,
-                    PageInput {
-                        headers: &headers,
-                        path: format!("/inbox/{id}"),
-                        filters,
-                        open: Some(id),
-                        pane: None,
-                        draft,
-                        kind: kind.to_owned(),
-                        error: None,
-                    },
-                )
-                .await;
+            let mut input = PageInput::new(&headers, format!("/inbox/{id}"), filters, Some(id));
+            input.draft = draft;
+            input.kind = kind.to_owned();
+            return self.page(&uow, input).await;
         }
         let text = body.trim();
         let problem = if text.is_empty() {
@@ -642,21 +604,11 @@ impl Pages {
             if from_runtime {
                 return Ok(refuse(&form, "body", problem, &parts).into_response());
             }
-            let mut response = self
-                .page(
-                    &uow,
-                    PageInput {
-                        headers: &headers,
-                        path: format!("/inbox/{id}"),
-                        filters,
-                        open: Some(id),
-                        pane: None,
-                        draft: body.chars().take(LONGEST).collect(),
-                        kind: kind.to_owned(),
-                        error: Some(problem.to_owned()),
-                    },
-                )
-                .await?;
+            let mut input = PageInput::new(&headers, format!("/inbox/{id}"), filters, Some(id));
+            input.draft = body.chars().take(LONGEST).collect();
+            input.kind = kind.to_owned();
+            input.error = Some(problem.to_owned());
+            let mut response = self.page(&uow, input).await?;
             *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
             return Ok(response);
         }
@@ -676,7 +628,11 @@ impl Pages {
                 }],
             )
             .await?;
-        let mut sets = vec![Conversation::LAST_AT.set(at)];
+        let mut sets = vec![
+            Conversation::LAST_AT.set(at),
+            Conversation::REV.set(self.hub.rev()),
+            Conversation::MESSAGES.set(found.messages + 1),
+        ];
         if author == Author::Agent {
             // An answer stops the clock and leaves the next word to the customer.
             sets.push(Conversation::SLA_DUE.set(None::<i64>));
@@ -685,6 +641,7 @@ impl Pages {
             sets.push(Conversation::PREVIEW.set(preview_of(text)));
             if found.status == Status::Open.key() {
                 sets.push(Conversation::STATUS.set(Status::Pending.key().to_owned()));
+                sets.push(Conversation::INBOX.set("open".to_owned()));
             }
             if found.assignee_id.is_none() {
                 sets.push(Conversation::ASSIGNEE_ID.set(Some(me.id)));
@@ -734,6 +691,8 @@ impl Pages {
                 [
                     Conversation::ASSIGNEE_ID.set(agent.as_ref().map(|agent| agent.id)),
                     Conversation::LAST_AT.set(at),
+                    Conversation::REV.set(self.hub.rev()),
+                    Conversation::MESSAGES.set(found.messages + 1),
                 ],
             )
             .await?;
@@ -805,8 +764,11 @@ impl Pages {
         let at = now();
         let mut sets = vec![
             Conversation::STATUS.set(status.key().to_owned()),
+            Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(at),
             Conversation::SNOOZED_UNTIL.set(None::<NaiveDate>),
+            Conversation::REV.set(self.hub.rev()),
+            Conversation::MESSAGES.set(found.messages + 1),
         ];
         if status != Status::Open {
             sets.push(Conversation::SLA_DUE.set(None::<i64>));
@@ -867,7 +829,11 @@ impl Pages {
         };
         let me = who(&uow, &headers).await?;
         let at = now();
-        let mut sets = vec![Conversation::PRIORITY.set(priority.key().to_owned())];
+        let mut sets = vec![
+            Conversation::PRIORITY.set(priority.key().to_owned()),
+            Conversation::REV.set(self.hub.rev()),
+            Conversation::MESSAGES.set(found.messages + 1),
+        ];
         if let (Some(_), Some(from)) = (found.sla_due, found.sla_from) {
             sets.push(Conversation::SLA_DUE.set(Some(from + priority.target())));
         }
@@ -908,10 +874,13 @@ impl Pages {
                 uow,
                 [
                     Conversation::STATUS.set(Status::Snoozed.key().to_owned()),
+                    Conversation::INBOX.set("snoozed".to_owned()),
                     Conversation::SNOOZED_UNTIL.set(Some(day)),
                     Conversation::SLA_DUE.set(None::<i64>),
                     Conversation::SLA_FROM.set(None::<i64>),
                     Conversation::LAST_AT.set(at),
+                    Conversation::REV.set(self.hub.rev()),
+                    Conversation::MESSAGES.set(found.messages + 1),
                 ],
             )
             .await?;
@@ -1091,60 +1060,86 @@ impl Controller for Pages {
         let mut routes = vec![
             RouteDef::on(Method::GET, "!/", || async { Reply::redirect("/inbox") }).public(),
             route!(me, Method::GET, "!/inbox", pages, [uow: Uow, headers: HeaderMap, Query(query): Query<ListQuery>] => {
-                pages
-                    .page(
-                        &uow,
-                        PageInput {
-                            headers: &headers,
-                            path: "/inbox".to_owned(),
-                            filters: query.filters(),
-                            open: None,
-                            pane: None,
-                            draft: String::new(),
-                            kind: "reply".to_owned(),
-                            error: None,
-                        },
-                    )
-                    .await
+                let mut input = PageInput::new(&headers, "/inbox".to_owned(), query.filters(), None);
+                input.list = query.list_ask();
+                pages.page(&uow, input).await
             }),
             route!(me, Method::GET, "!/inbox/{id}", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<ListQuery>] => {
                 pages.show(uow, headers, format!("/inbox/{id}"), id, query).await
             }),
-            route!(me, Method::GET, "!/inbox/fragments/list", pages, [uow: Uow, headers: HeaderMap, Query(query): Query<ListQuery>] => {
+            route!(me, Method::GET, "!/inbox/rows", pages, [uow: Uow, headers: HeaderMap, ask: LazyQuery, Query(query): Query<ListQuery>] => {
                 let me = who(&uow, &headers).await?;
                 let filters = query.filters();
-                let open = ListQuery::number(query.open.as_deref());
-                let rows = rows(&uow, &filters, me.id).await?;
-                let stream = match open {
-                    Some(id) => match conversation(&uow, id).await? {
-                        Some(found) => format!("/inbox/events?open={id}&customer={}", found.customer_id),
-                        None => "/inbox/events".to_owned(),
-                    },
-                    None => "/inbox/events".to_owned(),
+                let now = now();
+                let open = filters_of_referer_open(&headers);
+                if let LazyAsk::Since(since) = ask.ask() {
+                    let since = since.parse::<i64>().unwrap_or(i64::MAX);
+                    // Read the revision first: a change made while this runs comes next time.
+                    let at = pages.hub.current_rev();
+                    let (rows, gone, newest) = queries::changes(&uow, &filters, me.id, since).await?;
+                    let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
+                    return Ok::<_, AppError>(LazyPage::changes(items, newest.max(at.min(since.max(newest))).to_string(), gone).into_response());
+                }
+                let (rows, more_after, more_before) = queries::list_page(&uow, &filters, me.id, ask.ask()).await?;
+                let more = match ask.ask() {
+                    LazyAsk::Before(_) => more_before,
+                    _ => more_after,
                 };
+                Ok(LazyPage::new(rows.iter().map(|row| conversation_item(row, &filters, open, now, None)), more).into_response())
+            }),
+            route!(me, Method::GET, "!/inbox/{id}/messages", pages, [uow: Uow, headers: HeaderMap, ask: LazyQuery, Path(id): Path<i64>] => {
+                let now = now();
+                let (messages, files, older, newer) = queries::thread_window(&uow, id, ask.ask()).await?;
+                if let LazyAsk::Since(since) = ask.ask() {
+                    // Drawn into a page that has the conversation open: what is new is seen.
+                    if !is_prefetch(&headers)
+                        && let Some(found) = conversation(&uow, id).await?
+                        && found.unread > 0
+                    {
+                        Conversation::query()
+                            .where_(Conversation::ID.eq(id))
+                            .update(&uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(pages.hub.rev())])
+                            .await?;
+                        pages.hub.tell(Change {
+                            conversation: id,
+                            customer: found.customer_id,
+                        });
+                    }
+                    let last = messages.last().map_or_else(|| since.clone(), |m| m.id.to_string());
+                    let items: Vec<LazyItem> = messages.iter().map(|m| message_item(m, &files, now)).collect();
+                    return Ok::<_, AppError>(LazyPage::changes(items, last, Vec::new()).into_response());
+                }
+                let more = match ask.ask() {
+                    LazyAsk::After(_) => newer,
+                    _ => older,
+                };
+                Ok(LazyPage::new(messages.iter().map(|m| message_item(m, &files, now)), more).into_response())
+            }),
+            route!(me, Method::GET, "!/inbox/fragments/summary", pages, [uow: Uow, headers: HeaderMap, Query(query): Query<ListQuery>] => {
                 let _ = &pages;
-                Ok::<_, AppError>(no_store(fragment("Conversations", list_region(&rows, &filters, open, now(), &stream)).into_response()))
+                let me = who(&uow, &headers).await?;
+                let filters = query.filters();
+                let summary = queries::summary(&uow, &filters, me.id, now()).await?;
+                let stream = "/inbox/events";
+                Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, stream)).into_response()))
             }),
             route!(me, Method::GET, "!/inbox/{id}/fragments/head", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>] => {
                 let _ = &pages;
                 let filters = filters_of_referer(&headers);
-                match open_thread(&uow, id).await? {
+                let me = who(&uow, &headers).await?;
+                match open_thread(&uow, id, &LazyAsk::First, &filters, me.id).await? {
                     Some(thread) => Ok::<_, AppError>(no_store(fragment("Conversation", head_region(&open_of(&thread, &filters))).into_response())),
-                    None => Ok(StatusCode::NOT_FOUND.into_response()),
-                }
-            }),
-            route!(me, Method::GET, "!/inbox/{id}/fragments/messages", pages, [uow: Uow, Path(id): Path<i64>] => {
-                let _ = &pages;
-                match open_thread(&uow, id).await? {
-                    Some(thread) => Ok::<_, AppError>(no_store(fragment("Messages", messages_region(&thread, today())).into_response())),
                     None => Ok(StatusCode::NOT_FOUND.into_response()),
                 }
             }),
             route!(me, Method::GET, "!/inbox/{id}/fragments/customer", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>] => {
                 let _ = &pages;
                 let filters = filters_of_referer(&headers);
-                match open_thread(&uow, id).await? {
-                    Some(thread) => Ok::<_, AppError>(no_store(fragment("Customer", customer_region(&thread, &filters, now())).into_response())),
+                match customer_of(&uow, id).await? {
+                    Some(view) => {
+                        let customer = view.customer.id;
+                        Ok::<_, AppError>(no_store(fragment("Customer", customer_region(id, customer, &filters, Some(&view), now())).into_response()))
+                    }
                     None => Ok(StatusCode::NOT_FOUND.into_response()),
                 }
             }),
@@ -1304,7 +1299,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
         }),
         route!(me, Method::POST, "!/__test/reset", pages, [] => {
-            pages.hub.seed(&pages.db, now()).await.map_err(|error| {
+            pages.hub.seed(&pages.db, now(), pages.settings.scale).await.map_err(|error| {
                 eprintln!("inbox-demo: reset failed: {error}");
                 AppError::internal(error.to_string())
             })?;
