@@ -17,10 +17,14 @@ pub struct CardData {
     pub card: Card,
     /// Its checklist, in order.
     pub checks: Vec<Check>,
-    /// Its comments, oldest first.
+    /// Its newest comments, newest first.
     pub comments: Vec<Comment>,
-    /// What happened to it, oldest first.
+    /// The cursor for older comments, when there are more.
+    pub older_comments: Option<String>,
+    /// The newest lines of what happened to it, newest first.
     pub activity: Vec<Activity>,
+    /// The cursor for older lines, when there are more.
+    pub older_history: Option<String>,
     pub people: Vec<Person>,
 }
 
@@ -200,23 +204,65 @@ pub struct CommentForm {
     pub body: String,
 }
 
-/// The comments, oldest first, and a box to add one. `form` is that box as it came
-/// back with an error; a fresh one otherwise.
-pub fn comments(data: &CardData, form: Option<FormView<CommentForm>>) -> Node {
-    let id = data.card.id;
-    let thread: Vec<Node> = data
-        .comments
+/// How many comments the drawer draws at a time.
+pub const COMMENT_PAGE: usize = 10;
+/// How many lines of history the drawer draws at a time.
+pub const HISTORY_PAGE: usize = 12;
+
+/// A button that loads the next page of a list as it comes into sight: a `GET` of
+/// `action` with `before`. With JavaScript off it opens the card's page at that page.
+fn older(id: &str, action: String, before: &str, label: &str) -> Node {
+    el("form")
+        .attr("id", id.to_owned())
+        .attr("method", "get")
+        .attr("action", action)
+        .flag("data-ui-form", true)
+        .flag("data-ui-autoload", true)
+        .uses(Uses::CORE)
+        .children((
+            el("input")
+                .attr("type", "hidden")
+                .attr("name", "before")
+                .attr("value", before.to_owned()),
+            Button::ghost(label.to_owned()).size(Size::Sm).submit(),
+        ))
+        .into()
+}
+
+/// A page of comments, newest first.
+pub fn comment_items(comments: &[Comment], people: &[Person]) -> Vec<Node> {
+    comments
         .iter()
         .map(|comment| {
-            let who = person(&data.people, Some(comment.person_id));
-            let name = who.map_or_else(|| "Someone".to_owned(), |p| p.name.clone());
+            let name = person(people, Some(comment.person_id))
+                .map_or_else(|| "Someone".to_owned(), |p| p.name.clone());
             Message::new(BubbleSide::Start)
+                .id(format!("comment-{}", comment.id))
                 .avatar(Avatar::placeholder(name.clone()).size(Size::Sm))
                 .header(Row::gap(2).children((Text::new(name), Text::muted(moment(comment.at)))))
                 .content(Bubble::new(BubbleSide::Start, comment.body.clone()))
                 .into()
         })
-        .collect();
+        .collect()
+}
+
+/// What ends the comments: a button for older ones, or nothing.
+pub fn older_comments(card: i64, next: Option<&str>) -> Node {
+    next.map_or(Node::Empty, |before| {
+        older(
+            "comments-more",
+            format!("/cards/{card}/comments"),
+            before,
+            "Older comments",
+        )
+    })
+}
+
+/// The comments, newest first, older ones loading as they come into sight, and a
+/// box to add one. `form` is that box as it came back with an error; a fresh one
+/// otherwise.
+pub fn comments(data: &CardData, form: Option<FormView<CommentForm>>) -> Node {
+    let id = data.card.id;
     let form = form
         .unwrap_or_default()
         .post(format!("/cards/{id}/comments"))
@@ -225,21 +271,26 @@ pub fn comments(data: &CardData, form: Option<FormView<CommentForm>>) -> Node {
     Stack::gap(3)
         .id("comments")
         .children((
-            Heading::h3(format!("Comments ({})", data.comments.len())),
-            if thread.is_empty() {
+            Heading::h3(format!("Comments ({})", data.card.comments)),
+            form,
+            if data.comments.is_empty() {
                 Text::muted("No comments yet. Ask a question or leave a note.").into()
             } else {
-                Node::from(Stack::gap(3).children(thread))
+                Node::from(
+                    Stack::gap(3)
+                        .id("comment-list")
+                        .children(comment_items(&data.comments, &data.people)),
+                )
             },
-            form,
+            older_comments(id, data.older_comments.as_deref()),
         ))
         .into()
 }
 
-/// What happened to the card, newest last.
-fn history(data: &CardData) -> Node {
-    let events = data.activity.iter().map(|event| {
-        let who = person(&data.people, Some(event.person_id))
+/// A page of what happened to the card, newest first.
+pub fn history_page(activity: &[Activity], people: &[Person], page: &str) -> Node {
+    let events = activity.iter().map(|event| {
+        let who = person(people, Some(event.person_id))
             .map_or_else(|| "Someone".to_owned(), |p| p.name.clone());
         let (title, tone, glyph) = match event.kind.as_str() {
             "created" => (
@@ -266,11 +317,36 @@ fn history(data: &CardData) -> Node {
             .icon(glyph)
             .meta(Meta::new(who))
     });
+    Timeline::new(format!("card-history-{page}"), "What happened to this card")
+        .newest_first()
+        .events(events)
+        .into()
+}
+
+/// What ends the history: a button for older lines, or nothing.
+pub fn older_history(card: i64, next: Option<&str>) -> Node {
+    next.map_or(Node::Empty, |before| {
+        older(
+            "history-more",
+            format!("/cards/{card}/history"),
+            before,
+            "Older activity",
+        )
+    })
+}
+
+/// What happened to the card, newest first, older lines loading as they come into sight.
+fn history(data: &CardData) -> Node {
     Stack::gap(2)
         .id("history")
         .children((
             Heading::h3("Activity"),
-            Timeline::new("card-history", "What happened to this card").events(events),
+            Stack::gap(2).id("history-list").children(history_page(
+                &data.activity,
+                &data.people,
+                "0",
+            )),
+            older_history(data.card.id, data.older_history.as_deref()),
         ))
         .into()
 }

@@ -2,11 +2,14 @@
 //!
 //! | Route | Answers |
 //! |---|---|
-//! | `GET /` | the board; `?assignee=`, `&label=`, `&due=` filter it |
+//! | `GET /` | the board; `?assignee=`, `&label=`, `&due=` filter it, `&show.<column>=` draws more of a column |
 //! | `GET /fragments/board` | the board's region, which the stream asks for again |
-//! | `POST /board/moves` | a card's move, checked against the board as it is now |
-//! | `GET /cards/{id}/peek`, `GET /cards/peek?card=` | the card in the drawer, as ops; its page with JavaScript off |
+//! | `GET /columns/{column}` | a column's next cards after a cursor, as ops; the board with more of it, with JavaScript off |
+//! | `POST /board/moves` | a card's move, placed by rank and checked against the board as it is now |
+//! | `GET /cards/search?q=` | the palette's answer: cards whose title holds the text |
+//! | `GET /cards/{id}/peek` | the card in the drawer, as ops; its page with JavaScript off |
 //! | `GET /cards/{id}` | the card on a page of its own |
+//! | `GET /cards/{id}/comments`, `/history` | older comments or history after a cursor, as ops |
 //! | `POST /cards/{id}/move` | a move from the drawer's column field |
 //! | `POST /cards/{id}/checks/moves` | a checklist line's move |
 //! | `POST /checks/{id}/done` | a line ticked or not |
@@ -14,6 +17,7 @@
 //! | `POST /as/{id}` | shows the board as someone else: a lead, or a member who can't close cards |
 //! | `GET /events` | the server-sent event stream |
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -34,10 +38,13 @@ use serde::Deserialize;
 use crate::Settings;
 use crate::data::{Check, Column, PROJECT, Person, TEAM, day_of};
 use crate::live::{Hub, now};
-use crate::store;
-use crate::views::board::{DRAWER, Filters, REGION, board, board_page};
+use crate::store::{self, parse_cursor};
+use crate::views::board::{
+    ColumnPage, DRAWER, Filters, PAGE, REGION, board, board_page, column, query,
+};
 use crate::views::card::{
-    CardData, CommentForm, card_detail, card_sheet, checklist, comments, missing_card,
+    CardData, CommentForm, card_detail, card_sheet, checklist, comment_items, comments,
+    history_page, missing_card, older_comments, older_history,
 };
 
 /// The pages, with the hub that tells every open board when it changes.
@@ -49,6 +56,7 @@ pub struct Pages {
 }
 
 type Result<T> = std::result::Result<T, AppError>;
+type Params = HashMap<String, String>;
 
 /// The cookie that says who the board is shown as.
 const AS: &str = "board_as";
@@ -71,26 +79,27 @@ fn viewer_id(headers: &HeaderMap) -> Option<i64> {
         })
 }
 
-#[derive(Deserialize, Default)]
-struct FilterQuery {
-    assignee: Option<String>,
-    label: Option<String>,
-    due: Option<String>,
+fn filters(params: &Params) -> Filters {
+    Filters::parse(
+        params.get("assignee").map(String::as_str),
+        params.get("label").map(String::as_str),
+        params.get("due").map(String::as_str),
+    )
 }
 
-impl FilterQuery {
-    fn filters(&self) -> Filters {
-        Filters::parse(
-            self.assignee.as_deref(),
-            self.label.as_deref(),
-            self.due.as_deref(),
-        )
-    }
+/// What a transaction's failure answers.
+fn failed(error: impl std::fmt::Display) -> AppError {
+    AppError::internal(error.to_string())
 }
 
 #[derive(Deserialize, Default)]
-struct PeekQuery {
-    card: Option<String>,
+struct Before {
+    before: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct Search {
+    q: Option<String>,
 }
 
 impl Pages {
@@ -104,58 +113,99 @@ impl Pages {
         shell: AppShell,
         uow: Uow,
         headers: HeaderMap,
-        query: FilterQuery,
+        params: Params,
     ) -> Result<AppPage> {
         let viewer = self.viewer(&uow, &headers).await?;
-        let data = store::board(&uow).await?;
+        let filters = filters(&params);
+        let data = store::board(&uow, &filters, today(), |name| params.get(name).cloned()).await?;
         Ok(board_page(
             shell.page(PROJECT).crumb(TEAM, "/"),
             &data,
             &viewer,
-            &query.filters(),
+            &filters,
             today(),
         ))
     }
 
     /// `GET /fragments/board`: the board's region alone.
-    async fn fragment(&self, uow: Uow, headers: HeaderMap, query: FilterQuery) -> Result<View> {
+    async fn fragment(&self, uow: Uow, headers: HeaderMap, params: Params) -> Result<View> {
         let viewer = self.viewer(&uow, &headers).await?;
-        let data = store::board(&uow).await?;
-        Ok(View::new("Board").body(board(&data, &viewer, &query.filters(), today())))
+        let filters = filters(&params);
+        let data = store::board(&uow, &filters, today(), |name| params.get(name).cloned()).await?;
+        Ok(View::new("Board").body(board(&data, &viewer, &filters, today())))
     }
 
-    /// `POST /board/moves`: checks the move against the board as it is now, in the
-    /// transaction that writes it. A refusal puts the card back; a stale page also
-    /// fetches the board again.
+    /// `GET /columns/{column}?after=&show=`: the next cards of a column, joined to its
+    /// end in the page. With JavaScript off, the board with that much of the column.
+    async fn more(
+        &self,
+        uow: Uow,
+        headers: HeaderMap,
+        key: String,
+        params: Params,
+    ) -> Result<Reply> {
+        let Some(which) = Column::parse(&key) else {
+            return Ok(Reply::ops_or_redirect("/"));
+        };
+        let filters = filters(&params);
+        let shown = store::shown(which, |_| params.get("show").cloned());
+        let mut back = filters.pairs();
+        back.push((format!("show.{key}"), shown.to_string()));
+        let reply = Reply::ops_or_redirect(format!("/{}", query(&back)));
+        let Some(after) = params.get("after").and_then(|text| parse_cursor(text)) else {
+            return Ok(reply);
+        };
+        let viewer = self.viewer(&uow, &headers).await?;
+        let start = shown.saturating_sub(PAGE);
+        let (cards, more) =
+            store::column_cards(&uow, which, &filters, today(), Some(after), PAGE).await?;
+        let page = ColumnPage {
+            next: more.then(|| cards.last().map(store::cursor)).flatten(),
+            total: store::column_total(&uow, which).await?,
+            column: which,
+            cards,
+            start,
+        };
+        let people = store::people(&uow).await?;
+        // Every column of the board is named, so a moved card's form offers them all.
+        let lists = Column::ALL.map(|other| {
+            if other == which {
+                column(&page, &people, &viewer, &filters, today())
+            } else {
+                SortList::new(other.key(), other.title())
+            }
+        });
+        let ops = Sortable::new("columns", format!("{PROJECT} board"))
+            .board()
+            .post("/board/moves")
+            .lists(lists)
+            .page(which.key());
+        Ok(ops.into_iter().fold(reply, Reply::op))
+    }
+
+    /// `POST /board/moves`: places the move by rank, checked against the board as it
+    /// is now, in the transaction that writes it. A refusal puts the card back; a
+    /// stale page also fetches the board again.
     async fn moves(&self, headers: HeaderMap, mv: Move) -> Result<Reply> {
         let delay = self.hub.delay_ms.load(Ordering::SeqCst);
         if delay > 0 {
             tokio::time::sleep(Duration::from_millis(delay)).await;
         }
         let who = viewer_id(&headers);
-        let checked = mv.clone();
-        let outcome = self
+        let made = mv.clone();
+        let placed = self
             .db
             .transaction(|uow| async move {
                 let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
-                let lists = store::columns(&uow, &viewer).await.map_err(store::db)?;
-                match checked.check(&lists) {
-                    Ok(landing) => {
-                        if landing.moved {
-                            store::move_card(&uow, &landing, viewer.id, now())
-                                .await
-                                .map_err(store::db)?;
-                        }
-                        Ok(Ok(landing))
-                    }
-                    Err(refusal) => Ok(Err(refusal)),
-                }
+                store::place_and_write(&uow, &viewer, &made, now())
+                    .await
+                    .map_err(store::db)
             })
             .await
-            .map_err(|error| AppError::internal(error.to_string()))?;
-        match outcome {
-            Ok(landing) => {
-                if landing.moved {
+            .map_err(failed)?;
+        match placed {
+            Ok(placement) => {
+                if placement.moved {
                     self.hub.nudge();
                 }
                 Ok(mv.done("/"))
@@ -174,48 +224,60 @@ impl Pages {
     }
 
     /// `POST /cards/{id}/move`: the drawer's column field, a move to the end of a
-    /// column, checked the same way. It answers with the drawer drawn again.
+    /// column, placed the same way. It answers with the drawer drawn again.
     async fn move_from_drawer(&self, headers: HeaderMap, id: i64, mv: Move) -> Result<Reply> {
         let to = Column::parse(&mv.to_list).map_or("that column", Column::title);
         let mv = Move::new(id.to_string(), mv.from_list, mv.to_list);
         let who = viewer_id(&headers);
-        let checked = mv.clone();
-        let outcome = self
+        let made = mv.clone();
+        let (placed, card, viewer) = self
             .db
             .transaction(|uow| async move {
                 let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
-                let lists = store::columns(&uow, &viewer).await.map_err(store::db)?;
-                let outcome = match checked.check(&lists) {
-                    Ok(landing) if landing.from_list == landing.to_list => Ok(false),
-                    Ok(landing) => {
-                        store::move_card(&uow, &landing, viewer.id, now())
+                let placed = if made.from_list == made.to_list {
+                    None
+                } else {
+                    Some(
+                        store::place_and_write(&uow, &viewer, &made, now())
                             .await
-                            .map_err(store::db)?;
-                        Ok(true)
-                    }
-                    Err(refusal) => Err(refusal),
+                            .map_err(store::db)?,
+                    )
                 };
                 let card = store::card(&uow, id).await.map_err(store::db)?;
-                Ok((outcome, card, viewer))
+                Ok((placed, card, viewer))
             })
             .await
-            .map_err(|error| AppError::internal(error.to_string()))?;
-        let (outcome, card, viewer) = outcome;
+            .map_err(failed)?;
         let page = format!("/cards/{id}");
         let Some(card) = card else {
             return Ok(Reply::ops_or_redirect("/")
                 .toast(ToastTone::Warning, "That card isn't on the board any more."));
         };
-        let reply = match outcome {
-            Ok(true) => {
+        let reply = match placed {
+            Some(Ok(_)) => {
                 self.hub.nudge();
                 mv.done(page)
                     .toast(ToastTone::Success, format!("Moved to {to}."))
             }
-            Ok(false) => mv.done(page),
-            Err(refusal) => mv.refused(page, refusal.message()),
+            Some(Err(refusal)) => mv.refused(page, refusal.message()),
+            None => mv.done(page),
         };
         Ok(reply.morph(DRAWER, card_sheet(&card, &viewer, today())))
+    }
+
+    /// `GET /cards/search?q=`: the cards whose title holds the text, for the palette.
+    async fn search(&self, uow: Uow, text: &str) -> Result<ChoiceList> {
+        let cards = store::search(&uow, text).await?;
+        let found: Vec<Choice> = cards
+            .into_iter()
+            .map(|card| {
+                let column = Column::parse(&card.list).map_or("", Column::title);
+                Choice::new(card.id.to_string(), card.title)
+                    .description(column)
+                    .link(format!("/cards/{}", card.id))
+            })
+            .collect();
+        Ok(ChoiceList::new().group("Cards", found))
     }
 
     /// The card in the drawer, opened.
@@ -268,12 +330,57 @@ impl Pages {
         shell
             .page(card.card.title.clone())
             .crumb(PROJECT, "/")
-            .body(Card::new().body(card_detail(card, viewer, today(), form)))
+            .body(Card::titled("About this card").heading(2).body(card_detail(
+                card,
+                viewer,
+                today(),
+                form,
+            )))
     }
 
-    /// `POST /cards/{id}/checks/moves`: a checklist line moved.
+    /// `GET /cards/{id}/comments?before=`: older comments, joined to the list.
+    async fn older_comments(&self, uow: Uow, id: i64, before: Option<String>) -> Result<Reply> {
+        let reply = Reply::ops_or_redirect(format!("/cards/{id}"));
+        let Some(before) = before.as_deref().and_then(parse_cursor) else {
+            return Ok(reply);
+        };
+        let (page, next) = store::comments(&uow, id, Some(before)).await?;
+        let people = store::people(&uow).await?;
+        Ok(reply
+            .op(Op::append(
+                "comment-list",
+                &Node::list(comment_items(&page, &people)),
+            ))
+            .op(Op::replace(
+                "comments-more",
+                &older_comments(id, next.as_deref()),
+            )))
+    }
+
+    /// `GET /cards/{id}/history?before=`: older lines of history.
+    async fn older_history(&self, uow: Uow, id: i64, before: Option<String>) -> Result<Reply> {
+        let reply = Reply::ops_or_redirect(format!("/cards/{id}"));
+        let Some(cursor) = before.as_deref().and_then(parse_cursor) else {
+            return Ok(reply);
+        };
+        let (page, next) = store::history(&uow, id, Some(cursor)).await?;
+        let people = store::people(&uow).await?;
+        let name = before.unwrap_or_default().replace('.', "-");
+        Ok(reply
+            .op(Op::append(
+                "history-list",
+                &history_page(&page, &people, &name),
+            ))
+            .op(Op::replace(
+                "history-more",
+                &older_history(id, next.as_deref()),
+            )))
+    }
+
+    /// `POST /cards/{id}/checks/moves`: a checklist line moved. A card's lines are
+    /// few, so the whole list is read and checked.
     async fn move_check(&self, id: i64, mv: Move) -> Result<Reply> {
-        let checked = mv.clone();
+        let made = mv.clone();
         let outcome = self
             .db
             .transaction(|uow| async move {
@@ -283,16 +390,18 @@ impl Pages {
                     "Checklist",
                     lines.iter().map(|line| line.id.to_string()),
                 );
-                match checked.check(&[list]) {
+                match made.check(&[list]) {
                     Ok(landing) => {
-                        store::move_check(&uow, &landing).await.map_err(store::db)?;
+                        store::move_check(&uow, &landing.order)
+                            .await
+                            .map_err(store::db)?;
                         Ok(Ok(landing.moved))
                     }
                     Err(refusal) => Ok(Err(refusal)),
                 }
             })
             .await
-            .map_err(|error| AppError::internal(error.to_string()))?;
+            .map_err(failed)?;
         let page = format!("/cards/{id}");
         Ok(match outcome {
             Ok(moved) => {
@@ -306,20 +415,18 @@ impl Pages {
     }
 
     /// `POST /checks/{id}/done`: a line ticked, or not.
-    async fn tick(&self, uow: Uow, line: i64, done: bool) -> Result<Reply> {
+    async fn tick(&self, uow: Uow, headers: HeaderMap, line: i64, done: bool) -> Result<Reply> {
         let Some(found) = Check::query().find(&uow, line).await? else {
             return Ok(Reply::ops_or_redirect("/").toast(ToastTone::Warning, "That line is gone."));
         };
         let found = found.into_inner();
-        Check::query()
-            .where_(Check::ID.eq(line))
-            .update(&uow, [Check::DONE.set(i64::from(done))])
-            .await?;
+        let viewer = self.viewer(&uow, &headers).await?;
+        store::tick(&uow, &found, done).await?;
         if done {
             store::record(
                 &uow,
                 found.card_id,
-                1,
+                viewer.id,
                 now(),
                 "checked",
                 format!("Ticked \u{201c}{}\u{201d}", found.text),
@@ -370,14 +477,11 @@ impl Pages {
     /// `POST /as/{id}`: shows the board as someone else.
     async fn view_as(&self, uow: Uow, id: i64) -> Result<Response> {
         let person = store::viewer(&uow, Some(id)).await?;
+        let role = if person.is_lead() { "lead" } else { "member" };
         let mut response = Reply::redirect("/")
             .toast(
                 ToastTone::Info,
-                format!(
-                    "Viewing as {}, a {}.",
-                    person.name,
-                    if person.is_lead() { "lead" } else { "member" }
-                ),
+                format!("Viewing as {}, a {role}.", person.name),
             )
             .into_response();
         if let Ok(cookie) = http::HeaderValue::from_str(&format!(
@@ -403,17 +507,28 @@ impl Controller for Pages {
                 move |shell: AppShell,
                       uow: Uow,
                       headers: HeaderMap,
-                      Query(query): Query<FilterQuery>| {
+                      Query(params): Query<Params>| {
                     let me = me.clone();
-                    async move { me.index(shell, uow, headers, query).await }
+                    async move { me.index(shell, uow, headers, params).await }
                 }
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/board", {
                 let me = me.clone();
-                move |uow: Uow, headers: HeaderMap, Query(query): Query<FilterQuery>| {
+                move |uow: Uow, headers: HeaderMap, Query(params): Query<Params>| {
                     let me = me.clone();
-                    async move { me.fragment(uow, headers, query).await }
+                    async move { me.fragment(uow, headers, params).await }
+                }
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/columns/{column}", {
+                let me = me.clone();
+                move |uow: Uow,
+                      headers: HeaderMap,
+                      Path(key): Path<String>,
+                      Query(params): Query<Params>| {
+                    let me = me.clone();
+                    async move { me.more(uow, headers, key, params).await }
                 }
             })
             .public(),
@@ -425,17 +540,13 @@ impl Controller for Pages {
                 }
             })
             .public(),
-            RouteDef::on(Method::GET, "!/cards/peek", {
+            RouteDef::on(Method::GET, "!/cards/search", {
                 let me = me.clone();
-                move |uow: Uow, headers: HeaderMap, Query(query): Query<PeekQuery>| {
+                move |uow: Uow, Query(search): Query<Search>| {
                     let me = me.clone();
                     async move {
-                        let id = query
-                            .card
-                            .as_deref()
-                            .and_then(|id| id.parse().ok())
-                            .unwrap_or(0);
-                        me.peek(uow, headers, id).await
+                        me.search(uow, search.q.as_deref().unwrap_or_default())
+                            .await
                     }
                 }
             })
@@ -453,6 +564,22 @@ impl Controller for Pages {
                 move |shell: AppShell, uow: Uow, headers: HeaderMap, Path(id): Path<i64>| {
                     let me = me.clone();
                     async move { me.card_page(shell, uow, headers, id).await }
+                }
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/cards/{id}/comments", {
+                let me = me.clone();
+                move |uow: Uow, Path(id): Path<i64>, Query(page): Query<Before>| {
+                    let me = me.clone();
+                    async move { me.older_comments(uow, id, page.before).await }
+                }
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/cards/{id}/history", {
+                let me = me.clone();
+                move |uow: Uow, Path(id): Path<i64>, Query(page): Query<Before>| {
+                    let me = me.clone();
+                    async move { me.older_history(uow, id, page.before).await }
                 }
             })
             .public(),
@@ -474,9 +601,12 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::POST, "!/checks/{id}/done", {
                 let me = me.clone();
-                move |uow: Uow, Path(id): Path<i64>, Submit(tick): Submit<TickForm>| {
+                move |uow: Uow,
+                      headers: HeaderMap,
+                      Path(id): Path<i64>,
+                      Submit(tick): Submit<TickForm>| {
                     let me = me.clone();
-                    async move { me.tick(uow, id, tick.done.is_some()).await }
+                    async move { me.tick(uow, headers, id, tick.done.is_some()).await }
                 }
             })
             .public(),
@@ -543,21 +673,25 @@ struct DelayHook {
     ms: Option<u64>,
 }
 
+#[derive(Deserialize, Default)]
+struct WhereHook {
+    ids: Option<String>,
+}
+
 /// What the browser tests drive the app with, when `BOARD_TEST_HOOKS` is set: the
 /// board written afresh; a move made by someone else (`?item=4&to=ready&by=3`),
-/// which with `&quiet=1` tells no open page, so the next move from one is stale;
-/// and a wait before each move is answered (`?ms=3000`).
+/// which with `&quiet=1` tells no open page, so the next move from one is stale; a
+/// wait before each move is answered (`?ms=3000`); and where cards are
+/// (`?ids=1,2`: `1:backlog:0 2:ready:3`, each with its place in its column).
 fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
+    use crate::data::Card as Stored;
     vec![
         RouteDef::on(Method::POST, "!/__test/reset", {
             let me = me.clone();
             move || {
                 let me = me.clone();
                 async move {
-                    me.hub.seed(&me.db, now()).await.map_err(|error| {
-                        eprintln!("board-demo: reset failed: {error}");
-                        AppError::internal(error.to_string())
-                    })?;
+                    me.hub.seed(&me.db, now()).await.map_err(failed)?;
                     me.hub.nudge();
                     Ok::<_, AppError>(StatusCode::NO_CONTENT)
                 }
@@ -584,7 +718,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                             hook.quiet.is_none(),
                         )
                         .await
-                        .map_err(|error| AppError::internal(error.to_string()))?;
+                        .map_err(failed)?;
                     Ok::<_, AppError>(if moved { "moved" } else { "refused" })
                 }
             }
@@ -603,33 +737,36 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             }
         })
         .public(),
-        RouteDef::on(Method::GET, "!/__test/board", {
-            let me = me.clone();
-            move || {
-                let me = me.clone();
-                async move {
-                    let cards = me
-                        .db
-                        .transaction(
-                            |uow| async move { store::cards(&uow).await.map_err(store::db) },
+        RouteDef::on(
+            Method::GET,
+            "!/__test/where",
+            |uow: Uow, Query(hook): Query<WhereHook>| async move {
+                let mut out = Vec::new();
+                for id in hook
+                    .ids
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter_map(|id| id.parse::<i64>().ok())
+                {
+                    let Some(card) = Stored::query().find(&uow, id).await? else {
+                        out.push(format!("{id}:gone:0"));
+                        continue;
+                    };
+                    let card = card.into_inner();
+                    let before = Stored::query()
+                        .where_(Stored::LIST.eq(card.list.clone()))
+                        .where_(
+                            Stored::RANK
+                                .lt(card.rank)
+                                .or(Stored::RANK.eq(card.rank).and(Stored::ID.lt(id))),
                         )
-                        .await
-                        .map_err(|error| AppError::internal(error.to_string()))?;
-                    let text: Vec<String> = Column::ALL
-                        .iter()
-                        .map(|column| {
-                            let ids: Vec<String> = cards
-                                .iter()
-                                .filter(|card| card.list == column.key())
-                                .map(|card| card.id.to_string())
-                                .collect();
-                            format!("{}:{}", column.key(), ids.join(","))
-                        })
-                        .collect();
-                    Ok::<_, AppError>(text.join(" "))
+                        .count(&uow)
+                        .await?;
+                    out.push(format!("{id}:{}:{before}", card.list));
                 }
-            }
-        })
+                Ok::<_, AppError>(out.join(" "))
+            },
+        )
         .public(),
     ]
 }

@@ -71,42 +71,60 @@ impl Hub {
             "DROP TABLE IF EXISTS cards",
             "DROP TABLE IF EXISTS people",
             "CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, job TEXT NOT NULL, role TEXT NOT NULL)",
-            "CREATE TABLE cards (id INTEGER PRIMARY KEY, list TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, assignee INTEGER, labels TEXT NOT NULL, due DATE, created_at INTEGER NOT NULL)",
-            "CREATE INDEX cards_place ON cards (list, position, id)",
+            "CREATE TABLE cards (id INTEGER PRIMARY KEY, list TEXT NOT NULL, rank INTEGER NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, assignee INTEGER, labels TEXT NOT NULL, due DATE, created_at INTEGER NOT NULL, checks_done INTEGER NOT NULL, checks_total INTEGER NOT NULL, comments INTEGER NOT NULL)",
+            // A column's page, its count and a move's neighbours are each one walk of this index.
+            "CREATE INDEX cards_place ON cards (list, rank, id)",
+            "CREATE INDEX cards_assignee ON cards (list, assignee, rank, id)",
             "CREATE TABLE checks (id INTEGER PRIMARY KEY, card_id INTEGER NOT NULL, position INTEGER NOT NULL, text TEXT NOT NULL, done INTEGER NOT NULL)",
             "CREATE INDEX checks_card ON checks (card_id, position)",
             "CREATE TABLE comments (id INTEGER PRIMARY KEY, card_id INTEGER NOT NULL, person_id INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL)",
-            "CREATE INDEX comments_card ON comments (card_id, at)",
+            "CREATE INDEX comments_card ON comments (card_id, at, id)",
             "CREATE TABLE activity (id INTEGER PRIMARY KEY, card_id INTEGER NOT NULL, person_id INTEGER NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL)",
-            "CREATE INDEX activity_card ON activity (card_id, at)",
+            "CREATE INDEX activity_card ON activity (card_id, at, id)",
         ] {
             pool.execute_script(statement).await?;
         }
         Ok(())
     }
 
-    /// Writes the board afresh, as it stands at `now`.
+    /// Writes the board afresh, as it stands at `now`: twenty thousand cards and
+    /// their comments, lines and history, in one transaction.
     pub async fn seed(&self, db: &Db, now: i64) -> Result<(), BoxError> {
-        Activity::query().delete(db).await?;
-        Comment::query().delete(db).await?;
-        Check::query().delete(db).await?;
-        Card::query().delete(db).await?;
-        Person::query().delete(db).await?;
         let seed = data::seed(now);
-        Person::query().insert(db, seed.people).await?;
-        Card::query().insert(db, seed.cards).await?;
-        Check::query().insert(db, seed.checks).await?;
-        Comment::query().insert(db, seed.comments).await?;
-        for chunk in seed.activity.chunks(100) {
-            Activity::query().insert(db, chunk.to_vec()).await?;
-        }
+        db.transaction(|uow| async move {
+            let write = async {
+                Activity::query().delete(&uow).await?;
+                Comment::query().delete(&uow).await?;
+                Check::query().delete(&uow).await?;
+                Card::query().delete(&uow).await?;
+                Person::query().delete(&uow).await?;
+                Person::query().insert(&uow, seed.people).await?;
+                // Rows of a few columns each, a few hundred at a time: well under
+                // SQLite's limit of bound values in one statement.
+                for chunk in seed.cards.chunks(500) {
+                    Card::query().insert(&uow, chunk.to_vec()).await?;
+                }
+                for chunk in seed.checks.chunks(1_000) {
+                    Check::query().insert(&uow, chunk.to_vec()).await?;
+                }
+                for chunk in seed.comments.chunks(1_000) {
+                    Comment::query().insert(&uow, chunk.to_vec()).await?;
+                }
+                for chunk in seed.activity.chunks(1_000) {
+                    Activity::query().insert(&uow, chunk.to_vec()).await?;
+                }
+                Ok::<_, navree::orm::OrmError>(())
+            };
+            write.await.map_err(store::db)
+        })
+        .await?;
         self.delay_ms.store(0, Ordering::SeqCst);
         Ok(())
     }
 
-    /// Moves `item` to the end of `to`, as `by`, checked like any other move.
-    /// Returns whether it moved; `nudge` false leaves every open page as it was,
-    /// out of date, which the tests use to make a stale move.
+    /// Moves `item` to the end of `to`, as `by`, placed and checked like any other
+    /// move. Returns whether it moved; `nudge` false leaves every open page as it
+    /// was, out of date, which the tests use to make a stale move.
     pub async fn move_as(
         &self,
         db: &Db,
@@ -118,23 +136,14 @@ impl Hub {
         let moved = db
             .transaction(|uow| async move {
                 let viewer = store::viewer(&uow, Some(by)).await.map_err(store::db)?;
-                let lists = store::columns(&uow, &viewer).await.map_err(store::db)?;
-                let Some(from) = lists
-                    .iter()
-                    .find(|list| list.items.contains(&item.to_string()))
-                else {
+                let Some(card) = Card::query().find(&uow, item).await.map_err(store::db)? else {
                     return Ok(false);
                 };
-                let mv = Move::new(item.to_string(), from.key.clone(), to.key());
-                match mv.check(&lists) {
-                    Ok(landing) => {
-                        store::move_card(&uow, &landing, by, now())
-                            .await
-                            .map_err(store::db)?;
-                        Ok(landing.moved)
-                    }
-                    Err(_) => Ok(false),
-                }
+                let mv = Move::new(item.to_string(), card.into_inner().list, to.key());
+                let placed = store::place_and_write(&uow, &viewer, &mv, now())
+                    .await
+                    .map_err(store::db)?;
+                Ok(placed.is_ok_and(|placement| placement.moved))
             })
             .await?;
         if moved && nudge {
@@ -143,11 +152,15 @@ impl Hub {
         Ok(moved)
     }
 
-    /// One step of the teammate: a card in Ready or In progress moves one column
-    /// on, if the next column has room.
+    /// One step of the teammate: a card at the top of the backlog, Ready or In
+    /// progress moves one column on, if the next column has room.
     pub async fn step(&self, db: &Db) -> Result<bool, BoxError> {
+        let column = [Column::Backlog, Column::Ready, Column::Doing]
+            [usize::try_from(self.roll(3)).unwrap_or(0)];
         let cards = Card::query()
-            .where_(Card::LIST.is_in(["ready", "doing", "backlog"]))
+            .where_(Card::LIST.eq(column.key()))
+            .order_by("rank")
+            .limit(5)
             .get(db)
             .await?
             .into_vec();
@@ -156,11 +169,10 @@ impl Hub {
         }
         let at = usize::try_from(self.roll(cards.len() as u64)).unwrap_or(0);
         let card = cards[at].clone().into_inner();
-        let next = match Column::parse(&card.list) {
-            Some(Column::Backlog) => Column::Ready,
-            Some(Column::Ready) => Column::Doing,
-            Some(Column::Doing) => Column::Review,
-            _ => return Ok(false),
+        let next = match column {
+            Column::Backlog => Column::Ready,
+            Column::Ready => Column::Doing,
+            _ => Column::Review,
         };
         self.move_as(db, card.assignee.unwrap_or(2), card.id, next, true)
             .await

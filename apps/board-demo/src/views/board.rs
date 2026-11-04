@@ -1,38 +1,44 @@
 //! The board: five columns of cards that move by pointer, touch or keys, filters
-//! over them, a drawer for one card, and a palette that jumps to any card.
+//! over them, a drawer for one card, and a palette that finds any card.
+//!
+//! A column holds thousands of cards, so the page draws the first ones and each
+//! column loads more as it is scrolled, a page at a time, by a cursor.
 
 use chrono::NaiveDate;
 use navree::ui::*;
 
-use crate::data::{Card, Check, Column, Comment, Label, PROJECT, Person, labels_of};
+use crate::data::{Card, Column, Label, PROJECT, Person, labels_of};
 use crate::views::{due_label, person};
 
 /// The region the board is drawn in: filters redraw it, and the stream refreshes it.
 pub const REGION: &str = "board";
 /// The drawer a card opens in.
 pub const DRAWER: &str = "card";
+/// How many cards a column draws at first, and loads at a time after that.
+pub const PAGE: usize = 20;
+/// The most cards a column keeps in the page. Past this, filters and the palette
+/// find the rest.
+pub const CAP: usize = 200;
+
+/// One column as the page holds it: some of its cards, from `start`.
+#[derive(Clone, Debug)]
+pub struct ColumnPage {
+    pub column: Column,
+    /// The cards drawn, in order.
+    pub cards: Vec<Card>,
+    /// How many cards the column holds, drawn or not.
+    pub total: u64,
+    /// Where the cards drawn start in the column (0 for the first page).
+    pub start: usize,
+    /// The cursor after the last card drawn, when the filter has more.
+    pub next: Option<String>,
+}
 
 /// Everything the board draws.
 #[derive(Clone, Debug, Default)]
 pub struct BoardData {
     pub people: Vec<Person>,
-    /// Every card, in column order and then by position.
-    pub cards: Vec<Card>,
-    pub checks: Vec<Check>,
-    pub comments: Vec<Comment>,
-}
-
-impl BoardData {
-    /// How many of a card's checklist lines are ticked, and how many there are.
-    pub fn checklist(&self, card: i64) -> (usize, usize) {
-        let lines = self.checks.iter().filter(|check| check.card_id == card);
-        let done = lines.clone().filter(|check| check.done == 1).count();
-        (done, lines.count())
-    }
-
-    pub fn comment_count(&self, card: i64) -> usize {
-        self.comments.iter().filter(|c| c.card_id == card).count()
-    }
+    pub columns: Vec<ColumnPage>,
 }
 
 /// Which cards to show.
@@ -61,7 +67,7 @@ impl Due {
         (Self::Undated, "none", "No due date"),
     ];
 
-    fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         Self::ALL
             .iter()
             .find(|(due, ..)| *due == self)
@@ -85,95 +91,111 @@ impl Filters {
         *self == Self::default()
     }
 
-    /// The filters as a query, `?assignee=2&due=week`, or nothing.
-    pub fn query(&self) -> String {
-        let mut parts = Vec::new();
+    /// The filters as query pairs.
+    pub fn pairs(&self) -> Vec<(String, String)> {
+        let mut pairs = Vec::new();
         if let Some(id) = self.assignee {
-            parts.push(format!("assignee={id}"));
+            pairs.push(("assignee".to_owned(), id.to_string()));
         }
         if let Some(label) = self.label {
-            parts.push(format!("label={}", label.key()));
+            pairs.push(("label".to_owned(), label.key().to_owned()));
         }
         if self.due != Due::Any {
-            parts.push(format!("due={}", self.due.key()));
+            pairs.push(("due".to_owned(), self.due.key().to_owned()));
         }
-        if parts.is_empty() {
-            String::new()
-        } else {
-            format!("?{}", parts.join("&"))
-        }
-    }
-
-    /// Whether `card` passes.
-    pub fn keeps(&self, card: &Card, today: NaiveDate) -> bool {
-        let assignee = self.assignee.is_none_or(|id| card.assignee == Some(id));
-        let label = self
-            .label
-            .is_none_or(|label| labels_of(&card.labels).contains(&label));
-        let due = match self.due {
-            Due::Any => true,
-            Due::Late => card.due.is_some_and(|due| due < today),
-            Due::Week => card
-                .due
-                .is_some_and(|due| due >= today && (due - today).num_days() < 7),
-            Due::Undated => card.due.is_none(),
-        };
-        assignee && label && due
+        pairs
     }
 }
 
-/// The columns, each card drawn by [`card_face`]. A move posts to `/board/moves`,
-/// where the server checks it against the board as it is then. A column counts
-/// every card it holds, shown or filtered out, so its limit is read right.
+/// A query string, `?a=1&b=2`, or nothing. The values here are numbers and keys.
+pub fn query(pairs: &[(String, String)]) -> String {
+    if pairs.is_empty() {
+        return String::new();
+    }
+    let text: Vec<String> = pairs
+        .iter()
+        .map(|(name, value)| format!("{name}={value}"))
+        .collect();
+    format!("?{}", text.join("&"))
+}
+
+/// One column as the board draws it: its cards, its count and limit, and what
+/// ends it: a button for the next cards, or a note at the cap.
+pub fn column(
+    page: &ColumnPage,
+    people: &[Person],
+    viewer: &Person,
+    filters: &Filters,
+    today: NaiveDate,
+) -> SortList {
+    let column = page.column;
+    let shown = page.start + page.cards.len();
+    let mut list = SortList::new(column.key(), column.title())
+        .items(page.cards.iter().map(|card| {
+            SortItem::new(card.id.to_string(), card.title.clone())
+                .body(card_face(card, people, today))
+        }))
+        .total(usize::try_from(page.total).unwrap_or(usize::MAX))
+        .from(page.start)
+        .empty(if filters.is_empty() {
+            "No cards"
+        } else {
+            "No cards match"
+        });
+    if let Some(cursor) = &page.next {
+        list = if shown >= CAP {
+            list.end_note(format!(
+                "Showing the first {CAP}. Filter the board, or press Ctrl K, to find the rest."
+            ))
+        } else {
+            let mut fields = vec![
+                ("after".to_owned(), cursor.clone()),
+                ("show".to_owned(), (shown + PAGE).to_string()),
+            ];
+            fields.extend(filters.pairs());
+            list.more(format!("/columns/{}", column.key()), fields)
+        };
+    }
+    if let Some(limit) = column.limit() {
+        list = list.limit(limit);
+    }
+    if column == Column::Done && !viewer.is_lead() {
+        list = list.refuse("Only a lead can move cards to Done.");
+    }
+    list
+}
+
+/// The columns. A move posts to `/board/moves`, where the server checks it
+/// against the board as it is then and gives the card a rank between its new
+/// neighbours'.
 pub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Sortable {
-    let lists = Column::ALL.map(|column| {
-        let held: Vec<&Card> = data
-            .cards
-            .iter()
-            .filter(|c| c.list == column.key())
-            .collect();
-        let shown = held.iter().filter(|card| filters.keeps(card, today));
-        let mut list = SortList::new(column.key(), column.title())
-            .items(shown.map(|card| {
-                SortItem::new(card.id.to_string(), card.title.clone())
-                    .body(card_face(card, data, today))
-            }))
-            .total(held.len())
-            .empty(if filters.is_empty() {
-                "No cards"
-            } else {
-                "No cards match"
-            });
-        if let Some(limit) = column.limit() {
-            list = list.limit(limit);
-        }
-        if column == Column::Done && !viewer.is_lead() {
-            list = list.refuse("Only a lead can move cards to Done.");
-        }
-        list
-    });
     Sortable::new("columns", format!("{PROJECT} board"))
         .board()
         .post("/board/moves")
-        .lists(lists)
+        .lists(
+            data.columns
+                .iter()
+                .map(|page| column(page, &data.people, viewer, filters, today)),
+        )
 }
 
 /// One card as the board shows it: its labels, its title (which opens the drawer),
 /// who has it, when it is due, its checklist and its comments.
-pub fn card_face(card: &Card, data: &BoardData, today: NaiveDate) -> Node {
+pub fn card_face(card: &Card, people: &[Person], today: NaiveDate) -> Node {
     let labels = labels_of(&card.labels);
-    let (done, lines) = data.checklist(card.id);
-    let comments = data.comment_count(card.id);
     let mut facts = Vec::new();
-    if let Some(who) = person(&data.people, card.assignee) {
+    if let Some(who) = person(people, card.assignee) {
         let first = who.name.split(' ').next().unwrap_or_default().to_owned();
         facts.push(Meta::new(first).start(Avatar::placeholder(who.name.clone()).size(Size::Sm)));
     }
-    if lines > 0 {
-        facts.push(Meta::icon(icons::LIST_CHECKS, format!("{done}/{lines}")));
+    if card.checks_total > 0 {
+        facts.push(Meta::icon(
+            icons::LIST_CHECKS,
+            format!("{}/{}", card.checks_done, card.checks_total),
+        ));
     }
-    if comments > 0 {
-        facts.push(Meta::icon(icons::MESSAGE_SQUARE, comments.to_string()));
+    if card.comments > 0 {
+        facts.push(Meta::icon(icons::MESSAGE_SQUARE, card.comments.to_string()));
     }
     Stack::gap(2)
         .children((
@@ -257,11 +279,19 @@ pub fn filter_bar(people: &[Person], filters: &Filters) -> Node {
         .into()
 }
 
-/// The board in its region: redrawn by the filters, and fetched again whenever
-/// the event stream says the board changed, so other people's moves slide in.
+/// The board in its region: redrawn by the filters, and fetched again whenever the
+/// event stream says the board changed, so other people's moves slide in. Its
+/// source asks for as many cards in each column as the page holds.
 pub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Region {
+    let mut pairs = filters.pairs();
+    for page in &data.columns {
+        let shown = page.start + page.cards.len();
+        if shown > PAGE {
+            pairs.push((format!("show.{}", page.column.key()), shown.to_string()));
+        }
+    }
     Region::new(REGION)
-        .src(format!("/fragments/board{}", filters.query()))
+        .src(format!("/fragments/board{}", query(&pairs)))
         .live_from("/events")
         .children(Stack::gap(2).children((live_state(), columns(data, viewer, filters, today))))
 }
@@ -291,53 +321,14 @@ pub fn empty_drawer() -> Sheet {
     Sheet::new(DRAWER, "Card").width(SheetWidth::Lg)
 }
 
-/// The palette: every card, found by its title, its column, who has it or its
-/// labels. Choosing one opens it in the drawer. `Ctrl` or `Cmd` and `K` opens it.
-pub fn palette(data: &BoardData) -> Command {
-    let cards = data.cards.iter().map(|card| {
-        let column = Column::parse(&card.list).map_or("", Column::title);
-        let mut words: Vec<String> = labels_of(&card.labels)
-            .iter()
-            .map(|label| label.title().to_owned())
-            .collect();
-        if let Some(who) = person(&data.people, card.assignee) {
-            words.push(who.name.clone());
-        }
-        CommandItem::run(
-            card.title.clone(),
-            vec![
-                Cmd::value("peek-card", card.id.to_string()),
-                Cmd::submit("peek"),
-            ],
-        )
-        .icon(icons::SQUARE_KANBAN)
-        .description(column)
-        .keywords(words)
-    });
+/// The palette: finds any card by its title, on the server, as you type, and
+/// opens its page. `Ctrl` or `Cmd` and `K` opens it.
+pub fn palette() -> Command {
     Command::new("jump")
-        .title("Jump to a card")
-        .placeholder("Search cards by title, person or label")
-        .group(CommandGroup::new("Cards").items(cards))
+        .title("Find a card")
+        .placeholder("Search every card by title")
+        .source("/cards/search")
         .shortcut(true)
-}
-
-/// The one form the palette opens a card with.
-pub fn peek_form() -> Node {
-    el("form")
-        .attr("id", "peek")
-        .attr("method", "get")
-        .attr("action", "/cards/peek")
-        .flag("data-ui-form", true)
-        .flag("hidden", true)
-        .uses(Uses::CORE)
-        .child(
-            el("input")
-                .attr("type", "hidden")
-                .attr("id", "peek-card")
-                .attr("name", "card")
-                .settable(),
-        )
-        .into()
 }
 
 /// Who the board is shown as: a lead may move cards to Done, a member may not.
@@ -365,7 +356,7 @@ pub fn board_page(
     today: NaiveDate,
 ) -> AppPage {
     page.actions((
-        Command::trigger("jump", "Jump to a card"),
+        Command::trigger("jump", "Find a card"),
         viewer_menu(&data.people, viewer),
     ))
     .body((
@@ -374,7 +365,6 @@ pub fn board_page(
             board(data, viewer, filters, today),
         )),
         empty_drawer(),
-        palette(data),
-        peek_form(),
+        palette(),
     ))
 }

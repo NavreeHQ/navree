@@ -6,6 +6,7 @@
 
 use chrono::{DateTime, Days, NaiveDate};
 use navree::orm::Model;
+use navree::ui::sortable::RANK_GAP;
 use navree::ui::{Tone, icons};
 
 /// The team.
@@ -165,14 +166,15 @@ impl Person {
     }
 }
 
-/// A card, as stored. Its place is its column and its position in it.
+/// A card, as stored. Its place is its column and its rank there: cards are in
+/// rank order, and a move writes one rank between its new neighbours'.
 #[derive(Model, Clone, Debug, Default, serde::Serialize)]
 #[model(table = "cards")]
 pub struct Card {
     pub id: i64,
     /// A [`Column`]'s key.
     pub list: String,
-    pub position: i64,
+    pub rank: i64,
     pub title: String,
     pub description: String,
     pub assignee: Option<i64>,
@@ -181,6 +183,12 @@ pub struct Card {
     pub due: Option<NaiveDate>,
     /// Unix seconds.
     pub created_at: i64,
+    /// How many checklist lines are ticked, and how many there are, kept with the
+    /// card so the board reads one row a card.
+    pub checks_done: i64,
+    pub checks_total: i64,
+    /// How many comments it has.
+    pub comments: i64,
 }
 
 /// One line of a card's checklist.
@@ -246,7 +254,7 @@ pub fn person_icon(person: &Person) -> icons::Icon {
     }
 }
 
-const PEOPLE: [(&str, &str, &str, &str); 6] = [
+const PEOPLE: [(&str, &str, &str, &str); 8] = [
     (
         "Mara Quinn",
         "mara.quinn@example.com",
@@ -281,6 +289,18 @@ const PEOPLE: [(&str, &str, &str, &str); 6] = [
         "Sol Ferreira",
         "sol.ferreira@example.com",
         "Support and docs",
+        "member",
+    ),
+    (
+        "Kai Nakamura",
+        "kai.nakamura@example.com",
+        "Data engineer",
+        "member",
+    ),
+    (
+        "Priya Raman",
+        "priya.raman@example.com",
+        "Quality engineer",
         "member",
     ),
 ];
@@ -523,7 +543,92 @@ const COMMENTS: [(usize, i64, i64, &str); 7] = [
     ),
 ];
 
-/// The board written afresh, as it stands at `now` (unix seconds).
+/// How many cards the seed writes: a project some years old, most of it done or
+/// waiting in the backlog.
+pub const CARD_COUNT: usize = 20_000;
+
+/// The order a column's ranks start in, apart by [`RANK_GAP`].
+fn rank(at: usize) -> i64 {
+    i64::try_from(at).unwrap_or(i64::MAX / RANK_GAP) * RANK_GAP
+}
+
+/// A small fixed sequence of numbers, so every run writes the same board.
+struct Dice(u64);
+
+impl Dice {
+    fn below(&mut self, n: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        if n == 0 {
+            0
+        } else {
+            usize::try_from(self.0 % n as u64).unwrap_or(0)
+        }
+    }
+}
+
+const VERBS: [&str; 10] = [
+    "Fix",
+    "Speed up",
+    "Add",
+    "Tidy",
+    "Write up",
+    "Redesign",
+    "Test",
+    "Measure",
+    "Simplify",
+    "Translate",
+];
+const SUBJECTS: [&str; 16] = [
+    "the map legend",
+    "photo uploads",
+    "species search",
+    "offline sync",
+    "the sighting export",
+    "the tide table",
+    "the survey summary",
+    "the field guide",
+    "sign-in",
+    "the settings screen",
+    "dive logs",
+    "weather notes",
+    "the team list",
+    "GPS tracks",
+    "photo tags",
+    "the release checklist",
+];
+const PLACES: [&str; 8] = [
+    "on Android",
+    "on iOS",
+    "on a weak signal",
+    "for tablets",
+    "in the web app",
+    "for new surveyors",
+    "in Portuguese",
+    "with large photos",
+];
+const SAYINGS: [&str; 8] = [
+    "I can take this one next week.",
+    "Is this still wanted after the redesign?",
+    "Reproduced it on a Pixel 6a.",
+    "Added a screenshot to the thread.",
+    "This blocks the export work.",
+    "Looks good to me.",
+    "Can we split this in two?",
+    "Moved the notes to the description.",
+];
+const LINES: [&str; 6] = [
+    "Reproduce it",
+    "Write the fix",
+    "Add a test",
+    "Check it on a phone",
+    "Ask a surveyor to try it",
+    "Note it in the release",
+];
+
+/// The board written afresh, as it stands at `now` (unix seconds): the sixteen
+/// cards above in their columns, then thousands more in the backlog and in done.
 pub fn seed(now: i64) -> Seed {
     // Times on the board are whole minutes.
     let now = now - now.rem_euclid(60);
@@ -538,101 +643,199 @@ pub fn seed(now: i64) -> Seed {
             job: (*job).to_owned(),
             role: (*role).to_owned(),
         })
-        .collect();
-    let mut cards = Vec::new();
-    let mut checks = Vec::new();
-    let mut activity = Vec::new();
-    let mut positions = [0_i64; 5];
+        .collect::<Vec<_>>();
+    let mut seed = Seed {
+        people,
+        ..Seed::default()
+    };
+    let mut dice = Dice(0x5a17_3a25_1104);
+    let mut counts = [0_usize; 5];
+    // The cards a reader meets first.
     for (at, (column, title, assignee, labels, due, description, lines)) in CARDS.iter().enumerate()
     {
-        let id = at as i64 + 1;
-        let slot = Column::ALL.iter().position(|c| c == column).unwrap_or(0);
-        let position = positions[slot];
-        positions[slot] += 1;
-        let created_at = now - (9 - (at as i64 % 7)) * 86_400 - at as i64 * 1_800;
-        cards.push(Card {
-            id,
-            list: column.key().to_owned(),
-            position,
-            title: (*title).to_owned(),
-            description: (*description).to_owned(),
-            assignee: Some(*assignee),
-            labels: (*labels).to_owned(),
-            due: due.and_then(|days| {
-                if days >= 0 {
-                    today.checked_add_days(Days::new(days.unsigned_abs()))
-                } else {
-                    today.checked_sub_days(Days::new(days.unsigned_abs()))
-                }
-            }),
-            created_at,
-        });
-        for (line, (text, done)) in lines.iter().enumerate() {
-            checks.push(Check {
-                id: checks.len() as i64 + 1,
-                card_id: id,
-                position: line as i64,
-                text: (*text).to_owned(),
-                done: i64::from(*done),
-            });
-        }
-        activity.push(Activity {
-            id: activity.len() as i64 + 1,
-            card_id: id,
-            person_id: 1,
-            at: created_at,
-            kind: "created".to_owned(),
-            detail: "Backlog".to_owned(),
-        });
-        // The cards past the backlog came through each column on the way.
-        let mut from = Column::Backlog;
-        let mut when = created_at;
-        for step in Column::ALL.iter().skip(1) {
-            if Column::ALL.iter().position(|c| c == step)
-                > Column::ALL.iter().position(|c| c == column)
-            {
-                break;
+        let due = due.and_then(|days| {
+            if days >= 0 {
+                today.checked_add_days(Days::new(days.unsigned_abs()))
+            } else {
+                today.checked_sub_days(Days::new(days.unsigned_abs()))
             }
-            when += 14 * 3600;
-            activity.push(Activity {
-                id: activity.len() as i64 + 1,
-                card_id: id,
-                person_id: if *step == Column::Done { 1 } else { *assignee },
-                at: when.min(now - 600),
-                kind: "moved".to_owned(),
-                detail: format!("{} to {}", from.title(), step.title()),
-            });
-            from = *step;
+        });
+        let created = now - (9 - (at as i64 % 7)) * 86_400 - at as i64 * 1_800;
+        let lines: Vec<(String, bool)> = lines
+            .iter()
+            .map(|(text, done)| ((*text).to_owned(), *done))
+            .collect();
+        add(
+            &mut seed,
+            &mut counts,
+            *column,
+            title,
+            *assignee,
+            labels,
+            due,
+            description,
+            &lines,
+            created,
+            now,
+        );
+    }
+    for (card, person, ago, body) in COMMENTS {
+        comment(&mut seed, card as i64 + 1, person, now - ago, body);
+    }
+    // The rest of the project.
+    while seed.cards.len() < CARD_COUNT {
+        let n = seed.cards.len();
+        let column = if dice.below(10) < 6 {
+            Column::Backlog
+        } else {
+            Column::Done
+        };
+        let title = format!(
+            "{} {} {}",
+            VERBS[dice.below(VERBS.len())],
+            SUBJECTS[dice.below(SUBJECTS.len())],
+            PLACES[dice.below(PLACES.len())]
+        );
+        let label = Label::ALL[dice.below(Label::ALL.len())].key();
+        let assignee = dice.below(PEOPLE.len()) as i64 + 1;
+        let created = now - 86_400 * (30 + dice.below(900) as i64) - 60 * dice.below(1_440) as i64;
+        let due = (column == Column::Backlog && dice.below(5) == 0)
+            .then(|| today.checked_add_days(Days::new(dice.below(90) as u64)))
+            .flatten();
+        let lines: Vec<(String, bool)> = (0..dice.below(5))
+            .map(|line| {
+                (
+                    LINES[line].to_owned(),
+                    column == Column::Done || dice.below(3) == 0,
+                )
+            })
+            .collect();
+        let description = format!(
+            "Card {} of the project. Noted while planning {}.",
+            n + 1,
+            PROJECT
+        );
+        add(
+            &mut seed,
+            &mut counts,
+            column,
+            &title,
+            assignee,
+            label,
+            due,
+            &description,
+            &lines,
+            created,
+            now,
+        );
+        let id = seed.cards.len() as i64;
+        for said in 0..dice.below(5) {
+            let at =
+                (created + 3_600 * (said as i64 + 1) * (1 + dice.below(48) as i64)).min(now - 60);
+            comment(
+                &mut seed,
+                id,
+                dice.below(PEOPLE.len()) as i64 + 1,
+                at,
+                SAYINGS[dice.below(SAYINGS.len())],
+            );
         }
     }
-    let comments = COMMENTS
-        .iter()
-        .enumerate()
-        .map(|(at, (card, person, ago, body))| Comment {
-            id: at as i64 + 1,
-            card_id: *card as i64 + 1,
-            person_id: *person,
-            at: now - ago,
-            body: (*body).to_owned(),
-        })
-        .collect::<Vec<_>>();
-    for comment in &comments {
-        activity.push(Activity {
-            id: activity.len() as i64 + 1,
-            card_id: comment.card_id,
-            person_id: comment.person_id,
-            at: comment.at,
-            kind: "commented".to_owned(),
-            detail: String::new(),
+    seed
+}
+
+/// Adds a card at the end of `column`, its checklist, and how it got there.
+#[allow(clippy::too_many_arguments)]
+fn add(
+    seed: &mut Seed,
+    counts: &mut [usize; 5],
+    column: Column,
+    title: &str,
+    assignee: i64,
+    labels: &str,
+    due: Option<NaiveDate>,
+    description: &str,
+    lines: &[(String, bool)],
+    created: i64,
+    now: i64,
+) {
+    let id = seed.cards.len() as i64 + 1;
+    let slot = Column::ALL.iter().position(|c| *c == column).unwrap_or(0);
+    let at = counts[slot];
+    counts[slot] += 1;
+    seed.cards.push(Card {
+        id,
+        list: column.key().to_owned(),
+        rank: rank(at),
+        title: title.to_owned(),
+        description: description.to_owned(),
+        assignee: Some(assignee),
+        labels: labels.to_owned(),
+        due,
+        created_at: created,
+        checks_done: lines.iter().filter(|(_, done)| *done).count() as i64,
+        checks_total: lines.len() as i64,
+        comments: 0,
+    });
+    for (line, (text, done)) in lines.iter().enumerate() {
+        seed.checks.push(Check {
+            id: seed.checks.len() as i64 + 1,
+            card_id: id,
+            position: line as i64,
+            text: text.clone(),
+            done: i64::from(*done),
         });
     }
-    Seed {
-        people,
-        cards,
-        checks,
-        comments,
-        activity,
+    let mut history = |person: i64, at: i64, kind: &str, detail: String| {
+        seed.activity.push(Activity {
+            id: seed.activity.len() as i64 + 1,
+            card_id: id,
+            person_id: person,
+            at,
+            kind: kind.to_owned(),
+            detail,
+        });
+    };
+    history(1, created, "created", "Backlog".to_owned());
+    // A card past the backlog came through each column on the way.
+    let mut from = Column::Backlog;
+    let mut when = created;
+    for step in Column::ALL.iter().skip(1).take(slot) {
+        when += 14 * 3600;
+        let by = if *step == Column::Done { 1 } else { assignee };
+        history(
+            by,
+            when.min(now - 600),
+            "moved",
+            format!("{} to {}", from.title(), step.title()),
+        );
+        from = *step;
     }
+}
+
+/// Adds a comment to card `card`, and says so in its history.
+fn comment(seed: &mut Seed, card: i64, person: i64, at: i64, body: &str) {
+    seed.comments.push(Comment {
+        id: seed.comments.len() as i64 + 1,
+        card_id: card,
+        person_id: person,
+        at,
+        body: body.to_owned(),
+    });
+    if let Some(found) = seed
+        .cards
+        .get_mut(usize::try_from(card - 1).unwrap_or(usize::MAX))
+    {
+        found.comments += 1;
+    }
+    seed.activity.push(Activity {
+        id: seed.activity.len() as i64 + 1,
+        card_id: card,
+        person_id: person,
+        at,
+        kind: "commented".to_owned(),
+        detail: String::new(),
+    });
 }
 
 #[cfg(test)]
@@ -642,6 +845,7 @@ mod tests {
     #[test]
     fn the_seed_fills_every_column_within_its_limit() {
         let seed = seed(1_793_793_600);
+        assert_eq!(seed.cards.len(), CARD_COUNT);
         for column in Column::ALL {
             let n = seed.cards.iter().filter(|c| c.list == column.key()).count();
             assert!(n > 0, "{column:?} has cards");
@@ -654,6 +858,15 @@ mod tests {
         for person in &seed.people {
             assert!(person.email.ends_with("@example.com"));
         }
+        // The counters on each card agree with its lines and comments.
+        let card = &seed.cards[9];
+        assert_eq!(card.comments, 3);
+        assert_eq!((card.checks_done, card.checks_total), (2, 3));
+        // The same board every time.
+        assert_eq!(
+            seed.cards[12_345].title,
+            super::seed(1_793_793_600).cards[12_345].title
+        );
     }
 
     #[test]
