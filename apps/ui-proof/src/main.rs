@@ -22,6 +22,7 @@
 //! | `/themes/layouts/{layout}` | the same page in each layout, folding three ways |
 //! | `/themes/builder` | the theme builder, saving to memory and importing |
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
+//! | `/pages` | error pages, sign-in and the states inside a page, in every case |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -33,7 +34,7 @@ use navree::http::{GlobalLayer, LayerSlot};
 #[cfg(feature = "logbook")]
 use navree::logbook::{LogbookOptions, StoreKind};
 use navree::prelude::*;
-use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
+use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, icons};
 
 mod acme_theme;
 mod bench;
@@ -45,6 +46,7 @@ mod display;
 mod gallery;
 mod icons_flags;
 mod menus;
+mod pages;
 mod phone;
 mod select;
 mod themes;
@@ -76,6 +78,7 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Select", "/select").icon(icons::LIST))
                 .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG))
                 .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST))
+                .item(NavItem::new("States", "/pages").icon(icons::SHIELD_ALERT))
                 .item(NavItem::new("Display", "/display").icon(icons::LAYERS))
                 .item(NavItem::new("Live activity", "/display/live").icon(icons::ACTIVITY)),
         )
@@ -92,6 +95,10 @@ impl Module for ProofModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) }))
             .exports::<Shell>();
+        m.factory(Factory::<dyn navree::http::Authenticator>::new(|_| async {
+            Ok(Arc::new(pages::CookieAuth) as Arc<dyn navree::http::Authenticator>)
+        }))
+        .exports::<dyn navree::http::Authenticator>();
         m.http_layer(GlobalLayer::new(
             LayerSlot::Context,
             "proof.timing",
@@ -106,7 +113,8 @@ impl Module for ProofModule {
             .controller::<menus::MenuPages>()
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
-            .controller::<themes::ThemePages>();
+            .controller::<themes::ThemePages>()
+            .controller::<pages::Pages>();
     }
 }
 
@@ -149,7 +157,11 @@ fn main() -> Result<(), BoxError> {
     let app = Navree::app()
         .module(ConfigModule::for_root(sources))
         .module(HttpModule::from_config())
-        .module(UiModule::from_config())
+        .module(UiModule::with_pages(
+            // Error pages show their details only when asked: a development build of the
+            // proof app must look like the release one.
+            PagesOptions::default().debug(std::env::var_os("UI_PROOF_DEBUG").is_some()),
+        ))
         .module(ProofModule);
     // A development build only (`--features logbook`), and then only when asked: it
     // records every request, which a speed measurement shouldn't pay for.

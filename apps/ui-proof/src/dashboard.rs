@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use http::Method;
+use navree::http::response::IntoResponse;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::{
@@ -88,7 +89,15 @@ impl Controller for DashboardPages {
             .public(),
             RouteDef::on(Method::GET, "!/plain", || async { plain() }).public(),
             RouteDef::on(Method::POST, "!/sign-out", || async {
-                Reply::redirect("/plain")
+                // The sign-in demo's cookie goes too.
+                let mut reply = Reply::redirect("/plain").into_response();
+                reply.headers_mut().append(
+                    http::header::SET_COOKIE,
+                    http::HeaderValue::from_static(
+                        "proof_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+                    ),
+                );
+                reply
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/revenue", || async {

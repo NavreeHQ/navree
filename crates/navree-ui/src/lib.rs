@@ -89,7 +89,7 @@ pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
 pub use pages::{
     EmptyState, ErrorPage, ErrorShell, Forbidden, NotFound, PagesOptions, ReturnTo, SessionEnded,
-    SignInRequired, State, StateKind, StateLabels,
+    SignInRequired, State, StateKind, StateLabels, StateSize,
 };
 #[cfg(feature = "phone")]
 pub use phone::{PhoneInput, PhoneLabels};

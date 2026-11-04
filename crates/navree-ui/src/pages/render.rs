@@ -358,7 +358,11 @@ fn action(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> R
     if let Some(detail) = shown_detail(error, kind)
         && matches!(
             kind,
-            StateKind::Conflict | StateKind::Invalid | StateKind::Client | StateKind::Forbidden
+            StateKind::Conflict
+                | StateKind::Invalid
+                | StateKind::Client
+                | StateKind::Forbidden
+                | StateKind::Unavailable
         )
     {
         text = detail;
