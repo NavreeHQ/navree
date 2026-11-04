@@ -240,12 +240,13 @@ fn columns(cells: Cells, n: usize) -> i64 {
 }
 
 /// The module scripts a preview loads: what the page would load, less the
-/// core runtime unless the example runs commands. The core boosts links and
-/// forms, which go nowhere in a preview.
+/// core runtime unless the example runs commands, and less the live module,
+/// since no preview follows a stream. The core boosts links and forms, which
+/// go nowhere in a preview.
 fn scripts(example: &Example, node: &Node) -> Vec<String> {
     assets::scripts(measure(node).uses)
         .filter(|url| example.live || *url != assets::CORE_URL)
-        .filter(|url| !example.still || *url != assets::LIVE_URL)
+        .filter(|url| *url != assets::LIVE_URL)
         .map(|url| file_of(url).to_owned())
         .collect()
 }
@@ -287,10 +288,9 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
     } else {
         ""
     };
-    let mut body = render(stage);
-    if example.still {
-        body = without_streams(&body);
-    }
+    // A static page has no server to stream from: a region that follows a stream would open
+    // one, to an address the site does not have, and keep trying.
+    let body = without_streams(&render(stage));
     format!(
         "{head}<body data-preview=\"{}\"{show}>{body}</body>\n</html>\n",
         example.layout.as_str(),
@@ -298,7 +298,7 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
 }
 
 /// `html` with no `data-ui-live-src` or `data-ui-live-event` attribute: the regions
-/// and tables in it follow no stream.
+/// and tables in it follow no stream. Every preview is drawn this way.
 fn without_streams(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
@@ -656,9 +656,9 @@ fn check(examples: &[Example], api: &BTreeMap<String, TypeDoc>) {
 }
 
 #[cfg(test)]
-mod still_tests {
+mod stream_tests {
     #[test]
-    fn a_still_preview_follows_no_stream() {
+    fn a_preview_follows_no_stream() {
         let html = r#"<div id="r" data-ui-src="/f" data-ui-live-src="/events" data-ui-live-event="stats"><table data-ui-live-src="/events"></table></div>"#;
         assert_eq!(
             super::without_streams(html),

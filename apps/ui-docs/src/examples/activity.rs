@@ -49,9 +49,14 @@ pub fn all() -> Vec<Example> {
         single!("badge", "dot", "A dot and a tone", badge_dot),
         gallery!("badge", "tones", "Tones", badge_tones).narrow(),
         single!("badge", "outcome", "Outcome chips", badge_outcome),
-        single!("regions", "live", "A feed fed by a stream", regions_live)
-            .start()
-            .streaming("on"),
+        single!(
+            "regions",
+            "live",
+            "A feed fed by a stream, which runs in your app",
+            regions_live
+        )
+        .start()
+        .streaming("on"),
     ]
 }
 

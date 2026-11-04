@@ -32,8 +32,7 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(560)
-        .streaming("on")
-        .still(),
+        .streaming("on"),
         Example::new(
             "build-anything",
             "recipient",
@@ -63,8 +62,7 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(560)
-        .streaming("on")
-        .still(),
+        .streaming("on"),
         Example::new(
             "build-anything",
             "funnel",
