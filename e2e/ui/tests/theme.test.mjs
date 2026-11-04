@@ -75,9 +75,13 @@ for (const name of NAMES) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark", ...rest });
       contexts.push(context);
       if (slowSheets) {
+        // The sheet is fetched at once and handed over late. Handing it back to the
+        // browser's own network after the wait would add Firefox's dispatch delay
+        // under the test driver, seconds at times, on top.
         await context.route("**/_navree/ui/theme/**", async (route) => {
+          const response = await route.fetch();
           await sleep(slowSheets);
-          await route.continue();
+          await route.fulfill({ response });
         });
       }
       const page = await context.newPage();
@@ -261,6 +265,50 @@ for (const name of NAMES) {
         else assert.match((await look(page)).theme, /^c[0-9a-f]{24}$/);
         await page.done();
       }
+    });
+
+    test("a page shown twice while its theme's stylesheet is late waits both times, and its title changes with its content", async () => {
+      const form = await acmeForm();
+      // A page that doesn't link the app's own theme yet: no theme menu offers it.
+      const page = await open("/deals?theme=ocean&mode=light", { slowSheets: 1500 });
+      assert.equal(await page.locator(`link[href*="${form}"]`).count(), 0);
+      const before = await look(page);
+      const title = await page.title();
+      await page.evaluate((href) => {
+        const a = document.createElement("a");
+        a.id = "late";
+        a.href = href;
+        a.textContent = "late";
+        document.querySelector("main").prepend(a);
+        // The title, the theme and the accent at every frame.
+        window.__frames = [];
+        const tick = () => {
+          const span = document.createElement("span");
+          document.documentElement.append(span);
+          span.style.color = "var(--accent)";
+          window.__frames.push([document.title, document.documentElement.getAttribute("data-theme"), getComputedStyle(span).color].join(" | "));
+          span.remove();
+          if (!window.__stop) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }, `/themes/layouts/sidebar?theme=${form}&mode=dark`);
+      await page.click("#late");
+      await sleep(300);
+      // The same link again while the first show still waits for the stylesheet.
+      await page.evaluate(() => document.getElementById("late")?.click());
+      await page.waitFor(() => /^c[0-9a-f]{24}$/.test(document.documentElement.getAttribute("data-theme") || ""));
+      const seen = await page.evaluate(() => window.__frames.length);
+      await page.waitFor((n) => window.__frames.length > n + 10, seen);
+      await page.evaluate(() => { window.__stop = true; });
+      const after = await look(page);
+      const states = [...new Set(await page.evaluate(() => window.__frames))];
+      assert.deepEqual(
+        states,
+        [`${title} | ${before.theme} | ${before.accent}`, `${await page.title()} | ${after.theme} | ${after.accent}`],
+        "the old page in its theme, then the new page in its own: no new title over old content, no frame in another theme",
+      );
+      assert.equal(after.accent, "rgb(124, 92, 255)", "the app's own violet accent, from its stylesheet");
+      await page.done();
     });
 
     test("a theme chosen in the menu stays chosen on a page reached with ?theme= and ?mode=", async () => {

@@ -104,28 +104,38 @@ function prefetch(url) {
   prefetched.set(key, { at: performance.now(), epoch, cookies: cookies(), page });
 }
 
+/** The stylesheets added to this page that are still loading, by URL. */
+const pendingSheets = new Map();
+
 /**
  * Adds the stylesheets and the toolkit's modules of `doc` that this page lacks. A
  * script from `DOMParser` never runs, so a module gets a new element; no other
  * script loads, whatever the page's head says. Resolves when the stylesheets it
- * added have loaded or failed, or after `STYLE_WAIT`: a page that changes theme
+ * needs have loaded or failed, those it added and those an earlier show added
+ * that are still loading, or after `STYLE_WAIT`: a page that changes theme
  * shows only once its theme is there, so it never paints in the wrong one.
  * @param {Document} doc
  * @returns {Promise<unknown> | null}
  */
 function mergeHead(doc) {
-  setTitle(titleOf(doc));
   /** @type {Promise<unknown>[]} */
   const loading = [];
   for (const el of head(doc).querySelectorAll("link[rel=stylesheet],script[src]")) {
     const name = el.nodeName === "LINK" ? "href" : "src";
     const url = attr(el, name) || "";
-    if (head().querySelector(`[${name}="${CSS.escape(url)}"]`)) continue;
+    if (head().querySelector(`[${name}="${CSS.escape(url)}"]`)) {
+      const pending = pendingSheets.get(url);
+      if (pending) loading.push(pending);
+      continue;
+    }
     if (el.nodeName === "LINK") {
-      loading.push(new Promise((done) => {
-        on(el, "load", done, { once: true });
-        on(el, "error", done, { once: true });
-      }));
+      const done = new Promise((settle) => {
+        on(el, "load", settle, { once: true });
+        on(el, "error", settle, { once: true });
+      });
+      pendingSheets.set(url, done);
+      done.then(() => pendingSheets.get(url) === done && pendingSheets.delete(url));
+      loading.push(done);
       head().append(el);
     } else if (attr(el, "type") === "module" && ownModule(url)) {
       const script = /** @type {HTMLScriptElement} */ (make("script"));
@@ -208,6 +218,8 @@ export async function showPage(response, how = {}) {
   }
   takeLook(doc);
   morph(body(), body(doc), { reset: !how.region && !how.keep });
+  // The title changes with what it names, never ahead of it.
+  setTitle(titleOf(doc));
   dropSheets(sheets);
   // The same page again is no navigation: the reader stays where they were, focus and scroll.
   const stay = how.keep && active() !== body() && holds(body(), active());
