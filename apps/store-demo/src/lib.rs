@@ -25,6 +25,8 @@
 //! `sqlite://target/store-demo.db?mode=rwc` by default). While the app runs, a
 //! simulator places, packs, ships and delivers orders and restocks shelves every
 //! few seconds (`STORE_SIMULATOR=<milliseconds>`, 3000 by default, or `off`).
+//! `STORE_LOG_QUERIES=1` logs every statement as JSON lines, for
+//! `e2e/ui/measure-store.mjs`, which measures the app.
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -130,9 +132,11 @@ impl Module for StoreModule {
     }
 }
 
-/// The app on `127.0.0.1:port`, on the database at `database_url`.
+/// The app on `127.0.0.1:port`, on the database at `database_url`. With
+/// `STORE_LOG_QUERIES` set it logs every statement it runs, which is how the
+/// query plans on the website are found.
 pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
-    let config = vec![
+    let mut config = vec![
         ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
         ("APP_DATABASE__URL".to_owned(), database_url),
         // The browser tests send every request from one address, and keep many
@@ -146,6 +150,11 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
             "10000".to_owned(),
         ),
     ];
+    if std::env::var_os("STORE_LOG_QUERIES").is_some() {
+        config.push(("APP_DATABASE__LOG_QUERIES".to_owned(), "true".to_owned()));
+        config.push(("APP_LOG__LEVEL".to_owned(), "debug".to_owned()));
+        config.push(("APP_LOG__FORMAT".to_owned(), "json".to_owned()));
+    }
     Navree::app()
         .module(ConfigModule::for_root(
             ConfigSources::new().env_vars("APP_", config),
