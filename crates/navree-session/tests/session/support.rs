@@ -14,8 +14,9 @@ use navree_testing::{TestApp, TestAppBuilder, TestClient};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-/// The default session cookie name.
-pub const COOKIE: &str = "navree_session";
+/// The default session cookie's name: `session.cookie` with the `__Host-`
+/// prefix, as the default options (secure, no domain) allow it.
+pub const COOKIE: &str = "__Host-navree_session";
 
 /// The cookie JavaScript clients read the CSRF token from.
 pub const XSRF: &str = "XSRF-TOKEN";
@@ -60,6 +61,15 @@ async fn invalidate(session: Session) -> Json<Value> {
     Json(json!({ "old": old, "new": session.id() }))
 }
 
+/// "Remember me": the session lives 30 days when idle.
+async fn remember(session: Session) -> Json<Value> {
+    session.set_lifetime(std::time::Duration::from_secs(REMEMBER_DAYS * 24 * 3600));
+    Json(json!({ "id": session.id() }))
+}
+
+/// How long [`remember`] keeps a session, in days.
+pub const REMEMBER_DAYS: u64 = 30;
+
 async fn flush(session: Session) -> Json<Value> {
     session.flush();
     Json(json!({ "id": session.id() }))
@@ -101,6 +111,7 @@ impl Controller for ProbeController {
             RouteDef::on(Method::POST, "/regenerate", regenerate).public(),
             RouteDef::on(Method::POST, "/invalidate", invalidate).public(),
             RouteDef::on(Method::POST, "/flush", flush).public(),
+            RouteDef::on(Method::POST, "/remember", remember).public(),
             RouteDef::on(Method::GET, "/token", token).public(),
             RouteDef::on(Method::GET, "/untouched", untouched).public(),
             RouteDef::on(Method::POST, "/fail", put_then_fail).public(),

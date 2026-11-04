@@ -6,7 +6,7 @@
 //! - `GET /api/demo/visits` (public): counts visits in a `visits` cookie
 //! - `POST /api/demo/forget` (public): deletes the `visits` cookie
 //! - `GET|POST /api/demo/headers` (public): the request headers as JSON
-//! - `GET /sanctum/csrf-cookie` (public): 204 and an `XSRF-TOKEN` cookie
+//! - `GET /csrf-cookie` (public): 204 and an `XSRF-TOKEN` cookie
 //! - `GET /api/demo/items` (public): a fixed list
 //! - `POST /api/demo/raw` (public): `{"content_type", "body"}` of the request
 //! - `GET|POST|PUT|PATCH|DELETE /api/demo/method` (public): `{"method"}`
@@ -56,7 +56,7 @@ impl Controller for DemoController {
             RouteDef::on(Method::POST, "/forget", forget).public(),
             RouteDef::on(Method::GET, "/headers", headers).public(),
             RouteDef::on(Method::POST, "/headers", headers).public(),
-            RouteDef::on(Method::GET, "!/sanctum/csrf-cookie", csrf_cookie).public(),
+            RouteDef::on(Method::GET, "!/csrf-cookie", csrf_cookie).public(),
             RouteDef::on(Method::GET, "/items", items).public(),
             RouteDef::on(Method::POST, "/raw", raw).public(),
             RouteDef::on(Method::GET, "/ip", ip).public(),

@@ -230,6 +230,73 @@ async fn activity_extends_the_session() {
     assert_eq!(value, json!("ada"));
 }
 
+// MOD-001: "remember me" keeps the session, and its cookies, for the
+// lifetime the session set itself, past `session.lifetime_minutes`.
+#[tokio::test]
+async fn a_remembered_session_outlives_the_configured_lifetime() {
+    let clock = clock();
+    let app = app_with_clock(clock.clone()).await;
+    let store = app.get::<dyn SessionStore>().await;
+    let client = app.client();
+    let id = support::put(&client, "user", json!("ada")).await;
+    let response = client
+        .post("/api/probe/remember")
+        .xsrf()
+        .send()
+        .await
+        .assert_status(200);
+    let days = i64::try_from(support::REMEMBER_DAYS).unwrap();
+    let cookie = response.set_cookie(COOKIE).expect("the cookie is renewed");
+    assert_eq!(
+        cookie.max_age(),
+        Some(navree_testing::cookie::time::Duration::days(days)),
+        "the session cookie lasts as long as the session"
+    );
+    let xsrf = response.set_cookie(XSRF).expect("with the XSRF cookie");
+    assert_eq!(
+        xsrf.max_age(),
+        Some(navree_testing::cookie::time::Duration::days(days))
+    );
+    let record = store.load(&id).await.unwrap().expect("the record");
+    assert_eq!(
+        record.expires_at,
+        Some(clock.now() + chrono::TimeDelta::days(days)),
+        "the record lives as long"
+    );
+
+    // Five idle hours: past the configured two, within the thirty days.
+    clock.advance(Duration::from_secs(5 * 3600));
+    let (current, value) = support::get(&client, "user").await;
+    assert_eq!(current, id, "the remembered session is still there");
+    assert_eq!(value, json!("ada"));
+
+    // Thirty-one idle days: gone.
+    clock.advance(Duration::from_secs(31 * 24 * 3600));
+    let (current, value) = support::get(&client, "user").await;
+    assert_ne!(current, id);
+    assert_eq!(value, Value::Null);
+}
+
+// MOD-001: a session that never set a lifetime keeps the configured one.
+#[tokio::test]
+async fn a_session_without_its_own_lifetime_keeps_the_configured_one() {
+    let clock = clock();
+    let app = app_with_clock(clock.clone()).await;
+    let client = app.client();
+    client.csrf_cookie().await;
+    let response = client
+        .post("/api/probe/put")
+        .xsrf()
+        .json(&json!({ "key": "k", "value": 1 }))
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(
+        response.set_cookie(COOKIE).unwrap().max_age(),
+        Some(navree_testing::cookie::time::Duration::minutes(120))
+    );
+}
+
 #[tokio::test]
 async fn changes_before_an_error_response_are_kept() {
     let app = support::app().await;

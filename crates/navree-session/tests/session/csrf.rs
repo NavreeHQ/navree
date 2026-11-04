@@ -12,11 +12,7 @@ async fn csrf_cookie_endpoint_sets_xsrf_token() {
     let app = support::app().await;
     let client = app.client();
 
-    let response = client
-        .get("/sanctum/csrf-cookie")
-        .send()
-        .await
-        .assert_status(204);
+    let response = client.get("/csrf-cookie").send().await.assert_status(204);
     let xsrf = response
         .set_cookie(XSRF)
         .expect("the XSRF-TOKEN cookie is set");
@@ -43,11 +39,7 @@ async fn csrf_cookie_endpoint_sets_xsrf_token() {
     );
 
     // Asking again keeps the token and hands the cookie out again.
-    let again = client
-        .get("/sanctum/csrf-cookie")
-        .send()
-        .await
-        .assert_status(204);
+    let again = client.get("/csrf-cookie").send().await.assert_status(204);
     assert_eq!(again.set_cookie(XSRF).unwrap().value(), xsrf.value());
 }
 

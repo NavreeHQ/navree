@@ -51,8 +51,10 @@ async fn the_plain_module_reads_the_session_section() {
         .await;
     let options = app.get::<SessionOptions>().await;
     assert_eq!(options.cookie, "crm_session");
-    let response = app.client().get("/sanctum/csrf-cookie").send().await;
-    assert!(response.set_cookie("crm_session").is_some());
+    let response = app.client().get("/csrf-cookie").send().await;
+    // MOD-001: the cookie carries the `__Host-` prefix (secure, no domain).
+    assert!(response.set_cookie("__Host-crm_session").is_some());
+    assert!(response.set_cookie("crm_session").is_none());
     assert!(response.set_cookie(COOKIE).is_none());
 }
 
@@ -62,11 +64,11 @@ async fn the_csrf_cookie_route_is_public_and_absolute() {
     let routes = route_table(app.ctx()).await.unwrap();
     let route = routes
         .iter()
-        .find(|r| r.full_path == "/sanctum/csrf-cookie")
+        .find(|r| r.full_path == "/csrf-cookie")
         .expect("the route is mounted without the API prefix");
     assert_eq!(route.method, "GET");
     assert!(route.access.public);
-    assert_eq!(route.name.as_deref(), Some("sanctum.csrf-cookie"));
+    assert_eq!(route.name.as_deref(), Some("session.csrf-cookie"));
     assert_eq!(route.module, Some("SessionModule"));
 }
 

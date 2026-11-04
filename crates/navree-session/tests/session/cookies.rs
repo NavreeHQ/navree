@@ -96,6 +96,52 @@ async fn cookie_attributes_follow_the_options() {
     assert_eq!(cookie.domain(), Some("example.com"));
 }
 
+// MOD-001: the `__Host-` prefix only where browsers accept it, and the
+// cookie under the plain name is not read in its place.
+#[tokio::test]
+async fn the_host_prefix_follows_secure_and_domain() {
+    for (options, name) in [
+        (SessionOptions::default(), "__Host-navree_session"),
+        (
+            SessionOptions {
+                secure: false,
+                ..SessionOptions::default()
+            },
+            "navree_session",
+        ),
+        (
+            SessionOptions {
+                host_prefix: false,
+                ..SessionOptions::default()
+            },
+            "navree_session",
+        ),
+    ] {
+        let app = support::app_with(options).await;
+        let client = app.client();
+        let response = client
+            .post("/api/probe/put")
+            .json(&json!({ "key": "k", "value": 1 }))
+            .send()
+            .await
+            .assert_status(200);
+        let cookie = response.set_cookie(name).expect(name);
+        assert_eq!(cookie.path(), Some("/"));
+        assert_eq!(cookie.domain(), None);
+        assert_eq!(cookie.http_only(), Some(true));
+    }
+
+    // A planted cookie under the unprefixed name is never read.
+    let app = support::app().await;
+    let victim = app.client();
+    let id = support::put(&victim, "k", json!("mine")).await;
+    let attacker = app.client();
+    attacker.set_cookie("navree_session", &victim.cookie(COOKIE).unwrap());
+    let (other, value) = support::get(&attacker, "k").await;
+    assert_ne!(other, id);
+    assert_eq!(value, json!(null));
+}
+
 #[tokio::test]
 async fn a_tampered_cookie_starts_a_new_session() {
     let app = support::app().await;
@@ -148,7 +194,7 @@ async fn a_stale_duplicate_cookie_does_not_hide_the_session() {
     let id = support::put(&client, "k", json!("v")).await;
     let body = client
         .get("/api/probe/get/k")
-        .header("cookie", "navree_session=v1.stale.cookie.value")
+        .header("cookie", "__Host-navree_session=v1.stale.cookie.value")
         .send()
         .await
         .assert_status(200)
