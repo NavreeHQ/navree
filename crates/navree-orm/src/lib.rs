@@ -130,6 +130,7 @@ mod global_scopes;
 pub mod hooks;
 pub mod ir;
 mod lifecycle;
+pub mod list;
 mod model;
 mod module;
 mod operators;

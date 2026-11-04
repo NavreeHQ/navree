@@ -38,6 +38,9 @@
 //! - [`serve()`] runs an app on a listener: HTTP/1 and HTTP/2 on hyper, with
 //!   graceful shutdown and the limits of [`ServerOptions`], so a client
 //!   cannot hold a connection without finishing a request.
+//! - [`list`] is the one query-string grammar of lists: filters with
+//!   operators, sort, search, numbered and cursor pages, read strictly
+//!   against an allow-list per resource by the [`list::List`] extractor.
 //! - Every error is an [`AppError`] rendered in one JSON shape, as
 //!   `application/json`: `{"statusCode": 404, "message": "Not Found",
 //!   "error": "Not Found", "code": "not_found"}`; `code` is one of the
@@ -106,6 +109,7 @@ mod error_pages;
 pub mod extract;
 pub mod handler;
 mod limiter;
+pub mod list;
 mod maintenance;
 pub mod middleware;
 mod module;
