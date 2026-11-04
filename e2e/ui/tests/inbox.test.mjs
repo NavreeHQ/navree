@@ -475,7 +475,10 @@ for (const name of NAMES) {
       const input = page.locator("#assign-agent-input");
       await input.click();
       await input.fill("");
+      // The answer to the whole word: an answer to "te" may come first and look the same.
+      const tech = page.waitForResponse((r) => r.url().includes("/inbox/agents/options") && new URL(r.url()).searchParams.get("q") === "tech");
       await input.pressSequentially("tech", { delay: 30 });
+      await tech;
       await until(page, () => [...document.querySelectorAll("#assign-agent [role=option]")].length > 0 && [...document.querySelectorAll("#assign-agent [role=option]")].every((o) => /Technical/.test(o.textContent)), null, "the Technical team, from the server");
       assert.ok(searches.includes("tech"), searches.join());
       await input.fill("");
