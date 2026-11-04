@@ -22,16 +22,24 @@ use serde::Serialize;
 
 const FORM: &str = "application/x-www-form-urlencoded";
 
-/// `pickers_people(id, name, email)`.
+/// `pickers_people(id, team_id, name, email)`.
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "pickers_people")]
 pub struct Person {
     /// The key.
     pub id: i64,
+    /// The team the person is in: the caller sees one team's people.
+    pub team_id: i64,
     /// The name the list shows.
     pub name: String,
     /// The address the search also reads.
     pub email: String,
+}
+
+/// The people this caller may pick: the app's scoped query, which a real app builds from
+/// the request (the workspace, the team, an access rule). Here it is team 1.
+fn visible() -> navree::orm::Builder<Person> {
+    Person::query().where_(navree::orm::col("team_id").eq(1_i64))
 }
 
 /// What `components/combobox.mdx` shows: the search and the check of what was picked.
@@ -46,7 +54,7 @@ mod combobox_page {
 
     pub async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
         Ok(PEOPLE
-            .find(Person::query(), &query, &uow, "/people/options", |record| {
+            .find(visible(), &query, &uow, "/people/options", |record| {
                 let person = record.into_inner();
                 Choice::new(person.id.to_string(), person.name)
             })
@@ -64,7 +72,7 @@ mod combobox_page {
     pub async fn store(parts: Parts, uow: Uow, Submit(deal): Submit<NewDeal>) -> Result<Response> {
         let picked = deal.owner_id.iter();
         if !PEOPLE
-            .all_pickable(Person::query(), picked, &uow, OptionSource::as_int)
+            .all_pickable(visible(), picked, &uow, OptionSource::as_int)
             .await?
         {
             let errors = FieldErrors::from([(
@@ -87,7 +95,7 @@ mod command_page {
     pub async fn palette_search(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
         // People whose name contains the text, as links
         let people = PEOPLE
-            .find(Person::query(), &query, &uow, "/palette/search", |record| {
+            .find(visible(), &query, &uow, "/palette/search", |record| {
                 let person = record.into_inner();
                 Choice::new(person.id.to_string(), person.name)
                     .link(format!("/people/{}", person.id))
@@ -103,6 +111,8 @@ mod forms_page {
     use navree::http::response::{IntoResponse, Response};
     use navree::ui::form::Rejected;
     use navree::ui::*;
+
+    const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
 
     #[derive(serde::Deserialize, Validate, Form)]
     pub struct NewDeal {
@@ -125,16 +135,21 @@ mod forms_page {
                 .toast(ToastTone::Success, format!("{} created", deal.title))
                 .into_response()),
             Err(rejected) => {
-                let owner = match rejected
-                    .value("owner_id")
-                    .and_then(|id| id.parse::<i64>().ok())
-                {
-                    Some(id) => Person::find(&uow, id)
-                        .await?
-                        .map(|person| (id.to_string(), person.into_inner().name)),
-                    None => None,
-                };
-                Ok(rejected.options("owner_id", owner).respond(|form| {
+                // The labels of the people posted that this caller may pick, from the same
+                // scoped query the search uses: someone else's name is never looked up.
+                let owners = PEOPLE
+                    .pickable(
+                        visible(),
+                        rejected.values_of("owner_id"),
+                        &uow,
+                        OptionSource::as_int,
+                        |record| {
+                            let person = record.into_inner();
+                            Choice::new(person.id.to_string(), person.name)
+                        },
+                    )
+                    .await?;
+                Ok(rejected.choices("owner_id", owners).respond(|form| {
                     shell
                         .page("New deal")
                         .body(form.post("/deals").submit("Create deal"))
@@ -201,12 +216,13 @@ async fn app() -> TestApp {
         .await;
     let db = app.get::<Db>().await;
     db.execute(&Statement::text(
-        "CREATE TABLE pickers_people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)",
+        "CREATE TABLE pickers_people (id INTEGER PRIMARY KEY, team_id INTEGER NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL)",
     ))
     .await
     .unwrap();
+    // Grace and Alan are in the caller's team; Ada is in another one.
     db.execute(&Statement::text(
-        "INSERT INTO pickers_people (id, name, email) VALUES          (7, 'Grace Hopper', 'grace@example.test'),          (8, 'Alan Turing', 'alan@example.test'),          (9, 'Ada Lovelace', 'ada@example.test')",
+        "INSERT INTO pickers_people (id, team_id, name, email) VALUES          (7, 1, 'Grace Hopper', 'grace@example.test'),          (8, 1, 'Alan Turing', 'alan@example.test'),          (9, 2, 'Ada Lovelace', 'ada@example.test')",
     ))
     .await
     .unwrap();
@@ -299,4 +315,59 @@ async fn a_refused_form_comes_back_with_the_name_of_the_person_picked() {
         page.contains(r#"value="999" placeholder="Search people""#),
         "{page}"
     );
+}
+
+#[tokio::test]
+async fn a_refused_form_never_names_someone_outside_the_callers_scope() {
+    let app = app().await;
+    // Ada (9) is in another team. The post names her; the refusal shows what was posted, the
+    // id, and no name: the label comes only from the caller's own scoped query.
+    let page = app
+        .client()
+        .post("/deals")
+        .header("content-type", FORM)
+        .body("title=&owner_id=9")
+        .send()
+        .await
+        .assert_status(422)
+        .text();
+    assert!(
+        page.contains(r#"value="9" placeholder="Search people""#),
+        "{page}"
+    );
+    assert!(!page.contains("Ada Lovelace"), "{page}");
+    assert!(!page.contains("ada@example.test"), "{page}");
+    // Her name is not in the search either, and the check of what was picked refuses her.
+    let list = app
+        .client()
+        .get("/people/options?q=ada")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(!list.contains("Ada Lovelace"), "{list}");
+    let refused = app
+        .client()
+        .post("/picked")
+        .header("content-type", FORM)
+        .body("owner_id=9")
+        .send()
+        .await
+        .assert_status(422)
+        .text();
+    assert!(
+        refused.contains("Choose someone from the list."),
+        "{refused}"
+    );
+    // Someone in the team keeps their name, so the scope is the only difference.
+    let page = app
+        .client()
+        .post("/deals")
+        .header("content-type", FORM)
+        .body("title=&owner_id=8")
+        .send()
+        .await
+        .assert_status(422)
+        .text();
+    assert!(page.contains("Alan Turing"), "{page}");
 }

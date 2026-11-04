@@ -721,7 +721,6 @@ struct SignUp {
     #[validate(length(min = 1))]
     email: String,
     #[validate(length(min = 8))]
-    #[form(widget = password)]
     password: String,
 }
 

@@ -7,8 +7,8 @@ use syn::ext::IdentExt;
 use syn::{Data, DeriveInput, Fields, Ident, LitInt, LitStr};
 
 use crate::shared::{
-    apply_case, doc_line, many_inner, named_fields, option_inner, serde_rename, serde_rename_all,
-    type_name, ui_path, words,
+    apply_case, doc_line, is_utc_instant, many_inner, named_fields, option_inner, serde_rename,
+    serde_rename_all, type_name, ui_path, words,
 };
 
 /// What `#[form(...)]` says about a field.
@@ -103,6 +103,20 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
     })
 }
 
+/// Whether a field's posted name says it holds a password: `password`, `new_password`,
+/// `current_password`, `password_confirmation`, `newPassword`. A name that only starts with
+/// the word (`password_hint`) is not one.
+fn is_secret_name(name: &str) -> bool {
+    let plain: String = name
+        .chars()
+        .filter(|c| !matches!(c, '_' | '-'))
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    ["password", "passwordconfirmation", "passwordconfirm"]
+        .iter()
+        .any(|ending| plain.ends_with(ending))
+}
+
 /// The widget a field's type implies; `None` means an enum with `Options`.
 fn inferred_widget(ui: &TokenStream, name: Option<&str>) -> Option<TokenStream> {
     let input = |kind: &str| {
@@ -176,10 +190,20 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         let many = many_inner(inner);
         let element = many.unwrap_or(inner);
         let element_name = type_name(element);
-        let inferred = inferred_widget(&ui, element_name.as_deref());
-        // A date and time read as UTC: what the widget alone can't say, and the form needs
-        // to read the field.
-        let instant = matches!(element_name.as_deref(), Some("DateTime"));
+        // A text field that holds a secret is drawn as a password input, which a refused form
+        // never writes back: named `password`, or ending in it (`new_password`).
+        let secret = matches!(element_name.as_deref(), Some("String" | "str"))
+            && hint.widget.is_none()
+            && is_secret_name(&name);
+        let inferred = if secret {
+            Some(quote!(#ui::form::Widget::Input(#ui::InputKind::Password)))
+        } else {
+            inferred_widget(&ui, element_name.as_deref())
+        };
+        // A date and time read as UTC, and a number that is read exactly: what the widget
+        // alone can't say, and the form needs to read the field.
+        let instant = is_utc_instant(element);
+        let decimal = matches!(element_name.as_deref(), Some("Decimal"));
         let phone_type = matches!(type_name(inner).as_deref(), Some("Phone" | "PhoneNumber"));
         let widget = match &hint.widget {
             // A phone input on text keeps the number as E.164 text.
@@ -221,25 +245,23 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         };
         let date_rules = rules_of(&hint.date_rules, "DateRules");
         let time_rules = rules_of(&hint.time_rules, "TimeRules");
+        // `FormField` is non-exhaustive, so it is built with its constructor.
         specs.push(quote! {
-            #ui::form::FormField {
-                name: #name,
-                label: #label,
-                widget: #widget,
-                optional: #optional,
-                placeholder: #placeholder,
-                help: #help,
-                prompt: #prompt,
-                error: #error,
-                addon: #addon,
-                autofocus: #autofocus,
-                wide: #wide,
-                options: #options,
-                max: #max,
-                instant: #instant,
-                date_rules: #date_rules,
-                time_rules: #time_rules,
-            },
+            #ui::form::FormField::new(#name, #label, #widget)
+                .optional(#optional)
+                .placeholder(#placeholder)
+                .help(#help)
+                .prompt(#prompt)
+                .error(#error)
+                .addon(#addon)
+                .autofocus(#autofocus)
+                .wide(#wide)
+                .options(#options)
+                .max(#max)
+                .instant(#instant)
+                .decimal(#decimal)
+                .date_rules(#date_rules)
+                .time_rules(#time_rules),
         });
         values.push(quote! {
             for value in #ui::form::FieldValue::field_values(&self.#ident) {
@@ -343,4 +365,32 @@ pub(crate) fn options(input: DeriveInput) -> syn::Result<TokenStream> {
             const KIND: #ui::table::ValueKind = #ui::table::ValueKind::Text;
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_secret_name;
+
+    #[test]
+    fn a_name_that_ends_in_password_is_a_secret() {
+        for name in [
+            "password",
+            "new_password",
+            "current_password",
+            "password_confirmation",
+            "newPassword",
+            "confirm-password",
+        ] {
+            assert!(is_secret_name(name), "{name}");
+        }
+        for name in [
+            "password_hint",
+            "passwords",
+            "pass",
+            "email",
+            "password_reset_url",
+        ] {
+            assert!(!is_secret_name(name), "{name}");
+        }
+    }
 }

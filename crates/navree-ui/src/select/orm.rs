@@ -11,6 +11,9 @@ use navree_orm::{Builder, Executor, Filter, Model, Record, Result, Value, col, c
 use super::choice::Choice;
 use super::query::{ChoiceList, OptionQuery};
 
+/// The most values [`OptionSource::pickable`] looks up.
+const PICKABLE_AT_MOST: usize = 1_000;
+
 /// Where a searched list's options come from.
 ///
 /// Columns are named as the model has them. A field the store keeps under another
@@ -180,6 +183,81 @@ impl OptionSource {
             .count_distinct(exec, column)
             .await?;
         Ok(found == distinct)
+    }
+
+    /// The choices for the `values` this caller may pick, and none for the rest: the rows of
+    /// `builder`, the caller's own scoped query, whose value column equals one of them, each
+    /// made a choice by `map`. A value that is empty, that `as_value` can't read, or that is not
+    /// a row of `builder` (another workspace's, one the caller may not see, one that never
+    /// existed) gets nothing, so what comes back never names a record the caller could not have
+    /// picked.
+    ///
+    /// It is for showing what was posted again: a refused form with a searched picker posts only
+    /// an id, and the page that answers needs its label. Give the result to
+    /// `Rejected::choices`, with the same builder the search and
+    /// [`all_pickable`](Self::all_pickable) use, and never look the label up with an unscoped
+    /// `find`: a refusal that names a person the caller may not see is a leak.
+    ///
+    /// At most 1,000 values are looked up. The choices come in the order of the list a search
+    /// gives, and a value that several rows have is one choice.
+    ///
+    /// ```ignore
+    /// let owners = PEOPLE
+    ///     .pickable(Person::query(), rejected.values_of("owner_id"), &uow, OptionSource::as_int, |record| {
+    ///         let person = record.into_inner();
+    ///         Choice::new(person.id.to_string(), person.name)
+    ///     })
+    ///     .await?;
+    /// let rejected = rejected.choices("owner_id", owners);
+    /// ```
+    ///
+    /// # Errors
+    /// Whatever the database reports.
+    pub async fn pickable<M, E, V>(
+        &self,
+        builder: Builder<M>,
+        values: impl IntoIterator<Item = V>,
+        exec: &E,
+        as_value: impl Fn(&str) -> Option<Value>,
+        map: impl Fn(Record<M>) -> Choice,
+    ) -> Result<Vec<Choice>>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+        V: AsRef<str>,
+    {
+        let mut wanted: Vec<Value> = Vec::new();
+        for value in values {
+            let text = value.as_ref();
+            if text.is_empty() || wanted.len() == PICKABLE_AT_MOST {
+                continue;
+            }
+            if let Some(parsed) = as_value(text)
+                && !wanted.contains(&parsed)
+            {
+                wanted.push(parsed);
+            }
+        }
+        if wanted.is_empty() {
+            return Ok(Vec::new());
+        }
+        let column = column_of::<M>(self.value);
+        let rows = builder
+            .reorder()
+            .where_(col(column).is_in(wanted))
+            .order_by(column_of::<M>(self.order))
+            .order_by(column)
+            .get(exec)
+            .await?
+            .into_vec();
+        let mut choices: Vec<Choice> = Vec::new();
+        for record in rows {
+            let choice = map(record);
+            if !choices.iter().any(|known| known.value() == choice.value()) {
+                choices.push(choice);
+            }
+        }
+        Ok(choices)
     }
 
     /// A value read as a whole number, for a column of `i64`.

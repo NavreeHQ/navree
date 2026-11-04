@@ -165,8 +165,34 @@ fn generic_inner<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
     })
 }
 
+/// Whether `ty` is `DateTime<Utc>` (`chrono::DateTime<chrono::Utc>` too): the one instant a
+/// form reads as UTC. A `DateTime` in another zone is not.
+pub(crate) fn is_utc_instant(ty: &Type) -> bool {
+    generic_inner(ty, "DateTime").is_some_and(|zone| type_name(zone).as_deref() == Some("Utc"))
+}
+
 /// The last segment of a type's path: `chrono::NaiveDate` is `NaiveDate`.
 pub(crate) fn type_name(ty: &Type) -> Option<String> {
     let Type::Path(path) = ty else { return None };
     Some(path.path.segments.last()?.ident.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn utc(text: &str) -> bool {
+        is_utc_instant(&syn::parse_str::<Type>(text).unwrap())
+    }
+
+    #[test]
+    fn only_a_datetime_in_utc_is_an_instant() {
+        assert!(utc("DateTime<Utc>"));
+        assert!(utc("chrono::DateTime<chrono::Utc>"));
+        assert!(!utc("DateTime<FixedOffset>"));
+        assert!(!utc("chrono::DateTime<chrono::Local>"));
+        assert!(!utc("NaiveDateTime"));
+        assert!(!utc("DateTime"));
+        assert!(!utc("Utc"));
+    }
 }

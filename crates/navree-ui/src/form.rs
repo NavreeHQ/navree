@@ -88,8 +88,11 @@ impl Widget {
     }
 }
 
-/// One field of a [`Form`]. The derive writes these.
+/// One field of a [`Form`]. The derive writes these, with [`new`](Self::new) and its setters:
+/// the struct is non-exhaustive, so a field can be added without breaking a form that was
+/// derived before it.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct FormField {
     /// The name it posts as.
     pub name: &'static str,
@@ -118,9 +121,12 @@ pub struct FormField {
     /// The most values a [`Many`] field takes: the browser stops at it, and
     /// [`decode`] refuses a post that goes past it.
     pub max: Option<u32>,
-    /// A `DateTime<Utc>`: the date and time a browser posts have no zone, and are read as
-    /// UTC. A value posted with its own offset is read with it.
+    /// A `chrono::DateTime<Utc>`: the date and time a browser posts have no zone, and are
+    /// read as UTC. A value posted with its own offset is read with it, and the year is
+    /// held to the calendar in UTC too.
     pub instant: bool,
+    /// A `Decimal`: a number with more than 28 decimal places is refused, not rounded.
+    pub decimal: bool,
     /// A date picker's rules, from `#[form(date_rules = path)]`: the function that gives the
     /// days that can't be chosen. The picker draws them for the browser, and [`decode`]
     /// holds the posted value to them, so the rules are written once and a value drawn as
@@ -128,6 +134,116 @@ pub struct FormField {
     pub date_rules: Option<fn() -> crate::dates::DateRules>,
     /// A time picker's rules, from `#[form(time_rules = path)]`, used the same way.
     pub time_rules: Option<fn() -> crate::dates::TimeRules>,
+}
+
+impl FormField {
+    /// A field named `name` (as it posts), labelled `label` and drawn as `widget`, with no
+    /// hint, rule or choice. The setters below are for the rest.
+    pub const fn new(name: &'static str, label: &'static str, widget: Widget) -> Self {
+        Self {
+            name,
+            label,
+            widget,
+            optional: false,
+            placeholder: None,
+            help: None,
+            prompt: None,
+            error: None,
+            addon: None,
+            autofocus: false,
+            wide: false,
+            options: &[],
+            max: None,
+            instant: false,
+            decimal: false,
+            date_rules: None,
+            time_rules: None,
+        }
+    }
+
+    /// Sets whether it may be left empty.
+    pub const fn optional(mut self, optional: bool) -> Self {
+        self.optional = optional;
+        self
+    }
+
+    /// Sets the hint while empty.
+    pub const fn placeholder(mut self, placeholder: Option<&'static str>) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    /// Sets the help below it.
+    pub const fn help(mut self, help: Option<&'static str>) -> Self {
+        self.help = help;
+        self
+    }
+
+    /// Sets a select's empty first choice.
+    pub const fn prompt(mut self, prompt: Option<&'static str>) -> Self {
+        self.prompt = prompt;
+        self
+    }
+
+    /// Sets the message for any failed rule.
+    pub const fn error(mut self, error: Option<&'static str>) -> Self {
+        self.error = error;
+        self
+    }
+
+    /// Sets the field drawn inside this one's input group.
+    pub const fn addon(mut self, addon: Option<&'static str>) -> Self {
+        self.addon = addon;
+        self
+    }
+
+    /// Sets whether it takes focus when the page loads.
+    pub const fn autofocus(mut self, autofocus: bool) -> Self {
+        self.autofocus = autofocus;
+        self
+    }
+
+    /// Sets whether it takes the whole width of the form.
+    pub const fn wide(mut self, wide: bool) -> Self {
+        self.wide = wide;
+        self
+    }
+
+    /// Sets a select's or radio group's choices.
+    pub const fn options(mut self, options: &'static [(&'static str, &'static str)]) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Sets the most values a [`Many`] field takes.
+    pub const fn max(mut self, max: Option<u32>) -> Self {
+        self.max = max;
+        self
+    }
+
+    /// Sets whether it is a `DateTime<Utc>`.
+    pub const fn instant(mut self, instant: bool) -> Self {
+        self.instant = instant;
+        self
+    }
+
+    /// Sets whether it is a `Decimal`.
+    pub const fn decimal(mut self, decimal: bool) -> Self {
+        self.decimal = decimal;
+        self
+    }
+
+    /// Sets a date picker's rules.
+    pub const fn date_rules(mut self, rules: Option<fn() -> crate::dates::DateRules>) -> Self {
+        self.date_rules = rules;
+        self
+    }
+
+    /// Sets a time picker's rules.
+    pub const fn time_rules(mut self, rules: Option<fn() -> crate::dates::TimeRules>) -> Self {
+        self.time_rules = rules;
+        self
+    }
 }
 
 /// A struct that can be drawn as a form. `#[derive(Form)]` implements it.
@@ -1050,8 +1166,20 @@ impl<T: Form> FormView<T> {
                 let mut box_field = Field::new(id, field.label)
                     .error_opt(error)
                     .control(control);
-                if let Some(help) = field.help {
-                    box_field = box_field.help(help);
+                // A date and time with no zone in it is read as UTC: the field says so.
+                let in_utc = field.instant && field.widget == Widget::Input(InputKind::DateTime);
+                match (field.help, in_utc) {
+                    (Some(help), false) => box_field = box_field.help(help),
+                    (Some(help), true) => {
+                        let stop = if help.ends_with(['.', '!', '?']) {
+                            ""
+                        } else {
+                            "."
+                        };
+                        box_field = box_field.help(format!("{help}{stop} Time in UTC."));
+                    }
+                    (None, true) => box_field = box_field.help("Time in UTC"),
+                    (None, false) => {}
                 }
                 let box_node: Node = box_field.into();
                 box_node.into_element()?
@@ -1272,7 +1400,9 @@ fn read_phones<T: Form>(pairs: &[(String, String)]) -> (Vec<(String, String)>, F
     (read, errors)
 }
 
-/// What a rejected form may show again: never a password, and a bounded amount.
+/// What a rejected form may show again: never what a password input holds, and a bounded
+/// amount. A `String` field named `password` (or ending in it) is a password input; so is any
+/// field with `#[form(widget = password)]`.
 fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
     let mut left = MAX_ECHO;
     values
@@ -1332,16 +1462,22 @@ fn browser_text<T: Form>(name: &str, value: &str) -> String {
     text
 }
 
-/// The date and time `text` says, in the zone it names or in none.
-fn moment(text: &str) -> Option<chrono::NaiveDateTime> {
-    text.trim()
-        .parse::<chrono::NaiveDateTime>()
-        .ok()
-        .or_else(|| {
-            chrono::DateTime::parse_from_rfc3339(text.trim())
-                .ok()
-                .map(|at| at.naive_local())
-        })
+/// The date and times `text` says that the calendar and the clock have to hold: the wall
+/// time as typed, and for an instant that names a zone the same moment in UTC, which is what
+/// is stored (`9999-12-31T23:30-05:00` is on 10,000-01-01 in UTC, past the calendar). A field
+/// that is not an instant takes no zone, so a text with one is the type's own error.
+fn moments(field: &FormField, text: &str) -> Vec<chrono::NaiveDateTime> {
+    let text = text.trim();
+    if let Ok(wall) = text.parse::<chrono::NaiveDateTime>() {
+        return vec![wall];
+    }
+    if !field.instant {
+        return Vec::new();
+    }
+    match chrono::DateTime::parse_from_rfc3339(text) {
+        Ok(at) => vec![at.naive_local(), at.naive_utc()],
+        Err(_) => Vec::new(),
+    }
 }
 
 /// What the date and time fields say of the posted text, which the typed value can't: a
@@ -1361,8 +1497,7 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
             // A date and time has no picker rules of its own, but the calendar and the
             // time of day are the same: a year outside 1 to 9999, a leap second and a
             // fraction of a second are refused.
-            _ if is_moment(field) => {
-                let Some(at) = moment(value) else { continue };
+            _ if is_moment(field) => moments(field, value).iter().find_map(|at| {
                 DateRules::default()
                     .check(at.date())
                     .err()
@@ -1373,6 +1508,14 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
                             .err()
                             .map(|error| error.message(&english))
                     })
+            }),
+            // A number is read exactly or not at all: past 28 decimal places a `Decimal` would
+            // round, and what is stored would not be what was typed.
+            Widget::Input(InputKind::Number) if field.decimal => {
+                let text = value.trim();
+                (rust_decimal::Decimal::from_str_exact(text).is_err()
+                    && text.parse::<rust_decimal::Decimal>().is_ok())
+                .then(|| format!("{}: use at most 28 decimal places.", field.label))
             }
             Widget::DatePicker | Widget::Input(InputKind::Date) => {
                 let Ok(day) = value.trim().parse::<NaiveDate>() else {
@@ -1472,9 +1615,16 @@ where
         return outcome;
     }
     // The value read fine, or failed for other reasons: the rules' words join whatever else
-    // there is to say.
+    // there is to say. A date and time or a decimal says one thing about itself, though: when
+    // the rules or the type already said what is wrong with it, that is the message.
     let mut errors = outcome.err().unwrap_or_default();
     for (name, texts) in refused {
+        let says_once = T::FIELDS
+            .iter()
+            .any(|field| field.name == name && (is_moment(field) || field.decimal));
+        if says_once && errors.contains_key(&name) {
+            continue;
+        }
         let list = errors.entry(name).or_default();
         for text in texts {
             if !list.contains(&text) {
@@ -1896,7 +2046,8 @@ impl<T: Form> Rejected<T> {
 
     /// What was posted, as `(field, text)` in the order it was sent: the fields of the
     /// form and nothing else, so a `#[form(skip)]` field a client made up is not here,
-    /// and never a password. A form refused before it was read (a body from another
+    /// and never what a password input holds (a `String` named `password`, or any field with
+    /// `widget = password`). A form refused before it was read (a body from another
     /// site, one too large) has none.
     ///
     /// A handler reads it to look up what the person picked: a searched combobox posts
@@ -1931,15 +2082,11 @@ impl<T: Form> Rejected<T> {
     /// searched combobox, which posts an id and has no list to look it up in, shows the
     /// id when the form comes back.
     ///
-    /// ```ignore
-    /// Err(rejected) => {
-    ///     let owner = match rejected.value("owner_id").and_then(|id| id.parse::<i64>().ok()) {
-    ///         Some(id) => Person::find(&uow, id).await?.map(|person| (id.to_string(), person.name)),
-    ///         None => None,
-    ///     };
-    ///     Ok(rejected.options("owner_id", owner).into_response())
-    /// }
-    /// ```
+    /// Only give the label of something the caller may pick. A posted id is whatever a client
+    /// chose to send, so look it up through the caller's own scoped query and never with an
+    /// unscoped `find`: a refusal that names a person the caller may not see is a leak.
+    /// `OptionSource::pickable` does that and gives [`choices`](Self::choices) what it
+    /// needs.
     pub fn options(
         mut self,
         field: &'static str,
@@ -1952,6 +2099,19 @@ impl<T: Form> Rejected<T> {
     /// Gives the choices of a picker field with more than a label: see
     /// [`FormView::choices`]. This and [`options`](Self::options) are for the form that
     /// comes back with script off; the runtime keeps the page and shows only the errors.
+    ///
+    /// ```ignore
+    /// Err(rejected) => {
+    ///     // Only the people this caller may pick, from the query the search uses.
+    ///     let owners = PEOPLE
+    ///         .pickable(Person::query(), rejected.values_of("owner_id"), &uow, OptionSource::as_int, |record| {
+    ///             let person = record.into_inner();
+    ///             Choice::new(person.id.to_string(), person.name)
+    ///         })
+    ///         .await?;
+    ///     Ok(rejected.choices("owner_id", owners).into_response())
+    /// }
+    /// ```
     pub fn choices(
         mut self,
         field: &'static str,

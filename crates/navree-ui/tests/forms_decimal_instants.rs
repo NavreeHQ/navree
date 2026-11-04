@@ -244,3 +244,175 @@ fn a_value_with_seconds_lets_the_browser_step_by_the_second() {
         "seconds need a step of one: {tag}"
     );
 }
+
+#[test]
+fn the_year_of_an_instant_is_held_to_the_calendar_in_utc_too() {
+    // Wall time in range, UTC out of it, and the other way round.
+    for bad in ["9999-12-31T23:30:00-05:00", "0001-01-01T00:30:00+05:00"] {
+        let mut post = good();
+        post[3].1 = bad.to_owned();
+        let errors = decode::<Invoice>(&post).unwrap_err();
+        assert_eq!(errors["sent_at"].len(), 1, "{bad}: {errors:?}");
+    }
+    // The edges that are in range in both are taken.
+    for good_edge in [
+        "9999-12-31T23:30:00+00:00",
+        "0001-01-01T00:30:00+00:00",
+        "9999-12-31T23:30:00+05:00",
+        "0001-01-01T05:30:00+05:00",
+    ] {
+        let mut post = good();
+        post[3].1 = good_edge.to_owned();
+        assert!(decode::<Invoice>(&post).is_ok(), "{good_edge}");
+    }
+    // A date and time with no zone is wall time and nothing else, so an offset is not its.
+    let mut post = good();
+    post[2].1 = "2026-11-04T14:30:00+05:30".to_owned();
+    let errors = decode::<Invoice>(&post).unwrap_err();
+    assert_eq!(errors["due"].len(), 1, "{errors:?}");
+    assert!(
+        errors["due"][0].contains("enter a date and time"),
+        "{errors:?}"
+    );
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Booking {
+    /// Starts
+    #[validate(custom(after_2000))]
+    starts: chrono::DateTime<chrono::Utc>,
+}
+
+fn after_2000(at: &chrono::DateTime<chrono::Utc>) -> Result<(), String> {
+    use chrono::Datelike;
+    if at.year() < 2000 {
+        return Err("Pick a time after 1999.".to_owned());
+    }
+    Ok(())
+}
+
+#[test]
+fn a_bad_date_and_time_says_one_thing_about_itself() {
+    // Both its own rule and the calendar are against it: the rule's message is the one.
+    let errors = decode::<Booking>(&pairs(&[("starts", "0001-01-01T10:00")])).unwrap_err();
+    assert_eq!(errors["starts"], ["Pick a time after 1999."], "{errors:?}");
+    // The calendar alone is one message too.
+    let mut post = good();
+    post[3].1 = "2026-12-31T23:59:60".to_owned();
+    let errors = decode::<Invoice>(&post).unwrap_err();
+    assert_eq!(errors["sent_at"].len(), 1, "{errors:?}");
+}
+
+#[test]
+fn a_full_path_instant_is_read_as_utc_and_says_so() {
+    let starts = Booking::FIELDS.iter().find(|f| f.name == "starts").unwrap();
+    assert!(
+        starts.instant,
+        "chrono::DateTime<chrono::Utc> is an instant"
+    );
+    assert!(!field("total").instant && !field("due").instant);
+    // The input tells the person which clock it is.
+    let html = render(&FormView::<Invoice>::new().post("/i").into());
+    let hint = |name: &str| {
+        let at = html.find(&format!("name=\"{name}\"")).unwrap();
+        let rest = &html[at..];
+        // The field's own box ends where the next one starts.
+        let end = rest.find("<div data-slot=\"field\"").unwrap_or(rest.len());
+        rest[..end].contains("Time in UTC")
+    };
+    assert!(hint("sent_at") && hint("reminder"), "{html}");
+    assert!(
+        !hint("due"),
+        "a date and time with no zone is the person's own clock"
+    );
+    assert!(!hint("total"));
+}
+
+#[test]
+fn a_decimal_is_read_exactly_or_refused() {
+    let mut post = good();
+    // 28 places are the most a Decimal holds.
+    post[0].1 = "0.1234567890123456789012345678".to_owned();
+    let invoice: Invoice = decode(&post).unwrap();
+    assert_eq!(invoice.total.scale(), 28);
+    // One more would be rounded: it is refused instead, with one message.
+    post[0].1 = "0.12345678901234567890123456789".to_owned();
+    let errors = decode::<Invoice>(&post).unwrap_err();
+    assert_eq!(errors["total"].len(), 1, "{errors:?}");
+    assert!(
+        errors["total"][0].contains("at most 28 decimal places"),
+        "{errors:?}"
+    );
+    // An optional decimal too.
+    let mut post = good();
+    post[1].1 = "1.00000000000000000000000000001".to_owned();
+    let errors = decode::<Invoice>(&post).unwrap_err();
+    assert!(errors.contains_key("discount"), "{errors:?}");
+    // Not a number is still "enter a number", once.
+    let mut post = good();
+    post[0].1 = "many".to_owned();
+    let errors = decode::<Invoice>(&post).unwrap_err();
+    assert_eq!(errors["total"].len(), 1, "{errors:?}");
+    assert!(errors["total"][0].contains("enter a number"), "{errors:?}");
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Account {
+    #[validate(length(min = 1))]
+    email: String,
+    #[validate(length(min = 8))]
+    password: String,
+    #[validate(skip)]
+    new_password: Option<String>,
+    #[validate(skip)]
+    password_confirmation: String,
+    #[validate(skip)]
+    password_hint: String,
+    #[validate(skip)]
+    #[form(widget = text)]
+    password_shown: String,
+}
+
+#[test]
+fn a_text_field_named_for_a_password_is_a_password_input() {
+    let widget = |name: &str| {
+        Account::FIELDS
+            .iter()
+            .find(|field| field.name == name)
+            .unwrap()
+            .widget
+    };
+    assert_eq!(widget("password"), Widget::Input(InputKind::Password));
+    assert_eq!(widget("new_password"), Widget::Input(InputKind::Password));
+    assert_eq!(
+        widget("password_confirmation"),
+        Widget::Input(InputKind::Password)
+    );
+    assert_eq!(widget("email"), Widget::Input(InputKind::Text));
+    assert_eq!(
+        widget("password_hint"),
+        Widget::Input(InputKind::Text),
+        "a hint for a password is not one"
+    );
+    assert_eq!(
+        widget("password_shown"),
+        Widget::Input(InputKind::Text),
+        "a widget that was named is the one used"
+    );
+    // And a refusal never writes any of them back, as the posted pairs go through it.
+    let post = pairs(&[
+        ("email", "a@b.example"),
+        ("password", "short"),
+        ("new_password", "hunter2hunter2"),
+        ("password_confirmation", "hunter3hunter3"),
+        ("password_hint", "my dog"),
+        ("password_shown", "visible"),
+    ]);
+    let errors = decode::<Account>(&post).unwrap_err();
+    assert!(errors.contains_key("password"), "{errors:?}");
+    let html = render(&FormView::<Account>::new().into());
+    for name in ["password", "new_password", "password_confirmation"] {
+        let tag = input_tag(&html, name);
+        assert!(tag.contains("type=\"password\""), "{name}: {tag}");
+    }
+}
