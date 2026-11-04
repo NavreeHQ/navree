@@ -105,12 +105,14 @@ impl Hub {
     }
 
     /// One reader does one thing: `kind` when given, otherwise whatever the dice
-    /// say. Returns what happened, or `None` when nobody was left to do it.
+    /// say; `who` when given, if their copy is where the thing can happen.
+    /// Returns what happened, or `None` when nobody was left to do it.
     pub async fn step(
         &self,
         db: &Db,
         now: i64,
         kind: Option<Kind>,
+        who: Option<i64>,
     ) -> Result<Option<Event>, BoxError> {
         let kind = kind.unwrap_or_else(|| match self.roll(100) {
             0..=44 => Kind::Opened,
@@ -126,7 +128,15 @@ impl Hub {
             Kind::Converted => Status::Clicked,
             _ => return Ok(None),
         };
-        let Some(mut person) = self.pick(db, from).await? else {
+        let person = match who {
+            Some(id) => Recipient::query()
+                .where_(Recipient::STATUS.eq(from.key()))
+                .find(db, id)
+                .await?
+                .map(|record| record.into_inner()),
+            None => self.pick(db, from).await?,
+        };
+        let Some(mut person) = person else {
             return Ok(None);
         };
         let link = LINKS[usize::try_from(self.roll(3)).unwrap_or(0)];
@@ -261,7 +271,7 @@ impl Hub {
         loop {
             let jitter = Duration::from_millis(self.roll(900));
             tokio::time::sleep(every + jitter).await;
-            if let Err(error) = self.step(&db, now(), None).await {
+            if let Err(error) = self.step(&db, now(), None, None).await {
                 eprintln!("campaign-demo: the simulator could not take a step: {error}");
             }
         }

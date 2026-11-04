@@ -37,11 +37,12 @@ const ROUND = ["timeline-dot", "live-dot", "badge-dot", "activity-icon", "radio"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const post = (path) => fetch(BASE + path, { method: "POST" });
-const step = async (kind) => {
-  const text = await (await post(`/__test/step?kind=${kind}`)).text();
-  const [event, recipient] = text.split(" ").map(Number);
+/** One reader does `kind`; `recipient` names who, when the test needs to know. */
+const step = async (kind, recipient) => {
+  const text = await (await post(`/__test/step?kind=${kind}${recipient ? `&recipient=${recipient}` : ""}`)).text();
+  const [event, who] = text.split(" ").map(Number);
   assert.ok(event > 0, `a ${kind} happened: "${text}"`);
-  return { event, recipient };
+  return { event, recipient: who };
 };
 
 let reachable = false;
@@ -132,7 +133,20 @@ for (const name of NAMES) {
     const shot = async (page, label, fullPage = true) => {
       if (SHOTS) await page.screenshot({ path: join(SHOTS, `${name}-${label}.png`), fullPage });
     };
-    const live = (page, id) => page.waitForFunction((region) => document.getElementById(region)?.getAttribute("data-live") === "on", id, { timeout: 10000 });
+    /**
+     * Waits for `check` to hold in the page, asking from here: Playwright's own wait in
+     * Firefox sometimes misses a condition that has come true (the display suite found
+     * the same).
+     */
+    const until = async (page, check, arg, what, ms = 12000) => {
+      const end = Date.now() + ms;
+      for (;;) {
+        if (await page.evaluate(check, arg)) return;
+        if (Date.now() > end) assert.fail(`timed out waiting for ${what}`);
+        await sleep(100);
+      }
+    };
+    const live = (page, id) => until(page, (region) => document.getElementById(region)?.getAttribute("data-live") === "on", id, `${id} to be live`);
     const feedIds = (page) => page.evaluate(() => [...document.querySelectorAll("#activity-list > li")].map((li) => li.id));
     const stat = (page, label) =>
       page
@@ -193,19 +207,19 @@ for (const name of NAMES) {
       const before = await feedIds(page);
       const { event, recipient } = await step("clicked");
       // The new row arrives at the top, once, and the figure moves.
-      await page.locator(`#event-${event}`).waitFor({ timeout: 10000 });
+      await until(page, (id) => !!document.getElementById(id), `event-${event}`, "the new row");
       assert.equal((await feedIds(page))[0], `event-${event}`);
       assert.equal(await page.locator(`#event-${event}`).count(), 1);
       assert.match(await page.locator(`#event-${event} a`).getAttribute("href"), new RegExp(`/recipients/${recipient}$`));
-      await page.waitForFunction((n) => document.querySelector("#figures [data-slot=stat]:nth-child(4) [data-slot=stat-value]")?.textContent === String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","), clicked + 1, { timeout: 10000 });
+      await until(page, (n) => document.querySelector("#figures [data-slot=stat]:nth-child(4) [data-slot=stat-value]")?.textContent === String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","), clicked + 1, "the Clicked figure to move");
       assert.deepEqual((await feedIds(page)).slice(1, before.length + 1), before, "the rows already there stay, in order");
       // A proxy's open arrives hidden, and the notice counts it.
       const text = async () => page.locator("#activity-hidden [data-slot=hidden-notice-text]").textContent();
       const hidden = Number((await text()).match(/^\d+/)[0]);
       const proxy = await step("proxy_open");
-      await page.locator(`#event-${proxy.event}`).waitFor({ state: "attached", timeout: 10000 });
+      await until(page, (id) => !!document.getElementById(id), `event-${proxy.event}`, "the proxy's row");
       assert.equal(await page.locator(`#event-${proxy.event}`).isVisible(), false);
-      await page.waitForFunction((n) => document.querySelector("#activity-hidden [data-slot=hidden-notice-text]")?.textContent.startsWith(`${n} opens`), hidden + 1, { timeout: 10000 });
+      await until(page, (n) => document.querySelector("#activity-hidden [data-slot=hidden-notice-text]")?.textContent.startsWith(`${n} opens`), hidden + 1, "the notice to count it");
       await shot(page, "overview-live");
       await page.done();
     });
@@ -270,11 +284,22 @@ for (const name of NAMES) {
     });
 
     test("the table refreshes when the stream speaks, and the status counts follow", async () => {
-      const page = await open("/recipients?sort=-last_activity");
-      await page.waitForFunction(() => document.getElementById("recipients")?.getAttribute("data-live") === "on", null, { timeout: 10000 }).catch(() => {});
-      const { recipient } = await step("converted");
-      await page.waitForFunction((id) => document.querySelector("#recipients tbody tr[data-key]")?.getAttribute("data-key") === String(id), recipient, { timeout: 10000 });
-      assert.equal((await rows(page).first().locator("[data-slot=badge]").textContent()).trim(), "Converted");
+      // Someone who clicked, found by their address.
+      const clickers = await open("/recipients?f.status=clicked");
+      const key = await rows(clickers).first().getAttribute("data-key");
+      const email = (await rows(clickers).first().locator("p").first().textContent()).trim();
+      const page = await open(`/recipients?q=${encodeURIComponent(email)}`);
+      assert.equal(await rows(page).count(), 1);
+      assert.equal((await rows(page).first().locator("[data-slot=badge]").textContent()).trim(), "Clicked");
+      const count = (label) => page.evaluate((text) => {
+        const option = [...document.querySelectorAll("#recipients-p-status label")].find((l) => l.textContent.includes(text));
+        return Number(option?.textContent.match(/\d+/)?.[0] ?? -1);
+      }, label);
+      const converted = await count("Converted");
+      await live(page, "recipients");
+      await step("converted", key);
+      await until(page, () => document.querySelector("#recipients tbody tr[data-key] [data-slot=badge]")?.textContent.trim() === "Converted", null, "the row's badge to change");
+      assert.equal(await count("Converted"), converted + 1, "the status filter counts it");
       await page.done();
     });
 

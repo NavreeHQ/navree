@@ -207,6 +207,7 @@ struct PeriodQuery {
 #[derive(Deserialize, Default)]
 struct StepQuery {
     kind: Option<String>,
+    recipient: Option<i64>,
 }
 
 impl Pages {
@@ -536,7 +537,8 @@ impl Controller for Pages {
 }
 
 /// What the browser tests drive the app with, when `CAMPAIGN_TEST_HOOKS` is set:
-/// one step of a kind they choose, the campaign written afresh, and the counts.
+/// one step of a kind they choose (`?kind=clicked`, `&recipient=7` for who), and the
+/// campaign written afresh.
 fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
     vec![
         RouteDef::on(Method::POST, "!/__test/step", {
@@ -547,7 +549,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                     let kind = query.kind.as_deref().map(Kind::parse);
                     let event = me
                         .hub
-                        .step(&me.db, now(), kind)
+                        .step(&me.db, now(), kind, query.recipient)
                         .await
                         .map_err(|error| AppError::internal(error.to_string()))?;
                     Ok::<_, AppError>(event.map_or_else(String::new, |event| {
