@@ -81,7 +81,6 @@ struct Pending {
 
 /// The result of [`AuthService::sign_in_session`].
 #[derive(Debug)]
-#[non_exhaustive]
 pub enum SessionSignIn {
     /// The browser is signed in as the user.
     SignedIn(User),
@@ -235,8 +234,9 @@ impl AuthService {
     /// `session.lifetime_minutes`); the sign-in ends `remember_days`, or
     /// `auth.session.lifetime_hours`, after it started. A user who must
     /// set up two-factor authentication reaches only the setup routes until
-    /// they do. It asks no [`SignInPolicy`](crate::SignInPolicy) and writes
-    /// no `auth.login` entry: the caller's flow does both.
+    /// they do. A sign-in the browser held before (another account, say)
+    /// ends on the server. It asks no [`SignInPolicy`](crate::SignInPolicy)
+    /// and writes no `auth.login` entry: the caller's flow does both.
     pub async fn start_session(
         &self,
         session: &Session,
@@ -244,6 +244,7 @@ impl AuthService {
         remember: bool,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
+        let previous = session.get::<SignedIn>(SESSION_USER_KEY);
         let max_age_secs = self.options.session.max_age_secs(remember);
         let (state, _secret) = self
             .open_family(user, meta, SessionKind::Browser { max_age_secs })
@@ -258,7 +259,11 @@ impl AuthService {
                 setup: typ == TokenType::TwoFactorSetup,
                 remember,
             },
-        )
+        )?;
+        if let Some(previous) = previous {
+            self.end_server_session(previous.user, previous.sid).await?;
+        }
+        Ok(())
     }
 
     /// Signs the browser out: ends its server-side session (audited as
@@ -276,18 +281,8 @@ impl AuthService {
         let Some(signed_in) = signed_in else {
             return Ok(());
         };
-        let now = self.clock.now();
         let (user_id, sid) = (signed_in.user, signed_in.sid);
-        let revoked = self
-            .write(Some(user_id), |uow| async move {
-                Ok(RefreshToken::query()
-                    .where_(RefreshToken::FAMILY_ID.eq(sid))
-                    .where_(RefreshToken::USER_ID.eq(user_id))
-                    .where_null(RefreshToken::REVOKED_AT)
-                    .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
-                    .await?)
-            })
-            .await?;
+        let revoked = self.end_server_session(user_id, sid).await?;
         self.audit(
             entry(AuditKind::Auth, "auth.logout", meta)
                 .actor(user_id)
@@ -393,6 +388,21 @@ impl AuthService {
         session
             .insert(SESSION_USER_KEY, &signed_in)
             .map_err(session_error)
+    }
+
+    /// Revokes the server-side session `sid` of `user`; how many of its
+    /// rows were live.
+    async fn end_server_session(&self, user: Uuid, sid: Uuid) -> Result<u64, AuthError> {
+        let now = self.clock.now();
+        self.write(Some(user), |uow| async move {
+            Ok(RefreshToken::query()
+                .where_(RefreshToken::FAMILY_ID.eq(sid))
+                .where_(RefreshToken::USER_ID.eq(user))
+                .where_null(RefreshToken::REVOKED_AT)
+                .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
+                .await?)
+        })
+        .await
     }
 
     /// When the server-side session `sid` of `user` ends, if it is live
