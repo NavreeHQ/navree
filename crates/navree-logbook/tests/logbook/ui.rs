@@ -662,6 +662,18 @@ async fn ui_routes(app: &navree_testing::TestApp) -> Vec<String> {
         .collect()
 }
 
+/// The toolkit's routes as `UiModule` alone mounts them: what an app with Logbook on
+/// has, once.
+async fn toolkit_routes() -> Vec<String> {
+    let app = navree_testing::TestApp::builder()
+        .module(navree_ui::UiModule)
+        .build()
+        .await;
+    let routes = ui_routes(&app).await;
+    assert!(!routes.is_empty());
+    routes
+}
+
 #[tokio::test]
 async fn a_logbook_that_is_off_adds_no_toolkit_route_and_no_layer() {
     let app = navree_testing::TestApp::builder()
@@ -697,7 +709,7 @@ async fn a_logbook_that_is_on_serves_the_toolkit() {
         .module(ReplyModule)
         .build()
         .await;
-    assert_eq!(ui_routes(&app).await.len(), 1);
+    assert_eq!(ui_routes(&app).await, toolkit_routes().await);
     app.client()
         .get(navree_ui::assets::CORE_URL)
         .send()
@@ -729,7 +741,11 @@ async fn an_app_that_names_the_toolkit_keeps_it_whatever_logbook_does() {
         }
         let app = app.build().await;
         assert!(!app.get::<Logbook>().await.is_enabled());
-        assert_eq!(ui_routes(&app).await.len(), 1, "named_first {named_first}");
+        assert_eq!(
+            ui_routes(&app).await,
+            toolkit_routes().await,
+            "named_first {named_first}"
+        );
         app.client()
             .get(navree_ui::assets::CORE_URL)
             .send()

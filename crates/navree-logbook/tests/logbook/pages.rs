@@ -383,9 +383,16 @@ async fn the_colours_are_the_apps_and_not_the_systems() {
         .await
         .assert_status(200)
         .text();
+    // The stylesheet follows the system only on a page in system mode, and Logbook's
+    // page names no mode of its own: it stays dark.
+    let root = &page[page.find("<html").unwrap()..];
+    let root = &root[..root.find('>').unwrap()];
+    assert!(!root.contains("data-mode"), "{root}");
     assert!(
-        !css.contains("prefers-color-scheme"),
-        "the stylesheet doesn't switch to light with the system"
+        css.match_indices("prefers-color-scheme")
+            .all(|(at, _)| css[at..]
+                .starts_with("prefers-color-scheme:light){:where([data-mode=system])")),
+        "the stylesheet switches to light with the system only in system mode"
     );
     assert!(css.contains("color-scheme:dark"));
 }
