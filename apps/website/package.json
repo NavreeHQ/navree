@@ -13,6 +13,7 @@
     "check:geo": "node scripts/check-geo.ts",
     "check:aeo": "node scripts/check-aeo.ts",
     "check:fresh": "node scripts/check-fresh.ts",
+    "check:console": "node scripts/check-console.ts",
     "check": "node scripts/check-links.ts && node scripts/check-seo.ts && node scripts/check-geo.ts && node scripts/check-aeo.ts && node scripts/check-fresh.ts",
     "lighthouse": "node scripts/lighthouse.ts",
     "daily": "node scripts/site-daily.ts",

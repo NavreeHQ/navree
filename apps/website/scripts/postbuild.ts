@@ -29,6 +29,9 @@
  * 3. Checks the fonts: every family a next/font CSS variable names must have
  *    an @font-face in the CSS (see src/app/fonts.ts), or text would silently
  *    fall back to a system font.
+ *
+ * 4. Keeps email addresses as written: pages that show one switch off the
+ *    CDN's address rewriting, which would otherwise break hydration.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -134,3 +137,36 @@ for (const [, name, value] of variables) {
   if (!faces.has(family)) fail(`${name} names the font family "${family}", which has no @font-face`);
 }
 console.log(`postbuild: ${faces.size} font families, every next/font variable has a face`);
+
+// ------------------------------------------------ 4. email addresses as written
+
+/**
+ * The CDN in front of the site can hide email addresses from scrapers by
+ * rewriting them in the HTML: Cloudflare's Email Address Obfuscation turns
+ * each address into a "[email protected]" link and a script decodes it
+ * again in the browser. React then finds different text from the page it
+ * rendered and hydration fails (React error #418), on every load of every
+ * page that shows an address (`/about/`, docs with example addresses).
+ *
+ * The addresses on this site are meant to be read, so the body of every
+ * page that has one is wrapped in the markers that switch the rewrite off,
+ * `<!--email_off-->` and `<!--/email_off-->`. React skips comments that are
+ * not its own while hydrating, so it never sees them.
+ * `scripts/check-console.ts` loads pages through the same rewrite and fails
+ * on any console error.
+ */
+const EMAIL = /[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/i;
+let guarded = 0;
+for (const file of files(OUT).filter((f) => f.endsWith(".html"))) {
+  let html = fs.readFileSync(file, "utf8");
+  if (html.includes("<!--email_off-->")) continue;
+  const open = /<body[^>]*>/.exec(html);
+  const close = html.lastIndexOf("</body>");
+  if (!open || close < 0) continue;
+  const start = open.index + open[0].length;
+  if (!EMAIL.test(html.slice(start, close))) continue;
+  html = `${html.slice(0, start)}<!--email_off-->${html.slice(start, close)}<!--/email_off-->${html.slice(close)}`;
+  fs.writeFileSync(file, html);
+  guarded++;
+}
+console.log(`postbuild: ${guarded} pages with email addresses keep them as written (Cloudflare's rewrite switched off there)`);
