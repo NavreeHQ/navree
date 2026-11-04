@@ -5,11 +5,12 @@
 //! PostgreSQL and MySQL, and on SQLite the write lock `BEGIN IMMEDIATE` takes. Two
 //! moves at once queue, and the second is checked against what the first left.
 
+use std::collections::HashMap;
 use std::future::Future;
 
 use chrono::{Days, NaiveDate};
 use navree::db::{DbError, ErrorKind, Uow};
-use navree::orm::{Model as _, OrmError};
+use navree::orm::{Model as _, OrmError, Value, raw};
 use navree::ui::ListState;
 use navree::ui::sortable::{self, Placement, RankedLists, Spot};
 
@@ -34,24 +35,43 @@ pub async fn people(uow: &Uow) -> Result<Vec<Person>, OrmError> {
         .collect())
 }
 
-/// The person with `id`, or the lead when there is none: who the board is shown as.
+/// The person with `id`, or the first member when there is none: who the board is
+/// shown as. Nobody is a lead until they choose to be.
 pub async fn viewer(uow: &Uow, id: Option<i64>) -> Result<Person, OrmError> {
     let people = people(uow).await?;
-    Ok(id
-        .and_then(|id| people.iter().find(|person| person.id == id).cloned())
-        .or_else(|| people.into_iter().next())
+    let named = id.and_then(|id| people.iter().find(|person| person.id == id).cloned());
+    Ok(named
+        .or_else(|| people.iter().find(|person| !person.is_lead()).cloned())
         .unwrap_or_default())
 }
 
-/// `rank.id`: where a page of a column ends.
+/// Where a page of a column ends: the last card drawn, by its id. The next page
+/// starts after that card wherever it is now, so fresh ranks between two pages
+/// skip nothing.
 pub fn cursor(card: &Card) -> String {
-    format!("{}.{}", card.rank, card.id)
+    card.id.to_string()
 }
 
-/// A cursor read back, or `None` for one that doesn't parse.
+/// A card's id from a cursor: digits only, or `None`.
+pub fn parse_card(text: &str) -> Option<i64> {
+    let plain = !text.is_empty() && text.len() <= 18 && text.bytes().all(|b| b.is_ascii_digit());
+    plain.then(|| text.parse().ok()).flatten()
+}
+
+/// `at.id`, a comment's or a line of history's place, read back, or `None` for
+/// one that doesn't parse.
 pub fn parse_cursor(text: &str) -> Option<(i64, i64)> {
     let (rank, id) = text.rsplit_once('.')?;
     Some((rank.parse().ok()?, id.parse().ok()?))
+}
+
+/// Where a page of a column starts: after the card `card`, wherever it stands in
+/// the column now. When that card has left the column, after the first `skip`
+/// cards that pass the filters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct After {
+    pub card: i64,
+    pub skip: usize,
 }
 
 /// The cards of `column` that pass `filters`, after `after` when given, at most
@@ -61,16 +81,23 @@ pub async fn column_cards(
     column: Column,
     filters: &Filters,
     today: NaiveDate,
-    after: Option<(i64, i64)>,
+    after: Option<After>,
     limit: usize,
 ) -> Result<(Vec<Card>, bool), OrmError> {
     let mut query = Card::query().where_(Card::LIST.eq(column.key()));
-    if let Some((rank, id)) = after {
-        query = query.where_(
-            Card::RANK
-                .gt(rank)
-                .or(Card::RANK.eq(rank).and(Card::ID.gt(id))),
-        );
+    let mut skip = 0;
+    if let Some(after) = after {
+        match Card::query().find(uow, after.card).await? {
+            Some(card) if card.list == column.key() => {
+                let (rank, id) = (card.rank, card.id);
+                query = query.where_(
+                    Card::RANK
+                        .gt(rank)
+                        .or(Card::RANK.eq(rank).and(Card::ID.gt(id))),
+                );
+            }
+            _ => skip = after.skip,
+        }
     }
     if let Some(id) = filters.assignee {
         query = query.where_(Card::ASSIGNEE.eq(id));
@@ -89,6 +116,7 @@ pub async fn column_cards(
     let mut cards: Vec<Card> = query
         .order_by("rank")
         .order_by("id")
+        .offset(u64::try_from(skip).unwrap_or(u64::MAX))
         .limit(u64::try_from(limit + 1).unwrap_or(u64::MAX))
         .get(uow)
         .await?
@@ -99,6 +127,34 @@ pub async fn column_cards(
     let more = cards.len() > limit;
     cards.truncate(limit);
     Ok((cards, more))
+}
+
+/// Where each of `cards` stands in the whole of `column`, 1 being first: one walk
+/// of the column's index, numbered by a window. For a filter, whose cards are some
+/// of the column's, so their move forms count in the column the server places by.
+pub async fn places(uow: &Uow, column: Column, cards: &[Card]) -> Result<Vec<usize>, OrmError> {
+    if cards.is_empty() {
+        return Ok(Vec::new());
+    }
+    let marks = vec!["?"; cards.len()].join(", ");
+    let sql = format!(
+        "SELECT id, n FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY rank, id) AS n FROM cards WHERE list = ?) AS ranked WHERE id IN ({marks})"
+    );
+    let mut values = vec![Value::from(column.key())];
+    values.extend(cards.iter().map(|card| Value::from(card.id)));
+    let found: HashMap<i64, usize> = navree::orm::select(uow, raw(sql, values))
+        .await?
+        .iter()
+        .filter_map(|row| {
+            let id = row.get::<i64>("id").ok()?;
+            let n = usize::try_from(row.get::<i64>("n").ok()?).ok()?;
+            Some((id, n))
+        })
+        .collect();
+    Ok(cards
+        .iter()
+        .map(|card| found.get(&card.id).copied().unwrap_or(1))
+        .collect())
 }
 
 /// How many cards `column` holds: an index-only count.
@@ -133,6 +189,11 @@ pub async fn board(
             next: more.then(|| cards.last().map(cursor)).flatten(),
             total: column_total(uow, column).await?,
             start: 0,
+            places: if filters.is_empty() {
+                Vec::new()
+            } else {
+                places(uow, column, &cards).await?
+            },
             column,
             cards,
         });

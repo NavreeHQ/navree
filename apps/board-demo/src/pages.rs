@@ -4,8 +4,8 @@
 //! |---|---|
 //! | `GET /` | the board; `?assignee=`, `&label=`, `&due=` filter it, `&show.<column>=` draws more of a column |
 //! | `GET /fragments/board` | the board's region, which the stream asks for again |
-//! | `GET /columns/{column}` | a column's next cards after a cursor, as ops; the board with more of it, with JavaScript off |
-//! | `POST /board/moves` | a card's move, placed by rank and checked against the board as it is now |
+//! | `GET /columns/{column}` | a column's next cards after a card (`?after=<id>`, wherever that card is now), as ops; the board with more of it, with JavaScript off |
+//! | `POST /board/moves` | a card's move, placed by rank and checked against the board as it is now; with JavaScript off it goes back to the board with the filters in its own query |
 //! | `GET /cards/search?q=` | the palette's answer: cards whose title holds the text |
 //! | `GET /cards/{id}/peek` | the card in the drawer, as ops; its page with JavaScript off |
 //! | `GET /cards/{id}` | the card on a page of its own |
@@ -14,7 +14,7 @@
 //! | `POST /cards/{id}/checks/moves` | a checklist line's move |
 //! | `POST /checks/{id}/done` | a line ticked or not |
 //! | `POST /cards/{id}/comments` | a comment |
-//! | `POST /as/{id}` | shows the board as someone else: a lead, or a member who can't close cards |
+//! | `POST /as/{id}` | shows the board as someone else: a lead, or a member who can't close cards (a member until then) |
 //! | `GET /events` | the server-sent event stream |
 
 use std::collections::HashMap;
@@ -38,9 +38,9 @@ use serde::Deserialize;
 use crate::Settings;
 use crate::data::{Check, Column, ColumnRow, PROJECT, Person, TEAM, day_of};
 use crate::live::{Hub, now};
-use crate::store::{self, parse_cursor};
+use crate::store::{self, After, parse_card, parse_cursor};
 use crate::views::board::{
-    ColumnPage, DRAWER, Filters, PAGE, REGION, board, board_page, column, query,
+    ColumnPage, DRAWER, Filters, PAGE, REGION, board, board_page, column, moves_action, query,
 };
 use crate::views::card::{
     CardData, CommentForm, card_detail, card_sheet, checklist, comment_items, comments,
@@ -66,7 +66,7 @@ fn today() -> NaiveDate {
     day_of(now())
 }
 
-/// Who the board is shown as: the person the cookie names, or the lead.
+/// Who the board is shown as: the person the cookie names, or else a member.
 fn viewer_id(headers: &HeaderMap) -> Option<i64> {
     headers
         .get_all(http::header::COOKIE)
@@ -85,6 +85,19 @@ fn filters(params: &Params) -> Filters {
         params.get("label").map(String::as_str),
         params.get("due").map(String::as_str),
     )
+}
+
+/// The board as a move's query names it: its filters, and how much of each column
+/// it holds, each read as the board reads them, so nothing else gets through.
+fn board_href(params: &Params) -> String {
+    let mut pairs = filters(params).pairs();
+    for column in Column::ALL {
+        let shown = store::shown(column, |name| params.get(name).cloned());
+        if shown > PAGE {
+            pairs.push((format!("show.{}", column.key()), shown.to_string()));
+        }
+    }
+    format!("/{}", query(&pairs))
 }
 
 /// What a transaction's failure answers.
@@ -152,16 +165,23 @@ impl Pages {
         let mut back = filters.pairs();
         back.push((format!("show.{key}"), shown.to_string()));
         let reply = Reply::ops_or_redirect(format!("/{}", query(&back)));
-        let Some(after) = params.get("after").and_then(|text| parse_cursor(text)) else {
+        let Some(card) = params.get("after").and_then(|text| parse_card(text)) else {
             return Ok(reply);
         };
         let viewer = self.viewer(&uow, &headers).await?;
         let start = shown.saturating_sub(PAGE);
+        // After that card, wherever it is now; past the cards drawn, if it has left.
+        let after = After { card, skip: start };
         let (cards, more) =
             store::column_cards(&uow, which, &filters, today(), Some(after), PAGE).await?;
         let page = ColumnPage {
             next: more.then(|| cards.last().map(store::cursor)).flatten(),
             total: store::column_total(&uow, which).await?,
+            places: if filters.is_empty() {
+                Vec::new()
+            } else {
+                store::places(&uow, which, &cards).await?
+            },
             column: which,
             cards,
             start,
@@ -177,7 +197,7 @@ impl Pages {
         });
         let ops = Sortable::new("columns", format!("{PROJECT} board"))
             .board()
-            .post("/board/moves")
+            .post(moves_action(&back))
             .lists(lists)
             .page(which.key());
         Ok(ops.into_iter().fold(reply, Reply::op))
@@ -185,8 +205,10 @@ impl Pages {
 
     /// `POST /board/moves`: places the move by rank, checked against the board as it
     /// is now, in the transaction that writes it. A refusal puts the card back; a
-    /// stale page also fetches the board again.
-    async fn moves(&self, headers: HeaderMap, mv: Move) -> Result<Reply> {
+    /// stale page also fetches the board again. With JavaScript off it goes back to
+    /// the board its query names, filters and all.
+    async fn moves(&self, headers: HeaderMap, params: Params, mv: Move) -> Result<Reply> {
+        let page = board_href(&params);
         let delay = self.hub.delay_ms.load(Ordering::SeqCst);
         if delay > 0 {
             tokio::time::sleep(Duration::from_millis(delay)).await;
@@ -211,10 +233,10 @@ impl Pages {
                 if placement.moved {
                     self.hub.nudge();
                 }
-                Ok(mv.done("/"))
+                Ok(mv.done(page))
             }
             Err(refusal) => {
-                let reply = mv.refused("/", refusal.message());
+                let reply = mv.refused(page, refusal.message());
                 Ok(if refusal.is_stale() {
                     reply.op(Op::Invalidate {
                         target: REGION.to_owned(),
@@ -482,7 +504,8 @@ impl Pages {
             .into_response())
     }
 
-    /// `POST /as/{id}`: shows the board as someone else.
+    /// `POST /as/{id}`: shows the board as someone else. A post from another site
+    /// is refused before this runs, as any form's is.
     async fn view_as(&self, uow: Uow, id: i64) -> Result<Response> {
         let person = store::viewer(&uow, Some(id)).await?;
         let role = if person.is_lead() { "lead" } else { "member" };
@@ -542,9 +565,9 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::POST, "!/board/moves", {
                 let me = me.clone();
-                move |headers: HeaderMap, mv: Move| {
+                move |headers: HeaderMap, Query(params): Query<Params>, mv: Move| {
                     let me = me.clone();
-                    async move { me.moves(headers, mv).await }
+                    async move { me.moves(headers, params, mv).await }
                 }
             })
             .public(),
@@ -632,7 +655,7 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::POST, "!/as/{id}", {
                 let me = me.clone();
-                move |uow: Uow, Path(id): Path<i64>| {
+                move |uow: Uow, Path(id): Path<i64>, Submit(_): Submit<ViewAs>| {
                     let me = me.clone();
                     async move { me.view_as(uow, id).await }
                 }
@@ -657,6 +680,16 @@ impl Controller for Pages {
         }
         routes
     }
+}
+
+/// Showing the board as someone: no field of its own, but posted as a form, so
+/// it gets a form's forgery check.
+#[derive(Debug, Deserialize, Validate, Form)]
+#[form(id = "view-as")]
+pub struct ViewAs {
+    /// Nothing the menu sends.
+    #[validate(skip)]
+    pub go: Option<String>,
 }
 
 /// A line's tick, as a form: `done` is there when the box is ticked.

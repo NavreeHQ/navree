@@ -30,7 +30,11 @@ pub struct ColumnPage {
     pub total: u64,
     /// Where the cards drawn start in the column (0 for the first page).
     pub start: usize,
-    /// The cursor after the last card drawn, when the filter has more.
+    /// Where each card drawn stands in the whole column, 1 being first, when a
+    /// filter leaves some out; empty when the cards drawn are the column's own run.
+    pub places: Vec<usize>,
+    /// The cursor after the last card drawn, when the filter has more: that card's
+    /// id, read as "after this card, wherever it is now".
     pub next: Option<String>,
 }
 
@@ -107,6 +111,24 @@ impl Filters {
     }
 }
 
+/// What the board's address says beyond its filters: how many cards each column
+/// holds in the page, past the first page.
+pub fn shown_pairs(data: &BoardData) -> Vec<(String, String)> {
+    data.columns
+        .iter()
+        .map(|page| (page.column, page.start + page.cards.len()))
+        .filter(|(_, shown)| *shown > PAGE)
+        .map(|(column, shown)| (format!("show.{}", column.key()), shown.to_string()))
+        .collect()
+}
+
+/// Where a move posts: `/board/moves`, with the board's filters and how much of
+/// each column it holds, so the page a move with JavaScript off goes back to is
+/// the one it was made on.
+pub fn moves_action(pairs: &[(String, String)]) -> String {
+    format!("/board/moves{}", query(pairs))
+}
+
 /// A query string, `?a=1&b=2`, or nothing. The values here are numbers and keys.
 pub fn query(pairs: &[(String, String)]) -> String {
     if pairs.is_empty() {
@@ -131,9 +153,14 @@ pub fn column(
     let column = page.column;
     let shown = page.start + page.cards.len();
     let mut list = SortList::new(column.key(), column.title())
-        .items(page.cards.iter().map(|card| {
-            SortItem::new(card.id.to_string(), card.title.clone())
-                .body(card_face(card, people, today))
+        .items(page.cards.iter().enumerate().map(|(at, card)| {
+            let item = SortItem::new(card.id.to_string(), card.title.clone())
+                .body(card_face(card, people, today));
+            // Under a filter, a card's move form counts in the whole column.
+            match page.places.get(at) {
+                Some(place) => item.position(*place),
+                None => item,
+            }
         }))
         .total(usize::try_from(page.total).unwrap_or(usize::MAX))
         .from(page.start)
@@ -169,9 +196,11 @@ pub fn column(
 /// against the board as it is then and gives the card a rank between its new
 /// neighbours'.
 pub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Sortable {
+    let mut pairs = filters.pairs();
+    pairs.extend(shown_pairs(data));
     Sortable::new("columns", format!("{PROJECT} board"))
         .board()
-        .post("/board/moves")
+        .post(moves_action(&pairs))
         .lists(
             data.columns
                 .iter()
@@ -284,12 +313,7 @@ pub fn filter_bar(people: &[Person], filters: &Filters) -> Node {
 /// source asks for as many cards in each column as the page holds.
 pub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Region {
     let mut pairs = filters.pairs();
-    for page in &data.columns {
-        let shown = page.start + page.cards.len();
-        if shown > PAGE {
-            pairs.push((format!("show.{}", page.column.key()), shown.to_string()));
-        }
-    }
+    pairs.extend(shown_pairs(data));
     Region::new(REGION)
         .src(format!("/fragments/board{}", query(&pairs)))
         .live_from("/events")

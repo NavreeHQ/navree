@@ -115,14 +115,14 @@ fn seeded(moves: &[(i64, Column)]) -> BoardData {
                 .collect();
             held.sort_by_key(|card| (card.rank, card.id));
             let total = held.len() as u64;
-            let next = (held.len() > PAGE)
-                .then(|| format!("{}.{}", held[PAGE - 1].rank, held[PAGE - 1].id));
+            let next = (held.len() > PAGE).then(|| held[PAGE - 1].id.to_string());
             held.truncate(PAGE);
             ColumnPage {
                 column: *column,
                 cards: held,
                 total,
                 start: 0,
+                places: Vec::new(),
                 next,
             }
         })
