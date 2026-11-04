@@ -205,11 +205,51 @@ pub trait DraftStore: Send + Sync {
 
 /// Drafts in memory: for tests, the proof app and small apps with one process. It
 /// holds at most `capacity` drafts and forgets one that nobody touched for `ttl`.
+/// When it is full, a new draft takes the place of the one touched longest ago, so
+/// a store that has filled up never locks everyone else out; an owner at their limit
+/// of 100 drafts gives up their own oldest first. A person whose draft was forgotten
+/// finds nothing when they come back, as with a draft past its `ttl`.
 pub struct MemoryDrafts {
     capacity: usize,
     per_owner: usize,
     ttl: Duration,
-    drafts: Mutex<HashMap<(String, String), (Draft, Instant)>>,
+    held: Mutex<Held>,
+}
+
+/// What the store holds, and a count of touches, which orders them even when the clock
+/// gives two the same instant.
+#[derive(Default)]
+struct Held {
+    drafts: HashMap<(String, String), Kept>,
+    touches: u64,
+}
+
+struct Kept {
+    draft: Draft,
+    touched: Instant,
+    order: u64,
+}
+
+impl Held {
+    fn touch(&mut self) -> u64 {
+        self.touches += 1;
+        self.touches
+    }
+
+    fn owned(&self, owner: &str) -> usize {
+        self.drafts.keys().filter(|(who, _)| who == owner).count()
+    }
+
+    /// Forgets the draft touched longest ago, of `owner` or of anyone. Whether there was one.
+    fn evict(&mut self, owner: Option<&str>) -> bool {
+        let oldest = self
+            .drafts
+            .iter()
+            .filter(|((who, _), _)| owner.is_none_or(|owner| who == owner))
+            .min_by_key(|(_, kept)| kept.order)
+            .map(|(key, _)| key.clone());
+        oldest.is_some_and(|key| self.drafts.remove(&key).is_some())
+    }
 }
 
 impl Default for MemoryDrafts {
@@ -226,13 +266,13 @@ impl MemoryDrafts {
             capacity,
             per_owner: 100,
             ttl,
-            drafts: Mutex::new(HashMap::new()),
+            held: Mutex::new(Held::default()),
         }
     }
 
     /// How many drafts are held now.
     pub fn len(&self) -> usize {
-        self.drafts.lock().map_or(0, |drafts| drafts.len())
+        self.held.lock().map_or(0, |held| held.drafts.len())
     }
 
     /// Whether none is held.
@@ -240,18 +280,16 @@ impl MemoryDrafts {
         self.len() == 0
     }
 
-    fn with<R>(
-        &self,
-        f: impl FnOnce(&mut HashMap<(String, String), (Draft, Instant)>) -> R,
-    ) -> Result<R, DraftError> {
-        let mut drafts = self
-            .drafts
+    fn with<R>(&self, f: impl FnOnce(&mut Held) -> R) -> Result<R, DraftError> {
+        let mut held = self
+            .held
             .lock()
             .map_err(|_| DraftError::Store("the store's lock is poisoned".to_owned()))?;
         let now = Instant::now();
         let ttl = self.ttl;
-        drafts.retain(|_, (_, touched)| now.duration_since(*touched) < ttl);
-        Ok(f(&mut drafts))
+        held.drafts
+            .retain(|_, kept| now.duration_since(kept.touched) < ttl);
+        Ok(f(&mut held))
     }
 }
 
@@ -259,10 +297,12 @@ impl DraftStore for MemoryDrafts {
     fn load(&self, owner: &str, id: &str) -> BoxFuture<'_, Result<Option<Draft>, DraftError>> {
         let key = (owner.to_owned(), id.to_owned());
         Box::pin(async move {
-            self.with(|drafts| {
-                drafts.get_mut(&key).map(|(draft, touched)| {
-                    *touched = Instant::now();
-                    draft.clone()
+            self.with(|held| {
+                let order = held.touch();
+                held.drafts.get_mut(&key).map(|kept| {
+                    kept.touched = Instant::now();
+                    kept.order = order;
+                    kept.draft.clone()
                 })
             })
         })
@@ -282,19 +322,34 @@ impl DraftStore for MemoryDrafts {
                 return Err(DraftError::TooLarge);
             }
             let (capacity, per_owner) = (self.capacity, self.per_owner);
-            self.with(move |drafts| {
-                match (drafts.get(&key), expected) {
+            self.with(move |held| {
+                match (held.drafts.get(&key), expected) {
                     (None, None) => {
-                        if drafts.len() >= capacity
-                            || drafts.keys().filter(|(who, _)| *who == owner).count() >= per_owner
-                        {
-                            return Err(DraftError::Full);
+                        // Room is made by forgetting what was touched longest ago: the
+                        // owner's own when they are at their limit, then anyone's.
+                        while held.owned(&owner) >= per_owner {
+                            if !held.evict(Some(&owner)) {
+                                return Err(DraftError::Full);
+                            }
+                        }
+                        while held.drafts.len() >= capacity {
+                            if !held.evict(None) {
+                                return Err(DraftError::Full);
+                            }
                         }
                     }
-                    (Some((stored, _)), Some(revision)) if stored.revision == revision => {}
+                    (Some(kept), Some(revision)) if kept.draft.revision == revision => {}
                     _ => return Err(DraftError::Conflict),
                 }
-                drafts.insert(key, (draft, Instant::now()));
+                let order = held.touch();
+                held.drafts.insert(
+                    key,
+                    Kept {
+                        draft,
+                        touched: Instant::now(),
+                        order,
+                    },
+                );
                 Ok(())
             })?
         })
@@ -303,8 +358,8 @@ impl DraftStore for MemoryDrafts {
     fn discard(&self, owner: &str, id: &str) -> BoxFuture<'_, Result<(), DraftError>> {
         let key = (owner.to_owned(), id.to_owned());
         Box::pin(async move {
-            self.with(|drafts| {
-                drafts.remove(&key);
+            self.with(|held| {
+                held.drafts.remove(&key);
             })
         })
     }
@@ -416,15 +471,82 @@ mod tests {
     }
 
     #[test]
-    fn the_store_is_bounded() {
-        let store = MemoryDrafts::new(2, Duration::from_secs(60));
-        for _ in 0..2 {
-            block(store.save("ada", &Draft::new("one"), None)).unwrap();
+    fn a_full_store_forgets_the_draft_touched_longest_ago_and_never_locks_people_out() {
+        let store = MemoryDrafts::new(3, Duration::from_secs(60));
+        let drafts: Vec<Draft> = (0..3).map(|_| Draft::new("one")).collect();
+        for (n, draft) in drafts.iter().enumerate() {
+            block(store.save(&format!("owner-{n}"), draft, None)).unwrap();
         }
+        // The first was read after the others were saved, so it is the second oldest now.
+        assert!(
+            block(store.load("owner-0", &drafts[0].id))
+                .unwrap()
+                .is_some()
+        );
+        let newest = Draft::new("one");
+        assert_eq!(block(store.save("dana", &newest, None)), Ok(()));
+        assert_eq!(store.len(), 3);
         assert_eq!(
-            block(store.save("ada", &Draft::new("one"), None)),
+            block(store.load("owner-1", &drafts[1].id)),
+            Ok(None),
+            "the oldest went"
+        );
+        assert!(
+            block(store.load("owner-0", &drafts[0].id))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            block(store.load("owner-2", &drafts[2].id))
+                .unwrap()
+                .is_some()
+        );
+        assert!(block(store.load("dana", &newest.id)).unwrap().is_some());
+        // A saved draft counts as touched too.
+        let mut again = block(store.load("owner-2", &drafts[2].id))
+            .unwrap()
+            .unwrap();
+        again.revision += 1;
+        block(store.save("owner-2", &again, Some(0))).unwrap();
+        block(store.save("erin", &Draft::new("one"), None)).unwrap();
+        assert_eq!(block(store.load("owner-0", &drafts[0].id)), Ok(None));
+        assert!(
+            block(store.load("owner-2", &drafts[2].id))
+                .unwrap()
+                .is_some()
+        );
+        // A store with no room at all still says so.
+        let none = MemoryDrafts::new(0, Duration::from_secs(60));
+        assert_eq!(
+            block(none.save("ada", &Draft::new("one"), None)),
             Err(DraftError::Full)
         );
+    }
+
+    #[test]
+    fn an_owner_at_their_limit_gives_up_their_own_oldest_and_nobody_elses() {
+        let store = MemoryDrafts::default();
+        let first = Draft::new("one");
+        block(store.save("ada", &first, None)).unwrap();
+        let grace = Draft::new("one");
+        block(store.save("grace", &grace, None)).unwrap();
+        for _ in 1..100 {
+            block(store.save("ada", &Draft::new("one"), None)).unwrap();
+        }
+        // Ada has 100 and opens another, over and over, finishing none: she loses her oldest.
+        for _ in 0..250 {
+            block(store.save("ada", &Draft::new("one"), None)).unwrap();
+        }
+        assert_eq!(block(store.load("ada", &first.id)), Ok(None));
+        assert!(
+            block(store.load("grace", &grace.id)).unwrap().is_some(),
+            "grace's draft stays"
+        );
+        assert_eq!(store.len(), 101);
+    }
+
+    #[test]
+    fn an_oversized_draft_is_refused() {
         let mut big = Draft::new("one");
         big.steps.insert(
             "one".into(),
@@ -439,15 +561,6 @@ mod tests {
             block(MemoryDrafts::default().save("ada", &big, None)),
             Err(DraftError::TooLarge)
         );
-        let many = MemoryDrafts::default();
-        for _ in 0..100 {
-            block(many.save("ada", &Draft::new("one"), None)).unwrap();
-        }
-        assert_eq!(
-            block(many.save("ada", &Draft::new("one"), None)),
-            Err(DraftError::Full)
-        );
-        assert!(block(many.save("grace", &Draft::new("one"), None)).is_ok());
     }
 
     #[test]
