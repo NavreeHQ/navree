@@ -36,6 +36,23 @@ function namesOf(root) {
   return names;
 }
 
+/**
+ * A value as the number it is, written the way the page writes numbers: the decimals the grid has (the
+ * shortest text, up to nine, for a slider that takes any value) and the page's decimal point. A browser
+ * writes a small value as `1e-7`; the person never reads that.
+ * @param {Element} root @param {string} text
+ */
+function shown(root, text) {
+  const value = num(text);
+  if (!Number.isFinite(value)) return text;
+  const decimals = decimalsOf(root);
+  let out = decimals > 0 ? value.toFixed(decimals) : value.toFixed(9).replace(/\.?0+$/, "");
+  // A small negative that rounds to nothing is nothing.
+  if (/^-0(\.0*)?$/.test(out)) out = out.slice(1);
+  const point = attr(root, "data-point");
+  return point ? out.replace(".", point) : out;
+}
+
 /** The value of `input` as the page writes it: a step's name, or the number with its prefix and suffix. @param {Element} root @param {HTMLInputElement} input */
 function say(root, input) {
   const names = namesOf(root);
@@ -44,13 +61,7 @@ function say(root, input) {
     const at = Math.round((value - min) / step);
     if (names[at] !== undefined) return names[at];
   }
-  const decimals = decimalsOf(root);
-  let text = input.value;
-  if (Number.isFinite(value) && decimals > 0) {
-    const [whole, fraction = ""] = text.split(".");
-    text = whole + "." + (fraction + "0".repeat(decimals)).slice(0, decimals);
-  }
-  return (attr(root, "data-prefix") || "") + text + (attr(root, "data-suffix") || "");
+  return (attr(root, "data-prefix") || "") + shown(root, input.value) + (attr(root, "data-suffix") || "");
 }
 
 /** Whether the page writes a value as more than the bare number. @param {Element} root */
@@ -98,7 +109,8 @@ function nudge(input, by) {
   const min = num(input.min), max = num(input.max);
   if (!(max > min)) return;
   const next = Math.min(max, Math.max(min, num(input.value) + (by * (max - min)) / 100));
-  input.value = String(next);
+  // To nine places, which is what the server reads.
+  input.value = String(Number(next.toFixed(9)));
 }
 
 /** The gap between the thumbs of a range, as a number. @param {Element} root @param {HTMLInputElement} input */
@@ -135,8 +147,10 @@ on(document, "input", (e) => {
 function bigStep(root, input) {
   const given = num(attr(root, "data-big") || "");
   if (given > 0) return given;
-  const step = num(input.step) > 0 ? num(input.step) : 1;
   const tenth = (num(input.max) - num(input.min)) / 10;
+  const step = num(input.step);
+  // A slider that takes any value has no step to round to: a tenth of the track.
+  if (!(step > 0)) return tenth;
   return Math.max(step, Math.round(tenth / step) * step);
 }
 
@@ -147,6 +161,8 @@ on(document, "keydown", (e) => {
   const field = /** @type {HTMLInputElement} */ (input);
   const rtl = getComputedStyle(field).direction === "rtl";
   const horizontal = e.key === "ArrowLeft" || e.key === "ArrowRight";
+  // `step="any"` has no step: the browsers disagree on how far an arrow goes (Firefox goes to the end).
+  const anyStep = !(num(field.step) > 0);
   // The arrows move the thumb the way it looks: in a right-to-left page the least is at the right, and
   // browsers differ on whether Right means more there, so the sideways arrows are done here.
   const toward = e.key === (rtl ? "ArrowLeft" : "ArrowRight") || e.key === "ArrowUp" ? 1 : -1;
@@ -158,15 +174,17 @@ on(document, "keydown", (e) => {
   } else if (e.shiftKey && (horizontal || e.key === "ArrowUp" || e.key === "ArrowDown")) {
     by = toward;
     large = true;
-  } else if (rtl && !e.shiftKey && horizontal) {
+  } else if (!e.shiftKey && ((rtl && horizontal) || (anyStep && (horizontal || e.key === "ArrowUp" || e.key === "ArrowDown")))) {
+    // Done here: a slider that takes any value moves by a hundredth of its track, and in a right-to-left page the sideways arrows are the page's.
     by = toward;
   }
   if (!by) return;
   e.preventDefault();
   const big = bigStep(root, field);
-  const step = num(field.step) > 0 ? num(field.step) : big;
+  // A step, or for a slider that takes any value a hundredth of the track, which is what `nudge` moves it by.
+  const unit = anyStep ? (num(field.max) - num(field.min)) / 100 : num(field.step);
   // Move by whole steps: the browser puts the value on its grid and inside its bounds.
-  const times = large ? Math.max(1, Math.round(big / step)) : 1;
+  const times = large ? Math.max(1, Math.round(big / unit)) : 1;
   const before = field.value;
   for (let n = 0; n < times; n++) nudge(field, by);
   keepApart(root, field);

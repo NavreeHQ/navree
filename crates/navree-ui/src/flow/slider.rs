@@ -78,6 +78,9 @@ pub struct SliderLabels {
     pub off_step: Cow<'static, str>,
     pub low_above_high: Cow<'static, str>,
     pub too_close: Cow<'static, str>,
+    /// What is written between the whole part and the decimals of a number shown to the
+    /// person (`,` in German). The number a form posts always has a point.
+    pub decimal_point: Cow<'static, str>,
 }
 
 impl Default for SliderLabels {
@@ -94,6 +97,7 @@ impl Default for SliderLabels {
             off_step: "Choose a value in steps of {step}.".into(),
             low_above_high: "The lower value can't be above the upper one.".into(),
             too_close: "The two values must be at least {gap} apart.".into(),
+            decimal_point: ".".into(),
         }
     }
 }
@@ -108,7 +112,8 @@ impl Default for SliderLabels {
 /// assert!(grid.check("35").is_ok());
 /// assert!(grid.check("36").is_err());
 /// assert!(grid.check("105").is_err());
-/// assert!(grid.check("1e2").is_err());
+/// assert!(grid.check("1e2").is_ok()); // what a browser may write for 100
+/// assert!(grid.check("0x10").is_err());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SliderSpec {
@@ -200,12 +205,14 @@ impl SliderSpec {
                 .is_none_or(|step| (value.units() - self.min.units()).rem_euclid(step.units()) == 0)
     }
 
-    /// Reads one value from text and holds it to the grid.
+    /// Reads one value from text and holds it to the grid. The text is read as a browser writes
+    /// a number ([`Decimal::from_browser`]): a slider that takes any value posts a long fraction,
+    /// which is rounded to nine places, and a very small step posts an exponent (`1e-7`).
     pub fn check(&self, text: &str) -> Result<Decimal, SliderError> {
         if text.is_empty() {
             return Err(SliderError::Missing);
         }
-        let value: Decimal = text.parse().map_err(SliderError::NotANumber)?;
+        let value = Decimal::from_browser(text).map_err(SliderError::NotANumber)?;
         if value < self.min {
             return Err(SliderError::TooLow);
         }
@@ -224,8 +231,11 @@ impl SliderSpec {
         if low > high {
             return Err(SliderError::LowAboveHigh);
         }
+        // A gap of that many steps that does not fit a number is a gap nothing is wide enough for.
         if let Some(step) = self.step
-            && (high.units() - low.units()) < i128::from(self.gap) * step.units()
+            && i128::from(self.gap)
+                .checked_mul(step.units())
+                .is_none_or(|gap| (high.units() - low.units()) < gap)
         {
             return Err(SliderError::TooClose);
         }
@@ -263,11 +273,12 @@ impl SliderSpec {
         };
         let step = self.step.unwrap_or(Decimal::ONE);
         let gap = step.times(i64::from(self.gap)).unwrap_or(step);
+        let shown = |value: Decimal| point(&value.to_string(), &labels.decimal_point);
         words
-            .replace("{min}", &self.min.to_string())
-            .replace("{max}", &self.max.to_string())
-            .replace("{step}", &step.to_string())
-            .replace("{gap}", &gap.to_string())
+            .replace("{min}", &shown(self.min))
+            .replace("{max}", &shown(self.max))
+            .replace("{step}", &shown(step))
+            .replace("{gap}", &shown(gap))
     }
 
     /// Where `value` is along the track, from 0 to 100.
@@ -285,6 +296,15 @@ impl SliderSpec {
         self.step
             .map_or(0, Decimal::decimals)
             .max(self.min.decimals())
+    }
+}
+
+/// `text`, a number with a point, written with `point` instead.
+fn point(text: &str, point: &str) -> String {
+    if point == "." {
+        text.to_owned()
+    } else {
+        text.replace('.', point)
     }
 }
 
@@ -547,10 +567,16 @@ impl Slider {
         if let Some(name) = self.name_of(value) {
             return name.to_owned();
         }
+        // A step has the decimals it writes; a slider that takes any value writes what it has.
+        let number = if self.spec.step.is_some() {
+            value.fixed(self.spec.decimals())
+        } else {
+            value.to_string()
+        };
         format!(
             "{}{}{}",
             self.prefix.as_deref().unwrap_or(""),
-            value.fixed(self.spec.decimals()),
+            point(&number, &self.labels.decimal_point),
             self.suffix.as_deref().unwrap_or("")
         )
     }
@@ -722,6 +748,10 @@ impl Slider {
             .flag("data-invalid", self.invalid)
             .flag("data-labelled", marks.1)
             .attr("data-decimals", i64::from(spec.decimals()))
+            .attr_opt(
+                "data-point",
+                (self.labels.decimal_point != ".").then(|| self.labels.decimal_point.to_string()),
+            )
             .attr_opt("data-gap", (spec.gap > 0).then(|| i64::from(spec.gap)))
             .attr_opt("data-big", big.map(|big| big.to_string()))
             .attr_opt("data-prefix", self.prefix.clone())
@@ -1056,8 +1086,11 @@ mod tests {
         assert_eq!(grid.check("-5"), Err(SliderError::TooLow));
         assert_eq!(grid.check("105"), Err(SliderError::TooHigh));
         assert_eq!(grid.check(""), Err(SliderError::Missing));
+        // What a browser may write for a number: an exponent.
+        assert_eq!(grid.check("1e2"), Ok(Decimal::from(100)));
+        assert_eq!(grid.check("3.5e1"), Ok(Decimal::from(35)));
         for text in [
-            "1e2", "0x10", "NaN", "10 ", " 10", "5px", "1,5", "--5", "ten",
+            "0x10", "NaN", "10 ", " 10", "5px", "1,5", "--5", "ten", "1e", "e1",
         ] {
             assert!(
                 matches!(grid.check(text), Err(SliderError::NotANumber(_))),
@@ -1183,5 +1216,107 @@ mod tests {
             let snapped = grid.snap(Decimal::from_f64(rng.next() as f64 / 1e12 - 5000.0));
             assert!(grid.allows(snapped), "{snapped} on {grid:?}");
         }
+    }
+
+    #[test]
+    fn a_post_from_a_slider_that_takes_any_value_or_a_tiny_step_is_read_and_rounded() {
+        let any = SliderSpec::new(0, 1).any_step();
+        // A drag lands on a double, written with up to 17 digits.
+        assert_eq!(
+            any.check("0.5033333333333333").unwrap().to_string(),
+            "0.503333333"
+        );
+        assert_eq!(any.check("0.30000000000000004").unwrap().to_string(), "0.3");
+        assert_eq!(
+            any.check("1.0000000000000002"),
+            Ok(Decimal::ONE),
+            "rounded onto the maximum"
+        );
+        assert_eq!(any.check("1.0000000004"), Ok(Decimal::ONE));
+        assert_eq!(any.check("1.000000001"), Err(SliderError::TooHigh));
+        assert_eq!(any.check("-0.0000000004"), Ok(Decimal::ZERO));
+        // A step of a ten-millionth is posted as 1e-7.
+        let fine = SliderSpec::new(0, "0.00001".parse::<Decimal>().unwrap())
+            .step("0.0000001".parse::<Decimal>().unwrap());
+        assert_eq!(fine.check("1e-7").unwrap().to_string(), "0.0000001");
+        assert_eq!(fine.check("3E-7").unwrap().to_string(), "0.0000003");
+        assert_eq!(fine.check("1.5e-7"), Err(SliderError::OffStep));
+        // A stepped slider still holds the grid after rounding.
+        let tenths = SliderSpec::new(0, 1).step(0.1_f64);
+        assert_eq!(
+            tenths.check("0.30000000000000004").unwrap().to_string(),
+            "0.3"
+        );
+        assert_eq!(tenths.check("0.35"), Err(SliderError::OffStep));
+        // A range posts two of them.
+        let range = SliderSpec::new(0, 1).any_step();
+        assert!(
+            range
+                .check_range("0.2500000000000001", "0.7499999999999999")
+                .is_ok()
+        );
+        // Nothing else becomes a number.
+        for text in ["0x10", "NaN", "Infinity", "1 ", "1,5", "\u{661}"] {
+            assert!(
+                matches!(any.check(text), Err(SliderError::NotANumber(_))),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_gap_that_does_not_fit_a_number_is_too_wide_and_does_not_overflow() {
+        let spec = SliderSpec::new(0, "99999999999999999999".parse::<Decimal>().unwrap())
+            .step("50000000000000000000".parse::<Decimal>().unwrap())
+            .min_gap(u32::MAX);
+        assert_eq!(spec.check_range("0", "0"), Err(SliderError::TooClose));
+        assert_eq!(
+            spec.check_range("0", "50000000000000000000"),
+            Err(SliderError::TooClose)
+        );
+    }
+
+    #[test]
+    fn the_value_is_shown_with_the_decimal_point_of_the_page_and_posted_with_a_point() {
+        let labels = SliderLabels {
+            decimal_point: ",".into(),
+            ..SliderLabels::default()
+        };
+        let out = html(
+            Slider::new("v")
+                .min(0)
+                .max(1)
+                .step(0.25_f64)
+                .value(0.5_f64)
+                .prefix("~")
+                .labels(labels.clone()),
+        );
+        // What the person reads has the comma; what the input posts has the point.
+        assert!(out.contains(r#"aria-valuetext="~0,50""#), "{out}");
+        assert!(out.contains(r#"data-point=",""#), "{out}");
+        assert!(
+            out.contains(r#"step="0.25""#) && out.contains(r#"value="0.5""#),
+            "{out}"
+        );
+        assert!(!html(Slider::new("v").value(3)).contains("data-point"));
+        let grid = SliderSpec::new(0, 1).step(0.25_f64);
+        assert_eq!(
+            grid.message(SliderError::OffStep, &labels),
+            "Choose a value in steps of 0,25."
+        );
+        assert_eq!(
+            grid.message(SliderError::OffStep, &SliderLabels::default()),
+            "Choose a value in steps of 0.25."
+        );
+        // A slider that takes any value writes what it has, not a rounded whole.
+        let any = html(
+            Slider::new("v")
+                .min(0)
+                .max(1)
+                .any_step()
+                .value(0.5_f64)
+                .prefix("~"),
+        );
+        assert!(any.contains(r#"aria-valuetext="~0.5""#), "{any}");
     }
 }

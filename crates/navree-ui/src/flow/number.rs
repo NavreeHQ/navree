@@ -12,6 +12,9 @@ const ONE: i128 = 1_000_000_000;
 const INTEGER_DIGITS: usize = 20;
 /// The largest magnitude, in units of 10^-9.
 const LIMIT: i128 = 100_000_000_000_000_000_000 * ONE - 1;
+/// The longest text [`Decimal::from_browser`] reads, and the largest exponent in it.
+const BROWSER_BYTES: usize = 128;
+const BROWSER_EXPONENT: i32 = 400;
 
 /// Why a text is not a [`Decimal`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,8 +22,8 @@ const LIMIT: i128 = 100_000_000_000_000_000_000 * ONE - 1;
 pub enum DecimalError {
     /// Nothing there.
     Empty,
-    /// Not digits with an optional sign and point: `1e3`, `0x10`, `12px`, `NaN`,
-    /// spaces and the like.
+    /// Not digits with an optional sign and point: `0x10`, `12px`, `NaN`, spaces and the
+    /// like. (`from_str` refuses `1e3` as well; [`Decimal::from_browser`] reads it.)
     Malformed,
     /// More than 20 digits before the point, or more than 9 after it.
     TooLong,
@@ -47,6 +50,7 @@ impl std::error::Error for DecimalError {}
 /// let three = step.times(3).unwrap();
 /// assert_eq!(three.to_string(), "0.3");
 /// assert!("1e3".parse::<Decimal>().is_err());
+/// assert_eq!(Decimal::from_browser("1e-7").unwrap().to_string(), "0.0000001");
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Decimal(i128);
@@ -175,6 +179,112 @@ impl Decimal {
             "{sign}{whole}.{fraction:0width$}",
             width = decimals as usize
         )
+    }
+}
+
+impl Decimal {
+    /// Reads a number the way a browser writes one: what `from_str` reads, and also a fraction
+    /// of any length, which is rounded to nine places (half away from zero), and an exponent
+    /// (`1e-7`, `2.5E3`). A range input that takes any value posts `0.5033333333333333`, and
+    /// one with a tiny step posts `1e-7`, and neither is wrong. Still nothing else is a number:
+    /// no spaces, no separators, no `NaN` or `inf`, no hex; a text over 128 bytes, an exponent
+    /// past 400, or a number past 20 digits before the point is `TooLong`.
+    ///
+    /// ```
+    /// use navree_ui::flow::Decimal;
+    ///
+    /// let read = |text: &str| Decimal::from_browser(text).map(|d| d.to_string());
+    /// assert_eq!(read("0.5033333333333333").unwrap(), "0.503333333");
+    /// assert_eq!(read("0.30000000000000004").unwrap(), "0.3");
+    /// assert_eq!(read("1E3").unwrap(), "1000");
+    /// assert!(read("0x10").is_err() && read("NaN").is_err() && read("1 ").is_err());
+    /// ```
+    pub fn from_browser(text: &str) -> Result<Self, DecimalError> {
+        if text.is_empty() {
+            return Err(DecimalError::Empty);
+        }
+        if text.len() > BROWSER_BYTES {
+            return Err(DecimalError::TooLong);
+        }
+        let (mantissa, exponent) = match text.find(['e', 'E']) {
+            Some(at) => (&text[..at], Some(&text[at + 1..])),
+            None => (text, None),
+        };
+        let (negative, rest) = match mantissa.as_bytes().first() {
+            Some(b'-') => (true, &mantissa[1..]),
+            Some(b'+') => (false, &mantissa[1..]),
+            _ => (false, mantissa),
+        };
+        let (whole, fraction) = rest.split_once('.').unwrap_or((rest, ""));
+        let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+        if (whole.is_empty() && fraction.is_empty()) || !digits(whole) || !digits(fraction) {
+            return Err(DecimalError::Malformed);
+        }
+        let shift: i32 = match exponent {
+            None => 0,
+            Some(power) => {
+                let (up, body) = match power.as_bytes().first() {
+                    Some(b'-') => (false, &power[1..]),
+                    Some(b'+') => (true, &power[1..]),
+                    _ => (true, power),
+                };
+                if body.is_empty() || !digits(body) {
+                    return Err(DecimalError::Malformed);
+                }
+                // At most 3 digits: the text is short, and 999 is past the limit anyway.
+                let trimmed = body.trim_start_matches('0');
+                let magnitude: i32 = if trimmed.is_empty() {
+                    0
+                } else {
+                    trimmed.parse().map_err(|_| DecimalError::TooLong)?
+                };
+                if magnitude > BROWSER_EXPONENT {
+                    return Err(DecimalError::TooLong);
+                }
+                if up { magnitude } else { -magnitude }
+            }
+        };
+        // The digits in one run, and where the point falls among them once the exponent has moved it.
+        let all = format!("{whole}{fraction}");
+        let point = i64::try_from(whole.len()).unwrap_or(i64::MAX) + i64::from(shift);
+        let len = i64::try_from(all.len()).unwrap_or(i64::MAX);
+        let digit_at = |index: i64| -> i128 {
+            if index < 0 || index >= len {
+                0
+            } else {
+                i128::from(all.as_bytes()[index as usize] - b'0')
+            }
+        };
+        // The whole part is the digits before the point (zeros when the exponent pushed it past the end).
+        let mut units: i128 = 0;
+        let first = point.max(0);
+        // Leading zeros before the first non-zero digit do not count towards the limit.
+        let mut seen = 0;
+        for index in 0..first {
+            let digit = digit_at(index);
+            if digit == 0 && seen == 0 {
+                continue;
+            }
+            seen += 1;
+            if seen > INTEGER_DIGITS {
+                return Err(DecimalError::TooLong);
+            }
+            units = units * 10 + digit;
+        }
+        units *= ONE;
+        // Nine places after the point, then the tenth decides the rounding.
+        let mut place = ONE / 10;
+        for index in point..point + i64::from(FRACTION_DIGITS) {
+            units += digit_at(index) * place;
+            place /= 10;
+        }
+        if digit_at(point + i64::from(FRACTION_DIGITS)) >= 5 {
+            units += 1;
+        }
+        if units > LIMIT {
+            return Err(DecimalError::TooLong);
+        }
+        Ok(Self(if negative { -units } else { units }))
     }
 }
 
@@ -431,6 +541,91 @@ mod tests {
             assert!(
                 (snapped.units() - value.units()).abs() * 2 <= step.units(),
                 "{min} {step} {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_browser_may_write_a_long_fraction_or_an_exponent() {
+        let read = |text: &str| Decimal::from_browser(text).map(|d| d.to_string());
+        for (text, back) in [
+            ("0.5033333333333333", "0.503333333"),
+            ("0.30000000000000004", "0.3"),
+            ("0.123456789", "0.123456789"),
+            ("0.1234567895", "0.12345679"),
+            ("0.9999999999", "1"),
+            ("-0.9999999999", "-1"),
+            ("1e-7", "0.0000001"),
+            ("1E-7", "0.0000001"),
+            ("1.5e+3", "1500"),
+            ("2.5e-1", "0.25"),
+            ("-1e-10", "0"),
+            ("5e-10", "0.000000001"),
+            ("4e-10", "0"),
+            ("0.000000000000001e9", "0.000001"),
+            ("12345e-3", "12.345"),
+            ("1e0", "1"),
+            ("0e5", "0"),
+            (".5e1", "5"),
+            ("5.e0", "5"),
+            ("+7", "7"),
+            ("10000000000000000000", "10000000000000000000"),
+            ("0.00000000000000000000000000000001e32", "1"),
+        ] {
+            assert_eq!(read(text).as_deref(), Ok(back), "{text}");
+        }
+        for text in [
+            "", "e5", "1e", "1e+", "1e-", "1e1.5", "1ee1", "0x10", "NaN", "inf", "-inf",
+            "Infinity", " 1", "1 ", "1,5", "1_000", "--1", "+-1", "1.2.3", "\u{661}", "1\u{0}",
+            ".", "-", "+", "-.", ".e1",
+        ] {
+            assert!(read(text).is_err(), "{text:?} should not be a number");
+        }
+        // Too big to hold, however it is written.
+        for text in [
+            "1e30",
+            "1e21",
+            "123456789012345678901",
+            "1e400",
+            "1e401",
+            "1e99999999999",
+            &"9".repeat(129),
+        ] {
+            assert_eq!(read(text), Err(DecimalError::TooLong), "{text}");
+        }
+        assert!(read("1e20").is_err(), "the 21st digit is past the limit");
+        assert_eq!(read("1e19").as_deref(), Ok("10000000000000000000"));
+    }
+
+    #[test]
+    fn any_text_is_read_by_a_browser_or_refused_and_what_is_read_reads_back() {
+        let alphabet: Vec<char> = "0123456789+-.eE xX_,\u{0}\u{661}NaIn".chars().collect();
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        let mut read = 0;
+        for _ in 0..200_000 {
+            let len = (rng.next() % 60) as usize;
+            let text: String = (0..len)
+                .map(|_| alphabet[(rng.next() % alphabet.len() as u64) as usize])
+                .collect();
+            if let Ok(value) = Decimal::from_browser(&text) {
+                read += 1;
+                // Never an exponent once read, and the shortest text reads back as itself.
+                let written = value.to_string();
+                assert!(!written.contains(['e', 'E']), "{text:?} -> {written}");
+                assert_eq!(
+                    written.parse::<Decimal>(),
+                    Ok(value),
+                    "{text:?} -> {written}"
+                );
+            }
+        }
+        assert!(read > 1000, "the generator should find numbers: {read}");
+        // What `from_str` reads, `from_browser` reads the same.
+        for text in ["0", "-12.5", "+3.25", ".5", "7.", "000123", "-0.000000001"] {
+            assert_eq!(
+                Decimal::from_browser(text),
+                text.parse::<Decimal>(),
+                "{text}"
             );
         }
     }

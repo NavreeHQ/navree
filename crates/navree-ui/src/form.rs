@@ -1025,7 +1025,7 @@ impl<T: Form> FormView<T> {
             Widget::Slider => {
                 let spec = slider_spec::<T>(field);
                 let shown = value
-                    .and_then(|text| text.trim().parse::<crate::flow::Decimal>().ok())
+                    .and_then(|text| crate::flow::Decimal::from_browser(text.trim()).ok())
                     .unwrap_or_else(|| spec.minimum());
                 crate::flow::Slider::new(field.name)
                     .spec(spec)
@@ -1566,7 +1566,7 @@ fn slider_spec<T: Form>(field: &FormField) -> crate::flow::SliderSpec {
     }
     let rules = native::<T>(field);
     let number = |text: Option<&str>, otherwise: i64| {
-        text.and_then(|text| text.parse::<crate::flow::Decimal>().ok())
+        text.and_then(|text| crate::flow::Decimal::from_browser(text).ok())
             .unwrap_or_else(|| crate::flow::Decimal::from(otherwise))
     };
     crate::flow::SliderSpec::new(number(rules.min, 0), number(rules.max, 100))
