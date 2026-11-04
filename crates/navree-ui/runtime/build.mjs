@@ -58,6 +58,13 @@ async function css() {
   return Buffer.from(out.outputFiles[0].contents);
 }
 
+/** A stylesheet of its own from `styles/extra`: the named files, in order. @param {string[]} names */
+async function extraCss(names) {
+  const source = names.map((f) => readFileSync(join(crate, "styles", "extra", f), "utf8")).join("\n");
+  const out = await build({ stdin: { contents: source, loader: "css" }, minify: true, target: TARGET, write: false, legalComments: "none" });
+  return Buffer.from(out.outputFiles[0].contents);
+}
+
 // A page with no script: the browser fetches links marked safe when the pointer rests
 // on them, and those marked eager as soon as it can.
 const speculation = Buffer.from(
@@ -98,6 +105,8 @@ const FILES = [
   ["phone-data", "json", "application/json", PHONE_DATA, "phone"],
   ["navree-ui", "css", "text/css; charset=utf-8", Buffer.from((await css()).toString().replaceAll("geist.woff2", `geist-${FONT}.woff2`))],
   ["speculation", "json", "application/speculationrules+json", speculation],
+  // The theme builder's styles, linked only where the builder is drawn.
+  ["theme-builder", "css", "text/css; charset=utf-8", await extraCss(["theme-builder-tokens.css", "theme-builder.css"])],
 ];
 
 /** Files kept byte for byte: no compression gain, or already compressed. */

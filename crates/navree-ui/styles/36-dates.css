@@ -28,7 +28,7 @@
 [data-slot=calendar-grid] td{position:relative;height:var(--cell)}
 [data-slot=calendar-day]{display:inline-flex;align-items:center;justify-content:center;width:var(--cell);height:var(--cell);margin:0;padding:0;border:0;border-radius:var(--radius);background:transparent;color:inherit;font:inherit;font-variant-numeric:tabular-nums;cursor:pointer;user-select:none;
   &:hover{background:var(--ink-3);color:var(--fg)}
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:1px;position:relative;z-index:1}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:1px;position:relative;z-index:1}
   &[data-today]{box-shadow:inset 0 0 0 1px var(--fg-3);color:var(--fg)}
   &[data-selected],&[data-range-start],&[data-range-end]{background:var(--accent);color:var(--accent-ink);font-weight:600;&:hover{background:var(--accent);color:var(--accent-ink)}&:focus-visible{outline-color:var(--fg)}}
   &[data-range-middle],&[data-preview]:not([data-range-start],[data-range-end]){border-radius:0;background:var(--band);color:var(--fg);&:hover{background:var(--band)}}
@@ -90,7 +90,7 @@
 
 /* The list of times. */
 [data-slot=time-list]{position:relative;list-style:none;margin:0;padding:.25rem;min-width:8rem;max-height:min(16rem,calc(100dvh - 2rem));overflow:auto;scrollbar-width:thin;font-variant-numeric:tabular-nums;
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
   & [role=option]{padding:.375rem .625rem;border-radius:var(--radius);color:var(--fg-1);cursor:pointer;white-space:nowrap}
   & [role=option]:hover{background:var(--ink-3);color:var(--fg)}
   & [role=option][aria-selected=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}

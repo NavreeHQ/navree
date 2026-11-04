@@ -75,6 +75,14 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
     .map(|(_, url)| url)
 }
 
+/// The stylesheets a page with `uses` links after the toolkit's own.
+pub fn stylesheets(uses: Uses) -> impl Iterator<Item = &'static str> {
+    [(Uses::THEME_BUILDER, THEME_BUILDER_URL)]
+        .into_iter()
+        .filter(move |(bit, _)| uses.has(*bit))
+        .map(|(_, url)| url)
+}
+
 /// Finds the file behind `core-3f9a1c07b2de.js`: the file, and whether the
 /// hash is current. An old hash still gets the file, uncached, so a page open
 /// across a deploy keeps working.

@@ -1,6 +1,7 @@
-//! The application shell: a collapsible sidebar (the `sidebar-07` layout), a
-//! top bar and the page. [`Shell`] is the app's one definition; [`AppShell`]
-//! is it applied to a request; [`AppPage`] is what a handler returns.
+//! The application shell: a sidebar (docked, inset or floating, collapsing to
+//! icons by default) or links in the top bar, a top bar and the page. [`Shell`]
+//! is the app's one definition; [`AppShell`] is it applied to a request;
+//! [`AppPage`] is what a handler returns.
 //!
 //! Provenance: the anatomy follows shadcn/ui's Sidebar (MIT). See THIRD_PARTY.md.
 
@@ -22,6 +23,7 @@ use crate::html::Href;
 use crate::icons::{self, Icon};
 use crate::node::{Element, IntoNodes, Node, Uses, el};
 use crate::op::ToastTone;
+use crate::theme::{Appearance, Density, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
 /// The cookie holding a toast for the next page.
@@ -32,6 +34,77 @@ const CSRF_COOKIE: &str = "XSRF-TOKEN";
 
 /// The cookie the runtime sets when the sidebar collapses or expands.
 pub const SIDEBAR_COOKIE: &str = "navree_ui_sidebar";
+
+/// Where an app's navigation stands. On phones every layout puts it in a sheet
+/// that slides over the page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ShellLayout {
+    /// A sidebar docked to the edge of the window: the default.
+    #[default]
+    Sidebar,
+    /// The sidebar on the frame's colour, and the page in a card beside it.
+    Inset,
+    /// The sidebar as a card floating over the frame.
+    Floating,
+    /// The links in the top bar, and no sidebar on wide screens.
+    Header,
+}
+
+impl ShellLayout {
+    /// Every layout.
+    pub const ALL: [Self; 4] = [Self::Sidebar, Self::Inset, Self::Floating, Self::Header];
+
+    /// The `data-layout` value, and the id a form posts.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Sidebar => "sidebar",
+            Self::Inset => "inset",
+            Self::Floating => "floating",
+            Self::Header => "header",
+        }
+    }
+
+    /// The name shown.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Sidebar => "Sidebar",
+            Self::Inset => "Inset",
+            Self::Floating => "Floating",
+            Self::Header => "Header",
+        }
+    }
+
+    /// The layout with the id `id`.
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|layout| layout.id() == id)
+    }
+}
+
+/// What the sidebar does when its button or `Ctrl/Cmd+B` folds it, on wide
+/// screens. On phones it is always a sheet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Collapse {
+    /// Folds to a rail of icons: the default.
+    #[default]
+    Icons,
+    /// Slides away entirely.
+    Offcanvas,
+    /// Never folds: no button on wide screens.
+    Never,
+}
+
+impl Collapse {
+    /// The `data-collapse` value.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Icons => "icons",
+            Self::Offcanvas => "offcanvas",
+            Self::Never => "never",
+        }
+    }
+}
 
 /// The tone a flash holds before its text, success being the plain case. The text
 /// is percent-encoded, so its first `:` is always this one.
@@ -321,7 +394,7 @@ impl UserMenu {
         self
     }
 
-    fn to_node(&self, csrf: Option<&str>) -> Node {
+    fn to_node(&self, csrf: Option<&str>, side: &'static str) -> Node {
         let trigger = el("button")
             .slot("sidebar-user")
             .attr("type", "button")
@@ -371,7 +444,8 @@ impl UserMenu {
             .flag("autofocus", true)
             .attr("aria-label", "Account")
             .flag("data-ui-place", true)
-            .attr("data-side", "right")
+            .attr("data-side", side)
+            .attr_opt("data-align", (side == "bottom").then_some("end"))
             .uses(Uses::OVERLAY)
             .child(links);
         Node::list((trigger, menu))
@@ -399,6 +473,11 @@ pub struct Shell {
     user: Option<UserMenu>,
     search: Option<Node>,
     prefetch_home: bool,
+    appearance: Appearance,
+    themes: Vec<Theme>,
+    theme_menu: bool,
+    layout: ShellLayout,
+    collapse: Collapse,
 }
 
 impl Shell {
@@ -412,7 +491,73 @@ impl Shell {
             user: None,
             search: None,
             prefetch_home: false,
+            appearance: Appearance::default(),
+            themes: Theme::BUILT_IN.to_vec(),
+            theme_menu: false,
+            layout: ShellLayout::Sidebar,
+            collapse: Collapse::Icons,
         }
+    }
+
+    /// Sets how every page looks unless a workspace, the reader or the URL says
+    /// otherwise: the app's default theme and mode. Dark Navree with nothing set.
+    #[must_use]
+    pub fn appearance(mut self, appearance: Appearance) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    /// Sets the themes a reader may choose: the [`ThemeMenu`]'s cards, and the
+    /// only themes a cookie or the URL can pick. Every built-in by default.
+    #[must_use]
+    pub fn themes(mut self, themes: impl IntoIterator<Item = Theme>) -> Self {
+        self.themes = themes.into_iter().collect();
+        self
+    }
+
+    /// Puts a [`ThemeMenu`] in the top bar, posting to the toolkit's route,
+    /// which keeps the reader's choice in a cookie.
+    #[must_use]
+    pub fn theme_menu(mut self) -> Self {
+        self.theme_menu = true;
+        self
+    }
+
+    /// Sets where the navigation stands: [`ShellLayout::Sidebar`] by default.
+    #[must_use]
+    pub fn layout(mut self, layout: ShellLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Sets what folding the sidebar does: [`Collapse::Icons`] by default.
+    #[must_use]
+    pub fn collapse(mut self, collapse: Collapse) -> Self {
+        self.collapse = collapse;
+        self
+    }
+
+    /// The app's default appearance.
+    pub fn default_appearance(&self) -> &Appearance {
+        &self.appearance
+    }
+
+    /// The themes a reader may choose.
+    pub fn offered_themes(&self) -> &[Theme] {
+        &self.themes
+    }
+
+    /// `setting` with its theme kept only when the app offers it.
+    fn offered(&self, mut setting: ThemeSetting) -> ThemeSetting {
+        if setting.theme.as_ref().is_some_and(|theme| {
+            !self
+                .themes
+                .iter()
+                .any(|offered| offered.key() == theme.key())
+        }) {
+            setting.theme = None;
+        }
+        setting
     }
 
     /// Fetches the page the app's name links to when the pointer rests on it or it
@@ -460,6 +605,7 @@ impl Shell {
 
     /// A page of this shell at `path`, for use without the [`AppShell`] extractor.
     pub fn page(&self, title: impl Into<Cow<'static, str>>, path: impl Into<String>) -> AppPage {
+        let appearance = self.appearance.clone();
         AppPage::new(
             Arc::new(self.clone()),
             title.into(),
@@ -468,19 +614,26 @@ impl Shell {
             None,
             None,
         )
+        .appearance(appearance)
     }
 
     /// This shell applied to a request: which link is active, whether the sidebar is
-    /// collapsed, a toast left for this page. It is what the [`AppShell`] extractor
-    /// does for the app's own `Shell`, for a module that serves pages of its own
-    /// and has no business registering one for the whole app (a debugging tool).
+    /// collapsed, a toast left for this page, the reader's theme. It is what the
+    /// [`AppShell`] extractor does for the app's own `Shell`, for a module that
+    /// serves pages of its own and has no business registering one for the whole
+    /// app (a debugging tool). A `?` in `path` starts its query.
     pub fn for_request(&self, path: impl Into<String>, headers: &HeaderMap) -> AppShell {
-        AppShell::read(Arc::new(self.clone()), path.into(), headers)
+        let path = path.into();
+        let (path, query) = match path.split_once('?') {
+            Some((path, query)) => (path.to_owned(), Some(query.to_owned())),
+            None => (path, None),
+        };
+        AppShell::read(Arc::new(self.clone()), path, query, headers)
     }
 
-    fn sidebar(&self, path: &str, csrf: Option<&str>) -> Element {
-        let home = self.home.as_str();
-        let header = el("a")
+    /// The app's mark and name, linking home.
+    fn brand(&self) -> Element {
+        el("a")
             .slot("sidebar-brand")
             .href(self.home.clone())
             .attr("title", self.name.clone())
@@ -495,7 +648,23 @@ impl Shell {
                         .clone()
                         .map(|context| el("span").slot("sidebar-brand-context").child(context)),
                 )),
-            ));
+            ))
+    }
+
+    /// How well the best link matches `path`.
+    fn best(&self, path: &str) -> usize {
+        let home = self.home.as_str();
+        self.groups
+            .iter()
+            .flat_map(|group| &group.items)
+            .map(|item| item.best(path, home))
+            .max()
+            .unwrap_or(0)
+    }
+
+    fn sidebar(&self, path: &str, csrf: Option<&str>, footer: bool) -> Element {
+        let home = self.home.as_str();
+        let header = self.brand();
         let best = self
             .groups
             .iter()
@@ -531,10 +700,92 @@ impl Shell {
                     .slot("sidebar-content")
                     .attr("aria-label", "Main")
                     .child(groups),
-                self.user
-                    .as_ref()
-                    .map(|user| el("div").slot("sidebar-footer").child(user.to_node(csrf))),
+                self.user.as_ref().filter(|_| footer).map(|user| {
+                    el("div")
+                        .slot("sidebar-footer")
+                        .child(user.to_node(csrf, "right"))
+                }),
             ))
+    }
+
+    /// The links of every group in a row, for the top bar of [`ShellLayout::Header`].
+    /// An item with items below it opens them in a popover.
+    fn topnav(&self, path: &str) -> Element {
+        let home = self.home.as_str();
+        let best = self.best(path);
+        let mut items: Vec<Element> = Vec::new();
+        for (at, item) in self
+            .groups
+            .iter()
+            .flat_map(|group| &group.items)
+            .enumerate()
+        {
+            let active = item
+                .current
+                .unwrap_or(best > 0 && item.score(path, home) == best);
+            if item.sub.is_empty() {
+                items.push(
+                    el("li").child(
+                        el("a")
+                            .slot("topnav-item")
+                            .href(item.href.clone())
+                            .attr_opt("aria-current", active.then_some("page"))
+                            .flag("data-ui-prefetch", item.prefetch == Prefetch::Intent)
+                            .children((item.glyph.map(icon), el("span").child(item.label.clone()))),
+                    ),
+                );
+                continue;
+            }
+            let open = item
+                .sub
+                .iter()
+                .any(|sub| sub.best(path, home) == best && best > 0);
+            let id = format!("ui-topnav-{at}");
+            let links: Vec<Element> = std::iter::once(item)
+                .chain(&item.sub)
+                .map(|link| {
+                    let here = link
+                        .current
+                        .unwrap_or(best > 0 && link.score(path, home) == best);
+                    el("li").child(
+                        el("a")
+                            .slot("menu-link")
+                            .href(link.href.clone())
+                            .attr_opt("aria-current", here.then_some("page"))
+                            .child(link.label.clone()),
+                    )
+                })
+                .collect();
+            items.push(
+                el("li").children((
+                    el("button")
+                        .slot("topnav-item")
+                        .attr("type", "button")
+                        .attr("popovertarget", id.clone())
+                        .flag("data-active", active || open)
+                        .children((
+                            item.glyph.map(icon),
+                            el("span").child(item.label.clone()),
+                            icon(icons::CHEVRON_DOWN),
+                        )),
+                    el("div")
+                        .slot("popover-content")
+                        .attr("id", id)
+                        .attr("popover", "auto")
+                        .attr("aria-label", item.label.clone())
+                        .attr("tabindex", -1_i64)
+                        .flag("data-ui-place", true)
+                        .attr("data-side", "bottom")
+                        .attr("data-align", "start")
+                        .uses(Uses::OVERLAY)
+                        .child(el("ul").slot("topnav-sub").child(links)),
+                )),
+            );
+        }
+        el("nav")
+            .slot("topnav")
+            .attr("aria-label", "Main")
+            .child(el("ul").slot("topnav-menu").child(items))
     }
 }
 
@@ -555,6 +806,11 @@ pub struct AppPage {
     prefetch_crumbs: bool,
     actions: Vec<Node>,
     body: Vec<Node>,
+    appearance: Appearance,
+    layout: ShellLayout,
+    sheets: Vec<Theme>,
+    density: Option<Density>,
+    back: Option<String>,
 }
 
 impl AppPage {
@@ -567,7 +823,6 @@ impl AppPage {
         csrf: Option<String>,
     ) -> Self {
         Self {
-            shell,
             title,
             path,
             collapsed,
@@ -577,9 +832,45 @@ impl AppPage {
             prefetch_crumbs: false,
             actions: Vec::new(),
             body: Vec::new(),
+            appearance: shell.appearance.clone(),
+            layout: shell.layout,
+            sheets: Vec::new(),
+            density: None,
+            back: None,
+            shell,
         }
     }
 
+    /// Sets how this page looks, in place of what the app, the workspace and the
+    /// reader chose: a preview, say.
+    pub fn appearance(mut self, appearance: Appearance) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    /// Sets where this page's navigation stands, in place of the app's layout.
+    pub fn layout(mut self, layout: ShellLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Sets this page's density, in place of its theme's.
+    pub fn density(mut self, density: Density) -> Self {
+        self.density = Some(density);
+        self
+    }
+
+    /// Links the stylesheet of a theme of your own that a part of the page is
+    /// drawn in. See [`View::theme_sheet`].
+    pub fn theme_sheet(mut self, theme: &Theme) -> Self {
+        self.sheets.push(theme.clone());
+        self
+    }
+
+    /// The appearance the page is drawn in.
+    pub fn current_appearance(&self) -> &Appearance {
+        &self.appearance
+    }
     /// Adds a step to the breadcrumb, before this page.
     pub fn crumb(mut self, label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
         self.crumbs.push((label.into(), href.into()));
@@ -606,30 +897,49 @@ impl AppPage {
     }
 
     /// The whole document.
-    pub fn to_view(self) -> View {
-        let shell = self.shell;
+    pub fn to_view(mut self) -> View {
+        let shell = self.shell.clone();
+        let crumbs_empty = self.crumbs.is_empty();
         let mut crumbs = Breadcrumb::new();
-        for (label, href) in self.crumbs {
+        for (label, href) in std::mem::take(&mut self.crumbs) {
             crumbs = crumbs.link(label, href);
         }
         crumbs = crumbs.current(self.title.clone());
         if self.prefetch_crumbs {
             crumbs = crumbs.prefetch();
         }
+        let header = self.layout == ShellLayout::Header;
+        let collapsed = self.collapsed && shell.collapse != Collapse::Never && !header;
         let trigger = Button::icon_only(icons::PANEL_LEFT, "Toggle sidebar")
             .variant(ButtonVariant::Ghost)
             .size(Size::Sm)
             .attr("data-ui-sidebar-trigger", "")
-            .attr(
-                "aria-expanded",
-                if self.collapsed { "false" } else { "true" },
-            );
+            .attr("aria-expanded", if collapsed { "false" } else { "true" });
+        let menu = shell.theme_menu.then(|| {
+            let mut menu = ThemeMenu::new(&self.appearance, &shell.themes)
+                .back(self.back.clone().unwrap_or_else(|| self.path.clone()));
+            if let Some(token) = &self.csrf {
+                menu = menu.csrf(token.clone());
+            }
+            menu
+        });
+        if let Some(menu) = &menu {
+            self.sheets.extend(menu.sheets());
+        }
         let topbar = el("header").slot("topbar").children((
             trigger,
-            Separator::vertical(),
-            crumbs,
+            (!header).then(Separator::vertical),
+            header.then(|| el("div").slot("topbar-brand").child(shell.brand())),
+            header.then(|| shell.topnav(&self.path)),
+            (!header).then(|| crumbs.clone()),
             el("div").slot("topbar-spacer"),
             shell.search.clone(),
+            menu,
+            shell.user.as_ref().filter(|_| header).map(|user| {
+                el("div")
+                    .slot("topbar-user")
+                    .child(user.to_node(self.csrf.as_deref(), "bottom"))
+            }),
         ));
         let had_flash = self.flash.is_some();
         let mut toaster = Toaster::new();
@@ -641,24 +951,49 @@ impl AppPage {
         }
         let heading = el("div").slot("page-header").children((
             el("h1").slot("page-title").child(self.title.clone()),
-            (!self.actions.is_empty()).then(|| el("div").slot("page-actions").child(self.actions)),
+            (!self.actions.is_empty()).then(|| {
+                el("div")
+                    .slot("page-actions")
+                    .child(std::mem::take(&mut self.actions))
+            }),
         ));
         let main = el("main")
             .slot("page")
             .attr("id", "main")
             .attr("tabindex", -1_i64)
-            .children((heading, self.body));
+            .children((
+                // With the links in the top bar, the trail stands over the heading.
+                (header && !crumbs_empty).then_some(crumbs),
+                heading,
+                std::mem::take(&mut self.body),
+            ));
         let wrapper = el("div")
             .slot("sidebar-wrapper")
             .attr("data-ui-keep-attrs", "data-collapsed data-mobile-open")
-            .flag("data-collapsed", self.collapsed)
+            .attr_opt(
+                "data-layout",
+                (self.layout != ShellLayout::Sidebar).then_some(self.layout.id()),
+            )
+            .attr_opt(
+                "data-collapse",
+                (shell.collapse != Collapse::Icons).then_some(shell.collapse.id()),
+            )
+            .flag("data-collapsed", collapsed)
             .uses(Uses::SIDEBAR.with(Uses::CORE))
             .children((
-                shell.sidebar(&self.path, self.csrf.as_deref()),
+                shell.sidebar(&self.path, self.csrf.as_deref(), !header),
                 el("div").slot("sidebar-overlay"),
                 el("div").slot("sidebar-inset").children((topbar, main)),
             ));
-        let mut view = View::new(self.title).body((wrapper, toaster));
+        let mut view = View::new(self.title)
+            .appearance(self.appearance)
+            .body((wrapper, toaster));
+        if let Some(density) = self.density {
+            view = view.density(density);
+        }
+        for theme in &self.sheets {
+            view = view.theme_sheet(theme);
+        }
         if let Some(token) = &self.csrf {
             view = view.csrf(token.clone());
         }
@@ -691,15 +1026,20 @@ impl IntoResponse for AppPage {
 pub struct AppShell {
     shell: Arc<Shell>,
     path: String,
+    query: Option<String>,
     collapsed: bool,
     flash: Option<(ToastTone, String)>,
     csrf: Option<String>,
+    cookie: ThemeSetting,
+    url: ThemeSetting,
+    workspace: ThemeSetting,
+    user: Option<ThemeSetting>,
 }
 
 impl AppShell {
     /// A page titled `title`.
     pub fn page(&self, title: impl Into<Cow<'static, str>>) -> AppPage {
-        AppPage::new(
+        let mut page = AppPage::new(
             self.shell.clone(),
             title.into(),
             self.path.clone(),
@@ -707,12 +1047,49 @@ impl AppShell {
             self.flash.clone(),
             self.csrf.clone(),
         )
+        .appearance(self.appearance());
+        page.back = Some(match &self.query {
+            Some(query) => format!("{}?{query}", self.path),
+            None => self.path.clone(),
+        });
+        page
+    }
+
+    /// Sets what the workspace chose, from the app's store: it lies over the
+    /// app's default, and when locked the reader can't change its theme.
+    #[must_use]
+    pub fn workspace(mut self, setting: ThemeSetting) -> Self {
+        self.workspace = setting;
+        self
+    }
+
+    /// Sets what the reader chose, from the app's store, in place of the cookie.
+    /// A theme set here is the app's word: it needn't be one the shell offers.
+    #[must_use]
+    pub fn user(mut self, setting: ThemeSetting) -> Self {
+        self.user = Some(setting);
+        self
+    }
+
+    /// How this request's pages look: the app's default, then the workspace's,
+    /// then the reader's (the app's store, else the cookie), then `?theme=` and
+    /// `?mode=`. A locked workspace keeps its theme; the mode is still the reader's.
+    pub fn appearance(&self) -> Appearance {
+        let mut appearance = self.shell.appearance.clone();
+        self.workspace.over(&mut appearance, false);
+        let locked = self.workspace.locked;
+        self.user
+            .as_ref()
+            .unwrap_or(&self.cookie)
+            .over(&mut appearance, locked);
+        self.url.over(&mut appearance, locked);
+        appearance
     }
 }
 
 impl AppShell {
     /// `shell` applied to a request with these headers, at `path`.
-    fn read(shell: Arc<Shell>, path: String, headers: &HeaderMap) -> Self {
+    fn read(shell: Arc<Shell>, path: String, query: Option<String>, headers: &HeaderMap) -> Self {
         let mut collapsed = false;
         let mut flash = None;
         let mut csrf = None;
@@ -736,12 +1113,19 @@ impl AppShell {
                 }
             }
         }
+        let (cookie, url) = crate::theme::read_setting(headers, query.as_deref());
+        let (cookie, url) = (shell.offered(cookie), shell.offered(url));
         Self {
             shell,
             path,
+            query,
             collapsed,
             flash,
             csrf,
+            cookie,
+            url,
+            workspace: ThemeSetting::none(),
+            user: None,
         }
     }
 }
@@ -754,6 +1138,7 @@ impl FromRequestParts for AppShell {
         Ok(Self::read(
             shell,
             parts.uri.path().to_owned(),
+            parts.uri.query().map(str::to_owned),
             &parts.headers,
         ))
     }

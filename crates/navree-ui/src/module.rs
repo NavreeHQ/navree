@@ -5,6 +5,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use bytes::Bytes;
+
 use http::header::{self, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, StatusCode};
 use navree_http::extract::Request;
@@ -224,6 +226,26 @@ impl Controller for Assets {
                 },
             )
             .name("ui.assets")
+            .public(),
+            // A theme of your own: the file's name is the theme, read by a strict parser.
+            RouteDef::on(
+                Method::GET,
+                format!("!{}/theme/{{file}}", assets::MOUNT),
+                |Path(file): Path<String>, headers: HeaderMap| async move {
+                    crate::theme::respond_sheet(&file, &headers)
+                },
+            )
+            .name("ui.theme")
+            .public(),
+            // The theme menu's post: sets the reader's cookie and goes back.
+            RouteDef::on(
+                Method::POST,
+                format!("!{}", crate::theme::SETTINGS_PATH),
+                |headers: HeaderMap, body: Bytes| async move {
+                    crate::theme::respond_setting(&headers, &body)
+                },
+            )
+            .name("ui.appearance")
             .public(),
         ]
     }

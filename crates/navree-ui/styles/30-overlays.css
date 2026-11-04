@@ -6,7 +6,7 @@
  */
 /* Dialogs: the browser's <dialog>. Closed ones stay display:none by default. */
 [data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]{padding:0;border:1px solid var(--line-2);background:var(--ink-1);color:var(--fg-1);overflow:auto;
-  &::backdrop{background:rgb(1 3 2/.72)}
+  &::backdrop{background:var(--scrim,rgb(1 3 2/.72))}
   &[open]{display:flex;flex-direction:column;animation:ui-in .1s ease-out}
 }
 [data-slot=dialog],[data-slot=alert-dialog]{width:calc(100% - 2rem);max-width:32rem;max-height:calc(100dvh - 2rem);margin:auto;border-radius:var(--radius-lg)}

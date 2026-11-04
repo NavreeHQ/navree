@@ -11,7 +11,8 @@
 //! - [`View`]: a page, with its strict content security policy.
 //! - [`assets`]: one stylesheet and the runtime's modules, embedded with
 //!   brotli and gzip forms, at content-hash URLs.
-//! - [`tokens`]: the design tokens' one source.
+//! - [`tokens`]: the design tokens' one source. [`theme`]: the built-in themes,
+//!   themes of your own, light, dark and system, and the theme builder.
 //! - [`form`]: `#[derive(Form)]`, [`FormView`], [`Submit`]. [`table`]:
 //!   `#[derive(TableRow)]`, [`DataTable`], [`TableQuery`], [`Region`].
 //! - [`TestView`]: drive a page in a plain test, with no browser.
@@ -40,9 +41,11 @@ pub mod prelude {
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
         TableHeight, TableLabels, TablePage, TableQuery,
     };
+    pub use crate::theme::{Appearance, Mode, Theme, ThemeMenu, ThemeSetting};
     pub use crate::{
-        AppPage, AppShell, Cmd, Element, FilterBar, Form, IntoNodes, NavGroup, NavItem, Node,
-        Options, Shell, TableRow, TestView, UiModule, UserMenu, Validate, View, el,
+        AppPage, AppShell, Cmd, Collapse, Element, FilterBar, Form, IntoNodes, NavGroup, NavItem,
+        Node, Options, Shell, ShellLayout, TableRow, TestView, UiModule, UserMenu, Validate, View,
+        el,
     };
 }
 
@@ -67,6 +70,7 @@ pub mod select;
 pub mod shell;
 pub mod table;
 pub mod test_view;
+pub mod theme;
 pub mod tokens;
 pub mod view;
 
@@ -88,7 +92,7 @@ pub use select::{
     Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
     Select, SelectLabels,
 };
-pub use shell::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu};
+pub use shell::{AppPage, AppShell, Collapse, NavGroup, NavItem, Shell, ShellLayout, UserMenu};
 pub use table::{
     BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,
     TableLabels, TablePage, TableQuery,

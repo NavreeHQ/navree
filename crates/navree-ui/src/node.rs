@@ -236,6 +236,9 @@ impl Uses {
     /// The phone module: the country list, formatting as you type and the
     /// number in E.164.
     pub const PHONE: Self = Self(1 << 8);
+    /// The theme builder's stylesheet: no script, only its styles, linked on a
+    /// page that draws the builder.
+    pub const THEME_BUILDER: Self = Self(1 << 13);
 
     /// Both sets together.
     #[must_use]

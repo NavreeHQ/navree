@@ -17,7 +17,7 @@
   & > [data-slot=icon]{color:var(--fg-3)}
 }
 [data-slot=select-trigger]{height:var(--ctl);padding:0 .625rem;cursor:pointer;user-select:none;
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   &[data-placeholder] [data-slot=select-value]{color:var(--fg-3)}
 }
 [data-slot=select-value],[data-slot=chip-text]{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:start}
@@ -30,7 +30,7 @@
 }
 [data-slot=select-clear]{height:1.25rem}
 [data-slot=combobox-control],[data-slot=multiselect-control]{padding-inline:.625rem .25rem;gap:.25rem;cursor:text;
-  &:focus-within{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  &:focus-within{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
 }
 [data-slot=combobox-input],[data-slot=multiselect-input]{flex:1 1 6rem;min-width:0;height:calc(var(--ctl) - 2px);padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;outline:0;
   &::placeholder{color:var(--fg-3)}
@@ -40,7 +40,7 @@
 [data-slot=multiselect-control]{flex-wrap:wrap;padding-block:.1875rem;padding-inline-start:.375rem;row-gap:.125rem}
 [data-slot=chips]{display:flex;flex-wrap:wrap;gap:.25rem;min-width:0;max-width:100%}
 [data-slot=chip],[data-slot=chip-summary]{display:inline-flex;align-items:center;gap:.125rem;height:calc(var(--ctl) - 10px);max-width:100%;padding-inline:.375rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:13px;line-height:1;
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
   & [data-slot=chip-text]{max-width:14rem;flex:0 1 auto}
   & [data-slot=chip-remove]{width:1rem;height:1rem;margin-inline-end:-.125rem}
 }
@@ -76,17 +76,17 @@
 [aria-multiselectable=true] [role=option]{padding-inline:1.75rem .5rem;
   &::after{display:none}
   &::before{content:"";position:absolute;inset-inline-start:.5rem;top:50%;width:14px;height:14px;translate:0 -50%;border:1px solid var(--line-3);border-radius:var(--radius);background:var(--ink-1)}
-  &[aria-selected=true]::before{border-color:var(--accent);background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2303130a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/10px no-repeat}
+  &[aria-selected=true]::before{border-color:var(--accent);background:var(--accent) var(--ui-tick) center/10px no-repeat}
 }
 [data-slot=select-action]{color:var(--fg-2);padding-inline-end:.5rem;
-  &[data-action=create]::before{content:"+";font-weight:600;color:var(--accent)}
+  &[data-action=create]::before{content:"+";font-weight:600;color:var(--accent-text)}
   &[data-action=more],&[data-action=retry]{justify-content:center;color:var(--fg)}
 }
 ::highlight(ui-match){background:color-mix(in oklab,var(--accent) 30%,transparent);color:inherit}
 
 /* The command palette: a modal dialog with a combobox and a list. */
 [data-slot=command-dialog]{padding:0;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);overflow:hidden;
-  &::backdrop{background:rgb(1 3 2/.72)}
+  &::backdrop{background:var(--scrim,rgb(1 3 2/.72))}
   &[open]{display:flex;flex-direction:column;width:calc(100% - 2rem);max-width:36rem;max-height:min(30rem,calc(100dvh - 4rem));margin:12vh auto auto;animation:ui-in .1s ease-out}
 }
 [data-slot=command]{display:flex;flex-direction:column;min-height:0;flex:1}
@@ -103,8 +103,8 @@
 @media (scripting:none){
   [data-slot=select-native]{display:block;width:100%;height:var(--ctl);padding:0 .625rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-1);color:var(--fg);font-size:14px;
     &[multiple]{height:auto;min-height:6rem;padding:.25rem}
-    &:not([multiple]){appearance:none;padding-inline-end:1.75rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238a968f' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .375rem center}
-    &:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+    &:not([multiple]){appearance:none;padding-inline-end:1.75rem;background-image:var(--ui-chevron);background-repeat:no-repeat;background-position:right .375rem center}
+    &:focus{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   }
   [data-slot=select-control],[data-slot=combobox-control],[data-slot=multiselect-control],[data-slot=select-popup],[data-slot=command-input-wrap]{display:none}
 }

@@ -3,7 +3,7 @@
    searchable list. The number is always written left to right. */
 [data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-1);
   &:hover{border-color:var(--line-3)}
-  &:focus-within{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  &:focus-within{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   &:has([aria-invalid=true]){border-color:var(--danger)}
   &[data-disabled]{opacity:.5;cursor:not-allowed}
   & > [data-slot=input]{flex:1;min-width:0;height:100%;border:0;background:transparent;font-variant-numeric:tabular-nums;&:focus{outline:0}}
@@ -13,12 +13,12 @@
 }
 [data-slot=phone-country]{flex:none;width:10.5rem;max-width:50%;height:100%;padding:0 1.5rem 0 .5rem;border:0;border-inline-end:1px solid var(--line-2);border-radius:var(--radius) 0 0 var(--radius);background:transparent;color:var(--fg);font-size:13px;text-overflow:ellipsis;
   &:dir(rtl){border-radius:0 var(--radius) var(--radius) 0}
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
   & option,& optgroup{background:var(--ink-1);color:var(--fg)}
 }
 [data-slot=phone-country-trigger]{display:flex;flex:none;align-items:center;gap:.375rem;height:100%;padding-inline:.5rem .375rem;border:0;border-inline-end:1px solid var(--line-2);background:transparent;color:var(--fg);font:inherit;font-size:13px;font-variant-numeric:tabular-nums;cursor:pointer;border-start-start-radius:var(--radius);border-end-start-radius:var(--radius);
   &:hover{background:var(--ink-2)}
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
   &:disabled{cursor:not-allowed}
   & [data-slot=icon]{width:14px;height:14px;color:var(--fg-3)}
 }

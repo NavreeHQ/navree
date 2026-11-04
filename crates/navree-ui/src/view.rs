@@ -13,6 +13,7 @@ use crate::form::csrf_field;
 use crate::html::escape_into;
 use crate::node::{IntoNodes, Node, Uses, el};
 use crate::render::{Measure, POST_FORM, measure, render_into};
+use crate::theme::{Appearance, Density, Font, Theme};
 
 /// The content security policy of every page: scripts, styles, fonts and
 /// requests from the page's own origin only, images also as `data:` URLs, no
@@ -49,6 +50,9 @@ pub struct View {
     cache: &'static str,
     cookies: Vec<HeaderValue>,
     csrf: Option<String>,
+    appearance: Option<Appearance>,
+    density: Option<Density>,
+    sheets: Vec<Theme>,
 }
 
 impl View {
@@ -62,7 +66,49 @@ impl View {
             cache: "no-store",
             cookies: Vec::new(),
             csrf: None,
+            appearance: None,
+            density: None,
+            sheets: Vec::new(),
         }
+    }
+
+    /// Sets how the page looks: `data-theme` and `data-mode` on `<html>`, the
+    /// `color-scheme` meta, the theme's density, and the theme's stylesheet in the
+    /// head when it is one of your own. All of it is in the first bytes of the
+    /// page, so it paints right with no script.
+    pub fn appearance(mut self, appearance: Appearance) -> Self {
+        self.appearance = Some(appearance);
+        self
+    }
+
+    /// Sets the page's density, in place of its theme's.
+    pub fn density(mut self, density: Density) -> Self {
+        self.density = Some(density);
+        self
+    }
+
+    /// Links the stylesheet of a theme the page draws in a part of itself (a
+    /// card in a theme menu, a preview): a theme of your own needs its sheet
+    /// wherever it is drawn. A built-in needs none and is passed over.
+    pub fn theme_sheet(mut self, theme: &Theme) -> Self {
+        if !theme.is_builtin() && !self.sheets.iter().any(|sheet| sheet.key() == theme.key()) {
+            self.sheets.push(theme.clone());
+        }
+        self
+    }
+
+    /// The stylesheets of the themes the page draws, its own first: each URL once.
+    fn theme_sheets(&self) -> Vec<String> {
+        let mut urls: Vec<String> = Vec::new();
+        let page = self.appearance.as_ref().map(Appearance::theme);
+        for theme in page.into_iter().chain(&self.sheets) {
+            if let Some(url) = theme.stylesheet()
+                && !urls.contains(&url)
+            {
+                urls.push(url);
+            }
+        }
+        urls
     }
 
     /// Sets the page's language.
@@ -126,20 +172,64 @@ impl View {
         out.push_str("<!doctype html><html lang=\"");
         out.push_str(self.lang);
         out.push('"');
+        if let Some(appearance) = self.appearance.as_ref().filter(|a| !a.is_default()) {
+            // A built-in's id or `c` and hex digits, and a mode's id: never text from outside.
+            out.push_str(" data-theme=\"");
+            out.push_str(appearance.theme().key());
+            out.push_str("\" data-mode=\"");
+            out.push_str(appearance.mode().id());
+            out.push('"');
+        }
+        let density = self
+            .density
+            .or_else(|| self.appearance.as_ref().map(|a| a.theme().spec().density))
+            .unwrap_or_default();
+        if density != Density::Default {
+            out.push_str(" data-density=\"");
+            out.push_str(density.id());
+            out.push('"');
+        }
         if uses.has(Uses::CORE) {
             out.push_str(" data-build=\"");
             out.push_str(assets::BUILD);
             out.push('"');
         }
-        out.push_str("><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>");
-        escape_into(out, &self.title);
+        out.push_str("><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"");
         out.push_str(
-            "</title><link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
+            self.appearance
+                .as_ref()
+                .map_or("dark", |appearance| appearance.mode().color_scheme()),
         );
-        out.push_str(assets::GEIST_URL);
-        out.push_str("\"><link rel=\"stylesheet\" href=\"");
+        out.push_str("\"><title>");
+        escape_into(out, &self.title);
+        out.push_str("</title>");
+        // Geist is preloaded only for a theme that sets its text in Geist.
+        if self
+            .appearance
+            .as_ref()
+            .is_none_or(|appearance| appearance.theme().spec().font == Font::Geist)
+        {
+            out.push_str(
+                "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
+            );
+            out.push_str(assets::GEIST_URL);
+            out.push_str("\">");
+        }
+        out.push_str("<link rel=\"stylesheet\" href=\"");
         out.push_str(assets::NAVREE_UI_URL);
-        out.push_str("\"><link rel=\"icon\" href=\"");
+        out.push_str("\">");
+        for url in assets::stylesheets(uses) {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(url);
+            out.push_str("\">");
+        }
+        // A theme of your own: its sheet after the toolkit's, so its rules come later.
+        for url in self.theme_sheets() {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(&url);
+            out.push_str("\" data-ui-theme>");
+        }
+        out.push_str("<link rel=\"icon\" href=\"");
         out.push_str(assets::FAVICON_URL);
         out.push_str("\">");
         for url in assets::scripts(uses) {

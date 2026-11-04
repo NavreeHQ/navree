@@ -11,7 +11,7 @@
 [data-slot=timeline-event],[data-slot=activity-item],[data-slot=fact-card]{--tone:var(--fg-3)}
 [data-slot=badge]{--tone:currentColor}
 [data-tone=info]{--tone:var(--info)}
-[data-tone=success]{--tone:var(--accent)}
+[data-tone=success]{--tone:var(--success)}
 [data-tone=warning]{--tone:var(--amber)}
 [data-tone=danger]{--tone:var(--danger)}
 [data-tone=violet]{--tone:var(--violet)}
@@ -36,9 +36,9 @@
 /* The notice over a list that has rows left out */
 [data-slot=hidden-notice]{display:flex;flex-wrap:wrap;align-items:center;gap:.125rem .75rem;padding:.5rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);font-size:13px}
 [data-slot=hidden-notice-text]{flex:1 1 12rem;min-width:0}
-[data-slot=hidden-notice-toggle]{position:relative;display:inline-flex;align-items:center;min-height:1.75rem;color:var(--accent);font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer;
+[data-slot=hidden-notice-toggle]{position:relative;display:inline-flex;align-items:center;min-height:1.75rem;color:var(--accent-text);font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer;
   & input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
-  &:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius)}
+  &:has(input:focus-visible){outline:2px solid var(--ring);outline-offset:2px;border-radius:var(--radius)}
   & [data-state=on],&:has(input:checked) [data-state=off]{display:none}
   &:has(input:checked) [data-state=on]{display:inline}
 }
@@ -63,7 +63,7 @@ html[data-ui-js] [data-slot=hidden-notice-dismiss]{display:inline-flex}
 [data-slot=timeline-dot]{justify-self:center;align-self:start;box-sizing:border-box;width:.625rem;height:.625rem;margin-top:.4375rem;border-radius:50%;background:var(--tone);
   &[data-icon]{display:flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;margin-top:0;background:color-mix(in oklab,var(--tone) 15%,var(--ink-2));color:var(--tone-text);& [data-slot=icon]{width:14px;height:14px}}
 }
-[data-slot=timeline-event][data-state=current]:not([data-tone]){--tone:var(--accent)}
+[data-slot=timeline-event][data-state=current]:not([data-tone]){--tone:var(--accent-text)}
 [data-slot=timeline-event][data-state=current] [data-slot=timeline-dot]:not([data-icon]){background:transparent;border:2px solid var(--tone)}
 [data-slot=timeline-event][data-state=upcoming] [data-slot=timeline-dot]:not([data-icon]){background:transparent;border:2px solid var(--line-3)}
 [data-slot=timeline-event][data-state=muted] [data-slot=timeline-dot]:not([data-icon]){background:transparent;border:2px dashed var(--fg-3)}
@@ -104,7 +104,7 @@ html[data-ui-js] [data-slot=hidden-notice-dismiss]{display:inline-flex}
 }
 [data-slot=activity-item]{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;column-gap:.75rem;padding:.625rem 1rem;border-top:1px solid var(--line);
   &[data-link]:hover{background:var(--ink-2)}
-  &:has([data-slot=activity-actor]:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+  &:has([data-slot=activity-actor]:focus-visible){outline:2px solid var(--ring);outline-offset:-2px}
 }
 [data-slot=activity-icon]{display:inline-flex;flex:none;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border-radius:50%;background:color-mix(in oklab,var(--tone) 16%,var(--ink-2));color:var(--tone-text);& [data-slot=icon]{width:14px;height:14px}}
 [data-slot=activity-body]{min-width:0}

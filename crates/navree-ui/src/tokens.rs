@@ -10,8 +10,9 @@
 //! cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored
 //! ```
 //!
-//! The dark theme ships. Each token holds its light value too, so the light
-//! theme is a matter of writing it out.
+//! This table is the default theme, [`Theme::NAVREE`](crate::theme::Theme::NAVREE),
+//! in both its palettes. The other built-in themes and the modes are written
+//! after it by [`crate::theme::token_layer`].
 
 /// One colour or length.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +44,9 @@ pub const TOKENS: &[Token] = &[
     t("fg-3", "#8a968f", "#55615b"),
     t("accent", "#3dff8f", "#0b7a3e"),
     t("accent-ink", "#03130a", "#ffffff"),
+    t("accent-text", "#3dff8f", "#0b7a3e"),
+    t("ring", "#3dff8f", "#0b7a3e"),
+    t("success", "#3dff8f", "#0b7a3e"),
     t("amber", "#ffbf5e", "#8a5a00"),
     t("danger", "#ff6b6b", "#b3261e"),
     t("info", "#6cb6ff", "#0b5cad"),
@@ -50,6 +54,11 @@ pub const TOKENS: &[Token] = &[
     t("cyan", "#4fd6e6", "#0a6b78"),
     t("rose", "#ff8aa8", "#b3254f"),
     t("bar", "#5b6862", "#8a968f"),
+    t("chart-1", "#3dff8f", "#0b7a3e"),
+    t("chart-2", "#6cb6ff", "#0b5cad"),
+    t("chart-3", "#b79cff", "#6b46c1"),
+    t("chart-4", "#ffbf5e", "#8a5a00"),
+    t("chart-5", "#ff8aa8", "#b3254f"),
     t("radius", "4px", "4px"),
     t("radius-lg", "6px", "6px"),
     t("sidebar-w", "16rem", "16rem"),
@@ -66,27 +75,6 @@ pub const TOKENS: &[Token] = &[
         "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
         "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
     ),
-];
-
-/// Text colour and background pairs that must reach WCAG AA (4.5:1).
-pub const TEXT_PAIRS: &[(&str, &str)] = &[
-    ("fg", "ink-0"),
-    ("fg", "ink-1"),
-    ("fg", "ink-3"),
-    ("fg-1", "ink-1"),
-    ("fg-2", "ink-1"),
-    ("fg-2", "ink-3"),
-    ("fg-3", "ink-0"),
-    ("fg-3", "ink-1"),
-    ("fg-3", "ink-3"),
-    ("accent-ink", "accent"),
-    ("danger", "ink-1"),
-    ("amber", "ink-1"),
-    ("accent", "ink-1"),
-    ("info", "ink-1"),
-    ("violet", "ink-1"),
-    ("cyan", "ink-1"),
-    ("rose", "ink-1"),
 ];
 
 /// The tokens `@navree/theme` and the website share, in order: the colours.
@@ -116,17 +104,11 @@ pub fn dark(name: &str) -> Option<&'static str> {
         .map(|token| token.dark)
 }
 
-/// `styles/tokens.css`, as it must read.
+/// `styles/tokens.css`, as it must read: the default theme, the modes, the
+/// densities, the other built-in themes and the helpers the theme menu and the
+/// builder draw with.
 pub fn css() -> String {
-    let mut out = String::from(":root{color-scheme:dark");
-    for token in TOKENS {
-        out.push_str(";--");
-        out.push_str(token.name);
-        out.push(':');
-        out.push_str(token.dark);
-    }
-    out.push_str("}\n");
-    out
+    crate::theme::token_layer()
 }
 
 /// The marker lines that fence generated text inside a hand-written file.
@@ -196,25 +178,12 @@ pub fn splice(text: &str, block: &str) -> Option<String> {
 
 /// The WCAG contrast ratio of two `#rrggbb` colours; `None` for anything else.
 pub fn contrast(a: &str, b: &str) -> Option<f64> {
-    let (a, b) = (luminance(a)?, luminance(b)?);
-    let (light, dark) = if a > b { (a, b) } else { (b, a) };
-    Some((light + 0.05) / (dark + 0.05))
-}
-
-fn luminance(hex: &str) -> Option<f64> {
-    let hex = hex.strip_prefix('#')?;
-    if hex.len() != 6 {
-        return None;
-    }
-    let channel = |at: usize| -> Option<f64> {
-        let value = f64::from(u8::from_str_radix(hex.get(at..at + 2)?, 16).ok()?) / 255.0;
-        Some(if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        })
+    let strict = |hex: &str| {
+        (hex.len() == 7)
+            .then(|| crate::theme::Rgb::parse(hex).ok())
+            .flatten()
     };
-    Some(0.2126 * channel(0)? + 0.7152 * channel(2)? + 0.0722 * channel(4)?)
+    Some(strict(a)?.contrast(strict(b)?))
 }
 
 #[cfg(test)]
@@ -224,10 +193,15 @@ mod tests {
     #[test]
     fn every_text_pair_reaches_aa() {
         for theme in [|t: &Token| t.dark, |t: &Token| t.light] {
-            for (text, background) in TEXT_PAIRS {
+            for pair in crate::theme::PAIRS {
                 let value = |name: &str| TOKENS.iter().find(|t| t.name == name).map(theme).unwrap();
-                let ratio = contrast(value(text), value(background)).unwrap();
-                assert!(ratio >= 4.5, "{text} on {background} is {ratio:.2}:1");
+                let ratio = contrast(value(pair.text.name()), value(pair.on.name())).unwrap();
+                assert!(
+                    ratio >= pair.min,
+                    "{} on {} is {ratio:.2}:1",
+                    pair.text.name(),
+                    pair.on.name()
+                );
             }
         }
     }
@@ -260,6 +234,10 @@ mod tests {
         };
         vec![
             (root.join("styles/tokens.css"), css()),
+            (
+                root.join("styles/extra/theme-builder-tokens.css"),
+                crate::theme::builder_layer(),
+            ),
             spliced("css/theme.css", theme_css(false)),
             spliced("css/tokens.css", theme_css(true)),
             spliced("src/index.ts", theme_ts()),
