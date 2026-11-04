@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, query } from "@/lib/api/client";
+import { api, listQuery } from "@/lib/api/client";
 import type { BillingOverview, DataList, Member, ProjectPage } from "@/lib/api/types";
 import { keys, useMe, useWorkspaceSlug, useWorkspaces } from "@/lib/queries";
 import { workspacePath } from "@/lib/workspace";
@@ -33,11 +33,11 @@ export default function DashboardPage() {
 
   const active = useQuery({
     queryKey: [...keys.projects(slug), "count", "active"],
-    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${query({ status: "active", per_page: 1 })}`, { workspace: slug }),
+    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${listQuery({ filter: { status: "active" }, per_page: 1 })}`, { workspace: slug }),
   });
   const archived = useQuery({
     queryKey: [...keys.projects(slug), "count", "archived"],
-    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${query({ status: "archived", per_page: 1 })}`, { workspace: slug }),
+    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${listQuery({ filter: { status: "archived" }, per_page: 1 })}`, { workspace: slug }),
   });
   const members = useQuery({
     queryKey: keys.members(slug),

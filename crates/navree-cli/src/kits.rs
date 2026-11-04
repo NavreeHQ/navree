@@ -9,9 +9,10 @@
 //! | `api/` | `saas`, `api` | the API: accounts, settings, projects, admin, seeds, tests, Dock, Harbor and CI files |
 //! | `web/` | `saas` | the Next.js and shadcn/ui front end with its backend-for-frontend |
 //! | `micro/` | `micro` | a Cargo workspace: a service crate and its contracts crate |
+//! | `ui/` | `--ui navree` | the Navree UI front end the minimal app gets in `src/`, with its journey test ([`ui_files`]) |
 //!
 //! A file ending in `.j2` is a template rendered with the kit's
-//! context ([`KitContext`]); every other file is copied as it is. In paths,
+//! context ([`KitContext`], or [`UiContext`] for `ui/`); every other file is copied as it is. In paths,
 //! a component starting with `dot.` becomes a dotfile (`dot.gitignore` is
 //! `.gitignore`, so the templates never act as git or tool configuration in
 //! this repository), `__package__` is the package name and `mNOW` is the
@@ -20,7 +21,7 @@
 use serde::Serialize;
 
 use crate::clock::Timestamp;
-use crate::new_app::{Database, NewApp};
+use crate::new_app::{Database, NavreeSource, NewApp};
 use crate::scaffold::FileSet;
 use crate::templates::{TemplateError, render};
 
@@ -129,6 +130,12 @@ pub struct KitContext {
     /// locally (`timescale/timescaledb:2.31.0-pg17`, or `postgres:17` with
     /// `--database postgres`).
     pub postgres_image: String,
+    /// Where the web app links the `@navree/*` packages from (`packages/js`
+    /// of the checkout, `/` separators); `None` when `navree` is a
+    /// published version.
+    pub navree_js_dir: Option<String>,
+    /// The npm range of the `@navree/*` packages for a published version.
+    pub navree_js_range: &'static str,
 }
 
 impl KitContext {
@@ -169,6 +176,8 @@ impl KitContext {
             } else {
                 format!("postgres:{}", navree_dock::POSTGRES_VERSION)
             },
+            navree_js_dir: app.navree.js_dir(),
+            navree_js_range: NavreeSource::JS_RANGE,
             package,
             crate_name,
         }
@@ -199,6 +208,12 @@ pub(crate) fn templates() -> impl Iterator<Item = (&'static str, &'static str)> 
 /// The generated path of template file `path`: `.j2` dropped, `dot.`
 /// components made dotfiles, `__package__` and `mNOW` replaced.
 pub fn output_path(path: &str, ctx: &KitContext) -> String {
+    output_path_for(path, &ctx.package, &ctx.migration_prefix)
+}
+
+/// [`output_path`] for an app named `package` whose migrations start with
+/// `migration_prefix`.
+pub fn output_path_for(path: &str, package: &str, migration_prefix: &str) -> String {
     let path = path.strip_suffix(".j2").unwrap_or(path);
     path.split('/')
         .map(|part| {
@@ -206,11 +221,55 @@ pub fn output_path(path: &str, ctx: &KitContext) -> String {
                 Some(rest) => format!(".{rest}"),
                 None => part.to_owned(),
             };
-            part.replace("__package__", &ctx.package)
-                .replace("mNOW", &ctx.migration_prefix)
+            part.replace("__package__", package)
+                .replace("mNOW", migration_prefix)
         })
         .collect::<Vec<_>>()
         .join("/")
+}
+
+/// What the templates of `ui/` are rendered with.
+#[derive(Debug, Clone, Serialize)]
+pub struct UiContext {
+    /// The package name (`acme-cloud`).
+    pub package: String,
+    /// The crate name (`acme_cloud`).
+    pub crate_name: String,
+    /// The display name (`Acme cloud`).
+    pub title: String,
+    /// The prefix of the migration names (`m20261027_101500`).
+    pub migration_prefix: String,
+}
+
+impl UiContext {
+    /// The context of `app` created at `now`.
+    pub fn new(app: &NewApp, now: Timestamp) -> Self {
+        UiContext {
+            package: app.name.package().to_owned(),
+            crate_name: app.name.crate_name(),
+            title: app.name.title(),
+            migration_prefix: now.migration_prefix(),
+        }
+    }
+}
+
+/// The files `--ui navree` adds to the minimal app, relative to the app's
+/// directory: the front end in `src/ui/`, the customers module, and the
+/// journey test.
+pub fn ui_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError> {
+    let ctx = UiContext::new(app, now);
+    let mut files = FileSet::new();
+    for (path, contents) in embedded("ui") {
+        let target = output_path_for(path, &ctx.package, &ctx.migration_prefix);
+        let contents = if path.ends_with(".j2") {
+            render(&format!("ui/{path}"), &ctx)?
+        } else {
+            contents.to_owned()
+        };
+        // Embedded files keep the checkout's line endings; apps get LF.
+        files.add(target, contents.replace("\r\n", "\n"));
+    }
+    Ok(files)
 }
 
 /// The files of `kit` for `app`, relative to the app's directory.
@@ -286,7 +345,7 @@ mod tests {
 
     #[test]
     fn every_kit_has_embedded_files() {
-        for part in ["api", "web", "micro"] {
+        for part in ["api", "web", "micro", "ui"] {
             assert!(embedded(part).count() > 5, "{part}");
         }
     }

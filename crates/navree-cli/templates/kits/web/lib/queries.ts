@@ -1,9 +1,9 @@
 "use client";
 
+import { createAbility } from "@navree/client/abilities";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
-import { abilityFrom } from "@/lib/abilities";
 import { api } from "@/lib/api/client";
 import type { CaslRule, DataList, User, Workspace } from "@/lib/api/types";
 
@@ -52,13 +52,16 @@ export function useWorkspaces() {
   });
 }
 
-/** What the user may do in workspace `slug` (their role there). */
+/**
+ * What the user may do in workspace `slug` (their role there): the ability of the rules the API serves, so
+ * buttons follow them. The API checks again on every request: hiding a button is never the protection.
+ */
 export function useWorkspaceAbility(slug: string) {
   const { data } = useQuery({
     queryKey: keys.abilities(slug),
     queryFn: () => api.get<CaslRule[]>("/api/v1/settings/abilities", { workspace: slug }),
   });
-  return useMemo(() => abilityFrom(data ?? []), [data]);
+  return useMemo(() => createAbility(data ?? []), [data]);
 }
 
 /** What the user may do outside workspaces (super admins: everything, the admin panel too). */
@@ -67,5 +70,5 @@ export function useGlobalAbility() {
     queryKey: keys.globalAbilities,
     queryFn: () => api.get<CaslRule[]>("/api/me/abilities", { workspace: null }),
   });
-  return useMemo(() => abilityFrom(data ?? []), [data]);
+  return useMemo(() => createAbility(data ?? []), [data]);
 }

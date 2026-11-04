@@ -12,9 +12,13 @@
 //!
 //! The SaaS kit's front end is checked by `saas_kit_web_installs_lints_tests_and_builds`,
 //! which runs only with `NAVREE_TEST_KIT_WEB=1` (it needs Node.js 22 and
-//! pnpm, and downloads the packages): `pnpm install --frozen-lockfile`, the
-//! shipped `lib/api/schema.d.ts` against what `navree openapi:client` writes
-//! for `../openapi.json`, then `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in `web/`.
+//! pnpm, and downloads the packages). The web app links the Navree packages
+//! (`@navree/next`, `@navree/client`) from the checkout, so the test installs
+//! and builds `packages/js` first. Then in `web/`: `pnpm install` (not frozen:
+//! the shipped lockfile pins the other packages and the first install adds the
+//! two links), the shipped `lib/api/schema.d.ts` against what
+//! `navree openapi:client` writes for `../openapi.json`, then `pnpm lint`,
+//! `pnpm typecheck`, `pnpm test` and `pnpm build`.
 //!
 //! `NAVREE_FACADE` may point at another `navree` facade crate directory
 //! (default: the workspace's `crates/navree`). The projects build in
@@ -85,12 +89,17 @@ fn cargo(dir: &Path, args: &[&str]) -> bool {
     command.status().expect("cargo runs").success()
 }
 
+/// The `navree` facade crate the projects depend on.
+fn facade() -> PathBuf {
+    std::env::var_os("NAVREE_FACADE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace().join("crates").join("navree"))
+}
+
 /// Writes `kit` as app `name` into a temporary directory, with the
 /// workspace's `Cargo.lock` so dependency versions match.
 fn generate(kit: Kit, name: &str) -> (tempfile::TempDir, PathBuf) {
-    let facade = std::env::var_os("NAVREE_FACADE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace().join("crates").join("navree"));
+    let facade = facade();
     let parent = tempfile::Builder::new()
         .prefix("navree-test-")
         .tempdir()
@@ -220,9 +229,18 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
     }
     let (parent, root) = generate(Kit::Saas, "acme");
     let web = root.join("web");
-    // The committed lockfile installs as it is, and the shipped types are
-    // what `navree openapi:client` makes of the shipped `openapi.json`.
-    let ok = pnpm(&web, &["install", "--frozen-lockfile"])
+    // The packages the web app links are installed and built where it links them from.
+    let packages = PathBuf::from(
+        NavreeSource::Path(facade())
+            .js_dir()
+            .expect("a local checkout has packages/js"),
+    );
+    // The shipped lockfile pins the other packages and installs as it is; the first
+    // install adds the links to the two packages (so it is not frozen). The shipped
+    // types are what `navree openapi:client` makes of the shipped `openapi.json`.
+    let ok = pnpm(&packages, &["install", "--frozen-lockfile"])
+        && pnpm(&packages, &["build"])
+        && pnpm(&web, &["install", "--no-frozen-lockfile"])
         && {
             let read = |path: &Path| std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
             let generated = navree_cli::openapi_client::generate(&read(&root.join("openapi.json")))
@@ -241,4 +259,186 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
         && pnpm(&web, &["test"])
         && pnpm(&web, &["build"]);
     finish(parent, ok, "saas kit's web app");
+}
+
+/// Writes the minimal app with `--ui navree` as app `name`, with the
+/// workspace's `Cargo.lock` so dependency versions match.
+fn generate_navree_ui(name: &str) -> (tempfile::TempDir, PathBuf) {
+    let parent = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let app = NewApp {
+        name: AppName::parse(name).unwrap(),
+        ui: Ui::Navree,
+        kit: None,
+        database: Database::default(),
+        navree: NavreeSource::Path(facade()),
+    };
+    let root = create_app(parent.path(), &app, Timestamp::now()).unwrap();
+    std::fs::copy(workspace().join("Cargo.lock"), root.join("Cargo.lock")).unwrap();
+    (parent, root)
+}
+
+/// The app with screens drawn by Navree UI compiles, passes clippy and its own
+/// tests (the whole journey over HTTP, `tests/journey.rs`), its module graph
+/// resolves, and every route is documented or allowed by `api.undocumented`.
+#[test]
+#[ignore = "builds the whole framework in a new project; run with --ignored"]
+fn navree_ui_kit_compiles_and_its_tests_pass() {
+    let (parent, root) = generate_navree_ui("platform");
+    let ok = rust_checks(&root, &["conformity:check"]);
+    finish(parent, ok, "navree ui kit");
+}
+
+/// A free port on the loopback address.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("a free port")
+        .local_addr()
+        .expect("its address")
+        .port()
+}
+
+/// The status line's code of `GET path` from the app on `port`, or `None` while it
+/// does not answer. Plain HTTP over a socket: no client library is needed.
+fn status_of(port: u16, path: &str) -> Option<u16> {
+    use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .ok()?;
+    write!(
+        stream,
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    )
+    .ok()?;
+    let mut bytes = Vec::new();
+    stream.read_to_end(&mut bytes).ok()?;
+    String::from_utf8_lossy(&bytes)
+        .lines()
+        .next()?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+/// The app process this test started. Dropping it stops that process, by the
+/// handle `spawn` gave: nothing else is touched.
+struct Running {
+    child: std::process::Child,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        eprintln!("stopping the app (process {})", self.child.id());
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Starts the built app on `port` with SQLite and `APP_*` settings, and waits
+/// until `/health/live` answers 200.
+fn start_app(root: &Path, binary: &Path, port: u16, key: &str) -> Option<Running> {
+    let child = Command::new(binary)
+        .current_dir(root)
+        .env("APP_KEY", key)
+        .env("APP_HTTP__ADDR", format!("127.0.0.1:{port}"))
+        .env("APP_DATABASE__URL", "sqlite://storage/browser.db?mode=rwc")
+        .env("APP_MAIL__TRANSPORT", "log")
+        .env("APP_LOGBOOK__ENABLED", "false")
+        // The browser tests send every request from one address, and keep
+        // event streams open from it.
+        .env("APP_HTTP__PER_IP_RATE_LIMIT", "100000000")
+        .env("APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP", "10000")
+        .spawn()
+        .expect("the app starts");
+    eprintln!("started the app on port {port} (process {})", child.id());
+    let mut running = Running { child };
+    for _ in 0..240 {
+        if let Ok(Some(status)) = running.child.try_wait() {
+            eprintln!("the app stopped at once: {status}");
+            return None;
+        }
+        if status_of(port, "/health/live") == Some(200) {
+            return Some(running);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    eprintln!("the app did not answer /health/live in two minutes");
+    None
+}
+
+/// Builds the app, starts it, runs the browser journey against it and stops it.
+fn journey_in_a_browser(root: &Path) -> bool {
+    let e2e = workspace().join("e2e").join("ui");
+    if !e2e.join("node_modules").join("playwright").is_dir() {
+        eprintln!(
+            "Playwright is not installed: run `npm ci` and `npx playwright install chromium` in {}",
+            e2e.display()
+        );
+        return false;
+    }
+    std::fs::create_dir_all(root.join("storage")).unwrap();
+    if !cargo(root, &["build", "--quiet", "--features", SQLITE]) {
+        return false;
+    }
+    let binary = target()
+        .join("debug")
+        .join(format!("platform{}", std::env::consts::EXE_SUFFIX));
+    // A key for the session cookie: the app prints a new one.
+    let printed = Command::new(&binary)
+        .arg("key:generate")
+        .current_dir(root)
+        .env("APP_DATABASE__URL", "sqlite://storage/browser.db?mode=rwc")
+        .env("APP_MAIL__TRANSPORT", "log")
+        .output()
+        .expect("the app runs");
+    let key = String::from_utf8_lossy(&printed.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with("base64:"))
+        .map(str::to_owned);
+    let Some(key) = key else {
+        eprintln!(
+            "key:generate printed no key:\n{}{}",
+            String::from_utf8_lossy(&printed.stdout),
+            String::from_utf8_lossy(&printed.stderr)
+        );
+        return false;
+    };
+    let port = free_port();
+    let Some(running) = start_app(root, &binary, port, &key) else {
+        return false;
+    };
+    let status = Command::new("node")
+        .args(["--test", "--test-concurrency=1", "tests/platform.test.mjs"])
+        .current_dir(&e2e)
+        .env("PLATFORM_URL", format!("http://127.0.0.1:{port}"))
+        .status();
+    drop(running);
+    status.is_ok_and(|status| status.success())
+}
+
+/// The screens in real browsers: sign-in, the customers table with search,
+/// filters and sort, the form, a second window that sees the first one's change
+/// live, and sign-out (`e2e/ui/tests/platform.test.mjs`). It builds the app,
+/// starts it on a free port with SQLite, runs the browser tests against it and
+/// stops the one process it started. It runs only with `NAVREE_TEST_KIT_WEB=1`,
+/// and needs Node.js 22 with `npm ci` and `npx playwright install chromium`
+/// run in `e2e/ui` once; `PLATFORM_BROWSERS` (`chromium,firefox,webkit`) picks
+/// the engines.
+#[test]
+#[ignore = "builds the app and drives it in browsers; needs NAVREE_TEST_KIT_WEB=1"]
+fn navree_ui_kit_journey_in_a_browser() {
+    if std::env::var_os("NAVREE_TEST_KIT_WEB").is_none() {
+        eprintln!(
+            "SKIPPED: set NAVREE_TEST_KIT_WEB=1 to build the Navree UI kit and drive it in browsers"
+        );
+        return;
+    }
+    let (parent, root) = generate_navree_ui("platform");
+    let ok = journey_in_a_browser(&root);
+    finish(parent, ok, "navree ui kit's browser journey");
 }

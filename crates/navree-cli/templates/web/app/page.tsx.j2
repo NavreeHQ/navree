@@ -1,7 +1,12 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { navree } from "@/lib/navree";
+import { SignOut } from "./sign-out";
+
+interface User {
+  id: string;
+  name?: string;
+  email?: string;
+}
 
 interface Profile {
   user_id: string;
@@ -9,37 +14,30 @@ interface Profile {
   timezone: string;
 }
 
-export default function Home() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [signedOut, setSignedOut] = useState(false);
+/** The signed-in user's profile (`GET /api/v1/profile`), called with the session's access token. */
+async function loadProfile(accessToken: string): Promise<Profile | null> {
+  const response = await navree.bff().api("/api/v1/profile", { accessToken });
+  return response.ok ? ((await response.json()) as Profile) : null;
+}
 
-  useEffect(() => {
-    fetch("/api/v1/profile").then(async (response) => {
-      if (response.status === 401) setSignedOut(true);
-      else if (response.ok) setProfile((await response.json()) as Profile);
-    });
-  }, []);
-
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setProfile(null);
-    setSignedOut(true);
-  }
+/** `/` is behind sign-in (`proxy.ts`), so a browser that gets here has a session. */
+export default async function Home() {
+  const session = await navree.auth<User>();
+  const profile = session ? await loadProfile(session.accessToken) : null;
 
   return (
     <main>
       <h1>{{ title }}</h1>
-      {signedOut && (
+      {session ? (
+        <>
+          <p>Signed in as {session.user.email ?? session.user.id}.</p>
+          {profile && <p>Time zone: {profile.timezone}</p>}
+          <SignOut />
+        </>
+      ) : (
         <p>
           You are signed out. <Link href="/login">Sign in</Link>
         </p>
-      )}
-      {profile && (
-        <>
-          <p>Signed in as {profile.user_id}.</p>
-          <p>Time zone: {profile.timezone}</p>
-          <button onClick={logout}>Sign out</button>
-        </>
       )}
     </main>
   );

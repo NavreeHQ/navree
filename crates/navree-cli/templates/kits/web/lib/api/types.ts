@@ -16,6 +16,14 @@ export type Invitation = Schemas["InvitationResource"];
 export type Project = Schemas["Project"];
 export type ProjectStatus = Schemas["ProjectStatus"];
 export type ProjectPage = Schemas["ProjectPage"];
+/** The query of `GET /api/v1/projects`, sent as `?filter[status]=active&search=web&sort=-created_at&page=2`. */
+export type ProjectListQuery = {
+  filter?: { status?: ProjectStatus };
+  search?: string;
+  sort?: string;
+  page?: number;
+  per_page?: number;
+};
 export type CreateProject = Schemas["CreateProject"];
 export type UpdateProject = Schemas["UpdateProject"];
 export type BillingOverview = Schemas["BillingOverview"];

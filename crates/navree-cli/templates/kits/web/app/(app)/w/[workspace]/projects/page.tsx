@@ -28,9 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, query } from "@/lib/api/client";
+import { api, listQuery } from "@/lib/api/client";
 import { applyFieldErrors, errorMessage } from "@/lib/api/errors";
-import type { Project, ProjectPage } from "@/lib/api/types";
+import type { Project, ProjectListQuery, ProjectPage, ProjectStatus } from "@/lib/api/types";
 import { keys, useWorkspaceAbility, useWorkspaceSlug } from "@/lib/queries";
 import { workspacePath } from "@/lib/workspace";
 
@@ -115,10 +115,15 @@ function Projects() {
     router.replace(`${pathname}${text ? `?${text}` : ""}`);
   };
 
-  const filters = { status: status === "all" ? null : status, search: params.get("search"), page, per_page: PER_PAGE };
+  const list: ProjectListQuery = {
+    filter: { status: status === "all" ? undefined : (status as ProjectStatus) },
+    search: params.get("search") ?? undefined,
+    page,
+    per_page: PER_PAGE,
+  };
   const projects = useQuery({
-    queryKey: [...keys.projects(slug), filters],
-    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${query(filters)}`, { workspace: slug }),
+    queryKey: [...keys.projects(slug), list],
+    queryFn: () => api.get<ProjectPage>(`/api/v1/projects${listQuery(list)}`, { workspace: slug }),
     placeholderData: keepPreviousData,
   });
   const meta = projects.data?.meta;

@@ -10,12 +10,13 @@
 //!
 //! | Command | What it does |
 //! |---|---|
-//! | `navree new <name> [--database timescaledb\|postgres\|mysql\|sqlite] [--ui next\|none] [--navree-path <path>]` | A new app ([`new_app`]), made a Git repository when it is not inside one (nothing is committed) |
+//! | `navree new <name> [--database timescaledb\|postgres\|mysql\|sqlite] [--ui next\|navree\|none] [--navree-path <path>]` | A new app ([`new_app`]), made a Git repository when it is not inside one (nothing is committed) |
 //! | `navree new <name> --kit saas\|api\|micro` | A new app from a starter kit ([`kits`]), with its `harbor.key` |
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, MCP server, factory (`--model <model>`) or seeder in a module ([`make::make_item`]) |
 //! | `navree make:model <module> <Name> [--migration --factory --seeder --controller --policy \| --all]` | An ORM model with the companions asked for, which refer to each other ([`make::make_model`]) |
 //! | `navree make:resource <module> <Model> [--path src/modules]` | A Helm admin-panel resource for a navree-orm model, registered with its module ([`resource::make_resource`]) |
+//! | `navree make:page <Name> [--module <module>] [--public]`, `make:form <Name>`, `make:table <Name>` (each with `--dry-run` and `--force`) | A Navree UI page (a controller and its test), a form struct with its handlers, or a data table row with its handler ([`make_ui::make_ui_item`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree check [--graph] [--json] [--only <checks>]` | The module graph, then the app's conformity checks ([`check`]) |
 //! | `navree gate [--only <steps>] [--skip <steps>] [--keep-going] [--no-lock]` | fmt, clippy, tests, `navree check` and the front end's typecheck, tests and build, under a machine lock with per-step times ([`gate`]) |
@@ -50,6 +51,7 @@ pub mod forward;
 pub mod gate;
 pub mod kits;
 pub mod make;
+pub mod make_ui;
 pub mod names;
 pub mod new_app;
 pub mod openapi_client;

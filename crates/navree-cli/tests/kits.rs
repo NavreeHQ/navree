@@ -133,19 +133,21 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
             "web/app/(app)/w/[workspace]/settings/security/page.tsx",
             "web/app/(app)/w/[workspace]/settings/notifications/page.tsx",
             "web/app/api/[...path]/route.ts",
-            "web/app/api/auth/login/route.ts",
-            "web/app/api/auth/logout/route.ts",
-            "web/app/api/auth/refresh/route.ts",
-            "web/app/api/auth/2fa/verify/route.ts",
+            "web/app/api/auth/email/verify/[id]/[hash]/route.ts",
             "web/app/admin/[[...path]]/route.ts",
+            "web/app/auth/callback/[provider]/route.ts",
+            "web/app/auth/social/[provider]/route.ts",
             "web/app/broadcasting/auth/route.ts",
             "web/app/invitations/accept/page.tsx",
             "web/components/workspace-switcher.tsx",
             "web/components/ui/button.tsx",
-            "web/lib/bff/bff.ts",
-            "web/lib/bff/bff.test.ts",
+            "web/lib/navree.ts",
+            "web/lib/social.ts",
+            "web/lib/social.test.ts",
             "web/lib/api/client.ts",
-            "web/lib/realtime.ts",
+            "web/next.config.ts",
+            "web/proxy.ts",
+            "web/README.md",
             "web/e2e/sign-up.spec.ts",
             "web/e2e/two-factor.spec.ts",
             "web/e2e/workspace.spec.ts",
@@ -247,13 +249,11 @@ fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
     let web_env = read(&root, "web/.env.example");
     assert!(web_env.contains("# NAVREE_TRUSTED_PROXY_HOPS=1"));
     assert!(web_env.contains("# NAVREE_CLIENT_IP_HEADER=x-real-ip"));
-    // The backend-for-frontend reads both and forwards the client address.
-    let server = read(&root, "web/lib/bff/server.ts");
-    assert!(server.contains("process.env.NAVREE_TRUSTED_PROXY_HOPS"));
-    assert!(server.contains("process.env.NAVREE_CLIENT_IP_HEADER"));
-    let bff = read(&root, "web/lib/bff/bff.ts");
-    assert!(bff.contains("clientIpHeader"));
-    assert!(bff.contains("\"x-forwarded-for\": address"));
+    // `@navree/next` reads both (it takes its settings from the environment when
+    // the first request arrives) and forwards the client address.
+    let navree = read(&root, "web/lib/navree.ts");
+    assert!(navree.contains("createNavree()"));
+    assert!(!navree.contains("trustedProxyHops"));
     // The API kit has no web app, so no proxy to trust.
     let (_dir2, api) = generate("acme", Kit::Api);
     assert!(
@@ -262,6 +262,165 @@ fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
             .is_none()
     );
     assert!(!read(&api, ".env.example").contains("APP_HTTP__TRUSTED_PROXIES"));
+}
+
+/// The files of the generated app under `web/`, relative to the app.
+fn web_files(root: &Path) -> Vec<String> {
+    tree(root)
+        .into_iter()
+        .filter(|file| file.starts_with("web/"))
+        .collect()
+}
+
+// MOD-012
+#[test]
+fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
+    let (_dir, root) = generate("acme", Kit::Saas);
+    let files = web_files(&root);
+
+    // The copies are gone: the BFF, its error bodies, the real-time, abilities and per-route code.
+    for gone in [
+        "web/lib/bff/bff.ts",
+        "web/lib/bff/bff.test.ts",
+        "web/lib/bff/http-errors.ts",
+        "web/lib/bff/server.ts",
+        "web/lib/realtime.ts",
+        "web/lib/abilities.ts",
+        "web/lib/abilities.test.ts",
+        "web/app/api/auth/login/route.ts",
+        "web/app/api/auth/logout/route.ts",
+        "web/app/api/auth/refresh/route.ts",
+        "web/app/api/auth/2fa/verify/route.ts",
+    ] {
+        assert!(!files.iter().any(|file| file == gone), "{gone} is still written");
+    }
+    assert!(files.iter().all(|file| !file.starts_with("web/lib/bff/")));
+
+    // The route handlers are the package's.
+    for route in [
+        "web/app/api/[...path]/route.ts",
+        "web/app/admin/[[...path]]/route.ts",
+        "web/app/broadcasting/auth/route.ts",
+    ] {
+        assert!(read(&root, route).contains("navree.handlers"), "{route}");
+    }
+    assert!(read(&root, "web/lib/navree.ts").contains("createNavree()"));
+    // The admin panel is behind sign-in in the proxy, and the sign-in page is the kit's.
+    let proxy = read(&root, "web/proxy.ts");
+    assert!(proxy.contains("navree.proxy({ loginPath: \"/sign-in\" })"), "{proxy}");
+    assert!(proxy.contains("matcher: [\"/admin/:path*\"]"), "{proxy}");
+    // Live updates and abilities use the packages' entry points.
+    assert!(
+        read(&root, "web/app/(app)/w/[workspace]/layout.tsx")
+            .contains("from \"@navree/next/realtime\"")
+    );
+    assert!(read(&root, "web/lib/queries.ts").contains("from \"@navree/client/abilities\""));
+
+    // The packages are linked from the checkout `navree` comes from.
+    let package: serde_json::Value =
+        serde_json::from_str(&read(&root, "web/package.json")).unwrap();
+    assert_eq!(
+        package["dependencies"]["@navree/next"],
+        "link:/opt/navree/packages/js/next"
+    );
+    assert_eq!(
+        package["dependencies"]["@navree/client"],
+        "link:/opt/navree/packages/js/client"
+    );
+    // ... which sits outside the app: Next may read it, and compiles it with the app.
+    let config = read(&root, "web/next.config.ts");
+    for needle in [
+        "\"/opt/navree/packages/js\"",
+        "turbopack: { root }",
+        "outputFileTracingRoot: root",
+        "transpilePackages: [\"@navree/next\", \"@navree/client\", \"@navree/bff\"]",
+        "cacheComponents: false",
+    ] {
+        assert!(config.contains(needle), "{needle} in\n{config}");
+    }
+    assert!(!config.contains("{{") && !config.contains("{%"), "{config}");
+    // The lockfile pins the other packages; the first install adds the two links.
+    assert!(!read(&root, "web/pnpm-lock.yaml").contains("@navree/"));
+    assert!(read(&root, "web/README.md").contains("without `--frozen-lockfile`"));
+
+    // No file of the web app keeps tokens or the token cookies itself. (Only the social
+    // sign-in, which the package does not have, writes the cookies of its own flow.)
+    for file in &files {
+        let Ok(text) = std::fs::read_to_string(root.join(file)) else {
+            continue;
+        };
+        for needle in ["ACCESS_COOKIE", "REFRESH_COOKIE", "createBff(", "originAllowed"] {
+            let allowed = file == "web/lib/social.test.ts" && needle == "createBff(";
+            assert!(allowed || !text.contains(needle), "{file} mentions {needle}");
+        }
+        if file != "web/lib/social.ts" && file != "web/lib/social.test.ts" {
+            assert!(!text.contains("navree_at"), "{file} mentions navree_at");
+        }
+    }
+}
+
+// MOD-012
+#[test]
+fn the_saas_kits_web_app_from_a_published_navree_asks_npm_for_the_packages() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let published = NewApp {
+        navree: NavreeSource::Version("1.0.0".to_owned()),
+        ..app("acme", Kit::Saas)
+    };
+    let root = create_app(dir.path(), &published, now()).unwrap();
+
+    let package: serde_json::Value =
+        serde_json::from_str(&read(&root, "web/package.json")).unwrap();
+    assert_eq!(package["dependencies"]["@navree/next"], "^1.0.0");
+    assert_eq!(package["dependencies"]["@navree/client"], "^1.0.0");
+    let config = read(&root, "web/next.config.ts");
+    for needle in ["turbopack", "outputFileTracingRoot", "transpilePackages", "node:path"] {
+        assert!(!config.contains(needle), "{needle} in\n{config}");
+    }
+    assert!(config.contains("cacheComponents: false"));
+    assert!(read(&root, "web/README.md").contains("not on npm yet"));
+}
+
+// MOD-012
+#[test]
+fn no_template_carries_a_backend_for_frontend_of_its_own() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let templates = Path::new(env!("CARGO_MANIFEST_DIR")).join("templates");
+    let mut files = Vec::new();
+    walk(&templates, &mut files);
+    assert!(files.len() > 100, "{} templates", files.len());
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let name = file.strip_prefix(&templates).unwrap().to_string_lossy().replace('\\', "/");
+        // The only tests that name `createBff` give the social routes a BFF with a scripted API.
+        let test_of_social = name == "kits/web/lib/social.test.ts";
+        for implementation in [
+            "export function createBff",
+            "function callNavreeRefresh",
+            "function refresh(",
+            "single-flight",
+            "ACCESS_COOKIE",
+            "REFRESH_COOKIE",
+            "originAllowed",
+        ] {
+            assert!(!text.contains(implementation), "{name} contains {implementation}");
+        }
+        assert!(test_of_social || !text.contains("createBff("), "{name} calls createBff");
+    }
 }
 
 #[test]
@@ -584,10 +743,21 @@ fn the_created_message_lists_the_kit_s_next_steps() {
         "  navree dock up                 # TimescaleDB and Mailpit\n",
         "  navree key:generate            # then set APP_KEY in .env\n",
         "  navree migrate:fresh --seed    # tables and a demo workspace\n",
+        "  pnpm --dir /opt/navree/packages/js install # the Navree packages (not on npm yet)\n",
+        "  pnpm --dir /opt/navree/packages/js build # once; the web app links them\n",
+        "  pnpm --dir web install         # the web app's packages\n",
         "  navree dev                     # API on :8080, web app on :3000\n",
     ] {
         assert!(message.contains(line), "{line:?} in\n{message}");
     }
+    // A published navree has published packages: only the web app's own install.
+    let published = NewApp {
+        navree: NavreeSource::Version("1.0.0".to_owned()),
+        ..app("acme", Kit::Saas)
+    };
+    let message = created_message(&published, &root);
+    assert!(message.contains("  pnpm --dir web install         # the web app's packages\n"));
+    assert!(!message.contains("packages/js"), "{message}");
     let micro = created_message(&app("billing", Kit::Micro), &root);
     assert!(micro.contains("(kit: micro)"));
     assert!(micro.contains("# TimescaleDB and NATS"));

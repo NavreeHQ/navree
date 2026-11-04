@@ -19,6 +19,13 @@
     "@fontsource-variable/mona-sans": "^5.3.0",
     "@fontsource/monaspace-neon": "^5.3.0",
     "@hookform/resolvers": "^6.0.0",
+{% if navree_js_dir %}
+    "@navree/client": "link:{{ navree_js_dir }}/client",
+    "@navree/next": "link:{{ navree_js_dir }}/next",
+{% else %}
+    "@navree/client": "{{ navree_js_range }}",
+    "@navree/next": "{{ navree_js_range }}",
+{% endif %}
     "@tanstack/react-query": "^5.104.5",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",

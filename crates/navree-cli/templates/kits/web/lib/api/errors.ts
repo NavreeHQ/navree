@@ -8,7 +8,7 @@ const MESSAGES: Record<string, string> = {
   invalid_credentials: "Wrong email or password.",
   too_many_login_attempts: "Too many attempts. Wait a minute and try again.",
   invalid_two_factor_code: "That code is not right. Try the next one from your app.",
-  two_factor_challenge_expired: "Your sign-in attempt expired. Sign in again.",
+  two_factor_expired: "Your sign-in attempt expired. Sign in again.",
   not_a_member: "You are not a member of this workspace.",
   workspace_not_found: "This workspace does not exist.",
   invitation_expired: "This invitation has expired. Ask for a new one.",

@@ -41,7 +41,7 @@ function TwoFactor() {
       router.replace(next);
     } catch (error) {
       form.setValue("code", "");
-      if (isApiError(error) && error.code === "two_factor_challenge_expired") {
+      if (isApiError(error) && error.code === "two_factor_expired") {
         router.replace(`/sign-in${nextQuery(next)}`);
         return;
       }

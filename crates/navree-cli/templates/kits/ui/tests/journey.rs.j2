@@ -1,0 +1,635 @@
+//! The browser journey over HTTP, in process: a guest is sent to sign in, signs
+//! in, looks at the customers, narrows them, adds and edits one, hears about it
+//! on the live stream and signs out. Each test boots the whole app on a fresh
+//! SQLite file, with its forty demo customers and its demo account.
+
+use std::time::Duration;
+
+use futures_util::StreamExt;
+use navree::config::ConfigSources;
+use navree::crypto::generate_key;
+use navree::testing::{
+    TempDirGuard, TestApp, TestClient, TestRequest, TestResponse, temp_sqlite_url,
+};
+use serde_json::Value;
+
+use {{ crate_name }}::modules::customers::seed::seeds;
+use {{ crate_name }}::ui::auth::{DEMO_EMAIL, DEMO_PASSWORD};
+
+/// What a browser asks pages with.
+const HTML: &str = "text/html";
+
+/// Hermetic settings, as in `tests/app.rs`, plus the page settings of
+/// `config/app.toml`: guests are sent to sign in, and sessions live in the
+/// database.
+fn sources() -> (ConfigSources, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("http.per_ip_rate_limit", Value::Null)
+        .set("mail.transport", "array")
+        .set("observe.metrics", false)
+        .set("logbook.enabled", false)
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1)
+        .set("session.store", "database")
+        .set("ui.sign_in_redirect", true);
+    (sources, guard)
+}
+
+async fn app() -> (TestApp, TempDirGuard) {
+    let (sources, guard) = sources();
+    let app = TestApp::from_builder({{ crate_name }}::app(sources)).await;
+    (app, guard)
+}
+
+/// A page request, as a browser makes it.
+fn page(client: &TestClient, path: &str) -> TestRequest {
+    client.get(path).header("accept", HTML)
+}
+
+/// What a browser does to sign in: opens the form, which gives it a session and
+/// the token to post back, then posts it.
+async fn post_sign_in(
+    client: &TestClient,
+    email: &str,
+    password: &str,
+    next: &str,
+) -> TestResponse {
+    page(client, "/sign-in").send().await.assert_status(200);
+    client
+        .post("/sign-in")
+        .header("accept", HTML)
+        .xsrf()
+        .form(&[("email", email), ("password", password), ("next", next)])
+        .send()
+        .await
+}
+
+/// A client signed in as the demo account.
+async fn signed_in(app: &TestApp) -> TestClient {
+    let client = app.client();
+    let response = post_sign_in(&client, DEMO_EMAIL, DEMO_PASSWORD, "/customers").await;
+    assert_eq!(response.status(), 303, "{}", response.text());
+    client
+}
+
+/// The fields of the customer form for a new customer.
+fn customer<'a>(name: &'a str, email: &'a str) -> Vec<(&'a str, &'a str)> {
+    vec![
+        ("name", name),
+        ("email", email),
+        ("phone", "+91 98765 43210"),
+        ("city", "Ludhiana"),
+        ("plan", "growth"),
+        ("status", "trial"),
+        ("monthly", "24,999"),
+        ("since", "2026-11-01"),
+        ("autopay", "true"),
+        ("notes", ""),
+    ]
+}
+
+/// Adds a customer through the form.
+async fn add(client: &TestClient, name: &str, email: &str) -> TestResponse {
+    client
+        .post("/customers/new")
+        .header("accept", HTML)
+        .xsrf()
+        .form(&customer(name, email))
+        .send()
+        .await
+}
+
+/// The rows of the table in `html`.
+fn rows(html: &str) -> usize {
+    html.matches("<tr data-key=\"").count()
+}
+
+/// The addresses of the customers `html` links to.
+fn customer_links(html: &str) -> Vec<String> {
+    html.split("href=\"/customers/")
+        .skip(1)
+        .filter_map(|rest| rest.split('"').next())
+        .filter(|id| id.len() == 36)
+        .map(|id| format!("/customers/{id}"))
+        .collect()
+}
+
+/// The page of `/customers` with `query` added to its address.
+async fn table(client: &TestClient, query: &str) -> String {
+    let path = if query.is_empty() {
+        "/customers".to_owned()
+    } else {
+        format!("/customers?{query}")
+    };
+    page(client, &path).send().await.assert_status(200).text()
+}
+
+#[tokio::test]
+async fn a_guest_is_sent_to_sign_in_with_the_page_they_asked_for() {
+    let (app, _guard) = app().await;
+    let client = app.client();
+    for path in ["/", "/customers", "/customers/new", "/profile"] {
+        let response = page(&client, path).send().await;
+        assert_eq!(response.status(), 303, "{path}");
+        let location = response.header("location").unwrap_or_default();
+        assert!(
+            location.starts_with("/sign-in?next=%2F"),
+            "{path}: {location}"
+        );
+    }
+    // The address the guest asked for travels with them, query and all.
+    let response = page(&client, "/customers?search=ludhiana").send().await;
+    assert_eq!(
+        response.header("location"),
+        Some("/sign-in?next=%2Fcustomers%3Fsearch%3Dludhiana")
+    );
+    // A client that wants JSON gets the JSON error.
+    client.get("/customers").send().await.assert_status(401);
+}
+
+#[tokio::test]
+async fn a_wrong_password_is_a_field_error_that_does_not_say_which_part_was_wrong() {
+    let (app, _guard) = app().await;
+    let wrong_password = app.client();
+    let first = post_sign_in(&wrong_password, DEMO_EMAIL, "not-the-password", "/").await;
+    let unknown_email = app.client();
+    let second = post_sign_in(
+        &unknown_email,
+        "nobody@example.com",
+        "not-the-password",
+        "/",
+    )
+    .await;
+    for response in [&first, &second] {
+        assert_eq!(response.status(), 422);
+        let body = response.text();
+        assert!(body.contains("field-error"), "{body}");
+        assert!(
+            body.contains("Check your email and password, then try again."),
+            "{body}"
+        );
+        // The form comes back as it was, and never with the password in it.
+        assert!(!body.contains("not-the-password"), "{body}");
+    }
+    assert!(second.text().contains("nobody@example.com"));
+    // Still a guest.
+    let response = page(&wrong_password, "/customers").send().await;
+    assert_eq!(response.status(), 303);
+}
+
+#[tokio::test]
+async fn signing_in_starts_a_session_and_goes_where_the_visitor_was_going() {
+    let (app, _guard) = app().await;
+    let client = app.client();
+    let response = post_sign_in(
+        &client,
+        DEMO_EMAIL,
+        DEMO_PASSWORD,
+        "/customers?search=ludhiana",
+    )
+    .await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(
+        response.header("location"),
+        Some("/customers?search=ludhiana")
+    );
+    let cookie = response
+        .set_cookie("navree_session")
+        .expect("signing in sets the session cookie");
+    assert_eq!(cookie.http_only(), Some(true));
+    assert!(response.set_cookie("XSRF-TOKEN").is_some());
+    page(&client, "/customers").send().await.assert_status(200);
+    page(&client, "/profile").send().await.assert_status(200);
+    // Someone signed in has no use for the sign-in page.
+    let again = page(&client, "/sign-in").send().await;
+    assert_eq!(again.status(), 303);
+}
+
+#[tokio::test]
+async fn a_next_that_leaves_the_site_is_ignored() {
+    let (app, _guard) = app().await;
+    for next in ["//evil.example", "https://evil.example", "/\\evil.example"] {
+        let client = app.client();
+        let response = post_sign_in(&client, DEMO_EMAIL, DEMO_PASSWORD, next).await;
+        assert_eq!(response.status(), 303, "{next}");
+        assert_eq!(response.header("location"), Some("/"), "{next}");
+    }
+}
+
+#[tokio::test]
+async fn the_table_lists_the_demo_customers_in_rupees() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    // Ten to a page, sorted by name.
+    let first = table(&client, "").await;
+    assert_eq!(rows(&first), 10);
+    assert!(
+        first.contains("Ajay Rawat"),
+        "the first name in the alphabet"
+    );
+    // Every customer, on one page.
+    let all = table(&client, "per_page=40").await;
+    assert_eq!(rows(&all), 40);
+    for seed in seeds() {
+        assert!(all.contains(&seed.name), "{}", seed.name);
+    }
+    // Rupees with lakh grouping, from paise.
+    assert!(all.contains("₹1,00,000"));
+    assert!(all.contains("₹2,50,000"));
+    assert!(all.contains("₹4,999"));
+}
+
+#[tokio::test]
+async fn search_filters_sort_and_pages_narrow_the_rows() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    let seeds = seeds();
+    let named = |html: &str, wanted: &dyn Fn(&str) -> bool| {
+        seeds
+            .iter()
+            .filter(|seed| html.contains(&seed.name))
+            .all(|seed| wanted(&seed.city))
+    };
+
+    // A search finds the customers of a city.
+    let html = table(&client, "search=Ludhiana&per_page=40").await;
+    assert_eq!(rows(&html), 5);
+    assert!(named(&html, &|city| city == "Ludhiana"));
+
+    // One list query, written the one way: a filter that takes several values.
+    let html = table(
+        &client,
+        "filter%5Bcity%5D%5Bin%5D=Ludhiana%2CAmritsar&per_page=40",
+    )
+    .await;
+    assert_eq!(rows(&html), 10);
+    assert!(named(&html, &|city| city == "Ludhiana" || city == "Amritsar"));
+
+    // A filter that takes one value, and one that takes a range.
+    let scale = seeds
+        .iter()
+        .filter(|seed| seed.plan.key() == "scale")
+        .count();
+    let html = table(&client, "filter%5Bplan%5D=scale&per_page=40").await;
+    assert_eq!(rows(&html), scale);
+    let big = seeds.iter().filter(|seed| seed.rupees >= 100_000).count();
+    let html = table(
+        &client,
+        "filter%5Bmonthly_paise%5D%5Bgte%5D=100000&per_page=40",
+    )
+    .await;
+    assert_eq!(rows(&html), big);
+
+    // Sorted by what they pay, biggest first.
+    let mut by_fee: Vec<_> = seeds.iter().collect();
+    by_fee.sort_by_key(|seed| std::cmp::Reverse(seed.rupees));
+    assert!(by_fee[0].rupees > by_fee[1].rupees && by_fee[1].rupees > by_fee[2].rupees);
+    let html = table(&client, "sort=-monthly_paise&per_page=40").await;
+    let at: Vec<usize> = by_fee[..3]
+        .iter()
+        .map(|seed| html.find(&seed.name).expect("a customer on the page"))
+        .collect();
+    assert!(at[0] < at[1] && at[1] < at[2], "{at:?}");
+
+    // Page sizes the table offers, and pages.
+    assert_eq!(rows(&table(&client, "per_page=20").await), 20);
+    assert_eq!(
+        rows(&table(&client, "per_page=7").await),
+        10,
+        "a size it does not offer"
+    );
+    let one = table(&client, "page=1").await;
+    let two = table(&client, "page=2").await;
+    assert_eq!(rows(&two), 10);
+    let on_two: Vec<_> = seeds
+        .iter()
+        .filter(|seed| two.contains(&seed.name))
+        .collect();
+    assert!(on_two.iter().all(|seed| !one.contains(&seed.name)));
+
+    // What the table does not know is left out, not an error.
+    let html = table(&client, "filter%5Bnope%5D=1&sort=nope&per_page=40").await;
+    assert_eq!(rows(&html), 40);
+}
+
+#[tokio::test]
+async fn adding_a_customer_checks_the_form_and_then_shows_the_new_row() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    let form = page(&client, "/customers/new")
+        .send()
+        .await
+        .assert_status(200);
+    let form = form.text();
+    assert!(form.contains("name=\"email\"") && form.contains("action=\"/customers/new\""));
+
+    // The rules of the form: the words are the form's own.
+    let invalid = client
+        .post("/customers/new")
+        .header("accept", HTML)
+        .xsrf()
+        .form(&[
+            ("name", "A"),
+            ("email", "not-an-email"),
+            ("phone", "12"),
+            ("city", ""),
+            ("plan", "growth"),
+            ("status", "trial"),
+            ("monthly", "24,999"),
+            ("since", "2026-11-01"),
+        ])
+        .send()
+        .await;
+    assert_eq!(invalid.status(), 422);
+    let body = invalid.text();
+    for message in [
+        "Enter a name of 2 to 120 characters.",
+        "Enter a valid email address.",
+        "Enter a phone number with its country code.",
+        "Enter the city.",
+    ] {
+        assert!(body.contains(message), "{message}");
+    }
+    // What was typed stays in the form.
+    assert!(body.contains("not-an-email"));
+
+    // The rules only the server knows: a fee, and an email nobody else has.
+    let taken = seeds()[0].email.clone();
+    let response = add(&client, "Sneha Bajaj", &taken).await;
+    assert_eq!(response.status(), 422);
+    assert!(
+        response
+            .text()
+            .contains("A customer with this email already exists.")
+    );
+    let no_fee = client
+        .post("/customers/new")
+        .header("accept", HTML)
+        .xsrf()
+        .form(&[
+            ("name", "Sneha Bajaj"),
+            ("email", "sneha.bajaj@example.com"),
+            ("phone", "+91 98765 43210"),
+            ("city", "Ludhiana"),
+            ("plan", "growth"),
+            ("status", "trial"),
+            ("monthly", "0"),
+            ("since", "2026-11-01"),
+        ])
+        .send()
+        .await;
+    assert_eq!(no_fee.status(), 422);
+    assert!(no_fee.text().contains("Enter the monthly fee in rupees."));
+    assert_eq!(
+        rows(&table(&client, "search=sneha.bajaj&per_page=40").await),
+        0
+    );
+
+    // A good one is added, and the next page says so once.
+    let response = add(&client, "Sneha Bajaj", "Sneha.Bajaj@Example.com").await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(response.header("location"), Some("/customers"));
+    let list = table(&client, "").await;
+    assert!(list.contains("Sneha Bajaj was added."), "the toast");
+    let list = table(&client, "").await;
+    assert!(!list.contains("Sneha Bajaj was added."), "only once");
+    let found = table(&client, "search=sneha.bajaj&per_page=40").await;
+    assert_eq!(rows(&found), 1);
+    assert!(found.contains("Sneha Bajaj"));
+    assert!(found.contains("₹24,999"));
+
+    // It has a page, with the number as people read it and the email in lower case.
+    let path = customer_links(&found).remove(0);
+    let shown = page(&client, &path).send().await.assert_status(200).text();
+    assert!(shown.contains("+91 98765 43210"));
+    assert!(shown.contains("sneha.bajaj@example.com"));
+    // Another customer may not take its email, in any case.
+    let again = add(&client, "Someone Else", "SNEHA.BAJAJ@example.com").await;
+    assert_eq!(again.status(), 422);
+}
+
+#[tokio::test]
+async fn editing_a_customer_saves_it_and_keeps_the_email_unique() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    let found = table(&client, "search=Rajesh&per_page=40").await;
+    let path = customer_links(&found).remove(0);
+    let edit = page(&client, &format!("{path}/edit"))
+        .send()
+        .await
+        .assert_status(200);
+    let edit = edit.text();
+    assert!(
+        edit.contains("value=\"Rajesh Sharma\""),
+        "the form is filled in"
+    );
+    assert!(edit.contains(&format!("action=\"{path}/edit\"")));
+
+    // Its own email is not "taken".
+    let response = client
+        .post(&format!("{path}/edit"))
+        .header("accept", HTML)
+        .xsrf()
+        .form(&[
+            ("name", "Rajesh Sharma"),
+            ("email", "rajesh.sharma@example.com"),
+            ("phone", "+919876501000"),
+            ("city", "Delhi"),
+            ("plan", "scale"),
+            ("status", "active"),
+            ("monthly", "1,00,000"),
+            ("since", "2024-03-12"),
+            ("autopay", "true"),
+            ("notes", "Moved to Delhi."),
+        ])
+        .send()
+        .await;
+    assert_eq!(response.status(), 303, "{}", response.text());
+    assert_eq!(response.header("location"), Some(path.as_str()));
+    let shown = page(&client, &path).send().await.assert_status(200).text();
+    assert!(shown.contains("Delhi") && shown.contains("Moved to Delhi."));
+    assert!(shown.contains("₹1,00,000"));
+    assert!(shown.contains("Rajesh Sharma was saved."), "the toast");
+
+    // Somebody else's email is.
+    let response = client
+        .post(&format!("{path}/edit"))
+        .header("accept", HTML)
+        .xsrf()
+        .form(&customer("Rajesh Sharma", "sunita.verma@example.com"))
+        .send()
+        .await;
+    assert_eq!(response.status(), 422);
+
+    // A customer that is not there is a page that says so, in the shell.
+    let missing = page(&client, "/customers/00000000-0000-7000-8000-000000000000")
+        .send()
+        .await;
+    assert_eq!(missing.status(), 404);
+    assert!(missing.text().contains("Customers"), "the shell stays");
+}
+
+#[tokio::test]
+async fn the_live_stream_speaks_after_a_customer_is_added() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    // A guest gets no stream.
+    app.client()
+        .get("/customers/events")
+        .header("accept", "text/event-stream")
+        .send()
+        .await
+        .assert_status(401);
+    let response = client
+        .get("/customers/events")
+        .header("accept", "text/event-stream")
+        .send_stream()
+        .await;
+    assert_eq!(response.status(), 200);
+    let kind = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(kind.starts_with("text/event-stream"), "{kind}");
+    let mut stream = response.into_body().into_data_stream();
+
+    let added = add(&client, "Live Test", "live.test@example.com").await;
+    assert_eq!(added.status(), 303);
+
+    // A first comment, then the event the table and the figures wait for.
+    let mut heard = String::new();
+    while !heard.contains("event: customers") {
+        let chunk = tokio::time::timeout(Duration::from_secs(10), stream.next())
+            .await
+            .expect("the stream spoke in time")
+            .expect("the stream is still open")
+            .expect("a chunk");
+        heard.push_str(&String::from_utf8_lossy(&chunk));
+    }
+    assert!(heard.contains("ready"), "{heard}");
+}
+
+#[tokio::test]
+async fn a_post_without_the_token_or_from_another_site_is_refused() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    let no_token = client
+        .post("/customers/new")
+        .header("accept", HTML)
+        .form(&customer("No Token", "no.token@example.com"))
+        .send()
+        .await;
+    assert_eq!(no_token.status(), 403);
+    let other_site = client
+        .post("/customers/new")
+        .header("accept", HTML)
+        .header("sec-fetch-site", "cross-site")
+        .xsrf()
+        .form(&customer("Other Site", "other.site@example.com"))
+        .send()
+        .await;
+    assert_eq!(other_site.status(), 403);
+    for search in ["no.token", "other.site"] {
+        let html = table(&client, &format!("search={search}&per_page=40")).await;
+        assert_eq!(rows(&html), 0, "{search}");
+    }
+}
+
+#[tokio::test]
+async fn signing_out_ends_the_session_for_good() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+    page(&client, "/customers").send().await.assert_status(200);
+    let before = client
+        .cookie("navree_session")
+        .expect("a session cookie after signing in");
+
+    let out = client
+        .post("/sign-out")
+        .header("accept", HTML)
+        .xsrf()
+        .send()
+        .await;
+    assert_eq!(out.status(), 303);
+    assert_eq!(out.header("location"), Some("/sign-in"));
+
+    let response = page(&client, "/customers").send().await;
+    assert_eq!(response.status(), 303);
+    assert!(
+        response
+            .header("location")
+            .unwrap_or_default()
+            .starts_with("/sign-in?next=")
+    );
+
+    // The cookie the browser had before is worth nothing now.
+    let replay = app.client();
+    replay.set_cookie("navree_session", &before);
+    let response = page(&replay, "/customers").send().await;
+    assert_eq!(response.status(), 303);
+}
+
+#[tokio::test]
+async fn the_whole_journey() {
+    let (app, _guard) = app().await;
+    let client = app.client();
+
+    // A guest asks for the customers and is sent to sign in.
+    let response = page(&client, "/customers").send().await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(
+        response.header("location"),
+        Some("/sign-in?next=%2Fcustomers")
+    );
+
+    // A wrong password is a field error.
+    let response = post_sign_in(&client, DEMO_EMAIL, "wrong", "/customers").await;
+    assert_eq!(response.status(), 422);
+
+    // The right one goes on to the customers.
+    let response = client
+        .post("/sign-in")
+        .header("accept", HTML)
+        .xsrf()
+        .form(&[
+            ("email", DEMO_EMAIL),
+            ("password", DEMO_PASSWORD),
+            ("next", "/customers"),
+        ])
+        .send()
+        .await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(response.header("location"), Some("/customers"));
+
+    // The table has the demo customers; a search narrows it; a sort orders it.
+    assert_eq!(rows(&table(&client, "").await), 10);
+    assert_eq!(
+        rows(&table(&client, "search=Amritsar&per_page=40").await),
+        5
+    );
+    let html = table(&client, "sort=-monthly_paise&per_page=40").await;
+    assert!(html.find("Ashok Luthra") < html.find("Rahul Chauhan"));
+
+    // A customer is added, and found.
+    let response = add(&client, "Radhika Sood", "radhika.sood@example.com").await;
+    assert_eq!(response.status(), 303);
+    let found = table(&client, "search=radhika&per_page=40").await;
+    assert_eq!(rows(&found), 1);
+
+    // Signing out asks for sign-in again.
+    let out = client
+        .post("/sign-out")
+        .header("accept", HTML)
+        .xsrf()
+        .send()
+        .await;
+    assert_eq!(out.status(), 303);
+    let response = page(&client, "/customers").send().await;
+    assert_eq!(response.status(), 303);
+}

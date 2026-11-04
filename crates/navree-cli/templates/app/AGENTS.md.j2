@@ -15,9 +15,18 @@ dock.toml              the local services (the database) `navree dock up` runs
 src/main.rs            runs the app: `serve` by default, or any other command
 src/app.rs             the root module: every module, configured once
 src/abilities.rs       who may do what: permissions and ability rules
+{% if ui_navree %}
+src/ui/                the screens' shell, sign-in (auth.rs), live stream (live.rs)
+                       and formats (rupees, phone numbers, days)
+src/modules/customers/ the example feature drawn with Navree UI: table.rs,
+                       form.rs, pages.rs, home.rs, seed.rs
+{% endif %}
 src/modules/<name>/    feature modules: mod.rs, controller.rs, service.rs,
                        entity.rs, dto.rs, migrations/, tests/
 tests/                 tests that boot the whole app
+{% if ui_navree %}
+tests/journey.rs       a visitor's whole way through the screens, over HTTP
+{% endif %}
 {% if database == "sqlite" %}
 storage/               runtime data: the SQLite database, logs, uploads
 {% else %}
@@ -118,6 +127,28 @@ snake_case; module names are plural. Generators never overwrite a file.
   (`scope.query().paginate(uow, page)`).
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
+{% if ui_navree %}
+- **Screens.** Pages are drawn on the server with `navree::ui`; there is no
+  front-end project. A page is a handler that takes `AppShell` and returns an
+  `AppPage` (see `src/modules/customers/pages.rs`); its route is a `RouteDef`
+  marked `.authenticated()` and `.page()`, so a guest is sent to `/sign-in`
+  and back. A form is a struct deriving `Validate` and `Form`, drawn by
+  `FormView` and read by `Submit<T>`; a table is a struct deriving `TableRow`,
+  drawn by `DataTable` (see `form.rs` and `table.rs`). Lists use the one list
+  query: `search`, `filter[col][op]`, `sort`, `page` and `per_page`. Money is
+  stored in paise and shown with `ui::format::rupees` (`₹1,00,000`).
+- **Signing in.** `src/ui/auth.rs` is the only file that knows how a browser
+  signs in: pages use `CurrentAccount`, `Browser::sign_in` and
+  `Browser::sign_out`, and never touch the cookie, the session or the password
+  hasher. Keep it that way, so sign-in can change without touching the pages.
+- **Live updates.** After a change to data a screen shows, call
+  `Hub::nudge` once the unit of work commits (`uow.after_commit`), as
+  `CustomerService` does; tables and figures that follow the stream fetch
+  themselves again.
+- **Demo data.** `src/modules/customers/seed.rs` and the demo account in
+  `auth.rs` are made at boot outside production. Do not rely on them in
+  anything that runs in production.
+{% endif %}
 {% if database == "timescaledb" %}
 - **TimescaleDB.** The database is TimescaleDB (PostgreSQL with
   time-series hypertables), started by `navree dock up`; tests run on

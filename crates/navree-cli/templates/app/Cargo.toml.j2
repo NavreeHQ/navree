@@ -7,9 +7,16 @@ publish = false
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+{% if ui_navree %}
+futures-util = "0.3"
+http = "1"
+{% endif %}
 navree = {{ navree_dependency }}
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+{% if ui_navree %}
+tokio = { version = "1", features = ["sync", "time"] }
+{% endif %}
 uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]

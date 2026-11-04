@@ -9,13 +9,14 @@ use heck::ToSnakeCase;
 
 use crate::browser;
 use crate::check::{CheckOptions, run_check};
-use crate::cli::{Cli, Command};
+use crate::cli::{Cli, Command, MakeUiArgs};
 use crate::clock::Timestamp;
 use crate::dev::{self, DevOptions};
 use crate::dock;
 use crate::forward::{ProcessRunner, forward};
 use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make_module};
+use crate::make_ui::{UiOptions, UiReport, default_module, make_ui_item};
 use crate::names::{AppName, Name};
 use crate::new_app::{
     NavreeSource, NewApp, Repository, create_app, created_message, init_repository,
@@ -60,6 +61,9 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             finish(&root, &report);
             Ok(ExitCode::SUCCESS)
         }
+        Command::MakePage(args) => make_ui(cwd, MakeKind::Page, &args.item, args.public),
+        Command::MakeForm(args) => make_ui(cwd, MakeKind::Form, args, false),
+        Command::MakeTable(args) => make_ui(cwd, MakeKind::Table, args, false),
         Command::Dev(args) => {
             let root = run_root_of(cwd)?;
             dev::run(
@@ -261,6 +265,31 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
     }
 }
 
+/// `make:page`, `make:form` or `make:table`: the name may be given as
+/// `NewDeal`, `new_deal` or `new-deal`, and the module defaults to the app's
+/// only one.
+fn make_ui(
+    cwd: &Path,
+    kind: MakeKind,
+    args: &MakeUiArgs,
+    public: bool,
+) -> anyhow::Result<ExitCode> {
+    let root = app_root(cwd)?;
+    let module = match &args.module {
+        Some(module) => Name::parse("module", module)?,
+        None => default_module(&root, &args.path)?,
+    };
+    let name = Name::parse(kind.noun(), &args.name.to_snake_case())?;
+    let options = UiOptions {
+        public,
+        dry_run: args.dry_run,
+        force: args.force,
+    };
+    let report = make_ui_item(&root, &args.path, kind, &module, &name, &options)?;
+    finish_ui(&root, &report);
+    Ok(ExitCode::SUCCESS)
+}
+
 /// Success or failure as an exit code.
 fn exit_code(passed: bool) -> ExitCode {
     if passed {
@@ -341,6 +370,49 @@ fn finish(root: &Path, report: &MakeReport) {
         println!("  updated  {}", shown(root, path));
     }
     for hint in &report.hints {
+        println!("  next     {hint}");
+    }
+}
+
+/// Formats the generated Rust files and prints what happened, or with
+/// `--dry-run` what would happen, and the files that would be written.
+fn finish_ui(root: &Path, report: &UiReport) {
+    let made = &report.made;
+    if report.dry_run {
+        for path in &made.created {
+            println!("  would create     {}", shown(root, path));
+        }
+        for path in &report.overwritten {
+            println!("  would replace    {}", shown(root, path));
+        }
+        for path in &made.updated {
+            println!("  would update     {}", shown(root, path));
+        }
+        for hint in &made.hints {
+            println!("  next     {hint}");
+        }
+        println!("\nNothing was written (--dry-run). The files would be:\n");
+        print!("{}", report.files);
+        return;
+    }
+    let rust: Vec<PathBuf> = made
+        .created
+        .iter()
+        .chain(&report.overwritten)
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+        .cloned()
+        .collect();
+    format_rust(&rust);
+    for path in &made.created {
+        println!("  created  {}", shown(root, path));
+    }
+    for path in &report.overwritten {
+        println!("  replaced {}", shown(root, path));
+    }
+    for path in &made.updated {
+        println!("  updated  {}", shown(root, path));
+    }
+    for hint in &made.hints {
         println!("  next     {hint}");
     }
 }

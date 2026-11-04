@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, apiEvents, query, request, setWorkspace } from "./client";
+import { api, apiEvents, listQuery, request, setWorkspace } from "./client";
 import { ApiError, applyFieldErrors, errorMessage } from "./errors";
 
 function recording(response: Response) {
@@ -89,8 +89,28 @@ describe("the API client", () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
-  it("builds query strings from the defined values", () => {
-    expect(query({ status: "active", search: "", page: 2, per_page: undefined })).toBe("?status=active&page=2");
-    expect(query({})).toBe("");
+  // MOD-013
+  it("sends a list request with filter[name]=value and no flat filter", async () => {
+    const { fetch, calls } = recording(Response.json({ data: [], meta: { total: 0 } }));
+    setWorkspace("acme");
+
+    const list = listQuery({ filter: { status: "active", owner: undefined }, search: "web", page: 2, per_page: 20 });
+    await api.get(`/api/v1/projects${list}`, { fetch });
+
+    const sent = new URL(calls[0].url, "http://app.test");
+    expect(sent.pathname).toBe("/api/v1/projects");
+    expect(Object.fromEntries(sent.searchParams)).toEqual({
+      "filter[status]": "active",
+      search: "web",
+      page: "2",
+      per_page: "20",
+    });
+    expect(sent.searchParams.has("status")).toBe(false);
+  });
+
+  it("writes a list query in the canonical order and leaves out blank parts", () => {
+    const text = listQuery({ filter: { status: "archived", kind: "" }, sort: "-created_at,name", search: " ", page: 1 });
+    expect(text).toBe("?filter%5Bstatus%5D=archived&sort=-created_at%2Cname&page=1");
+    expect(listQuery({})).toBe("");
   });
 });

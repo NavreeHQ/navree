@@ -45,11 +45,53 @@ transport = "log"
 driver = "database"
 
 [auth]
+{% if ui_navree %}
+# Public sign-up at POST /api/auth/register is off: the screens are for your own
+# staff, and accounts come from the seeder (development) or from you. Turn it
+# on, and give new accounts only what they may do in src/abilities.rs, to let
+# people register.
+registration = false
+{% else %}
 # Public sign-up at POST /api/auth/register.
 registration = true
+{% endif %}
+{% if ui_navree %}
+
+[session]
+# A browser that signs in keeps its state on the server (src/ui/auth.rs). The
+# database store survives the restarts `navree dev` does on every save.
+store = "database"
+# The session cookie goes over plain HTTP while you develop. Production serves
+# HTTPS and sets APP_SESSION__SECURE=true.
+secure = false
+
+[ui]
+sign_in = "/sign-in"
+# A guest who asks for a page goes straight to sign-in, and back afterwards.
+sign_in_redirect = true
+
+[validation.phone]
+# Phone numbers typed without a country code are Indian numbers.
+default_region = "IN"
+{% endif %}
 
 [api]
 title = "{{ title }} API"
 # The Lighthouse and Logbook dashboards are pages, not API routes:
 # `navree check` doesn't ask them for #[api] docs.
+{% if ui_navree %}
+# Neither does it ask the pages: the screens, their forms and the toolkit's files.
+undocumented = [
+    "/_lighthouse*",
+    "/_logbook*",
+    "/_navree/*",
+    "/",
+    "/sign-in",
+    "/sign-out",
+    "/profile",
+    "/customers*",
+    "/fragments/*",
+]
+{% else %}
 undocumented = ["/_lighthouse*", "/_logbook*"]
+{% endif %}

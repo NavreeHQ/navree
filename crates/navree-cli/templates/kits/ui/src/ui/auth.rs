@@ -1,0 +1,210 @@
+//! How a browser signs in. This is the only file that knows.
+//!
+//! The pages ask this file three things and nothing else:
+//!
+//! - [`CurrentAccount`]: who is signed in. As a handler argument it answers
+//!   401 for a guest, which the error pages turn into a way to the sign-in
+//!   page and back. `Option<CurrentAccount>` is `None` for a guest.
+//! - [`Browser::sign_in`]: checks an email and a password and, when they are
+//!   right, signs this browser in.
+//! - [`Browser::sign_out`]: signs this browser out.
+//!
+//! [`Browser::csrf_token`] gives a plain form the token it posts back, so the
+//! form also works with JavaScript off.
+//!
+//! How it works now: the account is looked up in the `users` table of
+//! `AuthModule`, its password is checked with `AuthModule`'s hasher, and the
+//! signed-in user's id is kept in the server-side session that the browser's
+//! cookie names. [`BrowserStrategy`] tells the rest of the app who that is,
+//! so `.authenticated()` on a route and `CurrentUser` work as they do for
+//! calls made with a token.
+//!
+//! To sign in some other way, or when `AuthModule` offers cookie sign-in of
+//! its own, replace the bodies of `Browser::sign_in`, `Browser::sign_out` and
+//! `BrowserStrategy`. The pages, the shell and the tests stay as they are:
+//! they never touch the cookie, the session or the hasher.
+
+use std::convert::Infallible;
+use std::sync::Arc;
+
+use http::request::Parts;
+use navree::BoxFuture;
+use navree::auth::{AuthError, AuthService, CurrentUser, Strategy, two_factor_enabled};
+use navree::contracts::{AuthVia, Principal};
+use navree::http::AppError;
+use navree::http::extract::{FromRequestParts, OptionalFromRequestParts};
+use navree::injectable;
+use navree::kernel::{AppContext, BoxError};
+use navree::session::Session;
+use uuid::Uuid;
+
+/// The name of the account development starts with.
+pub const DEMO_NAME: &str = "Harpreet Singh";
+
+/// The email of the account development starts with.
+pub const DEMO_EMAIL: &str = "harpreet.singh@example.com";
+
+/// Its password. It exists in development only: the seeder that makes the
+/// account does not run when `env` is `production`.
+pub const DEMO_PASSWORD: &str = "demo-password-2026";
+
+/// What the server-side session keeps under this name: the signed-in user's id.
+const USER_KEY: &str = "user_id";
+
+/// The signed-in account of a request.
+#[derive(Clone, Debug)]
+pub struct CurrentAccount {
+    /// The user's id.
+    pub id: Uuid,
+    /// The name to show.
+    pub name: String,
+    /// The email address.
+    pub email: String,
+}
+
+impl FromRequestParts for CurrentAccount {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, AppError> {
+        let CurrentUser(user) = CurrentUser::from_request_parts(parts).await?;
+        Ok(CurrentAccount {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+        })
+    }
+}
+
+/// `Option<CurrentAccount>` is `None` for a guest.
+impl OptionalFromRequestParts for CurrentAccount {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Option<Self>, Infallible> {
+        Ok(<Self as FromRequestParts>::from_request_parts(parts)
+            .await
+            .ok())
+    }
+}
+
+/// Why a browser could not sign in.
+#[derive(Debug)]
+pub enum SignInError {
+    /// The email or the password is wrong. It says nothing about which, so a
+    /// visitor cannot find out which emails have an account.
+    Wrong,
+    /// The account may not sign in on this page; the reason is shown to the
+    /// visitor.
+    Refused(&'static str),
+    /// Something broke; the error is the answer.
+    Failed(Box<AppError>),
+}
+
+/// The browser making the request: sign in, sign out, and the token a plain
+/// form posts back. A handler takes it as an argument.
+#[derive(Clone)]
+pub struct Browser {
+    session: Session,
+    auth: Arc<AuthService>,
+}
+
+impl FromRequestParts for Browser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, AppError> {
+        let session = parts.extensions.get::<Session>().cloned().ok_or_else(|| {
+            AppError::internal("no session in the request: add SessionModule to the app")
+        })?;
+        let ctx = parts
+            .extensions
+            .get::<AppContext>()
+            .cloned()
+            .ok_or_else(|| AppError::internal("Browser used outside the navree pipeline"))?;
+        let auth = ctx.get::<AuthService>().await.map_err(|error| {
+            AppError::internal(format!("signing in needs AuthModule in the app: {error}"))
+        })?;
+        Ok(Browser { session, auth })
+    }
+}
+
+impl Browser {
+    /// The token a plain form posts back (`FormView::csrf`). The response also
+    /// carries it in the `XSRF-TOKEN` cookie, which the page's script sends
+    /// back as a header by itself.
+    pub fn csrf_token(&self) -> String {
+        self.session.csrf_token()
+    }
+
+    /// Signs this browser in as the account with `email` when `password` is
+    /// right. It starts a new session, so a session id seen before signing in
+    /// is useless afterwards.
+    pub async fn sign_in(
+        &self,
+        email: &str,
+        password: &str,
+    ) -> Result<CurrentAccount, SignInError> {
+        let user = match self.auth.validate_user(email, password).await {
+            Ok(user) => user,
+            Err(AuthError::InvalidCredentials) => return Err(SignInError::Wrong),
+            Err(error) => return Err(SignInError::Failed(Box::new(error.into_app_error()))),
+        };
+        if two_factor_enabled(&user) {
+            return Err(SignInError::Refused(
+                "This account asks for a second factor, which this page cannot take.",
+            ));
+        }
+        self.session.regenerate();
+        self.session
+            .insert(USER_KEY, &user.id)
+            .map_err(|error| SignInError::Failed(Box::new(AppError::internal(error))))?;
+        // Makes sure the response carries the XSRF-TOKEN cookie.
+        self.session.csrf_token();
+        Ok(CurrentAccount {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+        })
+    }
+
+    /// Signs this browser out: the session gets a new id and keeps nothing.
+    pub fn sign_out(&self) {
+        self.session.invalidate();
+    }
+}
+
+/// Tells the rest of the app who a browser is signed in as, so `.authenticated()`
+/// and `CurrentUser` see it like a call made with a token.
+#[injectable]
+pub struct BrowserStrategy;
+
+impl Strategy for BrowserStrategy {
+    fn name(&self) -> &'static str {
+        "browser"
+    }
+
+    fn authenticate<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+    ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
+        let principal = parts.extensions.get::<Session>().and_then(|session| {
+            let user_id = session.get::<Uuid>(USER_KEY)?;
+            Some(Principal {
+                user_id,
+                via: AuthVia::Session,
+                token_abilities: None,
+                session_id: Some(session.id()),
+            })
+        });
+        Box::pin(async move { Ok(principal) })
+    }
+}
+
+/// Makes the demo account if it does not exist. Development only: the caller
+/// checks the environment first.
+pub async fn ensure_demo_account(ctx: &AppContext) -> Result<(), BoxError> {
+    let auth = ctx.get::<AuthService>().await?;
+    if auth.find_by_email(DEMO_EMAIL).await?.is_none() {
+        auth.create_user(DEMO_NAME, DEMO_EMAIL, DEMO_PASSWORD)
+            .await?;
+    }
+    Ok(())
+}

@@ -1,12 +1,9 @@
-import { bff } from "@/lib/bff/server";
+import { navree } from "@/lib/navree";
 
 /**
  * The Helm admin panel (`/admin`, for super admins), served by the API and forwarded with the
- * same session, so it opens on this origin.
+ * same session, so it opens on this origin. `proxy.ts` sends a browser without a session to the
+ * sign-in page first.
  */
-function handle(request: Request): Promise<Response> {
-  return bff.admin(request);
-}
-
 export const dynamic = "force-dynamic";
-export { handle as DELETE, handle as GET, handle as HEAD, handle as PATCH, handle as POST, handle as PUT };
+export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;

@@ -6,7 +6,7 @@ use anyhow::{Context, bail};
 use serde::Serialize;
 
 use crate::clock::Timestamp;
-use crate::kits::{Kit, kit_files};
+use crate::kits::{Kit, kit_files, ui_files};
 use crate::names::AppName;
 use crate::scaffold::FileSet;
 use crate::templates::{TemplateError, render};
@@ -17,10 +17,23 @@ pub enum Ui {
     /// A Next.js app in `web/` that talks to the API through its own server
     /// (backend-for-frontend), keeping the tokens in httpOnly cookies.
     Next,
+    /// Screens drawn on the server with Navree UI, in `src/` next to the API:
+    /// sign-in, a customers table and forms, a home page with live figures. No
+    /// `web/` folder and no Node.
+    Navree,
     /// API only.
     #[default]
     None,
 }
+
+/// The email of the account `--ui navree` apps start with in development.
+/// `src/ui/auth.rs` of the Navree UI template holds the same value, and a
+/// test keeps the two equal.
+pub const DEMO_EMAIL: &str = "harpreet.singh@example.com";
+
+/// Its password: for development only, since the seeder that makes the
+/// account never runs when `env` is `production`.
+pub const DEMO_PASSWORD: &str = "demo-password-2026";
 
 /// The database a new app is set up for: its `database.url`, the driver
 /// feature of its `navree` dependency and, for PostgreSQL, the `dock.toml`
@@ -184,6 +197,37 @@ impl NavreeSource {
         }
     }
 
+    /// The version range of the `@navree/*` packages that a front end written
+    /// by a published CLI depends on.
+    pub const JS_RANGE: &'static str = "^1.0.0";
+
+    /// The directory of the Navree JavaScript packages (`packages/js` of the
+    /// checkout), with `/` separators, when `navree` comes from a local
+    /// checkout. A front end links `@navree/next`, `@navree/client` and the
+    /// rest from there until the packages are published; `None` for a
+    /// published version, where the front end asks npm for
+    /// [`JS_RANGE`](NavreeSource::JS_RANGE).
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    ///
+    /// use navree_cli::new_app::NavreeSource;
+    ///
+    /// let local = NavreeSource::Path(PathBuf::from("/src/navree/crates/navree"));
+    /// assert_eq!(local.js_dir().as_deref(), Some("/src/navree/packages/js"));
+    /// assert_eq!(NavreeSource::Version("1.0.0".to_owned()).js_dir(), None);
+    /// ```
+    pub fn js_dir(&self) -> Option<String> {
+        match self {
+            NavreeSource::Path(facade) => {
+                let checkout = facade.parent()?.parent()?;
+                let dir = checkout.join("packages").join("js");
+                Some(plain_path(&dir.to_string_lossy()).replace('\\', "/"))
+            }
+            NavreeSource::Version(_) => None,
+        }
+    }
+
     /// The right-hand side of `navree = ...` with the default features
     /// off, for `[workspace.dependencies]`: each member turns on what it
     /// uses (`{ path = "..", default-features = false }`).
@@ -276,6 +320,16 @@ struct AppContext {
     navree_test_dependency: String,
     users_migration: String,
     ui_next: bool,
+    /// Whether the app draws its screens with Navree UI (`--ui navree`).
+    ui_navree: bool,
+    /// The email and password of the demo account (`--ui navree`).
+    demo_email: &'static str,
+    demo_password: &'static str,
+    /// Where the `@navree/*` packages are linked from (`packages/js` of the
+    /// checkout, `/` separators); `None` when `navree` is a published version.
+    navree_js_dir: Option<String>,
+    /// The npm range of the `@navree/*` packages for a published version.
+    navree_js_range: &'static str,
     /// `timescaledb`, `postgres`, `mysql` or `sqlite`.
     database: &'static str,
     database_url: String,
@@ -299,6 +353,11 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
             .dependency_with_features(&app.database.feature().into_iter().collect::<Vec<_>>()),
         users_migration: format!("{}_create_user_profiles_table", now.migration_prefix()),
         ui_next: app.ui == Ui::Next,
+        ui_navree: app.ui == Ui::Navree,
+        demo_email: DEMO_EMAIL,
+        demo_password: DEMO_PASSWORD,
+        navree_js_dir: app.navree.js_dir(),
+        navree_js_range: NavreeSource::JS_RANGE,
         database: app.database.key(),
         database_url: app.database.url(&crate_name),
         dock: app.database.runs_in_dock(),
@@ -359,28 +418,28 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
     if ctx.ui_next {
         for (template, path) in [
             ("web/package.json", "web/package.json"),
+            ("web/pnpm-workspace.yaml", "web/pnpm-workspace.yaml"),
             ("web/tsconfig.json", "web/tsconfig.json"),
             ("web/next.config.ts", "web/next.config.ts"),
             ("web/env.example", "web/.env.example"),
             ("web/README.md", "web/README.md"),
-            ("web/lib/bff.ts", "web/lib/bff.ts"),
+            ("web/lib/navree.ts", "web/lib/navree.ts"),
+            ("web/proxy.ts", "web/proxy.ts"),
             ("web/app/layout.tsx", "web/app/layout.tsx"),
             ("web/app/page.tsx", "web/app/page.tsx"),
+            ("web/app/sign-out.tsx", "web/app/sign-out.tsx"),
             ("web/app/login/page.tsx", "web/app/login/page.tsx"),
-            (
-                "web/app/api/auth/login/route.ts",
-                "web/app/api/auth/login/route.ts",
-            ),
-            (
-                "web/app/api/auth/logout/route.ts",
-                "web/app/api/auth/logout/route.ts",
-            ),
             (
                 "web/app/api/proxy/route.ts",
                 "web/app/api/[...path]/route.ts",
             ),
         ] {
             files.add(path, render(template, &ctx)?);
+        }
+    }
+    if ctx.ui_navree {
+        for file in ui_files(app, now)?.iter() {
+            files.add(file.path.clone(), file.contents.clone());
         }
     }
     Ok(files)
@@ -414,6 +473,14 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
     if let NavreeSource::Path(path) = &app.navree {
         out.push_str(&format!("It depends on navree at {}.\n", path.display()));
     }
+    // Until they are published, the front end links the Navree packages from
+    // the checkout, so they are installed and built there once.
+    let js_steps = app.navree.js_dir().map(|dir| {
+        (
+            format!("pnpm --dir {dir} install"),
+            format!("pnpm --dir {dir} build"),
+        )
+    });
     let timescale = app.database == Database::Timescaledb;
     let (steps, width): (Vec<(&str, &str)>, usize) = match app.kit {
         Some(kit) => {
@@ -427,21 +494,25 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
                 ("navree dock up", services),
                 ("navree key:generate", "then set APP_KEY in .env"),
             ];
-            steps.extend_from_slice(match kit {
-                Kit::Saas => &[
-                    ("navree migrate:fresh --seed", "tables and a demo workspace"),
-                    ("pnpm --dir web install", "the web app's packages"),
-                    ("navree dev", "API on :8080, web app on :3000"),
-                ][..],
-                Kit::Api => &[
+            match kit {
+                Kit::Saas => {
+                    steps.push(("navree migrate:fresh --seed", "tables and a demo workspace"));
+                    if let Some((install, build)) = &js_steps {
+                        steps.push((install.as_str(), "the Navree packages (not on npm yet)"));
+                        steps.push((build.as_str(), "once; the web app links them"));
+                    }
+                    steps.push(("pnpm --dir web install", "the web app's packages"));
+                    steps.push(("navree dev", "API on :8080, web app on :3000"));
+                }
+                Kit::Api => steps.extend_from_slice(&[
                     ("navree migrate:fresh --seed", "tables and a demo workspace"),
                     ("navree dev", "API on :8080, reference at /api/docs"),
-                ],
-                Kit::Micro => &[
+                ]),
+                Kit::Micro => steps.extend_from_slice(&[
                     ("navree migrate", "the invoices table"),
                     ("navree dev", "handlers on NATS, health on :8080"),
-                ],
-            });
+                ]),
+            }
             (steps, 30)
         }
         None => {
@@ -453,12 +524,20 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
             let mut steps: Vec<(&str, &str)> = database.into_iter().collect();
             steps.push(("navree key:generate", "then set APP_KEY in .env"));
             if app.ui == Ui::Next {
+                if let Some((install, build)) = &js_steps {
+                    steps.push((install.as_str(), "the Navree packages (not on npm yet)"));
+                    steps.push((build.as_str(), "once; the front end links them"));
+                }
                 steps.push((
-                    "npm --prefix web install",
+                    "pnpm --dir web install",
                     "the front end; `navree dev` starts it",
                 ));
             }
-            steps.push(("navree dev", "http://127.0.0.1:8080/api/docs"));
+            if app.ui == Ui::Navree {
+                steps.push(("navree dev", "http://127.0.0.1:8080"));
+            } else {
+                steps.push(("navree dev", "http://127.0.0.1:8080/api/docs"));
+            }
             (steps, 26)
         }
     };
@@ -466,6 +545,11 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
     out.push_str(&format!("  cd {package}\n"));
     for (command, comment) in steps {
         out.push_str(&format!("  {command:<width$} # {comment}\n"));
+    }
+    if app.kit.is_none() && app.ui == Ui::Navree {
+        out.push_str(&format!(
+            "\nSign in at http://127.0.0.1:8080/sign-in as {DEMO_EMAIL} with the password {DEMO_PASSWORD}.\nThe account exists in development only.\n"
+        ));
     }
     if app.kit.is_none() && app.database == Database::Mysql {
         out.push_str(&format!(
@@ -527,6 +611,13 @@ pub fn write_harbor_key(root: &Path) -> anyhow::Result<()> {
 /// Creates the app in `parent/<name>` and returns its directory. The
 /// directory must not exist or be empty.
 pub fn create_app(parent: &Path, app: &NewApp, now: Timestamp) -> anyhow::Result<PathBuf> {
+    if let Some(kit) = app.kit
+        && app.ui == Ui::Navree
+    {
+        bail!(
+            "--ui navree goes with the minimal app: the {kit} kit brings its own front end (or none), so leave out --kit, or leave out --ui navree"
+        );
+    }
     if let Some(kit) = app.kit
         && app.ui == Ui::Next
         && !kit.has_web()

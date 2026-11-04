@@ -3,9 +3,18 @@
 //! [`app`] assembles the root module; `src/main.rs` runs it and the tests in
 //! `tests/` boot it. Features live in `src/modules/<name>/`
 //! (`navree make:module <name> --crud` adds one).
+{% if ui_navree %}
+//!
+//! The screens are drawn on the server with Navree UI: `src/ui/` holds the
+//! shell, sign-in and the live stream, and `src/modules/customers/` the pages
+//! of the example feature.
+{% endif %}
 
 pub mod abilities;
 pub mod modules;
+{% if ui_navree %}
+pub mod ui;
+{% endif %}
 
 mod app;
 

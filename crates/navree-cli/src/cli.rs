@@ -92,6 +92,15 @@ pub enum Command {
     /// Generate a Helm admin-panel resource for a model of a module (resources/MODEL.rs).
     #[command(name = "make:resource")]
     MakeResource(MakeResourceArgs),
+    /// Generate a Navree UI page in a module (pages/NAME.rs): a GET route in the app's shell, with its test.
+    #[command(name = "make:page")]
+    MakePage(MakePageArgs),
+    /// Generate a form in a module (forms/NAME.rs): a struct with its rules, and the handlers that draw and read it.
+    #[command(name = "make:form")]
+    MakeForm(MakeUiArgs),
+    /// Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler.
+    #[command(name = "make:table")]
+    MakeTable(MakeUiArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
     /// Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations).
@@ -189,7 +198,7 @@ impl Command {
     }
 }
 
-/// `navree new <name> [--kit saas|api|micro] [--ui next|none] [--database <db>] [--navree-path <path>]`.
+/// `navree new <name> [--kit saas|api|micro] [--ui next|navree|none] [--database <db>] [--navree-path <path>]`.
 #[derive(Debug, Args)]
 pub struct NewArgs {
     /// The app (package) name: lower-case letters, digits, `-` and `_`.
@@ -198,9 +207,11 @@ pub struct NewArgs {
     /// alone) or `micro` (a microservice); default: the minimal app.
     #[arg(long, value_enum, value_name = "KIT")]
     pub kit: Option<Kit>,
-    /// The front end to create next to the API. With a kit, only `saas`
-    /// has one, and it is Next.js (`--kit saas --ui next` is the same as
-    /// `--kit saas`).
+    /// The front end to create next to the API: `next` (a Next.js app in
+    /// `web/`), `navree` (screens drawn on the server with Navree UI, in
+    /// `src/`; no Node) or `none`. With a kit, only `saas` has a front end,
+    /// and it is Next.js (`--kit saas --ui next` is the same as `--kit saas`);
+    /// `--ui navree` goes with no kit.
     #[arg(long, value_enum, default_value_t = Ui::None)]
     pub ui: Ui,
     /// The database: TimescaleDB (PostgreSQL with time-series hypertables,
@@ -251,6 +262,38 @@ pub struct MakeResourceArgs {
     /// The directory holding feature modules, relative to the app.
     #[arg(long, default_value = MODULES_DIR)]
     pub path: String,
+}
+
+/// `navree make:form|table <Name> [--module <module>] [--path src/modules]
+/// [--dry-run] [--force]`.
+#[derive(Debug, Args)]
+pub struct MakeUiArgs {
+    /// The name, as `new_deal` or `NewDeal`.
+    pub name: String,
+    /// The module (a directory under --path, created by make:module); default: the app's only module.
+    #[arg(long, value_name = "MODULE")]
+    pub module: Option<String>,
+    /// The directory holding feature modules, relative to the app.
+    #[arg(long, default_value = MODULES_DIR)]
+    pub path: String,
+    /// Say what would be created and edited, and write nothing.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Replace the files that exist.
+    #[arg(long)]
+    pub force: bool,
+}
+
+/// `navree make:page <Name> [--module <module>] [--public] [--path src/modules]
+/// [--dry-run] [--force]`.
+#[derive(Debug, Args)]
+pub struct MakePageArgs {
+    /// The name and the module.
+    #[command(flatten)]
+    pub item: MakeUiArgs,
+    /// Anyone may open the page, not only signed-in users.
+    #[arg(long)]
+    pub public: bool,
 }
 
 /// `navree make:model <module> <Name> [--migration] [--factory] [--seeder]
@@ -534,6 +577,10 @@ mod tests {
             panic!("expected new");
         };
         assert_eq!(args.ui, Ui::None);
+        let Command::New(args) = parse(&["new", "blog", "--ui", "navree"]) else {
+            panic!("expected new");
+        };
+        assert_eq!(args.ui, Ui::Navree);
         let Command::New(args) = parse(&["new", "blog"]) else {
             panic!("expected new");
         };
@@ -635,6 +682,71 @@ mod tests {
         assert_eq!(parsed.make_item().unwrap().2.event, Some("post_published"));
         let parsed = parse(&["make:factory", "crm", "vip_deal", "--model", "deal"]);
         assert_eq!(parsed.make_item().unwrap().2.model, Some("deal"));
+    }
+
+    #[test]
+    fn every_ui_kind_has_a_command() {
+        for kind in MakeKind::UI {
+            let command = format!("make:{}", kind.noun());
+            let name = match parse(&[&command, "dashboard"]) {
+                Command::MakePage(args) => args.item.name,
+                Command::MakeForm(args) | Command::MakeTable(args) => args.name,
+                other => panic!("{command}: {other:?}"),
+            };
+            assert_eq!(name, "dashboard", "{command}");
+        }
+        // They take `<Name> [--module]`, not `<module> <name>`, so they are
+        // not among the kinds `make_item` reads.
+        assert!(parse(&["make:form", "new_deal"]).make_item().is_none());
+        assert!(!MakeKind::ALL.iter().any(|kind| MakeKind::UI.contains(kind)));
+    }
+
+    #[test]
+    fn make_ui_options() {
+        let Command::MakePage(args) = parse(&["make:page", "Dashboard"]) else {
+            panic!("expected make:page");
+        };
+        assert_eq!(args.item.name, "Dashboard");
+        assert_eq!(args.item.module, None);
+        assert_eq!(args.item.path, "src/modules");
+        assert!(!args.public && !args.item.dry_run && !args.item.force);
+        let Command::MakePage(args) = parse(&[
+            "make:page",
+            "about",
+            "--module",
+            "site",
+            "--public",
+            "--dry-run",
+            "--force",
+            "--path",
+            "src/features",
+        ]) else {
+            panic!("expected make:page");
+        };
+        assert_eq!(args.item.module.as_deref(), Some("site"));
+        assert_eq!(args.item.path, "src/features");
+        assert!(args.public && args.item.dry_run && args.item.force);
+        let Command::MakeTable(args) = parse(&["make:table", "deals", "--module=crm", "--dry-run"])
+        else {
+            panic!("expected make:table");
+        };
+        assert_eq!(args.module.as_deref(), Some("crm"));
+        assert!(args.dry_run && !args.force);
+        // `<module> <name>` is the other generators' form; a second name is a mistake.
+        assert!(Cli::try_parse_from(["navree", "make:page", "site", "about"]).is_err());
+        // Only a page can be public.
+        assert!(Cli::try_parse_from(["navree", "make:form", "new_deal", "--public"]).is_err());
+    }
+
+    #[test]
+    fn the_help_lists_the_ui_generators() {
+        let help = Cli::try_parse_from(["navree", "--help"])
+            .unwrap_err()
+            .to_string();
+        for command in ["make:page", "make:form", "make:table"] {
+            assert!(help.contains(command), "{help}");
+        }
+        assert!(help.contains("forms/NAME.rs"), "{help}");
     }
 
     #[test]

@@ -1,0 +1,23 @@
+//! The shell: the sidebar, the top bar and the user menu every page sits in.
+
+use navree::ui::{NavGroup, NavItem, Shell, UserMenu, icons};
+
+/// The app's one shell. `UiAppModule` registers it, and a page draws itself in
+/// it by taking the `AppShell` extractor.
+///
+/// Add a link by adding a `NavItem` to a group; give every top-level item an
+/// icon, since the folded sidebar shows only that. The user menu is the same
+/// for everyone: the page `/profile` says who is signed in.
+pub fn shell() -> Shell {
+    Shell::new("{{ title }}")
+        .context("Customer desk")
+        .group(NavGroup::plain().item(NavItem::new("Home", "/").icon(icons::HOUSE)))
+        .group(
+            NavGroup::new("Sales").item(NavItem::new("Customers", "/customers").icon(icons::USERS)),
+        )
+        .user(
+            UserMenu::new("Account", "Signed in")
+                .link("Profile", "/profile")
+                .action("Sign out", "/sign-out"),
+        )
+}

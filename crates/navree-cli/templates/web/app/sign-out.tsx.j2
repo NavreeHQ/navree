@@ -1,0 +1,16 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+
+/** Ends the session at Navree, clears the cookies and goes to the sign-in page. */
+export function SignOut() {
+  const router = useRouter();
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  return <button onClick={signOut}>Sign out</button>;
+}

@@ -1,3 +1,6 @@
 //! Feature modules, one directory each (`navree make:module <name>` adds one).
 
+{% if ui_navree %}
+pub mod customers;
+{% endif %}
 pub mod users;

@@ -1,35 +1,56 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, Suspense, useState } from "react";
 
 /** What to show for an error `code` (the place to plug in translations). */
 const MESSAGES: Record<string, string> = {
   invalid_credentials: "Wrong email or password.",
   too_many_login_attempts: "Too many attempts. Wait a minute and try again.",
+  invalid_two_factor_code: "That code is not right. Try the next one from your app.",
+  two_factor_expired: "Your sign-in attempt expired. Sign in again.",
 };
 
-export default function Login() {
+/** `next` when it is a path on this site (never an open redirect), else `/`. */
+function safeNext(next: string | null): string {
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+}
+
+/** Posts JSON to the app's own server, which keeps the tokens in httpOnly cookies. */
+function send(path: string, body: unknown): Promise<Response> {
+  return fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}
+
+function SignIn() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
+  const [step, setStep] = useState<"password" | "code">("password");
   const [failed, setFailed] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
-    });
-    if (response.ok) {
-      router.push("/");
-    } else {
-      const body = (await response.json().catch(() => null)) as {
-        message?: string | string[];
-        code?: string;
-      } | null;
+    const response =
+      step === "password"
+        ? await send("/api/auth/login", { email: form.get("email"), password: form.get("password") })
+        : await send("/api/auth/2fa/verify", { code: String(form.get("code") ?? "").replace(/\s+/g, "") });
+    const body = (await response.json().catch(() => null)) as {
+      two_factor_required?: boolean;
+      message?: string | string[];
+      code?: string;
+    } | null;
+
+    if (!response.ok) {
       const known = body?.code ? MESSAGES[body.code] : undefined;
       setFailed(known ?? [body?.message ?? "Sign-in failed"].flat().join(", "));
+      if (body?.code === "two_factor_expired") setStep("password");
+    } else if (body?.two_factor_required) {
+      // The password was right; the account asks for a code from its authenticator app.
+      setFailed(null);
+      setStep("code");
+    } else {
+      router.push(next);
+      router.refresh();
     }
   }
 
@@ -37,19 +58,37 @@ export default function Login() {
     <main>
       <h1>Sign in</h1>
       <form onSubmit={submit}>
-        <p>
-          <label>
-            Email <input name="email" type="email" autoComplete="email" required />
-          </label>
-        </p>
-        <p>
-          <label>
-            Password <input name="password" type="password" autoComplete="current-password" required />
-          </label>
-        </p>
+        {step === "password" ? (
+          <>
+            <p>
+              <label>
+                Email <input name="email" type="email" autoComplete="email" required />
+              </label>
+            </p>
+            <p>
+              <label>
+                Password <input name="password" type="password" autoComplete="current-password" required />
+              </label>
+            </p>
+          </>
+        ) : (
+          <p>
+            <label>
+              Authentication code <input name="code" autoComplete="one-time-code" inputMode="numeric" required />
+            </label>
+          </p>
+        )}
         {failed && <p role="alert">{failed}</p>}
-        <button type="submit">Sign in</button>
+        <button type="submit">{step === "password" ? "Sign in" : "Verify"}</button>
       </form>
     </main>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense>
+      <SignIn />
+    </Suspense>
   );
 }

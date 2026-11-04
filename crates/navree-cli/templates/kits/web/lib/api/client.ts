@@ -1,6 +1,6 @@
 /**
  * The browser's API client. Every call is same-origin: the backend-for-frontend
- * (`lib/bff`) forwards it to the Navree API with the bearer token from the httpOnly
+ * (`@navree/next`, mounted in `app/api`) forwards it to the Navree API with the bearer token from the httpOnly
  * cookie. Calls carry `X-Workspace` with the workspace of the current `/w/<slug>/`
  * URL, which the API's `InWorkspace` guard resolves.
  */
@@ -60,12 +60,31 @@ export const api = {
   delete: <T = void>(path: string, options?: RequestOptions) => request<T>("DELETE", path, undefined, options),
 };
 
-/** A query string from the defined values: `query({status: "active", page: 2})` is `?status=active&page=2`. */
-export function query(params: Record<string, string | number | null | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+/** The parts of a list request, in the one list grammar every Navree list reads. */
+export interface ListParams {
+  /** Each entry is sent as `filter[name]=value`; undefined, null and blank values are left out. */
+  filter?: Record<string, string | number | boolean | null | undefined>;
+  /** Fields to sort by, a leading `-` for descending: `-created_at,name`. */
+  sort?: string;
+  search?: string | null;
+  page?: number;
+  per_page?: number;
+}
+
+/**
+ * The query string of a list request: `listQuery({ filter: { status: "active" }, search: "web", page: 2 })` is
+ * `?filter%5Bstatus%5D=active&search=web&page=2`. A flat `?status=active` is not part of the grammar and the
+ * API ignores it.
+ */
+export function listQuery({ filter, sort, search, page, per_page }: ListParams): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(filter ?? {})) {
+    if (value !== undefined && value !== null && value !== "") params.append(`filter[${name}]`, String(value));
   }
-  const text = search.toString();
+  if (sort) params.set("sort", sort);
+  if (search?.trim()) params.set("search", search);
+  if (page !== undefined) params.set("page", String(page));
+  if (per_page !== undefined) params.set("per_page", String(per_page));
+  const text = params.toString();
   return text ? `?${text}` : "";
 }

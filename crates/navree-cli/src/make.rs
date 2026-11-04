@@ -258,10 +258,24 @@ pub enum MakeKind {
     Factory,
     /// `seeders/<name>.rs`: a seeder, registered with the module.
     Seeder,
+    /// `pages/<name>.rs`: a Navree UI page (`GET /<name>` in the app's shell),
+    /// registered with the module, with its test. Made by [`crate::make_ui`].
+    Page,
+    /// `forms/<name>.rs`: a form struct with its rules, and the handlers that
+    /// draw and read it. Made by [`crate::make_ui`].
+    Form,
+    /// `tables/<name>.rs`: a data table row with its handler. Made by
+    /// [`crate::make_ui`].
+    Table,
 }
 
 impl MakeKind {
-    /// Every kind, in `navree help` order.
+    /// The kinds of Navree UI. They take `<Name> [--module <module>]` and the
+    /// `--dry-run` and `--force` options, not `<module> <name>`, so they are
+    /// not in [`MakeKind::ALL`].
+    pub const UI: [MakeKind; 3] = [MakeKind::Page, MakeKind::Form, MakeKind::Table];
+
+    /// Every kind that takes `<module> <name>`, in `navree help` order.
     pub const ALL: [MakeKind; 17] = [
         MakeKind::Controller,
         MakeKind::Service,
@@ -302,6 +316,9 @@ impl MakeKind {
             MakeKind::Model => "model",
             MakeKind::Factory => "factory",
             MakeKind::Seeder => "seeder",
+            MakeKind::Page => "page",
+            MakeKind::Form => "form",
+            MakeKind::Table => "table",
         }
     }
 
@@ -325,11 +342,14 @@ impl MakeKind {
             MakeKind::Model => "models",
             MakeKind::Factory => "factories",
             MakeKind::Seeder => "seeders",
+            MakeKind::Page => "pages",
+            MakeKind::Form => "forms",
+            MakeKind::Table => "tables",
         }
     }
 
     /// The first line of a new `<dir>/mod.rs`.
-    fn dir_doc(self, module_words: &str) -> String {
+    pub(crate) fn dir_doc(self, module_words: &str) -> String {
         let what = match self {
             MakeKind::Controller => "HTTP controllers",
             MakeKind::Service => "Services",
@@ -348,6 +368,9 @@ impl MakeKind {
             MakeKind::Model => "ORM models",
             MakeKind::Factory => "Model factories",
             MakeKind::Seeder => "Seeders",
+            MakeKind::Page => "UI pages",
+            MakeKind::Form => "Forms",
+            MakeKind::Table => "Data tables",
         };
         format!("//! {what} of the {module_words} module.\n")
     }
@@ -564,11 +587,11 @@ const MAX_WIDTH: usize = 100;
 const FN_CALL_WIDTH: usize = 60;
 
 /// The indentation of statements in a module's `wire` method.
-const WIRE_INDENT: usize = 8;
+pub(crate) const WIRE_INDENT: usize = 8;
 
 /// `path::<generics>(args);` laid out as rustfmt would at `indent`: on one
 /// line when it fits, else one generic argument per line.
-fn generic_call(path: &str, generics: &[String], args: &str, indent: usize) -> String {
+pub(crate) fn generic_call(path: &str, generics: &[String], args: &str, indent: usize) -> String {
     let line = format!("{path}::<{}>({args});", generics.join(", "));
     if indent + line.len() <= MAX_WIDTH {
         return line;
@@ -725,6 +748,11 @@ pub fn make_item(
     options: &MakeOptions,
     now: Timestamp,
 ) -> anyhow::Result<MakeReport> {
+    if MakeKind::UI.contains(&kind) {
+        // Pages, forms and tables write and wire themselves differently.
+        let ui = crate::make_ui::UiOptions::default();
+        return Ok(crate::make_ui::make_ui_item(root, modules_dir, kind, module, name, &ui)?.made);
+    }
     let module_dir = join(root, modules_dir).join(module.snake());
     let module_rs = module_dir.join("mod.rs");
     if !module_rs.is_file() {

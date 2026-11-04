@@ -1,14 +1,61 @@
 # {{ title }} web
 
-The Next.js front end of {{ title }}. The browser talks only to this server;
-route handlers in `app/api` forward to the Navree API (`NAVREE_API_URL`) and keep
-the JWTs in httpOnly cookies (`lib/bff.ts`).
+The Next.js front end of {{ title }}. The browser talks only to this server. `@navree/next` is its
+backend-for-frontend: the route handler in `app/api` keeps the Navree JWTs in httpOnly cookies,
+refreshes them, checks the `Origin` of every write and forwards `/api/*` to the Navree API
+(`NAVREE_API_URL`). `proxy.ts` keeps pages behind sign-in, and `navree.auth()` gives a server
+component the signed-in user (`app/page.tsx`).
 
 ```sh
 cp .env.example .env.local
-npm install
-npm run dev        # http://localhost:3000, with `navree dev` running in the app root
+{% if navree_js_dir %}
+pnpm --dir {{ navree_js_dir }} install   # once: the Navree packages
+pnpm --dir {{ navree_js_dir }} build
+{% endif %}
+pnpm install
+pnpm dev        # http://localhost:3000, with `navree dev` running in the app root
 ```
 
 Accounts: `POST /api/auth/register` on the API (when `auth.registration` is
 on), then sign in at http://localhost:3000/login.
+
+## The Navree packages
+
+{% if navree_js_dir %}
+`@navree/next` and `@navree/client` are not on npm yet. `package.json` links them from the Navree
+checkout this app was made from (`{{ navree_js_dir }}`). The choice, and what it needs:
+
+- The packages ship a built `dist/`, so build them once (the two `pnpm --dir` commands above), and
+  again when their source changes.
+- A link is a symlink, so it never goes stale and pnpm needs nothing from the registry for it. A copy
+  of the packages (`file:`) could not install, because they depend on each other with `workspace:*`,
+  which only resolves inside `packages/js`. npm does not read `link:` either, so this app uses pnpm.
+- A linked package sits outside this directory, and its own `node_modules` holds its own `react`,
+  `react-dom` and `next`. So `next.config.ts` sets Next's root to the directory that holds both this
+  app and the checkout (`turbopack.root`, `outputFileTracingRoot`) and compiles the packages with the
+  app (`transpilePackages`). Next resolves `react` and `react-dom` for the whole bundle to its own
+  copy, so the linked components run on one React.
+- If you move this app or the checkout, change the path in `package.json` and `next.config.ts`.
+
+When the packages are published, replace the two `link:` paths with version ranges
+(`"@navree/next": "{{ navree_js_range }}"`) and delete the `turbopack`, `outputFileTracingRoot` and
+`transpilePackages` settings in `next.config.ts`.
+{% else %}
+`package.json` asks npm for `@navree/next` and `@navree/client` at `{{ navree_js_range }}`. They are
+not on npm yet, so until they are published, install them from a Navree checkout: build them
+(`pnpm --dir <checkout>/packages/js install`, then `build`) and replace the two ranges in
+`package.json` with `link:<checkout>/packages/js/next` and `link:<checkout>/packages/js/client`.
+
+A linked package sits outside this directory, so `next.config.ts` then needs Next's root to be the
+directory that holds both this app and the checkout, and the packages compiled with the app:
+
+```ts
+const nextConfig: NextConfig = {
+  turbopack: { root: "/path/that/holds/both" },
+  outputFileTracingRoot: "/path/that/holds/both",
+  transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
+};
+```
+
+Once the packages are published, none of this is needed.
+{% endif %}

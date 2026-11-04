@@ -1,8 +1,9 @@
-import { proxy } from "@/lib/bff";
+import { navree } from "@/lib/navree";
 
-// Every other `/api/*` request goes to Navree with the access token.
-export const GET = proxy;
-export const POST = proxy;
-export const PUT = proxy;
-export const PATCH = proxy;
-export const DELETE = proxy;
+/**
+ * Sign-in, two-factor, sign-out and refresh are answered here, with the tokens kept in httpOnly
+ * cookies. Every other `/api/*` request goes to Navree with the access token, refreshed once on
+ * a 401.
+ */
+export const dynamic = "force-dynamic";
+export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;
