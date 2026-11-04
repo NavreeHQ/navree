@@ -316,6 +316,16 @@ fn regions(shell: &AppShell) -> AppPage {
                 Card::titled("Flaky").body(Region::new("r-flaky").src("/pages/frag/flaky").lazy()),
             ),
             section(
+                "region-offline",
+                "A region that can be cut off",
+                Card::titled("Offline").body(
+                    Region::new("r-offline")
+                        .src("/pages/frag/offline")
+                        .lazy()
+                        .when_offline(),
+                ),
+            ),
+            section(
                 "region-ok",
                 "A region that works",
                 Card::titled("Fine").body(Region::new("r-ok").src("/pages/frag/ok").lazy()),
@@ -478,6 +488,11 @@ impl Controller for StatePages {
             RouteDef::on(Method::GET, "!/pages/frag/ok", || async {
                 hit("ok");
                 fragment(Alert::new(AlertTone::Success).title("This region loaded."))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/pages/frag/offline", || async {
+                hit("offline");
+                fragment(Alert::new(AlertTone::Success).title("This region is back."))
             })
             .public(),
             RouteDef::on(Method::GET, "!/pages/frag/flaky", || async {

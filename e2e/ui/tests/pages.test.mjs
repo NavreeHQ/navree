@@ -515,6 +515,38 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("a region that gets no answer says so beside what it had, and recovers when the connection does", async () => {
+        await reset();
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        contexts.push(context);
+        const page = await context.newPage();
+        await context.addCookies([{ name: "proof_user", value: "ada", url: BASE }]);
+        // The fragment's fetch is cut off, as it is with no connection.
+        await page.route("**/pages/frag/offline", (route) => route.abort());
+        await page.goto(BASE + "/pages/regions");
+        const region = page.locator("#r-offline");
+        await until(() => region.evaluate((el) => el.hasAttribute("data-ui-failed")), "the region to be marked failed");
+        const failed = region.locator("[data-slot=region-failed]");
+        assert.equal(await failed.isVisible(), true);
+        assert.match(await failed.innerText(), /You're offline/);
+        assert.equal(await region.locator("[data-slot=skeleton]").count(), 2, "the placeholder is still in the page");
+        assert.equal(await region.locator("[data-slot=skeleton]").first().isVisible(), false, "and out of sight");
+        assert.deepEqual(await axe(page), []);
+        await shot(page, "region-offline");
+        // The connection is back: Try again fetches the region, and the state goes.
+        await page.unroute("**/pages/frag/offline");
+        await failed.getByRole("button", { name: "Try again" }).click();
+        await until(() => region.locator("[data-slot=alert]").count(), "the region to load");
+        assert.equal(await region.evaluate((el) => el.hasAttribute("data-ui-failed")), false);
+        assert.equal(await failed.isVisible(), false);
+        assert.match(await region.innerText(), /This region is back\./);
+        // And the state is there for the next time the connection goes.
+        await page.route("**/pages/frag/offline", (route) => route.abort());
+        await region.evaluate((el) => el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true })));
+        await until(() => region.evaluate((el) => el.hasAttribute("data-ui-failed")), "the region to fail again");
+        assert.equal(await failed.isVisible(), true);
+      });
+
       test("a region that works is untouched", async () => {
         await reset();
         const page = await open("/pages/regions");
