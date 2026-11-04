@@ -28,13 +28,15 @@
 
 /// `webhook_endpoints`: where webhooks are sent.
 pub mod endpoint {
+    use std::fmt;
+
     use chrono::{DateTime, Utc};
     use serde::Serialize;
     use serde_json::Value;
     use uuid::Uuid;
 
-    /// An endpoint.
-    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    /// An endpoint. `Debug` never shows its secrets.
+    #[derive(Clone, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "webhook_endpoints")]
     pub struct Model {
         /// The id (UUID v7).
@@ -73,6 +75,24 @@ pub mod endpoint {
         pub created_at: DateTime<Utc>,
         /// When it last changed.
         pub updated_at: DateTime<Utc>,
+    }
+
+    impl fmt::Debug for Model {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("Model")
+                .field("id", &self.id)
+                .field("workspace_id", &self.workspace_id)
+                .field("url", &self.url)
+                .field("description", &self.description)
+                .field("events", &self.events)
+                .field("enabled", &self.enabled)
+                .field("disabled_at", &self.disabled_at)
+                .field("disabled_reason", &self.disabled_reason)
+                .field("failing_since", &self.failing_since)
+                .field("created_at", &self.created_at)
+                .field("updated_at", &self.updated_at)
+                .finish_non_exhaustive()
+        }
     }
 }
 
@@ -172,5 +192,44 @@ pub mod receipt {
         pub message_id: String,
         /// When it was handled.
         pub received_at: DateTime<Utc>,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::endpoint;
+
+    #[test]
+    fn an_endpoint_never_shows_its_secrets_in_debug_output() {
+        let now = Utc::now();
+        let endpoint = endpoint::Model {
+            id: Uuid::now_v7(),
+            workspace_id: None,
+            url: "https://hooks.acme.test/deals".to_owned(),
+            description: None,
+            events: json!(["deal.won"]),
+            headers: json!({ "x-api-key": "hdr-c4ffee" }),
+            secret: "whsec_a1b2c3".to_owned(),
+            previous_secret: Some("whsec_d4e5f6".to_owned()),
+            previous_secret_expires_at: Some(now),
+            enabled: true,
+            disabled_at: None,
+            disabled_reason: None,
+            failing_since: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let printed = format!("{endpoint:?}");
+        for secret in ["a1b2c3", "d4e5f6", "c4ffee"] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(
+            printed.contains("https://hooks.acme.test/deals"),
+            "{printed}"
+        );
     }
 }

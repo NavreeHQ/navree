@@ -551,4 +551,26 @@ mod tests {
         assert!(!shown.contains("top_secret"), "{shown}");
         assert!(shown.contains("[redacted]"));
     }
+
+    #[test]
+    fn the_section_never_shows_a_secret_or_verify_token() {
+        let options = parse(json!({
+            "incoming": {
+                "stripe": { "secret": "whsec_stripe_s3cr3t" },
+                "meta": { "secret": "meta-app-s3cr3t", "verify_token": "meta-verify-s3cr3t" },
+            }
+        }));
+        let shown = format!("{options:?}");
+        for secret in [
+            "whsec_stripe_s3cr3t",
+            "meta-app-s3cr3t",
+            "meta-verify-s3cr3t",
+        ] {
+            assert!(!shown.contains(secret), "{secret} in {shown}");
+        }
+        assert!(
+            shown.contains("stripe") && shown.contains("meta"),
+            "{shown}"
+        );
+    }
 }
