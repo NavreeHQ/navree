@@ -6155,6 +6155,7 @@ dependencies = [
  "http",
  "http-body",
  "http-body-util",
+ "navree-config",
  "navree-http",
  "navree-kernel",
  "navree-orm",

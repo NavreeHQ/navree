@@ -9,6 +9,7 @@ use bytes::Bytes;
 
 use http::header::{self, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, StatusCode};
+use navree_config::Config;
 use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
@@ -19,6 +20,7 @@ use navree_kernel::{
 };
 
 use crate::op::{Envelope, PendingOps, UI_HEADER};
+use crate::pages::{PagesOptions, Renderer};
 use crate::shell::FLASH_COOKIE;
 use crate::{assets, compress};
 
@@ -41,6 +43,30 @@ impl UiModule {
     pub fn from_config() -> impl Module {
         Self
     }
+
+    /// The module, with the settings of the error pages it draws: where "Sign in" and
+    /// "Go to home" lead, and the words. The `ui` section of the configuration, when the
+    /// app has one, overrides them.
+    pub fn with_pages(options: PagesOptions) -> impl Module {
+        UiWithPages(options)
+    }
+}
+
+/// `UiModule` with settings: the same module, configured.
+struct UiWithPages(PagesOptions);
+
+impl Module for UiWithPages {
+    fn id(&self) -> ModuleId {
+        ModuleId::of::<UiModule>()
+    }
+
+    fn is_configured(&self) -> bool {
+        true
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        register(m, true, Some(self.0.clone()));
+    }
 }
 
 impl Module for UiModule {
@@ -54,7 +80,7 @@ impl Module for UiModule {
     }
 
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, true);
+        register(m, true, None);
     }
 }
 
@@ -70,7 +96,7 @@ impl Module for UiOnDemand {
     }
 
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, false);
+        register(m, false, None);
     }
 }
 
@@ -91,14 +117,26 @@ impl UiNeed {
 }
 
 /// Marks an app that named `UiModule` itself.
-struct UiAlways;
+pub(crate) struct UiAlways;
 
 /// The answer to "does anything need the toolkit", settled before the first
 /// request and read by the layer.
 struct UiGate(Arc<OnceLock<bool>>);
 
-fn register(m: &mut ModuleBuilder, always: bool) {
+fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();
+    m.error_pages(Renderer);
+    m.factory(Factory::<PagesOptions>::new(move |r: Resolver| {
+        let explicit = pages.clone();
+        async move {
+            let base = explicit.unwrap_or_default();
+            let options = match r.app().try_get::<Config>().await {
+                Some(config) => base.configured(&config),
+                None => base,
+            };
+            Ok(Arc::new(options.checked()))
+        }
+    }));
     if always {
         m.contribute(UiAlways);
     }

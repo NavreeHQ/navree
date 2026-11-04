@@ -328,7 +328,8 @@ function takes(response) {
     if (sameOrigin(response.url)) location.assign(response.url);
     return false;
   }
-  return response.ok && (response.headers.get("content-type") || "").startsWith("text/html");
+  // A state the server drew for this region (a 403, a 404, a 500) is shown where the region was.
+  return (response.ok || response.headers.has("x-navree-state")) && (response.headers.get("content-type") || "").startsWith("text/html");
 }
 
 /** How many rows a feed keeps: its own limit, or 200 when it has none that makes sense. @param {Element} el */
@@ -442,7 +443,8 @@ export async function refresh(id) {
   const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
-    const response = await fetch(src, { headers: HEADER, signal: withinLimit() });
+    // The region and the page it is on, so a refusal can say where to sign in and come back to.
+    const response = await fetch(src, { headers: { ...HEADER, "x-navree-region": id, "x-navree-from": location.pathname + location.search }, signal: withinLimit() });
     if (regions.get(id) !== mine) return;
     // The user moved on while this was on its way: it answers a state that's gone.
     if (table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending"))) return;
@@ -475,7 +477,14 @@ export async function refresh(id) {
     }
     to.removeAttribute("data-ui-lazy");
     to.removeAttribute("aria-busy");
+    const state = Number(response.headers.get("x-navree-state"));
+    // A door that stays shut is not knocked on again.
+    if (state === 401 || state === 403 || state === 404 || state === 410) {
+      clearInterval(/** @type {any} */ (el).uiPoll);
+      to.removeAttribute("data-ui-poll");
+    }
     morph(el, to);
+    if (state) announce(all(el, "[data-slot=state-title]")[0]?.textContent || "");
   } catch {
     if (regions.get(id) !== mine) return;
     if (table) tableFailed(table, src, 0);

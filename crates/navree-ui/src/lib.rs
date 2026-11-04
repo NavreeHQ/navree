@@ -17,6 +17,9 @@
 //!   `#[derive(TableRow)]`, [`DataTable`], [`TableQuery`], [`Region`].
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
+//! - [`pages`]: what the app shows when a request ends in an error, or a place has
+//!   nothing to show: [`ErrorPage`], [`EmptyState`], [`Forbidden`], [`NotFound`],
+//!   [`SignInRequired`].
 //!
 //! The browser side lives in `runtime/`: plain ES modules with JSDoc types.
 //! Its build output is committed, so `cargo build` never needs Node.
@@ -63,6 +66,7 @@ pub mod icons;
 mod module;
 pub mod node;
 pub mod op;
+pub mod pages;
 #[cfg(feature = "phone")]
 pub mod phone;
 pub mod render;
@@ -83,6 +87,10 @@ pub use navree_ui_macros::{FilterBar, Form, Options, TableRow, icon_file, icon_s
 pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
+pub use pages::{
+    EmptyState, ErrorPage, ErrorShell, Forbidden, NotFound, PagesOptions, ReturnTo, SessionEnded,
+    SignInRequired, State, StateKind, StateLabels,
+};
 #[cfg(feature = "phone")]
 pub use phone::{PhoneInput, PhoneLabels};
 pub use render::{Measure, measure, render, render_into};

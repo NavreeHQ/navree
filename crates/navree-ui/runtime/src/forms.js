@@ -108,7 +108,7 @@ async function send(form, submitter) {
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
     const data = fieldsOf(form, submitter);
     /** @type {Record<string, string>} */
-    const headers = { "x-navree-ui": "1" };
+    const headers = { "x-navree-ui": "1", "x-navree-from": location.pathname + location.search };
     const token = cookie("XSRF-TOKEN");
     if (token) headers["x-xsrf-token"] = token;
     /** @type {RequestInit} */

@@ -8,9 +8,9 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use http::HeaderMap;
 use http::header::{COOKIE, HeaderValue, InvalidHeaderValue};
 use http::request::Parts;
+use http::{HeaderMap, StatusCode};
 use navree_http::extract::urlencoded;
 use navree_http::extract::{FromRequestParts, Scoped};
 use navree_http::response::{IntoResponse, Response};
@@ -827,6 +827,7 @@ pub struct AppPage {
     density: Option<Density>,
     back: Option<String>,
     theme_locked: bool,
+    status: StatusCode,
 }
 
 impl AppPage {
@@ -854,6 +855,7 @@ impl AppPage {
             density: None,
             back: None,
             theme_locked: false,
+            status: StatusCode::OK,
             shell,
         }
     }
@@ -888,6 +890,14 @@ impl AppPage {
     pub fn current_appearance(&self) -> &Appearance {
         &self.appearance
     }
+
+    /// Sets the status the page answers with (`200` by default): the status of an
+    /// error page drawn in the shell.
+    pub fn status(mut self, status: StatusCode) -> Self {
+        self.status = status;
+        self
+    }
+
     /// Adds a step to the breadcrumb, before this page.
     pub fn crumb(mut self, label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
         self.crumbs.push((label.into(), href.into()));
@@ -1008,6 +1018,7 @@ impl AppPage {
             ));
         let mut view = View::new(self.title)
             .appearance(self.appearance)
+            .status(self.status)
             .body((wrapper, toaster));
         if let Some(density) = self.density {
             view = view.density(density);
