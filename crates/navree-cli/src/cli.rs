@@ -22,7 +22,7 @@ pub const MODULES_DIR: &str = "src/modules";
     after_help = "Every other command runs in the app binary: `navree <command> [args...]` is \
                   `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, \
                   model:show, queue:work, schedule:run, routes, openapi:export, key:generate, \
-                  <module>:<command>, ...). `navree list` shows the app's commands."
+                  config:show, config:check, <module>:<command>, ...). `navree list` shows the app's commands."
 )]
 pub struct Cli {
     /// What to do.

@@ -40,6 +40,115 @@ fn new_app(kit: Option<Kit>, database: Database) -> NewApp {
     }
 }
 
+/// Every starter kit and database `navree new` can write.
+const CASES: [(Option<Kit>, Database); 8] = [
+    (Some(Kit::Saas), Database::Timescaledb),
+    (Some(Kit::Api), Database::Timescaledb),
+    (Some(Kit::Api), Database::Postgres),
+    (Some(Kit::Micro), Database::Timescaledb),
+    (None, Database::Timescaledb),
+    (None, Database::Postgres),
+    (None, Database::Mysql),
+    (None, Database::Sqlite),
+];
+
+/// The config keys that the `APP_` entries of a `.env` file set: the lines
+/// `KEY=value`, comments and blank lines skipped. `APP_DATABASE__URL` sets
+/// `database.url`; `APP_URL` is the short name of `app.url`.
+fn dotenv_keys(text: &str) -> Vec<String> {
+    const SHORT: [&str; 6] = ["name", "url", "version", "env", "key", "previous_keys"];
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| line.split_once('='))
+        .filter_map(|(name, _)| name.trim().strip_prefix("APP_").map(str::to_lowercase))
+        .map(|name| name.split("__").collect::<Vec<_>>().join("."))
+        .map(|key| {
+            if SHORT.contains(&key.as_str()) {
+                format!("app.{key}")
+            } else {
+                key
+            }
+        })
+        .collect()
+}
+
+/// Every key a TOML table sets, as dotted paths (a list is one key).
+fn toml_keys(table: &toml::Table, prefix: &str, out: &mut Vec<String>) {
+    for (key, value) in table {
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        match value {
+            toml::Value::Table(inner) => toml_keys(inner, &path, out),
+            _ => out.push(path),
+        }
+    }
+}
+
+/// CONFIG-002: a config file ranks above `.env`, so a key written in both
+/// would ignore the `.env` copy. The files `navree new` writes set no key in
+/// both.
+#[test]
+fn no_generated_key_is_set_in_both_dotenv_and_config_app_toml() {
+    for (kit, database) in CASES {
+        let name = format!("{kit:?} on {database:?}");
+        let files = app_files(&new_app(kit, database), Timestamp::from_unix(1_792_938_605))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let dotenv = files
+            .get(".env")
+            .unwrap_or_else(|| panic!("{name}: no .env"));
+        let toml_text = files
+            .get("config/app.toml")
+            .unwrap_or_else(|| panic!("{name}: no config/app.toml"));
+        let table: toml::Table = toml_text
+            .parse()
+            .unwrap_or_else(|e| panic!("{name}: config/app.toml: {e}"));
+        let mut file_keys = Vec::new();
+        toml_keys(&table, "", &mut file_keys);
+        let twice: Vec<String> = dotenv_keys(dotenv)
+            .into_iter()
+            .filter(|key| file_keys.contains(key))
+            .collect();
+        assert!(
+            twice.is_empty(),
+            "{name}: set in both .env and config/app.toml: {twice:?}"
+        );
+    }
+}
+
+/// The helper itself: aliases and nesting.
+#[test]
+fn dotenv_entries_map_to_config_keys() {
+    let text = "# comment\n\nAPP_KEY=\nAPP_DATABASE__URL=x\nexport_not=1\nAPP_LOG__LEVELS__NAVREE_QUEUE=debug\nOTHER=1\n";
+    assert_eq!(
+        dotenv_keys(text),
+        ["app.key", "database.url", "log.levels.navree_queue"]
+    );
+}
+
+/// The minimal app keeps only what its config file leaves out in `.env`.
+#[test]
+fn the_minimal_app_env_keeps_the_key_and_the_sender() {
+    for database in [
+        Database::Timescaledb,
+        Database::Postgres,
+        Database::Mysql,
+        Database::Sqlite,
+    ] {
+        let files = app_files(
+            &new_app(None, database),
+            Timestamp::from_unix(1_792_938_605),
+        )
+        .expect("files");
+        let mut keys = dotenv_keys(files.get(".env").expect(".env"));
+        keys.sort();
+        assert_eq!(keys, ["app.key", "mail.from"], "{database:?}");
+    }
+}
+
 #[test]
 #[ignore = "rewrites crates/navree-config/tests/fixtures/rendered"]
 fn render_config_fixtures() {

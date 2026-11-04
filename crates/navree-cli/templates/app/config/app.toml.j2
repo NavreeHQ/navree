@@ -35,6 +35,10 @@ timescaledb = "auto"
 level = "info"
 
 [mail]
+# "log" writes messages to the log. To send them, set the transport to an
+# address such as smtps://user:pass@host:465: keep the password out of this
+# file and set APP_MAIL__TRANSPORT as a real environment variable instead.
+# The sender (mail.from) is in .env.
 transport = "log"
 
 [queue]

@@ -155,10 +155,14 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         main.contains("my_shop::app(ConfigSources::defaults()).run()"),
         "{main}"
     );
+    // The URL is set in config/app.toml; `.env` does not repeat it, because a
+    // config file ranks above `.env` and the second copy would do nothing
+    // (CONFIG-002).
     let env = std::fs::read_to_string(root.join(".env.example")).unwrap();
-    assert!(
-        env.contains("APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/my_shop"),
-        "{env}"
+    assert!(!env.contains("APP_DATABASE__URL"), "{env}");
+    assert_eq!(
+        configured_url(&root),
+        "postgres://navree:navree@127.0.0.1:5432/my_shop"
     );
     assert_eq!(std::fs::read_to_string(root.join(".env")).unwrap(), env);
 }
@@ -238,8 +242,8 @@ fn plain_postgres_mysql_and_sqlite_are_options() {
     );
     let env = read(&mysql, ".env.example");
     assert!(
-        env.contains("APP_DATABASE__URL=mysql://navree:navree@127.0.0.1:3306/my_shop"),
-        "{env}"
+        !env.contains("APP_DATABASE__URL"),
+        "set in config/app.toml only: {env}"
     );
 
     let sqlite = create_app(
@@ -350,8 +354,14 @@ fn the_generated_files_describe_the_database() {
     );
     let env = read(&root, ".env.example");
     assert!(
-        env.contains("# TimescaleDB, run by `navree dock up` (see dock.toml).\nAPP_DATABASE__URL="),
-        "{env}"
+        !env.contains("APP_DATABASE__URL"),
+        "set in config/app.toml only: {env}"
+    );
+    let config = read(&root, "config/app.toml");
+    assert!(
+        config
+            .contains("# TimescaleDB (PostgreSQL with time-series hypertables): `navree dock up`"),
+        "{config}"
     );
     let readme = read(&root, "README.md");
     assert!(
