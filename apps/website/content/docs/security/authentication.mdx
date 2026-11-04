@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "JWT access tokens, rotating refresh tokens with reuse detection, pluggable strategies, the `CurrentUser` extractor, platform administrators and trusted token exchange."
+description: "JWT access tokens, rotating refresh tokens with reuse detection, browser sign-in on the session cookie, pluggable strategies, the `CurrentUser` extractor, platform administrators and trusted token exchange."
 ---
 
 Navree authenticates API requests with tokens. A client signs in with an email address and a password and gets two tokens: a short-lived JWT **access token**, which it sends as `Authorization: Bearer` with every request, and an opaque **refresh token**, which it trades for a new pair when the access token expires. `navree-auth` provides the routes, the token handling, pluggable strategies and a `CurrentUser` extractor. Routes stay denied unless they say who may call them.
@@ -12,7 +12,7 @@ Navree authenticates API requests with tokens. A client signs in with an email a
 - When the access token expires, the client posts its refresh token to `POST /api/auth/refresh` and gets a new pair. The old refresh token stops working; presenting it again revokes the whole session.
 - `POST /api/auth/logout` revokes the session's refresh tokens.
 
-A browser app shouldn't hold the tokens in JavaScript at all. The [BFF pattern](#browser-apps-the-bff-pattern) below keeps them in httpOnly cookies on your web server, as the reference CRM does.
+A browser app shouldn't hold the tokens in JavaScript at all. Pages your app draws, such as [Navree UI](/docs/ui/overview/) pages, sign the browser in on its [session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session) instead, with the same policies, throttles, two-factor authentication and audit trail. A separate web front end uses the [BFF pattern](#browser-apps-the-bff-pattern) below, which keeps the tokens in httpOnly cookies on your web server, as the reference CRM does.
 
 ## Setting up
 
@@ -475,7 +475,7 @@ The OpenAPI document describes `UserResource` without the fields extensions add,
 
 ## Strategies
 
-Authentication is a chain of strategies, each one a way of recognising a request's credentials. `AuthModule` registers navree-http's authenticator, which runs every registered `dyn Strategy` in module dependency order, the built-in `JwtStrategy` (named `jwt`) first. Each strategy answers one of three ways:
+Authentication is a chain of strategies, each one a way of recognising a request's credentials. `AuthModule` registers navree-http's authenticator, which runs every registered `dyn Strategy` in module dependency order, the built-in `JwtStrategy` (named `jwt`) first and, with the `session` feature, the built-in `SessionStrategy` (named `session`) second. Each strategy answers one of three ways:
 
 | Answer | Meaning |
 |---|---|
@@ -484,6 +484,8 @@ Authentication is a chain of strategies, each one a way of recognising a request
 | `Err(error)` | Credentials of this kind are present but invalid. The request fails with `error` (usually a 401), even on a public route. It never falls through to another strategy or to a guest. |
 
 `JwtStrategy` only claims `Authorization: Bearer` values shaped like a JWT: three base64url segments separated by dots. Other bearer values, such as an opaque API key or the scrape token of the `/metrics` endpoint, are left to other strategies and to route guards. It accepts tokens of type `access`, `platform` and `two_factor_setup` (the last only on the setup routes), stores the verified `AccessClaims` in the request, and for an impersonation token also a `navree::contracts::Impersonator`, which the unit of work and the audit log pick up.
+
+`SessionStrategy` reads the user a browser [signed in on its session](/docs/basics/sessions-and-csrf/#signing-in-with-a-session) and checks on the server, on every request, that the sign-in is still live. It stores `AccessClaims` too (the user, the session as `sid`, the sign-in time as `auth_time`, no `jti`), so `#[recent_auth]`, `#[not_while_impersonating]`, the platform guard and the two-factor setup rule work the same for a browser as for a token. A sign-in that ended (signed out, revoked, past its end) makes the request a guest, never an error, so a stale cookie can always reach the sign-in page. It authenticates as `AuthVia::Session`.
 
 ### Writing your own strategy
 
@@ -769,7 +771,7 @@ Signatures are checked with `ring`; `alg: none`, HMAC algorithms and critical he
 
 ## Browser apps: the BFF pattern
 
-A token in `localStorage` can be read by any script that runs on the page, so one cross-site scripting bug leaks every session. `navree-auth` has no cookie-based login of its own. For a web front end, use a **backend-for-frontend** (BFF): the browser talks only to your web server, on the same origin, and never sees a token. The web server keeps the tokens in httpOnly cookies and calls Navree with `Authorization: Bearer`.
+A token in `localStorage` can be read by any script that runs on the page, so one cross-site scripting bug leaks every session. Pages your app serves itself sign the browser in on its [session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session). For a separate web front end, such as a Next.js or Nuxt app, use a **backend-for-frontend** (BFF): the browser talks only to your web server, on the same origin, and never sees a token. The web server keeps the tokens in httpOnly cookies and calls Navree with `Authorization: Bearer`.
 
 The CRM's front end, `apps/crm-web`, is a Next.js app with a BFF in `src/lib/bff`:
 

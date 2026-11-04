@@ -56,7 +56,7 @@ After a form posted without JavaScript, the page offers Home and a plain sign-in
 
 ## Sign in, and back to where you were
 
-A 401 shows a button to your sign-in page with the page the user was on as `next`. Set the address once:
+A 401 shows a button to your sign-in page with the page the user was on as `next`. `AuthPages`, from `navree-auth`, is that page: it signs the browser in on its session, with two-factor authentication, and sends it back to `next` (see [signing in with a session](/docs/basics/sessions-and-csrf/#signing-in-with-a-session)). Set the address once:
 
 ```toml
 [ui]
@@ -66,7 +66,7 @@ sign_in_redirect = false   # true sends a guest straight there with a 303
 
 With `sign_in_redirect` on, a guest is redirected only from another page: when the sign-in address itself answers a 401, the page is shown, not a redirect to itself.
 
-Your sign-in page reads `next` with `ReturnTo`, which accepts only an address on your site: one path with a single leading slash, no scheme, backslash, control character or dot segment (checked on the path as a browser reads it, so `/a%3F/..//evil.example` is refused). Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example` or an encoded slash, is dropped and the user lands on your fallback. `resolve_for` also drops the sign-in page and anything below it, however it is spelled, which would send the user round in a circle.
+A sign-in page of your own reads `next` with `ReturnTo`, which accepts only an address on your site: one path with a single leading slash, no scheme, backslash, control character or dot segment (checked on the path as a browser reads it, so `/a%3F/..//evil.example` is refused). Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example` or an encoded slash, is dropped and the user lands on your fallback. `resolve_for` also drops the sign-in page and anything below it, however it is spelled, which would send the user round in a circle.
 
 ```rust
 let target = ReturnTo::resolve_for(form.next.as_deref(), "/sign-in", "/");

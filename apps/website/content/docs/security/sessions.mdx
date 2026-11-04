@@ -31,7 +31,7 @@ Access tokens carry their session in two claims:
 
 A refreshed access token keeps the session's `auth_time`: refreshing is not signing in. [Impersonation](/docs/security/impersonation/) tokens carry `sid` but no `auth_time`, and the challenge tokens of a two-factor or platform sign-in carry neither.
 
-These sessions belong to token sign-ins. The optional `SessionModule` keeps another kind: a server-side record behind an encrypted cookie, described in [Sessions and CSRF](/docs/basics/sessions-and-csrf/). `navree-auth` doesn't read those cookies.
+A browser that [signs in on its session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session) has a session here too: the list below shows it, ending it signs that browser out at its next request, and `#[recent_auth]` reads its sign-in time. A browser confirms with `POST /api/auth/confirm` like a token client, and gets `204` instead of a new token. (`SessionModule`'s own record, behind the encrypted cookie, holds which of these sessions the browser is signed in with.)
 
 ## Listing sessions
 
