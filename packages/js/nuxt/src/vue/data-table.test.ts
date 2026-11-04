@@ -52,6 +52,12 @@ describe("NavreeDataTable", () => {
     expect(wrapper.findAll("th")[1]!.find("button").exists()).toBe(false);
   });
 
+  it("starts a cursor list over on a sort click: no cursor, no page before, the page size stays", async () => {
+    const wrapper = table({ query: { cursor: "abc", before: "def", limit: 20, filter: { stage: { in: ["lead", "won"] } } } });
+    await wrapper.findAll("th button")[0]!.trigger("click");
+    expect(wrapper.emitted("update:query")!.at(-1)).toEqual([{ limit: 20, filter: { stage: { in: ["lead", "won"] } }, sort: ["title"] }]);
+  });
+
   it("pages", async () => {
     const wrapper = table({ query: { page: 2 } });
     expect(wrapper.find("nav").text()).toContain("3–4 of 5");

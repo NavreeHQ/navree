@@ -2,24 +2,27 @@
 
 /**
  * `useListQuery()`: a list's filters, sort, search and page in the URL, so a
- * list survives a reload, the back button and a shared link.
+ * list survives a reload, the back button and a shared link. The URL is read
+ * and written only through `@navree/client`'s list-query functions, so it
+ * speaks the one grammar every Navree list does.
  */
 import {
-  parseListQuery,
+  checkListQuery,
+  firstPage,
+  isListParam,
   serializeListQuery,
   setFilter as withFilter,
   toggleSort as nextSort,
+  withDefaults,
   withPage,
   type FilterCondition,
   type ListQuery,
+  type ListQueryProblem,
 } from "@navree/client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
-/** True for the URL parameters a list query owns. */
-export function isListParam(key: string): boolean {
-  return key.startsWith("filter[") || ["sort", "search", "page", "per_page", "cursor", "limit"].includes(key);
-}
+export { isListParam };
 
 /** `params` with its list-query parameters replaced by `query`'s (other parameters stay). */
 export function mergeListParams(params: URLSearchParams, query: ListQuery, defaults: ListQuery = {}): URLSearchParams {
@@ -38,6 +41,8 @@ export function mergeListParams(params: URLSearchParams, query: ListQuery, defau
 export interface ListQueryState {
   /** The list query in the URL, over `defaults`. */
   query: ListQuery;
+  /** What is wrong in the list query of the URL (an edited or old link): the rest of the query still applies. */
+  problems: ListQueryProblem[];
   /** Replaces the list query (other URL parameters stay). */
   setQuery: (next: ListQuery | ((current: ListQuery) => ListQuery)) => void;
   /** Sets one filter (or removes it with `undefined`) and goes back to page 1. */
@@ -60,9 +65,10 @@ export function useListQuery(defaults: ListQuery = {}): ListQueryState {
   const defaultsKey = JSON.stringify(defaults);
   const search = params?.toString() ?? "";
 
+  const checked = useMemo(() => checkListQuery(search), [search]);
   const query = useMemo<ListQuery>(
-    () => ({ ...(JSON.parse(defaultsKey) as ListQuery), ...parseListQuery(search) }),
-    [defaultsKey, search],
+    () => withDefaults(checked.query, JSON.parse(defaultsKey) as ListQuery),
+    [checked, defaultsKey],
   );
 
   const setQuery = useCallback(
@@ -78,23 +84,22 @@ export function useListQuery(defaults: ListQuery = {}): ListQueryState {
   return useMemo(
     () => ({
       query,
+      problems: checked.problems,
       setQuery,
       setFilter: (field, condition) => setQuery((q) => withFilter(q, field, condition)),
       setSearch: (text) =>
         setQuery((q) => {
-          const { page: _page, cursor: _cursor, search: _search, ...rest } = q;
+          const { search: _search, ...rest } = firstPage(q);
           return text.trim() ? { ...rest, search: text } : rest;
         }),
       toggleSort: (field, options) =>
         setQuery((q) => {
-          const { page: _page, cursor: _cursor, ...rest } = q;
+          const { sort: _sort, ...rest } = firstPage(q);
           const sort = nextSort(q.sort, field, options);
-          if (sort.length > 0) return { ...rest, sort };
-          const { sort: _sort, ...unsorted } = rest;
-          return unsorted;
+          return sort.length > 0 ? { ...rest, sort } : rest;
         }),
       setPage: (page) => setQuery((q) => withPage(q, page)),
     }),
-    [query, setQuery],
+    [query, checked, setQuery],
   );
 }

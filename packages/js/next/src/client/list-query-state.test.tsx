@@ -28,8 +28,16 @@ describe("mergeListParams", () => {
   });
 
   it("knows which parameters a list query owns", () => {
-    expect(["filter[a]", "filter[a][gte]", "sort", "search", "page", "per_page", "cursor", "limit"].every(isListParam)).toBe(true);
-    expect(isListParam("tab")).toBe(false);
+    expect(["filter", "filter[a]", "filter[a][gte]", "sort", "search", "page", "per_page", "cursor", "before", "limit"].every(isListParam)).toBe(true);
+    expect(["tab", "q", "per", "after", "filters[a]"].some(isListParam)).toBe(false);
+  });
+
+  it("drops the cursor parameters with the others, and writes the canonical form", () => {
+    const merged = mergeListParams(
+      new URLSearchParams("tab=open&cursor=a&before=b&limit=5&filter=1&q=old&page=2"),
+      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "acme corp" },
+    );
+    expect(merged.toString()).toBe("tab=open&q=old&filter%5Bstage%5D%5Bin%5D=lead%2Cwon&search=acme+corp&limit=10");
   });
 });
 
@@ -66,5 +74,59 @@ describe("useListQuery", () => {
     const { result } = renderHook(() => useListQuery());
     act(() => result.current.setSearch(""));
     expect(lastUrl()).toBe("/deals");
+  });
+
+  it("reads the grammar's names: operators, null, before and limit", () => {
+    nav.search = "filter[amount][gte]=100&filter[owner_id][null]=1&before=abc&limit=20";
+    const { result } = renderHook(() => useListQuery({ per_page: 25 }));
+    // A page that goes by cursor takes no default page size.
+    expect(result.current.query).toEqual({
+      filter: { amount: { gte: "100" }, owner_id: { null: true } },
+      before: "abc",
+      limit: 20,
+    });
+    expect(result.current.problems).toEqual([]);
+  });
+
+  it("does not read names the grammar does not have", () => {
+    nav.search = "filters[stage]=won&q=acme&per=10&after=abc&f.stage=won";
+    const { result } = renderHook(() => useListQuery());
+    expect(result.current.query).toEqual({});
+    expect(result.current.problems).toEqual([]);
+  });
+
+  it("keeps what is right in an edited address and names what is not", () => {
+    nav.search = "filter[stage]=won&filter[amount][regex]=1&page=0&sort=-amount";
+    const { result } = renderHook(() => useListQuery());
+    expect(result.current.query).toEqual({ filter: { stage: "won" }, sort: ["-amount"] });
+    expect(result.current.problems.map((problem) => problem.param)).toEqual(["filter[amount][regex]", "page"]);
+  });
+
+  it("goes back to the first page of a cursor list when a filter, the search or the sort changes", () => {
+    nav.search = "cursor=abc&before=def&limit=20&tab=open";
+    const { result } = renderHook(() => useListQuery());
+    act(() => result.current.setFilter("stage", "won"));
+    expect(lastUrl()).toBe("/deals?tab=open&filter[stage]=won&limit=20");
+    act(() => result.current.setSearch("acme"));
+    expect(lastUrl()).toBe("/deals?tab=open&search=acme&limit=20");
+    act(() => result.current.toggleSort("name"));
+    expect(lastUrl()).toBe("/deals?tab=open&sort=name&limit=20");
+  });
+
+  it("writes a filter with an operator, and a list as `in`", () => {
+    nav.search = "";
+    const { result } = renderHook(() => useListQuery());
+    act(() => result.current.setFilter("amount", { gte: 100, lte: 900 }));
+    expect(lastUrl()).toBe("/deals?filter[amount][gte]=100&filter[amount][lte]=900");
+    act(() => result.current.setFilter("stage", ["lead", "won"]));
+    expect(lastUrl()).toBe("/deals?filter[stage][in]=lead,won");
+  });
+
+  it("writes a field named like a method of every object as an ordinary field", () => {
+    nav.search = "filter[constructor]=x";
+    const { result } = renderHook(() => useListQuery());
+    expect(Object.keys(result.current.query.filter ?? {})).toEqual(["constructor"]);
+    act(() => result.current.setFilter("toString", "y"));
+    expect(lastUrl()).toBe("/deals?filter[constructor]=x&filter[toString]=y");
   });
 });

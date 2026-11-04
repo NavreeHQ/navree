@@ -65,6 +65,12 @@ describe("DataTable", () => {
     expect(onQueryChange).toHaveBeenLastCalledWith({});
   });
 
+  it("starts a cursor list over on a sort click: no cursor, no page before, the page size stays", () => {
+    const { onQueryChange } = renderTable({ cursor: "abc", before: "def", limit: 20, filter: { stage: { in: ["lead", "won"] } } });
+    fireEvent.click(screen.getByRole("button", { name: /Title/ }));
+    expect(onQueryChange).toHaveBeenLastCalledWith({ limit: 20, filter: { stage: { in: ["lead", "won"] } }, sort: ["title"] });
+  });
+
   it("sorts by the column's sort field, and by several with shift", () => {
     const { onQueryChange } = renderTable({ sort: ["title"] });
     fireEvent.click(screen.getByRole("button", { name: /Amount/ }), { shiftKey: true });
@@ -129,5 +135,12 @@ describe("useDataTable", () => {
 
     rerender({ query: { sort: ["title"] } });
     expect(result.current.state.sorting).toEqual([{ id: "title", desc: false }]);
+  });
+
+  it("takes the page size of a cursor list from `limit` until the server reports one", () => {
+    const { result } = renderHook(() =>
+      useDataTable<Deal>({ columns, data: deals, query: { cursor: "abc", limit: 40 }, onQueryChange: vi.fn() }),
+    );
+    expect(result.current.state.pagination).toEqual({ pageIndex: 0, pageSize: 40 });
   });
 });

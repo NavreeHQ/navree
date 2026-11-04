@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkListQuery,
+  firstPage,
   fromSorting,
+  isListParam,
   listQuery,
   listQuerySerializer,
   parseListQuery,
@@ -9,6 +12,7 @@ import {
   sortDirection,
   toggleSort,
   toSorting,
+  withDefaults,
   withPage,
 } from "./list-query.js";
 
@@ -59,6 +63,20 @@ describe("serializeListQuery", () => {
 
     expect(params.toString()).toBe("cursor=eyJpZCI6NDJ9&limit=50");
   });
+
+  it("writes the page before a position, after cursor and before limit", () => {
+    expect(serializeListQuery({ before: "eyJpZCI6NDJ9", limit: 20 }).toString()).toBe("before=eyJpZCI6NDJ9&limit=20");
+    expect(serializeListQuery({ limit: 20, before: "b", cursor: "a" }).toString()).toBe("cursor=a&before=b&limit=20");
+  });
+
+  it("writes an equal filter plain, even when it is given as `eq`", () => {
+    const params = serializeListQuery({ filter: { stage: { eq: "won" }, amount: { gte: 1, eq: 5 } } });
+    expect(params.toString()).toBe("filter%5Bstage%5D=won&filter%5Bamount%5D%5Bgte%5D=1&filter%5Bamount%5D=5");
+  });
+
+  it("trims the search and the sort terms, as the reader does", () => {
+    expect(serializeListQuery({ search: "  acme corp ", sort: [" -name ", " "] }).toString()).toBe("sort=-name&search=acme+corp");
+  });
 });
 
 describe("parseListQuery", () => {
@@ -77,9 +95,20 @@ describe("parseListQuery", () => {
   });
 
   it("reads a Next.js searchParams object and ignores parameters it doesn't own", () => {
+    // A repeated page size keeps the last one, as in the Rust reader; a page that is not a number is left out.
     expect(
       parseListQuery({ "filter[owner_id]": "u1", sort: "name", page: "x", per_page: ["10", "20"], tab: "open" }),
-    ).toEqual({ filter: { owner_id: "u1" }, sort: ["name"], per_page: 10 });
+    ).toEqual({ filter: { owner_id: "u1" }, sort: ["name"], per_page: 20 });
+  });
+
+  it("reads before, and `filter[x][eq]` as a plain filter", () => {
+    expect(parseListQuery("before=abc&limit=5&filter[stage][eq]=won")).toEqual({ before: "abc", limit: 5, filter: { stage: "won" } });
+  });
+
+  it("parseListQuery is the query of checkListQuery", () => {
+    const text = "filter[a]=1&page=0&sort=x";
+    expect(parseListQuery(text)).toEqual(checkListQuery(text).query);
+    expect(parseListQuery(text)).toEqual({ filter: { a: "1" }, sort: ["x"] });
   });
 
   it("reads cursor pagination", () => {
@@ -88,6 +117,40 @@ describe("parseListQuery", () => {
 
   it("returns an empty query for an empty string", () => {
     expect(parseListQuery("")).toEqual({});
+  });
+});
+
+describe("checkListQuery", () => {
+  it("keeps what is right and names what is wrong, as written", () => {
+    const { query, problems } = checkListQuery("?filter[stage]=won&filter[hot][regex]=1&page=0&owner_id=3");
+    expect(query).toEqual({ filter: { stage: "won" } });
+    expect(problems.map((problem) => problem.param)).toEqual(["filter[hot][regex]", "page"]);
+    expect(problems.every((problem) => problem.message !== "")).toBe(true);
+  });
+
+  it("finds no problem in an empty query or in other parameters", () => {
+    expect(checkListQuery("")).toEqual({ query: {}, problems: [] });
+    expect(checkListQuery({ tab: "open", range: "30d" })).toEqual({ query: {}, problems: [] });
+  });
+
+  it("reads what serializeListQuery writes, with no problem", () => {
+    const written = serializeListQuery({
+      filter: { stage: { in: ["lead", "won"] }, owner_id: { null: true }, title: { contains: "a b" } },
+      sort: ["-created_at"],
+      search: "acme",
+      before: "xyz",
+      limit: 10,
+    });
+    expect(checkListQuery(written).problems).toEqual([]);
+  });
+});
+
+describe("isListParam", () => {
+  it("knows which parameters a list query owns", () => {
+    for (const key of ["filter", "filter[a]", "filter[a][gte]", "sort", "search", "page", "per_page", "cursor", "before", "limit"]) {
+      expect(isListParam(key)).toBe(true);
+    }
+    for (const key of ["tab", "q", "per", "after", "filters[a]", "owner_id", "range"]) expect(isListParam(key)).toBe(false);
   });
 });
 
@@ -125,6 +188,11 @@ describe("listQuery builder", () => {
     expect(query).toEqual({ search: "a", cursor: "abc", limit: 10 });
   });
 
+  it("goes back to numbered paging, and backwards by cursor", () => {
+    expect(listQuery({ cursor: "abc", limit: 10 }).page(2).toQuery()).toEqual({ page: 2 });
+    expect(listQuery({ page: 2 }).before("abc").toQuery()).toEqual({ before: "abc" });
+  });
+
   it("removes a filter with without()", () => {
     expect(listQuery().where("a", 1).where("b", 2).without("a").toQuery()).toEqual({ filter: { b: 2 } });
   });
@@ -144,6 +212,23 @@ describe("listQuerySerializer (the client's querySerializer)", () => {
       ),
     ).toBe("filter[status]=active&filter[created_at][gte]=2026-10-01&filter[stage][in]=lead,won&sort=-created_at&page=2&ids=a&ids=b");
   });
+
+  it("writes the list query's own parameters in the canonical order, before the others", () => {
+    expect(
+      listQuerySerializer({
+        tab: "open",
+        limit: 20,
+        before: "b",
+        search: " acme ",
+        sort: "-name",
+        filter: { stage: "won" },
+      }),
+    ).toBe("filter%5Bstage%5D=won&sort=-name&search=acme&before=b&limit=20&tab=open");
+  });
+
+  it("leaves a value of another type to the generic writer", () => {
+    expect(listQuerySerializer({ page: "2", search: 5, filter: "x" })).toBe("page=2&search=5&filter=x");
+  });
 });
 
 describe("sorting", () => {
@@ -157,6 +242,12 @@ describe("sorting", () => {
     expect(toggleSort(["-created_at"], "name")).toEqual(["name"]);
     expect(toggleSort(["-created_at"], "name", { multi: true })).toEqual(["-created_at", "name"]);
     expect(toggleSort(["-created_at", "name"], "name", { multi: true })).toEqual(["-created_at", "-name"]);
+  });
+
+  it("sorts by at most four fields: a fifth is not added", () => {
+    expect(toggleSort(["a", "b", "c", "d"], "e", { multi: true })).toEqual(["a", "b", "c", "d"]);
+    expect(toggleSort(["a", "b", "c", "d"], "d", { multi: true })).toEqual(["a", "b", "c", "-d"]);
+    expect(toggleSort(["a", "b", "c"], "e", { multi: true })).toEqual(["a", "b", "c", "e"]);
   });
 
   it("reports a column's direction", () => {
@@ -185,8 +276,43 @@ describe("query updates", () => {
     expect(query.page).toBe(3);
   });
 
+  it("setFilter also leaves the cursor and the page before it", () => {
+    expect(setFilter({ cursor: "a", before: "b", limit: 10 }, "stage", "won")).toEqual({ limit: 10, filter: { stage: "won" } });
+    expect(setFilter({ filter: { a: "1" } }, "a", { gte: "" })).toEqual({});
+    expect(setFilter({}, "a", [])).toEqual({});
+    expect(setFilter({}, "flag", false)).toEqual({ filter: { flag: false } });
+  });
+
   it("withPage sets the page and drops page 1", () => {
     expect(withPage({ search: "a" }, 2)).toEqual({ search: "a", page: 2 });
     expect(withPage({ search: "a", page: 2 }, 1)).toEqual({ search: "a" });
+  });
+
+  it("withPage switches to numbered paging: no cursor, before or limit", () => {
+    expect(withPage({ cursor: "a", before: "b", limit: 10, per_page: 5 }, 3)).toEqual({ per_page: 5, page: 3 });
+  });
+
+  it("firstPage drops the page, the cursor and the page before, and keeps the page size", () => {
+    expect(firstPage({ page: 3, per_page: 25, cursor: "a", before: "b", limit: 10, search: "x" })).toEqual({
+      per_page: 25,
+      limit: 10,
+      search: "x",
+    });
+  });
+
+  it("withDefaults puts the query over its defaults without mixing the two ways of paging", () => {
+    expect(withDefaults({ search: "a" }, { per_page: 25, sort: ["-created_at"] })).toEqual({
+      per_page: 25,
+      sort: ["-created_at"],
+      search: "a",
+    });
+    expect(withDefaults({ sort: ["name"] }, { sort: ["-created_at"] })).toEqual({ sort: ["name"] });
+    // A cursor in the address takes no default page size; a page takes no default cursor size.
+    expect(withDefaults({ cursor: "abc" }, { per_page: 25 })).toEqual({ cursor: "abc" });
+    expect(withDefaults({ cursor: "abc" }, { limit: 25 })).toEqual({ cursor: "abc", limit: 25 });
+    expect(withDefaults({ page: 2 }, { limit: 25, cursor: "a" })).toEqual({ page: 2 });
+    const defaults = { filter: { stage: "lead" } };
+    withDefaults({}, defaults).filter!.stage = "won";
+    expect(defaults.filter.stage).toBe("lead");
   });
 });

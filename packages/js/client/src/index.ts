@@ -5,7 +5,8 @@
  *   from the app's OpenAPI document, in cookie mode (behind a
  *   backend-for-frontend) or bearer mode, with `X-Workspace` and request ids;
  * - `NavreeError`: Navree's error shape with its `code`, `unwrap`;
- * - `listQuery()`: filters, sort, search and paging in list-query format;
+ * - `listQuery()`, `checkListQuery()`: filters, sort, search and paging in the
+ *   one list-query format a Navree list reads and writes;
  * - pages, query keys, operations (SSE) and locale helpers.
  *
  * Abilities (`@casl/ability`) are in `@navree/client/abilities`, real time
@@ -23,7 +24,10 @@ export {
 } from "./errors.js";
 export { direction, errorKey, isRtl, RTL_LANGUAGES, translateError, type Translate, type TranslateErrorOptions } from "./i18n.js";
 export {
+  checkListQuery,
+  firstPage,
   fromSorting,
+  isListParam,
   listQuery,
   ListQueryBuilder,
   listQuerySerializer,
@@ -33,12 +37,15 @@ export {
   sortDirection,
   toggleSort,
   toSorting,
+  withDefaults,
   withPage,
   type FilterCondition,
   type FilterOperator,
   type FilterScalar,
   type FilterValue,
   type ListQuery,
+  type ListQueryCheck,
+  type ListQueryProblem,
 } from "./list-query.js";
 export {
   cancelOperation,

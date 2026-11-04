@@ -6,7 +6,7 @@
  * next to shadcn-vue components. `useDataTable` gives the same table without
  * markup, for your own shadcn-vue `Table` components.
  */
-import { pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
+import { firstPage, pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
 import {
   columnVisibilityFeature,
   FlexRender,
@@ -63,6 +63,7 @@ export const defaultLabels: DataTableLabels = {
 export interface UseDataTableOptions<T extends RowData> {
   columns: () => NavreeColumnDef<T>[];
   data: () => T[] | undefined;
+  /** The current list query (its `sort` and `page` drive the table), in the one list-query grammar. */
   query: () => ListQuery;
   meta?: () => PageMeta | undefined;
   onQueryChange: (next: ListQuery) => void;
@@ -110,7 +111,7 @@ export function useDataTable<T extends RowData>(options: UseDataTableOptions<T>)
       const field = columnMeta(header).sortField;
       if (!field) return;
       const query = options.query();
-      const { page: _page, cursor: _cursor, sort: _sort, ...rest } = query;
+      const { sort: _sort, ...rest } = firstPage(query);
       const sort = toggleSort(query.sort, field, { multi });
       options.onQueryChange(sort.length > 0 ? { ...rest, sort } : rest);
     },

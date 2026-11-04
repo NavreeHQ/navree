@@ -7,7 +7,7 @@
  * tokens (`@navree/theme`), logical properties for right-to-left layouts.
  * `useDataTable` is the same table without markup, for your own components.
  */
-import { pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
+import { firstPage, pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
 import {
   columnVisibilityFeature,
   FlexRender,
@@ -67,7 +67,7 @@ export const defaultLabels: DataTableLabels = {
 export interface UseDataTableOptions<T extends RowData> {
   columns: NavreeColumnDef<T>[];
   data: T[] | undefined;
-  /** The current list query (its `sort` and `page` drive the table). */
+  /** The current list query (its `sort` and `page` drive the table), in the one list-query grammar. */
   query: ListQuery;
   /** Called with the next list query: a sort or page change. */
   onQueryChange: (next: ListQuery) => void;
@@ -100,7 +100,7 @@ export function useDataTable<T extends RowData>({ columns, data, query, onQueryC
     pageCount: meta?.last_page ?? -1,
     state: {
       sorting: toSorting(query.sort),
-      pagination: { pageIndex: (meta?.current_page ?? query.page ?? 1) - 1, pageSize: meta?.per_page ?? query.per_page ?? 15 },
+      pagination: { pageIndex: (meta?.current_page ?? query.page ?? 1) - 1, pageSize: meta?.per_page ?? query.per_page ?? query.limit ?? 15 },
     },
     ...(getRowId ? { getRowId } : {}),
   });
@@ -108,13 +108,9 @@ export function useDataTable<T extends RowData>({ columns, data, query, onQueryC
   const toggleColumnSort = (header: Header<NavreeTableFeatures, T, unknown>, multi = false) => {
     const field = columnMeta(header).sortField;
     if (!field) return;
-    const { page: _page, cursor: _cursor, ...rest } = query;
+    const { sort: _sort, ...rest } = firstPage(query);
     const sort = toggleSort(query.sort, field, { multi });
-    if (sort.length > 0) onQueryChange({ ...rest, sort });
-    else {
-      const { sort: _sort, ...unsorted } = rest;
-      onQueryChange(unsorted);
-    }
+    onQueryChange(sort.length > 0 ? { ...rest, sort } : rest);
   };
 
   return Object.assign(table, {

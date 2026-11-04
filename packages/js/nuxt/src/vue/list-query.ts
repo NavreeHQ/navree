@@ -1,23 +1,26 @@
 /**
  * `useListQuery()`: a list's filters, sort, search and page in the route's
  * query string (vue-router), so a list survives a reload and a shared link.
+ * The route is read and written only through `@navree/client`'s list-query
+ * functions, so it speaks the one grammar every Navree list does.
  */
 import {
-  parseListQuery,
+  checkListQuery,
+  firstPage,
+  isListParam,
   serializeListQuery,
   setFilter as withFilter,
   toggleSort as nextSort,
+  withDefaults,
   withPage,
   type FilterCondition,
   type ListQuery,
+  type ListQueryProblem,
 } from "@navree/client";
 import { computed, type ComputedRef } from "vue";
 import { useRoute, useRouter, type LocationQuery, type LocationQueryRaw } from "vue-router";
 
-/** True for the query parameters a list query owns. */
-export function isListParam(key: string): boolean {
-  return key.startsWith("filter[") || ["sort", "search", "page", "per_page", "cursor", "limit"].includes(key);
-}
+export { isListParam };
 
 function flatten(query: LocationQuery): Record<string, string | string[] | undefined> {
   const out: Record<string, string | string[] | undefined> = {};
@@ -46,7 +49,10 @@ export function mergeListQuery(current: LocationQuery, query: ListQuery, default
 }
 
 export interface ListQueryState {
+  /** The list query in the route, over `defaults`. */
   query: ComputedRef<ListQuery>;
+  /** What is wrong in the list query of the route (an edited or old link): the rest of the query still applies. */
+  problems: ComputedRef<ListQueryProblem[]>;
   setQuery(next: ListQuery | ((current: ListQuery) => ListQuery)): Promise<void>;
   setFilter(field: string, condition: FilterCondition | undefined): Promise<void>;
   setSearch(search: string): Promise<void>;
@@ -58,7 +64,9 @@ export interface ListQueryState {
 export function useListQuery(defaults: ListQuery = {}): ListQueryState {
   const route = useRoute();
   const router = useRouter();
-  const query = computed<ListQuery>(() => ({ ...structuredClone(defaults), ...parseListQuery(flatten(route.query)) }));
+  const checked = computed(() => checkListQuery(flatten(route.query)));
+  const query = computed<ListQuery>(() => withDefaults(checked.value.query, defaults));
+  const problems = computed(() => checked.value.problems);
 
   const setQuery = async (next: ListQuery | ((current: ListQuery) => ListQuery)) => {
     const value = typeof next === "function" ? next(query.value) : next;
@@ -67,16 +75,17 @@ export function useListQuery(defaults: ListQuery = {}): ListQueryState {
 
   return {
     query,
+    problems,
     setQuery,
     setFilter: (field, condition) => setQuery((q) => withFilter(q, field, condition)),
     setSearch: (text) =>
       setQuery((q) => {
-        const { page: _page, cursor: _cursor, search: _search, ...rest } = q;
+        const { search: _search, ...rest } = firstPage(q);
         return text.trim() ? { ...rest, search: text } : rest;
       }),
     toggleSort: (field, options) =>
       setQuery((q) => {
-        const { page: _page, cursor: _cursor, sort: _sort, ...rest } = q;
+        const { sort: _sort, ...rest } = firstPage(q);
         const sort = nextSort(q.sort, field, options);
         return sort.length > 0 ? { ...rest, sort } : rest;
       }),

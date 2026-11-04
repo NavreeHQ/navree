@@ -187,6 +187,59 @@ describe("useListQuery", () => {
   it("merges a list query into a route query and drops the defaults", () => {
     expect(mergeListQuery({ tab: "open", page: "2" }, { per_page: 25, search: "a" }, { per_page: 25 })).toEqual({ tab: "open", search: "a" });
   });
+
+  it("replaces every list parameter, the cursor ones too, and writes the canonical form", () => {
+    const merged = mergeListQuery(
+      { tab: "open", cursor: "a", before: "b", limit: "5", filter: "1", q: "old", page: "2" },
+      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "acme corp" },
+    );
+    expect(merged).toEqual({ tab: "open", q: "old", "filter[stage][in]": "lead,won", search: "acme corp", limit: "10" });
+    expect(Object.keys(merged)).toEqual(["tab", "q", "filter[stage][in]", "search", "limit"]);
+  });
+
+  it("reads the grammar's operators, null and cursor names, and a cursor takes no default page size", async () => {
+    const { state } = await setup("/deals?filter[amount][gte]=100&filter[owner_id][null]=1&before=abc&limit=20");
+    expect(state().query.value).toEqual({
+      filter: { amount: { gte: "100" }, owner_id: { null: true } },
+      before: "abc",
+      limit: 20,
+    });
+    expect(state().problems.value).toEqual([]);
+  });
+
+  it("does not read names the grammar does not have", async () => {
+    const { state } = await setup("/deals?q=acme&per=10&after=abc&f.stage=won&filters[stage]=won");
+    expect(state().query.value).toEqual({ per_page: 25 });
+    expect(state().problems.value).toEqual([]);
+  });
+
+  it("keeps what is right in an edited address and names what is not", async () => {
+    const { state } = await setup("/deals?filter[stage]=won&filter[amount][regex]=1&page=0");
+    expect(state().query.value).toEqual({ filter: { stage: "won" }, per_page: 25 });
+    expect(state().problems.value.map((problem) => problem.param)).toEqual(["filter[amount][regex]", "page"]);
+  });
+
+  it("goes back to the first page of a cursor list when a filter, the search or the sort changes", async () => {
+    const { router, state } = await setup("/deals?cursor=abc&before=def&limit=20&tab=open");
+    await state().setFilter("stage", "won");
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", limit: "20" });
+    await state().setSearch("acme");
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "acme", limit: "20" });
+    await state().toggleSort("name");
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "acme", sort: "name", limit: "20" });
+  });
+
+  it("writes an operator filter and a list as `in`", async () => {
+    const { router, state } = await setup("/deals");
+    await state().setFilter("amount", { gte: 100, lte: 900 });
+    expect(router.currentRoute.value.query).toEqual({ "filter[amount][gte]": "100", "filter[amount][lte]": "900" });
+    await state().setFilter("stage", ["lead", "won"]);
+    expect(router.currentRoute.value.query).toEqual({
+      "filter[amount][gte]": "100",
+      "filter[amount][lte]": "900",
+      "filter[stage][in]": "lead,won",
+    });
+  });
 });
 
 describe("applyFieldErrors (vee-validate)", () => {
