@@ -307,6 +307,12 @@ export const sections: DocsSection[] = [
       "breadcrumb",
       "pagination",
       "command",
+      // Steps, ranges and trees
+      "stepper",
+      "wizard",
+      "slider",
+      "tree-view",
+      "toolbar",
       // Data
       "table",
       "stat",
@@ -319,6 +325,7 @@ export const sections: DocsSection[] = [
       { title: "Overlays", from: "dialog" },
       { title: "Layout", from: "accordion" },
       { title: "Navigation", from: "breadcrumb" },
+      { title: "Steps, ranges and trees", from: "stepper" },
       { title: "Data", from: "table" },
     ],
   },

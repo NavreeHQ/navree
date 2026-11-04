@@ -1,0 +1,164 @@
+---
+title: "TreeView"
+description: "A tree of links or choices. Children load from the server as a branch opens, long lists come in pages, choices are native inputs that post with the form, and with no script it is a nested list you can read, follow and post."
+---
+
+<UiPreview example="tree-view/default" />
+
+`Tree` shows things that sit inside other things: folders, an organisation, categories. The server writes plain nested lists, links and inputs. With no script, that is a list a person can read, follow and post. The `tree` module turns it into a tree view when it runs: it adds the roles, one tab stop, the keys, type-ahead, opening and closing, tri-state parents, and children fetched as a branch opens.
+
+```rust
+use navree::ui::*;
+
+Tree::new("files", "Files")
+    .node(
+        TreeNode::branch(
+            "docs",
+            "Documents",
+            [
+                TreeNode::leaf("plans", "Plans").link("/files/plans").icon(icons::FILE),
+                TreeNode::leaf("notes", "Notes").link("/files/notes").icon(icons::FILE),
+            ],
+        )
+        .icon(icons::FOLDER)
+        .open(true),
+    )
+    .node(TreeNode::leaf("readme", "README").link("/files/readme"))
+```
+
+`Tree::new(name, label)` takes the name that chosen nodes post as, and the name a screen reader reads for the tree. A node has an `id`, which is what it posts and what an address calls it: it must be unique in the tree and is cut at 256 bytes.
+
+## When to use it
+
+Use a tree for a hierarchy a person moves through or chooses from. For a flat list of choices use a [Select](/docs/components/select/) or a [Combobox](/docs/components/combobox/); for rows of data with columns, a [DataTable](/docs/ui/data-table/).
+
+## Anatomy
+
+<UiAnatomy component="tree-view" />
+
+## Children from the server
+
+A node's children can come with it (`TreeNode::branch`), or from the server when the branch is first opened (`TreeNode::lazy(id, label, src)`). The module asks `src` once, shows "Loading", puts the answer in place and does not ask again. An answer that fails says so and offers Try again; one with nothing in it is an empty branch. A request that is already out is not asked for twice, however often the branch is toggled.
+
+<UiPreview example="tree-view/lazy" />
+
+The answer is the list items of the children, drawn with `Tree::children`, from the same tree as the page's:
+
+```rust
+use navree::ui::*;
+
+async fn children(Query(q): Query<ChildrenQuery>) -> impl IntoResponse {
+    let nodes = load_children(&q.parent).await?;
+    tree().children(2, 0, None, nodes, None) // the level, how many came before, the total, the nodes, a "Show more"
+}
+```
+
+## Long lists in pages
+
+A branch with ten thousand children does not draw ten thousand. Draw a page of them and end with a **Show more** row: `.more(href, remaining)` on the node, or on the tree for the top level. The module fetches the next page from the link in place and puts it where the row was; the assistive technology is told how long the list really is (`.children_total(n)` on the node, `.total(n)` on the tree), so item 51 of 10,000 reads as that.
+
+<UiPreview example="tree-view/paged" />
+
+The link works as a link too. Give the same address two answers: a page when the request is an ordinary one, the list items (`Tree::children`) when it carries the runtime's `X-Navree-UI` header (`navree::ui::op::UI_HEADER`).
+
+Virtual scrolling is left out on purpose: it hides items from find-in-page and from a screen reader's list of items, and the server already holds the data.
+
+## Choosing
+
+`.select(TreeSelect::Multiple)` puts a checkbox on each node, and `TreeSelect::Single` a radio. They are the browser's inputs, so they post as the tree's name with no script. With many, `.cascade()` makes a choice in a branch reach everything under it, and shows a branch with some of its children chosen as half chosen. A disabled node is not the person's to change, and does not count towards its parent.
+
+<UiPreview example="tree-view/multiple" />
+
+<UiPreview example="tree-view/single" />
+
+A branch that is chosen before its children arrive stands for them: they are chosen when they load. On the server a chosen branch posts its own id, so `TreeSelection::roots(parent)` gives the chosen nodes none of whose ancestors is chosen, which is what a cascading choice means.
+
+Read what was posted with `TreeSelection`:
+
+```rust
+use navree::ui::*;
+
+let chosen = TreeSelection::parse(&pairs, "access")?; // at most 1,000 ids, none over 256 bytes, no repeats
+if let Some(unknown) = chosen.first_unknown(|id| known.contains(id)) {
+    // an id the tree never had
+}
+let one = TreeSelection::one(&pairs, "owner")?; // for a single choice tree
+```
+
+## Open branches in the address
+
+`TreeState` keeps the open branches in the address as repeated `open` fields. Give it to the tree, and each caret is a link that opens or closes that branch. With no script a person opens a branch by following the link, and your handler draws that branch's children; with the script the caret opens it in place and the address is left alone.
+
+<UiPreview example="tree-view/state" />
+
+```rust
+use navree::ui::*;
+
+let state = TreeState::from_query("/files", &query);
+// state.is_open("docs"), state.toggled("docs")
+Tree::new("files", "Files").state(state) /* ... */
+```
+
+`TreeState` keeps at most 200 open branches and drops ids over 256 bytes, so an address can't be used to make a page enormous.
+
+## Right to left
+
+Left opens and Right closes, and the rows, carets and indent flip.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Enters the tree on one row, the one last used, and leaves it in one more press. |
+| `Down`, `Up` | Move to the next or previous row that is showing. |
+| `Right` | Opens a closed branch. On an open one, goes to its first child. |
+| `Left` | Closes an open branch. Otherwise goes to the parent. |
+| `Home`, `End` | Go to the first or last row. |
+| `Enter` | Follows a link; chooses in a tree with one choice; opens or closes a branch; chooses a leaf where many can be chosen. On a Show more row, loads the page. |
+| `Space` | Chooses or unchooses. |
+| `Shift` with `Down` or `Up` | Moves and toggles the row. |
+| `Shift` with `Space` | Chooses the rows from the last one chosen to this one. |
+| `Ctrl` with `A` | Chooses every row showing. |
+| `Ctrl` with `Shift` and `Home` or `End` | Chooses from here to the first or last row. |
+| A letter | Goes to the next row that starts with what was typed, and typing the same letter again goes round. |
+| `*` | Opens every branch at this level. |
+
+- The list is a `tree`, each row a `treeitem` with its level, position and size, and a branch's group is owned by its row. The list items are `role="none"`, so the name of a row is its own label and not everything under it.
+- A tree that chooses uses `aria-checked`, with `mixed` for a half chosen branch; a single choice tree uses `aria-selected`.
+- A row that is loading or has failed is a row too, and Enter on a failed one tries again. Loads and failures are said in a polite live region.
+- The roles come from the script, not from the server: a page with no script has a plain nested list and makes no promise of keys it doesn't have.
+- With no script every level shows. A tree deeper than its box scrolls inside it.
+
+</UiA11y>
+
+## API
+
+### Tree
+
+<UiProps type="Tree" />
+
+### TreeNode
+
+<UiProps type="TreeNode" />
+
+### TreeSelect
+
+<UiProps type="TreeSelect" />
+
+### TreeState
+
+<UiProps type="TreeState" />
+
+### TreeSelection
+
+<UiProps type="TreeSelection" />
+
+### TreeChildren
+
+<UiProps type="TreeChildren" />
+
+### TreeLabels
+
+<UiProps type="TreeLabels" />

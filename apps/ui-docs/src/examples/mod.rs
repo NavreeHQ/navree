@@ -9,6 +9,7 @@ mod data;
 mod dates;
 mod display;
 mod feedback;
+mod flow;
 mod icons;
 mod inputs;
 mod layout;
@@ -38,6 +39,7 @@ pub fn all() -> Vec<Example> {
     all.extend(layout::all());
     all.extend(navigation::all());
     all.extend(menus::all());
+    all.extend(flow::all());
     all.extend(data::all());
     all.extend(patterns::all());
     all.extend(themes::all());

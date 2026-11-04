@@ -1,0 +1,95 @@
+---
+title: "Stepper"
+description: "The steps of a task and where the person is in them: done, current, with an error, not yet open. Horizontal or vertical, and it works with no script."
+---
+
+<UiPreview example="stepper/default" />
+
+`Stepper` shows the steps of something that goes in order: setting up an account, checking out, a deal's stages. Each step has a state, and the stepper says it in words as well as colour, so a person who cannot see colour, or who uses a screen reader, hears "Payment (needs attention)". It stands on its own, and a [Wizard](/docs/components/wizard/) draws one for you.
+
+```rust
+use navree::ui::*;
+
+Stepper::new("Checkout")
+    .step(Step::new("Cart"))
+    .step(Step::new("Address"))
+    .step(Step::new("Payment").state(StepState::Error))
+    .step(Step::new("Review"))
+    .current(3)
+```
+
+`Stepper::new` takes the name a screen reader reads for the list. `.current(index)` says which step the person is on, counting from 0: steps before it are done, steps after it are upcoming. A step can say its own state with `.state(...)`, which wins, so a step before the current one can be in error and one after it can be closed.
+
+It is a plain ordered list. It ships no script.
+
+## When to use it
+
+Use a stepper when the order matters and the person should see how far along they are. For views of one thing that can be read in any order, use [Tabs](/docs/components/tabs/). For what happened to something, after the fact, use a [Timeline](/docs/components/timeline/).
+
+## Anatomy
+
+<UiAnatomy component="stepper" />
+
+## States
+
+A step is one of five things.
+
+| State | Means |
+|---|---|
+| `Upcoming` | Not reached yet, but it can be. |
+| `Current` | Where the person is. It is `aria-current="step"`. |
+| `Done` | Finished and valid. Its indicator is a tick. |
+| `Error` | Something in it is wrong. Its indicator is an alert. |
+| `Disabled` | Can't be reached yet. |
+
+Each state other than upcoming writes a short phrase after the step's name that only assistive technology reads: "(completed)", "(current step)", "(needs attention)", "(not available yet)". Change the words, for another language, with `StepperLabels`.
+
+## Steps that are links
+
+A step is plain text unless it is given somewhere to go. `.link(href)` makes it a link; `.submit(name, value)` makes it a submit button of the form it stands in, which is how a wizard moves between steps while saving what was typed. The current step and a disabled step are never links.
+
+<UiPreview example="stepper/links" />
+
+## Vertical
+
+`.vertical()` stacks the steps with a line down the side. Descriptions and the "Optional" note sit under the name.
+
+<UiPreview example="stepper/vertical" />
+
+## In a narrow box
+
+A horizontal stepper in a box narrower than 36 rem keeps the current step's name and writes "Step 2 of 4" under the list. The other steps shrink to their indicators, and their names stay in the page for assistive technology. The page never scrolls sideways. `.no_count()` leaves out the count.
+
+<UiPreview example="stepper/narrow" />
+
+A stepper with more steps than fit on a line wraps onto another.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The list is an ordered list named by its label. The current step is `aria-current="step"`.
+- A state is always written, not only drawn: the indicator is `aria-hidden` and the phrase after the name carries the meaning.
+- Links and buttons are in the page's tab order as usual; a stepper adds no keys of its own.
+- In forced-colours mode the current step's indicator uses the highlight colours.
+- Right to left pages flip the lines and the padding.
+
+</UiA11y>
+
+## API
+
+### Stepper
+
+<UiProps type="Stepper" />
+
+### Step
+
+<UiProps type="Step" />
+
+### StepState
+
+<UiProps type="StepState" />
+
+### StepperLabels
+
+<UiProps type="StepperLabels" />

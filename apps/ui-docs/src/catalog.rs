@@ -118,6 +118,11 @@ pub const GROUPS: &[Group] = &[
         components: &["app-shell", "tabs", "breadcrumb", "pagination", "command"],
     },
     Group {
+        id: "flow",
+        title: "Steps, ranges and trees",
+        components: &["stepper", "wizard", "slider", "tree-view", "toolbar"],
+    },
+    Group {
         id: "data",
         title: "Data",
         components: &["table", "data-table", "stat"],
@@ -458,6 +463,60 @@ pub const COMPONENTS: &[Component] = &[
         "command",
         "Command",
         &["Command", "CommandGroup", "CommandItem"],
+        "thumb",
+    )
+    .parts("default"),
+    // Steps, ranges and trees
+    component(
+        "stepper",
+        "Stepper",
+        &["Stepper", "Step", "StepState", "StepperLabels"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "wizard",
+        "Wizard",
+        &[
+            "Wizard",
+            "WizardStep",
+            "WizardStepOf",
+            "WizardPage",
+            "WizardOutcome",
+            "WizardAction",
+            "WizardLabels",
+            "Draft",
+            "MemoryDrafts",
+        ],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "slider",
+        "Slider",
+        &["Slider", "SliderSpec", "SliderError", "SliderLabels"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "tree-view",
+        "TreeView",
+        &[
+            "Tree",
+            "TreeNode",
+            "TreeSelect",
+            "TreeState",
+            "TreeSelection",
+            "TreeChildren",
+            "TreeLabels",
+        ],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "toolbar",
+        "Toolbar",
+        &["Toolbar", "ToolbarItem", "ToolbarLabels"],
         "thumb",
     )
     .parts("default"),

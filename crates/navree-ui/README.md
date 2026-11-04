@@ -36,6 +36,9 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   HoverCard, Popover, ScrollArea, Sheet, Tooltip. Menus and messages: Tabs, ToggleGroup,
   DropdownMenu, Toast and Toaster. Layout: Stack, Row, Grid, Container.
   Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
+  Flow (`navree_ui::flow`): Stepper, Wizard (steps that are derived forms, with a
+  `Draft` kept on the server), Slider (one value or a range, with `SliderSpec` to
+  check a post), Tree (children from the server, choices that post) and Toolbar.
   Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
   list and the number, formatted as typed, read on the server in the country chosen.
   Components carry no outer margin: layout
@@ -99,6 +102,10 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | A phone input | `phone`, `overlay`; the numbering plans on first focus. |
+| A stepper, a wizard | None of their own: a wizard is forms, so it has `core` for the runtime's posting. |
+| A slider | `slider`: the filled part, the value text, a gap between thumbs. It posts with no script. |
+| A tree | `tree`: the roles, the keys, children fetched as a branch opens. A tree is a plain nested list with no script. |
+| A toolbar | `toolbar`, `menus`, `overlay`: one tab stop and the arrow keys, and a More menu for what does not fit. |
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
