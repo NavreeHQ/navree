@@ -90,7 +90,7 @@ export function SiteFooter() {
       </div>
       <div className="container-site grid grid-cols-2 gap-x-6 gap-y-12 py-16 sm:gap-x-8 md:grid-cols-3 lg:grid-cols-5 lg:py-20 xl:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,1fr))]">
         <div className="col-span-2 max-w-sm md:col-span-3 lg:col-span-5 xl:col-span-1">
-          <Link href="/" className="-ml-1 inline-flex rounded-md px-1 py-1" aria-label={`${site.name} home`}>
+          <Link href="/" prefetch={false} className="-ml-1 inline-flex rounded-md px-1 py-1" aria-label={`${site.name} home`}>
             <Logo />
           </Link>
           <p className="mt-5 font-display text-[1.125rem] leading-snug font-semibold tracking-[-0.02em] text-balance text-fg">{site.headline}</p>

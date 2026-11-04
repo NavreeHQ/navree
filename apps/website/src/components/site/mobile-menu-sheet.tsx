@@ -45,6 +45,7 @@ export function MobileMenuSheet({ className, defaultOpen = false }: { className?
                   <SheetClose asChild>
                     <Link
                       href={item.href}
+                      prefetch={false}
                       aria-current={current ? "page" : undefined}
                       className={cn(
                         "flex items-center justify-between rounded-xl px-3 py-3 font-display text-[1.375rem] font-semibold tracking-[-0.02em] transition-colors",
@@ -63,7 +64,7 @@ export function MobileMenuSheet({ className, defaultOpen = false }: { className?
         <div className="flex flex-col gap-2 border-t border-line p-5">
           <SheetClose asChild>
             <Button asChild size="lg" className="w-full">
-              <Link href={site.getStarted}>
+              <Link href={site.getStarted} prefetch={false}>
                 Get started
                 <ArrowRightIcon aria-hidden />
               </Link>

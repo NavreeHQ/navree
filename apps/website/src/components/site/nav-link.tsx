@@ -28,6 +28,7 @@ export function NavLink({ href, match, children }: { href: string; match: readon
   return (
     <Link
       href={href}
+      prefetch={false}
       aria-current={current ? "page" : undefined}
       className={cn(
         "relative rounded-full px-3 py-1.5 text-[0.875rem] transition-colors duration-200",

@@ -14,7 +14,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 h-(--header-h) border-b border-line bg-ink-0/80 backdrop-blur-xl supports-[backdrop-filter]:bg-ink-0/65">
       <div className="container-site flex h-full items-center gap-3">
-        <Link href="/" className="-ml-1 shrink-0 rounded-md px-1 py-1" aria-label={`${site.name} home`}>
+        <Link href="/" prefetch={false} className="-ml-1 shrink-0 rounded-md px-1 py-1" aria-label={`${site.name} home`}>
           <Logo />
         </Link>
         <nav aria-label="Main" className="ml-5 hidden items-center gap-0.5 lg:flex">
@@ -34,7 +34,7 @@ export function SiteHeader() {
             <GitHubIcon className="size-[1.125rem]" />
           </a>
           <Button asChild size="sm" className="hidden h-9 pr-1.5 pl-4 sm:inline-flex">
-            <Link href={site.getStarted} className="group">
+            <Link href={site.getStarted} prefetch={false} className="group">
               Get started
               <span
                 aria-hidden
