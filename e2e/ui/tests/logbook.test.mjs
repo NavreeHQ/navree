@@ -1,4 +1,4 @@
-// Logbook in real browsers, Chromium and Firefox: the shell with the entry types, the
+// Logbook in real browsers, Chromium, Firefox and WebKit: the shell with the entry types, the
 // list and the open entry in two panes on a wide screen and one at a time on a phone,
 // an address for every entry, nothing wider than the window at 390px, the colours,
 // the states (empty, a bad filter, an entry that isn't there) and the app rules.
@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, test } from "node:test";
-import { chromium, firefox } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 
 const LOGBOOK = process.env.UI_LOGBOOK_URL;
 const require = createRequire(import.meta.url);
@@ -65,7 +65,7 @@ const panes = (page) =>
     }),
   );
 
-for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]]) {
+for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]]) {
   const suite = (name, options, fn) => test(`${engine}: ${name}`, { skip: !LOGBOOK, timeout: 90000, ...options }, fn);
   let browser;
   after(() => browser?.close());
