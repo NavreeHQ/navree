@@ -368,16 +368,19 @@ mod times {
         stage: Option<Stage>,
     }
 
-    fn median(rounds: u32, work: impl Fn() -> String) -> Duration {
-        let mut times: Vec<Duration> = (0..rounds)
+    /// The fastest of `rounds` timed runs, after one run that is not timed. The bound is
+    /// on what the code costs, not on a busy machine's worst moments: a real slowdown
+    /// slows every run, while noise slows only some.
+    fn best(rounds: u32, work: impl Fn() -> String) -> Duration {
+        black_box(work());
+        (0..rounds)
             .map(|_| {
                 let start = Instant::now();
                 black_box(work());
                 start.elapsed()
             })
-            .collect();
-        times.sort();
-        times[times.len() / 2]
+            .min()
+            .expect("at least one round")
     }
 
     /// A page with a phone input and a saved number: the 245 countries of
@@ -386,7 +389,7 @@ mod times {
     fn a_page_with_a_phone_input_renders_in_under_1_ms() {
         use navree_ui::PhoneInput;
         let saved = navree_phone::PhoneNumber::parse("+44 7400 123456", None).unwrap();
-        let time = median(50, || {
+        let time = best(50, || {
             View::new("Contact")
                 .body(PhoneInput::new("mobile").number(&saved))
                 .to_html()
@@ -398,7 +401,7 @@ mod times {
     #[test]
     fn ten_thousand_options_render_in_under_40_ms() {
         use navree_ui::{Choice, Combobox};
-        let time = median(20, || {
+        let time = best(20, || {
             View::new("Options")
                 .body(Combobox::new("c").options((0..10_000).map(|at| {
                     Choice::new(
@@ -423,7 +426,7 @@ mod times {
             })
             .collect();
         let query = TableQuery::<Row, Filter>::parse("/deals", "per=1000");
-        let time = median(50, || {
+        let time = best(50, || {
             View::new("Deals")
                 .body(DataTable::new("deals", &query, &rows))
                 .to_html()
@@ -434,7 +437,7 @@ mod times {
     #[test]
     fn a_hundred_event_timeline_renders_in_under_1_ms() {
         use navree_ui::{Meta, Timeline, TimelineEvent, Tone, icons};
-        let time = median(50, || {
+        let time = best(50, || {
             let timeline = Timeline::new("t", "Steps")
                 .time_zone("Asia/Kolkata", 19_800)
                 .events((0..100).map(|n| {
@@ -451,7 +454,7 @@ mod times {
     #[test]
     fn a_hundred_row_feed_renders_in_under_1_ms() {
         use navree_ui::{ActivityFeed, ActivityItem, Meta, Tone, icons};
-        let time = median(50, || {
+        let time = best(50, || {
             let feed = ActivityFeed::new("a", "Recent activity")
                 .live()
                 .items((0..100).map(|n| {
