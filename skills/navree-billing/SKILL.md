@@ -1,6 +1,6 @@
 ---
 name: navree-billing
-description: "Billing with navree-billing (facade feature `billing`, opt-in): `BillingModule` and the `billing` config section (plans, prices, trial days, seats, meters, Stripe and Paddle keys), the `Billable` trait for workspaces, users or your own types, the `Billing` service (checkout builder, `subscription`/`subscribed`, swap, quantity, cancel, resume, pause, trials without a subscription, metered usage, invoices, the customer portal), the `Subscribed` extractor (402), the `/api/billing` routes, signed webhooks (`Stripe-Signature`, `Paddle-Signature`) stored in `billing_events` and processed by the `billing.process_event` job, the billing events, the `billing:*` commands and `BillingFake` (`billing.provider = \"fake\"`). Use when adding subscriptions or paid plans, gating features by plan, recording usage, testing payment flows, or debugging a 400/402/409/502 from billing or a webhook that does nothing."
+description: "Billing with navree-billing (facade feature `billing`, opt-in): `BillingModule` and the `billing` config section (plans, prices, trial days, seats, meters, Stripe and Paddle keys), the `Billable` trait for workspaces, users or your own types, the `Billing` service (checkout builder, `subscription`/`subscribed`, swap, quantity, cancel, resume, pause, trials without a subscription, metered usage, invoices, the customer portal, one-time payments, payment links and refunds in `Money`), the open `BillingProvider` trait and `BillingModule::provider` for other gateways, idempotency keys on provider writes, the `Subscribed` extractor (402), the `/api/billing` routes, signed webhooks (`Stripe-Signature`, `Paddle-Signature`) stored in `billing_events` and processed by the `billing.process_event` job, the billing events, the `billing:*` commands and `BillingFake` (`billing.provider = \"fake\"`). Use when adding subscriptions or paid plans, gating features by plan, recording usage, testing payment flows, or debugging a 400/402/409/502 from billing or a webhook that does nothing."
 ---
 
 # Billing
@@ -43,7 +43,7 @@ Navree::app()
 
 ```toml
 [billing]
-provider = "stripe"                        # stripe | paddle | fake
+provider = "stripe"                        # stripe | paddle | fake | a registered name
 return_url = "https://app.acme.test/settings/billing"   # default: app.url
 
 [billing.plans.pro]                        # key: lower-case letters, digits, _ -
@@ -155,7 +155,31 @@ billing.usage(&ws, "ai_summaries").await?;           // this period's total
 billing.invoices(&ws).await?;           // provider list, cached invoice_cache_secs
 billing.portal_url(&ws, "https://app.acme.test/settings/billing").await?;
 billing.sync(&ws).await?;               // pull from the provider (billing:sync <type> <id>)
+
+// One-time payments, payment links and refunds. Money is an integer in the
+// smallest unit: Money::inr(149_900) is Rs 1,499.00 (paise), never a float.
+let payment = billing.payment(Money::inr(149_900), "Annual support")
+    .billable(&ws).reference("INV-2026-0042")   // 1-40 of [A-Za-z0-9_-]; events carry it
+    .customer_phone("+919876543210").methods([PaymentMethod::Upi])
+    .create().await?;                    // ProviderPayment; next_action: Redirect | ClientToken | UpiIntent
+let link = billing.payment_link(Money::inr(2_50_000), "Deposit").reference("DEP-311").create().await?;
+let refund = billing.refund(payment_id).amount(Money::inr(40_000)).reference("RF-7").create().await?;
+billing.supports(Capability::PartialRefunds); // what the configured provider can do
 ```
+
+Idempotency: every provider write carries a key where the provider honours
+one (Stripe yes, Paddle no), so the HTTP client retries it safely. Defaults:
+`payment` a new key per call (a new attempt), `payment_link` and `refund` a
+key from the reference (calling again returns the same link / refunds once),
+`checkout` billable + plan + attempt id; override with `.idempotency_key(k)`.
+
+Own provider: `impl BillingProvider` (required: `name`, `verify_webhook` by
+its own scheme, `parse_webhook`; everything else defaults to `Unsupported`;
+list `capabilities()`; `webhook_event_id(headers)` when the delivery id is
+a header), register `BillingModule::provider("upi_pay", |ctx: ProviderContext|
+async move { Ok::<_, BoxError>(UpiPay::new(ctx.section("billing.upi_pay")?)) })`,
+select `billing.provider = "upi_pay"`. Built-in names, duplicate names and a
+`name()` that differs from the registered one fail the boot.
 
 `Subscription`: `plan`, `interval`, `status` (`Trialing`, `Active`,
 `PastDue`, `Paused`, `Canceled`, `Incomplete`), `quantity`,
@@ -184,6 +208,9 @@ customers and emits after commit:
 | `TrialEnding` | `subscription.trial_ending` (Stripe only) |
 | `InvoicePaid` | `invoice.paid` |
 | `PaymentFailed` | `invoice.payment_failed` |
+| `PaymentUpdated` | `payment.updated` (one-time payments and links: paid, failed, expired) |
+| `RefundUpdated` | `refund.updated` |
+| `MandateUpdated` | `mandate.updated` (UPI AutoPay / e-mandate approved, paused, revoked) |
 
 Listen with `m.listen::<PaymentFailed, MyListener>()`; fields
 `billable_type`, `billable_id`, `subscription_id`, `plan` (`Option`s on the
@@ -234,6 +261,9 @@ fake.end_trial(&workspace).await?;                  // or fake.renew(&workspace)
 fake.assert_checkout(|c| c.plan == "pro" && c.trial_days == Some(14));
 fake.reported_usage(&workspace, "ai_summaries");    // after report_pending_usage()
 fake.send_webhook("invoice.paid", json!({ /* Stripe-shaped data.object */ })).await?;
+let p = billing.payment(Money::inr(50_000), "Seat").create().await?;
+fake.complete_payment(&p.id).await?;                // or fail_payment / expire_payment
+fake.pay_link(&link.id).await?; fake.refunds(); fake.idempotency_keys();
 ```
 
 ## Checks

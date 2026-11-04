@@ -5,7 +5,10 @@
 //! Requests are JSON, authenticated with the API key and pinned with
 //! `Paddle-Version: 1`. Paddle is the merchant of record: checkout is a
 //! transaction whose hosted page is the account's default payment link;
-//! metered usage is a one-time charge added to the next renewal.
+//! metered usage is a one-time charge added to the next renewal. A one-time
+//! payment, and a payment link, is a transaction for a non-catalog price;
+//! a refund is a full refund adjustment of a transaction. Paddle takes no
+//! idempotency keys, so its writes are sent once.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -18,11 +21,14 @@ use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
 
 use crate::invoice::{Invoice, InvoiceStatus};
+use crate::provider::payments::{KIND_KEY, REFERENCE_KEY, tagged_metadata};
 use crate::provider::signature::verify_paddle;
 use crate::provider::{
-    BillingProvider, CheckoutRequest, NewCustomer, ProviderCheckout, ProviderError,
-    ProviderInvoice, ProviderItem, ProviderSubscription, SubscriptionChange, UsageReport,
-    WebhookAction, WebhookEndpoint, WebhookError, WebhookEvent, billable_of,
+    BillingProvider, Capability, CheckoutRequest, Money, NewCustomer, PaymentAction,
+    PaymentLinkRequest, PaymentLinkStatus, PaymentRequest, PaymentStatus, ProviderCheckout,
+    ProviderError, ProviderInvoice, ProviderItem, ProviderPayment, ProviderPaymentLink,
+    ProviderRefund, ProviderSubscription, RefundRequest, RefundStatus, SubscriptionChange,
+    UsageReport, WebhookAction, WebhookEndpoint, WebhookError, WebhookEvent, billable_of,
 };
 use crate::subscription::{Proration, SubscriptionStatus};
 
@@ -43,6 +49,18 @@ pub const PADDLE_EVENTS: &[&str] = &[
     "subscription.canceled",
     "transaction.completed",
     "transaction.payment_failed",
+    "adjustment.created",
+    "adjustment.updated",
+];
+
+/// What the Paddle driver does.
+const CAPABILITIES: &[Capability] = &[
+    Capability::Subscriptions,
+    Capability::MeteredUsage,
+    Capability::CustomerPortal,
+    Capability::OneTimePayments,
+    Capability::PaymentLinks,
+    Capability::Refunds,
 ];
 
 /// A Paddle Billing client: customers, transactions (checkout and
@@ -161,9 +179,55 @@ pub(crate) fn checkout_body(request: &CheckoutRequest) -> Value {
     body
 }
 
+/// The transaction body of a one-time payment or a payment link: one
+/// non-catalog price for the amount, the metadata as `custom_data`.
+pub(crate) fn payment_body(
+    amount: &Money,
+    description: &str,
+    customer_id: Option<&str>,
+    custom_data: &BTreeMap<String, String>,
+) -> Value {
+    let mut body = json!({
+        "items": [{
+            "quantity": 1,
+            "price": {
+                "description": description,
+                "name": description,
+                "unit_price": { "amount": amount.amount.to_string(), "currency_code": amount.currency_code() },
+                "product": { "name": description, "tax_category": "standard" },
+            },
+        }],
+        "currency_code": amount.currency_code(),
+        "custom_data": custom_data,
+        "collection_mode": "automatic",
+    });
+    if let Some(customer) = customer_id {
+        body["customer_id"] = json!(customer);
+    }
+    body
+}
+
+/// The adjustment body of a full refund.
+pub(crate) fn refund_body(request: &RefundRequest) -> Value {
+    let reason = match &request.note {
+        Some(note) => format!("{}: {note}", request.reason.as_str()),
+        None => request.reason.as_str().to_owned(),
+    };
+    json!({
+        "action": "refund",
+        "type": "full",
+        "transaction_id": request.payment_id,
+        "reason": reason,
+    })
+}
+
 impl BillingProvider for PaddleProvider {
     fn name(&self) -> &'static str {
         NAME
+    }
+
+    fn capabilities(&self) -> &'static [Capability] {
+        CAPABILITIES
     }
 
     fn create_customer<'a>(
@@ -410,6 +474,96 @@ impl BillingProvider for PaddleProvider {
         })
     }
 
+    fn create_payment<'a>(
+        &'a self,
+        request: &'a PaymentRequest,
+    ) -> BoxFuture<'a, Result<ProviderPayment, ProviderError>> {
+        Box::pin(async move {
+            no_method_choice(&request.methods)?;
+            let custom_data = tagged_metadata(
+                &request.metadata,
+                request.billable.as_ref(),
+                &request.reference,
+                Some("payment"),
+            );
+            let body = payment_body(
+                &request.amount,
+                &request.description,
+                request.customer.customer_id.as_deref(),
+                &custom_data,
+            );
+            let transaction = self
+                .call(Method::POST, "/transactions", Some(&body), &[])
+                .await?;
+            parse_transaction_payment(&transaction, None)
+        })
+    }
+
+    fn create_payment_link<'a>(
+        &'a self,
+        request: &'a PaymentLinkRequest,
+    ) -> BoxFuture<'a, Result<ProviderPaymentLink, ProviderError>> {
+        Box::pin(async move {
+            no_method_choice(&request.methods)?;
+            let custom_data = tagged_metadata(
+                &request.metadata,
+                request.billable.as_ref(),
+                &request.reference,
+                Some("payment_link"),
+            );
+            let body = payment_body(
+                &request.amount,
+                &request.description,
+                request.customer.customer_id.as_deref(),
+                &custom_data,
+            );
+            let transaction = self
+                .call(Method::POST, "/transactions", Some(&body), &[])
+                .await?;
+            let url = transaction["checkout"]["url"].as_str().ok_or_else(|| {
+                ProviderError::decode(
+                    NAME,
+                    "the transaction has no checkout URL: set a default payment link in Paddle",
+                )
+            })?;
+            Ok(ProviderPaymentLink {
+                id: string(&transaction, "id")?,
+                url: url.to_owned(),
+                status: PaymentLinkStatus::Active,
+                amount: request.amount.clone(),
+                reference: Some(request.reference.clone()),
+                expires_at: None,
+            })
+        })
+    }
+
+    fn refund<'a>(
+        &'a self,
+        request: &'a RefundRequest,
+    ) -> BoxFuture<'a, Result<ProviderRefund, ProviderError>> {
+        Box::pin(async move {
+            if request.amount.is_some() {
+                return Err(ProviderError::Unsupported {
+                    provider: NAME,
+                    operation: "partial refunds (Paddle refunds whole transactions here)",
+                });
+            }
+            let adjustment = self
+                .call(
+                    Method::POST,
+                    "/adjustments",
+                    Some(&refund_body(request)),
+                    &[],
+                )
+                .await?;
+            let mut refund = parse_adjustment(&adjustment)?;
+            refund
+                .reference
+                .get_or_insert_with(|| request.reference.clone());
+            Ok(refund)
+        })
+    }
+
     fn verify_webhook(
         &self,
         headers: &HeaderMap,
@@ -558,6 +712,94 @@ fn parse_payment(value: &Value) -> Result<ProviderInvoice, ProviderError> {
     })
 }
 
+/// Paddle's checkout settings choose the payment methods; the API cannot.
+fn no_method_choice(methods: &[crate::provider::PaymentMethod]) -> Result<(), ProviderError> {
+    if methods.is_empty() {
+        Ok(())
+    } else {
+        Err(ProviderError::Unsupported {
+            provider: NAME,
+            operation: "choosing payment methods (Paddle's checkout settings decide them)",
+        })
+    }
+}
+
+/// Whether a transaction is a one-time payment Navree created.
+fn is_one_time(value: &Value) -> bool {
+    matches!(
+        value["custom_data"][KIND_KEY].as_str(),
+        Some("payment" | "payment_link")
+    )
+}
+
+/// Maps a transaction of a one-time payment or payment link; `status`
+/// overrides the transaction's own.
+pub(crate) fn parse_transaction_payment(
+    value: &Value,
+    status: Option<PaymentStatus>,
+) -> Result<ProviderPayment, ProviderError> {
+    let metadata = custom_data(&value["custom_data"]);
+    let status = status.unwrap_or(match value["status"].as_str().unwrap_or_default() {
+        "completed" => PaymentStatus::Paid,
+        "paid" => PaymentStatus::Processing,
+        "past_due" => PaymentStatus::Failed,
+        "canceled" => PaymentStatus::Canceled,
+        // `draft`, `ready`, `billed`.
+        _ => PaymentStatus::Pending,
+    });
+    let currency = value["currency_code"].as_str().unwrap_or_default();
+    let total = &value["details"]["totals"]["grand_total"];
+    let amount = if total.is_null() {
+        // A new transaction: the price's unit amount.
+        amount(&value["items"][0]["price"]["unit_price"]["amount"])
+    } else {
+        amount(total)
+    };
+    let next_action = match (status, value["checkout"]["url"].as_str()) {
+        (PaymentStatus::Pending, Some(url)) => Some(PaymentAction::Redirect {
+            url: url.to_owned(),
+        }),
+        _ => None,
+    };
+    let id = string(value, "id")?;
+    let link_id =
+        (metadata.get(KIND_KEY).map(String::as_str) == Some("payment_link")).then(|| id.clone());
+    Ok(ProviderPayment {
+        payment_id: Some(id.clone()),
+        id,
+        link_id,
+        reference: metadata.get(REFERENCE_KEY).cloned(),
+        status,
+        amount: Money::new(amount, currency),
+        method: None,
+        customer_id: value["customer_id"].as_str().map(str::to_owned),
+        next_action,
+        metadata,
+    })
+}
+
+/// Maps a refund adjustment.
+pub(crate) fn parse_adjustment(value: &Value) -> Result<ProviderRefund, ProviderError> {
+    let status = match value["status"].as_str().unwrap_or_default() {
+        "approved" => RefundStatus::Succeeded,
+        "rejected" => RefundStatus::Failed,
+        "reversed" => RefundStatus::Canceled,
+        // `pending_approval`.
+        _ => RefundStatus::Pending,
+    };
+    Ok(ProviderRefund {
+        id: string(value, "id")?,
+        payment_id: value["transaction_id"].as_str().map(str::to_owned),
+        reference: None,
+        status,
+        amount: Money::new(
+            amount(&value["totals"]["total"]),
+            value["currency_code"].as_str().unwrap_or_default(),
+        ),
+        metadata: BTreeMap::new(),
+    })
+}
+
 /// Parses a Paddle notification body.
 pub(crate) fn parse_event(body: &[u8]) -> Result<WebhookEvent, ProviderError> {
     let event: Value = serde_json::from_slice(body)
@@ -580,10 +822,28 @@ pub(crate) fn parse_event(body: &[u8]) -> Result<WebhookEvent, ProviderError> {
                     email: None,
                 });
             }
-            actions.push(WebhookAction::InvoicePaid(parse_payment(data)?));
+            if is_one_time(data) {
+                actions.push(WebhookAction::Payment(parse_transaction_payment(
+                    data,
+                    Some(PaymentStatus::Paid),
+                )?));
+            } else {
+                actions.push(WebhookAction::InvoicePaid(parse_payment(data)?));
+            }
             actions
         }
+        "transaction.payment_failed" if is_one_time(data) => {
+            vec![WebhookAction::Payment(parse_transaction_payment(
+                data,
+                Some(PaymentStatus::Failed),
+            )?)]
+        }
         "transaction.payment_failed" => vec![WebhookAction::PaymentFailed(parse_payment(data)?)],
+        "adjustment.created" | "adjustment.updated"
+            if data["action"].as_str() == Some("refund") =>
+        {
+            vec![WebhookAction::Refund(parse_adjustment(data)?)]
+        }
         _ => Vec::new(),
     };
     Ok(WebhookEvent {
@@ -618,6 +878,7 @@ mod tests {
             success_url: "https://app.test/ok".into(),
             cancel_url: "https://app.test/back".into(),
             metadata: BTreeMap::new(),
+            idempotency_key: "checkout-key".into(),
         });
         assert_eq!(
             body["items"],
@@ -674,5 +935,79 @@ mod tests {
         let invoice = parse_invoice(&body["data"]).unwrap();
         assert_eq!(invoice.total_cents, 2900);
         assert_eq!(invoice.status, InvoiceStatus::Draft);
+    }
+
+    // CONN-101
+    #[test]
+    fn one_time_payments_are_non_catalog_transactions() {
+        let data = tagged_metadata(
+            &BTreeMap::new(),
+            Some(&("user".to_owned(), Uuid::nil())),
+            "INV-7",
+            Some("payment"),
+        );
+        let body = payment_body(&Money::inr(149_900), "Annual support", Some("ctm_1"), &data);
+        let price = &body["items"][0]["price"];
+        assert_eq!(price["unit_price"]["amount"], "149900");
+        assert_eq!(price["unit_price"]["currency_code"], "INR");
+        assert_eq!(price["product"]["tax_category"], "standard");
+        assert_eq!(body["items"][0]["quantity"], 1);
+        assert_eq!(body["customer_id"], "ctm_1");
+        assert_eq!(body["custom_data"]["reference"], "INV-7");
+        assert_eq!(body["custom_data"]["navree_kind"], "payment");
+    }
+
+    // CONN-101
+    #[test]
+    fn one_time_transactions_and_refunds_map_to_their_actions() {
+        let one_time = json!({
+            "event_id": "evt_02", "event_type": "transaction.completed",
+            "occurred_at": "2026-10-26T09:00:00Z",
+            "data": { "id": "txn_02", "status": "completed", "customer_id": "ctm_01", "subscription_id": null,
+                      "currency_code": "INR", "details": { "totals": { "grand_total": "149900" } },
+                      "custom_data": { "billable_type": "user", "billable_id": Uuid::nil(),
+                                       "reference": "INV-7", "navree_kind": "payment" } }
+        });
+        let event = parse_event(one_time.to_string().as_bytes()).unwrap();
+        let [
+            WebhookAction::CustomerLinked { .. },
+            WebhookAction::Payment(payment),
+        ] = event.actions.as_slice()
+        else {
+            panic!("{:?}", event.actions);
+        };
+        assert_eq!(payment.status, PaymentStatus::Paid);
+        assert_eq!(payment.amount, Money::inr(149_900));
+        assert_eq!(payment.payment_id.as_deref(), Some("txn_02"));
+        assert_eq!(payment.reference.as_deref(), Some("INV-7"));
+        assert_eq!(payment.billable(), Some(("user".to_owned(), Uuid::nil())));
+
+        let refund = json!({
+            "event_id": "evt_03", "event_type": "adjustment.updated",
+            "occurred_at": "2026-10-27T09:00:00Z",
+            "data": { "id": "adj_01", "action": "refund", "type": "full", "status": "approved",
+                      "transaction_id": "txn_02", "currency_code": "INR",
+                      "totals": { "total": "149900" } }
+        });
+        let event = parse_event(refund.to_string().as_bytes()).unwrap();
+        let [WebhookAction::Refund(refund)] = event.actions.as_slice() else {
+            panic!("{:?}", event.actions);
+        };
+        assert_eq!(refund.status, RefundStatus::Succeeded);
+        assert_eq!(refund.payment_id.as_deref(), Some("txn_02"));
+        assert_eq!(refund.amount, Money::inr(149_900));
+
+        // A credit adjustment is not a refund.
+        let credit = json!({
+            "event_id": "evt_04", "event_type": "adjustment.created",
+            "occurred_at": "2026-10-27T09:00:00Z",
+            "data": { "id": "adj_02", "action": "credit", "status": "approved", "transaction_id": "txn_02" }
+        });
+        assert!(
+            parse_event(credit.to_string().as_bytes())
+                .unwrap()
+                .actions
+                .is_empty()
+        );
     }
 }

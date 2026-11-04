@@ -23,6 +23,7 @@ use crate::plan::Interval;
 /// | [`customer_email`](Self::customer_email) | Prefills the email when the billable has none |
 /// | [`success_url`](Self::success_url), [`cancel_url`](Self::cancel_url) | Where the customer returns; both default to `billing.return_url` |
 /// | [`metadata`](Self::metadata) | Stored on the provider's subscription |
+/// | [`idempotency_key`](Self::idempotency_key) | Makes a repeated call create one checkout |
 #[must_use = "a checkout does nothing until `create` is awaited"]
 pub struct CheckoutBuilder<'a> {
     billing: &'a Billing,
@@ -42,6 +43,7 @@ pub(crate) struct CheckoutParts {
     pub(crate) success_url: Option<String>,
     pub(crate) cancel_url: Option<String>,
     pub(crate) metadata: BTreeMap<String, String>,
+    pub(crate) idempotency_key: Option<String>,
 }
 
 impl<'a> CheckoutBuilder<'a> {
@@ -60,6 +62,7 @@ impl<'a> CheckoutBuilder<'a> {
                 success_url: None,
                 cancel_url: None,
                 metadata: BTreeMap::new(),
+                idempotency_key: None,
             },
         }
     }
@@ -137,6 +140,15 @@ impl<'a> CheckoutBuilder<'a> {
     /// Stored on the provider's subscription (and checkout).
     pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.parts.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    /// The idempotency key: a repeated call with the same key creates one
+    /// checkout, where the provider honours keys (Stripe does). Default: a
+    /// key from the billable, the plan and a new attempt id, so each call
+    /// creates its own. 1 to 255 visible ASCII characters without spaces.
+    pub fn idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.parts.idempotency_key = Some(key.into());
         self
     }
 

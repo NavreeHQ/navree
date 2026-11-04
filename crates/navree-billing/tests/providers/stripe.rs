@@ -62,6 +62,7 @@ async fn customers_and_checkouts_are_authenticated_form_posts_on_the_pinned_vers
             billable_id: WORKSPACE,
             name: "Acme".into(),
             email: Some("ada@example.com".into()),
+            idempotency_key: "navree-customer-test-1".into(),
         })
         .await
         .unwrap();

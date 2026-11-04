@@ -99,8 +99,12 @@ async fn webhook_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxEr
     println!("Events: {}", endpoint.events.join(", "));
     if let Some(secret) = endpoint.secret {
         let key = match billing.provider().name() {
-            "paddle" => "APP_BILLING__PADDLE__WEBHOOK_SECRET",
-            _ => "APP_BILLING__STRIPE__WEBHOOK_SECRET",
+            // The fake signs like Stripe.
+            "stripe" | "fake" => "APP_BILLING__STRIPE__WEBHOOK_SECRET".to_owned(),
+            name => format!(
+                "APP_BILLING__{}__WEBHOOK_SECRET",
+                name.to_ascii_uppercase().replace('-', "_")
+            ),
         };
         println!("Put its signing secret in .env:\n{key}={secret}");
     }

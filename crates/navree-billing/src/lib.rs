@@ -28,10 +28,18 @@
 //!   each event once in `billing_events` and processes it with the
 //!   `billing.process_event` job, which updates the local copy and emits
 //!   the [`events`] once its unit of work commits.
-//! - **Providers** ([`BillingProvider`]): [`StripeProvider`] and
-//!   [`PaddleProvider`] are narrow, typed clients on navree-http-client;
-//!   [`BillingFake`] (`billing.provider = "fake"`) records checkouts and
-//!   usage and simulates the provider's webhooks in tests.
+//! - **One-time payments, payment links and refunds**:
+//!   [`payment`](Billing::payment), [`payment_link`](Billing::payment_link)
+//!   and [`refund`](Billing::refund), with amounts as [`Money`] in the
+//!   currency's smallest unit (`Money::inr(149_900)` is ₹1,499.00); their
+//!   outcomes arrive as [`PaymentUpdated`] and [`RefundUpdated`] events.
+//! - **Providers** ([`BillingProvider`]): an open trait. [`StripeProvider`]
+//!   and [`PaddleProvider`] are narrow, typed clients on
+//!   navree-http-client; [`BillingFake`] (`billing.provider = "fake"`)
+//!   records checkouts, payments and usage and simulates the provider's
+//!   webhooks in tests; any other provider registers with
+//!   [`BillingModule::provider`] and is selected by its name. Writes carry
+//!   idempotency keys, so they are retried without acting twice.
 //!
 //! ```no_run
 //! use navree_billing::BillingModule;
@@ -66,6 +74,7 @@ mod extract;
 mod invoice;
 mod migration;
 mod module;
+mod payment;
 mod plan;
 mod provider;
 mod seats;
@@ -86,24 +95,32 @@ pub use controller::{
 pub use entity::SUBSCRIPTION_SUBJECT;
 pub use error::BillingError;
 pub use events::{
-    InvoicePaid, PaymentFailed, SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated,
-    TrialEnding,
+    InvoicePaid, MandateUpdated, PaymentFailed, PaymentUpdated, RefundUpdated,
+    SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated, TrialEnding,
 };
 pub use extract::Subscribed;
 pub use invoice::{Invoice, InvoiceStatus};
 pub use migration::BILLING_MIGRATIONS;
 pub use module::BillingModule;
+pub use payment::{PaymentBuilder, PaymentLinkBuilder, RefundBuilder};
 pub use plan::{Interval, Plan};
-pub use provider::fake::{BillingFake, FAKE_UNIT_AMOUNT_CENTS, FakeCheckout};
+pub use provider::fake::{
+    BillingFake, FAKE_UNIT_AMOUNT_CENTS, FakeCheckout, FakePayment, FakePaymentLink, FakeRefund,
+};
 pub use provider::paddle::{PADDLE_API_VERSION, PADDLE_EVENTS, PaddleProvider};
+pub use provider::payments::{KIND_KEY, REFERENCE_KEY};
+pub use provider::registry::ProviderContext;
 pub use provider::signature::{
     PADDLE_SIGNATURE_HEADER, STRIPE_SIGNATURE_HEADER, sign_paddle_webhook, sign_stripe_webhook,
 };
 pub use provider::stripe::{STRIPE_API_VERSION, STRIPE_EVENTS, StripeProvider};
 pub use provider::{
-    BillingProvider, CheckoutRequest, NewCustomer, ProviderCheckout, ProviderError,
-    ProviderInvoice, ProviderItem, ProviderSubscription, SubscriptionChange, UsageReport,
-    WebhookAction, WebhookEndpoint, WebhookError, WebhookEvent,
+    BillingProvider, Capability, CheckoutRequest, MandateStatus, Money, NewCustomer, PaymentAction,
+    PaymentCustomer, PaymentLinkRequest, PaymentLinkStatus, PaymentMethod, PaymentRequest,
+    PaymentStatus, ProviderCheckout, ProviderError, ProviderInvoice, ProviderItem, ProviderMandate,
+    ProviderPayment, ProviderPaymentLink, ProviderRefund, ProviderSubscription, RefundReason,
+    RefundRequest, RefundStatus, SubscriptionChange, UsageReport, WebhookAction, WebhookEndpoint,
+    WebhookError, WebhookEvent,
 };
 pub use seats::SeatSync;
 pub use subscription::{Proration, Subscription, SubscriptionStatus};

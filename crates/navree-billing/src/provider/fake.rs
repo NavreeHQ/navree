@@ -7,7 +7,7 @@
 //! secret, and they go through the same verification, storage, job and
 //! mapping as real ones.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -22,14 +22,87 @@ use crate::billable::AsBillable;
 use crate::error::BillingError;
 use crate::invoice::Invoice;
 use crate::plan::{Interval, Plans, PriceRole};
+use crate::provider::payments::tagged_metadata;
 use crate::provider::signature::{STRIPE_SIGNATURE_HEADER, sign_stripe_webhook, verify_stripe};
 use crate::provider::stripe::{STRIPE_API_VERSION, STRIPE_EVENTS, full_metadata};
 use crate::provider::{
-    BillingProvider, CheckoutRequest, NewCustomer, ProviderCheckout, ProviderError,
-    ProviderSubscription, SubscriptionChange, UsageReport, WebhookEndpoint, WebhookError,
-    WebhookEvent, stripe,
+    BillingProvider, Capability, CheckoutRequest, Money, NewCustomer, PaymentLinkRequest,
+    PaymentLinkStatus, PaymentRequest, PaymentStatus, ProviderCheckout, ProviderError,
+    ProviderPayment, ProviderPaymentLink, ProviderRefund, ProviderSubscription, RefundRequest,
+    SubscriptionChange, UsageReport, WebhookEndpoint, WebhookError, WebhookEvent, stripe,
 };
 use crate::webhook::WebhookReceipt;
+
+/// What the fake does: everything Stripe does.
+const CAPABILITIES: &[Capability] = &[
+    Capability::Subscriptions,
+    Capability::MeteredUsage,
+    Capability::CustomerPortal,
+    Capability::OneTimePayments,
+    Capability::PaymentLinks,
+    Capability::Refunds,
+    Capability::PartialRefunds,
+    Capability::IdempotencyKeys,
+];
+
+/// A one-time payment created through the fake provider.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakePayment {
+    /// The checkout session id (`cs_fake_...`).
+    pub id: String,
+    /// The payment intent id refunds name (`pi_fake_...`).
+    pub payment_id: String,
+    /// The payment link it came from, if any.
+    pub link_id: Option<String>,
+    /// The hosted page's URL.
+    pub url: String,
+    /// The amount.
+    pub amount: Money,
+    /// What is paid for.
+    pub description: String,
+    /// Your reference.
+    pub reference: String,
+    /// Where it is.
+    pub status: PaymentStatus,
+    /// The amount refunded so far, in the smallest unit.
+    pub refunded: i64,
+    /// The metadata (with the billable, the reference and the kind).
+    pub metadata: BTreeMap<String, String>,
+}
+
+/// A payment link created through the fake provider.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakePaymentLink {
+    /// The link id (`plink_fake_...`).
+    pub id: String,
+    /// The link's page.
+    pub url: String,
+    /// The amount.
+    pub amount: Money,
+    /// What is paid for.
+    pub description: String,
+    /// Your reference.
+    pub reference: String,
+    /// When it expires, if it does.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// The metadata (with the billable, the reference and the kind).
+    pub metadata: BTreeMap<String, String>,
+}
+
+/// A refund made through the fake provider.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakeRefund {
+    /// The refund id (`re_fake_...`).
+    pub id: String,
+    /// The payment refunded (`pi_fake_...`).
+    pub payment_id: String,
+    /// The amount refunded.
+    pub amount: Money,
+    /// Your refund reference.
+    pub reference: String,
+    /// The metadata.
+    pub metadata: BTreeMap<String, String>,
+}
 
 const NAME: &str = "fake";
 
@@ -118,6 +191,13 @@ struct FakeState {
     fail_next: HashSet<(String, Uuid)>,
     usage: BTreeMap<(String, Uuid, String), u64>,
     invoices: BTreeMap<String, Vec<Value>>,
+    payments: Vec<FakePayment>,
+    links: Vec<FakePaymentLink>,
+    refunds: Vec<FakeRefund>,
+    /// Idempotency key → the id of what its first request created.
+    keyed: HashMap<String, String>,
+    /// Every idempotency key received, in order.
+    keys: Vec<String>,
 }
 
 impl FakeState {
@@ -477,6 +557,129 @@ impl BillingFake {
         self.deliver(&event).await
     }
 
+    /// Every one-time payment created so far (payment links' payments
+    /// included once paid).
+    pub fn payments(&self) -> Vec<FakePayment> {
+        self.state().payments.clone()
+    }
+
+    /// The first payment matching `predicate`.
+    ///
+    /// # Panics
+    ///
+    /// When none matches, listing the payments.
+    pub fn assert_payment(&self, predicate: impl Fn(&FakePayment) -> bool) -> FakePayment {
+        let payments = self.payments();
+        payments
+            .iter()
+            .find(|payment| predicate(payment))
+            .cloned()
+            .unwrap_or_else(|| panic!("no payment matches; payments: {payments:#?}"))
+    }
+
+    /// Every payment link created so far.
+    pub fn payment_links(&self) -> Vec<FakePaymentLink> {
+        self.state().links.clone()
+    }
+
+    /// Every refund made so far.
+    pub fn refunds(&self) -> Vec<FakeRefund> {
+        self.state().refunds.clone()
+    }
+
+    /// Every idempotency key the fake received, in order (a repeated
+    /// request repeats its key).
+    pub fn idempotency_keys(&self) -> Vec<String> {
+        self.state().keys.clone()
+    }
+
+    /// Pays payment `id` (a `cs_fake_...` id) as if the customer did:
+    /// sends `checkout.session.completed`.
+    pub async fn complete_payment(&self, id: &str) -> Result<(), BillingError> {
+        self.settle_payment(id, PaymentStatus::Paid, "checkout.session.completed")
+            .await
+    }
+
+    /// Fails payment `id`: sends `checkout.session.async_payment_failed`.
+    pub async fn fail_payment(&self, id: &str) -> Result<(), BillingError> {
+        self.settle_payment(
+            id,
+            PaymentStatus::Failed,
+            "checkout.session.async_payment_failed",
+        )
+        .await
+    }
+
+    /// Lets payment `id` expire unpaid: sends `checkout.session.expired`.
+    pub async fn expire_payment(&self, id: &str) -> Result<(), BillingError> {
+        self.settle_payment(id, PaymentStatus::Expired, "checkout.session.expired")
+            .await
+    }
+
+    /// Pays payment link `id` (a `plink_fake_...` id): records its payment
+    /// and sends `checkout.session.completed` for it.
+    pub async fn pay_link(&self, id: &str) -> Result<(), BillingError> {
+        let payment_id = {
+            let mut state = self.state();
+            let link = state
+                .links
+                .iter()
+                .find(|link| link.id == id)
+                .cloned()
+                .ok_or_else(|| BillingError::Fake(format!("no payment link `{id}`")))?;
+            if state
+                .payments
+                .iter()
+                .any(|p| p.link_id.as_deref() == Some(id))
+            {
+                return Err(BillingError::Fake(format!(
+                    "payment link `{id}` is already paid"
+                )));
+            }
+            let session = state.id("cs");
+            let intent = state.id("pi");
+            state.payments.push(FakePayment {
+                url: format!("https://checkout.fake.test/p/{session}"),
+                id: session.clone(),
+                payment_id: intent,
+                link_id: Some(link.id.clone()),
+                amount: link.amount.clone(),
+                description: link.description.clone(),
+                reference: link.reference.clone(),
+                status: PaymentStatus::Pending,
+                refunded: 0,
+                metadata: link.metadata.clone(),
+            });
+            session
+        };
+        self.complete_payment(&payment_id).await
+    }
+
+    async fn settle_payment(
+        &self,
+        id: &str,
+        status: PaymentStatus,
+        event_type: &'static str,
+    ) -> Result<(), BillingError> {
+        let session = {
+            let mut state = self.state();
+            let payment = state
+                .payments
+                .iter_mut()
+                .find(|payment| payment.id == id)
+                .ok_or_else(|| BillingError::Fake(format!("no payment `{id}`")))?;
+            if payment.status != PaymentStatus::Pending {
+                return Err(BillingError::Fake(format!(
+                    "payment `{id}` is already {}",
+                    payment.status.as_str()
+                )));
+            }
+            payment.status = status;
+            session_json(payment)
+        };
+        self.deliver_all(vec![(event_type, session)]).await
+    }
+
     fn event(&self, event_type: &str, object: Value) -> Value {
         let id = self.state().id("evt");
         json!({
@@ -596,6 +799,45 @@ fn quantity_of(sub: &FakeSubscription) -> i64 {
         .map_or(1, |q| i64::try_from(q).unwrap_or(i64::MAX))
 }
 
+/// The Stripe Checkout Session JSON of a fake payment.
+fn session_json(payment: &FakePayment) -> Value {
+    let (status, paid) = match payment.status {
+        PaymentStatus::Paid => ("complete", "paid"),
+        PaymentStatus::Processing | PaymentStatus::Failed => ("complete", "unpaid"),
+        PaymentStatus::Expired | PaymentStatus::Canceled => ("expired", "unpaid"),
+        _ => ("open", "unpaid"),
+    };
+    let opened = payment.status == PaymentStatus::Pending;
+    json!({
+        "id": payment.id,
+        "object": "checkout.session",
+        "mode": "payment",
+        "status": status,
+        "payment_status": paid,
+        "amount_total": payment.amount.amount,
+        "currency": payment.amount.currency,
+        "customer": null,
+        "payment_intent": if opened { Value::Null } else { json!(payment.payment_id) },
+        "payment_link": payment.link_id,
+        "client_reference_id": payment.reference,
+        "metadata": payment.metadata,
+        "url": if opened { json!(payment.url) } else { Value::Null },
+    })
+}
+
+/// The Stripe Refund JSON of a fake refund.
+fn refund_json(refund: &FakeRefund) -> Value {
+    json!({
+        "id": refund.id,
+        "object": "refund",
+        "amount": refund.amount.amount,
+        "currency": refund.amount.currency,
+        "status": "succeeded",
+        "payment_intent": refund.payment_id,
+        "metadata": refund.metadata,
+    })
+}
+
 /// The Stripe JSON of a fake subscription.
 fn subscription_json(sub: &FakeSubscription) -> Value {
     let items: Vec<Value> = sub
@@ -641,12 +883,17 @@ impl BillingProvider for BillingFake {
         NAME
     }
 
+    fn capabilities(&self) -> &'static [Capability] {
+        CAPABILITIES
+    }
+
     fn create_customer<'a>(
         &'a self,
         customer: &'a NewCustomer,
     ) -> BoxFuture<'a, Result<Option<String>, ProviderError>> {
         Box::pin(async move {
             let mut state = self.state();
+            state.keys.push(customer.idempotency_key.clone());
             if let Some(existing) = state.customer_of(&customer.billable_type, customer.billable_id)
             {
                 return Ok(Some(existing.id.clone()));
@@ -671,7 +918,20 @@ impl BillingProvider for BillingFake {
     ) -> BoxFuture<'a, Result<ProviderCheckout, ProviderError>> {
         Box::pin(async move {
             let mut state = self.state();
+            state.keys.push(request.idempotency_key.clone());
+            if let Some(id) = state.keyed.get(&request.idempotency_key).cloned()
+                && let Some(existing) = state.checkouts.iter().find(|c| c.id == id)
+            {
+                // A repeated key: the first request's checkout.
+                return Ok(ProviderCheckout {
+                    id: existing.id.clone(),
+                    url: existing.url.clone(),
+                });
+            }
             let id = state.id("cs");
+            state
+                .keyed
+                .insert(request.idempotency_key.clone(), id.clone());
             let url = format!("https://checkout.fake.test/c/{id}");
             state.checkouts.push(FakeCheckout {
                 id: id.clone(),
@@ -866,6 +1126,179 @@ impl BillingProvider for BillingFake {
                 secret: Some(self.secret.clone()),
                 events: STRIPE_EVENTS.iter().map(|e| (*e).to_owned()).collect(),
             })
+        })
+    }
+
+    fn create_payment<'a>(
+        &'a self,
+        request: &'a PaymentRequest,
+    ) -> BoxFuture<'a, Result<ProviderPayment, ProviderError>> {
+        Box::pin(async move {
+            // The same checks as Stripe's form (cards only).
+            stripe::payment_form(request)?;
+            let mut state = self.state();
+            state.keys.push(request.idempotency_key.clone());
+            let existing = state
+                .keyed
+                .get(&request.idempotency_key)
+                .and_then(|id| state.payments.iter().find(|p| &p.id == id))
+                .cloned();
+            let payment = match existing {
+                Some(payment) => payment,
+                None => {
+                    let id = state.id("cs");
+                    let intent = state.id("pi");
+                    let payment = FakePayment {
+                        url: format!("https://checkout.fake.test/p/{id}"),
+                        id: id.clone(),
+                        payment_id: intent,
+                        link_id: None,
+                        amount: request.amount.clone(),
+                        description: request.description.clone(),
+                        reference: request.reference.clone(),
+                        status: PaymentStatus::Pending,
+                        refunded: 0,
+                        metadata: tagged_metadata(
+                            &request.metadata,
+                            request.billable.as_ref(),
+                            &request.reference,
+                            Some("payment"),
+                        ),
+                    };
+                    state.keyed.insert(request.idempotency_key.clone(), id);
+                    state.payments.push(payment.clone());
+                    payment
+                }
+            };
+            stripe::parse_session_payment(&session_json(&payment), None)
+        })
+    }
+
+    fn create_payment_link<'a>(
+        &'a self,
+        request: &'a PaymentLinkRequest,
+    ) -> BoxFuture<'a, Result<ProviderPaymentLink, ProviderError>> {
+        Box::pin(async move {
+            let mut state = self.state();
+            state.keys.push(request.idempotency_key.clone());
+            let existing = state
+                .keyed
+                .get(&request.idempotency_key)
+                .and_then(|id| state.links.iter().find(|l| &l.id == id))
+                .cloned();
+            let link = match existing {
+                Some(link) => link,
+                None => {
+                    let id = state.id("plink");
+                    let link = FakePaymentLink {
+                        url: format!(
+                            "https://pay.fake.test/l/{id}?client_reference_id={}",
+                            request.reference
+                        ),
+                        id: id.clone(),
+                        amount: request.amount.clone(),
+                        description: request.description.clone(),
+                        reference: request.reference.clone(),
+                        expires_at: request.expires_at,
+                        metadata: tagged_metadata(
+                            &request.metadata,
+                            request.billable.as_ref(),
+                            &request.reference,
+                            Some("payment_link"),
+                        ),
+                    };
+                    state.keyed.insert(request.idempotency_key.clone(), id);
+                    state.links.push(link.clone());
+                    link
+                }
+            };
+            let paid = state.payments.iter().any(|p| {
+                p.link_id.as_deref() == Some(link.id.as_str()) && p.status == PaymentStatus::Paid
+            });
+            Ok(ProviderPaymentLink {
+                id: link.id,
+                url: link.url,
+                status: if paid {
+                    PaymentLinkStatus::Paid
+                } else {
+                    PaymentLinkStatus::Active
+                },
+                amount: link.amount,
+                reference: Some(link.reference),
+                expires_at: link.expires_at,
+            })
+        })
+    }
+
+    fn refund<'a>(
+        &'a self,
+        request: &'a RefundRequest,
+    ) -> BoxFuture<'a, Result<ProviderRefund, ProviderError>> {
+        Box::pin(async move {
+            let mut state = self.state();
+            state.keys.push(request.idempotency_key.clone());
+            if let Some(id) = state.keyed.get(&request.idempotency_key).cloned()
+                && let Some(existing) = state.refunds.iter().find(|r| r.id == id)
+            {
+                // A repeated key refunds once.
+                return stripe::parse_refund(&refund_json(existing));
+            }
+            let refused = |message: String| ProviderError::Api {
+                provider: NAME,
+                status: 400,
+                message,
+            };
+            let payment = state
+                .payments
+                .iter_mut()
+                .find(|p| p.payment_id == request.payment_id)
+                .ok_or_else(|| {
+                    not_found(format!("No such payment_intent: '{}'", request.payment_id))
+                })?;
+            if payment.status != PaymentStatus::Paid {
+                return Err(refused(format!(
+                    "Payment `{}` is not paid, so it cannot be refunded.",
+                    request.payment_id
+                )));
+            }
+            let left = payment.amount.amount - payment.refunded;
+            let amount = match &request.amount {
+                Some(amount) if amount.currency != payment.amount.currency => {
+                    return Err(refused(format!(
+                        "The refund is in {}, the payment in {}.",
+                        amount.currency, payment.amount.currency
+                    )));
+                }
+                Some(amount) => amount.amount,
+                None => left,
+            };
+            if amount <= 0 || amount > left {
+                return Err(refused(format!(
+                    "Refund amount ({amount}) is greater than the unrefunded amount on the payment ({left})."
+                )));
+            }
+            payment.refunded += amount;
+            let currency = payment.amount.currency.clone();
+            let id = state.id("re");
+            let mut metadata = tagged_metadata(
+                &request.metadata,
+                request.billable.as_ref(),
+                &request.reference,
+                None,
+            );
+            if let Some(note) = &request.note {
+                metadata.insert("note".into(), note.clone());
+            }
+            let refund = FakeRefund {
+                id: id.clone(),
+                payment_id: request.payment_id.clone(),
+                amount: Money::new(amount, currency),
+                reference: request.reference.clone(),
+                metadata,
+            };
+            state.keyed.insert(request.idempotency_key.clone(), id);
+            state.refunds.push(refund.clone());
+            stripe::parse_refund(&refund_json(&refund))
         })
     }
 

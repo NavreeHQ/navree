@@ -9,5 +9,8 @@ mod support;
 
 mod app;
 mod conformance;
+mod idempotency;
 mod paddle;
+mod payments;
+mod registry;
 mod stripe;

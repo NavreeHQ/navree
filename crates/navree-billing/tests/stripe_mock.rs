@@ -18,8 +18,9 @@ use std::collections::BTreeMap;
 
 use chrono::Utc;
 use navree_billing::{
-    BillingProvider, CheckoutRequest, Interval, NewCustomer, Proration, ProviderError,
-    StripeProvider, SubscriptionChange, UsageReport,
+    BillingProvider, CheckoutRequest, Interval, Money, NewCustomer, PaymentCustomer,
+    PaymentLinkRequest, PaymentMethod, PaymentRequest, Proration, ProviderError, RefundReason,
+    RefundRequest, StripeProvider, SubscriptionChange, UsageReport,
 };
 use navree_contracts::Secret;
 use navree_http_client::{HttpClient, HttpClientOptions, SsrfPolicy};
@@ -88,6 +89,7 @@ fn checkout(customer: Option<String>) -> CheckoutRequest {
         success_url: "https://app.acme.test/settings/billing?upgraded=1".into(),
         cancel_url: "https://app.acme.test/settings/billing".into(),
         metadata: BTreeMap::from([("source".to_owned(), "pricing".to_owned())]),
+        idempotency_key: format!("navree-checkout-mock-{}", Uuid::now_v7().simple()),
     }
 }
 
@@ -106,6 +108,7 @@ async fn stripe_accepts_every_request_the_client_sends() {
                 billable_id: Uuid::now_v7(),
                 name: "Acme".into(),
                 email: Some("ada@example.com".into()),
+                idempotency_key: format!("navree-customer-mock-{}", Uuid::now_v7().simple()),
             })
             .await,
     )
@@ -198,4 +201,84 @@ async fn stripe_accepts_every_request_the_client_sends() {
             .create_webhook_endpoint("https://api.acme.test/api/billing/webhook")
             .await,
     );
+}
+
+/// A one-time payment request for stripe-mock (CONN-101).
+fn payment(reference: &str) -> PaymentRequest {
+    PaymentRequest {
+        billable: Some(("workspace".into(), Uuid::now_v7())),
+        amount: Money::inr(149_900),
+        description: "Annual support, Ludhiana office".into(),
+        reference: reference.into(),
+        customer: PaymentCustomer {
+            customer_id: None,
+            name: Some("Harpreet Kaur".into()),
+            email: Some("harpreet@example.in".into()),
+            phone: Some("+919876543210".into()),
+        },
+        methods: vec![PaymentMethod::Card],
+        success_url: Some("https://app.acme.test/orders/42?paid=1".into()),
+        cancel_url: Some("https://app.acme.test/orders/42".into()),
+        expires_at: Some(Utc::now() + chrono::TimeDelta::hours(2)),
+        metadata: BTreeMap::from([("order".to_owned(), "42".to_owned())]),
+        idempotency_key: format!("navree-pay-mock-{}", Uuid::now_v7().simple()),
+    }
+}
+
+// CONN-101, CONN-103: one-time payments, payment links and refunds, each
+// write with its Idempotency-Key, as Stripe's own description accepts them.
+#[tokio::test]
+async fn stripe_accepts_the_payment_requests_the_client_sends() {
+    let Some(base) = service("stripe_accepts_the_payment_requests_the_client_sends") else {
+        return;
+    };
+    let stripe = provider(base);
+
+    accepted(
+        "a one-time payment as a payment-mode checkout session",
+        stripe.create_payment(&payment("INV-2026-0042")).await,
+    );
+    let mut any_method = payment("INV-2026-0043");
+    any_method.methods.clear();
+    any_method.customer.customer_id = Some("cus_123".into());
+    accepted(
+        "a one-time payment for a customer, with the dashboard's methods",
+        stripe.create_payment(&any_method).await,
+    );
+    accepted(
+        "a payment link (a price, then the link)",
+        stripe
+            .create_payment_link(&PaymentLinkRequest {
+                billable: None,
+                amount: Money::inr(250_000),
+                description: "Wedding photography deposit, Patiala".into(),
+                reference: "DEP-311".into(),
+                customer: PaymentCustomer::default(),
+                methods: Vec::new(),
+                expires_at: None,
+                notify_by_email: false,
+                notify_by_sms: false,
+                return_url: Some("https://app.acme.test/thanks".into()),
+                metadata: BTreeMap::new(),
+                idempotency_key: format!("navree-link-mock-{}", Uuid::now_v7().simple()),
+            })
+            .await,
+    );
+    for (payment_id, amount) in [("pi_123", Some(Money::inr(40_000))), ("ch_123", None)] {
+        accepted(
+            "a refund",
+            stripe
+                .refund(&RefundRequest {
+                    payment_id: payment_id.into(),
+                    amount,
+                    reason: RefundReason::RequestedByCustomer,
+                    note: Some("order canceled".into()),
+                    reference: "RF-2026-0007".into(),
+                    billable: None,
+                    metadata: BTreeMap::new(),
+                    idempotency_key: format!("navree-refund-mock-{}", Uuid::now_v7().simple()),
+                })
+                .await,
+        );
+    }
 }

@@ -1,11 +1,11 @@
 ---
 title: "Billing"
-description: "Subscriptions, trials, seats, metered usage, invoices and the customer portal for users or workspaces, with Stripe or Paddle and verified webhooks processed on the queue."
+description: "Subscriptions, trials, seats, metered usage, invoices, the customer portal, one-time payments, payment links and refunds, with Stripe, Paddle or a provider of your own, idempotent writes and verified webhooks processed on the queue."
 ---
 
 ## Introduction
 
-<Badge feature="billing" /> `navree-billing` charges your customers through Stripe or Paddle and keeps a copy of their subscriptions in your database, so a check like "is this workspace on Pro?" is a local query, not an API call.
+<Badge feature="billing" /> `navree-billing` charges your customers through Stripe, Paddle or a payment provider of your own, and keeps a copy of their subscriptions in your database, so a check like "is this workspace on Pro?" is a local query, not an API call.
 
 You make a type **billable** (a user or, in most SaaS apps, a [workspace](/docs/workspaces/introduction/)), list your plans in configuration, and the `Billing` service does the rest:
 
@@ -14,6 +14,7 @@ You make a type **billable** (a user or, in most SaaS apps, a [workspace](/docs/
 - **Trials,** with or without a payment method up front.
 - **Metered usage.** Record usage as it happens; Navree reports it to the provider in batches.
 - **Invoices and the customer portal,** where customers update their card and download receipts.
+- **One-time payments, payment links and refunds,** with amounts in the currency's smallest unit (paise for rupees).
 - **Webhooks.** The provider's events are verified, stored once and processed on the [queue](/docs/digging-deeper/queues/), and each one becomes a typed [event](/docs/digging-deeper/events/) your listeners handle.
 
 Card numbers never touch your servers: checkout and the portal are hosted by the provider.
@@ -57,7 +58,7 @@ Choose a provider and list your plans in the `billing` section. Each plan has a 
 
 ```toml title="config/app.toml"
 [billing]
-provider = "stripe"                               # stripe | paddle | fake
+provider = "stripe"                               # stripe | paddle | fake | a provider you register
 return_url = "https://app.acme.test/settings/billing"
 
 [billing.plans.starter]
@@ -85,7 +86,7 @@ APP_BILLING__STRIPE__SECRET_KEY=sk_live_51Q8...
 APP_BILLING__STRIPE__WEBHOOK_SECRET=whsec_Jx2...
 ```
 
-Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select `checkout.session.completed`, `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and `.trial_will_end`, `invoice.paid` and `invoice.payment_failed` (the list is `navree::billing::STRIPE_EVENTS`), or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
+Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed` and `.expired`, `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and `.trial_will_end`, `invoice.paid`, `invoice.payment_failed`, and `refund.created`, `.updated` and `.failed` (the list is `navree::billing::STRIPE_EVENTS`), or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
 
 Every request is pinned to Stripe API version `2025-03-31.basil` (`navree::billing::STRIPE_API_VERSION`) with the `Stripe-Version` header, and `billing:webhook` creates the endpoint on the same version, so the payloads have the shape Navree reads.
 
@@ -99,7 +100,7 @@ APP_BILLING__PADDLE__WEBHOOK_SECRET=pdl_ntfset_01j...
 APP_BILLING__PADDLE__ENVIRONMENT=production
 ```
 
-`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*` events (`created`, `updated`, `activated`, `trialing`, `past_due`, `paused`, `resumed`, `canceled`) and `transaction.completed` and `transaction.payment_failed` (the list is `navree::billing::PADDLE_EVENTS`), or run `navree billing:webhook <url>`. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
+`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*` events (`created`, `updated`, `activated`, `trialing`, `past_due`, `paused`, `resumed`, `canceled`) `transaction.completed`, `transaction.payment_failed`, `adjustment.created` and `adjustment.updated` (the list is `navree::billing::PADDLE_EVENTS`), or run `navree billing:webhook <url>`. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
 
 Paddle's checkout is a transaction opened on your account's default payment link, so set one in the Paddle dashboard. A few checkout options work differently on Paddle: the trial is the trial period of the price in Paddle (a checkout's `trial_days` is not sent), `coupon` is a discount id, and the customer returns to the URLs configured on the payment link rather than `success_url` and `cancel_url`.
 
@@ -343,6 +344,181 @@ let url = billing.portal_url(&workspace, "https://app.acme.test/settings/billing
 
 Invoices are read from the provider (on Paddle, the customer's billed transactions, without document links) and cached in memory for `billing.invoice_cache_secs` (300); a payment webhook for the billable clears its cache. The customer portal is the provider's hosted page where customers change their card, switch plans you allow there, cancel and download every invoice. Changes made in the portal reach you as webhooks, like any other change. A billable without a provider customer yet gets `BillingError::NoCustomer` from `portal_url`.
 
+## One-time payments
+
+Not everything is a subscription: an order, a deposit, a one-off invoice. `Billing::payment` charges an amount once. Amounts are `Money`: an integer in the currency's smallest unit and a currency code, never a float, so ₹1,499.00 is `Money::inr(149_900)` (149,900 paise):
+
+```rust title="src/modules/orders/service.rs"
+use navree::billing::{Billing, Money, PaymentAction};
+use navree::prelude::*;
+
+#[injectable]
+pub struct OrderPayments {
+    billing: Arc<Billing>,
+}
+
+impl OrderPayments {
+    /// Starts paying order `number` and returns where to send the customer.
+    pub async fn pay(&self, workspace: &Workspace, number: &str) -> Result<String, BillingError> {
+        let payment = self
+            .billing
+            .payment(Money::inr(149_900), "Annual support, Ludhiana office")
+            .billable(workspace)
+            .reference(number) // "INV-2026-0042"
+            .customer_phone("+919876543210")
+            .metadata("order", number)
+            .create()
+            .await?;
+        match payment.next_action {
+            Some(PaymentAction::Redirect { url }) => Ok(url),
+            _ => Err(BillingError::invalid("payment", "this provider needs its checkout script")),
+        }
+    }
+}
+```
+
+The builder takes `billable` (named in the payment's metadata; its provider customer, name and email fill in the customer), `reference` (your order or invoice number: 1 to 40 letters, digits, `_` or `-`, carried by every event of the payment), `customer_name`, `customer_email`, `customer_phone`, `methods` (to offer only some, such as `[PaymentMethod::Upi]`), `success_url` and `cancel_url` (default `billing.return_url`), `expires_at`, `metadata` and `idempotency_key`. An amount that is not above zero, a currency that is not a three-letter code, an empty description or a malformed reference is `BillingError::Invalid` (a 400).
+
+`next_action` says what the payer does next: `Redirect { url }` to a hosted page (Stripe and Paddle), `ClientToken { token }` for a provider's checkout script in your page, or `UpiIntent { url }`, a `upi://pay` link to open the payer's UPI app or show as a QR code. Coming back to `success_url` is not proof of payment. The outcome arrives by webhook as a `PaymentUpdated` event with the status `paid`, `failed` or `expired`; match it to your order by `reference`.
+
+On Stripe a payment is a Checkout Session in `payment` mode, with the reference as its `client_reference_id` and the metadata on the session and its PaymentIntent; `methods` may only name cards there (the methods you turn on in the Stripe dashboard are offered when you leave it empty). On Paddle it is a transaction for a non-catalog price; Paddle's checkout settings choose the methods, so `methods` must stay empty.
+
+## Payment links
+
+A payment link is a page that takes one payment, for you to send by email, SMS or chat:
+
+```rust
+let link = billing
+    .payment_link(Money::inr(2_50_000), "Wedding photography deposit, Patiala")
+    .reference("DEP-311")
+    .customer_phone("+919812345678")
+    .notify_by_sms() // where the provider sends links itself
+    .create()
+    .await?;
+// Send `link.url` to the customer (email, SMS or chat).
+```
+
+Its payment arrives as a `PaymentUpdated` event with `link_id` set. The default idempotency key follows the reference, so creating a link again for the same reference returns the same link. On Stripe a link sells one price, once (`restrictions.completed_sessions.limit = 1`), and does not expire; on Paddle it is a transaction's checkout page.
+
+## Refunds
+
+Refund a paid payment by the `payment_id` its `PaymentUpdated` event carried, in whole or in part:
+
+```rust
+use navree::billing::RefundReason;
+
+let refund = billing
+    .refund(&event.payment_id.unwrap())
+    .amount(Money::inr(40_000)) // leave it out to refund what is left
+    .reason(RefundReason::Duplicate)
+    .note("charged twice at the counter")
+    .reference("RF-2026-0007")
+    .create()
+    .await?;
+```
+
+Later changes reach you as `RefundUpdated` events. Refunding twice by mistake costs money, so a refund's default idempotency key follows its reference: give each refund your own reference (the support ticket, the credit note) and calling again refunds once. Stripe refunds part or all of a payment; Paddle refunds whole transactions, so an `amount` there is `ProviderError::Unsupported`.
+
+## Retries and idempotency
+
+Every write to the provider carries an idempotency key where the provider honours one. A payment, a link, a refund, a customer and a checkout carry the request's own key; subscription changes, portal sessions and webhook endpoints get a key made for the call. Because each write is keyed, the [HTTP client](/docs/digging-deeper/http-client/) retries it on a connection error, a `5xx` or a `429` (waiting as long as `Retry-After` asks, up to 30 seconds), and the provider acts once however many attempts reach it.
+
+| Operation | Default key | Pass your own |
+|---|---|---|
+| `payment` | new for each call: calling again is a new attempt | `idempotency_key("order-42-attempt-2")` |
+| `payment_link` | from the reference: the same link again | `idempotency_key(...)` |
+| `refund` | from the reference: the same refund again | `idempotency_key(...)` |
+| `checkout` | from the billable, the plan and a new attempt id | `idempotency_key(...)` |
+| a new customer | from the billable, its name and its email | |
+
+Stripe honours keys; Paddle takes none, so its writes are sent once. `billing.supports(Capability::IdempotencyKeys)` tells which.
+
+## Your own provider
+
+`BillingProvider` is an open trait. Any provider plugs in: implement the trait, register it under a name with `BillingModule::provider`, and select it with `billing.provider`. Stripe, Paddle and the fake implement the same trait.
+
+Only three methods are required: `name`, `verify_webhook` and `parse_webhook`. Every other operation answers `ProviderError::Unsupported` until you implement it, and `capabilities` lists what you implement, so `billing.supports(Capability::Upi)` and the like tell your app what the configured provider can do:
+
+| Capability | Operations |
+|---|---|
+| `Subscriptions` | `create_customer`, `create_checkout`, `update_subscription`, `cancel_subscription`, `resume_subscription`, `pause_subscription`, `unpause_subscription`, `subscriptions`, `invoices` |
+| `MeteredUsage` | `report_usage` |
+| `CustomerPortal` | `portal_url` |
+| `OneTimePayments` | `create_payment` |
+| `PaymentLinks` | `create_payment_link` |
+| `Refunds`, `PartialRefunds` | `refund` |
+| `Upi`, `Mandates` | UPI payments, and recurring payments against an approved mandate |
+| `IdempotencyKeys` | the provider honours the requests' `idempotency_key` |
+
+Each provider checks its own webhook signature scheme in `verify_webhook`: an HMAC of the timestamp and body for Stripe and Paddle, an HMAC of the body alone for many others. When the provider sends the delivery id in a header rather than the body, return it from `webhook_event_id`, so a redelivery is recognised. `parse_webhook` maps the provider's events to `WebhookAction`s: subscriptions, invoices, `Payment`, `Refund`, and `Mandate` (a UPI AutoPay or e-mandate approved, paused or revoked by the customer in their UPI app, which `Billing` emits as `MandateUpdated`).
+
+```rust title="src/billing/upi_pay.rs"
+use navree::billing::{
+    BillingModule, BillingProvider, Capability, PaymentAction, PaymentRequest, PaymentStatus,
+    ProviderContext, ProviderError, ProviderPayment, WebhookError, WebhookEvent,
+};
+use navree::prelude::*;
+
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
+struct UpiPayOptions {
+    key_secret: Option<navree::contracts::Secret<String>>,
+    vpa: String,
+}
+
+pub struct UpiPay {
+    options: UpiPayOptions,
+    http: navree::http_client::HttpClient,
+}
+
+impl BillingProvider for UpiPay {
+    fn name(&self) -> &'static str {
+        "upi_pay"
+    }
+
+    fn capabilities(&self) -> &'static [Capability] {
+        &[Capability::OneTimePayments, Capability::Upi, Capability::IdempotencyKeys]
+    }
+
+    fn create_payment<'a>(
+        &'a self,
+        request: &'a PaymentRequest,
+    ) -> BoxFuture<'a, Result<ProviderPayment, ProviderError>> {
+        Box::pin(async move {
+            // Send `request.amount.amount` (paise) with
+            // `.idempotency_key(&request.idempotency_key)` and map the answer.
+            todo!()
+        })
+    }
+
+    fn verify_webhook(
+        &self,
+        headers: &http::HeaderMap,
+        body: &[u8],
+        _now: chrono::DateTime<chrono::Utc>,
+        _tolerance: std::time::Duration,
+    ) -> Result<(), WebhookError> {
+        todo!("compare the signature header with an HMAC of `body`")
+    }
+
+    fn parse_webhook(&self, body: &[u8]) -> Result<WebhookEvent, ProviderError> {
+        todo!("map the provider's events to WebhookActions")
+    }
+}
+
+/// Import it next to `BillingModule`; `billing.provider = "upi_pay"` selects it.
+pub fn upi_pay() -> impl Module {
+    BillingModule::provider("upi_pay", |context: ProviderContext| async move {
+        Ok::<_, BoxError>(UpiPay {
+            options: context.section("billing.upi_pay")?, // APP_BILLING__UPI_PAY__KEY_SECRET
+            http: context.http_client().clone(),
+        })
+    })
+}
+```
+
+The factory gets a `ProviderContext`: the `billing` options, the app's HTTP client (send writes with `idempotency_key` so they are retried safely), the clock, and `section` to read the provider's own configuration, by convention `billing.<name>` with its secrets from the environment. Registering a built-in name (`stripe`, `paddle`, `fake`), registering a name twice, a provider whose `name()` is not its registered name, and a `billing.provider` that nothing registers each fail the boot with a message that says which. `billing:webhook <url>` prints the secret's variable as `APP_BILLING__<NAME>__WEBHOOK_SECRET`.
+
 ## Built-in routes
 
 With `billing.routes = true` (the default), the module mounts JSON routes for your billing settings page, under `/api/billing`. They act on the request's billable. For a workspace they run behind the `InWorkspace` guard and require the `billing.manage` permission in the workspace; a workspace's owner has every permission, so grant it to admins in the [workspace roles](/docs/workspaces/members-and-roles/). For users, any signed-in user manages their own billing. For a billable type of your own they require the `billing.manage` permission.
@@ -371,7 +547,7 @@ When you register both `User` and `Workspace` as billables, set `billing.routes_
 
 The provider tells you about every change through webhooks. `POST /api/billing/webhook` handles them in three steps:
 
-1. It verifies the signature: `Stripe-Signature` (`t=..,v1=..`, an HMAC-SHA256 of the timestamp and the raw body) or `Paddle-Signature` (`ts=..;h1=..`, the same scheme), with 5 minutes of tolerance in either direction, and answers 400 to anything that fails, including a body it cannot read. The comparison is constant-time and several signatures in one header (secret rotation) are accepted.
+1. It verifies the signature by the provider's own scheme: `Stripe-Signature` (`t=..,v1=..`, an HMAC-SHA256 of the timestamp and the raw body) or `Paddle-Signature` (`ts=..;h1=..`, the same scheme), with 5 minutes of tolerance in either direction, or whatever [your own provider](#your-own-provider) checks, and answers 400 to anything that fails, including a body it cannot read. The comparison is constant-time and several signatures in one header (secret rotation) are accepted.
 2. It stores the event in `billing_events`, keyed by the provider's event id. A redelivered event is answered 200 and not stored again.
 3. It answers 200 and dispatches a `billing.process_event` job on `billing.queue` (without a queue module, the job runs at once). The job updates the local customer and subscription rows, ignores states older than the one it already has (events can arrive out of order), clears the billable's cached invoices and emits a Navree event once its unit of work commits.
 
@@ -385,8 +561,11 @@ The events are ordinary [events](/docs/digging-deeper/events/):
 | `TrialEnding` | `subscription.trial_ending` | Three days before a trial with a subscription ends (Stripe) |
 | `InvoicePaid` | `invoice.paid` | A payment succeeded |
 | `PaymentFailed` | `invoice.payment_failed` | A payment failed; the provider retries it |
+| `PaymentUpdated` | `payment.updated` | A one-time payment, or a payment link's payment, was paid, failed or expired |
+| `RefundUpdated` | `refund.updated` | A refund was created, succeeded or failed |
+| `MandateUpdated` | `mandate.updated` | A mandate was approved, paused or revoked (providers with `Mandates`) |
 
-Each carries `billable_type`, `billable_id`, `subscription_id` and `plan`; the invoice events add `invoice_id`, `amount_cents` and `currency`, and their `subscription_id` and `plan` are `Option`s (an invoice need not belong to a subscription). This listener tells a workspace's owner that a payment failed, through a [notification](/docs/digging-deeper/notifications/):
+The subscription events carry `billable_type`, `billable_id`, `subscription_id` and `plan`; the invoice events add `invoice_id`, `amount_cents` and `currency`, and their `subscription_id` and `plan` are `Option`s (an invoice need not belong to a subscription). `PaymentUpdated` carries the `provider`, its `id`, the `payment_id` refunds take, `link_id`, your `reference`, the `status`, the `amount` as `Money`, the `method` when known and the `metadata`; its `billable_type` and `billable_id` are `Option`s, set when the payment named a billable. `RefundUpdated` carries the `refund_id`, `payment_id`, `reference`, `status` and `amount`. This listener tells a workspace's owner that a payment failed, through a [notification](/docs/digging-deeper/notifications/):
 
 ```rust title="src/modules/settings/listeners.rs"
 use navree::BoxFuture;
@@ -522,9 +701,14 @@ async fn upgrading_starts_a_pro_trial() {
 | `end_trial(&billable)`, `renew(&billable)` | Sends the webhooks of a trial ending or a period renewing (or, after `cancel`, of the subscription ending) |
 | `reported_usage(&billable, meter)` | The usage the reporter sent |
 | `send_webhook(type, json)` | Any event: `json` is a Stripe-shaped `data.object` |
+| `payments()`, `assert_payment(predicate)` | The one-time payments created (`id`, `payment_id`, `link_id`, `amount`, `reference`, `status`, `refunded`, `metadata`, ...) |
+| `complete_payment(id)`, `fail_payment(id)`, `expire_payment(id)` | Sends the webhook of a payment paid, failed or expired |
+| `payment_links()`, `pay_link(id)` | The links created; `pay_link` pays one and sends its webhook |
+| `refunds()` | The refunds made |
+| `idempotency_keys()` | Every idempotency key received, in order |
 | `webhook_secret()` | The secret the fake signs with (`Stripe-Signature`), to post to the webhook route yourself |
 
-The simulated webhooks are Stripe-shaped events signed with the fake's own secret, and they go through the same verification, storage, job and mapping as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Changes made through `Billing` (`swap`, `cancel`, ...) update the fake and the local copy at once; the fake sends no webhook for them. Fake invoices cost 1000 cents per seat and period (nothing during a trial). Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
+The simulated webhooks are Stripe-shaped events signed with the fake's own secret, and they go through the same verification, storage, job and mapping as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Changes made through `Billing` (`swap`, `cancel`, ...) update the fake and the local copy at once; the fake sends no webhook for them. The fake honours idempotency keys as Stripe does: a repeated key returns what the first request created, so you can test that a retried payment or refund acts once. It checks payment methods as Stripe does too (cards only). Fake invoices cost 1000 cents per seat and period (nothing during a trial). Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
 
 To test against the provider's own test mode, use real test keys (`sk_test_...`, the Paddle sandbox) in a separate, opt-in test suite, and forward webhooks to your machine with the provider's CLI. `billing.stripe.api_base` and `billing.paddle.api_base` point the clients at a mock server or a proxy.
 
@@ -532,7 +716,7 @@ To test against the provider's own test mode, use real test keys (`sk_test_...`,
 
 | Key | Default | Meaning |
 |---|---|---|
-| `billing.provider` | `stripe` | `stripe`, `paddle` or `fake` |
+| `billing.provider` | `stripe` | `stripe`, `paddle`, `fake`, or the name of a provider registered with `BillingModule::provider` |
 | `billing.currency` | `usd` | The currency of the fake provider's invoices (Stripe and Paddle take it from the price) |
 | `billing.return_url` | `app.url` | Where checkout and the portal return |
 | `billing.queue` | `default` | The queue of the webhook jobs |

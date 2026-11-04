@@ -1,12 +1,14 @@
 //! [`BillingProvider`]: the narrow, typed client of a payment provider, and
 //! the provider-neutral types it speaks.
 //!
-//! Three implementations: [`StripeProvider`](crate::StripeProvider) and
+//! The trait is open: any crate or app implements it and registers it with
+//! [`BillingModule::provider`](crate::BillingModule::provider). Three
+//! implementations ship: [`StripeProvider`](crate::StripeProvider) and
 //! [`PaddleProvider`](crate::PaddleProvider) over navree-http-client, and
 //! the in-memory fake behind [`BillingFake`](crate::BillingFake). Every one
 //! maps the provider's objects to the same [`ProviderSubscription`],
-//! [`ProviderInvoice`] and [`WebhookEvent`] values, which is all
-//! [`Billing`](crate::Billing) reads.
+//! [`ProviderInvoice`], [`ProviderPayment`], [`ProviderRefund`] and
+//! [`WebhookEvent`] values, which is all [`Billing`](crate::Billing) reads.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -23,8 +25,29 @@ use crate::subscription::{Proration, SubscriptionStatus};
 
 pub(crate) mod fake;
 pub(crate) mod paddle;
+pub(crate) mod payments;
+pub(crate) mod registry;
 pub(crate) mod signature;
 pub(crate) mod stripe;
+
+pub use payments::{
+    Capability, MandateStatus, Money, PaymentAction, PaymentCustomer, PaymentLinkRequest,
+    PaymentLinkStatus, PaymentMethod, PaymentRequest, PaymentStatus, ProviderMandate,
+    ProviderPayment, ProviderPaymentLink, ProviderRefund, RefundReason, RefundRequest,
+    RefundStatus,
+};
+
+/// A future that fails at once with [`ProviderError::Unsupported`]: the
+/// default of every operation a provider does not implement.
+fn unsupported<'a, T: Send + 'a>(
+    provider: &'static str,
+    operation: &'static str,
+) -> BoxFuture<'a, Result<T, ProviderError>> {
+    Box::pin(std::future::ready(Err(ProviderError::Unsupported {
+        provider,
+        operation,
+    })))
+}
 
 /// An error from a provider call.
 #[derive(Debug, thiserror::Error)]
@@ -107,6 +130,10 @@ pub struct NewCustomer {
     pub name: String,
     /// The billing email, if known.
     pub email: Option<String>,
+    /// Makes a repeated request create one customer, where the provider
+    /// supports keys. [`Billing`](crate::Billing) derives it from the
+    /// billable, the name and the email.
+    pub idempotency_key: String,
 }
 
 /// A hosted checkout to create.
@@ -143,6 +170,11 @@ pub struct CheckoutRequest {
     /// Stored on the provider's subscription (the billable and plan keys
     /// are added).
     pub metadata: BTreeMap<String, String>,
+    /// Makes a repeated request create one checkout, where the provider
+    /// supports keys. [`Billing`](crate::Billing) derives it from the
+    /// billable, the plan and an attempt id (or takes the one given to
+    /// [`CheckoutBuilder::idempotency_key`](crate::CheckoutBuilder::idempotency_key)).
+    pub idempotency_key: String,
 }
 
 /// A created hosted checkout.
@@ -296,6 +328,13 @@ pub enum WebhookAction {
     InvoicePaid(ProviderInvoice),
     /// A payment failed.
     PaymentFailed(ProviderInvoice),
+    /// A one-time payment (or a payment link's payment) changed state.
+    Payment(ProviderPayment),
+    /// A refund changed state.
+    Refund(ProviderRefund),
+    /// A mandate changed state: approved, paused, or revoked by the
+    /// customer in their UPI app or with their bank.
+    Mandate(ProviderMandate),
 }
 
 /// A verified webhook, parsed.
@@ -313,75 +352,138 @@ pub struct WebhookEvent {
 
 /// A payment provider's API, as [`Billing`](crate::Billing) uses it.
 ///
-/// Implemented by the Stripe and Paddle clients and the fake. Every method
-/// returns provider-neutral values; a provider that has no equivalent for an
-/// operation returns [`ProviderError::Unsupported`].
+/// The trait is open: implement it for any provider and register it with
+/// [`BillingModule::provider`](crate::BillingModule::provider), then select
+/// it with `billing.provider = "<name>"`. Stripe, Paddle and the fake
+/// implement it the same way.
+///
+/// Every method returns provider-neutral values. Only [`name`](Self::name),
+/// [`verify_webhook`](Self::verify_webhook) and
+/// [`parse_webhook`](Self::parse_webhook) are required: every other
+/// operation answers [`ProviderError::Unsupported`] unless the provider
+/// implements it, and [`capabilities`](Self::capabilities) lists what it
+/// implements.
+///
+/// - **Subscriptions**: customers, hosted checkouts, plan and quantity
+///   changes, cancel, resume, pause, usage, invoices, the portal.
+/// - **Payments**: one-time payments
+///   ([`create_payment`](Self::create_payment)), payment links
+///   ([`create_payment_link`](Self::create_payment_link)) and refunds
+///   ([`refund`](Self::refund)), with amounts as [`Money`] in the
+///   currency's smallest unit (paise for rupees) and the methods to offer
+///   ([`PaymentMethod::Upi`], cards, net banking, ...).
+/// - **Webhooks**: each provider checks its own signature scheme in
+///   [`verify_webhook`](Self::verify_webhook) and maps its events to
+///   [`WebhookAction`]s, mandates included.
+/// - **Idempotency**: the requests that create something carry an
+///   `idempotency_key`. A provider that honours keys
+///   ([`Capability::IdempotencyKeys`]) sends it, and gives every other
+///   write a key of its own, so the HTTP client retries writes without
+///   acting twice.
 pub trait BillingProvider: Send + Sync + 'static {
-    /// `stripe`, `paddle` or `fake`.
+    /// The provider's name, as `billing.provider` selects it and the
+    /// billing tables store it (`stripe`, `paddle`, `fake`, `razorpay`).
     fn name(&self) -> &'static str;
 
+    /// What the provider can do; the operations it does not list answer
+    /// [`ProviderError::Unsupported`]. Default: nothing beyond webhooks.
+    fn capabilities(&self) -> &'static [Capability] {
+        &[]
+    }
+
     /// Creates a customer; `None` when the provider needs more (Paddle needs
-    /// an email) and the checkout creates the customer instead.
+    /// an email) or has no customers, and the checkout creates the customer
+    /// instead. Default: `None`.
     fn create_customer<'a>(
         &'a self,
         customer: &'a NewCustomer,
-    ) -> BoxFuture<'a, Result<Option<String>, ProviderError>>;
+    ) -> BoxFuture<'a, Result<Option<String>, ProviderError>> {
+        let _ = customer;
+        Box::pin(std::future::ready(Ok(None)))
+    }
 
-    /// Creates a hosted checkout.
+    /// Creates a hosted checkout for a plan.
     fn create_checkout<'a>(
         &'a self,
         request: &'a CheckoutRequest,
-    ) -> BoxFuture<'a, Result<ProviderCheckout, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderCheckout, ProviderError>> {
+        let _ = request;
+        unsupported(self.name(), "subscriptions")
+    }
 
     /// Changes a subscription's price or quantity.
     fn update_subscription<'a>(
         &'a self,
         id: &'a str,
         change: &'a SubscriptionChange,
-    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>> {
+        let _ = (id, change);
+        unsupported(self.name(), "subscriptions")
+    }
 
     /// Cancels a subscription at the end of its period, or at once.
     fn cancel_subscription<'a>(
         &'a self,
         id: &'a str,
         at_period_end: bool,
-    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>> {
+        let _ = (id, at_period_end);
+        unsupported(self.name(), "subscriptions")
+    }
 
     /// Undoes a cancel at the end of the period.
     fn resume_subscription<'a>(
         &'a self,
         id: &'a str,
-    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>> {
+        let _ = id;
+        unsupported(self.name(), "resuming subscriptions")
+    }
 
     /// Stops charging a subscription, keeping it.
     fn pause_subscription<'a>(
         &'a self,
         id: &'a str,
-    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>> {
+        let _ = id;
+        unsupported(self.name(), "pausing subscriptions")
+    }
 
     /// Starts charging a paused subscription again.
     fn unpause_subscription<'a>(
         &'a self,
         id: &'a str,
-    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>>;
+    ) -> BoxFuture<'a, Result<ProviderSubscription, ProviderError>> {
+        let _ = id;
+        unsupported(self.name(), "pausing subscriptions")
+    }
 
-    /// Every subscription of a customer.
+    /// Every subscription of a customer. Default: none.
     fn subscriptions<'a>(
         &'a self,
         customer_id: &'a str,
-    ) -> BoxFuture<'a, Result<Vec<ProviderSubscription>, ProviderError>>;
+    ) -> BoxFuture<'a, Result<Vec<ProviderSubscription>, ProviderError>> {
+        let _ = customer_id;
+        Box::pin(std::future::ready(Ok(Vec::new())))
+    }
 
     /// Reports metered usage.
     fn report_usage<'a>(
         &'a self,
         report: &'a UsageReport,
-    ) -> BoxFuture<'a, Result<(), ProviderError>>;
+    ) -> BoxFuture<'a, Result<(), ProviderError>> {
+        let _ = report;
+        unsupported(self.name(), "metered usage")
+    }
 
-    /// A customer's invoices, newest first.
+    /// A customer's invoices, newest first. Default: none.
     fn invoices<'a>(
         &'a self,
         customer_id: &'a str,
-    ) -> BoxFuture<'a, Result<Vec<Invoice>, ProviderError>>;
+    ) -> BoxFuture<'a, Result<Vec<Invoice>, ProviderError>> {
+        let _ = customer_id;
+        Box::pin(std::future::ready(Ok(Vec::new())))
+    }
 
     /// A customer portal session's URL.
     fn portal_url<'a>(
@@ -389,16 +491,67 @@ pub trait BillingProvider: Send + Sync + 'static {
         customer_id: &'a str,
         return_url: &'a str,
         subscription_ids: &'a [String],
-    ) -> BoxFuture<'a, Result<String, ProviderError>>;
+    ) -> BoxFuture<'a, Result<String, ProviderError>> {
+        let _ = (customer_id, return_url, subscription_ids);
+        unsupported(self.name(), "the customer portal")
+    }
 
     /// Whether the price exists at the provider.
-    fn price_exists<'a>(&'a self, price_id: &'a str) -> BoxFuture<'a, Result<bool, ProviderError>>;
+    fn price_exists<'a>(&'a self, price_id: &'a str) -> BoxFuture<'a, Result<bool, ProviderError>> {
+        let _ = price_id;
+        unsupported(self.name(), "price lookups")
+    }
 
     /// Creates a webhook endpoint for the events Navree handles.
     fn create_webhook_endpoint<'a>(
         &'a self,
         url: &'a str,
-    ) -> BoxFuture<'a, Result<WebhookEndpoint, ProviderError>>;
+    ) -> BoxFuture<'a, Result<WebhookEndpoint, ProviderError>> {
+        let _ = url;
+        unsupported(self.name(), "creating webhook endpoints")
+    }
+
+    /// Creates a one-time payment and says what the payer does next
+    /// ([`ProviderPayment::next_action`]): open a hosted page, run the
+    /// provider's checkout script with a token, or open a UPI app. Its
+    /// outcome arrives by webhook as [`WebhookAction::Payment`].
+    fn create_payment<'a>(
+        &'a self,
+        request: &'a PaymentRequest,
+    ) -> BoxFuture<'a, Result<ProviderPayment, ProviderError>> {
+        let _ = request;
+        unsupported(self.name(), "one-time payments")
+    }
+
+    /// Creates a payment link: a page that takes one payment. Its payment
+    /// arrives by webhook as [`WebhookAction::Payment`] with
+    /// [`ProviderPayment::link_id`] set.
+    fn create_payment_link<'a>(
+        &'a self,
+        request: &'a PaymentLinkRequest,
+    ) -> BoxFuture<'a, Result<ProviderPaymentLink, ProviderError>> {
+        let _ = request;
+        unsupported(self.name(), "payment links")
+    }
+
+    /// Refunds a payment, in whole or in part. Later changes arrive by
+    /// webhook as [`WebhookAction::Refund`].
+    fn refund<'a>(
+        &'a self,
+        request: &'a RefundRequest,
+    ) -> BoxFuture<'a, Result<ProviderRefund, ProviderError>> {
+        let _ = request;
+        unsupported(self.name(), "refunds")
+    }
+
+    /// The id of a webhook delivery when the provider sends it in a header
+    /// instead of the body (Razorpay's `X-Razorpay-Event-Id`): it is what
+    /// makes a redelivery a duplicate. `None` (the default) uses
+    /// [`WebhookEvent::id`].
+    fn webhook_event_id(&self, headers: &HeaderMap) -> Option<String> {
+        let _ = headers;
+        None
+    }
 
     /// Checks a webhook's signature header against its raw body.
     fn verify_webhook(

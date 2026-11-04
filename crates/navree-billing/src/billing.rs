@@ -27,15 +27,18 @@ use crate::entity::{
 };
 use crate::error::BillingError;
 use crate::events::{
-    InvoicePaid, PaymentFailed, Pending, SubscriptionCanceled, SubscriptionCreated,
-    SubscriptionUpdated, TrialEnding,
+    InvoicePaid, MandateUpdated, PaymentFailed, PaymentUpdated, Pending, RefundUpdated,
+    SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated, TrialEnding,
 };
 use crate::invoice::Invoice;
+use crate::payment::{
+    PaymentBuilder, PaymentLinkBuilder, RefundBuilder, check_key, key_within_limit,
+};
 use crate::plan::{Interval, Plan, Plans, PriceRole};
 use crate::provider::fake::BillingFake;
 use crate::provider::{
-    BillingProvider, CheckoutRequest, NewCustomer, ProviderInvoice, ProviderSubscription,
-    SubscriptionChange, UsageReport, WebhookAction, WebhookEvent,
+    BillingProvider, Capability, CheckoutRequest, Money, NewCustomer, ProviderInvoice,
+    ProviderSubscription, SubscriptionChange, UsageReport, WebhookAction, WebhookEvent,
 };
 use crate::subscription::{Proration, Subscription, SubscriptionStatus};
 use crate::webhook::{ProcessBillingEvent, WebhookReceipt};
@@ -135,6 +138,42 @@ impl Billing {
     /// The provider client.
     pub fn provider(&self) -> &dyn BillingProvider {
         &*self.provider
+    }
+
+    /// What the configured provider can do.
+    pub fn capabilities(&self) -> &'static [Capability] {
+        self.provider.capabilities()
+    }
+
+    /// Whether the configured provider can do `capability` (take one-time
+    /// payments, refund part of a payment, take UPI, ...).
+    pub fn supports(&self, capability: Capability) -> bool {
+        self.provider.capabilities().contains(&capability)
+    }
+
+    /// A one-time payment of `amount` for `description`; configure it and
+    /// call [`create`](PaymentBuilder::create). Amounts are in the
+    /// currency's smallest unit: `Money::inr(149_900)` is ₹1,499.00.
+    pub fn payment(&self, amount: Money, description: impl Into<String>) -> PaymentBuilder<'_> {
+        PaymentBuilder::new(self, amount, description.into())
+    }
+
+    /// A payment link for `amount`: a page that takes one payment, to send
+    /// by email, SMS or chat; configure it and call
+    /// [`create`](PaymentLinkBuilder::create).
+    pub fn payment_link(
+        &self,
+        amount: Money,
+        description: impl Into<String>,
+    ) -> PaymentLinkBuilder<'_> {
+        PaymentLinkBuilder::new(self, amount, description.into())
+    }
+
+    /// A refund of payment `payment_id` (a `PaymentUpdated` event's
+    /// `payment_id`); configure it and call
+    /// [`create`](RefundBuilder::create).
+    pub fn refund(&self, payment_id: impl Into<String>) -> RefundBuilder<'_> {
+        RefundBuilder::new(self, payment_id.into())
     }
 
     /// The fake provider, when `billing.provider = "fake"`.
@@ -241,6 +280,14 @@ impl Billing {
             .first(exec)
             .await?
             .map(Record::into_inner))
+    }
+
+    /// The provider customer id of the billable, at this provider.
+    pub(crate) async fn provider_customer_id(
+        &self,
+        billable: &BillableRef,
+    ) -> Result<Option<String>, BillingError> {
+        self.customer_id(billable).await
     }
 
     /// The provider customer id of the billable, at this provider.
@@ -424,6 +471,19 @@ impl Billing {
             Some(days) => Some(days),
             None => (plan.trial_days > 0).then_some(plan.trial_days),
         };
+        let idempotency_key = match parts.idempotency_key {
+            Some(key) => {
+                check_key(&key)?;
+                key
+            }
+            None => key_within_limit(format!(
+                "navree-checkout-{}-{}-{}-{}",
+                parts.billable.billable_type,
+                parts.billable.billable_id.simple(),
+                plan.key,
+                Uuid::now_v7().simple()
+            )),
+        };
         let request = CheckoutRequest {
             billable_type: parts.billable.billable_type.clone(),
             billable_id: parts.billable.billable_id,
@@ -440,6 +500,7 @@ impl Billing {
             success_url,
             cancel_url,
             metadata: parts.metadata,
+            idempotency_key,
         };
         let created = self.provider.create_checkout(&request).await?;
         Ok(Checkout {
@@ -463,6 +524,18 @@ impl Billing {
         if let Some(existing) = self.customer_id(billable).await? {
             return Ok(Some(existing));
         }
+        // The same billable, name and email make the same key, so two
+        // checkouts racing to create the customer create one.
+        let mut digest = Sha256::new();
+        digest.update(billable.name.as_bytes());
+        digest.update([0]);
+        digest.update(email.as_deref().unwrap_or_default().as_bytes());
+        let idempotency_key = format!(
+            "navree-customer-{}-{}-{}",
+            billable.billable_type,
+            billable.billable_id.simple(),
+            &hex::encode(digest.finalize())[..16]
+        );
         let created = self
             .provider
             .create_customer(&NewCustomer {
@@ -470,6 +543,7 @@ impl Billing {
                 billable_id: billable.billable_id,
                 name: billable.name.clone(),
                 email: email.clone(),
+                idempotency_key: key_within_limit(idempotency_key),
             })
             .await?;
         if let Some(id) = &created {
@@ -1209,10 +1283,13 @@ impl Billing {
         let tolerance = Duration::from_secs(self.options.webhook_tolerance_secs);
         self.provider
             .verify_webhook(headers, body, self.now(), tolerance)?;
-        let event = self
+        let mut event = self
             .provider
             .parse_webhook(body)
             .map_err(|error| BillingError::InvalidPayload(error.to_string()))?;
+        if let Some(id) = self.provider.webhook_event_id(headers) {
+            event.id = id;
+        }
         let payload = std::str::from_utf8(body)
             .map_err(|_| BillingError::InvalidPayload("the body is not UTF-8".into()))?
             .to_owned();
@@ -1412,9 +1489,52 @@ impl Billing {
                         pending.push(event);
                     }
                 }
+                WebhookAction::Payment(payment) => {
+                    let billable = match payment.billable() {
+                        Some(billable) => Some(billable),
+                        None => {
+                            self.billable_of(uow, payment.customer_id.as_deref())
+                                .await?
+                        }
+                    };
+                    pending.push(Pending::Payment(PaymentUpdated::of(
+                        self.provider.name(),
+                        payment,
+                        billable,
+                    )));
+                }
+                WebhookAction::Refund(refund) => {
+                    pending.push(Pending::Refund(RefundUpdated::of(
+                        self.provider.name(),
+                        refund,
+                        refund.billable(),
+                    )));
+                }
+                WebhookAction::Mandate(mandate) => {
+                    let billable = self
+                        .billable_of(uow, mandate.customer_id.as_deref())
+                        .await?;
+                    pending.push(Pending::Mandate(MandateUpdated::of(
+                        self.provider.name(),
+                        mandate,
+                        billable,
+                    )));
+                }
             }
         }
         Ok(pending)
+    }
+
+    /// The billable linked to provider customer `customer_id`, if any.
+    async fn billable_of(
+        &self,
+        uow: &Uow,
+        customer_id: Option<&str>,
+    ) -> Result<Option<(String, Uuid)>, BillingError> {
+        match customer_id {
+            Some(customer) => self.billable_of_customer(uow, customer).await,
+            None => Ok(None),
+        }
     }
 
     /// The `InvoicePaid` or `PaymentFailed` event of an invoice, when its

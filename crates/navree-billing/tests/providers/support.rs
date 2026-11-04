@@ -58,6 +58,7 @@ pub fn checkout_request(customer: Option<&str>, price: &str) -> CheckoutRequest 
         success_url: "https://app.acme.test/settings/billing?upgraded=1".into(),
         cancel_url: "https://app.acme.test/settings/billing".into(),
         metadata: BTreeMap::new(),
+        idempotency_key: format!("navree-checkout-test-{price}"),
     }
 }
 

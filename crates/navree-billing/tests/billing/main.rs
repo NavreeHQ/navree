@@ -8,6 +8,7 @@ mod support;
 mod checkout;
 mod commands;
 mod orm;
+mod payments;
 mod routes;
 mod seats;
 mod subscriptions;

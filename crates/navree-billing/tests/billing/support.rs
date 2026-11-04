@@ -9,8 +9,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_auth::{AuthModule, AuthService, User};
 use navree_billing::{
-    Billing, BillingFake, BillingModule, InvoicePaid, PaymentFailed, Subscription,
-    SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated, TrialEnding,
+    Billing, BillingFake, BillingModule, InvoicePaid, MandateUpdated, PaymentFailed,
+    PaymentUpdated, RefundUpdated, Subscription, SubscriptionCanceled, SubscriptionCreated,
+    SubscriptionUpdated, TrialEnding,
 };
 use navree_contracts::{Clock, FixedClock};
 use navree_crypto::CryptoModule;
@@ -171,7 +172,10 @@ impl Module for EventLogModule {
             .on::<SubscriptionCanceled, LogListener>()
             .on::<TrialEnding, LogListener>()
             .on::<InvoicePaid, LogListener>()
-            .on::<PaymentFailed, LogListener>();
+            .on::<PaymentFailed, LogListener>()
+            .on::<PaymentUpdated, LogListener>()
+            .on::<RefundUpdated, LogListener>()
+            .on::<MandateUpdated, LogListener>();
     }
 }
 

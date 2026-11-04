@@ -1,5 +1,6 @@
 //! [`BillingModule`].
 
+use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -26,12 +27,15 @@ use crate::plan::Plans;
 use crate::provider::BillingProvider;
 use crate::provider::fake::BillingFake;
 use crate::provider::paddle::PaddleProvider;
+use crate::provider::registry::{self, ProviderContext, ProviderRegistration};
 use crate::provider::stripe::StripeProvider;
 use crate::seats::SeatSync;
 use crate::webhook::ProcessBillingEvent;
 
-/// Billing: subscriptions, trials, seats, metered usage, invoices and the
-/// customer portal, with Stripe, Paddle or the fake.
+/// Billing: subscriptions, trials, seats, metered usage, invoices, the
+/// customer portal, one-time payments, payment links and refunds, with
+/// Stripe, Paddle, the fake or a provider registered with
+/// [`BillingModule::provider`].
 ///
 /// Global; provides and exports [`Billing`] and [`BillingOptions`], and
 /// contributes:
@@ -82,6 +86,75 @@ impl BillingModule {
     /// `#[module(imports = [BillingModule::for_feature::<Workspace>()])]`.
     pub fn for_feature<B: Billable + 'static>() -> impl Module {
         BillableFeature::<B>(PhantomData)
+    }
+
+    /// Registers a payment provider under `name`: `billing.provider =
+    /// "<name>"` selects it, and `factory` builds it at boot from a
+    /// [`ProviderContext`] (the options, the app's HTTP client, the clock,
+    /// the provider's own configuration section). A crate that ships a
+    /// provider exports a module that imports this one.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use navree_billing::{BillingModule, BillingProvider, ProviderContext, ProviderError,
+    ///     WebhookError, WebhookEvent};
+    /// use navree_kernel::BoxError;
+    ///
+    /// struct AcmePay;
+    ///
+    /// impl BillingProvider for AcmePay {
+    ///     fn name(&self) -> &'static str {
+    ///         "acme_pay"
+    ///     }
+    ///
+    ///     fn verify_webhook(
+    ///         &self,
+    ///         _headers: &http::HeaderMap,
+    ///         _body: &[u8],
+    ///         _now: chrono::DateTime<chrono::Utc>,
+    ///         _tolerance: std::time::Duration,
+    ///     ) -> Result<(), WebhookError> {
+    ///         Err(WebhookError::NoSecret)
+    ///     }
+    ///
+    ///     fn parse_webhook(&self, _body: &[u8]) -> Result<WebhookEvent, ProviderError> {
+    ///         Err(ProviderError::Unsupported { provider: "acme_pay", operation: "webhooks" })
+    ///     }
+    /// }
+    ///
+    /// let module = BillingModule::provider("acme_pay", |_context: ProviderContext| async {
+    ///     Ok::<_, BoxError>(AcmePay)
+    /// });
+    /// # let _ = module;
+    /// ```
+    ///
+    /// The built-in names (`stripe`, `paddle`, `fake`) cannot be taken, a
+    /// name is registered once, and the provider's
+    /// [`name`](BillingProvider::name) must be the registered name: each
+    /// mistake fails the boot. Each provider type registers once (a second
+    /// registration of the same type is the same module).
+    pub fn provider<P, F, Fut>(name: &str, factory: F) -> impl Module
+    where
+        P: BillingProvider,
+        F: Fn(ProviderContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<P, BoxError>> + Send + 'static,
+    {
+        let registration = ProviderRegistration::new(name, move |context| {
+            let built = factory(context);
+            async move { Ok(Arc::new(built.await?) as Arc<dyn BillingProvider>) }
+        });
+        ProviderFeature::<P>(registration, PhantomData)
+    }
+}
+
+/// `BillingModule::provider::<P>(name, factory)`: one module per provider
+/// type.
+struct ProviderFeature<P>(ProviderRegistration, PhantomData<fn() -> P>);
+
+impl<P: BillingProvider> Module for ProviderFeature<P> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(self.0.clone());
     }
 }
 
@@ -183,7 +256,7 @@ fn register(m: &mut ModuleBuilder, options: Option<BillingOptions>) {
 
 /// The configured provider (and the fake, when it is the fake).
 async fn provider(
-    options: &BillingOptions,
+    options: &Arc<BillingOptions>,
     app: &AppContext,
     clock: Arc<dyn Clock>,
 ) -> Result<(Arc<dyn BillingProvider>, Option<Arc<BillingFake>>), BoxError> {
@@ -193,7 +266,23 @@ async fn provider(
             None => Ok(HttpClient::new(HttpClientOptions::default())?),
         }
     };
-    Ok(match options.provider {
+    Ok(match &options.provider {
+        ProviderKind::Registered(name) => {
+            let registrations: Vec<ProviderRegistration> = app
+                .contributions::<ProviderRegistration>()
+                .into_iter()
+                .map(|contributed| (*contributed.value).clone())
+                .collect();
+            let context = ProviderContext::new(
+                app.clone(),
+                name.clone(),
+                options.clone(),
+                client().await?,
+                clock,
+                app.try_get::<Config>().await,
+            );
+            (registry::build(name, &registrations, context).await?, None)
+        }
         ProviderKind::Stripe => {
             let key = options.stripe.secret_key.clone().ok_or(
                 "billing.stripe.secret_key is required with billing.provider = \"stripe\"",

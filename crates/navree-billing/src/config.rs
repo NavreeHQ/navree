@@ -5,11 +5,10 @@ use std::fmt;
 
 use navree_config::ConfigSection;
 use navree_contracts::Secret;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// Which payment provider [`Billing`](crate::Billing) talks to.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ProviderKind {
     /// Stripe (`billing.stripe.*`).
     #[default]
@@ -18,16 +17,45 @@ pub enum ProviderKind {
     Paddle,
     /// The in-memory [`BillingFake`](crate::BillingFake), for tests.
     Fake,
+    /// A provider registered under this name with
+    /// [`BillingModule::provider`](crate::BillingModule::provider)
+    /// (`razorpay`), configured in its own section (`billing.<name>`).
+    Registered(String),
 }
 
 impl ProviderKind {
-    /// `stripe`, `paddle` or `fake`.
-    pub fn as_str(self) -> &'static str {
+    /// `stripe`, `paddle`, `fake`, or the registered provider's name.
+    pub fn as_str(&self) -> &str {
         match self {
             ProviderKind::Stripe => "stripe",
             ProviderKind::Paddle => "paddle",
             ProviderKind::Fake => "fake",
+            ProviderKind::Registered(name) => name,
         }
+    }
+
+    /// The kind named `name`; `None` unless it is lower-case letters,
+    /// digits, `_` or `-`.
+    pub fn from_name(name: &str) -> Option<ProviderKind> {
+        Some(match name {
+            "stripe" => ProviderKind::Stripe,
+            "paddle" => ProviderKind::Paddle,
+            "fake" => ProviderKind::Fake,
+            other if is_key(other) => ProviderKind::Registered(other.to_owned()),
+            _ => return None,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for ProviderKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        // The message never repeats the configured value.
+        ProviderKind::from_name(&name).ok_or_else(|| {
+            serde::de::Error::custom(
+                "the provider must be `stripe`, `paddle`, `fake` or the name of a provider registered with BillingModule::provider (lower-case letters, digits, `_` or `-`)",
+            )
+        })
     }
 }
 
@@ -136,7 +164,7 @@ pub struct PlanOptions {
 ///
 /// ```toml
 /// [billing]
-/// provider = "stripe"                       # stripe | paddle | fake
+/// provider = "stripe"                       # stripe | paddle | fake | a registered name
 /// return_url = "https://app.acme.test/settings/billing"
 ///
 /// [billing.plans.pro]
@@ -220,7 +248,7 @@ impl BillingOptions {
                 .as_ref()
                 .is_none_or(|secret| secret.expose().trim().is_empty())
         };
-        match self.provider {
+        match &self.provider {
             ProviderKind::Stripe => {
                 if missing(&self.stripe.secret_key) {
                     errors.push(
@@ -262,7 +290,8 @@ impl BillingOptions {
                         .push("billing.paddle.api_base must be an absolute http(s) URL".to_owned());
                 }
             }
-            ProviderKind::Fake => {}
+            // A registered provider checks its own section when it is built.
+            ProviderKind::Fake | ProviderKind::Registered(_) => {}
         }
         if self.currency.len() != 3 || !self.currency.chars().all(|c| c.is_ascii_lowercase()) {
             errors.push(
@@ -494,7 +523,7 @@ mod tests {
     #[test]
     fn invalid_values_fail_validation() {
         for (key, value) in [
-            ("billing.provider", json!("braintree")),
+            ("billing.provider", json!("Brain Tree")),
             ("billing.currency", json!("USD")),
             ("billing.return_url", json!("settings/billing")),
             ("billing.queue", json!(" ")),
@@ -515,15 +544,47 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_provider_names_the_key() {
-        let error = load(ConfigSources::new().set("billing.provider", "braintree"))
+    fn an_invalid_provider_name_names_the_key() {
+        let error = load(ConfigSources::new().set("billing.provider", "Brain Tree"))
             .unwrap_err()
             .to_string();
         assert!(error.contains("provider"), "{error}");
         assert!(error.contains("`stripe`"), "{error}");
         // Configured values never appear in errors; the key and the
         // accepted values do.
-        assert!(!error.contains("braintree"), "{error}");
+        assert!(!error.contains("Brain Tree"), "{error}");
+    }
+
+    // CONN-101
+    #[test]
+    fn any_other_name_selects_a_registered_provider() {
+        let options = load(
+            ConfigSources::new()
+                .set("billing.provider", "razorpay")
+                .set("billing.razorpay.key_id", "rzp_test_1DP5mmOlF5G5ag"),
+        )
+        .unwrap();
+        assert_eq!(
+            options.provider,
+            ProviderKind::Registered("razorpay".into())
+        );
+        assert_eq!(options.provider.as_str(), "razorpay");
+        // The provider checks its own section; billing's needs nothing more.
+        assert!(options.check().is_ok());
+        for (name, kind) in [
+            ("stripe", ProviderKind::Stripe),
+            ("paddle", ProviderKind::Paddle),
+            ("fake", ProviderKind::Fake),
+            (
+                "cash-free_2",
+                ProviderKind::Registered("cash-free_2".into()),
+            ),
+        ] {
+            assert_eq!(ProviderKind::from_name(name), Some(kind));
+        }
+        for bad in ["", "Razorpay", "razor pay", "razorpay!"] {
+            assert_eq!(ProviderKind::from_name(bad), None, "{bad}");
+        }
     }
 
     #[test]

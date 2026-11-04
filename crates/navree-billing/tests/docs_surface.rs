@@ -367,6 +367,147 @@ fn the_names_the_page_mentions_in_passing() {
     );
 }
 
+/// "One-time payments", "Payment links", "Refunds", "Retries and
+/// idempotency" and "Your own provider" (CONN-101, CONN-103).
+#[allow(dead_code)]
+async fn the_documented_payment_methods(billing: &Billing, workspace: &Workspace) {
+    use navree_billing::{
+        Capability, Money, PaymentAction, PaymentMethod, PaymentUpdated, ProviderPayment,
+        ProviderPaymentLink, ProviderRefund, RefundReason,
+    };
+    let payment: Result<ProviderPayment, BillingError> = billing
+        .payment(Money::inr(149_900), "Annual support, Ludhiana office")
+        .billable(workspace)
+        .reference("INV-2026-0042")
+        .customer_name("Harpreet Kaur")
+        .customer_email("harpreet@example.in")
+        .customer_phone("+919876543210")
+        .methods([PaymentMethod::Upi, PaymentMethod::Card])
+        .success_url("https://app.acme.test/orders/42?paid=1")
+        .cancel_url("https://app.acme.test/orders/42")
+        .expires_at(chrono::Utc::now())
+        .metadata("order", "42")
+        .idempotency_key("order-42-attempt-2")
+        .create()
+        .await;
+    if let Ok(payment) = payment {
+        match payment.next_action {
+            Some(PaymentAction::Redirect { url }) => drop(url),
+            Some(PaymentAction::ClientToken { token }) => drop(token),
+            Some(PaymentAction::UpiIntent { url }) => drop(url),
+            _ => {}
+        }
+    }
+    let _: Result<ProviderPaymentLink, BillingError> = billing
+        .payment_link(Money::inr(2_50_000), "Wedding photography deposit, Patiala")
+        .reference("DEP-311")
+        .notify_by_sms()
+        .notify_by_email()
+        .return_url("https://app.acme.test/thanks")
+        .expires_at(chrono::Utc::now())
+        .create()
+        .await;
+    let event = |e: &PaymentUpdated| {
+        (
+            e.provider.clone(),
+            e.id.clone(),
+            e.payment_id.clone(),
+            e.link_id.clone(),
+            e.reference.clone(),
+            e.status,
+            e.amount.clone(),
+            e.method.clone(),
+            e.metadata.clone(),
+            e.billable_type.clone(),
+            e.billable_id,
+        )
+    };
+    let _ = event;
+    let _: Result<ProviderRefund, BillingError> = billing
+        .refund("pi_3Q8")
+        .amount(Money::inr(40_000))
+        .reason(RefundReason::Duplicate)
+        .note("charged twice at the counter")
+        .reference("RF-2026-0007")
+        .billable(workspace)
+        .metadata("ticket", "77")
+        .idempotency_key("refund-ticket-77")
+        .create()
+        .await;
+    let _ = billing
+        .checkout(workspace, "pro")
+        .idempotency_key("checkout-1")
+        .create()
+        .await;
+    for capability in [
+        Capability::Subscriptions,
+        Capability::MeteredUsage,
+        Capability::CustomerPortal,
+        Capability::OneTimePayments,
+        Capability::PaymentLinks,
+        Capability::Refunds,
+        Capability::PartialRefunds,
+        Capability::Upi,
+        Capability::Mandates,
+        Capability::IdempotencyKeys,
+    ] {
+        let _ = billing.supports(capability);
+    }
+    let _ = billing.capabilities();
+}
+
+#[test]
+fn the_documented_payment_names() {
+    use navree_billing::{
+        MandateUpdated, Money, PaymentUpdated, ProviderContext, ProviderKind, RefundUpdated,
+        WebhookAction,
+    };
+    assert_eq!(PaymentUpdated::NAME, "payment.updated");
+    assert_eq!(RefundUpdated::NAME, "refund.updated");
+    assert_eq!(MandateUpdated::NAME, "mandate.updated");
+    assert_eq!(Money::inr(149_900).major(), "1499.00");
+    assert_eq!(
+        ProviderKind::from_name("upi_pay"),
+        Some(ProviderKind::Registered("upi_pay".into()))
+    );
+    let _ = |a: &WebhookAction| {
+        matches!(
+            a,
+            WebhookAction::Payment(_) | WebhookAction::Refund(_) | WebhookAction::Mandate(_)
+        )
+    };
+    // "Your own provider": the factory's context.
+    let context = |c: &ProviderContext| {
+        let _ = (c.name(), c.options(), c.http_client(), c.clock(), c.app());
+        let _: Result<serde_json::Value, _> = c.section("billing.upi_pay");
+    };
+    let _ = context;
+    // The fake's payment helpers.
+    let fake = |f: &BillingFake| {
+        let found = f.assert_payment(|p| p.reference == "INV-2026-0042");
+        let _ = (
+            found.id,
+            found.payment_id,
+            found.link_id,
+            found.amount,
+            found.status,
+            found.refunded,
+            found.metadata,
+        );
+        let _ = (
+            f.payments(),
+            f.payment_links(),
+            f.refunds(),
+            f.idempotency_keys(),
+        );
+        drop(f.complete_payment("cs_1"));
+        drop(f.fail_payment("cs_1"));
+        drop(f.expire_payment("cs_1"));
+        drop(f.pay_link("plink_1"));
+    };
+    let _ = fake;
+}
+
 /// The remaining documented methods: the other swaps, the checkout's
 /// `interval`, `subscriptions` and `access`.
 #[allow(dead_code)]
