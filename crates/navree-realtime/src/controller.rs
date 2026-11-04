@@ -152,7 +152,8 @@ impl Controller for RealtimeController {
                     .to_owned(),
             ),
             tags: vec!["realtime".to_owned()],
-            responses: vec![204, 400, 401, 403, 429],
+            // A stream that names nothing answers 204; the rest are errors.
+            responses: vec![400, 401, 403, 429],
             ..ApiMeta::default()
         });
 
