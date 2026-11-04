@@ -28,21 +28,22 @@ pub fn all() -> Vec<Example> {
             themes_modes
         )
         .start(),
+        // The menu, drawn open, is 526 px tall: the frames have room for it under its button.
         single!("themes", "menu", "The theme menu, open", themes_menu)
             .show()
-            .height(520),
+            .height(640),
         page!("themes", "inset", "The inset layout", shell_inset)
             .fill()
             .width(1100)
-            .height(560),
+            .height(620),
         page!("themes", "floating", "The floating layout", shell_floating)
             .fill()
             .width(1100)
-            .height(560),
+            .height(620),
         page!("themes", "header", "Links in the top bar", shell_header)
             .fill()
             .width(1100)
-            .height(480),
+            .height(620),
         page!(
             "theme-builder",
             "default",

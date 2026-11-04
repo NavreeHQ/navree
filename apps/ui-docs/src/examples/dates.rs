@@ -54,11 +54,16 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(420),
-        gallery!("date-picker", "states", "States", date_picker_states).height(140),
+        // Tall enough for the calendar to open under each field, whole.
+        gallery!("date-picker", "states", "States", date_picker_states)
+            .start()
+            .height(440),
         single!("date-picker", "button", "One button", date_picker_button)
             .start()
             .height(420),
-        gallery!("date-picker", "locales", "Languages", date_picker_locales).height(140),
+        gallery!("date-picker", "locales", "Languages", date_picker_locales)
+            .start()
+            .height(440),
         single!("date-picker", "birth", "A date of birth", date_picker_birth)
             .start()
             .height(440),
@@ -118,17 +123,21 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(380),
+        // Tall enough for the list of times to open under each field, whole.
         gallery!(
             "time-picker",
             "clocks",
             "12 and 24 hours",
             time_picker_clocks
         )
-        .height(140),
+        .start()
+        .height(380),
         single!("time-picker", "rules", "Office hours", time_picker_rules)
             .start()
             .height(380),
-        gallery!("time-picker", "states", "States", time_picker_states).height(140),
+        gallery!("time-picker", "states", "States", time_picker_states)
+            .start()
+            .height(380),
         single!(
             "time-picker",
             "zone",
@@ -136,7 +145,7 @@ pub fn all() -> Vec<Example> {
             time_picker_zone
         )
         .start()
-        .height(160),
+        .height(380),
     ]
 }
 

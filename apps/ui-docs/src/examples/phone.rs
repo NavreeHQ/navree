@@ -10,17 +10,28 @@ const SOURCE: &str = include_str!("phone.rs");
 pub fn all() -> Vec<Example> {
     vec![
         single!("phone-input", "thumb", "A phone input", phone_thumb).start(),
-        single!("phone-input", "default", "A phone field", phone_default).start(),
-        single!("phone-input", "saved", "A saved number", phone_saved).start(),
-        gallery!("phone-input", "states", "States", phone_states).medium(),
+        // Each frame is tall enough for the country list to open under its button, whole.
+        single!("phone-input", "default", "A phone field", phone_default)
+            .start()
+            .height(470),
+        single!("phone-input", "saved", "A saved number", phone_saved)
+            .start()
+            .height(470),
+        gallery!("phone-input", "states", "States", phone_states)
+            .medium()
+            .start()
+            .height(480),
         single!(
             "phone-input",
             "preferred",
             "Suggested countries first",
             phone_preferred
         )
-        .start(),
-        single!("phone-input", "rtl", "Right to left", phone_rtl).start(),
+        .start()
+        .height(460),
+        single!("phone-input", "rtl", "Right to left", phone_rtl)
+            .start()
+            .height(460),
     ]
 }
 

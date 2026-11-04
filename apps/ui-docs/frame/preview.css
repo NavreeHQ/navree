@@ -6,6 +6,8 @@
 html{height:100%}
 body[data-preview]{box-sizing:border-box;min-height:100%;margin:0;padding:24px;display:flex;flex-direction:column;justify-content:center}
 body[data-preview=fill]{padding:0;display:block}
+/* From the top: a frame taller than what it shows keeps its room below, where a list opens. */
+body[data-preview=start]{justify-content:flex-start}
 [data-preview-stage]{width:100%;min-width:0}
 body[data-preview=center] [data-preview-stage]{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px}
 

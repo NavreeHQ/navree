@@ -9,7 +9,10 @@ const SOURCE: &str = include_str!("pickers.rs");
 pub fn all() -> Vec<Example> {
     vec![
         single!("select", "thumb", "A select", select_thumb),
-        single!("select", "default", "A select", select_default).start(),
+        // Each frame is tall enough for its list to open under its control, whole.
+        single!("select", "default", "A select", select_default)
+            .start()
+            .height(260),
         single!("select", "open", "The list, open", select_open)
             .start()
             .show()
@@ -32,22 +35,34 @@ pub fn all() -> Vec<Example> {
         .start()
         .show()
         .height(280),
-        gallery!("select", "states", "States", select_states).height(120),
+        gallery!("select", "states", "States", select_states)
+            .start()
+            .height(380),
         single!("combobox", "thumb", "A combobox", combobox_thumb),
-        single!("combobox", "default", "A combobox", combobox_default).start(),
+        single!("combobox", "default", "A combobox", combobox_default)
+            .start()
+            .height(460),
         single!("combobox", "open", "The list, open", combobox_open)
             .start()
             .show()
-            .height(360),
-        single!("combobox", "create", "Making a new option", combobox_create).start(),
-        gallery!("combobox", "states", "States", combobox_states).height(120),
+            .height(470),
+        single!("combobox", "create", "Making a new option", combobox_create)
+            .start()
+            .height(260),
+        gallery!("combobox", "states", "States", combobox_states)
+            .start()
+            .height(460),
         single!("multi-select", "thumb", "A multi-select", multi_thumb),
-        single!("multi-select", "default", "A multi-select", multi_default).start(),
+        single!("multi-select", "default", "A multi-select", multi_default)
+            .start()
+            .height(470),
         single!("multi-select", "open", "The list, open", multi_open)
             .start()
             .show()
-            .height(380),
-        gallery!("multi-select", "limits", "Limits", multi_limits).height(140),
+            .height(470),
+        gallery!("multi-select", "limits", "Limits", multi_limits)
+            .start()
+            .height(470),
         single!("command", "thumb", "A command palette", command_thumb)
             .show()
             .height(250),
