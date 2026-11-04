@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use crm_core::models::Activity;
 use crm_core::{ActivityKind, SubjectType};
 use navree::openapi::ToSchema;
+use navree::orm::list::{Field, ListResource, ListSpec, Op};
 use navree::validation::Validate;
 use serde::{Deserialize, Deserializer};
 use uuid::Uuid;
@@ -158,32 +159,88 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-/// The query of `GET /api/v1/activities` (besides `page` and `per_page`).
-#[derive(Debug, Default, Deserialize, Validate)]
-pub struct ActivityFilter {
-    /// Only activities attached to this kind of record.
-    #[validate(skip)]
-    pub subject_type: Option<SubjectType>,
-    /// Only activities attached to this record.
-    #[validate(skip)]
-    pub subject_id: Option<Uuid>,
-    /// Only activities of this kind.
-    #[validate(skip)]
-    pub kind: Option<ActivityKind>,
-    /// Only activities assigned to this user.
-    #[validate(skip)]
-    pub assignee_id: Option<Uuid>,
-    /// Only activities due in this window of UTC days; sorts
-    /// by due date, earliest first.
-    #[validate(skip)]
-    pub due: Option<Due>,
-    /// Only completed (`true`) or open (`false`) activities; `true` sorts
-    /// by completion, most recent first.
-    #[validate(skip)]
-    pub completed: Option<bool>,
+/// The strings of [`ActivityKind`] (`filter[kind]` takes these).
+const KINDS: &[&str] = &["note", "call", "email", "meeting", "task"];
+
+/// The strings of [`SubjectType`] (`filter[subject_type]` takes these).
+const SUBJECT_TYPES: &[&str] = &["company", "contact", "deal"];
+
+/// The list query of `GET /api/v1/activities`, in the list-query grammar:
+///
+/// - `filter[subject_type]` and `filter[subject_id]`: the record an
+///   activity is attached to.
+/// - `filter[kind]`: one kind, or several with `filter[kind][in]=call,email`.
+/// - `filter[assignee_id]`: the user it is assigned to.
+/// - `filter[due]`: `overdue`, `today` or `upcoming` (UTC days); sorts by due
+///   date, earliest first.
+/// - `filter[completed]`: `true` for completed activities, most recently
+///   completed first, or `false` for open ones.
+/// - `page` and `per_page` (default 15, at most 100).
+///
+/// Without `filter[due]` or `filter[completed]=true`, the newest come first.
+pub struct ActivityList;
+
+impl ListResource for ActivityList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::one_of("subject_type", SUBJECT_TYPES),
+        Field::uuid("subject_id"),
+        Field::one_of("kind", KINDS),
+        Field::uuid("assignee_id"),
+        // A window of days and a state, worked out by the service, which
+        // also picks the order they imply.
+        Field::one_of("due", Due::WORDS).ops(&[Op::Eq]).by_app(),
+        Field::boolean("completed").ops(&[Op::Eq]).by_app(),
+    ]);
 }
 
 /// A string without surrounding whitespace.
 pub(crate) fn trimmed<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     String::deserialize(deserializer).map(|value| value.trim().to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::orm::list::Kind;
+
+    use super::*;
+
+    #[test]
+    fn the_word_filters_take_exactly_their_enums() {
+        let kinds: Vec<&str> = ActivityKind::ALL.iter().map(|kind| kind.as_str()).collect();
+        let subjects: Vec<&str> = SubjectType::ALL.iter().map(|kind| kind.as_str()).collect();
+        assert_eq!(KINDS, kinds);
+        assert_eq!(SUBJECT_TYPES, subjects);
+        for (name, words) in [
+            ("kind", KINDS),
+            ("subject_type", SUBJECT_TYPES),
+            ("due", Due::WORDS),
+        ] {
+            let field = ActivityList::SPEC.field(name).expect(name);
+            assert_eq!(field.kind, Kind::OneOf(words), "{name}");
+        }
+    }
+
+    #[test]
+    fn due_and_completed_are_checked_but_left_to_the_service() {
+        for name in ["due", "completed"] {
+            let field = ActivityList::SPEC.field(name).expect(name);
+            assert!(field.by_app, "{name}");
+            assert_eq!(field.allowed_ops(), [Op::Eq], "{name}");
+        }
+        let list = ActivityList::SPEC
+            .parse("filter[due]=today&filter[completed]=false&filter[kind][in]=call,task")
+            .expect("a valid query");
+        assert_eq!(list.eq("due"), Some("today"));
+        assert_eq!(list.eq("completed"), Some("false"));
+        for query in [
+            "filter[due]=later",
+            "filter[due][in]=today,overdue",
+            "filter[completed]=maybe",
+            "filter[completed][null]=true",
+            "sort=due_at",
+            "search=call",
+        ] {
+            assert!(ActivityList::SPEC.parse(query).is_err(), "{query}");
+        }
+    }
 }

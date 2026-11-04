@@ -10,7 +10,7 @@ use crm_core::CrmCoreModule;
 use navree::prelude::*;
 
 pub use controller::ContactsController;
-pub use dto::{ContactFilters, CreateContact, UpdateContact};
+pub use dto::{ContactList, CreateContact, UpdateContact};
 pub use export::{CSV_CONTENT_TYPE, CSV_HEADER, contacts_csv};
 pub use resource::{ContactPage, ContactResource, ContactType};
 pub use service::ContactService;
@@ -21,13 +21,5 @@ pub use service::ContactService;
     providers = [ContactService],
     controllers = [ContactsController],
     exports = [ContactService],
-    register = Self::wire,
 )]
 pub struct ContactsModule;
-
-impl ContactsModule {
-    /// Schemas the routes' documents refer to only through query strings.
-    fn wire(&self, m: &mut ModuleBuilder) {
-        m.api_schema::<ContactFilters>();
-    }
-}

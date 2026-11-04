@@ -9,12 +9,13 @@ use crm_core::subjects::CONTACT;
 use navree::access::{Ability, Accessible, Read};
 use navree::contracts::Clock;
 use navree::orm::access::AccessibleQuery;
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::orm::{Builder, Record};
 use navree::prelude::*;
 use navree::validation::{Messages, ValidationErrors};
 use uuid::Uuid;
 
-use super::dto::{ContactFilters, CreateContact, UpdateContact};
+use super::dto::{ContactList, CreateContact, UpdateContact};
 use super::resource::{ContactPage, ContactResource};
 use crate::common::search_text;
 
@@ -29,31 +30,32 @@ pub struct ContactService {
 }
 
 impl ContactService {
-    /// One page of the contacts `scope` allows, matching `filters`, by last
-    /// then first name.
+    /// One page of the contacts `scope` allows that match `list` (read
+    /// against [`ContactList`]), by last then first name.
     pub async fn list(
         &self,
         uow: &Uow,
         scope: Accessible<Contact, Read>,
-        filters: ContactFilters,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<ContactPage> {
-        let Page { data, meta } = filtered(&scope, &filters).paginate(uow, page).await?;
+        let Page { data, meta } = filtered(&scope, list)?
+            .paginate(uow, list.page_request(&ContactList::SPEC))
+            .await?;
         Ok(ContactPage {
             data: data.iter().map(Record::to_resource).collect(),
             meta: meta.into(),
         })
     }
 
-    /// Every contact `scope` allows that matches `filters`, in list order,
+    /// Every contact `scope` allows that matches `list`, in list order,
     /// with their embeds (for the CSV export).
     pub async fn all(
         &self,
         uow: &Uow,
         scope: Accessible<Contact, Read>,
-        filters: ContactFilters,
+        list: &ListQuery,
     ) -> Result<Vec<ContactResource>> {
-        let contacts = filtered(&scope, &filters).get(uow).await?;
+        let contacts = filtered(&scope, list)?.get(uow).await?;
         Ok(contacts.to_resource_collection())
     }
 
@@ -135,19 +137,17 @@ impl ContactService {
     }
 }
 
-/// The contacts `scope` allows that match `filters`, by last name, first
-/// name (ignoring ASCII case) and id, with their embeds.
-fn filtered(scope: &Accessible<Contact, Read>, filters: &ContactFilters) -> Builder<Contact> {
-    scope
+/// The contacts `scope` allows that match `list`, by last name, first name
+/// (ignoring ASCII case) and id, with their embeds. A list has no `sort`, so
+/// the order is always this one.
+fn filtered(scope: &Accessible<Contact, Read>, list: &ListQuery) -> Result<Builder<Contact>> {
+    Ok(scope
         .apply(Contact::query())
-        .when_some(search_text(filters.search.as_deref()), |query, text| {
+        .list(list, &ContactList::SPEC)?
+        // Every word of the search must match, which the model's scope does.
+        .when_some(search_text(list.search.as_deref()), |query, text| {
             query.search(text)
         })
-        .when_some(filters.company_id, |query, company| {
-            query.at_company(company)
-        })
-        .when_some(filters.status, |query, status| query.with_status(status))
-        .when_some(filters.owner_id, |query, owner| query.owned_by(owner))
         .alphabetical()
-        .with_all(ContactResource::EMBEDS)
+        .with_all(ContactResource::EMBEDS))
 }

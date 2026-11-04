@@ -31,6 +31,25 @@ async fn routes_are_documented_with_their_schemas() {
         response_ref(&document, "/api/v1/activities", "get", "200"),
         Some(schema("ActivityPage"))
     );
+    // The list query is the list-query grammar: the prose names its
+    // parameters.
+    let description = document["paths"]["/api/v1/activities"]["get"]["description"]
+        .as_str()
+        .unwrap_or_default();
+    for parameter in [
+        "filter[subject_type]",
+        "filter[subject_id]",
+        "filter[kind]",
+        "filter[assignee_id]",
+        "filter[due]",
+        "filter[completed]",
+        "per_page",
+    ] {
+        assert!(
+            description.contains(parameter),
+            "the list does not describe `{parameter}`: {description}"
+        );
+    }
     assert_eq!(
         response_ref(&document, "/api/v1/activities", "post", "201"),
         Some(schema("Activity"))

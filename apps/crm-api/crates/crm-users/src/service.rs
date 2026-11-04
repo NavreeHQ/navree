@@ -2,14 +2,15 @@
 
 use std::sync::Arc;
 
-use crm_core::models::{User, UserScopes};
+use crm_core::models::User;
 use navree::access::{AccessService, Accessible, Read};
 use navree::auth::{AuthService, NewUser};
 use navree::orm::Record;
 use navree::orm::access::AccessibleQuery;
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::prelude::*;
 
-use crate::dto::{CreateUser, UpdateUser, UserFilter};
+use crate::dto::{CreateUser, UpdateUser, UserList};
 use crate::resource::UserView;
 
 /// Users and their CRM roles. Accounts are made by navree-auth (which
@@ -24,27 +25,19 @@ pub struct UserService {
 }
 
 impl UserService {
-    /// One page of the users `scope` allows, by name, matching `filter`,
-    /// with their roles.
+    /// One page of the users `scope` allows that match `list` (read against
+    /// [`UserList`]), by name unless it sorts, with their roles.
     pub async fn list(
         &self,
         uow: &Uow,
         scope: Accessible<User, Read>,
-        filter: UserFilter,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<Page<UserView>> {
-        let search = filter
-            .search
-            .as_deref()
-            .map(str::trim)
-            .filter(|search| !search.is_empty());
         let page = scope
             .apply(User::query())
-            .when_some(search, |query, term| query.search(term))
-            .order_by(User::NAME)
-            .order_by(User::ID)
+            .list(list, &UserList::SPEC)?
             .with_all(UserView::EMBEDS)
-            .paginate(uow, page)
+            .paginate(uow, list.page_request(&UserList::SPEC))
             .await?;
         Ok(page.map(|user| user.to_resource::<UserView>()))
     }

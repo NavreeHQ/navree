@@ -9,13 +9,14 @@ use crm_core::{ActivityKind, SubjectType};
 use navree::access::{Ability, Accessible, PrincipalAccess, Read};
 use navree::contracts::Clock;
 use navree::orm::access::{AbilityExt, AccessibleQuery};
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::orm::{OrmError, Record};
 use navree::prelude::*;
 use navree::validation::ValidationErrors;
 use uuid::Uuid;
 
-use crate::dto::{ActivityFilter, CreateActivity, UpdateActivity};
-use crate::due::Today;
+use crate::dto::{ActivityList, CreateActivity, UpdateActivity};
+use crate::due::{Due, Today};
 use crate::resource::ActivityResource;
 
 /// Lists, creates, changes, completes and deletes activities, in the
@@ -27,51 +28,42 @@ pub struct ActivityService {
 }
 
 impl ActivityService {
-    /// One page of the activities `scope` allows that match `filter`:
-    /// with `due`, earliest due first; with `completed=true`, most recently
-    /// completed first; otherwise newest first.
+    /// One page of the activities `scope` allows that match `list` (read
+    /// against [`ActivityList`]): with `filter[due]`, earliest due first;
+    /// with `filter[completed]=true`, most recently completed first;
+    /// otherwise newest first.
     pub async fn list(
         &self,
         uow: &Uow,
         scope: Accessible<Activity, Read>,
-        filter: ActivityFilter,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<Page<ActivityResource>> {
         let today = Today::of(self.clock.now());
+        let due = list.eq("due").and_then(Due::from_word);
+        let completed = list.eq("completed").map(|word| word == "true");
         let query = scope
             .apply(Activity::query())
-            .when_some(filter.subject_type, |query, subject_type| {
-                query.where_(Activity::SUBJECT_TYPE.eq(subject_type))
-            })
-            .when_some(filter.subject_id, |query, subject_id| {
-                query.where_(Activity::SUBJECT_ID.eq(subject_id))
-            })
-            .when_some(filter.kind, |query, kind| {
-                query.where_(Activity::KIND.eq(kind))
-            })
-            .when_some(filter.assignee_id, |query, assignee| {
-                query.where_(Activity::ASSIGNEE_ID.eq(assignee))
-            })
-            .when_some(filter.due, |query, due| due.apply(query, today))
-            .when_some(filter.completed, |query, completed| {
+            .list(list, &ActivityList::SPEC)?
+            .when_some(due, |query, due| due.apply(query, today))
+            .when_some(completed, |query, completed| {
                 if completed {
                     query.where_not_null(Activity::COMPLETED_AT)
                 } else {
                     query.where_null(Activity::COMPLETED_AT)
                 }
             });
-        let query = if filter.completed == Some(true) {
+        let query = if completed == Some(true) {
             query
                 .order_by_desc(Activity::COMPLETED_AT)
                 .order_by_desc(Activity::ID)
-        } else if filter.due.is_some() {
+        } else if due.is_some() {
             query.order_by(Activity::DUE_AT).order_by(Activity::ID)
         } else {
             query.newest_first()
         };
         let page = query
             .with_all(ActivityResource::EMBEDS)
-            .paginate(uow, page)
+            .paginate(uow, list.page_request(&ActivityList::SPEC))
             .await?;
         Ok(page.map(|activity| activity.to_resource::<ActivityResource>()))
     }

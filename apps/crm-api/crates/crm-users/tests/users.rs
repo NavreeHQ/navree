@@ -383,3 +383,151 @@ async fn user_search_takes_wildcards_literally() {
     }
     crm.shutdown().await;
 }
+
+// MOD-013: the list query of users, in the list-query grammar.
+
+/// The names on a page of users, in order.
+fn user_names(page: &Value) -> Vec<String> {
+    page["data"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a page: {page}"))
+        .iter()
+        .map(|user| user["name"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// `GET /api/v1/users` with `query` as `client`, answering 200.
+async fn users(client: &crm_testkit::CrmClient, query: &[(&str, &str)]) -> Value {
+    client
+        .get("/api/v1/users")
+        .query(query)
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()
+}
+
+#[tokio::test]
+async fn users_sort_by_the_fields_of_the_allow_list() {
+    let crm = crm().await;
+    let admin = crm.login_as(Role::Admin).await;
+    // By name this user comes first, by email last.
+    let mut input = new_user("zz@navree.test", "rep");
+    input["name"] = json!("Aarav Kapoor");
+    admin
+        .post("/api/v1/users")
+        .json(&input)
+        .send()
+        .await
+        .assert_status(201);
+
+    assert_eq!(
+        user_names(&users(&admin, &[]).await),
+        [
+            "Aarav Kapoor",
+            "Dana Whitfield",
+            "Marcus Reyes",
+            "Priya Shah",
+            "Tom Becker"
+        ]
+    );
+    assert_eq!(
+        user_names(&users(&admin, &[("sort", "email")]).await),
+        [
+            "Dana Whitfield",
+            "Marcus Reyes",
+            "Priya Shah",
+            "Tom Becker",
+            "Aarav Kapoor"
+        ]
+    );
+    assert_eq!(
+        user_names(&users(&admin, &[("sort", "-email")]).await),
+        [
+            "Aarav Kapoor",
+            "Tom Becker",
+            "Priya Shah",
+            "Marcus Reyes",
+            "Dana Whitfield"
+        ]
+    );
+    assert_eq!(
+        user_names(&users(&admin, &[("sort", "-name")]).await),
+        [
+            "Tom Becker",
+            "Priya Shah",
+            "Marcus Reyes",
+            "Dana Whitfield",
+            "Aarav Kapoor"
+        ]
+    );
+    // `created_at` is allowed, and a search keeps the order asked for.
+    users(&admin, &[("sort", "-created_at")]).await;
+    assert_eq!(
+        user_names(&users(&admin, &[("search", "navree.test"), ("sort", "-name")]).await)[0],
+        "Tom Becker"
+    );
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn what_the_user_list_does_not_allow_is_a_400_naming_the_parameter() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+
+    // (the parameter sent, its value, the parameter the 400 names)
+    for (sent, value, param) in [
+        // The user list has no filters.
+        ("filter[name]", "Priya Shah", "filter[name]"),
+        ("filter[email][contains]", "rep", "filter[email][contains]"),
+        ("filter[password]", "x", "filter[password]"),
+        ("sort", "password", "sort"),
+        ("sort", "roles", "sort"),
+        ("per_page", "101", "per_page"),
+        ("per_page", "x", "per_page"),
+        ("page", "0", "page"),
+    ] {
+        rep.get("/api/v1/users")
+            .query(&[(sent, value)])
+            .send()
+            .await
+            .assert_validation_error(param);
+    }
+    // The page size is at most 100; it used to be clamped.
+    let page = users(&rep, &[("per_page", "100")]).await;
+    assert_eq!(page["meta"]["per_page"], json!(100));
+    // Names that are not the list query's are left alone.
+    let page = users(&rep, &[("name", "Priya Shah"), ("email", "x")]).await;
+    assert_eq!(page["meta"]["total"], json!(4));
+    crm.shutdown().await;
+}
+
+/// Quotes and SQL in a search are text.
+#[tokio::test]
+async fn hostile_user_searches_are_just_text() {
+    let crm = crm().await;
+    let admin = crm.login_as(Role::Admin).await;
+    let mut input = new_user("robert@navree.test", "rep");
+    input["name"] = json!("Robert'); DROP TABLE users;--");
+    admin
+        .post("/api/v1/users")
+        .json(&input)
+        .send()
+        .await
+        .assert_status(201);
+
+    let found = users(&admin, &[("search", "'); DROP TABLE")]).await;
+    assert_eq!(user_names(&found), ["Robert'); DROP TABLE users;--"]);
+    let none = users(&admin, &[("search", "' OR 1=1")]).await;
+    assert_eq!(none["meta"]["total"], json!(0));
+    for (param, value) in [("sort", "name; DROP TABLE users"), ("filter[id]", "1")] {
+        admin
+            .get("/api/v1/users")
+            .query(&[(param, value)])
+            .send()
+            .await
+            .assert_status(400);
+    }
+    assert_eq!(users(&admin, &[]).await["meta"]["total"], json!(5));
+    crm.shutdown().await;
+}

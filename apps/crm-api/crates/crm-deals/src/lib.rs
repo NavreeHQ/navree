@@ -4,7 +4,7 @@
 //!
 //! | Route | Access | Result |
 //! |---|---|---|
-//! | `GET /api/v1/deals?stage=&owner_id=&company_id=&search=&page=&per_page=` | `read Deal` | page of [`DealResource`], newest first |
+//! | `GET /api/v1/deals?filter[stage]=&filter[owner_id]=&filter[company_id]=&search=&sort=&page=&per_page=` ([`DealList`]) | `read Deal` | page of [`DealResource`], newest first |
 //! | `GET /api/v1/deals/board?owner_id=` | `read Deal` | [`DealBoard`]: every stage in board order with `count`, `amount_cents` and its deals by `position` |
 //! | `POST /api/v1/deals` [`CreateDeal`] | `create Deal` | 201 [`DealResource`], at the end of its stage |
 //! | `GET /api/v1/deals/{id}` | `read` that deal | [`DealResource`] |
@@ -50,7 +50,7 @@ use crm_core::CrmCoreModule;
 use navree::prelude::*;
 
 pub use controller::DealsController;
-pub use dto::{BoardFilter, CreateDeal, DealFilter, MAX_AMOUNT_CENTS, MoveDeal, UpdateDeal};
+pub use dto::{BoardFilter, CreateDeal, DealList, MAX_AMOUNT_CENTS, MoveDeal, UpdateDeal};
 pub use events::{DealAssigned, DealWon};
 pub use mcp::{DealsMcp, FollowUpArgs, ListDeals, MoveDealArgs};
 pub use notification::{

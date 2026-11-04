@@ -3,16 +3,17 @@
 use crm_core::CompanySize;
 use crm_core::models::{Company, User};
 use navree::openapi::ToSchema;
+use navree::orm::list::{Field, ListQuery, ListResource, ListSpec, Op};
 use navree::orm::validation::exists;
 use navree::orm::{Builder, Expr};
 use navree::validation::Validate;
 use navree::validation::{AsyncRule, AsyncRules};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::common::{
-    MAX_TEXT, blank_as_none, not_blank, nullable, nullable_text, optional_text, present,
-    present_trimmed, set_some, trimmed,
+    MAX_TEXT, not_blank, nullable, nullable_text, optional_text, present, present_trimmed,
+    set_some, trimmed,
 };
 
 /// The body of `POST /api/v1/companies`. Text fields are trimmed; blank
@@ -156,58 +157,74 @@ impl AsyncRules for UpdateCompany {
     }
 }
 
-/// The order of `GET /api/v1/companies` (default `name`): by name
-/// (case-insensitive) or creation time, `-` for descending.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-pub enum CompanySort {
-    /// By name, A to Z.
-    #[default]
-    #[serde(rename = "name")]
-    Name,
-    /// By name, Z to A.
-    #[serde(rename = "-name")]
-    NameDesc,
-    /// Oldest first.
-    #[serde(rename = "created_at")]
-    CreatedAt,
-    /// Newest first.
-    #[serde(rename = "-created_at")]
-    CreatedAtDesc,
+/// The list query of `GET /api/v1/companies`, in the list-query grammar:
+///
+/// - `filter[owner_id]`: a user's id.
+/// - `filter[industry]`: an industry, ignoring case.
+/// - `search`: part of the name or domain, ignoring case.
+/// - `sort`: `name` (ignoring case) or `created_at`, with `-` in front for
+///   descending. The default is `name`.
+/// - `page` and `per_page` (default 15, at most 100).
+pub struct CompanyList;
+
+impl ListResource for CompanyList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::uuid("owner_id"),
+        // Matched without regard to case, so the service applies it.
+        Field::text("industry").ops(&[Op::Eq]).by_app(),
+    ])
+    .sortable(&["name", "created_at"])
+    .default_sort(&["name"])
+    .searchable_by_app();
 }
 
-impl CompanySort {
-    /// `query` in this order, then by id (so pages never overlap): names
-    /// compare ignoring ASCII case.
-    pub fn apply(self, query: Builder<Company>) -> Builder<Company> {
-        let name = || Expr::lower(Company::NAME);
-        match self {
-            CompanySort::Name => query.order_by(name()),
-            CompanySort::NameDesc => query.order_by_desc(name()),
-            CompanySort::CreatedAt => query.order_by(Company::CREATED_AT),
-            CompanySort::CreatedAtDesc => query.order_by_desc(Company::CREATED_AT),
-        }
-        .order_by(Company::ID)
+impl CompanyList {
+    /// `query` in the order `list` asks for (by name when it names none),
+    /// then by id so pages never overlap. Names compare ignoring ASCII case,
+    /// which the generic sort of `Builder::list` does not do.
+    pub fn order(query: Builder<Company>, list: &ListQuery) -> Builder<Company> {
+        Self::SPEC
+            .sort_of(list)
+            .iter()
+            .fold(query.reorder(), |query, key| {
+                match (key.field.as_str(), key.descending) {
+                    ("name", false) => query.order_by(Expr::lower(Company::NAME)),
+                    ("name", true) => query.order_by_desc(Expr::lower(Company::NAME)),
+                    ("created_at", false) => query.order_by(Company::CREATED_AT),
+                    ("created_at", true) => query.order_by_desc(Company::CREATED_AT),
+                    _ => query,
+                }
+            })
+            .order_by(Company::ID)
     }
 }
 
-/// The query of `GET /api/v1/companies` (besides `page` and `per_page`).
-/// Blank values count as left out.
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
-pub struct CompanyFilters {
-    /// Part of the name or domain (case-insensitive).
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub search: Option<String>,
-    /// Only companies this user owns.
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub owner_id: Option<Uuid>,
-    /// Only companies in this industry (case-insensitive).
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub industry: Option<String>,
-    /// The order.
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub sort: Option<CompanySort>,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn industry_is_checked_but_left_to_the_service() {
+        let field = CompanyList::SPEC.field("industry").expect("an industry filter");
+        assert!(field.by_app);
+        assert_eq!(field.allowed_ops(), [Op::Eq]);
+        // `contains` would be accepted and then ignored: it is refused.
+        let error = CompanyList::SPEC
+            .parse("filter[industry][contains]=soft")
+            .expect_err("only equality");
+        assert_eq!(error.problems[0].param, "filter[industry][contains]");
+    }
+
+    #[test]
+    fn names_sort_by_default() {
+        let list = CompanyList::SPEC.parse("").expect("an empty query");
+        let sorts = CompanyList::SPEC.sort_of(&list);
+        assert_eq!(sorts.len(), 1);
+        assert_eq!(sorts[0].term(), "name");
+        let list = CompanyList::SPEC
+            .parse("sort=-created_at")
+            .expect("a sortable field");
+        assert_eq!(CompanyList::SPEC.sort_of(&list)[0].term(), "-created_at");
+        assert!(CompanyList::SPEC.parse("sort=domain").is_err());
+    }
 }

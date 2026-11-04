@@ -2,7 +2,7 @@
 //! search, filters, sort and soft deletes.
 
 use crm_core::Stage;
-use crm_testkit::Role;
+use crm_testkit::{CrmClient, Role, TestCrm};
 use navree::orm::Model;
 use serde_json::{Value, json};
 
@@ -375,12 +375,15 @@ async fn search_and_industry_ignore_case_beyond_ascii() {
     }
     for industry in ["Énergie", "énergie", "ÉNERGIE"] {
         assert_eq!(
-            names(&[("industry", industry)]).await,
+            names(&[("filter[industry]", industry)]).await,
             ["Équipe Lyon"],
             "{industry}"
         );
     }
-    assert_eq!(names(&[("industry", "ENERGIE")]).await, ["Plain Ltd"]);
+    assert_eq!(
+        names(&[("filter[industry]", "ENERGIE")]).await,
+        ["Plain Ltd"]
+    );
     crm.shutdown().await;
 }
 
@@ -427,15 +430,15 @@ async fn search_and_filters() {
     // Filters.
     let rep2_id = crm.user_id(Role::Rep2).to_string();
     assert_eq!(
-        names(&[("owner_id", rep2_id.as_str())]).await,
+        names(&[("filter[owner_id]", rep2_id.as_str())]).await,
         ["100% Juice", "Globex"]
     );
     assert_eq!(
-        names(&[("industry", "Software")]).await,
+        names(&[("filter[industry]", "Software")]).await,
         ["acme", "Initech"]
     );
     assert_eq!(
-        names(&[("industry", "software"), ("search", "init")]).await,
+        names(&[("filter[industry]", "software"), ("search", "init")]).await,
         ["Initech"]
     );
     // Sort.
@@ -451,20 +454,23 @@ async fn search_and_filters() {
         names(&[("sort", "-created_at")]).await,
         ["100% Juice", "acme", "Globex", "Initech"]
     );
-    rep1.get("/api/v1/companies")
+    let refused = rep1
+        .get("/api/v1/companies")
         .query(&[("sort", "domain")])
         .send()
         .await
         .assert_validation_error("sort")
-        .assert_error(
-            400,
-            "sort must be one of the following values: name, -name, created_at, -created_at",
-        );
+        .json_value();
+    let message = refused["errors"]["sort"][0].as_str().unwrap_or_default();
+    assert!(
+        message.contains("domain") && message.contains("name, created_at"),
+        "{message}"
+    );
     rep1.get("/api/v1/companies")
-        .query(&[("owner_id", "nope")])
+        .query(&[("filter[owner_id]", "nope")])
         .send()
         .await
-        .assert_validation_error("owner_id");
+        .assert_validation_error("filter[owner_id]");
     // Pages.
     rep1.get("/api/v1/companies")
         .query(&[("per_page", "3"), ("page", "2")])
@@ -528,5 +534,270 @@ async fn soft_deleted_hidden() {
         .send()
         .await
         .assert_status(200);
+    crm.shutdown().await;
+}
+
+// MOD-013: the list query of companies, in the list-query grammar.
+
+/// Four companies, created a minute apart in this order: Sutlej Supply
+/// (rep 1, Software), Beas Traders (rep 2, Logistics), Ravi Foods (rep 2,
+/// Food) and Chenab Textiles (rep 1, no industry).
+async fn four_companies(crm: &TestCrm, rep1: &CrmClient, rep2: &CrmClient) {
+    create_company(
+        rep1,
+        json!({ "name": "Sutlej Supply", "domain": "sutlej.in", "industry": "Software" }),
+    )
+    .await;
+    tick(crm);
+    create_company(rep2, json!({ "name": "Beas Traders", "industry": "Logistics" })).await;
+    tick(crm);
+    create_company(rep2, json!({ "name": "Ravi Foods", "industry": "Food" })).await;
+    tick(crm);
+    create_company(rep1, json!({ "name": "Chenab Textiles" })).await;
+}
+
+#[tokio::test]
+async fn owner_and_industry_filters_take_their_operators() {
+    let crm = crm().await;
+    let rep1 = crm.login_as(Role::Rep1).await;
+    let rep2 = crm.login_as(Role::Rep2).await;
+    four_companies(&crm, &rep1, &rep2).await;
+    let (one, two) = (
+        crm.user_id(Role::Rep1).to_string(),
+        crm.user_id(Role::Rep2).to_string(),
+    );
+    let names =
+        async |query: &[(&str, &str)]| list(&rep1, "/api/v1/companies", query, "name").await;
+
+    assert_eq!(
+        names(&[("filter[owner_id]", &one)]).await,
+        ["Chenab Textiles", "Sutlej Supply"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id][eq]", &two)]).await,
+        ["Beas Traders", "Ravi Foods"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id][in]", &format!("{one},{two}"))]).await,
+        ["Beas Traders", "Chenab Textiles", "Ravi Foods", "Sutlej Supply"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id][ne]", &one)]).await,
+        ["Beas Traders", "Ravi Foods"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id][not_in]", &two)]).await,
+        ["Chenab Textiles", "Sutlej Supply"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id][null]", "true")]).await,
+        Vec::<String>::new()
+    );
+    assert_eq!(names(&[("filter[owner_id][null]", "false")]).await.len(), 4);
+    // The industry matches ignoring case; a blank one is left out.
+    assert_eq!(
+        names(&[("filter[industry]", "SOFTWARE")]).await,
+        ["Sutlej Supply"]
+    );
+    assert_eq!(
+        names(&[("filter[industry]", "  food ")]).await,
+        ["Ravi Foods"]
+    );
+    assert_eq!(names(&[("filter[industry]", "  ")]).await.len(), 4);
+    assert_eq!(
+        names(&[("filter[industry]", "Software"), ("filter[owner_id]", &two)]).await,
+        Vec::<String>::new()
+    );
+    // The industry is matched whole, by the service: other operators would
+    // be ignored, so they are refused.
+    for operator in ["contains", "starts_with", "in", "ne"] {
+        let param = format!("filter[industry][{operator}]");
+        rep1.get("/api/v1/companies")
+            .query(&[(param.as_str(), "soft")])
+            .send()
+            .await
+            .assert_validation_error(&param);
+    }
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn sort_takes_the_names_of_the_allow_list_and_several_fields() {
+    let crm = crm().await;
+    let rep1 = crm.login_as(Role::Rep1).await;
+    let rep2 = crm.login_as(Role::Rep2).await;
+    four_companies(&crm, &rep1, &rep2).await;
+    let two = crm.user_id(Role::Rep2).to_string();
+    let names =
+        async |query: &[(&str, &str)]| list(&rep1, "/api/v1/companies", query, "name").await;
+
+    assert_eq!(
+        names(&[("sort", "name,-created_at")]).await,
+        ["Beas Traders", "Chenab Textiles", "Ravi Foods", "Sutlej Supply"]
+    );
+    assert_eq!(
+        names(&[("sort", "-created_at")]).await,
+        ["Chenab Textiles", "Ravi Foods", "Beas Traders", "Sutlej Supply"]
+    );
+    // A repeated `sort` adds terms; with a filter.
+    assert_eq!(
+        names(&[
+            ("filter[owner_id]", &two),
+            ("sort", "created_at"),
+            ("sort", "name")
+        ])
+        .await,
+        ["Beas Traders", "Ravi Foods"]
+    );
+    assert_eq!(
+        names(&[("filter[owner_id]", &two), ("sort", "-name")]).await,
+        ["Ravi Foods", "Beas Traders"]
+    );
+    for sort in ["domain", "password", "owner_id", "name;drop", "-"] {
+        rep1.get("/api/v1/companies")
+            .query(&[("sort", sort)])
+            .send()
+            .await
+            .assert_validation_error("sort");
+    }
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    create_company(&rep, acme()).await;
+
+    // (the parameter sent, its value, the parameter the 400 names)
+    for (sent, value, param) in [
+        ("filter[name]", "Acme", "filter[name]"),
+        ("filter[x]", "1", "filter[x]"),
+        ("filter[password][contains]", "x", "filter[password][contains]"),
+        ("filter[owner_id]", "nope", "filter[owner_id]"),
+        ("filter[owner_id][gt]", "a", "filter[owner_id][gt]"),
+        ("filter[owner_id][null]", "maybe", "filter[owner_id][null]"),
+        ("per_page", "101", "per_page"),
+        ("per_page", "0", "per_page"),
+        ("page", "x", "page"),
+    ] {
+        rep.get("/api/v1/companies")
+            .query(&[(sent, value)])
+            .send()
+            .await
+            .assert_validation_error(param);
+    }
+    // Every problem is reported at once.
+    let errors = rep
+        .get("/api/v1/companies")
+        .query(&[("filter[x]", "1"), ("sort", "y"), ("per_page", "1000")])
+        .send()
+        .await
+        .assert_status(400)
+        .json_value()["errors"]
+        .clone();
+    for param in ["filter[x]", "sort", "per_page"] {
+        assert!(errors[param].is_array(), "{param}: {errors}");
+    }
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_page_size_is_at_most_100_and_refused_beyond() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    create_company(&rep, acme()).await;
+
+    rep.get("/api/v1/companies")
+        .query(&[("per_page", "100")])
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.per_page", json!(100));
+    // It used to be clamped to 100; now it is a 400.
+    rep.get("/api/v1/companies")
+        .query(&[("per_page", "101")])
+        .send()
+        .await
+        .assert_validation_error("per_page");
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_old_flat_parameters_are_ignored() {
+    let crm = crm().await;
+    let rep1 = crm.login_as(Role::Rep1).await;
+    let rep2 = crm.login_as(Role::Rep2).await;
+    four_companies(&crm, &rep1, &rep2).await;
+    let two = crm.user_id(Role::Rep2).to_string();
+
+    // `owner_id=` and `industry=` are not the list query's: no filter, and
+    // no error even for a value that is no id.
+    for query in [
+        [("owner_id", two.as_str()), ("industry", "Software")],
+        [("owner_id", "nope"), ("industry", "")],
+    ] {
+        let page = rep1
+            .get("/api/v1/companies")
+            .query(&query)
+            .send()
+            .await
+            .assert_status(200)
+            .json_value();
+        assert_eq!(page["meta"]["total"], 4, "{query:?}");
+    }
+    // The same name inside `filter[..]` does filter.
+    let page = rep1
+        .get("/api/v1/companies")
+        .query(&[("filter[owner_id]", two.as_str())])
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(page["meta"]["total"], 2);
+    crm.shutdown().await;
+}
+
+/// Quotes and SQL in a value are text.
+#[tokio::test]
+async fn hostile_values_are_just_values() {
+    let crm = crm().await;
+    let rep = crm.login_as(Role::Rep1).await;
+    create_company(
+        &rep,
+        json!({ "name": "Robert'); DROP TABLE companies;--", "industry": "' OR 1=1" }),
+    )
+    .await;
+    create_company(&rep, acme()).await;
+    let names =
+        async |query: &[(&str, &str)]| list(&rep, "/api/v1/companies", query, "name").await;
+
+    // The industry and the search are plain values, found or not.
+    assert_eq!(
+        names(&[("filter[industry]", "' or 1=1")]).await,
+        ["Robert'); DROP TABLE companies;--"]
+    );
+    assert_eq!(
+        names(&[("filter[industry]", "x' OR '1'='1")]).await,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        names(&[("search", "'); DROP TABLE")]).await,
+        ["Robert'); DROP TABLE companies;--"]
+    );
+    assert_eq!(names(&[("search", "' OR 1=1")]).await, Vec::<String>::new());
+    // An id or a sort is not text, so it is refused.
+    for (param, value) in [
+        ("filter[owner_id]", "' OR 1=1"),
+        ("filter[owner_id][in]", "1; DROP TABLE companies"),
+        ("sort", "name; DROP TABLE companies"),
+    ] {
+        rep.get("/api/v1/companies")
+            .query(&[(param, value)])
+            .send()
+            .await
+            .assert_status(400);
+    }
+    assert_eq!(names(&[]).await.len(), 2);
     crm.shutdown().await;
 }

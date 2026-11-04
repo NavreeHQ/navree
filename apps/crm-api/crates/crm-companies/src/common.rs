@@ -6,7 +6,6 @@ use navree::db::PageMeta;
 use navree::openapi::ToSchema;
 use navree::validation::Violation;
 use navree::validation::rules::RuleInput;
-use serde::de::value::StringDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The longest text the CRM stores in a short text column.
@@ -59,20 +58,6 @@ pub(crate) fn nullable_text<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<Option<String>>, D::Error> {
     optional_text(deserializer).map(Some)
-}
-
-/// An optional query parameter: a blank value (`?owner_id=`) is the same as
-/// leaving it out; anything else must parse as `T` (a UUID, an enum
-/// string), with serde's error otherwise.
-pub(crate) fn blank_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    match Option::<String>::deserialize(deserializer)?.and_then(non_blank) {
-        None => Ok(None),
-        Some(value) => T::deserialize(StringDeserializer::<D::Error>::new(value)).map(Some),
-    }
 }
 
 /// `value` trimmed, or `None` when that leaves nothing.
@@ -184,21 +169,5 @@ mod tests {
         assert_eq!(csv_safe("Ada"), "Ada");
         assert_eq!(csv_safe("a=b"), "a=b");
         assert_eq!(csv_safe(""), "");
-    }
-
-    #[test]
-    fn blank_query_values_are_left_out() {
-        #[derive(Debug, Deserialize)]
-        struct Q {
-            #[serde(default, deserialize_with = "blank_as_none")]
-            id: Option<uuid::Uuid>,
-        }
-        let parse = |json: serde_json::Value| serde_json::from_value::<Q>(json).map(|q| q.id);
-        assert_eq!(parse(serde_json::json!({ "id": "  " })).ok(), Some(None));
-        assert_eq!(parse(serde_json::json!({})).ok(), Some(None));
-        let id = uuid::Uuid::now_v7();
-        assert_eq!(parse(serde_json::json!({ "id": id })).ok(), Some(Some(id)));
-        let error = parse(serde_json::json!({ "id": "nope" })).expect_err("not a UUID");
-        assert!(error.to_string().contains("UUID parsing failed"), "{error}");
     }
 }

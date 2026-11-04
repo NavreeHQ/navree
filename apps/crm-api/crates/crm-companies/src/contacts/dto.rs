@@ -4,6 +4,7 @@
 use crm_core::ContactStatus;
 use crm_core::models::{Company, Contact, User};
 use navree::openapi::ToSchema;
+use navree::orm::list::{Field, ListResource, ListSpec};
 use navree::orm::validation::exists;
 use navree::validation::Validate;
 use navree::validation::{AsyncRule, AsyncRules};
@@ -11,8 +12,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::common::{
-    MAX_TEXT, blank_as_none, not_blank, nullable, nullable_text, optional_text, present,
-    present_trimmed, set_some, trimmed,
+    MAX_TEXT, not_blank, nullable, nullable_text, optional_text, present, present_trimmed,
+    set_some, trimmed,
 };
 
 /// The body of `POST /api/v1/contacts`. Text fields are trimmed; blank
@@ -160,25 +161,46 @@ impl AsyncRules for UpdateContact {
     }
 }
 
-/// The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and
-/// of `GET /api/v1/contacts/export`. Blank values count as left out.
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
-pub struct ContactFilters {
-    /// Words that must each appear in the first name, last name, email or
-    /// title (case-insensitive).
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub search: Option<String>,
-    /// Only contacts at this company.
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub company_id: Option<Uuid>,
-    /// Only contacts with this status.
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub status: Option<ContactStatus>,
-    /// Only contacts this user owns.
-    #[serde(default, deserialize_with = "blank_as_none")]
-    #[validate(skip)]
-    pub owner_id: Option<Uuid>,
+/// The strings of [`ContactStatus`], in life-cycle order (`filter[status]`
+/// takes these).
+const STATUSES: &[&str] = &["lead", "prospect", "customer", "churned"];
+
+/// The list query of `GET /api/v1/contacts` and of
+/// `GET /api/v1/contacts/export`, in the list-query grammar:
+///
+/// - `filter[company_id]` and `filter[owner_id]`: a company's or a user's id.
+/// - `filter[status]`: one status, or several with `filter[status][in]=lead,prospect`.
+/// - `search`: words that must each appear in the first name, last name,
+///   email or title, ignoring case.
+/// - `page` and `per_page` (default 15, at most 100) for the list.
+///
+/// Contacts come by last name, then first name.
+pub struct ContactList;
+
+impl ListResource for ContactList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::uuid("company_id"),
+        Field::one_of("status", STATUSES),
+        Field::uuid("owner_id"),
+    ])
+    // Every word must match, which the model's own scope does.
+    .searchable_by_app();
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::orm::list::Kind;
+
+    use super::*;
+
+    #[test]
+    fn the_status_filter_takes_exactly_the_statuses() {
+        let field = ContactList::SPEC.field("status").expect("a status filter");
+        let words: Vec<&str> = ContactStatus::ALL
+            .iter()
+            .map(|status| status.as_str())
+            .collect();
+        assert_eq!(field.kind, Kind::OneOf(STATUSES));
+        assert_eq!(STATUSES, words);
+    }
 }

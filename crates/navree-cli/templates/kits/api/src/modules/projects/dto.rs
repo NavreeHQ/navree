@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use navree::openapi::ToSchema;
+use navree::orm::list::{Field, ListResource, ListSpec};
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -76,15 +77,24 @@ impl UpdateProject {
     }
 }
 
-/// The query of `GET /api/v1/projects`: `?status=active&search=web`.
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
-pub struct ProjectFilter {
-    /// Only projects with this status.
-    #[validate(skip)]
-    pub status: Option<ProjectStatus>,
-    /// Only projects whose name contains this text.
-    #[validate(length(max = 120))]
-    pub search: Option<String>,
+/// The list query of `GET /api/v1/projects`, in the list-query grammar:
+///
+/// - `filter[status]`: `active` or `archived`; several with
+///   `filter[status][in]=active,archived`.
+/// - `search`: part of the name, ignoring case.
+/// - `sort`: `name`, `created_at` or `updated_at`, with `-` in front for
+///   descending. The default is `-created_at`.
+/// - `page` and `per_page` (default 15, at most 100).
+///
+/// An unknown filter or sort, a value of the wrong kind or a `per_page` over
+/// 100 is a 400 that names the parameter.
+pub struct ProjectList;
+
+impl ListResource for ProjectList {
+    const SPEC: ListSpec = ListSpec::new(&[Field::one_of("status", &["active", "archived"])])
+        .sortable(&["name", "created_at", "updated_at"])
+        .default_sort(&["-created_at"])
+        .searchable(&["name"]);
 }
 
 /// A project as the API returns it.
@@ -143,4 +153,26 @@ pub struct PageMetaSchema {
     pub total: u64,
     /// The last page number (at least 1).
     pub last_page: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::orm::list::Kind;
+
+    use super::*;
+
+    #[test]
+    fn the_status_filter_takes_exactly_the_statuses() {
+        let field = ProjectList::SPEC.field("status").expect("a status filter");
+        let Kind::OneOf(words) = field.kind else {
+            panic!("a list of words");
+        };
+        assert_eq!(
+            words,
+            [
+                ProjectStatus::Active.as_str(),
+                ProjectStatus::Archived.as_str()
+            ]
+        );
+    }
 }

@@ -10,10 +10,11 @@ use navree::access::{Ability, Accessible, Read};
 use navree::contracts::Clock;
 use navree::orm::Record;
 use navree::orm::access::AccessibleQuery;
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::prelude::*;
 use uuid::Uuid;
 
-use super::dto::{CompanyFilters, CreateCompany, UpdateCompany};
+use super::dto::{CompanyList, CreateCompany, UpdateCompany};
 use super::resource::{CompanyDetail, CompanyPage, CompanyResource};
 use crate::common::search_text;
 
@@ -27,29 +28,28 @@ pub struct CompanyService {
 }
 
 impl CompanyService {
-    /// One page of the companies `scope` allows, matching `filters`, with
-    /// their owners.
+    /// One page of the companies `scope` allows that match `list` (read
+    /// against [`CompanyList`]), by name unless it sorts, with their owners.
     pub async fn list(
         &self,
         uow: &Uow,
         scope: Accessible<Company, Read>,
-        filters: CompanyFilters,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<CompanyPage> {
-        let sort = filters.sort.unwrap_or_default();
         let page = scope
             .apply(Company::query())
-            .when_some(search_text(filters.search.as_deref()), |query, term| {
+            .list(list, &CompanyList::SPEC)?
+            // The name or domain search and the industry, which ignores
+            // case, are the model's own scopes.
+            .when_some(search_text(list.search.as_deref()), |query, term| {
                 query.search(term)
             })
-            .when_some(filters.owner_id, |query, owner| query.owned_by(owner))
-            .when_some(
-                search_text(filters.industry.as_deref()),
-                |query, industry| query.in_industry(industry),
-            )
-            .scope(|query| sort.apply(query))
+            .when_some(search_text(list.eq("industry")), |query, industry| {
+                query.in_industry(industry)
+            })
+            .scope(|query| CompanyList::order(query, list))
             .with_all(CompanyResource::EMBEDS)
-            .paginate(uow, page)
+            .paginate(uow, list.page_request(&CompanyList::SPEC))
             .await?;
         Ok(page
             .map(|company| company.to_resource::<CompanyResource>())

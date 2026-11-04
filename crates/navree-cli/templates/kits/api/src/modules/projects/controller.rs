@@ -1,8 +1,9 @@
 //! `/api/v1/projects`: the current workspace's projects.
 
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use super::dto::{CreateProject, ProjectFilter, ProjectPage, ProjectResource, UpdateProject};
+use super::dto::{CreateProject, ProjectList, ProjectPage, ProjectResource, UpdateProject};
 use super::entity::Project;
 use super::service::ProjectService;
 
@@ -20,7 +21,8 @@ pub struct ProjectsController {
 #[guard(InWorkspace::guard())]
 impl ProjectsController {
     /// `GET /api/v1/projects`: the current workspace's projects, newest
-    /// first; `?status=active&search=web&page=2&per_page=20`.
+    /// first; `?filter[status]=active&search=web&sort=name&page=2&per_page=20`
+    /// (see [`ProjectList`]).
     #[get("/")]
     #[can(Read, Project)]
     #[api(
@@ -34,13 +36,9 @@ impl ProjectsController {
         uow: WorkspaceUow,
         ws: CurrentWorkspace,
         scope: Accessible<Project, Read>,
-        Valid(Query(filter)): Valid<Query<ProjectFilter>>,
-        page: PageQuery,
+        list: List<ProjectList>,
     ) -> Result<Page<ProjectResource>> {
-        Ok(self
-            .projects
-            .list(&uow, ws.id(), scope, filter, page)
-            .await?)
+        Ok(self.projects.list(&uow, ws.id(), scope, &list).await?)
     }
 
     /// `POST /api/v1/projects`

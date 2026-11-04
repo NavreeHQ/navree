@@ -202,8 +202,14 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
             "search electricite.example",
             json!({ "search": "electricite.example" }),
         ),
-        ("industry énergie", json!({ "industry": "énergie" })),
-        ("industry SOFTWARE", json!({ "industry": "SOFTWARE" })),
+        (
+            "industry énergie",
+            json!({ "filter[industry]": "énergie" }),
+        ),
+        (
+            "industry SOFTWARE",
+            json!({ "filter[industry]": "SOFTWARE" }),
+        ),
     ] {
         let page = list(&rep, "/api/v1/companies", query).await;
         answers.push((question, sorted(names(&page, "name"))));
@@ -211,7 +217,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
     for query in [
         json!({ "search": "LINDQVIST" }),
         json!({ "search": "grace garcia" }),
-        json!({ "status": "customer", "per_page": 100 }),
+        json!({ "filter[status]": "customer", "per_page": 100 }),
     ] {
         let page = list(&rep, "/api/v1/contacts", query.clone()).await;
         answers.push((
@@ -297,7 +303,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
         let page = list(
             &rep,
             "/api/v1/activities",
-            json!({ "due": due, "per_page": 100 }),
+            json!({ "filter[due]": due, "per_page": 100 }),
         )
         .await;
         answers.push(("tasks due", json!([due, sorted(names(&page, "subject"))])));
@@ -317,7 +323,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
     let on_deal = list(
         &rep,
         "/api/v1/activities",
-        json!({ "subject_type": "deal", "subject_id": id(&deal) }),
+        json!({ "filter[subject_type]": "deal", "filter[subject_id]": id(&deal) }),
     )
     .await;
     answers.push(("tasks on the deal", names(&on_deal, "subject")));

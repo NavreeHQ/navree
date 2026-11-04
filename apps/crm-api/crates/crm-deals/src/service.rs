@@ -10,13 +10,14 @@ use navree::access::{Ability, Accessible, ActionMarker, Authorized, Read, Update
 use navree::contracts::{Broadcaster, Clock};
 use navree::events::EventBus;
 use navree::orm::access::AccessibleQuery;
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::orm::{OrmError, Record};
 use navree::prelude::*;
 use navree::validation::ValidationErrors;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::dto::{BoardFilter, CreateDeal, DealFilter, MoveDeal, UpdateDeal};
+use crate::dto::{BoardFilter, CreateDeal, DealList, MoveDeal, UpdateDeal};
 use crate::events::{DealAssigned, DealWon};
 use crate::positions;
 use crate::resource::{DealBoard, DealResource};
@@ -41,31 +42,20 @@ pub struct DealService {
 }
 
 impl DealService {
-    /// One page of the deals `scope` allows, newest first, matching
-    /// `filter`, with their embeds.
+    /// One page of the deals `scope` allows that match `list` (read
+    /// against [`DealList`]), newest first unless it sorts, with their
+    /// embeds.
     pub async fn list(
         &self,
         uow: &Uow,
         scope: Accessible<Deal, Read>,
-        filter: DealFilter,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<Page<DealResource>> {
-        let search = filter
-            .search
-            .as_deref()
-            .map(str::trim)
-            .filter(|search| !search.is_empty());
         let page = scope
             .apply(Deal::query())
-            .when_some(filter.stage, |query, stage| query.in_stage(stage))
-            .when_some(filter.owner_id, |query, owner| query.owned_by(owner))
-            .when_some(filter.company_id, |query, company| {
-                query.of_company(company)
-            })
-            .when_some(search, |query, term| query.search(term))
-            .newest_first()
+            .list(list, &DealList::SPEC)?
             .with_all(DealResource::EMBEDS)
-            .paginate(uow, page)
+            .paginate(uow, list.page_request(&DealList::SPEC))
             .await?;
         Ok(page.map(|deal| deal.to_resource::<DealResource>()))
     }

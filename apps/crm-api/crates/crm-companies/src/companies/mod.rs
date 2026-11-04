@@ -9,7 +9,7 @@ use crm_core::CrmCoreModule;
 use navree::prelude::*;
 
 pub use controller::CompaniesController;
-pub use dto::{CompanyFilters, CompanySort, CreateCompany, UpdateCompany};
+pub use dto::{CompanyList, CreateCompany, UpdateCompany};
 pub use resource::{CompanyDetail, CompanyPage, CompanyResource, CompanyType};
 pub use service::CompanyService;
 
@@ -19,13 +19,5 @@ pub use service::CompanyService;
     providers = [CompanyService],
     controllers = [CompaniesController],
     exports = [CompanyService],
-    register = Self::wire,
 )]
 pub struct CompaniesModule;
-
-impl CompaniesModule {
-    /// Schemas the routes' documents refer to only through query strings.
-    fn wire(&self, m: &mut ModuleBuilder) {
-        m.api_schema::<CompanySort>().api_schema::<CompanyFilters>();
-    }
-}

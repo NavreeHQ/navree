@@ -4,7 +4,7 @@
 //!
 //! | Route | Access | Result |
 //! |---|---|---|
-//! | `GET /api/v1/activities?subject_type=&subject_id=&kind=&assignee_id=&due=&completed=&page=&per_page=` | `read Activity` | page of [`ActivityResource`] ([`ActivityFilter`]) |
+//! | `GET /api/v1/activities?filter[subject_type]=&filter[subject_id]=&filter[kind]=&filter[assignee_id]=&filter[due]=&filter[completed]=&page=&per_page=` | `read Activity` | page of [`ActivityResource`] ([`ActivityList`]) |
 //! | `POST /api/v1/activities` [`CreateActivity`] | `create Activity` | 201 [`ActivityResource`], owned by the caller |
 //! | `PATCH /api/v1/activities/{id}` [`UpdateActivity`] | `update Activity` (owner; managers) | [`ActivityResource`] |
 //! | `POST /api/v1/activities/{id}/complete` | `complete Activity` (assignee or owner; managers) | [`ActivityResource`] |
@@ -16,7 +16,7 @@
 //!   user (else 400 `subject_id does not exist` / `assignee_id does not
 //!   exist`). Only tasks are completed (else 400); completing twice keeps
 //!   the first time.
-//! - `due` works in UTC days ([`Due`], [`Today`]): `overdue` =
+//! - `filter[due]` works in UTC days ([`Due`], [`Today`]): `overdue` =
 //!   open tasks due before today, `today` = due today, `upcoming` = due after
 //!   today. Times come from the app's `dyn Clock`.
 //! - For the dashboard, see [`Dashboard`].
@@ -47,7 +47,7 @@ pub use dashboard::{
     Dashboard, DashboardController, DashboardService, DealTotals, OpenDeals, PipelineStage,
     RECENT_ACTIVITIES, TaskCounts,
 };
-pub use dto::{ActivityFilter, CreateActivity, UpdateActivity};
+pub use dto::{ActivityList, CreateActivity, UpdateActivity};
 pub use due::{Due, Today};
 pub use mcp::{ActivitiesMcp, LogActivity};
 pub use reminders::{

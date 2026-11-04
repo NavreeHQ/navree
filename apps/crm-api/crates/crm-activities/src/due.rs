@@ -28,7 +28,7 @@ impl Today {
     }
 }
 
-/// `?due=` on `GET /api/v1/activities`.
+/// `filter[due]` on `GET /api/v1/activities`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[schema(as = ActivityDueFilter)]
@@ -42,6 +42,19 @@ pub enum Due {
 }
 
 impl Due {
+    /// The words `filter[due]` takes.
+    pub const WORDS: &'static [&'static str] = &["overdue", "today", "upcoming"];
+
+    /// The window a word of [`Due::WORDS`] names.
+    pub fn from_word(word: &str) -> Option<Due> {
+        match word {
+            "overdue" => Some(Due::Overdue),
+            "today" => Some(Due::Today),
+            "upcoming" => Some(Due::Upcoming),
+            _ => None,
+        }
+    }
+
     /// `query` restricted to the activities due in this window of `today`.
     pub fn apply(self, query: Builder<Activity>, today: Today) -> Builder<Activity> {
         match self {
@@ -89,8 +102,12 @@ mod tests {
             ("upcoming", Due::Upcoming),
         ] {
             assert_eq!(serde_json::from_value::<Due>(text.into()).unwrap(), due);
+            assert_eq!(Due::from_word(text), Some(due));
+            assert!(Due::WORDS.contains(&text));
         }
         assert!(serde_json::from_value::<Due>("Today".into()).is_err());
+        assert_eq!(Due::from_word("Today"), None);
+        assert_eq!(Due::WORDS.len(), 3);
     }
 
     #[test]

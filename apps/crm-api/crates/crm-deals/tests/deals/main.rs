@@ -4,6 +4,7 @@
 mod board;
 mod broadcasts;
 mod crud;
+mod list;
 mod moves;
 mod notifications;
 mod openapi;

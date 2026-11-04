@@ -6,6 +6,7 @@
 
 use crm_core::Stage;
 use navree::openapi::ToSchema;
+use navree::orm::list::{Field, ListResource, ListSpec};
 use navree::validation::Validate;
 use navree::validation::rules::{self, RuleInput};
 use navree::validation::{Violation, rule_error};
@@ -113,21 +114,35 @@ pub struct MoveDeal {
     pub lost_reason: Option<String>,
 }
 
-/// The query of `GET /api/v1/deals` (besides `page` and `per_page`).
-#[derive(Debug, Default, Deserialize, Validate)]
-pub struct DealFilter {
-    /// Only deals in this stage.
-    #[validate(skip)]
-    pub stage: Option<Stage>,
-    /// Only deals this user owns.
-    #[validate(skip)]
-    pub owner_id: Option<Uuid>,
-    /// Only deals of this company.
-    #[validate(skip)]
-    pub company_id: Option<Uuid>,
-    /// Part of the title (case-insensitive).
-    #[validate(skip)]
-    pub search: Option<String>,
+/// The strings of [`Stage`], in board order (`filter[stage]` takes these).
+const STAGES: &[&str] = &[
+    "lead",
+    "qualified",
+    "proposal",
+    "negotiation",
+    "won",
+    "lost",
+];
+
+/// The list query of `GET /api/v1/deals`, in the list-query grammar:
+///
+/// - `filter[stage]`: one stage, or several with `filter[stage][in]=lead,won`.
+/// - `filter[owner_id]` and `filter[company_id]`: a user's or a company's id.
+/// - `search`: part of the title, ignoring case.
+/// - `sort`: `created_at`, `title`, `amount_cents` or `expected_close_date`,
+///   with `-` in front for descending. The default is `-created_at`.
+/// - `page` and `per_page` (default 15, at most 100).
+pub struct DealList;
+
+impl ListResource for DealList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::one_of("stage", STAGES),
+        Field::uuid("owner_id"),
+        Field::uuid("company_id"),
+    ])
+    .sortable(&["created_at", "title", "amount_cents", "expected_close_date"])
+    .default_sort(&["-created_at"])
+    .searchable(&["title"]);
 }
 
 /// The query of `GET /api/v1/deals/board`.
@@ -170,6 +185,7 @@ fn is_currency_code(code: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use navree::orm::list::Kind;
     use serde_json::json;
 
     use super::*;
@@ -191,6 +207,45 @@ mod tests {
         .unwrap();
         assert_eq!(set.contact_id, Some(Some(id)));
         assert_eq!(set.expected_close_date, Some(Some("2026-12-01".to_owned())));
+    }
+
+    #[test]
+    fn the_stage_filter_takes_exactly_the_stages() {
+        let field = DealList::SPEC.field("stage").expect("a stage filter");
+        let words: Vec<&str> = Stage::ALL.iter().map(|stage| stage.as_str()).collect();
+        assert_eq!(field.kind, Kind::OneOf(STAGES));
+        assert_eq!(STAGES, words);
+    }
+
+    #[test]
+    fn the_list_query_reads_the_documented_parameters() {
+        let id = Uuid::now_v7();
+        let query = format!(
+            "filter[stage][in]=lead,won&filter[owner_id]={id}&filter[company_id]={id}\
+             &search=acme&sort=-amount_cents,title&page=2&per_page=100"
+        );
+        let list = DealList::SPEC.parse(&query).expect("a valid query");
+        assert_eq!(list.filter.len(), 3);
+        assert_eq!(list.search.as_deref(), Some("acme"));
+        assert_eq!(list.sort.len(), 2);
+
+        for (query, param) in [
+            ("filter[stage]=closed", "filter[stage]"),
+            ("filter[title]=x", "filter[title]"),
+            ("filter[owner_id]=nope", "filter[owner_id]"),
+            ("sort=password", "sort"),
+            ("per_page=101", "per_page"),
+            ("limit=20&page=2", "limit"),
+        ] {
+            let error = DealList::SPEC.parse(query).expect_err(query);
+            assert!(
+                error.problems.iter().any(|problem| problem.param == param),
+                "{query}: {error}"
+            );
+        }
+        // The flat names of the old query are not the list query's.
+        let flat = DealList::SPEC.parse("stage=won&search=").expect("ignored");
+        assert!(flat.filter.is_empty());
     }
 
     #[test]

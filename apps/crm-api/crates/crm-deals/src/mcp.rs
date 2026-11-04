@@ -6,12 +6,22 @@
 use crm_core::{Deal, Move, Stage};
 use navree::mcp::{McpContext, PromptMessage, mcp_server};
 use navree::openapi::ToSchema;
+use navree::orm::list::{Condition, ListQuery, Op};
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{DealBoard, DealFilter, DealResource, DealService, MoveDeal};
+use crate::{DealBoard, DealResource, DealService, MoveDeal};
+
+/// The condition `filter[field]=value` of a list query.
+fn equals(field: &str, value: impl ToString) -> Condition {
+    Condition {
+        field: field.to_owned(),
+        op: Op::Eq,
+        values: vec![value.to_string()],
+    }
+}
 
 /// The arguments of `list_deals`.
 #[derive(Debug, Deserialize, ToSchema, Validate)]
@@ -63,19 +73,21 @@ impl DealsMcp {
     #[mcp_tool(read_only)]
     #[can(Read, Deal)]
     async fn list_deals(&self, cx: &McpContext, args: ListDeals) -> Result<Vec<DealResource>> {
-        let filter = DealFilter {
-            stage: args.stage,
-            search: args.query,
-            owner_id: args.mine.then(|| cx.user_id()),
-            ..DealFilter::default()
-        };
-        let page = PageQuery {
-            per_page: 25,
-            ..PageQuery::default()
-        };
+        let mut list = ListQuery::new();
+        list.per_page = Some(25);
+        list.search = args
+            .query
+            .map(|query| query.trim().to_owned())
+            .filter(|query| !query.is_empty());
+        if let Some(stage) = args.stage {
+            list.filter.push(equals("stage", stage.as_str()));
+        }
+        if args.mine {
+            list.filter.push(equals("owner_id", cx.user_id()));
+        }
         Ok(self
             .deals
-            .list(cx.uow(), cx.accessible::<Deal, Read>(), filter, page)
+            .list(cx.uow(), cx.accessible::<Deal, Read>(), &list)
             .await?
             .data)
     }

@@ -2,6 +2,7 @@
 
 use crm_core::UserRole;
 use navree::openapi::ToSchema;
+use navree::orm::list::{ListResource, ListSpec};
 use navree::validation::Validate;
 use serde::{Deserialize, Deserializer};
 
@@ -39,9 +40,17 @@ pub struct UpdateUser {
     pub role: Option<UserRole>,
 }
 
-/// The query of `GET /api/v1/users`.
-#[derive(Debug, Default, Deserialize)]
-pub struct UserFilter {
-    /// Part of the name or email (case-insensitive).
-    pub search: Option<String>,
+/// The list query of `GET /api/v1/users`, in the list-query grammar:
+///
+/// - `search`: part of the name or email, ignoring case.
+/// - `sort`: `name`, `email` or `created_at`, with `-` in front for
+///   descending. The default is `name`.
+/// - `page` and `per_page` (default 15, at most 100).
+pub struct UserList;
+
+impl ListResource for UserList {
+    const SPEC: ListSpec = ListSpec::new(&[])
+        .sortable(&["name", "email", "created_at"])
+        .default_sort(&["name"])
+        .searchable(&["name", "email"]);
 }

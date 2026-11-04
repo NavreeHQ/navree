@@ -5,7 +5,7 @@
 //! | Route | Access | Result |
 //! |---|---|---|
 //! | `GET /api/v1/me` | signed in | `{id, name, email, roles}` |
-//! | `GET /api/v1/users?search=&page=&per_page=` | `read User` (everyone signed in) | page of [`UserView`] by name |
+//! | `GET /api/v1/users?search=&sort=&page=&per_page=` ([`UserList`]) | `read User` (everyone signed in) | page of [`UserView`] by name |
 //! | `POST /api/v1/users` `{name, email, password, role}` | `create User` (admin) | 201 [`UserView`] |
 //! | `PATCH /api/v1/users/{id}` `{name?, role?}` | `update User` (admin) | [`UserView`] |
 //!
@@ -22,7 +22,7 @@ use crm_core::{CrmCoreModule, User};
 use navree::prelude::*;
 
 pub use controller::{MeController, UsersController};
-pub use dto::{CreateUser, UpdateUser, UserFilter};
+pub use dto::{CreateUser, UpdateUser, UserList};
 pub use resource::{Me, UserPage, UserPageMeta, UserRolesExtension, UserView};
 pub use service::UserService;
 

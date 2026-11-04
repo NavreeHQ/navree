@@ -1,9 +1,10 @@
 //! `/api/v1/deals`.
 
 use crm_core::{Deal, Move};
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use crate::dto::{BoardFilter, CreateDeal, DealFilter, MoveDeal, UpdateDeal};
+use crate::dto::{BoardFilter, CreateDeal, DealList, MoveDeal, UpdateDeal};
 use crate::resource::{DealBoard, DealPage, DealResource};
 use crate::service::DealService;
 
@@ -17,8 +18,9 @@ pub struct DealsController {
 
 #[controller("/deals", version = "1")]
 impl DealsController {
-    /// A page of deals, newest first; filters `stage`, `owner_id`,
-    /// `company_id` and `search` (title).
+    /// A page of deals, newest first unless `sort` says otherwise. Filters
+    /// `filter[stage]`, `filter[owner_id]` and `filter[company_id]`; `search`
+    /// (title); `sort`; `page` and `per_page` (see [`DealList`]).
     #[get("/")]
     #[can(Read, Deal)]
     #[api(
@@ -31,10 +33,9 @@ impl DealsController {
         &self,
         uow: Uow,
         scope: Accessible<Deal, Read>,
-        Valid(Query(filter)): Valid<Query<DealFilter>>,
-        page: PageQuery,
+        list: List<DealList>,
     ) -> Result<Page<DealResource>> {
-        self.deals.list(&uow, scope, filter, page).await
+        self.deals.list(&uow, scope, &list).await
     }
 
     /// Every stage with its deals in board order, counts and totals;

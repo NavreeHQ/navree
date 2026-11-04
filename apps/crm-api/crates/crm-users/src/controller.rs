@@ -2,9 +2,10 @@
 
 use crm_core::User;
 use navree::access::CurrentAccess;
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use crate::dto::{CreateUser, UpdateUser, UserFilter};
+use crate::dto::{CreateUser, UpdateUser, UserList};
 use crate::resource::{Me, UserPage, UserView};
 use crate::service::UserService;
 
@@ -46,7 +47,7 @@ impl UsersController {
     #[can(Read, User)]
     #[api(
         summary = "List users",
-        description = "Query: `search` (part of the name or email, case-insensitive), `page`, `per_page` (default 15, at most 100). Ordered by name.",
+        description = "Query: `search` (part of the name or email, case-insensitive), `sort` (`name`, `email`, `created_at`; `-` in front for descending; default `name`), `page`, `per_page` (default 15, at most 100).",
         tag = "Users",
         response = UserPage,
         responses(400, 401, 403)
@@ -55,10 +56,9 @@ impl UsersController {
         &self,
         uow: Uow,
         scope: Accessible<User, Read>,
-        Query(filter): Query<UserFilter>,
-        page: PageQuery,
+        list: List<UserList>,
     ) -> Result<Page<UserView>> {
-        self.users.list(&uow, scope, filter, page).await
+        self.users.list(&uow, scope, &list).await
     }
 
     /// Creates an account with a role (admin).

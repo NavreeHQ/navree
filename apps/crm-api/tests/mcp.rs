@@ -163,6 +163,19 @@ async fn list_deals_filters_by_stage_title_and_owner() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0]["id"], theirs["id"]);
 
+    // A blank query searches for nothing; a stage and a query combine.
+    let blank = mcp
+        .call_tool("list_deals", json!({ "query": "   " }))
+        .await
+        .json::<Vec<Value>>();
+    assert_eq!(blank.len(), 2);
+    let combined = mcp
+        .call_tool("list_deals", json!({ "query": "acme", "stage": "lead", "mine": true }))
+        .await
+        .json::<Vec<Value>>();
+    assert_eq!(combined.len(), 1);
+    assert_eq!(combined[0]["id"], mine["id"]);
+
     let won = mcp
         .call_tool("list_deals", json!({ "stage": "won" }))
         .await
@@ -297,7 +310,7 @@ async fn activities_logged_over_mcp_are_the_users_and_audited() {
 
     let listed = rep
         .get(&format!(
-            "/api/v1/activities?subject_type=deal&subject_id={}",
+            "/api/v1/activities?filter[subject_type]=deal&filter[subject_id]={}",
             id(&deal)
         ))
         .send()

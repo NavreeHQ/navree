@@ -2,9 +2,10 @@
 
 use crm_core::{Activity, Complete};
 use navree::access::CurrentAccess;
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use crate::dto::{ActivityFilter, CreateActivity, UpdateActivity};
+use crate::dto::{ActivityList, CreateActivity, UpdateActivity};
 use crate::resource::{ActivityPage, ActivityResource};
 use crate::service::ActivityService;
 
@@ -18,12 +19,12 @@ pub struct ActivitiesController {
 
 #[controller("/activities", version = "1")]
 impl ActivitiesController {
-    /// A page of activities matching the filters ([`ActivityFilter`]).
+    /// A page of activities matching the filters ([`ActivityList`]).
     #[get("/")]
     #[can(Read, Activity)]
     #[api(
         summary = "List activities",
-        description = "Filters: subject_type, subject_id, kind, assignee_id, due (overdue | today | upcoming, by UTC day), completed (true | false); page, per_page. With due, earliest due first; with completed=true, most recently completed first; otherwise newest first.",
+        description = "Query: `filter[subject_type]`, `filter[subject_id]`, `filter[kind]`, `filter[assignee_id]`, `filter[due]` (overdue | today | upcoming, by UTC day), `filter[completed]` (true | false), `page`, `per_page` (default 15, at most 100). With `filter[due]`, earliest due first; with `filter[completed]=true`, most recently completed first; otherwise newest first.",
         tag = "Activities",
         response = ActivityPage,
         responses(400, 401, 403)
@@ -32,10 +33,9 @@ impl ActivitiesController {
         &self,
         uow: Uow,
         scope: Accessible<Activity, Read>,
-        page: PageQuery,
-        Valid(Query(filter)): Valid<Query<ActivityFilter>>,
+        list: List<ActivityList>,
     ) -> Result<Page<ActivityResource>> {
-        self.activities.list(&uow, scope, filter, page).await
+        self.activities.list(&uow, scope, &list).await
     }
 
     /// Records an activity, owned by the signed-in user.

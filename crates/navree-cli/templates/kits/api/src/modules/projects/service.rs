@@ -3,16 +3,17 @@
 
 use navree::access::{Accessible, Read};
 use navree::contracts::Broadcaster;
-use navree::db::{Page, PageQuery, Uow};
+use navree::db::{Page, Uow};
 use navree::injectable;
 use navree::orm::access::AccessibleQuery as _;
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
 use navree::orm::{OrmError, Record};
 use navree::workspace::WorkspaceRepo;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::dto::{CreateProject, ProjectFilter, ProjectResource, UpdateProject};
+use super::dto::{CreateProject, ProjectList, ProjectResource, UpdateProject};
 use super::entity::Project;
 
 /// The real-time event a project change is broadcast as, on the
@@ -32,31 +33,19 @@ pub struct ProjectService {
 
 impl ProjectService {
     /// One page of the workspace's projects that `scope` lets the user
-    /// read, newest first.
+    /// read and `list` asks for (read against [`ProjectList`]), newest first
+    /// unless it sorts.
     pub async fn list(
         &self,
         uow: &Uow,
         workspace: Uuid,
         scope: Accessible<Project, Read>,
-        filter: ProjectFilter,
-        page: PageQuery,
+        list: &ListQuery,
     ) -> Result<Page<ProjectResource>, OrmError> {
-        let search = filter
-            .search
-            .as_deref()
-            .map(str::trim)
-            .filter(|search| !search.is_empty());
         let page = scope
             .apply(WorkspaceRepo::<Project>::query(workspace))
-            .when_some(filter.status, |query, status| {
-                query.where_(Project::STATUS.eq(status.as_str()))
-            })
-            .when_some(search, |query, search| {
-                query.where_(Project::NAME.contains_ignore_case(search))
-            })
-            .order_by_desc(Project::CREATED_AT)
-            .order_by_desc(Project::ID)
-            .paginate(uow, page)
+            .list(list, &ProjectList::SPEC)?
+            .paginate(uow, list.page_request(&ProjectList::SPEC))
             .await?;
         Ok(page.map(|project| ProjectResource::from(&*project)))
     }

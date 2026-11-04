@@ -69,7 +69,7 @@ async fn create_task_on_deal() {
     // The deal's timeline lists it.
     let page = client
         .get(&format!(
-            "/api/v1/activities?subject_type=deal&subject_id={}",
+            "/api/v1/activities?filter[subject_type]=deal&filter[subject_id]={}",
             renewal.id
         ))
         .send()
@@ -293,34 +293,46 @@ async fn due_filters_overdue_today_upcoming() {
     let client = crm.login_as(Role::Rep1).await;
 
     // Overdue: open tasks due before today (meetings are never overdue).
-    assert_eq!(subjects(&list(&client, "due=overdue").await), ["Overdue"]);
+    assert_eq!(
+        subjects(&list(&client, "filter[due]=overdue").await),
+        ["Overdue"]
+    );
     // Today and upcoming go by the due date, earliest first.
     assert_eq!(
-        subjects(&list(&client, "due=today").await),
+        subjects(&list(&client, "filter[due]=today").await),
         ["Today early", "Today done", "Meeting today", "Today late"]
     );
     assert_eq!(
-        subjects(&list(&client, "due=today&kind=task&completed=false").await),
+        subjects(
+            &list(
+                &client,
+                "filter[due]=today&filter[kind]=task&filter[completed]=false"
+            )
+            .await
+        ),
         ["Today early", "Today late"]
     );
     assert_eq!(
-        subjects(&list(&client, "due=upcoming").await),
+        subjects(&list(&client, "filter[due]=upcoming").await),
         ["Tomorrow", "Next week"]
     );
     client
-        .get("/api/v1/activities?due=later")
+        .get("/api/v1/activities?filter[due]=later")
         .send()
         .await
-        .assert_validation_error("due");
+        .assert_validation_error("filter[due]");
 
     // A day later, by the app's clock (log in again: tokens follow it too).
     crm.clock().set(at("2026-10-27T10:00:00Z"));
     let client = crm.login_as(Role::Rep1).await;
     assert_eq!(
-        subjects(&list(&client, "due=overdue").await),
+        subjects(&list(&client, "filter[due]=overdue").await),
         ["Overdue", "Today early", "Today late"]
     );
-    assert_eq!(subjects(&list(&client, "due=today").await), ["Tomorrow"]);
+    assert_eq!(
+        subjects(&list(&client, "filter[due]=today").await),
+        ["Tomorrow"]
+    );
     crm.shutdown().await;
 }
 
@@ -375,42 +387,49 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
             "Old win"
         ]
     );
-    assert_eq!(subjects(&list(&client, "kind=call").await), ["Call Ada"]);
     assert_eq!(
-        subjects(&list(&client, &format!("assignee_id={rep2}")).await),
+        subjects(&list(&client, "filter[kind]=call").await),
+        ["Call Ada"]
+    );
+    assert_eq!(
+        subjects(&list(&client, &format!("filter[assignee_id]={rep2}")).await),
         ["Book demo", "Send deck"]
     );
     // Completed ones, most recently completed first.
     assert_eq!(
-        subjects(&list(&client, "completed=true").await),
+        subjects(&list(&client, "filter[completed]=true").await),
         ["Old win", "Book demo"]
     );
     assert_eq!(
-        subjects(&list(&client, "completed=false").await),
+        subjects(&list(&client, "filter[completed]=false").await),
         ["Note on Acme", "Send deck", "Call Ada"]
     );
     assert_eq!(
-        subjects(&list(&client, "subject_type=company").await),
+        subjects(&list(&client, "filter[subject_type]=company").await),
         ["Note on Acme"]
     );
     assert_eq!(
         subjects(
             &list(
                 &client,
-                &format!("subject_type=contact&subject_id={}", ada.id)
+                &format!("filter[subject_type]=contact&filter[subject_id]={}", ada.id)
             )
             .await
         ),
         ["Call Ada"]
     );
     // Pagination keeps the filters.
-    let page = list(&client, "completed=false&per_page=2&page=2").await;
+    let page = list(&client, "filter[completed]=false&per_page=2&page=2").await;
     assert_eq!(subjects(&page), ["Call Ada"]);
     assert_eq!(
         page["meta"],
         json!({ "current_page": 2, "per_page": 2, "total": 3, "last_page": 2 })
     );
-    for bad in ["completed=maybe", "kind=lunch", "assignee_id=nobody"] {
+    for bad in [
+        "filter[completed]=maybe",
+        "filter[kind]=lunch",
+        "filter[assignee_id]=nobody",
+    ] {
         client
             .get(&format!("/api/v1/activities?{bad}"))
             .send()
@@ -474,7 +493,7 @@ async fn complete_sets_completed_at() {
 
     // It is listed as completed now.
     let page = assignee
-        .get("/api/v1/activities?completed=true")
+        .get("/api/v1/activities?filter[completed]=true")
         .send()
         .await
         .assert_status(200)
@@ -696,7 +715,7 @@ async fn update_changes_only_the_fields_sent() {
             .assert_validation_error(field);
     }
     let unchanged = client
-        .get("/api/v1/activities?subject_type=company")
+        .get("/api/v1/activities?filter[subject_type]=company")
         .send()
         .await
         .assert_status(200)
@@ -776,5 +795,234 @@ async fn activity_changes_are_audited() {
         entries[0]["new_values"]["completed_at"],
         json!("2026-10-26T10:00:00Z")
     );
+    crm.shutdown().await;
+}
+
+// MOD-013: the list query of activities, in the list-query grammar.
+
+/// `GET /api/v1/activities` with `query` as `client`, answering 200.
+async fn list_with(client: &crm_testkit::CrmClient, query: &[(&str, &str)]) -> Value {
+    client
+        .get("/api/v1/activities")
+        .query(query)
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()
+}
+
+/// Five activities, oldest first: Call Ada (a call on the contact Ada,
+/// rep 1's), Send deck (a task for rep 2), Email Acme (an email on the
+/// company), Book demo (a task for rep 2, completed) and Plain note (a note
+/// on the deal). Returns the ids of rep 2, Acme and the deal.
+async fn five_activities(crm: &crm_testkit::TestCrm) -> (Uuid, Uuid, Uuid) {
+    let rep1 = crm.user_id(Role::Rep1);
+    let rep2 = crm.user_id(Role::Rep2);
+    let acme = company(crm, rep1, "Acme").await;
+    let ada = contact(crm, rep1, "Ada", "Lovelace").await;
+    let renewal = deal(crm, rep1, acme.id, NewDeal::open("Renewal", Stage::Lead, 100)).await;
+    let start = crm_testkit::TestCrm::start();
+    let minutes = |n: i64| start + chrono::Duration::minutes(n);
+    for new in [
+        NewActivity::task("Call Ada", renewal.id, rep1)
+            .kind(ActivityKind::Call)
+            .on(SubjectType::Contact, ada.id)
+            .created(minutes(1)),
+        NewActivity::task("Send deck", renewal.id, rep1)
+            .assigned(rep2)
+            .created(minutes(2)),
+        NewActivity::task("Email Acme", renewal.id, rep1)
+            .kind(ActivityKind::Email)
+            .on(SubjectType::Company, acme.id)
+            .created(minutes(3)),
+        NewActivity::task("Book demo", renewal.id, rep1)
+            .assigned(rep2)
+            .completed(minutes(4))
+            .created(minutes(4)),
+        NewActivity::task("Plain note", renewal.id, rep1)
+            .kind(ActivityKind::Note)
+            .created(minutes(5)),
+    ] {
+        activity(crm, new).await;
+    }
+    (rep2, acme.id, renewal.id)
+}
+
+#[tokio::test]
+async fn filters_take_their_operators() {
+    let crm = crm().await;
+    let (rep2, acme, renewal) = five_activities(&crm).await;
+    let client = crm.login_as(Role::Rep2).await;
+    let found = async |query: &[(&str, &str)]| subjects(&list_with(&client, query).await);
+
+    // Newest first without a sort.
+    assert_eq!(
+        found(&[]).await,
+        [
+            "Plain note",
+            "Book demo",
+            "Email Acme",
+            "Send deck",
+            "Call Ada"
+        ]
+    );
+    assert_eq!(
+        found(&[("filter[kind][in]", "call,email")]).await,
+        ["Email Acme", "Call Ada"]
+    );
+    assert_eq!(
+        found(&[("filter[kind][ne]", "task")]).await,
+        ["Plain note", "Email Acme", "Call Ada"]
+    );
+    assert_eq!(
+        found(&[("filter[kind][not_in]", "note,call,email")]).await,
+        ["Book demo", "Send deck"]
+    );
+    assert_eq!(
+        found(&[("filter[subject_type][in]", "company,contact")]).await,
+        ["Email Acme", "Call Ada"]
+    );
+    assert_eq!(
+        found(&[("filter[subject_id]", &acme.to_string())]).await,
+        ["Email Acme"]
+    );
+    assert_eq!(
+        found(&[("filter[subject_type]", "deal"), ("filter[subject_id]", &renewal.to_string())])
+            .await,
+        ["Plain note", "Book demo", "Send deck"]
+    );
+    assert_eq!(
+        found(&[("filter[assignee_id][null]", "true")]).await,
+        ["Plain note", "Email Acme", "Call Ada"]
+    );
+    assert_eq!(
+        found(&[("filter[assignee_id][null]", "false")]).await,
+        ["Book demo", "Send deck"]
+    );
+    assert_eq!(
+        found(&[(
+            "filter[assignee_id][in]",
+            &format!("{rep2},{}", Uuid::now_v7())
+        )])
+        .await,
+        ["Book demo", "Send deck"]
+    );
+    // `filter[completed]` also decides the order: the completed come by
+    // completion time, and `eq` may be spelled out.
+    assert_eq!(
+        found(&[("filter[completed][eq]", "true")]).await,
+        ["Book demo"]
+    );
+    assert_eq!(
+        found(&[("filter[completed][eq]", "false")]).await,
+        ["Plain note", "Email Acme", "Send deck", "Call Ada"]
+    );
+    assert_eq!(
+        found(&[("filter[completed]", "true"), ("filter[kind]", "task")]).await,
+        ["Book demo"]
+    );
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn what_the_activity_list_does_not_allow_is_a_400_naming_the_parameter() {
+    let crm = crm().await;
+    five_activities(&crm).await;
+    let client = crm.login_as(Role::Rep1).await;
+
+    // (the parameter sent, its value, the parameter the 400 names)
+    for (sent, value, param) in [
+        ("filter[x]", "1", "filter[x]"),
+        ("filter[subject]", "Call Ada", "filter[subject]"),
+        ("filter[kind]", "lunch", "filter[kind]"),
+        ("filter[kind][gt]", "call", "filter[kind][gt]"),
+        ("filter[subject_type]", "Deal", "filter[subject_type]"),
+        ("filter[subject_id]", "nope", "filter[subject_id]"),
+        ("filter[assignee_id]", "nobody", "filter[assignee_id]"),
+        // `due` and `completed` are checked like any field, and take `eq` only.
+        ("filter[due]", "later", "filter[due]"),
+        ("filter[due][in]", "today,overdue", "filter[due][in]"),
+        ("filter[due][null]", "true", "filter[due][null]"),
+        ("filter[completed]", "maybe", "filter[completed]"),
+        ("filter[completed][ne]", "true", "filter[completed][ne]"),
+        // The list has no sort and no search.
+        ("sort", "created_at", "sort"),
+        ("search", "call", "search"),
+        ("per_page", "101", "per_page"),
+        ("page", "0", "page"),
+    ] {
+        client
+            .get("/api/v1/activities")
+            .query(&[(sent, value)])
+            .send()
+            .await
+            .assert_validation_error(param);
+    }
+    // The page size is at most 100; it used to be clamped.
+    let page = list_with(&client, &[("per_page", "100")]).await;
+    assert_eq!(page["meta"]["per_page"], json!(100));
+    // Every problem is reported at once.
+    let errors = client
+        .get("/api/v1/activities")
+        .query(&[("filter[x]", "1"), ("sort", "y"), ("per_page", "1000")])
+        .send()
+        .await
+        .assert_status(400)
+        .json_value()["errors"]
+        .clone();
+    for param in ["filter[x]", "sort", "per_page"] {
+        assert!(errors[param].is_array(), "{param}: {errors}");
+    }
+    crm.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_old_flat_activity_parameters_are_ignored() {
+    let crm = crm().await;
+    five_activities(&crm).await;
+    let client = crm.login_as(Role::Rep1).await;
+
+    // No filter, and no error even for values that would not be valid.
+    for query in [
+        [("kind", "call"), ("completed", "true")],
+        [("due", "later"), ("assignee_id", "nobody")],
+        [("subject_type", "company"), ("subject_id", "nope")],
+    ] {
+        let page = list_with(&client, &query).await;
+        assert_eq!(page["meta"]["total"], 5, "{query:?}");
+    }
+    // The same names inside `filter[..]` do filter.
+    let page = list_with(&client, &[("filter[kind]", "call")]).await;
+    assert_eq!(page["meta"]["total"], 1);
+    crm.shutdown().await;
+}
+
+/// Quotes and SQL in a value are text, and text that is no word, id or
+/// flag of the list is a 400.
+#[tokio::test]
+async fn hostile_activity_values_are_refused_not_run() {
+    let crm = crm().await;
+    five_activities(&crm).await;
+    let client = crm.login_as(Role::Rep1).await;
+
+    for (param, value) in [
+        ("filter[kind]", "' OR 1=1"),
+        ("filter[kind][in]", "call') OR ('1'='1"),
+        ("filter[subject_type]", "deal' OR '1'='1"),
+        ("filter[subject_id]", "1; DROP TABLE activities"),
+        ("filter[assignee_id][in]", "' OR 1=1"),
+        ("filter[due]", "today' OR '1'='1"),
+        ("filter[completed]", "true OR 1=1"),
+    ] {
+        client
+            .get("/api/v1/activities")
+            .query(&[(param, value)])
+            .send()
+            .await
+            .assert_status(400);
+    }
+    // Nothing happened to the table.
+    let page = list_with(&client, &[]).await;
+    assert_eq!(page["meta"]["total"], 5);
     crm.shutdown().await;
 }

@@ -345,15 +345,15 @@ async fn list_filters_searches_and_paginates() {
         json!({ "current_page": 1, "per_page": 15, "total": 3, "last_page": 1 })
     );
 
-    let proposals = list(json!({ "stage": "proposal" })).await;
+    let proposals = list(json!({ "filter[stage]": "proposal" })).await;
     assert_eq!(titles(&proposals), ["Globex expansion"]);
-    let owned = list(json!({ "owner_id": rep2 })).await;
+    let owned = list(json!({ "filter[owner_id]": rep2 })).await;
     assert_eq!(titles(&owned), ["Acme upsell"]);
-    let at_acme = list(json!({ "company_id": acme })).await;
+    let at_acme = list(json!({ "filter[company_id]": acme })).await;
     assert_eq!(titles(&at_acme), ["Acme upsell", "Acme renewal"]);
     let found = list(json!({ "search": "ACME" })).await;
     assert_eq!(titles(&found), ["Acme upsell", "Acme renewal"]);
-    let narrowed = list(json!({ "search": "expan", "company_id": globex })).await;
+    let narrowed = list(json!({ "search": "expan", "filter[company_id]": globex })).await;
     assert_eq!(titles(&narrowed), ["Globex expansion"]);
 
     let page = list(json!({ "per_page": 2, "page": 2 })).await;
@@ -364,10 +364,10 @@ async fn list_filters_searches_and_paginates() {
     );
 
     rep.get("/api/v1/deals")
-        .query(&json!({ "stage": "closed" }))
+        .query(&json!({ "filter[stage]": "closed" }))
         .send()
         .await
-        .assert_validation_error("stage");
+        .assert_validation_error("filter[stage]");
     crm.shutdown().await;
 }
 

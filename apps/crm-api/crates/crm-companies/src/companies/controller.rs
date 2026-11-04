@@ -1,9 +1,10 @@
 //! `/api/v1/companies`.
 
 use crm_core::Company;
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use super::dto::{CompanyFilters, CreateCompany, UpdateCompany};
+use super::dto::{CompanyList, CreateCompany, UpdateCompany};
 use super::resource::{CompanyDetail, CompanyPage, CompanyResource};
 use super::service::CompanyService;
 
@@ -18,12 +19,12 @@ pub struct CompaniesController {
 
 #[controller("/companies", version = "1")]
 impl CompaniesController {
-    /// A page of companies; `search` matches the name or domain.
+    /// A page of companies by name; `search` matches the name or domain.
     #[get("/")]
     #[can(Read, Company)]
     #[api(
         summary = "List companies",
-        description = "Query: `search` (name or domain, case-insensitive), `owner_id`, `industry`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).",
+        description = "Query: `search` (name or domain, case-insensitive), `filter[owner_id]`, `filter[industry]`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).",
         tag = "Companies",
         response = CompanyPage,
         responses(400, 401, 403)
@@ -32,10 +33,9 @@ impl CompaniesController {
         &self,
         uow: Uow,
         scope: Accessible<Company, Read>,
-        Valid(Query(filters)): Valid<Query<CompanyFilters>>,
-        page: PageQuery,
+        list: List<CompanyList>,
     ) -> Result<Json<CompanyPage>> {
-        Ok(Json(self.companies.list(&uow, scope, filters, page).await?))
+        Ok(Json(self.companies.list(&uow, scope, &list).await?))
     }
 
     /// Creates a company, owned by the caller unless a manager names the

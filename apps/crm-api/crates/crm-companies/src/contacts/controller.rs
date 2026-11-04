@@ -2,9 +2,10 @@
 
 use crm_core::{Contact, Export};
 use navree::http::response::Response;
+use navree::orm::list::List;
 use navree::prelude::*;
 
-use super::dto::{ContactFilters, CreateContact, UpdateContact};
+use super::dto::{ContactList, CreateContact, UpdateContact};
 use super::export::csv_response;
 use super::resource::{ContactPage, ContactResource};
 use super::service::ContactService;
@@ -26,7 +27,7 @@ impl ContactsController {
     #[can(Read, Contact)]
     #[api(
         summary = "List contacts",
-        description = "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `company_id`, `status`, `owner_id` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
+        description = "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]`, `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
         tag = "Contacts",
         response = ContactPage,
         responses(400, 401, 403)
@@ -35,10 +36,9 @@ impl ContactsController {
         &self,
         uow: Uow,
         scope: Accessible<Contact, Read>,
-        Valid(Query(filters)): Valid<Query<ContactFilters>>,
-        page: PageQuery,
+        list: List<ContactList>,
     ) -> Result<Json<ContactPage>> {
-        Ok(Json(self.contacts.list(&uow, scope, filters, page).await?))
+        Ok(Json(self.contacts.list(&uow, scope, &list).await?))
     }
 
     /// Every contact matching the list's filters as a CSV download
@@ -48,7 +48,7 @@ impl ContactsController {
     #[audit(action = "contacts.exported")]
     #[api(
         summary = "Export contacts as CSV",
-        description = "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's filters (`ContactFilters`), in list order.",
+        description = "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search`, in list order.",
         tag = "Contacts",
         responses(400, 401, 403)
     )]
@@ -56,9 +56,9 @@ impl ContactsController {
         &self,
         uow: Uow,
         scope: Accessible<Contact, Read>,
-        Valid(Query(filters)): Valid<Query<ContactFilters>>,
+        list: List<ContactList>,
     ) -> Result<Response> {
-        let contacts = self.contacts.all(&uow, scope, filters).await?;
+        let contacts = self.contacts.all(&uow, scope, &list).await?;
         csv_response(&contacts)
     }
 

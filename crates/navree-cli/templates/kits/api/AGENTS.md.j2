@@ -38,7 +38,7 @@ navree routes                               # every route with its access rule
 navree migrate:fresh --seed                 # rebuild the database with the demo data
 navree openapi:export openapi.json          # the API contract, committed and checked in CI
 {% if web %}
-pnpm --dir web test                         # the backend-for-frontend's unit tests
+pnpm --dir web test                         # the social sign-in routes' and the API client's unit tests
 pnpm --dir web build                        # type check and build the front end
 {% endif %}
 ```
@@ -104,8 +104,10 @@ are plural. Generators never overwrite a file.
   `{ "statusCode", "message", "error", "code" }`.
 - **Database.** navree-orm models with UUID v7 ids (`#[derive(Model)]`);
   reads and writes take the request's unit of work first (`Project::create`,
-  `record.save(&uow)`, `WorkspaceRepo`), so they are audited; lists take
-  `PageQuery` and return `Page<T>`.
+  `record.save(&uow)`, `WorkspaceRepo`), so they are audited. Lists take
+  `List<R>` (see `ProjectList`: the filters, sorts and search a list allows),
+  apply it with `Builder::list` and return `Page<T>`; clients write
+  `filter[status]=active`, `search=web`, `sort=-created_at`, `page` and `per_page`.
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
 - **Configuration.** `config/app.toml` holds shared settings; secrets go in
@@ -115,8 +117,9 @@ are plural. Generators never overwrite a file.
   helpers for accounts, sign-in and workspaces.
 {% if web %}
 - **Front end.** The browser calls only the web app's own routes;
-  `web/lib/bff` forwards them to the API with the bearer token from an
-  httpOnly cookie. Never put a token in browser storage. After changing a
+  the backend-for-frontend (`@navree/next`, created in `web/lib/navree.ts`)
+  forwards them to the API with the bearer token from an httpOnly cookie.
+  Never put a token in browser storage. After changing a
   DTO, run `pnpm --dir web gen:api`: it exports `openapi.json` and
   regenerates `web/lib/api/schema.d.ts`; commit both.
 - **UI components.** shadcn/ui primitives live in `web/components/ui`.

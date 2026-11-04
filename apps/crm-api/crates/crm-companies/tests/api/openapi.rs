@@ -161,18 +161,49 @@ async fn every_route_is_documented_with_its_schemas() {
         "CompanyPage",
         "CompanyInput",
         "CompanyUpdateInput",
-        "CompanySort",
         "CompanySize",
         "Contact",
         "ContactPage",
         "ContactInput",
         "ContactUpdateInput",
-        "ContactFilters",
         "ContactStatus",
         "OwnerRef",
         "CompanyRef",
     ] {
         assert!(schemas[name].is_object(), "no `{name}` schema");
+    }
+    // The list queries are the list-query grammar, not schemas: the
+    // operations' prose names the `filter[..]` parameters.
+    for name in ["CompanyFilters", "CompanySort", "ContactFilters"] {
+        assert!(schemas[name].is_null(), "`{name}` is no longer a schema");
+    }
+    for (path, parameters) in [
+        (
+            "/api/v1/companies",
+            ["filter[owner_id]", "filter[industry]", "sort", "search"].as_slice(),
+        ),
+        (
+            "/api/v1/contacts",
+            [
+                "filter[company_id]",
+                "filter[status]",
+                "filter[owner_id]",
+                "search",
+            ]
+            .as_slice(),
+        ),
+        (
+            "/api/v1/contacts/export",
+            ["filter[...]", "search"].as_slice(),
+        ),
+    ] {
+        let description = paths[path]["get"]["description"].as_str().unwrap_or_default();
+        for parameter in parameters {
+            assert!(
+                description.contains(parameter),
+                "{path} does not describe `{parameter}`: {description}"
+            );
+        }
     }
     // `__type` is the CASL subject type.
     assert_eq!(
