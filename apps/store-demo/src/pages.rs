@@ -2,7 +2,7 @@
 //!
 //! | Route | Answers |
 //! |---|---|
-//! | `GET /` | the dashboard: figures, the live order activity, low stock, best sellers |
+//! | `GET /` | the dashboard: figures, the live order activity, low stock, top sellers |
 //! | `GET /orders` | the orders table; sort, filters, search and page in the URL |
 //! | `GET /orders/{id}` | one order, as a page |
 //! | `GET /orders/{id}/peek` | the same in the drawer, as ops; a redirect to the page with JavaScript off |
@@ -34,8 +34,8 @@ use crate::data::{
 use crate::live::{Hub, now};
 use crate::shop::{self, Done, Refusal};
 use crate::views::dashboard::{
-    Cursor, FeedEntry, Figures, Seller, activity_item, best_sellers, dashboard_body, figures,
-    low_stock, shelves,
+    Cursor, FeedEntry, Figures, Seller, activity_item, dashboard_body, figures, low_stock, shelves,
+    top_sellers,
 };
 use crate::views::inventory::{ProductRow, RestockForm, inventory_table};
 use crate::views::order::{
@@ -107,7 +107,7 @@ async fn count_figures(uow: &Uow) -> Result<Figures> {
     })
 }
 
-/// The shelves running low, emptiest first, and today's best sellers.
+/// The shelves running low, emptiest first, and today's top sellers.
 async fn shelf_lists(uow: &Uow) -> Result<(Vec<Product>, Vec<Seller>)> {
     let products: Vec<Product> = inner(Product::query().get(uow).await?.into_vec());
     let today: Vec<i64> = inner(
@@ -128,7 +128,7 @@ async fn shelf_lists(uow: &Uow) -> Result<(Vec<Product>, Vec<Seller>)> {
             .await?
             .into_vec(),
     );
-    Ok((low_stock(&products), best_sellers(&products, &lines)))
+    Ok((low_stock(&products), top_sellers(&products, &lines)))
 }
 
 /// The feed's rows: what happened in the last day, newest first; with a cursor,

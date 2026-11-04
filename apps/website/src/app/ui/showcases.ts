@@ -56,7 +56,7 @@ export const showcases: Showcase[] = [
         title:
           "An order open in a drawer over the orders table: badges, actions, customer and payment cards, a route with two flags, the items and the order's history",
         caption:
-          "The drawer as it opens over the table. Scroll it: the history and the customer's other orders load just after it opens, and the server checks each action again.",
+          "The drawer as it opens over the table. Scroll it: the history and the customer's other orders load a moment after it opens, and the server checks each action again.",
         file: "src/views/order.rs",
         interactive: true,
       },
@@ -71,7 +71,7 @@ export const showcases: Showcase[] = [
       {
         example: "build-anything/store-dashboard",
         label: "Dashboard",
-        title: "The store's dashboard: today's figures, the order activity, low stock and best sellers",
+        title: "The store's dashboard: today's figures, the order activity, low stock and top sellers",
         caption:
           "Replayed in your browser: the new rows were drawn by the app's Rust ahead of time. In the app, the server streams them over SSE, and the feed asks only for what came after its newest row.",
         file: "src/views/dashboard.rs",

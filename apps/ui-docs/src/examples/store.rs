@@ -6,7 +6,7 @@
 use navree::ui::*;
 use store_demo::data::{self, Customer, Event, Line, Order, Product, Status};
 use store_demo::views::dashboard::{
-    FeedEntry, Figures, activity_item, best_sellers, dashboard_body, low_stock,
+    FeedEntry, Figures, activity_item, dashboard_body, low_stock, top_sellers,
 };
 use store_demo::views::inventory::{ProductRow, inventory_table};
 use store_demo::views::order::{OrderView, Parts, order_drawer};
@@ -324,7 +324,7 @@ fn dashboard_page() -> Node {
             &shown,
             total,
             &low_stock(&shop.products),
-            &best_sellers(&shop.products, &lines),
+            &top_sellers(&shop.products, &lines),
             today(),
         ))
         .to_view()

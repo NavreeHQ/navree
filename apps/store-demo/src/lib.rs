@@ -9,7 +9,7 @@
 //! ```
 //!
 //! - **The dashboard** (`/`): today's figures, the order activity as it happens,
-//!   live over server-sent events, the shelves running low and today's best
+//!   live over server-sent events, the shelves running low and today's top
 //!   sellers.
 //! - **The orders** (`/orders`): a table whose search, status, fulfilment,
 //!   payment, country and date filters, sort and pages run on the server. It

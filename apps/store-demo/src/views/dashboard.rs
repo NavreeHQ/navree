@@ -1,5 +1,5 @@
 //! The dashboard: today's figures, the order activity as it happens, the shelves
-//! running low and today's best sellers. Every part is a region that a
+//! running low and today's top sellers. Every part is a region that a
 //! server-sent event stream keeps current.
 
 use navree::ui::*;
@@ -303,7 +303,7 @@ pub fn low_stock(products: &[Product]) -> Vec<Product> {
 
 /// The five products that sold the most units in `lines`, the lines of today's
 /// orders that weren't cancelled.
-pub fn best_sellers(products: &[Product], lines: &[Line]) -> Vec<Seller> {
+pub fn top_sellers(products: &[Product], lines: &[Line]) -> Vec<Seller> {
     let mut sellers: Vec<Seller> = products
         .iter()
         .filter_map(|product| {
@@ -351,7 +351,7 @@ pub fn dashboard_body(
     ))
 }
 
-/// The shelves running low and today's best sellers, side by side under the feed
+/// The shelves running low and today's top sellers, side by side under the feed
 /// on a phone.
 pub fn shelves(low: &[Product], sellers: &[Seller]) -> Stack {
     let low_list: Vec<Node> = low
@@ -403,7 +403,7 @@ pub fn shelves(low: &[Product], sellers: &[Seller]) -> Stack {
             } else {
                 Stack::gap(3).children(low_list).into()
             }),
-        Card::titled("Best sellers today")
+        Card::titled("Top sellers today")
             .description("By units sold, cancelled orders left out")
             .body(if seller_list.is_empty() {
                 Node::from(Text::muted("Nothing sold yet today."))
