@@ -25,6 +25,10 @@ pub struct CommandSpec {
     /// stdio, for example), so nothing else may write there: the logger
     /// writes to standard error instead. See [`CommandSpec::stdio`].
     pub stdio: bool,
+    /// The command does not need a booted app: it runs against the module
+    /// graph, and builds only the providers it asks for. See
+    /// [`CommandSpec::offline`].
+    pub offline: bool,
 }
 
 impl CommandSpec {
@@ -39,6 +43,7 @@ impl CommandSpec {
             about,
             run: Arc::new(move |ctx, args| Box::pin(f(ctx, args))),
             stdio: false,
+            offline: false,
         }
     }
 
@@ -50,6 +55,18 @@ impl CommandSpec {
         self.stdio = true;
         self
     }
+
+    /// Marks the command as one that needs no booted app. The runner does
+    /// not build every singleton (no database connection is opened, no
+    /// server started) and runs no lifecycle hook, before or after: the
+    /// command gets the [`AppContext`] of the module graph and resolves what
+    /// it needs with [`AppContext::get`], which builds a provider on first
+    /// use. Meant for commands that read the app's configuration or graph,
+    /// such as `config:show` and `config:check`.
+    pub fn offline(mut self) -> Self {
+        self.offline = true;
+        self
+    }
 }
 
 impl fmt::Debug for CommandSpec {
@@ -58,6 +75,7 @@ impl fmt::Debug for CommandSpec {
             .field("name", &self.name)
             .field("about", &self.about)
             .field("stdio", &self.stdio)
+            .field("offline", &self.offline)
             .finish_non_exhaustive()
     }
 }

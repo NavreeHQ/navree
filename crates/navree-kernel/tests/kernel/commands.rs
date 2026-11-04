@@ -368,3 +368,78 @@ fn commands_do_not_own_stdout_unless_marked() {
     assert!(!noop("x").stdio);
     assert!(noop("x").stdio().stdio);
 }
+
+/// An offline command (CONFIG-004, CONFIG-007) runs without booting the
+/// app: only the providers it asks for are built, and no lifecycle hook runs.
+struct OfflineProbe {
+    journal: Arc<Journal>,
+    built: Arc<Counter>,
+}
+
+impl Module for OfflineProbe {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let built = self.built.clone();
+        m.value(Greeting("hello"))
+            .factory(Factory::<Expensive>::new(move |_| {
+                built.hit();
+                async { Ok::<_, BoxError>(Arc::new(Expensive)) }
+            }));
+        for (name, offline) in [("online", false), ("offline", true)] {
+            let journal = self.journal.clone();
+            let spec = CommandSpec::new(name, "probe", move |ctx, _args| {
+                let journal = journal.clone();
+                async move {
+                    let greeting = ctx.get::<Greeting>().await?;
+                    let running = ctx.command().map(|c| (c.name, c.offline));
+                    journal.push(format!("{} {:?}", greeting.0, running));
+                    Ok(())
+                }
+            });
+            m.command(if offline { spec.offline() } else { spec });
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_offline_command_runs_without_booting_the_app() {
+    let probe = OfflineProbe {
+        journal: Arc::new(Journal::default()),
+        built: Arc::new(Counter::default()),
+    };
+    let (journal, built) = (probe.journal.clone(), probe.built.clone());
+    Navree::app()
+        .module(probe)
+        .run_with_args(args(&["offline"]))
+        .await
+        .expect("offline command runs");
+    assert_eq!(
+        built.get(),
+        0,
+        "no singleton the command did not ask for is built"
+    );
+    assert_eq!(
+        journal.entries(),
+        vec![r#"hello Some(("offline", true))"#.to_owned()]
+    );
+}
+
+#[tokio::test]
+async fn a_command_boots_the_app_unless_it_is_offline() {
+    let probe = OfflineProbe {
+        journal: Arc::new(Journal::default()),
+        built: Arc::new(Counter::default()),
+    };
+    let built = probe.built.clone();
+    Navree::app()
+        .module(probe)
+        .run_with_args(args(&["online"]))
+        .await
+        .expect("online command runs");
+    assert_eq!(built.get(), 1, "boot builds every singleton");
+}
+
+#[test]
+fn commands_boot_the_app_unless_marked_offline() {
+    assert!(!noop("x").offline);
+    assert!(noop("x").offline().offline);
+}

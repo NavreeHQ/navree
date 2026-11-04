@@ -128,7 +128,8 @@ impl AppBuilder {
     /// - `introspect [--json]` validates the graph without constructing
     ///   anything and prints it as JSON ([`GraphReport::to_json`]);
     /// - `<name> [args...]` boots the app, runs the registered command, then
-    ///   shuts the app down gracefully;
+    ///   shuts the app down gracefully; a command marked
+    ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
     /// - no command runs `serve` if a module registers it, else `help`.
     pub async fn run_with_args(self, args: Vec<String>) -> Result<(), BoxError> {
         let mut args = args.into_iter();
@@ -205,6 +206,18 @@ impl AppBuilder {
         let Some(command) = graph.commands().find(|c| c.name == name).cloned() else {
             return Err(KernelError::UnknownCommand { name }.into());
         };
+        if command.offline {
+            // No boot: the command builds what it asks for, and nothing runs
+            // at start or at shutdown.
+            let ctx = AppContext::from_inner(Arc::new(AppInner::new(
+                graph,
+                self.shutdown.clone(),
+                Some(command.clone()),
+            )));
+            let result = (command.run)(ctx.clone(), args).await;
+            ctx.inner.shutdown.cancel();
+            return result;
+        }
         let app = self.boot_graph(graph, Some(command)).await?;
         let result = app.run_command(&name, args).await;
         let shutdown = app.shutdown().await;
