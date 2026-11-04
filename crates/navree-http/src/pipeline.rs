@@ -15,7 +15,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use futures_util::FutureExt;
-use http::header::VARY;
+use http::header::{CACHE_CONTROL, VARY};
 use http::header::{
     CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue,
     REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, USER_AGENT, X_CONTENT_TYPE_OPTIONS,
@@ -36,7 +36,7 @@ use uuid::Uuid;
 use crate::body::{Body, HttpBody as _};
 use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
-use crate::error_pages::{self, ErrorContext, ErrorPagesHandle, RouteKind};
+use crate::error_pages::{self, ErrorContext, ErrorPagesHandle, RouteFinder, RouteKind};
 use crate::extract::{ProxyTrust, Request};
 use crate::limiter::KeyedRateLimiter;
 use crate::maintenance::MaintenanceMode;
@@ -144,7 +144,7 @@ impl Stages {
         let Some(guard) = &self.guard else {
             return self.checked(request, next).await;
         };
-        catch_panic(
+        let response = catch_panic(
             guard.format,
             guard.pages.as_ref(),
             request,
@@ -154,18 +154,17 @@ impl Stages {
                     guard.format,
                     guard.pages.as_ref(),
                     request,
-                    move |request| async move {
-                        let response = self.checked(request, next).await;
-                        if guard.security_headers {
-                            with_security_headers(response)
-                        } else {
-                            response
-                        }
-                    },
+                    move |request| self.checked(request, next),
                 )
             },
         )
-        .await
+        .await;
+        // Outside the panic catcher and the timeout, so what they answer carries the headers too.
+        if guard.security_headers {
+            with_security_headers(response)
+        } else {
+            response
+        }
     }
 
     async fn checked(&self, request: Request, next: Next) -> Response {
@@ -238,6 +237,8 @@ pub(crate) struct ContextState {
     pub(crate) pages: Option<ErrorPagesHandle>,
     /// `http.api_prefix`.
     pub(crate) api_prefix: Arc<str>,
+    /// Finds a request's route for an error raised before any route ran.
+    pub(crate) finder: Option<RouteFinder>,
 }
 
 /// The `traceparent` and `tracestate` headers (W3C Trace Context).
@@ -275,6 +276,7 @@ where
     request
         .headers_mut()
         .insert(X_REQUEST_ID.clone(), header.clone());
+    let matched_route = MatchedRoute::default();
     let error_context = state.pages.is_some().then(|| ErrorContext {
         method: request.method().clone(),
         uri: request.uri().clone(),
@@ -284,6 +286,8 @@ where
         route: None,
         user: None,
         api_prefix: state.api_prefix.clone(),
+        matched: Some(matched_route.0.clone()),
+        finder: state.finder.clone(),
     });
     let extensions = request.extensions_mut();
     extensions.insert(request_id.clone());
@@ -292,7 +296,6 @@ where
     extensions.insert(telemetry_context.clone());
     // Request-scoped providers are built once per request (see `Scoped`).
     extensions.insert(RequestScope::new());
-    let matched_route = MatchedRoute::default();
     extensions.insert(matched_route.clone());
     if let Some(error_context) = error_context {
         extensions.insert(Arc::new(error_context));
@@ -588,8 +591,10 @@ fn error_context_of(request: &Request) -> Option<Arc<ErrorContext>> {
 const PAGES_DEADLINE: Duration = Duration::from_secs(3);
 
 /// The response for `error`: the page the module renders when it answers, else the JSON
-/// body. `route` and `user` are what the request found out on its way in; a panic or a
-/// timeout knows neither.
+/// body. `route` and `user` are what the request found out on its way in: a route that ran
+/// has set `route`; for an error raised before one did (or for a panic or a timeout, which
+/// leave no response behind) the router is asked which route the request names. A panic or a
+/// timeout does not know the user.
 async fn error_response(
     error: &AppError,
     format: ErrorFormat,
@@ -600,6 +605,10 @@ async fn error_response(
 ) -> Response {
     let (Some(pages), Some(context)) = (pages, context) else {
         return error.render(format);
+    };
+    let route = match route {
+        Some(route) => Some(route),
+        None => context.resolve_route().await,
     };
     if route
         .as_ref()
@@ -620,12 +629,60 @@ async fn error_response(
     if let Ok(Ok(Some(page))) = page {
         return page;
     }
-    // A cache must not hand this JSON to a browser that would have got a page.
+    // The same address answers a page to the runtime and to a browser, and JSON to a script:
+    // a cache must keep them apart, and must not keep an error at all.
     let mut response = error.render(format);
+    let headers = response.headers_mut();
+    headers.append(VARY, HeaderValue::from_static("accept, x-navree-ui"));
+    if !headers.contains_key(CACHE_CONTROL) {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     response
-        .headers_mut()
-        .append(VARY, HeaderValue::from_static("accept"));
-    response
+}
+
+/// Whether a header describes the body it comes with: what an answer replaces, never adds to.
+fn describes_body(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "content-type"
+            | "content-length"
+            | "content-encoding"
+            | "content-language"
+            | "content-location"
+            | "content-disposition"
+            | "content-range"
+            | "content-security-policy"
+            | "cache-control"
+            | "etag"
+            | "last-modified"
+            | "expires"
+            | "pragma"
+            | "accept-ranges"
+            | "transfer-encoding"
+            | "speculation-rules"
+    )
+}
+
+/// Puts `answer`'s headers on `headers`, the response the error was raised on.
+///
+/// What described the old body goes, and the answer's own description takes its place. Every
+/// other header stays: a session's `Set-Cookie`, a layer's marks. The answer adds its own to
+/// them, a header with a value the response already has once, so a cookie the answer sets and
+/// one the session set both reach the client.
+fn merge_answer(headers: &mut HeaderMap, answer: &HeaderMap) {
+    let stale: Vec<HeaderName> = headers
+        .keys()
+        .filter(|name| describes_body(name))
+        .cloned()
+        .collect();
+    for name in stale {
+        headers.remove(&name);
+    }
+    for (name, value) in answer {
+        if describes_body(name) || !headers.get_all(name).iter().any(|have| have == value) {
+            headers.append(name.clone(), value.clone());
+        }
+    }
 }
 
 async fn finalize(
@@ -680,13 +737,7 @@ async fn finalize(
     let (rendered_parts, body) = rendered.into_parts();
     parts.status = rendered_parts.status;
     parts.headers.remove(CONTENT_LENGTH);
-    // A header the answer sets replaces the response's own, every value of it.
-    for name in rendered_parts.headers.keys() {
-        parts.headers.remove(name);
-    }
-    for (name, value) in &rendered_parts.headers {
-        parts.headers.append(name.clone(), value.clone());
-    }
+    merge_answer(&mut parts.headers, &rendered_parts.headers);
     Response::from_parts(parts, body)
 }
 
@@ -973,6 +1024,61 @@ mod tests {
             !needs_normalizing(&json),
             "custom JSON errors are left alone"
         );
+    }
+
+    #[test]
+    fn an_answer_replaces_what_described_the_old_body_and_keeps_the_rest() {
+        let mut have = HeaderMap::new();
+        for (name, value) in [
+            ("content-type", "application/json"),
+            ("etag", "\"abc\""),
+            ("content-disposition", "attachment"),
+            ("cache-control", "max-age=60"),
+            ("set-cookie", "sid=1"),
+            ("set-cookie", "csrf=2"),
+            ("x-rate-limit-remaining", "3"),
+            ("retry-after", "5"),
+        ] {
+            have.append(
+                HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                HeaderValue::from_static(value),
+            );
+        }
+        let mut answer = HeaderMap::new();
+        for (name, value) in [
+            ("content-type", "text/html"),
+            ("cache-control", "no-store"),
+            ("set-cookie", "flash=; Max-Age=0"),
+            ("set-cookie", "sid=1"),
+            ("retry-after", "5"),
+            ("vary", "accept"),
+        ] {
+            answer.append(
+                HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                HeaderValue::from_static(value),
+            );
+        }
+        merge_answer(&mut have, &answer);
+        let all = |name: &str| -> Vec<&str> {
+            have.get_all(name)
+                .iter()
+                .map(|v| v.to_str().unwrap())
+                .collect()
+        };
+        assert_eq!(all("content-type"), ["text/html"]);
+        assert_eq!(all("cache-control"), ["no-store"]);
+        assert!(
+            all("etag").is_empty() && all("content-disposition").is_empty(),
+            "the old body's own"
+        );
+        assert_eq!(
+            all("set-cookie"),
+            ["sid=1", "csrf=2", "flash=; Max-Age=0"],
+            "every cookie, none twice"
+        );
+        assert_eq!(all("x-rate-limit-remaining"), ["3"]);
+        assert_eq!(all("retry-after"), ["5"], "the same value is not doubled");
+        assert_eq!(all("vary"), ["accept"]);
     }
 
     #[test]

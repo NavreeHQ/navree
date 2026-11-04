@@ -23,6 +23,7 @@ use uuid::Uuid;
 use crate::body::BodyLimit;
 use crate::controller::ControllerRegistration;
 use crate::error::ErrorFormat;
+use crate::error_pages::RouteFinder;
 use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::KeyedRateLimiter;
@@ -71,10 +72,19 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         body_limit: options.body_limit_bytes,
         ipv6_prefix: options.rate_limit_ipv6_prefix,
     };
+    // The module that answers errors with pages, if any.
+    let pages = ctx
+        .contributions::<crate::ErrorPagesHandle>()
+        .into_iter()
+        .next()
+        .map(|c| (*c.value).clone());
     let mut routes_router = routing::Router::new();
+    // With such a module, a second router with the same paths that finds a request's route
+    // without running it, for an error raised before the route did.
+    let mut finder = pages.is_some().then(RouteFinder::new);
     let mut errors = Vec::new();
     for route in routes {
-        if let Err(error) = mount(&mut routes_router, route, &shared) {
+        if let Err(error) = mount(&mut routes_router, finder.as_mut(), route, &shared) {
             errors.push(error);
         }
     }
@@ -107,11 +117,6 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         .map(|c| (*c.value).clone())
         .collect();
     let format = ErrorFormat::from(&options.errors);
-    let pages = ctx
-        .contributions::<crate::ErrorPagesHandle>()
-        .into_iter()
-        .next()
-        .map(|c| (*c.value).clone());
     let mut stages = Stages {
         checks: Some(CheckStages {
             mappers,
@@ -157,6 +162,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         policy,
         pages,
         api_prefix: Arc::from(options.api_prefix.as_str()),
+        finder,
     });
     router = with_stages(router, &mut stages);
     apply_edge(ctx, router)
@@ -386,7 +392,12 @@ struct Shared {
 }
 
 /// Mounts a route on `router` behind its per-route pipeline.
-fn mount(router: &mut routing::Router, route: Mounted, shared: &Shared) -> Result<(), String> {
+fn mount(
+    router: &mut routing::Router,
+    finder: Option<&mut RouteFinder>,
+    route: Mounted,
+    shared: &Shared,
+) -> Result<(), String> {
     let meta = Arc::new(route.meta);
     let runtime = Arc::new(RouteRuntime {
         throttle: meta.throttle.map(|t| KeyedRateLimiter::new(t.limit, t.per)),
@@ -409,6 +420,9 @@ fn mount(router: &mut routing::Router, route: Mounted, shared: &Shared) -> Resul
         .parse::<Method>()
         .map_err(|error| format!("route `{} {}`: {error}", meta.method, meta.full_path))?;
     let handler = route.handler;
+    if let Some(finder) = finder {
+        finder.add(method.clone(), &meta);
+    }
     router
         .try_route_service(method, &meta.full_path, || {
             BoxCloneSyncService::new(RouteService {

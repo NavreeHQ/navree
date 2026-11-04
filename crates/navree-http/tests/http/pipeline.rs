@@ -700,9 +700,8 @@ fn client_ip_of_a_request_follows_the_proxy_settings() {
 }
 
 /// Without CORS and compression nothing separates the fixed layers, and
-/// they run as the stages of one middleware: still in their order, so a
-/// panic is rendered outside the security headers, and every response
-/// carries the request id.
+/// they run as the stages of one middleware: still in their order, and every
+/// response, a panic's included, carries the security headers and the request id.
 #[tokio::test]
 async fn fixed_layers_keep_their_order_in_one_middleware() {
     let dir = tempfile::Builder::new()
@@ -733,8 +732,8 @@ async fn fixed_layers_keep_their_order_in_one_middleware() {
     panicked.assert_error(500);
     assert_eq!(
         panicked.header("x-frame-options"),
-        None,
-        "the panic catcher is outside the security headers"
+        Some("DENY"),
+        "the security headers are outside the panic catcher"
     );
     assert!(panicked.header("x-request-id").is_some());
 
@@ -768,9 +767,10 @@ async fn the_app_timeout_holds_in_one_middleware() {
     );
     assert_eq!(
         response.header("x-frame-options"),
-        None,
-        "the timeout is outside the security headers"
+        Some("DENY"),
+        "a timed-out request's answer carries the security headers like any other"
     );
+    assert_eq!(response.header("x-content-type-options"), Some("nosniff"));
 }
 
 mod recorded_metrics {

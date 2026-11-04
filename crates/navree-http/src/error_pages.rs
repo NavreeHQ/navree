@@ -11,13 +11,20 @@
 use std::sync::Arc;
 
 use http::header::{self, HeaderMap, HeaderName};
+use std::convert::Infallible;
+use std::sync::OnceLock;
+
 use http::{Method, Uri};
 use navree_contracts::RequestId;
 use navree_kernel::{AppContext, BoxFuture};
+use tower::ServiceExt;
+use tower::util::BoxCloneSyncService;
 use uuid::Uuid;
 
+use crate::body::Body;
+use crate::extract::Request;
 use crate::response::Response;
-use crate::{AppError, RouteMeta};
+use crate::{AppError, RouteMeta, routing};
 
 /// Answers errors in another form than JSON.
 ///
@@ -58,24 +65,60 @@ pub struct ErrorContext {
     pub method: Method,
     /// The request's URI, as it arrived.
     pub uri: Uri,
-    /// The headers a page can depend on: `Accept`, `Accept-Language`,
-    /// `Cookie`, the `Sec-Fetch-*` and `Sec-Purpose` headers,
-    /// `X-Requested-With` and every `X-Navree-*` header. Nothing else is kept.
+    /// The headers a page can depend on: `Accept`, `Accept-Language`, `Cookie`,
+    /// `Host`, the `Sec-Fetch-*` and `Sec-Purpose` headers, `X-Requested-With`
+    /// and every `X-Navree-*` header. Nothing else is kept: not
+    /// `Authorization`, not an API key, not the body.
     pub headers: HeaderMap,
     /// The app.
     pub ctx: AppContext,
     /// The request id, when the request had one.
     pub request_id: Option<RequestId>,
-    /// The route that handled the request, when one did.
+    /// The route the request belongs to: the one that handled it, or, for an error
+    /// raised before any route ran (a refused CSRF token, a limit, a 405), the route its
+    /// path and method name (for a 405, the route of the first method the path takes).
+    /// `None` when no route has that path.
     pub route: Option<Arc<RouteMeta>>,
     /// The signed-in user, when the request reached authentication and had one.
     /// A panic or a timeout cannot say, and leaves it `None`.
     pub user: Option<Uuid>,
     /// `http.api_prefix`: paths under it belong to the JSON API.
     pub api_prefix: Arc<str>,
+    /// The route the request reached, filled in as it reaches one.
+    pub(crate) matched: Option<Arc<OnceLock<Arc<RouteMeta>>>>,
+    /// Finds a request's route without running it.
+    pub(crate) finder: Option<RouteFinder>,
 }
 
 impl ErrorContext {
+    /// A context for `method` and `uri` in the app `ctx`, with no headers, no request id, no
+    /// route and no user, and `/api` as the API prefix. Set the public fields for what your
+    /// test or tool knows.
+    pub fn new(method: Method, uri: Uri, ctx: AppContext) -> Self {
+        Self {
+            method,
+            uri,
+            headers: HeaderMap::new(),
+            ctx,
+            request_id: None,
+            route: None,
+            user: None,
+            api_prefix: Arc::from("/api"),
+            matched: None,
+            finder: None,
+        }
+    }
+
+    /// The route this request belongs to, for an error. A route that ran has set it; for one
+    /// raised before any route ran, the router is asked which route the path names, without
+    /// running it. Only an error pays for this.
+    pub(crate) async fn resolve_route(&self) -> Option<Arc<RouteMeta>> {
+        if let Some(route) = self.matched.as_ref().and_then(|cell| cell.get()) {
+            return Some(route.clone());
+        }
+        self.finder.as_ref()?.find(&self.method, &self.uri).await
+    }
+
     /// The path of the request.
     pub fn path(&self) -> &str {
         self.uri.path()
@@ -219,6 +262,76 @@ fn quality_of<'a>(parameters: impl Iterator<Item = &'a str>) -> f32 {
         }
     }
     1.0
+}
+
+/// Finds the route a request names with the router's own matching, without running the route.
+///
+/// It is a second [`routing::Router`] with the same paths, whose services answer with the route's
+/// metadata in place of its handler, so what matches here is exactly what matches there.
+#[derive(Clone)]
+pub(crate) struct RouteFinder {
+    router: routing::Router,
+}
+
+impl RouteFinder {
+    pub(crate) fn new() -> Self {
+        Self {
+            router: routing::Router::new(),
+        }
+    }
+
+    /// Adds `meta`'s route.
+    pub(crate) fn add(&mut self, method: Method, meta: &Arc<RouteMeta>) {
+        let meta = meta.clone();
+        // A mistake here would be the same mistake the real router already refused.
+        let _ = self
+            .router
+            .try_route_service(method, &meta.full_path.clone(), move || {
+                BoxCloneSyncService::new(tower::service_fn(move |_request: Request| {
+                    let meta = meta.clone();
+                    async move {
+                        let mut response = Response::new(Body::empty());
+                        response.extensions_mut().insert(meta);
+                        Ok::<_, Infallible>(response)
+                    }
+                }))
+            });
+    }
+
+    async fn find(&self, method: &Method, uri: &Uri) -> Option<Arc<RouteMeta>> {
+        let ask = |method: &Method| {
+            let mut request = Request::new(Body::empty());
+            *request.method_mut() = method.clone();
+            *request.uri_mut() = uri.clone();
+            self.router.clone().oneshot(request)
+        };
+        let response = ask(method).await.ok()?;
+        if let Some(meta) = response.extensions().get::<Arc<RouteMeta>>() {
+            return Some(meta.clone());
+        }
+        // A 405 names the methods the path takes: the route of the first of them is the path's.
+        let allow = response.headers().get(header::ALLOW)?.to_str().ok()?;
+        for name in allow.split(',').map(str::trim) {
+            if name.eq_ignore_ascii_case("OPTIONS") || name.eq_ignore_ascii_case("HEAD") {
+                continue;
+            }
+            let Ok(other) = Method::from_bytes(name.as_bytes()) else {
+                continue;
+            };
+            if let Ok(response) = ask(&other).await
+                && let Some(meta) = response.extensions().get::<Arc<RouteMeta>>()
+            {
+                return Some(meta.clone());
+            }
+        }
+        None
+    }
+}
+
+impl std::fmt::Debug for RouteFinder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RouteFinder")
+    }
 }
 
 /// The request headers an [`ErrorContext`] keeps: what decides a page and
