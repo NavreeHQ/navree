@@ -235,12 +235,17 @@ async fn serve(stream: TcpStream, state: Arc<State>) {
         // A blocked read ends when its client goes away, as in Redis.
         let executing = execute(&state, &args);
         tokio::pin!(executing);
+        // A client that has gone is looked at first, so that a blocked read that an entry has
+        // just woken does not take the entry for a client that is no longer there: a real server
+        // sees the close before it serves the next command, and a listener that was stopped must
+        // not be left holding what was sent after it.
         let reply = tokio::select! {
-            reply = &mut executing => reply,
+            biased;
             more = reader.fill_buf() => match more {
                 Ok(bytes) if !bytes.is_empty() => executing.await,
                 _ => break,
             },
+            reply = &mut executing => reply,
         };
         let mut out = Vec::new();
         reply.write(&mut out);
