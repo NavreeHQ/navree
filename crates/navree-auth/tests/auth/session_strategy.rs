@@ -1060,3 +1060,26 @@ async fn without_the_session_module_tokens_work_as_before() {
         .assert_status(200)
         .assert_json_path("via", json!("Token"));
 }
+
+// MOD-001: a browser that signs in again (as someone else, say) ends the
+// sign-in it held on the server, so a copy of the old cookie is no one.
+#[tokio::test]
+async fn signing_in_again_ends_the_sign_in_the_browser_held() {
+    let app = app().await;
+    let (ada, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let copy = app.client();
+    copy.set_cookie(COOKIE, &browser.cookie(COOKIE).unwrap());
+    whoami(&copy).await.assert_status(200);
+
+    create_user(&app, "grace@example.com").await;
+    sign_in(&browser, "grace@example.com", PASSWORD, false)
+        .await
+        .assert_status(303);
+    whoami(&browser)
+        .await
+        .assert_status(200)
+        .assert_json_path("via", json!("Session"));
+    whoami(&copy).await.assert_status(401);
+    let service = app.get::<AuthService>().await;
+    assert!(service.sessions(ada.id, None).await.unwrap().is_empty());
+}
