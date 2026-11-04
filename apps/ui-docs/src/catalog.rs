@@ -425,7 +425,14 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "split-pane",
         "SplitPane",
-        &["SplitPane", "Pane", "SplitWidth", "SplitHeight", "SplitSizes", "SplitSave"],
+        &[
+            "SplitPane",
+            "Pane",
+            "SplitWidth",
+            "SplitHeight",
+            "SplitSizes",
+            "SplitSave",
+        ],
         "thumb",
     )
     .parts("default"),
@@ -547,7 +554,15 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "lazy-list",
         "LazyList",
-        &["LazyList", "LazyItem", "LazyOrder", "LazyEnd", "LazyLabels", "LazyQuery", "LazyPage"],
+        &[
+            "LazyList",
+            "LazyItem",
+            "LazyOrder",
+            "LazyEnd",
+            "LazyLabels",
+            "LazyQuery",
+            "LazyPage",
+        ],
         "thumb",
     )
     .parts("default"),

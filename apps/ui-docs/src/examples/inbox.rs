@@ -50,9 +50,11 @@ pub fn all() -> Vec<Example> {
                 items(THREAD_RS, &["pub fn thread_lazy"]),
                 items(QUERIES_RS, &["pub async fn thread_window"]),
             ]
-            .join("
+            .join(
+                "
 
-"),
+",
+            ),
         )
         .fill()
         .width(1440)
@@ -98,7 +100,9 @@ fn items(source: &str, starts: &[&str]) -> String {
             })
             .unwrap_or_else(|| panic!("no `{start}` at the start of a line"));
         let mut first = at;
-        while first > 0 && (lines[first - 1].starts_with("#[") || lines[first - 1].starts_with("///")) {
+        while first > 0
+            && (lines[first - 1].starts_with("#[") || lines[first - 1].starts_with("///"))
+        {
             first -= 1;
         }
         let end = (at..lines.len())
@@ -133,12 +137,19 @@ fn desk() -> Desk {
 
 /// The open list, newest activity first, as rows.
 fn rows(desk: &Desk) -> Vec<ListRow> {
-    let mut open: Vec<&Conversation> = desk.conversations.iter().filter(|c| c.inbox == "open").collect();
+    let mut open: Vec<&Conversation> = desk
+        .conversations
+        .iter()
+        .filter(|c| c.inbox == "open")
+        .collect();
     open.sort_by_key(|c| std::cmp::Reverse((c.last_at, c.id)));
     open.into_iter()
         .take(50)
         .map(|conversation| {
-            let customer = desk.customers.iter().find(|c| c.id == conversation.customer_id);
+            let customer = desk
+                .customers
+                .iter()
+                .find(|c| c.id == conversation.customer_id);
             ListRow {
                 customer: customer.map_or_else(String::new, |c| c.name.clone()),
                 company: customer.map_or_else(String::new, |c| c.company.clone()),
@@ -158,9 +169,24 @@ fn chosen(desk: &Desk) -> Conversation {
         .iter()
         .filter(|c| c.inbox == "open")
         .max_by_key(|c| {
-            let notes = desk.messages.iter().filter(|m| m.conversation_id == c.id && m.kind == "note").count();
-            let files = desk.files.iter().filter(|f| f.conversation_id == c.id).count();
-            (files.min(1), notes.min(1), desk.messages.iter().filter(|m| m.conversation_id == c.id).count())
+            let notes = desk
+                .messages
+                .iter()
+                .filter(|m| m.conversation_id == c.id && m.kind == "note")
+                .count();
+            let files = desk
+                .files
+                .iter()
+                .filter(|f| f.conversation_id == c.id)
+                .count();
+            (
+                files.min(1),
+                notes.min(1),
+                desk.messages
+                    .iter()
+                    .filter(|m| m.conversation_id == c.id)
+                    .count(),
+            )
         })
         .cloned()
         .unwrap_or_default()
@@ -186,16 +212,40 @@ fn scene() -> Scene {
         .find(|c| c.id == conversation.customer_id)
         .cloned()
         .unwrap_or_default();
-    let at = rows.iter().position(|row| row.conversation.id == conversation.id);
+    let at = rows
+        .iter()
+        .position(|row| row.conversation.id == conversation.id);
     let neighbours = (
-        at.and_then(|at| at.checked_sub(1)).map(|at| rows[at].conversation.id),
-        at.and_then(|at| rows.get(at + 1)).map(|row| row.conversation.id),
+        at.and_then(|at| at.checked_sub(1))
+            .map(|at| rows[at].conversation.id),
+        at.and_then(|at| rows.get(at + 1))
+            .map(|row| row.conversation.id),
     );
-    let messages: Vec<Message> = desk.messages.iter().filter(|m| m.conversation_id == conversation.id).cloned().collect();
-    let files: Vec<Attachment> = desk.files.iter().filter(|f| f.conversation_id == conversation.id).cloned().collect();
-    let mut history: Vec<CustomerEvent> = desk.events.iter().filter(|e| e.customer_id == customer.id).cloned().collect();
+    let messages: Vec<Message> = desk
+        .messages
+        .iter()
+        .filter(|m| m.conversation_id == conversation.id)
+        .cloned()
+        .collect();
+    let files: Vec<Attachment> = desk
+        .files
+        .iter()
+        .filter(|f| f.conversation_id == conversation.id)
+        .cloned()
+        .collect();
+    let mut history: Vec<CustomerEvent> = desk
+        .events
+        .iter()
+        .filter(|e| e.customer_id == customer.id)
+        .cloned()
+        .collect();
     history.sort_by_key(|e| e.at);
-    let mut theirs: Vec<Conversation> = desk.conversations.iter().filter(|c| c.customer_id == customer.id).cloned().collect();
+    let mut theirs: Vec<Conversation> = desk
+        .conversations
+        .iter()
+        .filter(|c| c.customer_id == customer.id)
+        .cloned()
+        .collect();
     theirs.sort_by_key(|c| std::cmp::Reverse(c.last_at));
     let view = CustomerView {
         open: theirs.iter().filter(|c| c.inbox == "open").count() as u64,
@@ -218,9 +268,13 @@ fn scene() -> Scene {
         newer: false,
         neighbours,
     };
-    let open: Vec<&Conversation> = desk.conversations.iter().filter(|c| c.inbox == "open").collect();
+    let open: Vec<&Conversation> = desk
+        .conversations
+        .iter()
+        .filter(|c| c.inbox == "open")
+        .collect();
     let summary = Summary {
-        total: open.len() as u64,
+        total: Some(open.len() as u64),
         unread: open.iter().filter(|c| c.unread > 0).count() as u64,
         overdue: open
             .iter()
@@ -269,22 +323,42 @@ fn page(pane: &'static str) -> Node {
     let inbox = scene.inbox(pane);
     let me = desk.agents.first().cloned().unwrap_or_default();
     let counts = ViewCounts {
-        all: scene.summary.total,
-        mine: desk.conversations.iter().filter(|c| c.inbox == "open" && c.assignee_id == Some(me.id)).count() as u64,
-        unassigned: desk.conversations.iter().filter(|c| c.status == "open" && c.assignee_id.is_none()).count() as u64,
-        snoozed: desk.conversations.iter().filter(|c| c.inbox == "snoozed").count() as u64,
+        all: scene.summary.total.unwrap_or(0),
+        mine: desk
+            .conversations
+            .iter()
+            .filter(|c| c.inbox == "open" && c.assignee_id == Some(me.id))
+            .count() as u64,
+        unassigned: desk
+            .conversations
+            .iter()
+            .filter(|c| c.status == "open" && c.assignee_id.is_none())
+            .count() as u64,
+        snoozed: desk
+            .conversations
+            .iter()
+            .filter(|c| c.inbox == "snoozed")
+            .count() as u64,
     };
     let body = shell(&me, &desk.agents, counts, View::All)
-        .page("All open", format!("/inbox/{}", scene.thread.conversation.id))
+        .page(
+            "All open",
+            format!("/inbox/{}", scene.thread.conversation.id),
+        )
         .actions(page_actions())
         .body((inbox_split(&inbox, None), palette(&inbox), shortcuts()))
         .to_view()
         .body_node()
         .clone();
-    let list_items = format!("conversation-list-{}", navree::ui::assets::content_hash(b""));
+    let list_items = format!(
+        "conversation-list-{}",
+        navree::ui::assets::content_hash(b"")
+    );
     let thread_items = format!(
         "thread-messages-{}",
-        navree::ui::assets::content_hash(format!("conversation-{}", scene.thread.conversation.id).as_bytes())
+        navree::ui::assets::content_hash(
+            format!("conversation-{}", scene.thread.conversation.id).as_bytes()
+        )
     );
     // A customer nobody has answered writes in, at the top of the list.
     let newcomer = desk
@@ -325,12 +399,16 @@ fn page(pane: &'static str) -> Node {
     };
     Node::list((
         body,
-        el("template").attr("data-preview-replay", list_items).child(newcomer),
-        el("template").attr("data-preview-replay", thread_items.clone()).child(
-            message_item(&later, &[], NOW)
-                .attr("data-preview-into", thread_items)
-                .attr("data-preview-at", "end"),
-        ),
+        el("template")
+            .attr("data-preview-replay", list_items)
+            .child(newcomer),
+        el("template")
+            .attr("data-preview-replay", thread_items.clone())
+            .child(
+                message_item(&later, &[], NOW)
+                    .attr("data-preview-into", thread_items)
+                    .attr("data-preview-at", "end"),
+            ),
     ))
 }
 
@@ -365,7 +443,14 @@ fn long_thread() -> Node {
             since: data::day_of(NOW - 400 * 86_400),
             tags: "annual,multi-location".to_owned(),
         },
-        assignee: conversation.assignee_id.map(|id| (id, data::AGENTS[usize::try_from(id - 1).unwrap_or(0)].0.to_owned())),
+        assignee: conversation.assignee_id.map(|id| {
+            (
+                id,
+                data::AGENTS[usize::try_from(id - 1).unwrap_or(0)]
+                    .0
+                    .to_owned(),
+            )
+        }),
         conversation,
         messages: newest,
         files: Vec::new(),
@@ -392,17 +477,20 @@ fn long_thread() -> Node {
     );
     Node::list((
         body,
-        el("template").attr("data-preview-replay", thread_items.clone()).child(
-            older
-                .iter()
-                .rev()
-                .map(|m| {
-                    Node::from(
-                        message_item(m, &[], NOW).attr("data-preview-into", thread_items.clone()),
-                    )
-                })
-                .collect::<Vec<Node>>(),
-        ),
+        el("template")
+            .attr("data-preview-replay", thread_items.clone())
+            .child(
+                older
+                    .iter()
+                    .rev()
+                    .map(|m| {
+                        Node::from(
+                            message_item(m, &[], NOW)
+                                .attr("data-preview-into", thread_items.clone()),
+                        )
+                    })
+                    .collect::<Vec<Node>>(),
+            ),
     ))
 }
 
