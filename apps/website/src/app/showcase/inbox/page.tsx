@@ -210,11 +210,13 @@ function Built() {
         split
         id="built-heading"
         eyebrow="How it is built"
-        title="Server-rendered Rust, a few small modules in the browser."
+        title="Server-rendered Rust, small modules in the browser."
         lead={
           <p>
-            Every pane is drawn on the server. Four small browser modules do the rest: the split, the lazy lists, the live
-            stream and the keys. With JavaScript off, every action is a link or a form.
+            Every pane is drawn on the server. In the browser, the core runtime and {numbers.firstScreen.scripts.length - 1}{" "}
+            modules do the rest on the first screen: the split, the lazy lists, the live stream, the keys, the sidebar, the
+            select and the overlays, {kb(numbers.firstScreen.script_bytes)} of script compressed. A conversation adds the
+            menus and the date picker. With JavaScript off, every action is a link or a form.
           </p>
         }
         action={<ArrowLink href={repoTree(APP)}>Read the app&apos;s source</ArrowLink>}
@@ -248,7 +250,9 @@ function Built() {
             <p>
               <Link href="/docs/components/lazy-list/" className="link">LazyList</Link> draws the first page and asks for the
               next by the cursor of the last row: <Code>(last_at, id) &lt; (?, ?)</Code> on an index, so page 400 costs what
-              page 1 does. Past 300 rows the far end leaves the page and comes back when you scroll to it.
+              page 1 does, under a channel or priority filter too: each has an index of its own in every list. A search
+              reads the full-text index, then sorts what it found. Past 300 rows the far end leaves the page and comes back
+              when you scroll to it.
             </p>
           </ChapterHeading>
           <Checks
@@ -266,9 +270,11 @@ function Built() {
         <div className="min-w-0 xl:col-span-5">
           <ChapterHeading label="03 · Live, and checked by the server" title="New messages land where you are looking.">
             <p>
-              One server-sent event stream per page says what moved. The list asks what changed since its revision and
-              merges it: a conversation with a new message moves to the top, once. The open thread asks for messages newer
-              than its last, and what you are typing stays as it was. The clocks count down on the server.
+              One server-sent event stream per page says what moved. The list asks what changed since its revision, and
+              the server sends only those rows: a conversation with a new message moves to the top, once, and a row
+              changes where it stands, so the row you are on keeps your focus. The open thread asks for messages newer
+              than its last, and reads out what arrived. Every write takes its revision inside its own transaction, so
+              no reader can skip one. The clocks count down on the server.
             </p>
           </ChapterHeading>
           <Checks
@@ -276,7 +282,8 @@ function Built() {
               <>Assigning searches the team on the server, and the save checks the agent is one you may pick.</>,
               <>A snooze day, a status and a priority are checked again on the server, with JavaScript off too.</>,
               <>
-                <Code>j</Code>, <Code>k</Code>, <Code>e</Code>, <Code>r</Code> and <Code>/</Code> never fire while you type.
+                <Code>j</Code>, <Code>k</Code>, <Code>e</Code>, <Code>r</Code> and <Code>/</Code> never fire while you type;{" "}
+                <Code>e</Code> closes only the conversation you are in, and each agent can turn single keys off.
               </>,
             ]}
           />
@@ -301,8 +308,9 @@ function Scale() {
         lead={
           <p>
             Measured on one developer machine, release build, SQLite, Chromium. Past {numbers.flat.maxRows} rows the list
-            lets the far end go, so the page weighs the same at 2,000 conversations as at {count(numbers.flat.heldFrom)},
-            and every query reads by an index.
+            lets the far end go, so the page weighs the same at 2,000 conversations as at {count(numbers.flat.heldFrom)}.
+            Every query reads by an index that matches what it filters on, with any channel or priority filter, and the
+            suite fails a plan that walks a list.
           </p>
         }
       />
@@ -314,6 +322,7 @@ function Scale() {
             ["Scrolling to its oldest message", `${ms(numbers.oldest.ms)} · ${numbers.oldest.fetches} fetches`],
             [`Nodes, ${count(numbers.flat.heldFrom)} to ${count(numbers.flat.heldTo)} conversations scrolled`, `${count(numbers.flat.minNodes)} to ${count(numbers.flat.maxNodes)}`],
             [`JS heap, ${count(numbers.flat.heldFrom)} to ${count(numbers.flat.heldTo)} conversations scrolled`, `${mb(numbers.flat.minHeapKb)} to ${mb(numbers.flat.maxHeapKb)} MB`],
+            ["A live answer after one change", `${numbers.live.change.rows} row · ${count(numbers.live.change.bytes)} bytes`],
             ["Seeding the desk", numbers.seed],
           ].map(([label, value]) => (
             <div key={label} className="bg-ink-1 p-5">
@@ -375,6 +384,14 @@ function Run() {
           {APP}
         </a>
         .
+      </p>
+      <p className="mt-4 max-w-3xl text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
+        <strong className="font-medium text-fg-1">The example has no sign-in.</strong> A visitor works as one of the team,
+        named by a cookie the server signs, and can switch from the account menu. A real app puts the inbox behind{" "}
+        <Link href="/docs/security/authentication/" className="link">
+          navree-auth
+        </Link>{" "}
+        and checks on every route that the person may see and change the conversation it names.
       </p>
     </Section>
   );
