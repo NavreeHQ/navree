@@ -8,8 +8,9 @@
 //! six lower-case hex digits and parses to itself. A theme read from a short
 //! form or a stored theme writes the same short form or JSON back, and its
 //! stylesheet holds only the characters of names, colours, lengths, the font
-//! stacks and the two images. A builder draft reads back from its own query
-//! to the same theme.
+//! stacks and the two images. A theme's name holds no control character and
+//! nothing that reorders text, with no space at either end. A builder draft
+//! reads back from its own query to the same theme.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -29,12 +30,29 @@ fn check_theme(theme: &Theme) {
     let back = Theme::from_short_form(theme.short_form()).expect("a theme's short form reads back");
     assert_eq!(back.spec(), theme.spec());
     if let Some(url) = theme.stylesheet() {
-        assert!(url.bytes().all(|b| b.is_ascii_alphanumeric() || b"/_.-".contains(&b)), "{url}");
+        assert!(
+            url.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"/_.-".contains(&b)),
+            "{url}"
+        );
     }
     if let Some(css) = theme.css() {
         clean_css(&css);
     }
-    assert!(theme.key().bytes().all(|b| b.is_ascii_alphanumeric()), "{}", theme.key());
+    assert!(
+        theme.key().bytes().all(|b| b.is_ascii_alphanumeric()),
+        "{}",
+        theme.key()
+    );
+    // A name has no control character and nothing that reorders text, and no
+    // space at either end.
+    let name = theme.name();
+    assert_eq!(name, name.trim(), "{name:?}");
+    assert!(
+        !name.chars().any(|c| c.is_control()
+            || matches!(c, '\u{61c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')),
+        "{name:?}"
+    );
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -47,7 +65,12 @@ fuzz_target!(|data: &[u8]| {
             if let Ok(colour) = Rgb::parse(&text) {
                 let hex = colour.to_hex();
                 assert_eq!(hex.len(), 7);
-                assert!(hex.starts_with('#') && hex[1..].bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
+                assert!(
+                    hex.starts_with('#')
+                        && hex[1..]
+                            .bytes()
+                            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                );
                 assert_eq!(Rgb::parse(&hex), Ok(colour));
             }
         }

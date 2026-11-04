@@ -748,7 +748,7 @@ impl Theme {
     pub(crate) fn unchecked(id: ThemeId, name: String, spec: ThemeSpec) -> Self {
         let form = codec::to_form(&spec);
         let key = key_of(&form);
-        let name: String = name.chars().filter(|c| !c.is_control()).take(64).collect();
+        let name = codec::clean_text(&name, 64);
         Self(Repr::Custom(Arc::new(Custom {
             id,
             name,

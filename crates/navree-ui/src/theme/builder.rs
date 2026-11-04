@@ -383,12 +383,10 @@ fn encode(text: &str) -> String {
     out
 }
 
-/// At most `most` characters of `text`, with no control characters.
+/// At most `most` characters of `text`, with no control characters, nothing that
+/// reorders text and no spaces at either end.
 fn clip(text: &str, most: usize) -> String {
-    text.chars()
-        .filter(|c| !c.is_control())
-        .take(most)
-        .collect()
+    super::codec::clean_text(text, most)
 }
 
 /// The builder: the form, the preview, the contrast report and the export.

@@ -62,6 +62,12 @@ impl Rng {
             "&",
             "é",
             "\u{0}",
+            "\u{7}",
+            "\u{202e}",
+            "\u{2066}",
+            "\u{200f}",
+            "\\u202e",
+            "\\u0007",
             "\n",
             "ocean",
             "navree",
@@ -129,6 +135,47 @@ fn check_theme(theme: &Theme) {
         assert!(clean_css(&css), "{css}");
     }
     assert!(theme.key().bytes().all(|b| b.is_ascii_alphanumeric()));
+    // A name has no control character and nothing that reorders text, and no
+    // space at either end.
+    let name = theme.name();
+    assert_eq!(name, name.trim(), "{name:?}");
+    assert!(
+        !name.chars().any(|c| c.is_control()
+            || matches!(c, '\u{61c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')),
+        "{name:?}"
+    );
+}
+
+#[test]
+fn a_name_is_cleaned_before_it_is_trimmed_and_cannot_reorder_text() {
+    let spec = *Theme::OCEAN.spec();
+    let id = || ThemeId::parse("acme").unwrap();
+    let good = Theme::custom(id(), "Acme", spec).unwrap().to_json();
+    assert_eq!(good.matches(r#""Acme""#).count(), 1, "{good}");
+    let named = |name: &str| good.replace(r#""Acme""#, &format!(r#""{name}""#));
+    // A control character beyond a space is stripped first, then the space trimmed.
+    let theme = Theme::from_json(&named(r"\u0007 Acme \u0000")).unwrap();
+    assert_eq!(theme.name(), "Acme");
+    assert!(
+        Theme::from_json(&named(r"\u0007 \u0000")).is_err(),
+        "nothing left is no name"
+    );
+    // A stored theme whose name reorders text is refused.
+    for bidi in [r"\u202e", r"\u2066", r"\u200f", r"\u061c", "\u{202d}"] {
+        assert!(
+            Theme::from_json(&named(&format!("Ac{bidi}me"))).is_err(),
+            "{bidi}"
+        );
+    }
+    // A name given in code, or typed into the builder, has them dropped.
+    let theme = Theme::custom(id(), " \u{202e}Acme\u{7} ", spec).unwrap();
+    assert_eq!(theme.name(), "Acme");
+    let draft = BuilderDraft::from_query("base=ocean&id=acme&name=%E2%80%AEAc%E2%81%A6me%07%20");
+    let theme = draft.to_theme().unwrap();
+    assert_eq!(theme.name(), "Acme");
+    let rust = theme.to_rust("navree::ui");
+    assert!(rust.contains(r#""Acme""#), "{rust}");
+    assert!(!rust.contains('\u{202e}') && !rust.contains('\u{2066}'));
 }
 
 #[test]

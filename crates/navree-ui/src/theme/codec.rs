@@ -276,8 +276,12 @@ impl Theme {
                 None
             }
         };
-        let name = match text_of("name") {
-            Some(name) if !name.trim().is_empty() && name.chars().count() <= 64 => Some(name),
+        let name = match text_of("name").map(|name| (clean_text(name, usize::MAX), name)) {
+            Some((_, name)) if name.chars().any(reorders) => {
+                error("name", "A name can't hold characters that reorder text.");
+                None
+            }
+            Some((name, _)) if !name.is_empty() && name.chars().count() <= 64 => Some(name),
             Some(_) => {
                 error("name", "Give a name of 1 to 64 characters.");
                 None
@@ -378,7 +382,7 @@ impl Theme {
         let [light, dark] = palettes;
         Self::custom(
             id,
-            name.trim(),
+            name,
             ThemeSpec {
                 dark,
                 light,
@@ -445,7 +449,27 @@ fn fields(at: &str, what: &str) -> ImportError {
 
 /// A key from the file, cut short and stripped of control characters, for a message.
 fn clip(key: &str) -> String {
-    key.chars().filter(|c| !c.is_control()).take(40).collect()
+    clean_text(key, 40)
+}
+
+/// Whether `c` reorders the text around it: a bidirectional embedding,
+/// override, isolate or mark. Text holding one can show one thing and be another.
+pub(crate) fn reorders(c: char) -> bool {
+    matches!(
+        c,
+        '\u{61c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// `text` without control characters or characters that reorder text, then
+/// without spaces at either end, at most `most` characters.
+pub(crate) fn clean_text(text: &str, most: usize) -> String {
+    let kept: String = text
+        .chars()
+        .filter(|c| !c.is_control() && !reorders(*c))
+        .collect();
+    let cut: String = kept.trim().chars().take(most).collect();
+    cut.trim_end().to_owned()
 }
 
 #[cfg(test)]
