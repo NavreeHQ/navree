@@ -1188,7 +1188,9 @@ impl<T: Form> FormView<T> {
         Some(holder.flag("data-wide", field.wide))
     }
 
-    fn into_node(self) -> Node {
+    /// The fields of the form and the errors no field can show, without the `<form>`
+    /// around them: what a [`Wizard`](crate::Wizard) draws a step with.
+    pub(crate) fn fields_node(&self) -> Node {
         let boxes: Vec<Element> = T::FIELDS
             .iter()
             .filter_map(|field| self.field(field))
@@ -1205,6 +1207,55 @@ impl<T: Form> FormView<T> {
             .filter(|(name, _)| !T::FIELDS.iter().any(|field| field.name == *name))
             .map(|(_, messages)| Alert::new(AlertTone::Danger).title(messages.join(" ")))
             .collect();
+        Node::list((whole, el("div").slot(grid).child(boxes)))
+    }
+
+    /// Each field as its label and the text a person would read for its value: a
+    /// choice by its label, a switch as `yes` or `no`. Passwords and hidden fields
+    /// are left out. A field with no value has an empty text.
+    pub(crate) fn summary_rows(&self, yes: &str, no: &str) -> Vec<(String, String)> {
+        T::FIELDS
+            .iter()
+            .filter(|field| {
+                !matches!(
+                    field.widget,
+                    Widget::Input(InputKind::Hidden | InputKind::Password | InputKind::File)
+                )
+            })
+            .map(|field| {
+                let values = self.values_of(field.name);
+                let text = match field.widget {
+                    Widget::Checkbox | Widget::Switch => {
+                        let on = is_on(values.first().map(String::as_str));
+                        (if on { yes } else { no }).to_owned()
+                    }
+                    Widget::Select
+                    | Widget::Listbox
+                    | Widget::Combobox
+                    | Widget::Radio
+                    | Widget::Multi => {
+                        let choices = self.choices_of(field);
+                        values
+                            .iter()
+                            .filter(|value| !value.is_empty())
+                            .map(|value| {
+                                choices
+                                    .iter()
+                                    .find(|choice| choice.value() == value)
+                                    .map_or_else(|| value.clone(), |choice| choice.label().to_owned())
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    }
+                    _ => values.join(", "),
+                };
+                (field.label.to_owned(), text)
+            })
+            .collect()
+    }
+
+    fn into_node(self) -> Node {
+        let fields = self.fields_node();
         el("form")
             .slot("form")
             .attr("id", T::ID)
@@ -1214,8 +1265,7 @@ impl<T: Form> FormView<T> {
             .uses(Uses::CORE)
             .children((
                 self.csrf.map(csrf_field),
-                whole,
-                el("div").slot(grid).child(boxes),
+                fields,
                 el("div").slot("form-actions").children((
                     self.cancel
                         .map(|(label, href)| Button::ghost(label).href(href)),

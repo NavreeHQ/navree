@@ -30,7 +30,8 @@ pub mod prelude {
     pub use crate::components::*;
     pub use crate::dates::{Calendar, DatePicker, DateRangePicker, TimePicker};
     pub use crate::flow::{
-        Slider, SliderError, SliderLabels, SliderSpec, Step, StepState, Stepper, StepperLabels,
+        Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
+        StepState, Stepper, StepperLabels, Wizard, WizardOutcome, WizardPage, WizardStep,
     };
     pub use crate::form::{
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
@@ -84,7 +85,10 @@ pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
-pub use flow::{Slider, SliderError, SliderLabels, SliderSpec, Step, StepState, Stepper, StepperLabels};
+pub use flow::{
+    Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
+    StepState, Stepper, StepperLabels, Wizard, WizardOutcome, WizardPage, WizardStep,
+};
 pub use form::{FormView, Money, Submit};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use module::{UiModule, UiNeed, UiOnDemand};
