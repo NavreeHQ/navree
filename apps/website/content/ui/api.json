@@ -3823,6 +3823,60 @@
       }
     ]
   },
+  "Draft": {
+    "name": "Draft",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/draft.rs",
+    "summary": "A wizard in progress. It is plain data (`serde`), so an app can keep it in a database column.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "step: impl Into<String>",
+        "doc": "A new draft on `step`, with a fresh id."
+      },
+      {
+        "name": "with_id",
+        "generics": "",
+        "args": "id: impl Into<String>, step: impl Into<String>",
+        "doc": "A new draft on `step` with an id of your own, for an app that makes its ids itself or a test that needs the same one every time. The id must be one `is_draft_id` accepts, or the draft gets a fresh one."
+      }
+    ],
+    "methods": [
+      {
+        "name": "record",
+        "generics": "",
+        "args": "step: &str",
+        "doc": "The record of a step."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "step: &str, field: &str",
+        "doc": "The value posted for `field` in `step`: the first, when there are several."
+      },
+      {
+        "name": "read",
+        "generics": "<T>",
+        "args": "step: &str",
+        "doc": "A step read into the struct that is its form, with its rules run."
+      },
+      {
+        "name": "bytes",
+        "generics": "",
+        "args": "",
+        "doc": "How many bytes the draft holds."
+      },
+      {
+        "name": "reopen",
+        "generics": "",
+        "args": "",
+        "doc": "Opens a submitted draft again, for an app whose creating of the record failed after the wizard said it was done."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Drawer": {
     "name": "Drawer",
     "kind": "struct",
@@ -5742,6 +5796,36 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "MemoryDrafts": {
+    "name": "MemoryDrafts",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/draft.rs",
+    "summary": "Drafts in memory: for tests, the proof app and small apps with one process. It holds at most `capacity` drafts and forgets one that nobody touched for `ttl`. When it is full, a new draft takes the place of the one touched longest ago, so a store that has filled up never locks everyone else out; an owner at their limit of 100 drafts gives up their own oldest first. A person whose draft was forgotten finds nothing when they come back, as with a draft past its `ttl`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "capacity: usize, ttl: Duration",
+        "doc": "A store of at most `capacity` drafts that forgets them after `ttl`. One owner may hold at most 100 of them."
+      }
+    ],
+    "methods": [
+      {
+        "name": "len",
+        "generics": "",
+        "args": "",
+        "doc": "How many drafts are held now."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether none is held."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "MenuCheckbox": {
@@ -8381,6 +8465,331 @@
     ],
     "shared": []
   },
+  "Slider": {
+    "name": "Slider",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/slider.rs",
+    "summary": "A slider, single or a range.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A slider with one thumb, posting its value as `name`."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A slider with two thumbs, posting `{name}_min` and `{name}_max`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "spec",
+        "generics": "",
+        "args": "spec: SliderSpec",
+        "doc": "Sets the whole grid at once."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "min: impl Into<Decimal>",
+        "doc": "Sets the minimum."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: impl Into<Decimal>",
+        "doc": "Sets the maximum."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: impl Into<Decimal>",
+        "doc": "Sets the step. Zero or less is 1."
+      },
+      {
+        "name": "any_step",
+        "generics": "",
+        "args": "",
+        "doc": "Allows any value between the minimum and the maximum."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<Decimal>",
+        "doc": "Sets the value of a single slider. A value off the grid or outside it is moved to the nearest one the grid holds."
+      },
+      {
+        "name": "values",
+        "generics": "",
+        "args": "low: impl Into<Decimal>, high: impl Into<Decimal>",
+        "doc": "Sets the values of a range."
+      },
+      {
+        "name": "min_gap",
+        "generics": "",
+        "args": "steps: u32",
+        "doc": "The fewest steps between the two thumbs of a range."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the slider for assistive technology, when no visible label does."
+      },
+      {
+        "name": "labelled_by",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Says which element's text names the slider."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the thumb's `id` (the first thumb's, with `-min` and `-max` for a range), so a `<label for>` finds it. Without one the name makes it."
+      },
+      {
+        "name": "mark",
+        "generics": "",
+        "args": "value: impl Into<Decimal>, label: impl Into<String>",
+        "doc": "Draws a mark at `value`, with a label under it when `label` is not empty. A value outside the track is left out."
+      },
+      {
+        "name": "ticks_every",
+        "generics": "",
+        "args": "steps: u32",
+        "doc": "Draws a tick at every `steps`th step, starting at the minimum. No more than 101 are drawn: a finer grid gets fewer."
+      },
+      {
+        "name": "names",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Names the steps, from the first. The name is what assistive technology hears for that step, it is written in place of the number, and with up to twelve names each one is drawn under its step."
+      },
+      {
+        "name": "prefix",
+        "generics": "",
+        "args": "prefix: impl Into<String>",
+        "doc": "Text before the value: `$`."
+      },
+      {
+        "name": "suffix",
+        "generics": "",
+        "args": "suffix: impl Into<String>",
+        "doc": "Text after the value: `%` or ` min`."
+      },
+      {
+        "name": "hide_value",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the value written beside the slider."
+      },
+      {
+        "name": "big_step",
+        "generics": "",
+        "args": "big: impl Into<Decimal>",
+        "doc": "What Page Up, Page Down and Shift with the arrows move by. Without one it is a tenth of the track, and at least a step."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it: it posts nothing."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the value and keeps it still, but posts it: a disabled slider with the value in hidden fields."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it as holding a bad value."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: SliderLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SliderError": {
+    "name": "SliderError",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/slider.rs",
+    "summary": "Why a posted value is not one the slider allows.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Missing",
+        "doc": "Nothing was posted.",
+        "default": false
+      },
+      {
+        "name": "Duplicate",
+        "doc": "The same field came twice.",
+        "default": false
+      },
+      {
+        "name": "NotANumber",
+        "doc": "Not a plain number.",
+        "default": false
+      },
+      {
+        "name": "TooLow",
+        "doc": "Below the minimum.",
+        "default": false
+      },
+      {
+        "name": "TooHigh",
+        "doc": "Above the maximum.",
+        "default": false
+      },
+      {
+        "name": "OffStep",
+        "doc": "Between two steps.",
+        "default": false
+      },
+      {
+        "name": "LowAboveHigh",
+        "doc": "A range whose lower value is above its upper.",
+        "default": false
+      },
+      {
+        "name": "TooClose",
+        "doc": "A range whose thumbs are closer than the gap allows.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "SliderLabels": {
+    "name": "SliderLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/slider.rs",
+    "summary": "The words a slider uses. English by default. `{min}`, `{max}`, `{step}` and `{gap}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "SliderSpec": {
+    "name": "SliderSpec",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/slider.rs",
+    "summary": "The grid of values a slider allows: the minimum, the maximum and the step. The browser draws it and the server holds a post to it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "min: impl Into<Decimal>, max: impl Into<Decimal>",
+        "doc": "A grid from `min` to `max` in steps of 1. A maximum below the minimum swaps them."
+      }
+    ],
+    "methods": [
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: impl Into<Decimal>",
+        "doc": "Sets the step. A step of zero or less is 1, as in HTML."
+      },
+      {
+        "name": "any_step",
+        "generics": "",
+        "args": "",
+        "doc": "Allows any value between the minimum and the maximum."
+      },
+      {
+        "name": "min_gap",
+        "generics": "",
+        "args": "steps: u32",
+        "doc": "The fewest steps between the two values of a range."
+      },
+      {
+        "name": "minimum",
+        "generics": "",
+        "args": "",
+        "doc": "The minimum."
+      },
+      {
+        "name": "maximum",
+        "generics": "",
+        "args": "",
+        "doc": "The maximum."
+      },
+      {
+        "name": "step_size",
+        "generics": "",
+        "args": "",
+        "doc": "The step, or `None` for any value."
+      },
+      {
+        "name": "top",
+        "generics": "",
+        "args": "",
+        "doc": "The greatest value the grid holds: the maximum, or the last step below it."
+      },
+      {
+        "name": "snap",
+        "generics": "",
+        "args": "value: Decimal",
+        "doc": "The nearest value on the grid to `value`."
+      },
+      {
+        "name": "allows",
+        "generics": "",
+        "args": "value: Decimal",
+        "doc": "Whether `value` is on the grid."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads one value from text and holds it to the grid. The text is read as a browser writes a number (`Decimal::from_browser`): a slider that takes any value posts a long fraction, which is rounded to nine places, and a very small step posts an exponent (`1e-7`)."
+      },
+      {
+        "name": "check_range",
+        "generics": "",
+        "args": "low: &str, high: &str",
+        "doc": "Reads the two values of a range and holds them to the grid and the gap."
+      },
+      {
+        "name": "read",
+        "generics": "",
+        "args": "pairs: &[(String, String)], name: &str",
+        "doc": "The value posted as `name` in a form's pairs. Two of the same name are an error, not a choice."
+      },
+      {
+        "name": "read_range",
+        "generics": "",
+        "args": "pairs: &[(String, String)], name: &str",
+        "doc": "The range posted as `{name}_min` and `{name}_max`."
+      },
+      {
+        "name": "message",
+        "generics": "",
+        "args": "error: SliderError, labels: &SliderLabels",
+        "doc": "The error in words, with the grid's numbers in them."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Spinner": {
     "name": "Spinner",
     "kind": "struct",
@@ -8815,6 +9224,173 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Step": {
+    "name": "Step",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "One step of a `Stepper`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A step named `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "optional",
+        "generics": "",
+        "args": "",
+        "doc": "Marks it as a step that may be skipped."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: icons::Icon",
+        "doc": "Draws an icon in the indicator in place of the number."
+      },
+      {
+        "name": "state",
+        "generics": "",
+        "args": "state: StepState",
+        "doc": "Sets the state. Without one the stepper works it out from `Stepper::current`."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the step a link to `href`."
+      },
+      {
+        "name": "submit",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<String>",
+        "doc": "Makes the step a submit button of the form it stands in, posting `name=value` and skipping the browser's own checks: a wizard saves what was typed and moves, whether or not it is valid yet."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "StepState": {
+    "name": "StepState",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "Where a step stands.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The state as the stylesheet names it."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Upcoming",
+        "doc": "Not reached yet, but it can be.",
+        "default": true
+      },
+      {
+        "name": "Current",
+        "doc": "The step the person is on.",
+        "default": false
+      },
+      {
+        "name": "Done",
+        "doc": "Finished and valid.",
+        "default": false
+      },
+      {
+        "name": "Error",
+        "doc": "Needs attention: something in it is wrong.",
+        "default": false
+      },
+      {
+        "name": "Disabled",
+        "doc": "Can't be reached yet.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Stepper": {
+    "name": "Stepper",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "The steps of a task, in order.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "A stepper whose list is named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: Step",
+        "doc": "Adds a step."
+      },
+      {
+        "name": "steps",
+        "generics": "",
+        "args": "steps: impl IntoIterator<Item = Step>",
+        "doc": "Adds steps."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "index: usize",
+        "doc": "The step the person is on, counting from 0. A step with no state of its own before it is done, after it is upcoming. An index past the end is the last step."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the steps, with their descriptions beside the indicators."
+      },
+      {
+        "name": "no_count",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the \"Step 2 of 5\" line a horizontal stepper writes at a narrow width."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StepperLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<crate::node::AttrValue>",
+        "doc": "Sets the list's `id`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "StepperLabels": {
+    "name": "StepperLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/stepper.rs",
+    "summary": "The words a stepper writes for assistive technology and for a narrow screen. English by default; give your own for another language. `{n}` and `{total}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
     "shared": []
   },
   "Switch": {
@@ -10814,6 +11390,202 @@
     ],
     "shared": []
   },
+  "Toolbar": {
+    "name": "Toolbar",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/toolbar.rs",
+    "summary": "A toolbar.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A toolbar named `label` for assistive technology. `id` names its overflow menu, and must be unique on the page."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: ToolbarItem",
+        "doc": "Adds a tool."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = ToolbarItem>",
+        "doc": "Adds tools."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the tools. A vertical toolbar uses the up and down arrows and has no overflow menu."
+      },
+      {
+        "name": "no_loop",
+        "generics": "",
+        "args": "",
+        "doc": "Stops the arrow keys at the first and last tool, where they would go round."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size of the buttons."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ToolbarLabels",
+        "doc": "Sets the words."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ToolbarItem": {
+    "name": "ToolbarItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/toolbar.rs",
+    "summary": "One tool of a `Toolbar`.",
+    "constructors": [
+      {
+        "name": "button",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button with a label."
+      },
+      {
+        "name": "icon_button",
+        "generics": "",
+        "args": "glyph: Icon, label: impl Into<String>",
+        "doc": "A button that is only an icon. It must say what it is, so the accessible label is required."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A link to `href`."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A button that posts to `href` through the page's one post form, which carries the session's token. It works with no script."
+      },
+      {
+        "name": "toggle",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<Node>",
+        "doc": "A button that is on or off, posting `name` when it is on."
+      },
+      {
+        "name": "icon_toggle",
+        "generics": "",
+        "args": "name: impl Into<String>, glyph: Icon, label: impl Into<String>",
+        "doc": "A toggle that is only an icon, with the accessible label it needs."
+      },
+      {
+        "name": "radios",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<String>",
+        "doc": "A set of buttons of which one is on, posting its value as `name`. `label` names the set. Add the choices with `option`."
+      },
+      {
+        "name": "menu",
+        "generics": "",
+        "args": "label: impl Into<Node>, menu: DropdownMenu",
+        "doc": "A menu button. `label` is what the entry reads in the overflow menu; the button is the menu's own."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "A line between tools."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "label: impl Into<String>, items: impl IntoIterator<Item = ToolbarItem>",
+        "doc": "Tools in a group named `label`. A group inside a group is flattened."
+      }
+    ],
+    "methods": [
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<Node>",
+        "doc": "Adds a choice to a set made with `radios`."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "The choice that is on in a set of radios."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon before the label."
+      },
+      {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: ButtonVariant",
+        "doc": "Sets the look of a button."
+      },
+      {
+        "name": "on_click",
+        "generics": "",
+        "args": "commands: impl Into<Commands>",
+        "doc": "Runs commands in the browser when a button is pressed."
+      },
+      {
+        "name": "opens_dialog",
+        "generics": "",
+        "args": "dialog: impl Into<String>",
+        "doc": "Opens the `<dialog>` with this id when a button is pressed."
+      },
+      {
+        "name": "pressed",
+        "generics": "",
+        "args": "pressed: bool",
+        "doc": "Turns a toggle on."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Marks a link as the page the person is on."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables the tool."
+      },
+      {
+        "name": "keep",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the tool in the bar however narrow it gets: it is the last to move into the overflow menu, or never does."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ToolbarLabels": {
+    "name": "ToolbarLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/toolbar.rs",
+    "summary": "The words a toolbar writes. English by default.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "Tooltip": {
     "name": "Tooltip",
     "kind": "struct",
@@ -10863,6 +11635,310 @@
       }
     ]
   },
+  "Tree": {
+    "name": "Tree",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "A tree.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<String>",
+        "doc": "A tree whose chosen nodes post as `name`, named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the root's `id`."
+      },
+      {
+        "name": "select",
+        "generics": "",
+        "args": "select: TreeSelect",
+        "doc": "What choosing does."
+      },
+      {
+        "name": "cascade",
+        "generics": "",
+        "args": "",
+        "doc": "Makes a choice in a branch reach everything under it, and a branch half chosen show as such."
+      },
+      {
+        "name": "node",
+        "generics": "",
+        "args": "node: TreeNode",
+        "doc": "Adds a top-level node."
+      },
+      {
+        "name": "nodes",
+        "generics": "",
+        "args": "nodes: impl IntoIterator<Item = TreeNode>",
+        "doc": "Adds top-level nodes."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "total: usize",
+        "doc": "How many top-level nodes there are in all, when only some are drawn."
+      },
+      {
+        "name": "more",
+        "generics": "",
+        "args": "href: impl Into<Href>, remaining: Option<usize>",
+        "doc": "Ends the top-level list with a \"Show more\" row."
+      },
+      {
+        "name": "state",
+        "generics": "",
+        "args": "state: TreeState",
+        "doc": "Keeps the open branches in the address, so each caret is a link."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: TreeLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "children",
+        "generics": "",
+        "args": "level: u32, offset: usize, total: Option<usize>, nodes: impl IntoIterator<Item = TreeNode>, more: Option<(Href, Option<usize>)>",
+        "doc": "The children of a node, as the tree draws them: what a lazy branch's address and a \"Show more\" link answer. `level` is the depth of the children (the top level is 1), `offset` how many siblings came before them, and `total` how many there are in all. Build it from the same tree as the page's."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TreeChildren": {
+    "name": "TreeChildren",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "A branch's children, as the server answers when it opens or asks for the next page: the list items, with nothing around them.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "TreeLabels": {
+    "name": "TreeLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "The words a tree writes. English by default; `{label}` and `{n}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "TreeNode": {
+    "name": "TreeNode",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "One node of a `Tree`.",
+    "constructors": [
+      {
+        "name": "leaf",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>",
+        "doc": "A node with no children. `id` is what it posts and what an address calls it, and must be unique in the tree; one longer than 256 bytes is cut."
+      },
+      {
+        "name": "branch",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>, children: impl IntoIterator<Item = TreeNode>",
+        "doc": "A node with its children drawn now."
+      },
+      {
+        "name": "lazy",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>, src: impl Into<Href>",
+        "doc": "A node whose children are fetched from `src` when it opens. The answer is a `TreeChildren`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Draws an icon before the label."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the label a link. (In a tree that chooses, the label is the choice.)"
+      },
+      {
+        "name": "open",
+        "generics": "",
+        "args": "open: bool",
+        "doc": "Opens the branch."
+      },
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "selected: bool",
+        "doc": "Chooses the node."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Marks the link as the page the person is on."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables the choice."
+      },
+      {
+        "name": "children_total",
+        "generics": "",
+        "args": "total: usize",
+        "doc": "How many children the node has in all, when only some are drawn: the browser's accessibility tree is told, so a long list reads as long."
+      },
+      {
+        "name": "more",
+        "generics": "",
+        "args": "href: impl Into<Href>, remaining: Option<usize>",
+        "doc": "Ends the drawn children with a \"Show more\" row that links to `href`, the next page of them. `remaining`, when known, is written in it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TreeSelect": {
+    "name": "TreeSelect",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "What choosing in a tree does.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "None",
+        "doc": "Nothing is chosen: a tree of links, or of things to open.",
+        "default": true
+      },
+      {
+        "name": "Single",
+        "doc": "One node, on a radio: it posts as the tree's name.",
+        "default": false
+      },
+      {
+        "name": "Multiple",
+        "doc": "Any nodes, on checkboxes: each posts as the tree's name.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "TreeSelection": {
+    "name": "TreeSelection",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "The nodes a tree posted: ids, without duplicates, in the order sent.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "pairs: &[(String, String)], name: &str",
+        "doc": "Reads every value posted as `name`. Empty ones are dropped."
+      },
+      {
+        "name": "one",
+        "generics": "",
+        "args": "pairs: &[(String, String)], name: &str",
+        "doc": "The one node a single-choice tree posted, or none."
+      }
+    ],
+    "methods": [
+      {
+        "name": "ids",
+        "generics": "",
+        "args": "",
+        "doc": "The ids."
+      },
+      {
+        "name": "contains",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "Whether `id` was posted."
+      },
+      {
+        "name": "len",
+        "generics": "",
+        "args": "",
+        "doc": "How many were posted."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether none was."
+      },
+      {
+        "name": "first_unknown",
+        "generics": "",
+        "args": "known: impl Fn(&str) -> bool",
+        "doc": "The first id that `known` doesn't know: a post names nodes by what the browser sends, and the server holds each to the tree it has."
+      },
+      {
+        "name": "roots",
+        "generics": "",
+        "args": "parent: impl Fn(&str) -> Option<String>",
+        "doc": "The chosen nodes none of whose ancestors is chosen too: what a tree with cascading choices means, since a chosen branch stands for everything under it. `parent` gives a node's parent; a chain of more than 1,000 parents is cut."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TreeState": {
+    "name": "TreeState",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/tree.rs",
+    "summary": "Which branches are open, kept in the address as repeated `open` fields. The caret of each branch is a link that toggles it there, so a tree opens with no script, and the app draws the children of the branches that are open.",
+    "constructors": [
+      {
+        "name": "from_query",
+        "generics": "",
+        "args": "path: impl Into<String>, query: &str",
+        "doc": "Reads the open branches from a query string. Other fields of the query stay in the links, within limits: every caret repeats them, so at most 200 open branches of 256 bytes each and 2 KiB in all are kept, and at most 20 other fields and 1 KiB of them; what does not fit is left out of the links."
+      }
+    ],
+    "methods": [
+      {
+        "name": "param",
+        "generics": "",
+        "args": "name: impl Into<String>, query: &str",
+        "doc": "Names the field the open branches are kept in (`open` by default). Call it before reading: it re-reads `query`."
+      },
+      {
+        "name": "is_open",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "Whether the branch `id` is open."
+      },
+      {
+        "name": "open_ids",
+        "generics": "",
+        "args": "",
+        "doc": "The open branches."
+      },
+      {
+        "name": "toggled",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The address with `id` opened, or closed if it was open."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "UserMenu": {
     "name": "UserMenu",
     "kind": "struct",
@@ -10888,6 +11964,308 @@
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
         "doc": "Adds a button that posts to `href`: signing out, switching workspace. It works with JavaScript off, carrying the session's token as a field when there is one."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Wizard": {
+    "name": "Wizard",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "A form in steps.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A wizard with no steps. `id` names it in the page and tells two wizards on one page apart."
+      }
+    ],
+    "methods": [
+      {
+        "name": "base",
+        "generics": "",
+        "args": "base: impl Into<String>",
+        "doc": "Sets where the wizard's pages are: a step is at `{base}/{draft id}/{step id}`."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: impl Into<WizardStep>",
+        "doc": "Adds a step. A step whose id another has gets a number added to it, and the id `review` is taken by the review step. At most 100 steps are kept."
+      },
+      {
+        "name": "review",
+        "generics": "",
+        "args": "",
+        "doc": "Ends with a review: every step's answers as text, each with a button that opens that step, and the Finish button."
+      },
+      {
+        "name": "free",
+        "generics": "",
+        "args": "",
+        "doc": "Lets the steps be done in any order. The last step still checks them all."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the stepper on the side."
+      },
+      {
+        "name": "no_leave",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the Save and leave button."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: WizardLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "stepper_labels",
+        "generics": "",
+        "args": "labels: StepperLabels",
+        "doc": "Sets the words of the stepper."
+      },
+      {
+        "name": "url",
+        "generics": "",
+        "args": "draft_id: &str, step_id: &str",
+        "doc": "The address of a step of a draft."
+      },
+      {
+        "name": "start",
+        "generics": "",
+        "args": "",
+        "doc": "A new draft on the first step."
+      },
+      {
+        "name": "draft",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A new draft on the first step with an id of your own (see `Draft::with_id`)."
+      },
+      {
+        "name": "len",
+        "generics": "",
+        "args": "",
+        "doc": "How many steps there are, the review included."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether there are none."
+      },
+      {
+        "name": "entry",
+        "generics": "",
+        "args": "draft: &Draft",
+        "doc": "The step to open for a draft: where the person was, if it can be reached, else the last step that can."
+      },
+      {
+        "name": "states",
+        "generics": "",
+        "args": "draft: &Draft, current: &str",
+        "doc": "The state of every step, the way the stepper shows them, with `current` the open one."
+      },
+      {
+        "name": "submit",
+        "generics": "",
+        "args": "draft: &mut Draft, step_id: &str, pairs: &Pairs",
+        "doc": "What a post meant. Changes `draft` as it says; save it when `WizardOutcome::changed`."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "draft: &Draft, step_id: &str",
+        "doc": "A page for a step of a draft. The step must be one the draft can reach."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "WizardAction": {
+    "name": "WizardAction",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "What a post to a wizard asks for: the value of its `_wizard` field.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads a `_wizard` field. Anything else is `None`."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Next",
+        "doc": "Check this step and open the next.",
+        "default": false
+      },
+      {
+        "name": "Back",
+        "doc": "Keep what was typed and open the step before.",
+        "default": false
+      },
+      {
+        "name": "Save",
+        "doc": "Keep what was typed and leave; the draft waits.",
+        "default": false
+      },
+      {
+        "name": "Finish",
+        "doc": "Check every step and finish.",
+        "default": false
+      },
+      {
+        "name": "Goto",
+        "doc": "Keep what was typed and open the step with this id.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "WizardLabels": {
+    "name": "WizardLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "The words a wizard writes. English by default.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "WizardOutcome": {
+    "name": "WizardOutcome",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "What a post meant, once the wizard has changed the draft.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "changed",
+        "generics": "",
+        "args": "",
+        "doc": "Whether the draft changed, so it must be saved."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Go",
+        "doc": "Open this step.",
+        "default": false
+      },
+      {
+        "name": "Invalid",
+        "doc": "A step has something to fix: open it, and its errors are there.",
+        "default": false
+      },
+      {
+        "name": "Left",
+        "doc": "Saved; the person is leaving.",
+        "default": false
+      },
+      {
+        "name": "Done",
+        "doc": "Every step is valid and the draft is submitted. Create what the wizard was for, then discard the draft.",
+        "default": false
+      },
+      {
+        "name": "Stale",
+        "doc": "The form was drawn from an older revision: another window changed the draft. Nothing was changed. Draw the draft as it is, with a notice.",
+        "default": false
+      },
+      {
+        "name": "Refused",
+        "doc": "Nothing was changed.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "WizardPage": {
+    "name": "WizardPage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "A step of a wizard, ready to draw.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's token in the form, for a post with JavaScript off."
+      },
+      {
+        "name": "notice",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Shows a notice above the step."
+      },
+      {
+        "name": "stale",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the wizard's notice for a draft changed elsewhere (a `WizardOutcome::Stale`)."
+      },
+      {
+        "name": "title_text",
+        "generics": "",
+        "args": "",
+        "doc": "The step's title as text, for the page's `<title>`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "WizardStep": {
+    "name": "WizardStep",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "One step of a `Wizard`. Make one with `WizardStep::of`.",
+    "constructors": [
+      {
+        "name": "of",
+        "generics": "<T>",
+        "args": "id: impl Into<String>, title: impl Into<Node>",
+        "doc": "A step whose fields and rules are the struct `T`'s."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "WizardStepOf": {
+    "name": "WizardStepOf",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flow/wizard.rs",
+    "summary": "A step being described: the form it is, and how it is shown. Turns into a `WizardStep` where a wizard takes one.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "A line under the step's title."
+      },
+      {
+        "name": "optional",
+        "generics": "",
+        "args": "",
+        "doc": "Lets the step be skipped: it needn't be visited, but if it holds an answer, however the person left it (Next, Back, the stepper or Save), the answer must be valid."
+      },
+      {
+        "name": "form",
+        "generics": "",
+        "args": "shape: impl Fn(FormView<T>) -> FormView<T> + Send + Sync + 'static",
+        "doc": "Shapes the step's form: its choices from the database, the dates' locale and the like."
       }
     ],
     "variants": [],
