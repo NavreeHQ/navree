@@ -38,8 +38,16 @@ pub struct Summary {
 }
 
 /// The heading and the filters. The filters are a form that works without script;
-/// with it, typing narrows the list in place, and the address follows.
-pub fn list_header(filters: &Filters, path: &str) -> Node {
+/// with it, typing narrows the list in place, and the address follows. `/` finds the
+/// search, unless the agent turned single keys off (`keys`).
+pub fn list_header(filters: &Filters, path: &str, keys: bool) -> Node {
+    let mut search = Input::search("q")
+        .value(filters.q.clone())
+        .placeholder("Search subject, name or company")
+        .attr("aria-label", "Search conversations");
+    if keys {
+        search = search.hotkey("/");
+    }
     let channels = std::iter::once(OptionItem::new("", "All channels")).chain(
         Channel::ALL
             .iter()
@@ -68,11 +76,7 @@ pub fn list_header(filters: &Filters, path: &str) -> Node {
                             .attr("value", filters.view.key())
                     }),
                     Stack::gap(2).children((
-                        Input::search("q")
-                            .value(filters.q.clone())
-                            .placeholder("Search subject, name or company")
-                            .attr("aria-label", "Search conversations")
-                            .hotkey("/"),
+                        search,
                         Grid::cols(2).gap(2).children((
                             NativeSelect::new("channel")
                                 .options(channels)
@@ -90,6 +94,27 @@ pub fn list_header(filters: &Filters, path: &str) -> Node {
         .into()
 }
 
+/// How a clock stands, as a row marks it: `overdue`, `soon` or `running`.
+pub fn sla_state(sla: Sla) -> &'static str {
+    if sla.breached() {
+        "overdue"
+    } else if sla.at_risk() {
+        "soon"
+    } else {
+        "running"
+    }
+}
+
+/// What a row draws that moves with the clock alone: how long ago it last moved, and
+/// the time left to answer with its state. A live list sends a row again when this
+/// reads differently than when the server last drew it.
+pub fn timed(conversation: &Conversation, now: i64) -> (String, Option<(String, &'static str)>) {
+    (
+        ago(conversation.last_at, now),
+        Sla::of(conversation, now).map(|sla| (sla.text(), sla_state(sla))),
+    )
+}
+
 /// The badges under a row: how urgent, the clock, where it stands, what is new, and
 /// whose it is.
 fn badges(row: &ListRow, now: i64) -> Vec<Node> {
@@ -105,18 +130,11 @@ fn badges(row: &ListRow, now: i64) -> Vec<Node> {
         );
     }
     if let Some(sla) = Sla::of(conversation, now) {
-        let state = if sla.breached() {
-            "overdue"
-        } else if sla.at_risk() {
-            "soon"
-        } else {
-            "running"
-        };
         out.push(
             Badge::new(sla.text())
                 .tone(sla.tone())
                 .icon(icons::CLOCK)
-                .attr("data-sla", state)
+                .attr("data-sla", sla_state(sla))
                 .into(),
         );
     }
@@ -196,7 +214,8 @@ pub fn summary_line(summary: Summary, filters: &Filters) -> Node {
     Text::muted(text).into()
 }
 
-/// The count in its region: drawn again when the desk moves.
+/// The count in its region: drawn again when the desk moves, and read out politely
+/// when it changes.
 pub fn summary_region(summary: Summary, filters: &Filters, stream: &str) -> Region {
     let query = filters.query();
     let src = if query.is_empty() {
@@ -208,7 +227,13 @@ pub fn summary_region(summary: Summary, filters: &Filters, stream: &str) -> Regi
         .src(src)
         .live_from(stream.to_owned())
         .live_event("conversations")
-        .children(summary_line(summary, filters))
+        .children(
+            el("div")
+                .attr("role", "status")
+                .attr("aria-live", "polite")
+                .attr("aria-atomic", "true")
+                .child(summary_line(summary, filters)),
+        )
 }
 
 /// Where a list's rows come from: the same filters, as the view.
@@ -222,12 +247,13 @@ pub fn rows_src(filters: &Filters) -> String {
 }
 
 /// A page of the list, for its first draw: the rows, whether more come after, whether
-/// this page starts somewhere down the list (with JavaScript off), and the revision.
+/// this page starts somewhere down the list (with JavaScript off), and where a live ask
+/// starts from (a [`Since`](crate::queries::Since), as text).
 pub struct ListPage<'a> {
     pub rows: &'a [ListRow],
     pub more_after: bool,
     pub more_before: bool,
-    pub since: i64,
+    pub since: String,
 }
 
 /// The list: lazy, live, and kept as the agent left it while they open conversations.
@@ -254,7 +280,7 @@ pub fn list_lazy(
                 .iter()
                 .map(|row| conversation_item(row, filters, open, now, None)),
         )
-        .since(page.since.to_string())
+        .since(page.since.clone())
         .live_from(stream.to_owned(), Some("conversations"), LazyEnd::Start)
         .max(300)
         .labels(LazyLabels {

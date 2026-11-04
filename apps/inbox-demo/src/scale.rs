@@ -437,7 +437,7 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
          p AS (SELECT i, a, CASE a % 4 {plans} END AS plan, 3 + (a / 5) % 40 AS months FROM h)
          INSERT INTO customers (id, name, email, phone, company, role, plan, lifetime_paise, seats, country, city, since, tags)
          SELECT {FIRST_CUSTOMER} + p.i, s.first || ' ' || s.last, s.address || p.i || '@example.org',
-                '+91 98765 4' || printf('%04d', ({FIRST_CUSTOMER} + p.i) % 10000),
+                '+91 55555 ' || printf('%05d', ({FIRST_CUSTOMER} + p.i) % 100000),
                 c.name, CASE p.a % 3 WHEN 0 THEN 'Owner' WHEN 1 THEN 'Front desk lead' ELSE 'Practice manager' END,
                 p.plan,
                 (CASE p.plan {seat_paise} END) * (2 + p.a % 20) * p.months,
@@ -673,8 +673,17 @@ pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::da
 
 /// The indexes every query of the app reads by, and the search index, built once the
 /// rows are in. Then the planner's statistics.
-pub const INDEXES: [&str; 13] = [
+///
+/// A list reads one view, newest first, by the view's index. The channel and priority
+/// filters have indexes of their own under each list (`inbox`), alone and together, so a
+/// filter that matches little reads only what it matches instead of walking the list.
+/// "Mine" and "Unassigned" read by the agent and by the open, unassigned conversations:
+/// sets of a few hundred, which a filter narrows as it reads them.
+pub const INDEXES: [&str; 16] = [
     "CREATE INDEX IF NOT EXISTS conversations_inbox ON conversations (inbox, last_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS conversations_channel ON conversations (inbox, channel, last_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS conversations_priority ON conversations (inbox, priority, last_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS conversations_channel_priority ON conversations (inbox, channel, priority, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_mine ON conversations (assignee_id, inbox, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_unassigned ON conversations (status, assignee_id, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_rev ON conversations (rev)",

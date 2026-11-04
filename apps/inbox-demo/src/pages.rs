@@ -4,28 +4,37 @@
 //! | Route | Answers |
 //! |---|---|
 //! | `GET /inbox` | the panes with no conversation open; the view and filters in the URL |
-//! | `GET /inbox/{id}` | the panes with a conversation open (`?pane=customer` or `conversations` for phones) |
-//! | `GET /inbox/fragments/list`, `/inbox/{id}/fragments/{head,messages,customer}` | what the live parts fetch |
+//! | `GET /inbox/{id}` | the panes with a conversation open (`?pane=customer` or `conversations` for phones); it changes nothing |
+//! | `GET /inbox/rows`, `/inbox/{id}/messages` | the list's and the thread's pages, and what changed since a revision |
+//! | `GET /inbox/fragments/{summary,views}`, `/inbox/{id}/fragments/{head,customer}` | what the live parts fetch |
 //! | `GET /inbox/events` | the server-sent event stream for one page |
 //! | `POST /inbox/{id}/reply` | a reply or a note, or a saved reply put in the composer |
 //! | `POST /inbox/{id}/assign`, `/assign/me`; `GET /inbox/{id}/assign` | assigning, and the page that does it with no script |
 //! | `POST /inbox/{id}/status/{status}`, `/priority/{priority}`, `/snooze`, `/snooze/{preset}` | the rest of what an agent does |
 //! | `GET /inbox/agents/options` | the team, searched, for the assign combobox |
+//! | `POST /inbox/{id}/seen` | the agent saw what is new: marks the conversation read |
 //! | `POST /inbox/panes` | the sizes of the agent's panes |
+//! | `POST /inbox/keys` | single-key shortcuts on or off, for the agent |
 //! | `GET /inbox/{id}/files/{file}` | a file sent with a message |
 //! | `POST /as/{agent}` | work as someone else on the team |
+//!
+//! **There is no sign-in.** A visitor works as one of the team, named by a cookie the
+//! server signs, and can switch from the account menu. The signature only stops a
+//! visitor naming someone they didn't choose here; it is no sign-in. A real app puts
+//! the inbox behind navree-auth, and checks on every route that the person may see and
+//! change the conversation it names.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, COOKIE, REFERER, SET_COOKIE};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
-use navree::db::{Db, Uow};
+use navree::db::{Db, Executor as DbExecutor, Uow};
 use navree::http::extract::{Json, Path, Query};
 use navree::http::response::{IntoResponse, Response};
-use navree::http::{AppError, Controller, RouteDef};
+use navree::http::{AppError, Controller, RouteDef, UrlSigner};
 use navree::orm::{Executor, Filter, Model as _};
 use navree::prelude::*;
 use navree::ui::form::{FieldErrors, Rejected};
@@ -37,19 +46,19 @@ use crate::data::{
     Agent, Attachment, Author, Conversation, Customer, CustomerEvent, DEFAULT_AGENT, EventKind,
     Layout, Message, Priority, Status, day_of, inbox_of, preview_of, saved,
 };
-use crate::live::{Change, Happening, Hub, now};
-use crate::queries;
+use crate::live::{Change, Happening, Hub, current_rev, next_rev, now, plus_one};
+use crate::queries::{self, Since};
 use crate::views::customer::CUSTOMER;
 use crate::views::inbox::{
-    Inbox, OpenThread, SPLIT, assign_page, customer_region, head_region, inbox_split, layout,
-    page_actions, palette, shortcuts,
+    Inbox, KeysForm, OpenThread, SPLIT, assign_page, customer_region, head_region, inbox_split,
+    layout, page_actions, page_title, palette, shortcuts, stream_url,
 };
 use crate::views::list::{LIST, ListPage, conversation_item, summary_region};
 use crate::views::thread::{
     ActForm, AssignForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
     SnoozeForm, composer, message_item,
 };
-use crate::views::{Filters, View, ViewCounts, shell};
+use crate::views::{Filters, View, ViewCounts, shell, views_src};
 
 /// The cookie that says which agent a visitor works as.
 const AGENT_COOKIE: &str = "inbox_agent";
@@ -64,6 +73,7 @@ pub struct Pages {
     hub: Arc<Hub>,
     settings: Arc<Settings>,
     db: Arc<Db>,
+    signer: Arc<UrlSigner>,
 }
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -209,6 +219,29 @@ fn fragment(title: &'static str, body: impl IntoNodes) -> navree::ui::View {
     navree::ui::View::new(title).body(body)
 }
 
+/// The desk's next revision, inside the request's unit of work (see [`crate::live`]).
+async fn revision(uow: &Uow) -> Result<i64> {
+    next_rev(uow)
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))
+}
+
+/// Where an action taken on a page goes back to: that page, when it is one of the
+/// inbox's, else the inbox.
+fn back_to(headers: &HeaderMap) -> String {
+    let Some(referer) = headers.get(REFERER).and_then(|value| value.to_str().ok()) else {
+        return "/inbox".to_owned();
+    };
+    let rest = referer.split_once("://").map_or(referer, |(_, rest)| rest);
+    let path = rest.find('/').map_or("/", |at| &rest[at..]);
+    let path = path.split('#').next().unwrap_or("/");
+    if path.starts_with("/inbox") {
+        path.to_owned()
+    } else {
+        "/inbox".to_owned()
+    }
+}
+
 /// A response the browser keeps no copy of.
 fn no_store(mut response: Response) -> Response {
     response
@@ -217,10 +250,56 @@ fn no_store(mut response: Response) -> Response {
     response
 }
 
-/// The agent a visitor works as: the cookie's, if they are on the team, or the default.
-async fn who(uow: &(impl Executor + ?Sized), headers: &HeaderMap) -> Result<Agent> {
+/// The cookie's value that says a visitor works as `agent`, signed with the app's key and
+/// good for a year: `7.1825329600.<signature>`. The signature is the app's own
+/// [`UrlSigner`]'s, over `/as/7` and the expiry.
+pub fn agent_cookie(signer: &UrlSigner, agent: i64, now: DateTime<Utc>) -> String {
+    let signed = signer.sign(&format!("/as/{agent}"), now + chrono::Duration::days(365));
+    let query = signed.split_once('?').map_or("", |(_, query)| query);
+    let mut expires = "";
+    let mut signature = "";
+    for pair in query.split('&') {
+        match pair.split_once('=') {
+            Some(("expires", value)) => expires = value,
+            Some(("signature", value)) => signature = value,
+            _ => {}
+        }
+    }
+    format!("{agent}.{expires}.{signature}")
+}
+
+/// The agent a signed cookie's value names, if the app signed it and it hasn't expired at
+/// `now`: anything else names nobody.
+pub fn agent_of_cookie(signer: &UrlSigner, value: &str, now: DateTime<Utc>) -> Option<i64> {
+    let mut parts = value.splitn(3, '.');
+    let (agent, expires, signature) = (parts.next()?, parts.next()?, parts.next()?);
+    let digits = |text: &str| {
+        !text.is_empty() && text.len() <= 18 && text.bytes().all(|b| b.is_ascii_digit())
+    };
+    if !digits(agent)
+        || !digits(expires)
+        || signature.is_empty()
+        || signature.len() > 128
+        || !signature.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return None;
+    }
+    let agent: i64 = agent.parse().ok()?;
+    let uri: http::Uri = format!("/as/{agent}?expires={expires}&signature={signature}")
+        .parse()
+        .ok()?;
+    signer.verify(&uri, now).then_some(agent)
+}
+
+/// The agent a visitor works as: the one their signed cookie names, if they are on the
+/// team, or the default. An unsigned or forged cookie names nobody.
+async fn who(
+    uow: &(impl Executor + ?Sized),
+    signer: &UrlSigner,
+    headers: &HeaderMap,
+) -> Result<Agent> {
     let wanted = cookie(headers, AGENT_COOKIE)
-        .and_then(|value| value.parse::<i64>().ok())
+        .and_then(|value| agent_of_cookie(signer, value, Utc::now()))
         .unwrap_or(DEFAULT_AGENT);
     if let Some(agent) = Agent::query()
         .where_(Agent::ACTIVE.eq(true))
@@ -347,7 +426,7 @@ async fn saved_sizes(uow: &(impl Executor + ?Sized), me: i64) -> Result<Option<S
 }
 
 /// What the page needs to draw a conversation's heading.
-fn open_of<'a>(thread: &'a OpenThread, filters: &'a Filters) -> Open<'a> {
+fn open_of<'a>(thread: &'a OpenThread, filters: &'a Filters, keys: bool) -> Open<'a> {
     Open {
         conversation: &thread.conversation,
         customer: &thread.customer,
@@ -356,13 +435,15 @@ fn open_of<'a>(thread: &'a OpenThread, filters: &'a Filters) -> Open<'a> {
         now: now(),
         today: today(),
         neighbours: thread.neighbours,
+        keys,
     }
 }
 
-/// The note in the thread that says what happened.
-fn event_line(hub: &Hub, conversation: i64, me: &Agent, text: String, at: i64) -> Message {
+/// The note in the thread that says what happened. Its id is the database's, given
+/// where it commits.
+fn event_line(conversation: i64, me: &Agent, text: String, at: i64) -> Message {
     Message {
-        id: hub.message_id(),
+        id: 0,
         conversation_id: conversation,
         kind: Author::Event.key().to_owned(),
         author: me.name.clone(),
@@ -425,13 +506,29 @@ impl<'a> PageInput<'a> {
 }
 
 impl Pages {
+    /// The agent the request works as.
+    async fn who(&self, uow: &(impl Executor + ?Sized), headers: &HeaderMap) -> Result<Agent> {
+        who(uow, &self.signer, headers).await
+    }
+
     /// The inbox page, drawn for `input`.
-    async fn page(&self, uow: &(impl Executor + ?Sized), input: PageInput<'_>) -> Result<Response> {
-        let me = who(uow, input.headers).await?;
+    async fn page<E>(&self, uow: &E, input: PageInput<'_>) -> Result<Response>
+    where
+        E: Executor + DbExecutor + ?Sized,
+    {
+        let me = self.who(uow, input.headers).await?;
         let team = team(uow).await?;
         let counts = counts(uow, me.id).await?;
-        let since = self.hub.current_rev();
         let now = now();
+        // The revision before the rows: a change that commits between the two is asked
+        // for again, never missed.
+        let since = Since {
+            rev: current_rev(uow)
+                .await
+                .map_err(|e| AppError::internal(e.to_string()))?,
+            at: now,
+        }
+        .text();
         let (rows, more_after, more_before) =
             queries::list_page(uow, &input.filters, me.id, &input.list).await?;
         let summary = queries::summary(uow, &input.filters, me.id, now).await?;
@@ -465,15 +562,20 @@ impl Pages {
             draft: &input.draft,
             kind: &input.kind,
             error: input.error.as_deref(),
+            me: me.id,
+            keys: me.single_keys,
         };
         let split = inbox_split(&page, sizes.as_ref());
-        let title = input.filters.view.label().to_owned();
-        let shell = shell(&me, &team, counts, input.filters.view)
+        let stream = stream_url(page.open);
+        let shell = shell(&me, &team, counts, input.filters.view, Some(&stream))
             .for_request(input.path.clone(), input.headers);
-        let view = shell
-            .page(title)
-            .actions(page_actions())
-            .body((split, palette(&page), shortcuts()))
+        let mut app_page = shell.page(page_title(&page));
+        if page.open.is_some() {
+            app_page = app_page.crumb(input.filters.view.label(), input.filters.href("/inbox"));
+        }
+        let view = app_page
+            .actions(page_actions(me.single_keys))
+            .body((split, palette(&page), shortcuts(me.single_keys)))
             .to_view();
         Ok(no_store(view.into_response()))
     }
@@ -485,7 +587,7 @@ impl Pages {
         counts: ViewCounts,
         input: &PageInput<'_>,
     ) -> Response {
-        let shell = shell(me, team, counts, input.filters.view)
+        let shell = shell(me, team, counts, input.filters.view, None)
             .for_request(input.path.clone(), input.headers);
         let view = shell
             .page("No such conversation")
@@ -504,8 +606,8 @@ impl Pages {
         view.into_response()
     }
 
-    /// `GET /inbox/{id}`: also marks the conversation read, unless the browser is only
-    /// fetching ahead.
+    /// `GET /inbox/{id}`: the conversation, changing nothing. Its messages say when they
+    /// were seen (`POST /inbox/{id}/seen`), and with no script a button does.
     async fn show(
         &self,
         headers: HeaderMap,
@@ -514,25 +616,6 @@ impl Pages {
         query: ListQuery,
     ) -> Result<Response> {
         let db = &*self.db;
-        if !is_prefetch(&headers)
-            && let Some(found) = conversation(db, id).await?
-            && found.unread > 0
-        {
-            Conversation::query()
-                .where_(Conversation::ID.eq(id))
-                .update(
-                    db,
-                    [
-                        Conversation::UNREAD.set(0_i64),
-                        Conversation::REV.set(self.hub.rev()),
-                    ],
-                )
-                .await?;
-            self.hub.tell(Change {
-                conversation: id,
-                customer: found.customer_id,
-            });
-        }
         let mut input = PageInput::new(&headers, path, query.filters(), Some(id));
         input.pane = query.pane.clone();
         input.list = query.list_ask();
@@ -551,13 +634,16 @@ impl Pages {
         messages: bool,
     ) -> Result<Reply> {
         let filters = filters_of_referer(headers);
-        let me = who(uow, headers).await?;
+        let me = self.who(uow, headers).await?;
         let Some(thread) = open_thread(uow, id, &LazyAsk::First, &filters, me.id).await? else {
             return Ok(Reply::ops_or_redirect("/inbox").toast_with(toast));
         };
         let view = customer_of(uow, id).await?;
         let mut reply = Reply::ops_or_redirect(filters.href(&format!("/inbox/{id}")))
-            .morph(HEAD, head_region(&open_of(&thread, &filters)))
+            .morph(
+                HEAD,
+                head_region(&open_of(&thread, &filters, me.single_keys)),
+            )
             .morph(
                 CUSTOMER,
                 customer_region(id, thread.customer.id, &filters, view.as_ref(), now()),
@@ -589,7 +675,7 @@ impl Pages {
         let Some(found) = conversation(&uow, id).await? else {
             return Ok(missing_reply());
         };
-        let me = who(&uow, &headers).await?;
+        let me = self.who(&uow, &headers).await?;
         let body = form.body.clone().unwrap_or_default();
         let kind = if form.kind.as_deref() == Some("note") {
             "note"
@@ -622,7 +708,10 @@ impl Pages {
             let draft: String = draft.chars().take(LONGEST).collect();
             if from_runtime {
                 return Ok(Reply::ops(vec![
-                    Op::replace(COMPOSER, &composer(&found, &draft, kind, None)),
+                    Op::replace(
+                        COMPOSER,
+                        &composer(&found, &draft, kind, None, me.single_keys),
+                    ),
                     Op::Focus {
                         target: COMPOSER_BODY.to_owned(),
                     },
@@ -668,7 +757,7 @@ impl Pages {
             .insert(
                 &uow,
                 [Message {
-                    id: self.hub.message_id(),
+                    id: 0,
                     conversation_id: id,
                     kind: author.key().to_owned(),
                     author: me.name.clone(),
@@ -680,8 +769,8 @@ impl Pages {
             .await?;
         let mut sets = vec![
             Conversation::LAST_AT.set(at),
-            Conversation::REV.set(self.hub.rev()),
-            Conversation::MESSAGES.set(found.messages + 1),
+            Conversation::REV.set(revision(&uow).await?),
+            Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if author == Author::Agent {
             // An answer stops the clock and leaves the next word to the customer.
@@ -721,7 +810,10 @@ impl Pages {
         let reply = self
             .after(&uow, &headers, id, toast, true)
             .await?
-            .op(Op::replace(COMPOSER, &composer(&found, "", kind, None)));
+            .op(Op::replace(
+                COMPOSER,
+                &composer(&found, "", kind, None, me.single_keys),
+            ));
         Ok(reply.into_response())
     }
 
@@ -736,7 +828,7 @@ impl Pages {
         let Some(found) = conversation(uow, id).await? else {
             return Ok(missing_reply());
         };
-        let me = who(uow, headers).await?;
+        let me = self.who(uow, headers).await?;
         let at = now();
         let line = match &agent {
             Some(agent) if agent.id == me.id => format!("{} took the conversation", me.name),
@@ -750,13 +842,13 @@ impl Pages {
                 [
                     Conversation::ASSIGNEE_ID.set(agent.as_ref().map(|agent| agent.id)),
                     Conversation::LAST_AT.set(at),
-                    Conversation::REV.set(self.hub.rev()),
-                    Conversation::MESSAGES.set(found.messages + 1),
+                    Conversation::REV.set(revision(uow).await?),
+                    Conversation::MESSAGES.set_expr(plus_one("messages")),
                 ],
             )
             .await?;
         Message::query()
-            .insert(uow, [event_line(&self.hub, id, &me, line, at)])
+            .insert(uow, [event_line(id, &me, line, at)])
             .await?;
         self.hub.tell(Change {
             conversation: id,
@@ -833,15 +925,15 @@ impl Pages {
         let Some(found) = conversation(&uow, id).await? else {
             return Ok(missing_reply());
         };
-        let me = who(&uow, &headers).await?;
+        let me = self.who(&uow, &headers).await?;
         let at = now();
         let mut sets = vec![
             Conversation::STATUS.set(status.key().to_owned()),
             Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(at),
             Conversation::SNOOZED_UNTIL.set(None::<NaiveDate>),
-            Conversation::REV.set(self.hub.rev()),
-            Conversation::MESSAGES.set(found.messages + 1),
+            Conversation::REV.set(revision(&uow).await?),
+            Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if status != Status::Open {
             sets.push(Conversation::SLA_DUE.set(None::<i64>));
@@ -860,14 +952,14 @@ impl Pages {
             _ => format!("{} marked it pending", me.name),
         };
         Message::query()
-            .insert(&uow, [event_line(&self.hub, id, &me, line, at)])
+            .insert(&uow, [event_line(id, &me, line, at)])
             .await?;
         if status == Status::Closed {
             CustomerEvent::query()
                 .insert(
                     &uow,
                     [CustomerEvent {
-                        id: self.hub.event_id(),
+                        id: 0,
                         customer_id: found.customer_id,
                         kind: EventKind::TicketClosed.key().to_owned(),
                         at,
@@ -909,12 +1001,12 @@ impl Pages {
         let Some(found) = conversation(&uow, id).await? else {
             return Ok(missing_reply());
         };
-        let me = who(&uow, &headers).await?;
+        let me = self.who(&uow, &headers).await?;
         let at = now();
         let mut sets = vec![
             Conversation::PRIORITY.set(priority.key().to_owned()),
-            Conversation::REV.set(self.hub.rev()),
-            Conversation::MESSAGES.set(found.messages + 1),
+            Conversation::REV.set(revision(&uow).await?),
+            Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if let (Some(_), Some(from)) = (found.sla_due, found.sla_from) {
             sets.push(Conversation::SLA_DUE.set(Some(from + priority.target())));
@@ -927,7 +1019,6 @@ impl Pages {
             .insert(
                 &uow,
                 [event_line(
-                    &self.hub,
                     id,
                     &me,
                     format!(
@@ -964,7 +1055,7 @@ impl Pages {
         let Some(found) = conversation(uow, id).await? else {
             return Ok(missing_reply());
         };
-        let me = who(uow, headers).await?;
+        let me = self.who(uow, headers).await?;
         let at = now();
         Conversation::query()
             .where_(Conversation::ID.eq(id))
@@ -977,8 +1068,8 @@ impl Pages {
                     Conversation::SLA_DUE.set(None::<i64>),
                     Conversation::SLA_FROM.set(None::<i64>),
                     Conversation::LAST_AT.set(at),
-                    Conversation::REV.set(self.hub.rev()),
-                    Conversation::MESSAGES.set(found.messages + 1),
+                    Conversation::REV.set(revision(uow).await?),
+                    Conversation::MESSAGES.set_expr(plus_one("messages")),
                 ],
             )
             .await?;
@@ -987,7 +1078,6 @@ impl Pages {
             .insert(
                 uow,
                 [event_line(
-                    &self.hub,
                     id,
                     &me,
                     format!("{} snoozed it until {label}", me.name),
@@ -1061,7 +1151,7 @@ impl Pages {
         let Some(sizes) = save.sizes_for(&layout()) else {
             return Ok(StatusCode::BAD_REQUEST.into_response());
         };
-        let me = who(&uow, &headers).await?;
+        let me = self.who(&uow, &headers).await?;
         let text = sizes.to_text();
         let kept = Layout::query()
             .where_(Layout::AGENT_ID.eq(me.id))
@@ -1076,12 +1166,12 @@ impl Pages {
                     .await?;
             }
             None => {
-                let id = Layout::query().count(&uow).await? as i64 + me.id * 1000;
+                // The database gives the id, where it commits: no two saves share one.
                 Layout::query()
                     .insert(
                         &uow,
                         [Layout {
-                            id,
+                            id: 0,
                             agent_id: me.id,
                             split: SPLIT.to_owned(),
                             sizes: text,
@@ -1132,6 +1222,64 @@ impl Pages {
             .into_response())
     }
 
+    /// `POST /inbox/{id}/seen`: the agent saw what is new in the conversation, so it is
+    /// read. The runtime posts it when the messages show; with no script, a button does.
+    /// It reads first outside a transaction, and writes only when there is something to
+    /// mark, so a page view takes no write lock.
+    async fn seen(&self, uow: Uow, headers: &HeaderMap, id: i64) -> Result<Response> {
+        let Some(found) = conversation(&*self.db, id).await? else {
+            return Ok(missing_reply());
+        };
+        if found.unread > 0
+            && let Some(found) = conversation(&uow, id).await?
+            && found.unread > 0
+        {
+            Conversation::query()
+                .where_(Conversation::ID.eq(id))
+                .update(
+                    &uow,
+                    [
+                        Conversation::UNREAD.set(0_i64),
+                        Conversation::REV.set(revision(&uow).await?),
+                    ],
+                )
+                .await?;
+            self.hub.tell(Change {
+                conversation: id,
+                customer: found.customer_id,
+            });
+        }
+        if headers.contains_key("x-navree-ui") {
+            return Ok(StatusCode::NO_CONTENT.into_response());
+        }
+        Ok(
+            Reply::redirect(filters_of_referer(headers).href(&format!("/inbox/{id}")))
+                .into_response(),
+        )
+    }
+
+    /// `POST /inbox/keys`: turns single-key shortcuts on or off for the agent. The page
+    /// then draws no hotkeys at all for them.
+    async fn keys(&self, uow: Uow, headers: &HeaderMap, form: &KeysForm) -> Result<Response> {
+        let me = self.who(&uow, headers).await?;
+        let on = form.from.as_deref() == Some("on");
+        Agent::query()
+            .where_(Agent::ID.eq(me.id))
+            .update(&uow, [Agent::SINGLE_KEYS.set(on)])
+            .await?;
+        let (tone, text) = if on {
+            (ToastTone::Success, "Single-key shortcuts are on.")
+        } else {
+            (
+                ToastTone::Info,
+                "Single-key shortcuts are off. Ctrl+K still opens the command palette.",
+            )
+        };
+        Ok(Reply::redirect(back_to(headers))
+            .toast(tone, text)
+            .into_response())
+    }
+
     /// `POST /as/{agent}`: work as someone else on the team.
     async fn work_as(&self, uow: Uow, agent: i64) -> Result<Response> {
         let Some(found) = Agent::query()
@@ -1152,7 +1300,7 @@ impl Pages {
             .into_response();
         if let Ok(value) = HeaderValue::from_str(&format!(
             "{AGENT_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly",
-            found.id
+            agent_cookie(&self.signer, found.id, Utc::now())
         )) {
             response.headers_mut().append(SET_COOKIE, value);
         }
@@ -1192,21 +1340,19 @@ impl Controller for Pages {
             }),
             route!(me, Method::GET, "!/inbox/rows", pages, [headers: HeaderMap, ask: LazyQuery, Query(query): Query<ListQuery>] => {
                 let uow = &*pages.db;
-                let me = who(uow, &headers).await?;
+                let me = pages.who(uow, &headers).await?;
                 let filters = query.filters();
                 let now = now();
                 let open = filters_of_referer_open(&headers);
                 if let LazyAsk::Since(since) = ask.ask() {
-                    let since = since.parse::<i64>().unwrap_or(i64::MAX);
-                    // Read the revision first: a change made while this runs comes next time.
-                    let at = pages.hub.current_rev();
-                    let (rows, gone, newest) = queries::changes(uow, &filters, me.id, since, ask.window()).await?;
+                    // A revision is taken where it commits (see `live`), so the newest one
+                    // this answer holds is where the next ask starts: nothing can commit
+                    // below it later.
+                    let since = Since::read(since).unwrap_or(Since { rev: i64::MAX, at: now });
+                    let (rows, gone, newest, more) = queries::changes(uow, &filters, me.id, since, ask.window(), now).await?;
                     let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
-                    // A write takes its revision before it commits, so the newest few are asked
-                    // for again next time: one still on its way when this read can't be missed.
-                    // The list replaces what it has, so a row sent twice shows once.
-                    let next = since.max(newest.min(at) - 8);
-                    return Ok::<_, AppError>(LazyPage::changes(items, next.to_string(), gone).into_response());
+                    let next = Since { rev: newest, at: now }.text();
+                    return Ok::<_, AppError>(LazyPage::changes(items, next, gone).more(more).into_response());
                 }
                 let (rows, more_after, more_before) = queries::list_page(uow, &filters, me.id, ask.ask()).await?;
                 let more = match ask.ask() {
@@ -1218,36 +1364,25 @@ impl Controller for Pages {
             route!(me, Method::GET, "!/inbox/{id}/messages", pages, [headers: HeaderMap, ask: LazyQuery, Path(id): Path<i64>] => {
                 let uow = &*pages.db;
                 let now = now();
+                let me = pages.who(uow, &headers).await?;
                 let (messages, files, older, newer) = queries::thread_window(uow, id, ask.ask()).await?;
                 if let LazyAsk::Since(since) = ask.ask() {
-                    // Drawn into a page that has the conversation open: what is new is seen.
-                    if !is_prefetch(&headers)
-                        && let Some(found) = conversation(uow, id).await?
-                        && found.unread > 0
-                    {
-                        Conversation::query()
-                            .where_(Conversation::ID.eq(id))
-                            .update(uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(pages.hub.rev())])
-                            .await?;
-                        pages.hub.tell(Change {
-                            conversation: id,
-                            customer: found.customer_id,
-                        });
-                    }
+                    // An id is the database's, given where it commits (see `live`): the
+                    // newest this answer holds is where the next ask starts. A GET changes
+                    // nothing; the list says what was seen with a POST.
                     let last = messages.last().map_or_else(|| since.clone(), |m| m.id.to_string());
-                    let items: Vec<LazyItem> = messages.iter().map(|m| message_item(m, &files, now)).collect();
-                    return Ok::<_, AppError>(LazyPage::changes(items, last, Vec::new()).into_response());
+                    let items: Vec<LazyItem> = messages.iter().map(|m| message_item(m, &files, now, me.id)).collect();
+                    return Ok::<_, AppError>(LazyPage::changes(items, last, Vec::new()).more(newer).into_response());
                 }
                 let more = match ask.ask() {
                     LazyAsk::After(_) => newer,
                     _ => older,
                 };
-                Ok(LazyPage::new(messages.iter().map(|m| message_item(m, &files, now)), more).into_response())
+                Ok(LazyPage::new(messages.iter().map(|m| message_item(m, &files, now, me.id)), more).into_response())
             }),
             route!(me, Method::GET, "!/inbox/fragments/summary", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
                 let uow = &*pages.db;
-                let _ = &pages;
-                let me = who(uow, &headers).await?;
+                let me = pages.who(uow, &headers).await?;
                 let filters = query.filters();
                 let summary = queries::summary(uow, &filters, me.id, now()).await?;
                 // The stream of the page it is drawn into: another would take a second of
@@ -1262,13 +1397,34 @@ impl Controller for Pages {
                 );
                 Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, &stream)).into_response()))
             }),
+            route!(me, Method::GET, "!/inbox/fragments/views", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
+                // The sidebar's views with their counts, in a page with nothing else: the
+                // group's region takes itself from it.
+                let uow = &*pages.db;
+                let me = pages.who(uow, &headers).await?;
+                let team = team(uow).await?;
+                let counts = counts(uow, me.id).await?;
+                let view = query.filters().view;
+                let open = match filters_of_referer_open(&headers) {
+                    Some(id) => conversation(uow, id).await?,
+                    None => None,
+                };
+                let stream = open.map_or_else(
+                    || "/inbox/events".to_owned(),
+                    |found| format!("/inbox/events?open={}&customer={}", found.id, found.customer_id),
+                );
+                let page = shell(&me, &team, counts, view, Some(&stream))
+                    .for_request(views_src(view), &headers)
+                    .page(view.label())
+                    .to_view();
+                Ok::<_, AppError>(no_store(page.into_response()))
+            }),
             route!(me, Method::GET, "!/inbox/{id}/fragments/head", pages, [headers: HeaderMap, Path(id): Path<i64>] => {
                 let uow = &*pages.db;
-                let _ = &pages;
                 let filters = filters_of_referer(&headers);
-                let me = who(uow, &headers).await?;
+                let me = pages.who(uow, &headers).await?;
                 match open_thread(uow, id, &LazyAsk::First, &filters, me.id).await? {
-                    Some(thread) => Ok::<_, AppError>(no_store(fragment("Conversation", head_region(&open_of(&thread, &filters))).into_response())),
+                    Some(thread) => Ok::<_, AppError>(no_store(fragment("Conversation", head_region(&open_of(&thread, &filters, me.single_keys))).into_response())),
                     None => Ok(StatusCode::NOT_FOUND.into_response()),
                 }
             }),
@@ -1315,12 +1471,24 @@ impl Controller for Pages {
                 if let Err(rejected) = sent {
                     return Ok(rejected.into_response());
                 }
-                let me = who(&uow, &headers).await?;
+                let me = pages.who(&uow, &headers).await?;
                 pages.assign_to(&uow, &headers, id, Some(me)).await
+            }),
+            route!(me, Method::POST, "!/inbox/{id}/seen", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>, sent: std::result::Result<Submit<ActForm>, Rejected<ActForm>>] => {
+                if let Err(rejected) = sent {
+                    return Ok(rejected.into_response());
+                }
+                pages.seen(uow, &headers, id).await
+            }),
+            route!(me, Method::POST, "!/inbox/keys", pages, [uow: Uow, headers: HeaderMap, sent: std::result::Result<Submit<KeysForm>, Rejected<KeysForm>>] => {
+                match sent {
+                    Ok(Submit(form)) => pages.keys(uow, &headers, &form).await,
+                    Err(rejected) => Ok(rejected.into_response()),
+                }
             }),
             route!(me, Method::GET, "!/inbox/{id}/assign", pages, [headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<OptionQueryText>] => {
                 let uow = &*pages.db;
-                let me = who(uow, &headers).await?;
+                let me = pages.who(uow, &headers).await?;
                 let Some(found) = conversation(uow, id).await? else {
                     return Ok::<_, AppError>(missing_reply());
                 };
@@ -1342,8 +1510,7 @@ impl Controller for Pages {
                     .collect();
                 let everyone = team(uow).await?;
                 let counts = counts(uow, me.id).await?;
-                let _ = &pages;
-                let page = shell(&me, &everyone, counts, View::All)
+                let page = shell(&me, &everyone, counts, View::All, None)
                     .for_request(format!("/inbox/{id}/assign"), &headers)
                     .page("Assign the conversation")
                     .crumb("Inbox", "/inbox")
@@ -1431,6 +1598,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             let id = query.on.unwrap_or(0);
             let left = query.left.unwrap_or(600);
             let at = now();
+            let found = conversation(&uow, id).await?;
             Conversation::query()
                 .where_(Conversation::ID.eq(id))
                 .update(
@@ -1439,11 +1607,21 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                         Conversation::STATUS.set(Status::Open.key().to_owned()),
                         Conversation::SLA_DUE.set(Some(at + left)),
                         Conversation::SLA_FROM.set(Some(at + left - 3600)),
+                        Conversation::REV.set(revision(&uow).await?),
                     ],
                 )
                 .await?;
-            pages.hub.tell(Change::TICK);
+            if let Some(found) = found {
+                pages.hub.tell(Change { conversation: id, customer: found.customer_id });
+            }
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
+        }),
+        route!(me, Method::POST, "!/__test/wake", pages, [Query(query): Query<StepQuery>] => {
+            // Snoozed conversations come back as they would `left` days from now.
+            let at = now() + query.left.unwrap_or(0).clamp(0, 400) * 86_400;
+            let _one = pages.hub.writing.lock().await;
+            let woken = pages.hub.wake(&pages.db, at).await.map_err(|error| AppError::internal(error.to_string()))?;
+            Ok::<_, AppError>(woken.to_string())
         }),
         route!(me, Method::POST, "!/__test/reset", pages, [] => {
             // On its own task, one at a time: a client that gives up can't stop a write
@@ -1494,87 +1672,142 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
 }
 
 /// The plans SQLite makes for the queries the pages run, as the ORM writes them: each
-/// query's name, its SQL, and `EXPLAIN QUERY PLAN`'s lines. For the numbers in the
-/// report and the scale suite.
-async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
-    use navree::db::{Executor as _, Statement};
+/// query's name, the columns its index must match on (`expect:`, with `|` between
+/// indexes that are each good enough, so a plan that walks a whole list and checks each
+/// row fails the scale suite), its SQL, and `EXPLAIN QUERY PLAN`'s lines. For the
+/// numbers in the report and the scale suite.
+///
+/// The lists are every view the sidebar offers under each filter the list offers: a
+/// channel, a priority, both. "Mine" and "Unassigned" are read by their own small sets.
+pub async fn explain(
+    uow: &(impl navree::db::Executor + ?Sized),
+) -> std::result::Result<String, AppError> {
+    use navree::db::Statement;
     use navree::orm::Dialect;
 
     let at = now() - 30 * 86_400;
-    let all = Filters::default();
-    let closed = Filters::with_view(View::Closed);
-    let mine = Filters::with_view(View::Mine);
-    let unassigned = Filters::with_view(View::Unassigned);
-    let searched = Filters::read(Some("closed"), Some("booking page"), None, None);
-    let channel = Filters::read(Some("closed"), None, Some("api"), Some("high"));
-    let conversations = [
+    let read = |view: &str, channel: Option<&str>, priority: Option<&str>| {
+        Filters::read(Some(view), None, channel, priority)
+    };
+    let first_page = |filters: &Filters| {
+        queries::in_view(filters, 1)
+            .order_by_desc("last_at")
+            .order_by_desc("id")
+            .limit(51)
+    };
+    let mut conversations = vec![
         (
-            "list: the first page of all open",
-            queries::in_view(&all, 1)
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            "list: the first page of all open".to_owned(),
+            "inbox",
+            first_page(&Filters::default()),
         ),
         (
-            "list: the page after a cursor, closed",
-            queries::in_view(&closed, 1)
+            "list: the page after a cursor, closed".to_owned(),
+            "inbox",
+            queries::in_view(&Filters::with_view(View::Closed), 1)
                 .where_(queries::after(at, 50_000))
                 .order_by_desc("last_at")
                 .order_by_desc("id")
                 .limit(51),
         ),
         (
-            "list: the page before a cursor, closed",
-            queries::in_view(&closed, 1)
+            "list: the page before a cursor, closed".to_owned(),
+            "inbox",
+            queries::in_view(&Filters::with_view(View::Closed), 1)
                 .where_(queries::before(at, 50_000))
                 .order_by("last_at")
                 .order_by("id")
                 .limit(51),
         ),
         (
-            "list: assigned to me",
-            queries::in_view(&mine, 1)
+            "list: the page after a cursor, closed, api and urgent".to_owned(),
+            "inbox channel priority",
+            queries::in_view(&read("closed", Some("api"), Some("urgent")), 1)
+                .where_(queries::after(at, 50_000))
                 .order_by_desc("last_at")
                 .order_by_desc("id")
                 .limit(51),
         ),
         (
-            "list: unassigned",
-            queries::in_view(&unassigned, 1)
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            "list: assigned to me".to_owned(),
+            "assignee_id inbox",
+            first_page(&Filters::with_view(View::Mine)),
         ),
         (
-            "list: closed, one channel and priority",
-            queries::in_view(&channel, 1)
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            "list: assigned to me, chat and urgent".to_owned(),
+            "assignee_id inbox | inbox channel priority",
+            first_page(&read("mine", Some("chat"), Some("urgent"))),
         ),
         (
-            "search: closed, \"booking page\"",
-            queries::in_view(&searched, 1)
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            "list: unassigned".to_owned(),
+            "status assignee_id",
+            first_page(&Filters::with_view(View::Unassigned)),
         ),
         (
-            "live: what changed since a revision",
+            "list: unassigned, api and urgent".to_owned(),
+            "status assignee_id | inbox channel priority",
+            first_page(&read("unassigned", Some("api"), Some("urgent"))),
+        ),
+        (
+            "search: closed, \"booking page\"".to_owned(),
+            "",
+            first_page(&Filters::read(
+                Some("closed"),
+                Some("booking page"),
+                None,
+                None,
+            )),
+        ),
+        (
+            "live: what changed since a revision".to_owned(),
+            "",
             Conversation::query()
                 .where_(Conversation::REV.gt(1_i64))
                 .order_by("rev")
-                .limit(300),
+                .limit(301),
         ),
-        ("count: all open", queries::in_view(&all, 1)),
         (
-            "count: something new in all open",
-            queries::in_view(&all, 1).where_(queries::something_new()),
+            "count: all open".to_owned(),
+            "inbox",
+            queries::in_view(&Filters::default(), 1),
+        ),
+        (
+            "count: something new in all open".to_owned(),
+            "inbox",
+            queries::in_view(&Filters::default(), 1).where_(queries::something_new()),
+        ),
+        (
+            "count: closed, api and urgent".to_owned(),
+            "inbox channel priority",
+            queries::in_view(&read("closed", Some("api"), Some("urgent")), 1),
         ),
     ];
+    // Every list of the sidebar under each filter: the view's index and the filter's.
+    for view in ["all", "snoozed", "closed"] {
+        for (channel, priority, expect) in [
+            (Some("api"), None, "inbox channel"),
+            (None, Some("urgent"), "inbox priority"),
+            (Some("api"), Some("urgent"), "inbox channel priority"),
+        ] {
+            let filters = read(view, channel, priority);
+            conversations.push((
+                format!(
+                    "list: {view}, {}",
+                    [channel, priority]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                expect,
+                first_page(&filters),
+            ));
+        }
+    }
     let messages = [
         (
             "thread: the newest thirty",
+            "conversation_id",
             Message::query()
                 .where_(Message::CONVERSATION_ID.eq(1_008_i64))
                 .order_by_desc("id")
@@ -1582,6 +1815,7 @@ async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
         ),
         (
             "thread: thirty before a cursor",
+            "conversation_id",
             Message::query()
                 .where_(Message::CONVERSATION_ID.eq(1_008_i64))
                 .where_(Message::ID.lt(500_i64))
@@ -1590,32 +1824,35 @@ async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
         ),
         (
             "thread: what is new since a message",
+            "conversation_id",
             Message::query()
                 .where_(Message::CONVERSATION_ID.eq(1_008_i64))
                 .where_(Message::ID.gt(500_i64))
                 .order_by("id")
-                .limit(200),
+                .limit(201),
         ),
     ];
     let mut statements = Vec::new();
-    for (name, builder) in conversations {
+    for (name, expect, builder) in conversations {
         statements.push((
             name,
+            expect,
             builder
                 .to_sql(Dialect::Sqlite)
                 .map_err(|e| AppError::internal(e.to_string()))?,
         ));
     }
-    for (name, builder) in messages {
+    for (name, expect, builder) in messages {
         statements.push((
-            name,
+            name.to_owned(),
+            expect,
             builder
                 .to_sql(Dialect::Sqlite)
                 .map_err(|e| AppError::internal(e.to_string()))?,
         ));
     }
     let mut out = String::new();
-    for (name, statement) in statements {
+    for (name, expect, statement) in statements {
         let plan = uow
             .fetch_all(&Statement::portable(
                 format!("EXPLAIN QUERY PLAN {}", statement.sql),
@@ -1623,7 +1860,7 @@ async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
             ))
             .await
             .map_err(|e| AppError::internal(e.to_string()))?;
-        out.push_str(&format!("## {name}\n{}\n", statement.sql));
+        out.push_str(&format!("## {name}\nexpect: {expect}\n{}\n", statement.sql));
         for row in plan {
             let detail: String = row.get("detail").unwrap_or_default();
             out.push_str(&format!("  {detail}\n"));

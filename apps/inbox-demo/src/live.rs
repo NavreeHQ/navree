@@ -1,32 +1,47 @@
-//! The desk as it happens: customers write, teammates answer and close, and the
-//! clock on each conversation runs down. Every change goes to every open page over a
-//! server-sent event stream.
+//! The desk as it happens: customers write, teammates answer and close, the clock on
+//! each conversation runs down, and a snoozed conversation comes back on its day. Every
+//! change goes to every open page over a server-sent event stream.
 //!
 //! An event is only a nudge. A page never reads what it says: each live part of a
 //! page fetches its own fragment again, so the stream can't put anything in a page
 //! that the server didn't draw. A stream is for one page: it says `conversations` for
 //! any change, and `thread` and `customer` only when the change is to the conversation
 //! or the customer that page has open.
+//!
+//! **Every write takes its numbers where it commits.** A live list asks for what changed
+//! since the newest revision it has seen, and an open conversation for the messages after
+//! the newest it has. So a number must never become visible after a reader has seen a
+//! larger one. Each write runs in one transaction (a unit of work, `BEGIN IMMEDIATE` on
+//! SQLite, so one writer at a time), and inside it:
+//!
+//! - the desk's revision comes from the one row of `desk`, which the transaction updates
+//!   (`UPDATE desk SET rev = rev + 1 RETURNING rev`): the next writer can't read it until
+//!   this one has committed;
+//! - a message's id is the row id SQLite gives it as it is inserted, one more than the
+//!   largest, under the same write lock;
+//! - counts move in SQL (`messages = messages + 1`), never from a value read earlier.
+//!
+//! So ids and revisions become visible in the order they commit, and a reader that moves
+//! its cursor to the newest it saw can't skip one.
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use futures_util::FutureExt as _;
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
-use navree::db::{Db, Executor as _, ExecutorExt as _, Uow};
+use navree::db::{Db, Executor as _, ExecutorExt as _, Statement, Uow, Value};
 use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
 use navree::http::response::{IntoResponse, Response};
-use navree::orm::Model as _;
+use navree::orm::{Expr, Model as _};
 use navree::prelude::BoxError;
 use tokio::sync::broadcast;
 
 use crate::data::{
     self, Agent, Attachment, Author, Conversation, Customer, CustomerEvent, Dice, EventKind,
-    Message, Priority, Status, TOPICS, inbox_of, preview_of,
+    Message, Priority, Status, TOPICS, day_of, inbox_of, preview_of,
 };
 use crate::scale;
 
@@ -103,17 +118,44 @@ const NOTES: [&str; 4] = [
     "Offered a credit for the trouble; billing to apply it.",
 ];
 
+/// The most snoozed conversations one wake-up brings back in one transaction.
+const WAKE_AT_ONCE: u64 = 200;
+
+type Result<T> = std::result::Result<T, BoxError>;
+
+/// The desk's next revision, taken inside the writing transaction: `desk` has one row,
+/// and the update holds it until the transaction ends, so no other writer reads it first.
+pub async fn next_rev(uow: &Uow) -> Result<i64> {
+    Ok(uow
+        .fetch_scalar::<i64>(&Statement::portable(
+            "UPDATE desk SET rev = rev + 1 WHERE id = 1 RETURNING rev",
+            Vec::<Value>::new(),
+        ))
+        .await?)
+}
+
+/// The revision the desk is at: what a page drawn now says it is at. Read it before
+/// the rows, so a change that commits between the two is asked for again, not missed.
+pub async fn current_rev(db: &(impl navree::db::Executor + ?Sized)) -> Result<i64> {
+    Ok(db
+        .fetch_scalar::<i64>(&Statement::portable(
+            "SELECT rev FROM desk WHERE id = 1",
+            Vec::<Value>::new(),
+        ))
+        .await?)
+}
+
+/// `column + 1`, counted where the row is written.
+pub fn plus_one(column: &'static str) -> Expr {
+    Expr::raw(format!("\"{column}\" + 1"), Vec::<Value>::new())
+}
+
 /// What happens next, and who hears about it.
 pub struct Hub {
     /// Held while the desk is written afresh: one at a time.
     pub writing: tokio::sync::Mutex<()>,
     tx: broadcast::Sender<Change>,
     dice: Mutex<Dice>,
-    next_rev: AtomicI64,
-    next_message: AtomicI64,
-    next_attachment: AtomicI64,
-    next_event: AtomicI64,
-    next_conversation: AtomicI64,
 }
 
 impl Default for Hub {
@@ -128,19 +170,14 @@ impl Hub {
             writing: tokio::sync::Mutex::new(()),
             tx: broadcast::channel(256).0,
             dice: Mutex::new(Dice::new(4_111)),
-            next_rev: AtomicI64::new(2),
-            next_message: AtomicI64::new(1),
-            next_attachment: AtomicI64::new(1),
-            next_event: AtomicI64::new(1),
-            next_conversation: AtomicI64::new(1),
         }
     }
 
-    /// Tells every open stream that `change` happened, once it can be read. A request
-    /// writes in its unit of work, which commits after the handler returns: a page told
-    /// sooner asks before the commit, misses the change, and has no reason to ask again.
-    /// So inside a request the news waits for the commit, and goes nowhere on a
-    /// rollback. Elsewhere (the simulator, the clock) every write is already committed.
+    /// Tells every open stream that `change` happened, once it can be read. A write
+    /// runs in its unit of work, which commits after it: a page told sooner asks before
+    /// the commit, misses the change, and has no reason to ask again. So inside a unit
+    /// of work the news waits for the commit, and goes nowhere on a rollback. Outside
+    /// one (the clock) nothing was written.
     pub fn tell(&self, change: Change) {
         match Uow::current() {
             Some(uow) => {
@@ -165,29 +202,8 @@ impl Hub {
             .below(n)
     }
 
-    /// The next revision of the desk: every change to a conversation takes one, so a
-    /// live list can ask for what changed since the one it has.
-    pub fn rev(&self) -> i64 {
-        self.next_rev.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// The revision a page drawn now is at.
-    pub fn current_rev(&self) -> i64 {
-        self.next_rev.load(Ordering::SeqCst) - 1
-    }
-
-    /// A message id no one has used.
-    pub fn message_id(&self) -> i64 {
-        self.next_message.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// An event id no one has used.
-    pub fn event_id(&self) -> i64 {
-        self.next_event.fetch_add(1, Ordering::SeqCst)
-    }
-
     /// Creates the tables, empty. The indexes come after the rows: see [`Hub::seed`].
-    pub async fn create(&self, db: &Db) -> Result<(), BoxError> {
+    pub async fn create(&self, db: &Db) -> Result<()> {
         let pool = db.pool();
         for statement in [
             "DROP TABLE IF EXISTS conversations_fts",
@@ -198,7 +214,10 @@ impl Hub {
             "DROP TABLE IF EXISTS conversations",
             "DROP TABLE IF EXISTS customers",
             "DROP TABLE IF EXISTS agents",
-            "CREATE TABLE agents (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, team TEXT NOT NULL, active BOOLEAN NOT NULL)",
+            "DROP TABLE IF EXISTS desk",
+            "CREATE TABLE desk (id INTEGER PRIMARY KEY CHECK (id = 1), rev INTEGER NOT NULL)",
+            "INSERT INTO desk (id, rev) VALUES (1, 1)",
+            "CREATE TABLE agents (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, team TEXT NOT NULL, active BOOLEAN NOT NULL, single_keys BOOLEAN NOT NULL)",
             "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL, plan TEXT NOT NULL, lifetime_paise INTEGER NOT NULL, seats INTEGER NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE, tags TEXT NOT NULL)",
             "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL, rev INTEGER NOT NULL, messages INTEGER NOT NULL, inbox TEXT NOT NULL)",
             "CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, kind TEXT NOT NULL, author TEXT NOT NULL, agent_id INTEGER, body TEXT NOT NULL, at INTEGER NOT NULL)",
@@ -216,7 +235,7 @@ impl Hub {
 
     /// Writes the desk afresh as it stands at `now`: the hand-written conversations,
     /// then `scale` generated ones (see [`scale::seed`]), then the indexes.
-    pub async fn seed(&self, db: &Db, now: i64, scale: i64) -> Result<scale::Made, BoxError> {
+    pub async fn seed(&self, db: &Db, now: i64, scale: i64) -> Result<scale::Made> {
         self.create(db).await?;
         let seed = data::seed(now);
         Agent::query().insert(db, seed.agents.clone()).await?;
@@ -249,34 +268,39 @@ impl Hub {
         db.pool()
             .execute_script("PRAGMA wal_checkpoint(TRUNCATE)")
             .await?;
-        let most = |table: &'static str| async move {
-            db.fetch_scalar::<i64>(&navree::db::Statement::text(format!(
-                "SELECT COALESCE(MAX(id), 0) FROM {table}"
-            )))
-            .await
-        };
-        self.next_message
-            .store(most("messages").await? + 1, Ordering::SeqCst);
-        self.next_attachment
-            .store(most("attachments").await? + 1, Ordering::SeqCst);
-        self.next_event
-            .store(most("customer_events").await? + 1, Ordering::SeqCst);
-        self.next_conversation
-            .store(most("conversations").await? + 1, Ordering::SeqCst);
-        self.next_rev.store(2, Ordering::SeqCst);
         Ok(made)
+    }
+
+    /// Runs `work` in a unit of work of its own: committed when it returns `Ok`, and
+    /// rolled back, its news unsaid, when it fails.
+    async fn in_uow<T, F>(db: &Db, work: impl FnOnce(Uow) -> F) -> Result<T>
+    where
+        F: Future<Output = Result<T>>,
+    {
+        let uow = db.uow(None, None).await;
+        match uow.scope(work(uow.clone())).await {
+            Ok(value) => {
+                uow.commit().await?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = uow.rollback().await;
+                Err(error)
+            }
+        }
     }
 
     /// One thing happens: `what` when given, otherwise whatever the dice say; in
     /// conversation `on` when given and it can happen there. Returns the change, or
-    /// `None` when there was nowhere for it to happen.
+    /// `None` when there was nowhere for it to happen. It reads and writes in one unit of
+    /// work, so nothing changes between what it reads and what it writes.
     pub async fn step(
         &self,
         db: &Db,
         now: i64,
         what: Option<Happening>,
         on: Option<i64>,
-    ) -> Result<Option<Change>, BoxError> {
+    ) -> Result<Option<Change>> {
         let what = what.unwrap_or_else(|| match self.roll(100) {
             0..=24 => Happening::NewConversation,
             25..=64 => Happening::CustomerReply,
@@ -284,24 +308,27 @@ impl Hub {
             83..=92 => Happening::TeammateNote,
             _ => Happening::TeammateClose,
         });
-        let change = match what {
-            Happening::NewConversation => self.new_conversation(db, now).await?,
-            Happening::CustomerReply => self.customer_reply(db, now, on).await?,
-            Happening::TeammateReply | Happening::TeammateNote | Happening::TeammateClose => {
-                self.teammate(db, now, what, on).await?
+        Self::in_uow(db, |uow| async move {
+            let change = match what {
+                Happening::NewConversation => self.new_conversation(&uow, now).await?,
+                Happening::CustomerReply => self.customer_reply(&uow, now, on).await?,
+                Happening::TeammateReply | Happening::TeammateNote | Happening::TeammateClose => {
+                    self.teammate(&uow, now, what, on).await?
+                }
+            };
+            if let Some(change) = change {
+                self.tell(change);
             }
-        };
-        if let Some(change) = change {
-            self.tell(change);
-        }
-        Ok(change)
+            Ok(change)
+        })
+        .await
     }
 
-    async fn new_conversation(&self, db: &Db, now: i64) -> Result<Option<Change>, BoxError> {
+    async fn new_conversation(&self, uow: &Uow, now: i64) -> Result<Option<Change>> {
         let customers: Vec<Customer> = Customer::query()
             .where_(Customer::ID.lt(scale::FIRST_CUSTOMER))
             .order_by("id")
-            .get(db)
+            .get(uow)
             .await?
             .into_vec()
             .into_iter()
@@ -312,79 +339,81 @@ impl Hub {
         }
         let customer = &customers[usize::try_from(self.roll(customers.len() as u64)).unwrap_or(0)];
         let topic = &TOPICS[usize::try_from(self.roll(TOPICS.len() as u64)).unwrap_or(0)];
-        let id = self.next_conversation.fetch_add(1, Ordering::SeqCst);
         let first = &topic.lines[0];
-        let message = Message {
-            id: self.message_id(),
-            conversation_id: id,
-            kind: Author::Customer.key().to_owned(),
-            author: customer.name.clone(),
-            agent_id: None,
-            body: first.body.to_owned(),
-            at: now,
-        };
-        Conversation::query()
-            .insert(
-                db,
-                [Conversation {
-                    id,
-                    customer_id: customer.id,
-                    subject: topic.subject.to_owned(),
-                    channel: topic.channel.key().to_owned(),
-                    status: Status::Open.key().to_owned(),
-                    priority: topic.priority.key().to_owned(),
-                    assignee_id: None,
-                    created_at: now,
-                    last_at: now,
-                    sla_due: Some(now + topic.priority.target()),
-                    sla_from: Some(now),
-                    snoozed_until: None,
-                    unread: 1,
-                    preview: preview_of(first.body),
-                    rev: self.rev(),
-                    messages: 1,
-                    inbox: "open".to_owned(),
-                }],
-            )
-            .await?;
-        Message::query().insert(db, [message.clone()]).await?;
-        db.execute(&navree::db::Statement::portable(
+        let rev = next_rev(uow).await?;
+        let id = Conversation::create(
+            uow,
+            Conversation {
+                id: 0,
+                customer_id: customer.id,
+                subject: topic.subject.to_owned(),
+                channel: topic.channel.key().to_owned(),
+                status: Status::Open.key().to_owned(),
+                priority: topic.priority.key().to_owned(),
+                assignee_id: None,
+                created_at: now,
+                last_at: now,
+                sla_due: Some(now + topic.priority.target()),
+                sla_from: Some(now),
+                snoozed_until: None,
+                unread: 1,
+                preview: preview_of(first.body),
+                rev,
+                messages: 1,
+                inbox: "open".to_owned(),
+            },
+        )
+        .await?
+        .id;
+        let message = Message::create(
+            uow,
+            Message {
+                id: 0,
+                conversation_id: id,
+                kind: Author::Customer.key().to_owned(),
+                author: customer.name.clone(),
+                agent_id: None,
+                body: first.body.to_owned(),
+                at: now,
+            },
+        )
+        .await?
+        .id;
+        uow.execute(&Statement::portable(
             "INSERT INTO conversations_fts (rowid, subject, customer, company) VALUES (?, ?, ?, ?)",
             [
-                navree::db::Value::I64(id),
-                navree::db::Value::String(topic.subject.to_owned()),
-                navree::db::Value::String(customer.name.clone()),
-                navree::db::Value::String(customer.company.clone()),
+                Value::I64(id),
+                Value::String(topic.subject.to_owned()),
+                Value::String(customer.name.clone()),
+                Value::String(customer.company.clone()),
             ],
         ))
         .await?;
         if let Some((name, bytes)) = first.file {
-            Attachment::query()
-                .insert(
-                    db,
-                    [Attachment {
-                        id: self.next_attachment.fetch_add(1, Ordering::SeqCst),
-                        message_id: message.id,
-                        conversation_id: id,
-                        name: name.to_owned(),
-                        bytes,
-                    }],
-                )
-                .await?;
-        }
-        CustomerEvent::query()
-            .insert(
-                db,
-                [CustomerEvent {
-                    id: self.event_id(),
-                    customer_id: customer.id,
-                    kind: EventKind::TicketOpened.key().to_owned(),
-                    at: now,
-                    title: format!("Wrote in: {}", topic.subject),
-                    detail: format!("Through {}", topic.channel.label().to_lowercase()),
-                }],
+            Attachment::create(
+                uow,
+                Attachment {
+                    id: 0,
+                    message_id: message,
+                    conversation_id: id,
+                    name: name.to_owned(),
+                    bytes,
+                },
             )
             .await?;
+        }
+        CustomerEvent::create(
+            uow,
+            CustomerEvent {
+                id: 0,
+                customer_id: customer.id,
+                kind: EventKind::TicketOpened.key().to_owned(),
+                at: now,
+                title: format!("Wrote in: {}", topic.subject),
+                detail: format!("Through {}", topic.channel.label().to_lowercase()),
+            },
+        )
+        .await?;
         Ok(Some(Change {
             conversation: id,
             customer: customer.id,
@@ -395,25 +424,25 @@ impl Hub {
     /// one of them at random.
     async fn pick(
         &self,
-        db: &Db,
+        uow: &Uow,
         statuses: &[Status],
         on: Option<i64>,
         assigned: bool,
-    ) -> Result<Option<Conversation>, BoxError> {
+    ) -> Result<Option<Conversation>> {
         let keys: Vec<&str> = statuses.iter().map(|status| status.key()).collect();
         let mut query = Conversation::query().where_(Conversation::STATUS.is_in(keys.clone()));
         if assigned {
             query = query.where_(Conversation::ASSIGNEE_ID.is_not_null());
         }
         if let Some(id) = on {
-            return Ok(query.find(db, id).await?.map(|record| record.into_inner()));
+            return Ok(query.find(uow, id).await?.map(|record| record.into_inner()));
         }
         // Among the dozen most recent: what a teammate or a customer is in the middle of.
         let recent: Vec<Conversation> = query
             .order_by_desc("last_at")
             .order_by_desc("id")
             .limit(12)
-            .get(db)
+            .get(uow)
             .await?
             .into_vec()
             .into_iter()
@@ -426,15 +455,10 @@ impl Hub {
         Ok(recent.into_iter().nth(at))
     }
 
-    async fn customer_reply(
-        &self,
-        db: &Db,
-        now: i64,
-        on: Option<i64>,
-    ) -> Result<Option<Change>, BoxError> {
+    async fn customer_reply(&self, uow: &Uow, now: i64, on: Option<i64>) -> Result<Option<Change>> {
         let Some(conversation) = self
             .pick(
-                db,
+                uow,
                 &[Status::Open, Status::Pending, Status::Snoozed],
                 on,
                 false,
@@ -444,27 +468,26 @@ impl Hub {
             return Ok(None);
         };
         let Some(customer) = Customer::query()
-            .find(db, conversation.customer_id)
+            .find(uow, conversation.customer_id)
             .await?
             .map(|record| record.into_inner())
         else {
             return Ok(None);
         };
         let body = FOLLOW_UPS[usize::try_from(self.roll(FOLLOW_UPS.len() as u64)).unwrap_or(0)];
-        Message::query()
-            .insert(
-                db,
-                [Message {
-                    id: self.message_id(),
-                    conversation_id: conversation.id,
-                    kind: Author::Customer.key().to_owned(),
-                    author: customer.name.clone(),
-                    agent_id: None,
-                    body: body.to_owned(),
-                    at: now,
-                }],
-            )
-            .await?;
+        Message::create(
+            uow,
+            Message {
+                id: 0,
+                conversation_id: conversation.id,
+                kind: Author::Customer.key().to_owned(),
+                author: customer.name.clone(),
+                agent_id: None,
+                body: body.to_owned(),
+                at: now,
+            },
+        )
+        .await?;
         let priority = Priority::parse(&conversation.priority).unwrap_or(Priority::Normal);
         // A customer's word starts the clock again, unless one is already running: the
         // first unanswered message is what the team owes.
@@ -472,20 +495,21 @@ impl Hub {
             (Some(Status::Open), Some(due)) => (due, conversation.sla_from.unwrap_or(now)),
             _ => (now + priority.target(), now),
         };
+        let rev = next_rev(uow).await?;
         Conversation::query()
             .where_(Conversation::ID.eq(conversation.id))
             .update(
-                db,
+                uow,
                 [
                     Conversation::STATUS.set(Status::Open.key().to_owned()),
-                    Conversation::UNREAD.set(conversation.unread + 1),
+                    Conversation::UNREAD.set_expr(plus_one("unread")),
                     Conversation::LAST_AT.set(now),
                     Conversation::SLA_DUE.set(Some(due)),
                     Conversation::SLA_FROM.set(Some(from)),
                     Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
                     Conversation::PREVIEW.set(preview_of(body)),
-                    Conversation::REV.set(self.rev()),
-                    Conversation::MESSAGES.set(conversation.messages + 1),
+                    Conversation::REV.set(rev),
+                    Conversation::MESSAGES.set_expr(plus_one("messages")),
                     Conversation::INBOX.set("open".to_owned()),
                 ],
             )
@@ -498,20 +522,20 @@ impl Hub {
 
     async fn teammate(
         &self,
-        db: &Db,
+        uow: &Uow,
         now: i64,
         what: Happening,
         on: Option<i64>,
-    ) -> Result<Option<Change>, BoxError> {
+    ) -> Result<Option<Change>> {
         let statuses: &[Status] = match what {
             Happening::TeammateNote => &[Status::Open, Status::Pending],
             _ => &[Status::Open],
         };
-        let Some(conversation) = self.pick(db, statuses, on, true).await? else {
+        let Some(conversation) = self.pick(uow, statuses, on, true).await? else {
             return Ok(None);
         };
         let Some(agent) = Agent::query()
-            .find(db, conversation.assignee_id.unwrap_or(0))
+            .find(uow, conversation.assignee_id.unwrap_or(0))
             .await?
             .map(|record| record.into_inner())
         else {
@@ -534,27 +558,27 @@ impl Hub {
                 Status::Closed,
             ),
         };
-        Message::query()
-            .insert(
-                db,
-                [Message {
-                    id: self.message_id(),
-                    conversation_id: conversation.id,
-                    kind: kind.key().to_owned(),
-                    author: agent.name.clone(),
-                    agent_id: Some(agent.id),
-                    body: body.clone(),
-                    at: now,
-                }],
-            )
-            .await?;
+        Message::create(
+            uow,
+            Message {
+                id: 0,
+                conversation_id: conversation.id,
+                kind: kind.key().to_owned(),
+                author: agent.name.clone(),
+                agent_id: Some(agent.id),
+                body: body.clone(),
+                at: now,
+            },
+        )
+        .await?;
         let answered = matches!(kind, Author::Agent) || status == Status::Closed;
+        let rev = next_rev(uow).await?;
         let mut sets = vec![
             Conversation::STATUS.set(status.key().to_owned()),
             Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(now),
-            Conversation::REV.set(self.rev()),
-            Conversation::MESSAGES.set(conversation.messages + 1),
+            Conversation::REV.set(rev),
+            Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if answered {
             sets.push(Conversation::SLA_DUE.set(None::<i64>));
@@ -566,27 +590,99 @@ impl Hub {
         }
         Conversation::query()
             .where_(Conversation::ID.eq(conversation.id))
-            .update(db, sets)
+            .update(uow, sets)
             .await?;
         if status == Status::Closed {
-            CustomerEvent::query()
-                .insert(
-                    db,
-                    [CustomerEvent {
-                        id: self.event_id(),
-                        customer_id: conversation.customer_id,
-                        kind: EventKind::TicketClosed.key().to_owned(),
-                        at: now,
-                        title: format!("Resolved: {}", conversation.subject),
-                        detail: format!("Closed by {}", agent.name),
-                    }],
-                )
-                .await?;
+            CustomerEvent::create(
+                uow,
+                CustomerEvent {
+                    id: 0,
+                    customer_id: conversation.customer_id,
+                    kind: EventKind::TicketClosed.key().to_owned(),
+                    at: now,
+                    title: format!("Resolved: {}", conversation.subject),
+                    detail: format!("Closed by {}", agent.name),
+                },
+            )
+            .await?;
         }
         Ok(Some(Change {
             conversation: conversation.id,
             customer: conversation.customer_id,
         }))
+    }
+
+    /// Brings back every snoozed conversation whose day has come by `now` in the desk's
+    /// zone: open again, its clock started, a line in it that says so. A few hundred to a
+    /// transaction, so a writer never waits long. Returns how many came back.
+    pub async fn wake(&self, db: &Db, now: i64) -> Result<usize> {
+        let Some(today) = day_of(now) else {
+            return Ok(0);
+        };
+        let mut woken = 0;
+        loop {
+            let done = Self::in_uow(db, |uow| async move {
+                let due: Vec<Conversation> = Conversation::query()
+                    .where_(Conversation::INBOX.eq("snoozed"))
+                    .where_(Conversation::SNOOZED_UNTIL.lte(Some(today)))
+                    .order_by("id")
+                    .limit(WAKE_AT_ONCE)
+                    .get(&uow)
+                    .await?
+                    .into_vec()
+                    .into_iter()
+                    .map(|record| record.into_inner())
+                    .collect();
+                for conversation in &due {
+                    let day = conversation
+                        .snoozed_until
+                        .map_or_else(String::new, |day| day.format("%A, %-d %B").to_string());
+                    Message::create(
+                        &uow,
+                        Message {
+                            id: 0,
+                            conversation_id: conversation.id,
+                            kind: Author::Event.key().to_owned(),
+                            author: "Snooze".to_owned(),
+                            agent_id: None,
+                            body: format!("Back from snooze: it was put aside until {day}"),
+                            at: now,
+                        },
+                    )
+                    .await?;
+                    let target = Priority::parse(&conversation.priority)
+                        .unwrap_or(Priority::Normal)
+                        .target();
+                    let rev = next_rev(&uow).await?;
+                    Conversation::query()
+                        .where_(Conversation::ID.eq(conversation.id))
+                        .update(
+                            &uow,
+                            [
+                                Conversation::STATUS.set(Status::Open.key().to_owned()),
+                                Conversation::INBOX.set("open".to_owned()),
+                                Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
+                                Conversation::LAST_AT.set(now),
+                                Conversation::SLA_DUE.set(Some(now + target)),
+                                Conversation::SLA_FROM.set(Some(now)),
+                                Conversation::REV.set(rev),
+                                Conversation::MESSAGES.set_expr(plus_one("messages")),
+                            ],
+                        )
+                        .await?;
+                    self.tell(Change {
+                        conversation: conversation.id,
+                        customer: conversation.customer_id,
+                    });
+                }
+                Ok(due.len())
+            })
+            .await?;
+            woken += done;
+            if (done as u64) < WAKE_AT_ONCE {
+                return Ok(woken);
+            }
+        }
     }
 
     /// Runs the simulator: something happens every `every`, give or take. It runs until
@@ -607,6 +703,20 @@ impl Hub {
         loop {
             tokio::time::sleep(every).await;
             self.tell(Change::TICK);
+        }
+    }
+
+    /// Wakes snoozed conversations whose day has come, every `every`, whether or not
+    /// the clock runs. Not while the desk is written afresh.
+    pub async fn wake_up(self: Arc<Self>, db: Arc<Db>, every: Duration) {
+        loop {
+            {
+                let _one = self.writing.lock().await;
+                if let Err(error) = self.wake(&db, now()).await {
+                    eprintln!("inbox-demo: snoozed conversations could not come back: {error}");
+                }
+            }
+            tokio::time::sleep(every).await;
         }
     }
 
@@ -694,7 +804,7 @@ mod tests {
         uow.rollback().await.expect("the rollback");
         assert!(heard.try_recv().is_err(), "nothing after a rollback");
 
-        // Outside a request every write is committed already: at once.
+        // Outside a unit of work nothing was written: at once.
         hub.tell(change);
         assert_eq!(heard.try_recv().ok(), Some(change));
     }

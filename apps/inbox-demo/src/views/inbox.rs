@@ -9,7 +9,8 @@ use crate::data::{
 use crate::views::customer::{CUSTOMER, customer_body, customer_head};
 use crate::views::list::{LIST_BODY, ListPage, Summary, list_header, list_lazy, summary_region};
 use crate::views::thread::{
-    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, Open, Window, composer, thread_head, thread_lazy,
+    ActForm, COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, Open, Window, composer, thread_head,
+    thread_lazy,
 };
 use crate::views::{Filters, View};
 
@@ -82,6 +83,18 @@ pub struct Inbox<'a> {
     pub draft: &'a str,
     pub kind: &'a str,
     pub error: Option<&'a str>,
+    /// The agent at the desk.
+    pub me: i64,
+    /// Whether they have single-key shortcuts on.
+    pub keys: bool,
+}
+
+/// The page's heading: the open conversation's subject, or the view.
+pub fn page_title(page: &Inbox<'_>) -> String {
+    page.open.map_or_else(
+        || page.filters.view.label().to_owned(),
+        |thread| thread.conversation.subject.clone(),
+    )
 }
 
 /// The stream a page listens to.
@@ -177,7 +190,7 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
         split = split.sizes(sizes);
     }
     let split = split.current(page.pane).pane_with("conversations", |pane| {
-        pane.header(list_header(page.filters, &path))
+        pane.header(list_header(page.filters, &path, page.keys))
             .body(list_body(page, &stream))
     });
     match page.open {
@@ -190,6 +203,7 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
                 now: page.now,
                 today: page.today,
                 neighbours: thread.neighbours,
+                keys: page.keys,
             };
             let back = page.filters.href(&path);
             let window = Window {
@@ -201,7 +215,13 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
             split
                 .pane_with("thread", |pane| {
                     pane.header(head_region(&open))
-                        .body(thread_lazy(&thread.conversation, &window, &stream, page.now))
+                        .body(thread_lazy(
+                            &thread.conversation,
+                            &window,
+                            &stream,
+                            page.now,
+                            page.me,
+                        ))
                         .from_end()
                         .body_label("Messages")
                         .footer(composer(
@@ -209,6 +229,7 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
                             page.draft,
                             page.kind,
                             page.error,
+                            page.keys,
                         ))
                 })
                 .pane_with("customer", |pane| {
@@ -225,13 +246,17 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
             .pane_with("thread", |pane| {
                 let first = page.list.rows.first().map(|row| {
                     // j opens the first; on a conversation's page, j and k are its neighbours.
-                    Button::outline("Open the first")
-                        .href(page.filters.href(&format!("/inbox/{}", row.conversation.id)))
-                        .hotkey("j")
+                    let button = Button::outline("Open the first")
+                        .href(page.filters.href(&format!("/inbox/{}", row.conversation.id)));
+                    if page.keys { button.hotkey("j") } else { button }
                 });
                 let empty = Empty::new("Choose a conversation")
                     .icon(icons::MESSAGES_SQUARE)
-                    .description("Pick one from the list, or press j to open the first. Press ? for every key.");
+                    .description(if page.keys {
+                        "Pick one from the list, or press j to open the first. Press ? for every key."
+                    } else {
+                        "Pick one from the list."
+                    });
                 pane.body(match first {
                     Some(button) => empty.actions(button),
                     None => empty,
@@ -345,8 +370,13 @@ pub fn palette(page: &Inbox<'_>) -> Command {
     command.group(places)
 }
 
-/// The keys, in a dialog `?` opens.
-pub fn shortcuts() -> Dialog {
+/// Where the agent turns single-key shortcuts on or off.
+pub const KEYS_PATH: &str = "/inbox/keys";
+
+/// The keys, in a dialog `?` opens, and the switch that turns single keys off for the
+/// agent: some people can't use them (a speech input types letters), so each person
+/// chooses, and the server keeps the choice.
+pub fn shortcuts(keys: bool) -> Dialog {
     let row = |keys: &[&'static str], what: &'static str| {
         TableRowEl::new((
             TableCell::new(
@@ -359,9 +389,32 @@ pub fn shortcuts() -> Dialog {
             TableCell::new(what),
         ))
     };
+    let switch = el("form")
+        .attr("id", "keys-form")
+        .attr("method", "post")
+        .attr("action", KEYS_PATH)
+        .flag("data-ui-form", true)
+        .uses(Uses::CORE)
+        .children((
+            el("input")
+                .attr("type", "hidden")
+                .attr("name", "from")
+                .attr("value", if keys { "off" } else { "on" }),
+            Button::outline(if keys {
+                "Turn single keys off"
+            } else {
+                "Turn single keys on"
+            })
+            .submit()
+            .size(Size::Sm),
+        ));
     Dialog::new("shortcuts", "Keyboard shortcuts")
-        .description("Keys work anywhere on the page, except while you type in a field.")
-        .body(
+        .description(if keys {
+            "Single keys work while you aren't typing in a field; e works only inside the open conversation. Turn them off if you use speech input or press keys by accident."
+        } else {
+            "Single keys are off for you. Ctrl+K and Esc still work."
+        })
+        .body(Stack::gap(4).children((
             Table::new()
                 .caption("Keyboard shortcuts")
                 .head((TableHead::new("Key"), TableHead::new("Does")))
@@ -369,26 +422,34 @@ pub fn shortcuts() -> Dialog {
                     row(&["j"], "Open the next, older conversation in the list"),
                     row(&["k"], "Open the newer conversation above"),
                     row(&["r"], "Write a reply"),
-                    row(&["e"], "Close the conversation, or reopen it"),
+                    row(&["e"], "Close the open conversation, or reopen it"),
                     row(&["/"], "Search the conversations"),
                     row(&["Ctrl", "K"], "Open the command palette"),
                     row(&["?"], "Show these keys"),
                     row(&["Esc"], "Close a dialog or a menu"),
                 ]),
-        )
+            switch,
+        )))
         .footer(Button::new("Close").closes_dialog("shortcuts"))
 }
 
+/// What the switch posts.
+pub type KeysForm = ActForm;
+
 /// The buttons beside the page's heading: the palette and the keys.
-pub fn page_actions() -> Node {
+pub fn page_actions(keys: bool) -> Node {
+    let shortcuts = Button::icon_only(icons::KEYBOARD, "Keyboard shortcuts")
+        .variant(ButtonVariant::Ghost)
+        .size(Size::Sm)
+        .opens_dialog("shortcuts");
     Row::gap(2)
         .children((
             Command::trigger("palette", "Actions"),
-            Button::icon_only(icons::KEYBOARD, "Keyboard shortcuts")
-                .variant(ButtonVariant::Ghost)
-                .size(Size::Sm)
-                .opens_dialog("shortcuts")
-                .hotkey("?"),
+            if keys {
+                shortcuts.hotkey("?")
+            } else {
+                shortcuts
+            },
         ))
         .into()
 }

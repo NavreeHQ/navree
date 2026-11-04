@@ -178,8 +178,26 @@ pub struct ViewCounts {
     pub snoozed: u64,
 }
 
-/// The app's shell for the agent `me`, with the views and their counts.
-pub fn shell(me: &Agent, team: &[Agent], counts: ViewCounts, current: View) -> Shell {
+/// The sidebar's views, as the region that keeps their counts current.
+pub const VIEWS: &str = "inbox-views";
+
+/// Where the sidebar's views fetch their counts again, for the page of `current`.
+pub fn views_src(current: View) -> String {
+    match current {
+        View::All => "/inbox/fragments/views".to_owned(),
+        other => format!("/inbox/fragments/views?view={}", other.key()),
+    }
+}
+
+/// The app's shell for the agent `me`, with the views and their counts. With the page's
+/// event `stream`, the counts follow the desk as the list does.
+pub fn shell(
+    me: &Agent,
+    team: &[Agent],
+    counts: ViewCounts,
+    current: View,
+    stream: Option<&str>,
+) -> Shell {
     let item = |view: View, count: Option<u64>| {
         let item = NavItem::new(view.label(), Filters::with_view(view).href("/inbox"))
             .icon(view.icon())
@@ -201,19 +219,26 @@ pub fn shell(me: &Agent, team: &[Agent], counts: ViewCounts, current: View) -> S
             format!("/as/{}", other.id),
         );
     }
+    let mut group = NavGroup::new("Inbox")
+        .item(item(View::All, Some(counts.all)))
+        .item(item(View::Mine, Some(counts.mine)))
+        .item(item(View::Unassigned, Some(counts.unassigned)))
+        .item(item(View::Snoozed, Some(counts.snoozed)))
+        .item(item(View::Closed, None));
+    if let Some(stream) = stream {
+        group = group.live(
+            VIEWS,
+            views_src(current),
+            stream.to_owned(),
+            Some("conversations"),
+        );
+    }
     Shell::new(COMPANY)
         .context("Support")
         .home("/inbox")
         // At the top: at the bottom a toast would cover the composer's Send button.
         .toasts(ToastPosition::TopCenter)
-        .group(
-            NavGroup::new("Inbox")
-                .item(item(View::All, Some(counts.all)))
-                .item(item(View::Mine, Some(counts.mine)))
-                .item(item(View::Unassigned, Some(counts.unassigned)))
-                .item(item(View::Snoozed, Some(counts.snoozed)))
-                .item(item(View::Closed, None)),
-        )
+        .group(group)
         .user(menu)
 }
 

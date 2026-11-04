@@ -17,15 +17,17 @@ use crate::data::{
 };
 use crate::scale::match_query;
 use crate::views::inbox::CustomerView;
-use crate::views::list::{ListRow, PAGE, Summary};
+use crate::views::list::{ListRow, PAGE, Summary, timed};
 use crate::views::{Filters, View};
 
 type Result<T> = std::result::Result<T, AppError>;
 
 /// How many messages a page of a conversation holds.
 pub const MESSAGES: u64 = 30;
-/// The most changes one live answer carries.
-const MOST_CHANGES: u64 = 300;
+/// The most changes one live answer carries; the rest come with the next ask.
+pub const MOST_CHANGES: u64 = 300;
+/// The most new messages one live answer carries; the rest come with the next ask.
+pub const LIVE_MESSAGES: u64 = 200;
 
 /// The search as a filter on conversations: their ids in the full-text index.
 fn searched(filters: &Filters) -> Option<Filter> {
@@ -276,28 +278,70 @@ pub async fn neighbours(
     Ok((newer, older))
 }
 
-/// What changed since revision `since`: the conversations that fit the view now, the
-/// keys of those that left it, and the revision the answer is at.
+/// Where a live list stands: the desk's revision it has every change up to, and the
+/// moment, in unix seconds, the server last drew its times. Written `"{rev}.{at}"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Since {
+    pub rev: i64,
+    pub at: i64,
+}
+
+impl Since {
+    /// `"41.1793793600"`.
+    pub fn text(self) -> String {
+        format!("{}.{}", self.rev, self.at)
+    }
+
+    /// Reads what [`text`](Self::text) wrote; `None` for anything else.
+    pub fn read(text: &str) -> Option<Since> {
+        let (rev, at) = text.split_once('.')?;
+        let digits = |part: &str| {
+            !part.is_empty() && part.len() <= 18 && part.bytes().all(|b| b.is_ascii_digit())
+        };
+        if !digits(rev) || !digits(at) {
+            return None;
+        }
+        Some(Since {
+            rev: rev.parse().ok()?,
+            at: at.parse().ok()?,
+        })
+    }
+}
+
+/// What changed since `since`: the conversations that fit the view now, the keys of
+/// those that left it, the revision the answer is at, and whether more changes wait
+/// beyond it.
+///
+/// A change is a conversation whose revision is past the list's. A row in the window
+/// the page has loaded (`window`, its first and last cursors) whose times read
+/// differently now than when the server last drew them (`since.at`) is a change too: a
+/// clock counting down, "4 min" ago becoming "5 min". Nothing else is sent again.
 pub async fn changes(
     uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
-    since: i64,
+    since: Since,
     window: Option<(&str, &str)>,
-) -> Result<(Vec<ListRow>, Vec<String>, i64)> {
+    now: i64,
+) -> Result<(Vec<ListRow>, Vec<String>, i64, bool)> {
     let mut changed = inner(
         Conversation::query()
-            .where_(Conversation::REV.gt(since))
+            .where_(Conversation::REV.gt(since.rev))
             .order_by("rev")
-            .limit(MOST_CHANGES)
+            .limit(MOST_CHANGES + 1)
             .get(uow)
             .await?,
     );
-    let newest = changed.iter().map(|c| c.rev).max().unwrap_or(since);
-    if let Some(window) = window {
-        for clock in clocks_in(uow, filters, me, window).await? {
-            if !changed.iter().any(|c| c.id == clock.id) {
-                changed.push(clock);
+    let more = changed.len() as u64 > MOST_CHANGES;
+    changed.truncate(MOST_CHANGES as usize);
+    let newest = changed.iter().map(|c| c.rev).max().unwrap_or(since.rev);
+    if let Some(window) = window
+        && since.at < now
+    {
+        for row in window_rows(uow, filters, me, window).await? {
+            if !changed.iter().any(|c| c.id == row.id) && timed(&row, since.at) != timed(&row, now)
+            {
+                changed.push(row);
             }
         }
     }
@@ -327,13 +371,12 @@ pub async fn changes(
             gone.push(conversation.id.to_string());
         }
     }
-    Ok((hydrate(uow, keep).await?, gone, newest))
+    Ok((hydrate(uow, keep).await?, gone, newest, more))
 }
 
-/// The conversations in a loaded window of the list whose clock is running: their
-/// countdown changes with no write, so a live answer draws them again. At most what the
-/// page holds, read by the view's index between the window's two cursors.
-pub async fn clocks_in(
+/// The conversations in a loaded window of the list: at most what the page holds, read
+/// by the view's index between the window's two cursors.
+pub async fn window_rows(
     uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
@@ -344,9 +387,6 @@ pub async fn clocks_in(
     else {
         return Ok(Vec::new());
     };
-    if matches!(filters.view, View::Snoozed | View::Closed) {
-        return Ok(Vec::new());
-    }
     Ok(inner(
         in_view(filters, me)
             .where_(Filter::raw(
@@ -358,8 +398,6 @@ pub async fn clocks_in(
                     Value::I64(bottom_id),
                 ],
             ))
-            .where_(Conversation::STATUS.eq(Status::Open.key()))
-            .where_(Conversation::SLA_DUE.is_not_null())
             .order_by_desc("last_at")
             .order_by_desc("id")
             .limit(400)
@@ -369,8 +407,12 @@ pub async fn clocks_in(
 }
 
 /// A window of a conversation's messages, oldest first, and their files: the newest page,
-/// the page before or after a cursor, or everything after a live revision. Then whether
-/// older and newer messages lie beyond it.
+/// the page before or after a cursor, or what came after the newest message a live list
+/// has (at most [`LIVE_MESSAGES`]). Then whether older and newer messages lie beyond it.
+///
+/// A message's id is the row id SQLite gave it inside the transaction that wrote it, so
+/// ids become visible in the order they commit, and "after the newest it has" can't skip
+/// one (see [`crate::live`]).
 pub async fn thread_window(
     uow: &(impl Executor + ?Sized),
     id: i64,
@@ -415,16 +457,18 @@ pub async fn thread_window(
             (found, true, more)
         }
         LazyAsk::Since(text) => {
-            let since = text.parse::<i64>().unwrap_or(i64::MAX);
-            let found = rows(
+            let since = read_message_cursor(text).unwrap_or(i64::MAX);
+            let mut found = rows(
                 query
                     .where_(Message::ID.gt(since))
                     .order_by("id")
-                    .limit(200)
+                    .limit(LIVE_MESSAGES + 1)
                     .get(uow)
                     .await?,
             );
-            (found, false, false)
+            let more = found.len() as u64 > LIVE_MESSAGES;
+            found.truncate(LIVE_MESSAGES as usize);
+            (found, false, more)
         }
         _ => {
             let mut found = rows(

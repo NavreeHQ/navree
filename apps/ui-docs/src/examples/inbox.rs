@@ -4,7 +4,8 @@
 
 use inbox_demo::data::{self, Agent, Attachment, Conversation, Customer, CustomerEvent, Message};
 use inbox_demo::views::inbox::{
-    CustomerView, Inbox, OpenThread, inbox_split, page_actions, palette, shortcuts,
+    CustomerView, Inbox, OpenThread, inbox_split, page_actions, page_title, palette, shortcuts,
+    stream_url,
 };
 use inbox_demo::views::list::{ListPage, ListRow, Summary, conversation_item};
 use inbox_demo::views::thread::message_item;
@@ -298,7 +299,7 @@ impl Scene {
                 rows: &self.rows,
                 more_after: true,
                 more_before: false,
-                since: 1,
+                since: format!("1.{NOW}"),
             },
             summary: self.summary,
             open: Some(&self.thread),
@@ -309,6 +310,8 @@ impl Scene {
             draft: "",
             kind: "reply",
             error: None,
+            me: 1,
+            keys: true,
         }
     }
 }
@@ -339,13 +342,15 @@ fn page(pane: &'static str) -> Node {
             .filter(|c| c.inbox == "snoozed")
             .count() as u64,
     };
-    let body = shell(&me, &desk.agents, counts, View::All)
+    let stream = stream_url(inbox.open);
+    let body = shell(&me, &desk.agents, counts, View::All, Some(&stream))
         .page(
-            "All open",
+            page_title(&inbox),
             format!("/inbox/{}", scene.thread.conversation.id),
         )
-        .actions(page_actions())
-        .body((inbox_split(&inbox, None), palette(&inbox), shortcuts()))
+        .crumb(View::All.label(), "/inbox")
+        .actions(page_actions(true))
+        .body((inbox_split(&inbox, None), palette(&inbox), shortcuts(true)))
         .to_view()
         .body_node()
         .clone();
@@ -404,7 +409,7 @@ fn page(pane: &'static str) -> Node {
         el("template")
             .attr("data-preview-replay", thread_items.clone())
             .child(
-                message_item(&later, &[], NOW)
+                message_item(&later, &[], NOW, me.id)
                     .attr("data-preview-into", thread_items)
                     .attr("data-preview-at", "end"),
             ),
@@ -464,13 +469,21 @@ fn long_thread() -> Node {
     let inbox = scene.inbox("thread");
     let desk = &scene.desk;
     let me = desk.agents.first().cloned().unwrap_or_default();
-    let body = shell(&me, &desk.agents, ViewCounts::default(), View::Closed)
-        .page("Closed", "/inbox/1008")
-        .actions(page_actions())
-        .body((inbox_split(&inbox, None), shortcuts()))
-        .to_view()
-        .body_node()
-        .clone();
+    let stream = stream_url(inbox.open);
+    let body = shell(
+        &me,
+        &desk.agents,
+        ViewCounts::default(),
+        View::Closed,
+        Some(&stream),
+    )
+    .page(page_title(&inbox), "/inbox/1008")
+    .crumb(View::Closed.label(), "/inbox?view=closed")
+    .actions(page_actions(true))
+    .body((inbox_split(&inbox, None), shortcuts(true)))
+    .to_view()
+    .body_node()
+    .clone();
     let thread_items = format!(
         "thread-messages-{}",
         navree::ui::assets::content_hash(b"conversation-1008")
@@ -485,7 +498,7 @@ fn long_thread() -> Node {
                     .rev()
                     .map(|m| {
                         Node::from(
-                            message_item(m, &[], NOW)
+                            message_item(m, &[], NOW, me.id)
                                 .attr("data-preview-into", thread_items.clone()),
                         )
                     })

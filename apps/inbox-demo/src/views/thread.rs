@@ -87,6 +87,8 @@ pub struct Open<'a> {
     pub today: NaiveDate,
     /// The conversations either side of this one in the view: newer, then older.
     pub neighbours: (Option<i64>, Option<i64>),
+    /// Whether the agent has single-key shortcuts on.
+    pub keys: bool,
 }
 
 /// A form that posts to `action`, through the runtime when it runs.
@@ -229,8 +231,9 @@ fn snooze(open: &Open<'_>) -> Popover {
         )
 }
 
-/// Close, or reopen: one key does it.
-fn close_or_reopen(conversation: &Conversation) -> Node {
+/// Close, or reopen: `e` does it, only while the focus is in the conversation, so the
+/// key can't close one from the list or the search.
+fn close_or_reopen(conversation: &Conversation, keys: bool) -> Node {
     let closed = conversation.status == Status::Closed.key();
     let (to, label, glyph) = if closed {
         ("open", "Reopen", icons::ROTATE_CCW)
@@ -241,22 +244,40 @@ fn close_or_reopen(conversation: &Conversation) -> Node {
         "close-form",
         format!("/inbox/{}/status/{to}", conversation.id),
     )
-    .child(
-        Button::new(label)
-            .submit()
-            .icon(glyph)
-            .size(Size::Sm)
-            .hotkey("e"),
-    )
+    .child({
+        let button = Button::new(label).submit().icon(glyph).size(Size::Sm);
+        if keys {
+            button.hotkey_within("e", THREAD_PANE)
+        } else {
+            button
+        }
+    })
     .into()
 }
 
-/// The heading: the subject, who and where from, what stands, and what to do.
+/// With no script, opening a conversation marks nothing read (a `GET` changes nothing):
+/// a button does. With the runtime, the messages say they were seen by themselves.
+fn mark_read(conversation: &Conversation) -> Option<Node> {
+    (conversation.unread > 0).then(|| {
+        only_without_script(
+            post_form("read-form", format!("/inbox/{}/seen", conversation.id)).child(
+                Button::outline("Mark as read")
+                    .submit()
+                    .icon(icons::CHECK)
+                    .size(Size::Sm),
+            ),
+        )
+    })
+}
+
+/// The pane the conversation is in: a key that changes it works only inside it.
+pub const THREAD_PANE: &str = "thread";
+
+/// The heading: who and where from, what stands, and what to do. The subject is the
+/// page's own heading. Its status and priority are what their menus say.
 pub fn thread_head(open: &Open<'_>) -> Node {
     let conversation = open.conversation;
     let channel = Channel::parse(&conversation.channel).unwrap_or(Channel::Chat);
-    let status = Status::parse(&conversation.status).unwrap_or(Status::Open);
-    let priority = Priority::parse(&conversation.priority).unwrap_or(Priority::Normal);
     let here = format!("/inbox/{}", conversation.id);
     let mut customer_link = open.filters.href(&here);
     customer_link.push_str(if customer_link.contains('?') {
@@ -265,11 +286,6 @@ pub fn thread_head(open: &Open<'_>) -> Node {
         "?pane=customer"
     });
     let mut badges: Vec<Node> = vec![
-        Badge::new(status.label()).tone(status.tone()).dot().into(),
-        Badge::new(priority.label())
-            .tone(priority.tone())
-            .icon(priority.icon())
-            .into(),
         Badge::new(channel.label())
             .icon(channel.icon())
             .variant(BadgeVariant::Outline)
@@ -292,12 +308,20 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                 .into(),
         );
     }
+    if conversation.unread > 0 {
+        badges.push(
+            Badge::new(format!("{} new", conversation.unread))
+                .tone(Tone::Info)
+                .into(),
+        );
+    }
     let filters = open.filters;
+    let keys = open.keys;
     let step = |id: Option<i64>, glyph, label: &str, key: &str| {
         let button = Button::icon_only(glyph, label.to_owned())
             .variant(ButtonVariant::Ghost)
-            .size(Size::Sm)
-            .hotkey(key);
+            .size(Size::Sm);
+        let button = if keys { button.hotkey(key) } else { button };
         match id {
             Some(id) => button.href(filters.href(&format!("/inbox/{id}"))),
             None => button.disabled(true),
@@ -328,7 +352,6 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                     ),
                 )),
             )),
-            Heading::h2(conversation.subject.clone()).id("thread-subject"),
             Text::muted(format!(
                 "{} at {} · #{} · {} message{}",
                 open.customer.name,
@@ -343,7 +366,8 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                 status_menu(conversation),
                 priority_menu(conversation),
                 snooze(open),
-                close_or_reopen(conversation),
+                close_or_reopen(conversation, open.keys),
+                mark_read(conversation),
                 SplitPane::toggle(
                     Button::ghost("Customer")
                         .icon(icons::PANEL_RIGHT)
@@ -429,17 +453,27 @@ fn message(message: &MessageRow, files: &[&FileRow], now: i64) -> Node {
         .into()
 }
 
-/// One message as an item of the lazy list.
-pub fn message_item(item: &MessageRow, files: &[FileRow], now: i64) -> LazyItem {
+/// One message as an item of the lazy list, for the agent `me`: what it says when it
+/// arrives live is short, and nothing for what `me` did.
+pub fn message_item(item: &MessageRow, files: &[FileRow], now: i64, me: i64) -> LazyItem {
     let mine: Vec<&FileRow> = files
         .iter()
         .filter(|file| file.message_id == item.id)
         .collect();
-    LazyItem::new(
+    let lazy = LazyItem::new(
         item.id.to_string(),
         message_cursor(item.id),
         message(item, &mine, now),
-    )
+    );
+    if item.agent_id == Some(me) {
+        return lazy.quiet();
+    }
+    lazy.announce(match Author::parse(&item.kind) {
+        Author::Customer => format!("New message from {}", item.author),
+        Author::Agent => format!("{} replied", item.author),
+        Author::Note => format!("New internal note from {}", item.author),
+        Author::Event => item.body.clone(),
+    })
 }
 
 /// The newest messages of a conversation and the window of them a page holds: older
@@ -451,12 +485,14 @@ pub struct Window<'a> {
     pub newer: bool,
 }
 
-/// The messages, oldest first: a lazy list that starts at the newest.
+/// The messages, oldest first: a lazy list that starts at the newest. New ones arrive at
+/// the end, live, and are read out briefly; the server hears when they were seen.
 pub fn thread_lazy(
     conversation: &Conversation,
     window: &Window<'_>,
     stream: &str,
     now: i64,
+    me: i64,
 ) -> LazyList {
     let id = conversation.id;
     let mut list = LazyList::new(MESSAGES, "Messages", format!("/inbox/{id}/messages"))
@@ -467,10 +503,12 @@ pub fn thread_lazy(
             window
                 .messages
                 .iter()
-                .map(|item| message_item(item, window.files, now)),
+                .map(|item| message_item(item, window.files, now, me)),
         )
         .since(window.messages.last().map_or(0, |last| last.id).to_string())
         .live_from(stream.to_owned(), Some("thread"), LazyEnd::End)
+        .announce_new("{n} new messages", "A new message")
+        .seen_by(format!("/inbox/{id}/seen"))
         .max(400)
         .labels(LazyLabels {
             start: "Show earlier messages".to_owned(),
@@ -492,8 +530,15 @@ pub fn thread_lazy(
 }
 
 /// The composer: a reply or an internal note, saved replies to start from, and Send.
-/// `draft` is text to start with: a saved reply put in with no script.
-pub fn composer(conversation: &Conversation, draft: &str, kind: &str, error: Option<&str>) -> Node {
+/// `draft` is text to start with: a saved reply put in with no script. `r` finds it,
+/// unless the agent turned single keys off (`keys`).
+pub fn composer(
+    conversation: &Conversation,
+    draft: &str,
+    kind: &str,
+    error: Option<&str>,
+    keys: bool,
+) -> Node {
     let id = conversation.id;
     let note = kind == "note";
     let saved = Popover::new("saved-replies", "Saved replies")
@@ -527,14 +572,18 @@ pub fn composer(conversation: &Conversation, draft: &str, kind: &str, error: Opt
                     .size(Size::Sm),
                 Field::new(COMPOSER_BODY, "Message")
                     .error_opt(error.map(str::to_owned))
-                    .control(
-                        Textarea::new("body")
+                    .control({
+                        let text = Textarea::new("body")
                             .value(draft.to_owned())
                             .rows(3)
-                            .placeholder("Write a reply, or press r from anywhere")
-                            .attr("maxlength", 5000_i64)
-                            .hotkey("r"),
-                    ),
+                            .attr("maxlength", 5000_i64);
+                        if keys {
+                            text.placeholder("Write a reply, or press r from anywhere")
+                                .hotkey("r")
+                        } else {
+                            text.placeholder("Write a reply")
+                        }
+                    }),
                 el("input")
                     .attr("type", "hidden")
                     .attr("name", "saved")

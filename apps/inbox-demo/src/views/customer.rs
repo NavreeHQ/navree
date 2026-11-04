@@ -29,6 +29,10 @@ pub fn customer_head(customer: &Customer, back: &str) -> Node {
                 Stack::gap(0).children((
                     Heading::h2(customer.name.clone()).id("customer-name"),
                     Text::muted(format!("{} at {}", customer.role, customer.company)),
+                    Row::gap(1).align(Align::Center).children((
+                        Flag::country(&customer.country).decorative(),
+                        Text::muted(place(&customer.city, &customer.country)).inline(),
+                    )),
                     Text::muted(customer.email.clone()),
                     Text::muted(customer.phone.clone()),
                 )),
@@ -37,7 +41,8 @@ pub fn customer_head(customer: &Customer, back: &str) -> Node {
         .into()
 }
 
-/// The facts an agent checks first: the plan, the money, and what else is open.
+/// The facts an agent checks first: the plan, how big the account is, the money, and
+/// what else is open. Where they are is in the heading, with their flag.
 fn facts(view: &CustomerView) -> FactGrid {
     let customer = &view.customer;
     let plan = Plan::parse(&customer.plan);
@@ -47,12 +52,18 @@ fn facts(view: &CustomerView) -> FactGrid {
             .icon(icons::LAYERS)
             .tone(Tone::Info)
             .detail(format!(
-                "{} seats · customer since {}",
-                customer.seats,
+                "Customer since {}",
                 customer
                     .since
                     .map_or_else(String::new, |day| day.format("%b %Y").to_string())
             )),
+        FactCard::new(
+            "Seats",
+            thousands(u64::try_from(customer.seats).unwrap_or(0)),
+        )
+        .icon(icons::USERS)
+        .tone(Tone::named("violet"))
+        .detail(format!("{} a seat each month", rupees(plan.seat_paise()))),
         FactCard::new("Lifetime value", rupees(customer.lifetime_paise))
             .icon(icons::WALLET)
             .tone(Tone::Success)
@@ -69,16 +80,6 @@ fn facts(view: &CustomerView) -> FactGrid {
                 1 => "1 past due".to_owned(),
                 n => format!("{} past due", thousands(n)),
             }),
-        FactCard::new(
-            "Location",
-            Row::gap(2).align(Align::Center).children((
-                Flag::country(&customer.country).decorative(),
-                Text::new(customer.city.clone()).inline(),
-            )),
-        )
-        .icon(icons::MAP_PIN)
-        .tone(Tone::named("violet"))
-        .detail(place(&customer.city, &customer.country)),
     ])
 }
 

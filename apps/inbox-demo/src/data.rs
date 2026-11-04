@@ -30,6 +30,8 @@ pub struct Agent {
     pub email: String,
     pub team: String,
     pub active: bool,
+    /// Whether single-key shortcuts are on for them: each person can turn them off.
+    pub single_keys: bool,
 }
 
 /// A customer: a person at a business that books with the product.
@@ -39,7 +41,8 @@ pub struct Customer {
     pub id: i64,
     pub name: String,
     pub email: String,
-    /// A mobile number, made up: `+91 98765 4` and four digits.
+    /// A number shaped like a mobile, made up: `+91 55555` and five digits, in no range
+    /// India's numbering plan holds.
     pub phone: String,
     pub company: String,
     pub role: String,
@@ -760,9 +763,11 @@ pub fn state_of(city: &str) -> Option<&'static str> {
         .map(|(_, state)| *state)
 }
 
-/// A customer's made-up mobile number: `+91 98765 4` and four digits of their id.
+/// A customer's made-up number: `+91 55555` and five digits of their id. It is written as
+/// an Indian mobile is, but India's numbering plan holds no number, mobile or fixed, that
+/// starts with 555, so it can't be anyone's.
 pub fn phone_of(id: i64) -> String {
-    format!("+91 98765 4{:04}", id.rem_euclid(10_000))
+    format!("+91 55555 {:05}", id.rem_euclid(100_000))
 }
 
 const ROLES: [&str; 6] = [
@@ -1161,6 +1166,7 @@ pub fn seed(now: i64) -> Seed {
             team: (*team).to_owned(),
             // Two people are away, and can't be given work.
             active: !matches!(at, 21 | 23),
+            single_keys: true,
         })
         .collect();
 
@@ -1512,7 +1518,7 @@ mod tests {
         for customer in &one.customers {
             assert_eq!(customer.country, "IN");
             assert!(
-                customer.phone.starts_with("+91 98765 4"),
+                customer.phone.starts_with("+91 55555 "),
                 "{}",
                 customer.phone
             );
@@ -1566,7 +1572,8 @@ mod tests {
         assert_eq!(indian_digits(1_000), "1,000");
         assert_eq!(indian_digits(100_000), "1,00,000");
         assert_eq!(indian_digits(10_000_000), "1,00,00,000");
-        assert_eq!(phone_of(7), "+91 98765 40007");
+        assert_eq!(phone_of(7), "+91 55555 00007");
+        assert_eq!(phone_of(101_234), "+91 55555 01234");
         assert_eq!(state_of("Ludhiana"), Some("Punjab"));
         assert_eq!(state_of("Delhi"), None);
         assert_eq!(short_span(30), "under 1 min");

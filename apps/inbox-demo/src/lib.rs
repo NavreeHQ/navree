@@ -23,8 +23,9 @@
 //!   timeline of their history, and tags.
 //! - **Live**: new conversations and messages arrive over server-sent events, in the
 //!   list and in the open conversation, while what an agent types stays as it is.
-//! - **Keys**: `j` and `k` move through the list, `r` replies, `e` closes, `/`
-//!   searches, `?` lists the keys, and Ctrl+K opens the command palette.
+//! - **Keys**: `j` and `k` move through the list, `r` replies, `e` closes the open
+//!   conversation (only while the focus is in it), `/` searches, `?` lists the keys, and
+//!   Ctrl+K opens the command palette. Each agent can turn single keys off.
 //! - **No JavaScript**: every action is a link or a form.
 //!
 //! The data is SQLite, written afresh at every start (`INBOX_DATABASE_URL`,
@@ -35,8 +36,12 @@
 //! and the customer pane after the page. A simulator makes customers
 //! and teammates act every few seconds (`INBOX_SIMULATOR=<milliseconds>`, 6000 by
 //! default, or `off`), and the clock redraws the timers every 30 seconds
-//! (`INBOX_TICK=<milliseconds>` or `off`). There is no sign-in: a visitor works as
-//! one of the team and can switch to another from the account menu.
+//! (`INBOX_TICK=<milliseconds>` or `off`). A snoozed conversation comes back on its day.
+//!
+//! **There is no sign-in.** A visitor works as one of the team, named by a cookie the
+//! server signs, and can switch to another from the account menu. A real app puts the
+//! inbox behind navree-auth and checks on every route that the person may see the
+//! conversation it names.
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -154,6 +159,18 @@ impl Lifecycle for Seeder {
                 }
             });
         }
+        // Snoozed conversations come back on their day, whether or not the clock runs.
+        {
+            let hub = self.hub.clone();
+            let db = self.db.clone();
+            let stop = ctx.shutdown_token();
+            ctx.tracker().spawn(async move {
+                tokio::select! {
+                    () = stop.cancelled() => {}
+                    () = hub.wake_up(db, Duration::from_secs(60)) => {}
+                }
+            });
+        }
         Box::pin(async { Ok(()) })
     }
 }
@@ -172,22 +189,24 @@ impl Module for InboxModule {
     }
 }
 
-/// The app on `127.0.0.1:port`, on the database at `database_url`.
+/// The app on `127.0.0.1:port`, on the database at `database_url`. The framework's
+/// limits per address stand, but for the browser tests (`test_hooks`), which send every
+/// request from one address and keep many event streams open from it.
 pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
-    let config = vec![
+    let mut config = vec![
         ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
         ("APP_DATABASE__URL".to_owned(), database_url),
-        // The browser tests send every request from one address, and keep many event
-        // streams open from it.
-        (
+    ];
+    if settings.test_hooks {
+        config.push((
             "APP_HTTP__PER_IP_RATE_LIMIT".to_owned(),
             "100000000".to_owned(),
-        ),
-        (
+        ));
+        config.push((
             "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
             "10000".to_owned(),
-        ),
-    ];
+        ));
+    }
     Navree::app()
         .module(ConfigModule::for_root(
             ConfigSources::new().env_vars("APP_", config),
