@@ -261,6 +261,20 @@ for (const name of NAMES) {
       await page.done();
     });
 
+    test("MOD-004 every live part of a page listens on the app's live hub, on one connection", async () => {
+      for (const [path, region] of [["/", "activity-region"], ["/orders", "orders"], ["/inventory", "products"]]) {
+        const page = await open(path);
+        await live(page, region);
+        const parts = await page.evaluate(() => [...document.querySelectorAll("[data-ui-live-src]")].map((el) => [el.id, el.getAttribute("data-ui-live-src"), el.getAttribute("data-ui-live-event")]));
+        assert.ok(parts.length >= 1, path);
+        for (const [id, src, event] of parts) {
+          assert.equal(src, "/broadcasting/stream?topics=orders,activity,stats,inventory", `${path} #${id}`);
+          assert.ok(["orders", "activity", "stats", "inventory"].includes(event), `${path} #${id} listens for ${event}`);
+        }
+        await page.done();
+      }
+    });
+
     test("a new order arrives at the top of the table over the stream", async () => {
       const page = await open("/orders");
       await live(page, "orders");

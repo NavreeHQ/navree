@@ -384,6 +384,23 @@ for (const name of NAMES) {
       await page.done();
     });
 
+    test("MOD-004 a conversation's page listens on the app's live hub: the lists, its conversation, its customer and the clock, on one connection", async () => {
+      const id = await firstOpen();
+      const page = await open(`/inbox/${id}`);
+      await live(page, "conversation-list");
+      await live(page, "thread-messages");
+      const parts = await page.evaluate(() => [...document.querySelectorAll("[data-ui-live-src]")].map((el) => [el.id, el.getAttribute("data-ui-live-src"), el.getAttribute("data-ui-live-event")]));
+      const sources = new Set(parts.map(([, src]) => src));
+      assert.equal(sources.size, 1, `one stream for the page: ${[...sources].join(" ")}`);
+      const [src] = sources;
+      assert.match(src, new RegExp(`^/broadcasting/stream\\?topics=conversations,conversation\\.${id},customer\\.\\d+,clock$`));
+      const heard = Object.fromEntries(parts.map(([el, , event]) => [el, event]));
+      assert.equal(heard["conversation-list"], "conversations");
+      assert.equal(heard["thread-messages"], `conversation.${id}`);
+      assert.equal(heard["thread-head"], `conversation.${id} clock`, "the heading's timers follow the clock");
+      await page.done();
+    });
+
     test("the timers count down on the server: the clock redraws the list and the open conversation", async () => {
       const id = await firstOpen();
       const page = await open(`/inbox/${id}`);

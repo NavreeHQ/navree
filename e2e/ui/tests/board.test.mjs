@@ -546,6 +546,14 @@ for (const name of NAMES) {
 
     // ---- Two viewers ------------------------------------------------------------------
 
+    test("MOD-004 the board listens on the app's live hub for its topic", async () => {
+      const page = await open();
+      await until(page, () => document.getElementById("board")?.getAttribute("data-live") === "on", null, "the stream");
+      const parts = await page.evaluate(() => [...document.querySelectorAll("[data-ui-live-src]")].map((el) => [el.id, el.getAttribute("data-ui-live-src"), el.getAttribute("data-ui-live-event")]));
+      assert.deepEqual(parts, [["board", "/broadcasting/stream?topics=board", "board"]]);
+      await page.done();
+    });
+
     test("a move by one viewer slides into place on another's board", async () => {
       const a = await open();
       const b = await open();
