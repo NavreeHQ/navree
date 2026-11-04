@@ -314,18 +314,18 @@ for (const name of NAMES) {
     });
 
     test("sizes are kept per agent: one agent's sizes don't move another's", async () => {
-      const sam = await open("/inbox/18");
-      await sam.locator("#inbox-separator-0").focus();
-      await sam.keyboard.press("Shift+ArrowRight");
-      await until(sam, async () => (await (await fetch("/__test/layout/1")).text()).startsWith("40,"), null, "Sam's save");
+      const gurpreet = await open("/inbox/18");
+      await gurpreet.locator("#inbox-separator-0").focus();
+      await gurpreet.keyboard.press("Shift+ArrowRight");
+      await until(gurpreet, async () => (await (await fetch("/__test/layout/1")).text()).startsWith("40,"), null, "Gurpreet's save");
       const priya = await open("/inbox/18", { agent: 2 });
       assert.equal(await priya.locator("#conversations").getAttribute("data-split-basis"), "30");
       assert.equal(await layoutOf(2), "");
       await priya.locator("#inbox-separator-0").focus();
       await priya.keyboard.press("ArrowLeft");
       await until(priya, async () => (await (await fetch("/__test/layout/2")).text()).startsWith("28,"), null, "Priya's save");
-      assert.ok((await layoutOf(1)).startsWith("40,"), "Sam's stays");
-      await sam.done();
+      assert.ok((await layoutOf(1)).startsWith("40,"), "Gurpreet's stays");
+      await gurpreet.done();
       await priya.done();
     });
 
@@ -475,13 +475,13 @@ for (const name of NAMES) {
       await until(page, () => [...document.querySelectorAll("#assign-agent [role=option]")].length > 0 && [...document.querySelectorAll("#assign-agent [role=option]")].every((o) => /Technical/.test(o.textContent)), null, "the Technical team, from the server");
       assert.ok(searches.includes("tech"), searches.join());
       await input.fill("");
-      await input.pressSequentially("Mariana", { delay: 30 });
-      await page.locator("#assign-agent [role=option]", { hasText: "Mariana Costa" }).click();
+      await input.pressSequentially("Manpreet", { delay: 30 });
+      await page.locator("#assign-agent [role=option]", { hasText: "Manpreet Gill" }).click();
       await page.locator("#assign").getByRole("button", { name: "Assign", exact: true }).click();
-      await page.locator("[data-slot=toast]", { hasText: "Mariana Costa has it now" }).waitFor();
+      await page.locator("[data-slot=toast]", { hasText: "Manpreet Gill has it now" }).waitFor();
       assert.equal((await held(1)).conversation.assignee_id, 4);
-      assert.match(await page.locator("[popovertarget=assign-popover]").textContent(), /Mariana Costa/);
-      await until(page, () => /Mariana/.test(document.querySelector("#conversation-1")?.textContent || ""), null, "the list row to say who");
+      assert.match(await page.locator("[popovertarget=assign-popover]").textContent(), /Manpreet Gill/);
+      await until(page, () => /Manpreet/.test(document.querySelector("#conversation-1")?.textContent || ""), null, "the list row to say who");
       // The server checks what comes back: someone away today, or nobody that exists.
       const status = (agent) => page.evaluate(async (agent) => (await fetch("/inbox/1/assign", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-navree-ui": "1" }, body: `agent=${agent}` })).status, agent);
       assert.equal(await status(22), 422, "away today");
@@ -587,7 +587,7 @@ for (const name of NAMES) {
       await page.locator("dialog#palette[open]").waitFor();
       await page.keyboard.type("assign to me");
       await page.keyboard.press("Enter");
-      await page.locator("[data-slot=toast]", { hasText: "Sam Okafor has it now" }).waitFor();
+      await page.locator("[data-slot=toast]", { hasText: "Gurpreet Singh has it now" }).waitFor();
       assert.equal((await held(id)).conversation.assignee_id, 1);
       await page.keyboard.press("ControlOrMeta+k");
       await page.keyboard.type("unassigned");
@@ -779,9 +779,9 @@ for (const name of NAMES) {
       await page.locator("[popovertarget=assign-popover]").click();
       await page.getByRole("link", { name: "Choose from the whole team" }).click();
       await page.waitForURL(new RegExp(`/inbox/${id}/assign`));
-      await page.locator("input[name=q]").fill("Aisha");
+      await page.locator("input[name=q]").fill("Simran");
       await submit(page.getByRole("button", { name: "Search" }));
-      await submit(page.getByRole("button", { name: "Assign to Aisha Bello" }));
+      await submit(page.getByRole("button", { name: "Assign to Simran Sandhu" }));
       await page.waitForURL(new RegExp(`/inbox/${id}(\\?|$)`));
       assert.equal((await held(id)).conversation.assignee_id, 6);
       // Status from the menu, which is the browser's own popover.
