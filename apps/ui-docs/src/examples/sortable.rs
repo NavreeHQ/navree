@@ -8,7 +8,9 @@ const SOURCE: &str = include_str!("sortable.rs");
 
 pub fn all() -> Vec<Example> {
     vec![
-        single!("sortable", "thumb", "A board", sortable_thumb).start().height(260),
+        single!("sortable", "thumb", "A board", sortable_thumb)
+            .start()
+            .height(260),
         single!("sortable", "default", "A list", sortable_default)
             .start()
             .live()
@@ -21,10 +23,15 @@ pub fn all() -> Vec<Example> {
             .start()
             .live()
             .height(300),
-        single!("sortable", "long", "A long list, a page at a time", sortable_long)
-            .start()
-            .live()
-            .height(320),
+        single!(
+            "sortable",
+            "long",
+            "A long list, a page at a time",
+            sortable_long
+        )
+        .start()
+        .live()
+        .height(320),
     ]
 }
 
@@ -62,14 +69,22 @@ fn sortable_board() -> Sortable {
         .post("/launch/moves")
         .list(
             SortList::new("ready", "Ready")
-                .item(card("11", "Pick the launch date", Badge::new("Plan").tone(Tone::Info)))
-                .item(card("12", "Draft the press note", Badge::new("Docs").tone(Tone::named("cyan")))),
+                .item(card(
+                    "11",
+                    "Pick the launch date",
+                    Badge::new("Plan").tone(Tone::Info),
+                ))
+                .item(card(
+                    "12",
+                    "Draft the press note",
+                    Badge::new("Docs").tone(Tone::named("cyan")),
+                )),
         )
-        .list(
-            SortList::new("doing", "In progress")
-                .limit(3)
-                .item(card("13", "Fix the sign-up email", Badge::new("Bug").tone(Tone::Danger))),
-        )
+        .list(SortList::new("doing", "In progress").limit(3).item(card(
+            "13",
+            "Fix the sign-up email",
+            Badge::new("Bug").tone(Tone::Danger),
+        )))
         .list(SortList::new("done", "Done").empty("Nothing done yet"))
 }
 

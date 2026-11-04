@@ -70,10 +70,14 @@ fn items(source: &str, starts: &[&str]) -> String {
     for start in starts {
         let at = lines
             .iter()
-            .position(|line| line.starts_with(&format!("{start}(")) || line.starts_with(&format!("{start}<")))
+            .position(|line| {
+                line.starts_with(&format!("{start}(")) || line.starts_with(&format!("{start}<"))
+            })
             .unwrap_or_else(|| panic!("no `{start}` at the start of a line"));
         let mut first = at;
-        while first > 0 && (lines[first - 1].starts_with("#[") || lines[first - 1].starts_with("///")) {
+        while first > 0
+            && (lines[first - 1].starts_with("#[") || lines[first - 1].starts_with("///"))
+        {
             first -= 1;
         }
         let end = (at..lines.len())
@@ -103,10 +107,16 @@ fn seeded(moves: &[(i64, Column)]) -> BoardData {
     let columns = Column::ALL
         .iter()
         .map(|column| {
-            let mut held: Vec<_> = seed.cards.iter().filter(|card| card.list == column.key()).cloned().collect();
+            let mut held: Vec<_> = seed
+                .cards
+                .iter()
+                .filter(|card| card.list == column.key())
+                .cloned()
+                .collect();
             held.sort_by_key(|card| (card.rank, card.id));
             let total = held.len() as u64;
-            let next = (held.len() > PAGE).then(|| format!("{}.{}", held[PAGE - 1].rank, held[PAGE - 1].id));
+            let next = (held.len() > PAGE)
+                .then(|| format!("{}.{}", held[PAGE - 1].rank, held[PAGE - 1].id));
             held.truncate(PAGE);
             ColumnPage {
                 column: *column,
@@ -133,7 +143,9 @@ fn board() -> Node {
     let data = seeded(&[]);
     let viewer = data.people[0].clone();
     let page = board_page(
-        board_demo::views::shell().page(PROJECT, "/").crumb(TEAM, "/"),
+        board_demo::views::shell()
+            .page(PROJECT, "/")
+            .crumb(TEAM, "/"),
         &data,
         &viewer,
         &Filters::default(),
@@ -165,7 +177,9 @@ fn board() -> Node {
 /// The markup of card `id`'s item in `html`, from its `<li>` to the `</li>` that
 /// closes it.
 fn item_markup(html: &str, id: i64) -> Option<String> {
-    let start = html.find(&format!("<li data-slot=\"sortable-item\" id=\"columns-item-{id}\""))?;
+    let start = html.find(&format!(
+        "<li data-slot=\"sortable-item\" id=\"columns-item-{id}\""
+    ))?;
     let mut depth = 0;
     let mut at = start;
     while at < html.len() {
@@ -190,12 +204,27 @@ fn item_markup(html: &str, id: i64) -> Option<String> {
 fn card() -> Node {
     let seed = data::seed(NOW);
     let card = seed.cards[9].clone();
-    let mut comments: Vec<_> = seed.comments.iter().filter(|c| c.card_id == card.id).cloned().collect();
+    let mut comments: Vec<_> = seed
+        .comments
+        .iter()
+        .filter(|c| c.card_id == card.id)
+        .cloned()
+        .collect();
     comments.sort_by_key(|c| std::cmp::Reverse((c.at, c.id)));
-    let mut activity: Vec<_> = seed.activity.iter().filter(|a| a.card_id == card.id).cloned().collect();
+    let mut activity: Vec<_> = seed
+        .activity
+        .iter()
+        .filter(|a| a.card_id == card.id)
+        .cloned()
+        .collect();
     activity.sort_by_key(|a| std::cmp::Reverse((a.at, a.id)));
     let data = CardData {
-        checks: seed.checks.iter().filter(|c| c.card_id == card.id).cloned().collect(),
+        checks: seed
+            .checks
+            .iter()
+            .filter(|c| c.card_id == card.id)
+            .cloned()
+            .collect(),
         card,
         comments,
         older_comments: None,
@@ -215,7 +244,9 @@ fn drag() -> Node {
     let data = seeded(&[(11, Column::Review)]);
     let viewer = data.people[0].clone();
     let page = board_page(
-        board_demo::views::shell().page(PROJECT, "/").crumb(TEAM, "/"),
+        board_demo::views::shell()
+            .page(PROJECT, "/")
+            .crumb(TEAM, "/"),
         &data,
         &viewer,
         &Filters::default(),
@@ -246,8 +277,19 @@ fn sync() -> Node {
             .columns
             .iter()
             .filter(|page| matches!(page.column, Column::Doing | Column::Review))
-            .map(|page| board_demo::views::board::column(page, &data.people, &lead, &Filters::default(), today()));
-        Sortable::new(id, "In progress and Review").board().post("/board/moves").lists(lists)
+            .map(|page| {
+                board_demo::views::board::column(
+                    page,
+                    &data.people,
+                    &lead,
+                    &Filters::default(),
+                    today(),
+                )
+            });
+        Sortable::new(id, "In progress and Review")
+            .board()
+            .post("/board/moves")
+            .lists(lists)
     };
     let theirs = render(&pair("mara", &after).into());
     let card = item_markup(&theirs.replace("mara-item-", "columns-item-"), 11)
@@ -261,10 +303,16 @@ fn sync() -> Node {
     Grid::cols(2)
         .gap(4)
         .children((
-            Card::titled("Theo's screen").heading(2).body(pair("theo", &after)),
+            Card::titled("Theo's screen")
+                .heading(2)
+                .body(pair("theo", &after)),
             Card::titled("Mara's screen").heading(2).body((
                 pair("mara", &before),
-                Node::from(el("template").flag("data-preview-replay", true).child(SafeHtml::trusted(card))),
+                Node::from(
+                    el("template")
+                        .flag("data-preview-replay", true)
+                        .child(SafeHtml::trusted(card)),
+                ),
             )),
         ))
         .into()

@@ -570,7 +570,14 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "sortable",
         "Sortable",
-        &["Sortable", "SortList", "SortItem", "SortLabels", "Move", "ListState"],
+        &[
+            "Sortable",
+            "SortList",
+            "SortItem",
+            "SortLabels",
+            "Move",
+            "ListState",
+        ],
         "thumb",
     )
     .parts("default"),
