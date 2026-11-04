@@ -137,24 +137,19 @@ impl Hub {
         to: Column,
         nudge: bool,
     ) -> Result<bool, BoxError> {
-        let moved = db
-            .transaction(|uow| async move {
-                // Where the card is isn't known until it is read, so every column is
-                // locked first, in order, as a move from the page locks its two.
-                sortable::lock_lists(&uow, &ColumnRow::KEY, Column::ALL.map(Column::key))
-                    .await
-                    .map_err(store::db)?;
-                let Some(card) = Card::query().find(&uow, item).await.map_err(store::db)? else {
-                    return Ok(false);
-                };
-                let mv = Move::new(item.to_string(), card.into_inner().list, to.key());
-                let viewer = store::viewer(&uow, Some(by)).await.map_err(store::db)?;
-                let placed = store::place_and_write(&uow, &viewer, &mv, now())
-                    .await
-                    .map_err(store::db)?;
-                Ok(placed.is_ok_and(|placement| placement.moved))
-            })
-            .await?;
+        // Where the card is isn't known until it is read, so every column is locked
+        // first, in the toolkit's transaction, as a move from the page locks its two.
+        let columns = Column::ALL.map(Column::key).to_vec();
+        let moved = sortable::transaction(db, &ColumnRow::KEY, columns, |uow| async move {
+            let Some(card) = Card::query().find(&uow, item).await? else {
+                return Ok(false);
+            };
+            let mv = Move::new(item.to_string(), card.into_inner().list, to.key());
+            let viewer = store::viewer(&uow, Some(by)).await?;
+            let placed = store::place_and_write(&uow, &viewer, &mv, now()).await?;
+            Ok(placed.is_ok_and(|placement| placement.moved))
+        })
+        .await?;
         if moved && nudge {
             self.nudge();
         }

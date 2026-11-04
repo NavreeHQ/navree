@@ -1,16 +1,17 @@
 //! Reading the board and writing its moves. Every read is a page by an index:
 //! a column's cards by `(list, rank, id)`, a card's comments and history by
-//! `(card_id, at, id)`. A move is checked and written in one transaction that
-//! first locks the columns it touches: `SELECT ... FOR UPDATE` on their rows on
-//! PostgreSQL and MySQL, and on SQLite the write lock `BEGIN IMMEDIATE` takes. Two
-//! moves at once queue, and the second is checked against what the first left.
+//! `(card_id, at, id)`. A move is checked and written in the toolkit's transaction
+//! (`Move::transaction`): it begins at READ COMMITTED and first locks the columns
+//! the move touches, with `SELECT ... FOR UPDATE` on their rows on PostgreSQL and
+//! MySQL, and on SQLite the write lock `BEGIN IMMEDIATE` takes. Two moves at once
+//! queue, and the second is checked against what the first left.
 
 use std::collections::HashMap;
 use std::future::Future;
 
 use chrono::{Days, NaiveDate};
 use navree::db::{DbError, ErrorKind, Uow};
-use navree::orm::{Model as _, OrmError, Value, raw};
+use navree::orm::{Builder, Model as _, OrmError, Value, raw};
 use navree::ui::ListState;
 use navree::ui::sortable::{self, Placement, RankedLists, Spot};
 
@@ -67,7 +68,8 @@ pub fn parse_cursor(text: &str) -> Option<(i64, i64)> {
 
 /// Where a page of a column starts: after the card `card`, wherever it stands in
 /// the column now. When that card has left the column, after the first `skip`
-/// cards that pass the filters.
+/// cards that pass the filters, less one: a page that repeats the last card drawn
+/// is joined without it, where one that started a card late would skip it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct After {
     pub card: i64,
@@ -84,21 +86,48 @@ pub async fn column_cards(
     after: Option<After>,
     limit: usize,
 ) -> Result<(Vec<Card>, bool), OrmError> {
-    let mut query = Card::query().where_(Card::LIST.eq(column.key()));
-    let mut skip = 0;
-    if let Some(after) = after {
-        match Card::query().find(uow, after.card).await? {
-            Some(card) if card.list == column.key() => {
-                let (rank, id) = (card.rank, card.id);
-                query = query.where_(
-                    Card::RANK
-                        .gt(rank)
-                        .or(Card::RANK.eq(rank).and(Card::ID.gt(id))),
-                );
-            }
-            _ => skip = after.skip,
+    let page = |cursor: Option<i64>, skip: usize| {
+        let mut query = Card::query().where_(Card::LIST.eq(column.key()));
+        if let Some(card) = cursor {
+            // After the cursor card where it stands now, looked up in this column and
+            // paged in one statement, so fresh ranks can't come between the two.
+            query = query.where_(raw(
+                r#"("rank", "id") > (SELECT "c"."rank", "c"."id" FROM "cards" AS "c" WHERE "c"."id" = ? AND "c"."list" = ?)"#,
+                [Value::from(card), Value::from(column.key())],
+            ));
+        }
+        filtered(query, filters, today)
+            .order_by("rank")
+            .order_by("id")
+            .offset(u64::try_from(skip).unwrap_or(u64::MAX))
+            .limit(u64::try_from(limit + 1).unwrap_or(u64::MAX))
+    };
+    let mut cards = page(after.map(|after| after.card), 0).get(uow).await?;
+    if let Some(after) = after
+        && cards.is_empty()
+    {
+        // Nothing after it: the column's end, or the card has left the column.
+        let here = Card::query()
+            .where_(Card::ID.eq(after.card))
+            .where_(Card::LIST.eq(column.key()))
+            .count(uow)
+            .await?;
+        if here == 0 {
+            cards = page(None, after.skip.saturating_sub(1)).get(uow).await?;
         }
     }
+    let mut cards: Vec<Card> = cards
+        .into_vec()
+        .into_iter()
+        .map(|record| record.into_inner())
+        .collect();
+    let more = cards.len() > limit;
+    cards.truncate(limit);
+    Ok((cards, more))
+}
+
+/// `query` narrowed to the cards that pass `filters`.
+fn filtered(mut query: Builder<Card>, filters: &Filters, today: NaiveDate) -> Builder<Card> {
     if let Some(id) = filters.assignee {
         query = query.where_(Card::ASSIGNEE.eq(id));
     }
@@ -113,20 +142,7 @@ pub async fn column_cards(
             .where_(Card::DUE.lt(today.checked_add_days(Days::new(7)).unwrap_or(today))),
         Due::Undated => query.where_(Card::DUE.is_null()),
     };
-    let mut cards: Vec<Card> = query
-        .order_by("rank")
-        .order_by("id")
-        .offset(u64::try_from(skip).unwrap_or(u64::MAX))
-        .limit(u64::try_from(limit + 1).unwrap_or(u64::MAX))
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner())
-        .collect();
-    let more = cards.len() > limit;
-    cards.truncate(limit);
-    Ok((cards, more))
+    query
 }
 
 /// Where each of `cards` stands in the whole of `column`, 1 being first: one walk
@@ -291,23 +307,34 @@ impl RankedLists for Ranks<'_> {
     fn beside(
         &self,
         list: &str,
+        anchor: &str,
         rank: i64,
         lower: bool,
         item: &str,
     ) -> impl Future<Output = Result<Option<i64>, OrmError>> + Send {
-        let (uow, list, item) = (self.uow, list.to_owned(), id_of(item));
+        let (uow, list, anchor, item) = (self.uow, list.to_owned(), id_of(anchor), id_of(item));
         async move {
             let query = Card::query()
                 .where_(Card::LIST.eq(list))
                 .where_(Card::ID.ne(item));
+            // By rank, then id, as the column is drawn: a card tied with the anchor
+            // is its neighbour, and leaves no room.
             let found = if lower {
                 query
-                    .where_(Card::RANK.lt(rank))
+                    .where_(
+                        Card::RANK
+                            .lt(rank)
+                            .or(Card::RANK.eq(rank).and(Card::ID.lt(anchor))),
+                    )
                     .order_by_desc("rank")
                     .order_by_desc("id")
             } else {
                 query
-                    .where_(Card::RANK.gt(rank))
+                    .where_(
+                        Card::RANK
+                            .gt(rank)
+                            .or(Card::RANK.eq(rank).and(Card::ID.gt(anchor))),
+                    )
                     .order_by("rank")
                     .order_by("id")
             };
@@ -551,16 +578,12 @@ pub async fn record(
     kind: &str,
     detail: String,
 ) -> Result<(), OrmError> {
-    let id = Activity::query()
-        .order_by_desc("id")
-        .first(uow)
-        .await?
-        .map_or(1, |last| last.into_inner().id + 1);
     Activity::query()
         .insert(
             uow,
+            // Id 0: the database gives the next one.
             [Activity {
-                id,
+                id: 0,
                 card_id: card,
                 person_id: by,
                 at,
@@ -574,16 +597,11 @@ pub async fn record(
 
 /// Adds a comment, counts it on its card, and says so in the card's history.
 pub async fn comment(uow: &Uow, card: i64, by: i64, at: i64, body: String) -> Result<(), OrmError> {
-    let id = Comment::query()
-        .order_by_desc("id")
-        .first(uow)
-        .await?
-        .map_or(1, |last| last.into_inner().id + 1);
     Comment::query()
         .insert(
             uow,
             [Comment {
-                id,
+                id: 0,
                 card_id: card,
                 person_id: by,
                 at,

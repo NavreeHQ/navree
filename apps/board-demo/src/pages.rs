@@ -29,7 +29,7 @@ use navree::db::{Db, Uow};
 use navree::http::extract::{Path, Query};
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{AppError, Controller, RouteDef};
-use navree::orm::Model as _;
+use navree::orm::{Model as _, OrmError};
 use navree::prelude::*;
 use navree::ui::form::{FormView, Rejected};
 use navree::ui::*;
@@ -103,6 +103,17 @@ fn board_href(params: &Params) -> String {
 /// What a transaction's failure answers.
 fn failed(error: impl std::fmt::Display) -> AppError {
     AppError::internal(error.to_string())
+}
+
+/// A move's outcome, a column with no row to lock read as a column the board
+/// doesn't have: the move is refused, not failed.
+fn no_column<T>(
+    done: std::result::Result<std::result::Result<T, Refusal>, OrmError>,
+) -> std::result::Result<std::result::Result<T, Refusal>, OrmError> {
+    match done {
+        Err(error) if error.is_not_found() => Ok(Err(Refusal::NoList)),
+        done => done,
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -214,21 +225,19 @@ impl Pages {
             tokio::time::sleep(Duration::from_millis(delay)).await;
         }
         let who = viewer_id(&headers);
-        let made = mv.clone();
-        let placed = self
-            .db
-            .transaction(|uow| async move {
-                // The columns are locked before anything is read, so every read sees
-                // the moves that went first, whatever the database's isolation.
-                made.lock(&uow, &ColumnRow::KEY).await.map_err(store::db)?;
-                let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
-                store::place_and_write(&uow, &viewer, &made, now())
-                    .await
-                    .map_err(store::db)
+        // The toolkit's transaction: READ COMMITTED, the two columns locked as its
+        // first statement, and only then this, so every read here sees the moves
+        // that held the lock before.
+        let placed = mv
+            .transaction(&self.db, &ColumnRow::KEY, |uow| {
+                let made = mv.clone();
+                async move {
+                    let viewer = store::viewer(&uow, who).await?;
+                    store::place_and_write(&uow, &viewer, &made, now()).await
+                }
             })
-            .await
-            .map_err(failed)?;
-        match placed {
+            .await;
+        match no_column(placed).map_err(failed)? {
             Ok(placement) => {
                 if placement.moved {
                     self.hub.nudge();
@@ -254,26 +263,27 @@ impl Pages {
         let to = Column::parse(&mv.to_list).map_or("that column", Column::title);
         let mv = Move::new(id.to_string(), mv.from_list, mv.to_list);
         let who = viewer_id(&headers);
-        let made = mv.clone();
-        let (placed, card, viewer) = self
-            .db
-            .transaction(|uow| async move {
-                made.lock(&uow, &ColumnRow::KEY).await.map_err(store::db)?;
-                let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
-                let placed = if made.from_list == made.to_list {
-                    None
-                } else {
-                    Some(
-                        store::place_and_write(&uow, &viewer, &made, now())
-                            .await
-                            .map_err(store::db)?,
-                    )
-                };
-                let card = store::card(&uow, id).await.map_err(store::db)?;
-                Ok((placed, card, viewer))
+        let done = mv
+            .transaction(&self.db, &ColumnRow::KEY, |uow| {
+                let made = mv.clone();
+                async move {
+                    let viewer = store::viewer(&uow, who).await?;
+                    let placed = if made.from_list == made.to_list {
+                        None
+                    } else {
+                        Some(store::place_and_write(&uow, &viewer, &made, now()).await?)
+                    };
+                    let card = store::card(&uow, id).await?;
+                    Ok((placed, card, viewer))
+                }
             })
-            .await
-            .map_err(failed)?;
+            .await;
+        let (placed, card, viewer) = match done {
+            Err(error) if error.is_not_found() => {
+                return Ok(mv.refused(format!("/cards/{id}"), Refusal::NoList.message()));
+            }
+            done => done.map_err(failed)?,
+        };
         let page = format!("/cards/{id}");
         let Some(card) = card else {
             return Ok(Reply::ops_or_redirect("/")
@@ -404,17 +414,13 @@ impl Pages {
     }
 
     /// `POST /cards/{id}/checks/moves`: a checklist line moved. A card's lines are
-    /// few, so the whole list is read and checked, under a lock on the card's row:
-    /// its checklist is that card's.
+    /// few, so the whole list is read and checked, in the toolkit's transaction
+    /// under a lock on the card's row: its checklist is that card's.
     async fn move_check(&self, id: i64, mv: Move) -> Result<Reply> {
-        let made = mv.clone();
-        let outcome = self
-            .db
-            .transaction(|uow| async move {
-                navree::ui::sortable::lock_lists(&uow, &crate::data::Card::ID, [id])
-                    .await
-                    .map_err(store::db)?;
-                let lines = store::checks(&uow, id).await.map_err(store::db)?;
+        let outcome = sortable::transaction(&self.db, &crate::data::Card::ID, vec![id], |uow| {
+            let made = mv.clone();
+            async move {
+                let lines = store::checks(&uow, id).await?;
                 let list = ListState::new(
                     "checks",
                     "Checklist",
@@ -422,16 +428,19 @@ impl Pages {
                 );
                 match made.check(&[list]) {
                     Ok(landing) => {
-                        store::move_check(&uow, &landing.order)
-                            .await
-                            .map_err(store::db)?;
+                        store::move_check(&uow, &landing.order).await?;
                         Ok(Ok(landing.moved))
                     }
                     Err(refusal) => Ok(Err(refusal)),
                 }
-            })
-            .await
-            .map_err(failed)?;
+            }
+        })
+        .await;
+        let outcome = match outcome {
+            // The card is gone, and its checklist with it.
+            Err(error) if error.is_not_found() => Err(Refusal::Gone),
+            outcome => outcome.map_err(failed)?,
+        };
         let page = format!("/cards/{id}");
         Ok(match outcome {
             Ok(moved) => {
@@ -669,7 +678,7 @@ impl Controller for Pages {
                 }
             })
             .public(),
-            RouteDef::on(Method::POST, "!/sign-out", || async {
+            RouteDef::on(Method::POST, "!/sign-out", |Submit(_): Submit<ViewAs>| async {
                 Reply::redirect("/")
                     .toast(ToastTone::Info, "This demo has no accounts to sign out of.")
             })
@@ -682,8 +691,8 @@ impl Controller for Pages {
     }
 }
 
-/// Showing the board as someone: no field of its own, but posted as a form, so
-/// it gets a form's forgery check.
+/// Showing the board as someone, or signing out: no field of its own, but posted
+/// as a form, so each gets a form's forgery check.
 #[derive(Debug, Deserialize, Validate, Form)]
 #[form(id = "view-as")]
 pub struct ViewAs {

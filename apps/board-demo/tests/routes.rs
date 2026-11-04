@@ -304,3 +304,95 @@ async fn choosing_who_to_show_the_board_as_takes_a_post_from_this_site() {
         "a lead closes cards"
     );
 }
+
+/// The cards of a column's next page, from the ops `GET /columns/{column}` answers.
+async fn next_page(client: &navree::testing::TestClient, cursor: &str, show: usize) -> Vec<i64> {
+    let next = client
+        .get(&format!("/columns/backlog?after={cursor}&show={show}"))
+        .header("x-navree-ui", "1")
+        .send()
+        .await;
+    assert_eq!(next.status(), 200);
+    let ops = next.json_value().to_string().replace("\\\"", "\"");
+    values(&ops, "data-key")
+        .into_iter()
+        .map(|key| key.parse().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn when_the_last_card_drawn_has_left_the_column_the_next_page_skips_nothing() {
+    let (app, _dir) = boot().await;
+    let db = app.get::<Db>().await;
+    let client = app.client();
+    let lead = lead(&db).await;
+    client
+        .post(&format!("/as/{lead}"))
+        .form(&[("go", "")])
+        .send()
+        .await;
+    let page = client.get("/").send().await.text();
+    let first = keys(&page, "backlog");
+    let cursor = field(&page, "columns-list-backlog-more", "after");
+    let last = first[19];
+    // The cursor's card leaves the column, and no redraw follows.
+    let fields = [
+        ("item", last.to_string()),
+        ("from_list", "backlog".to_owned()),
+        ("to_list", "done".to_owned()),
+    ];
+    assert_eq!(post_move(&client, "/board/moves", &fields).await.0, 303);
+    let second = next_page(&client, &cursor, 40).await;
+    let now = order(&db, "backlog").await;
+    // The card that moved up into place 20 is the next page's first: counting from
+    // one card early, the page can repeat a card (which the page joins once) but
+    // never miss one until the next redraw.
+    assert_eq!(second[0], now[19], "starts at the card now at place 20");
+    assert_eq!(second, now[19..39]);
+    assert!(first[..19].iter().all(|id| *id != second[0]));
+}
+
+#[tokio::test]
+async fn signing_out_takes_a_post_from_this_site() {
+    let (app, _dir) = boot().await;
+    let client = app.client();
+    let forged = client
+        .post("/sign-out")
+        .header("origin", "https://elsewhere.example")
+        .form(&[("go", "")])
+        .send()
+        .await;
+    assert_eq!(forged.status(), 403);
+    let own = client.post("/sign-out").form(&[("go", "")]).send().await;
+    assert_eq!(own.status(), 303);
+}
+
+#[tokio::test]
+async fn comments_and_history_take_ids_the_database_gives() {
+    let (app, _dir) = boot().await;
+    let db = app.get::<Db>().await;
+    let client = app.client();
+    let card = order(&db, "review").await[0];
+    let before = board_demo::data::Comment::query().count(&db).await.unwrap();
+    for body in ["First look done.", "Second look done."] {
+        let posted = client
+            .post(&format!("/cards/{card}/comments"))
+            .form(&[("body", body)])
+            .send()
+            .await;
+        assert_eq!(posted.status(), 303, "{}", posted.text());
+    }
+    let comments = board_demo::data::Comment::query()
+        .order_by_desc("id")
+        .limit(2)
+        .get(&db)
+        .await
+        .unwrap()
+        .into_vec();
+    assert_eq!(
+        board_demo::data::Comment::query().count(&db).await.unwrap(),
+        before + 2
+    );
+    let ids: Vec<i64> = comments.iter().map(|c| c.clone().into_inner().id).collect();
+    assert!(ids[0] > ids[1] && ids[1] > 0, "{ids:?}");
+}
