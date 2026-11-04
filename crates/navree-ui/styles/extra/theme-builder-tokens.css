@@ -90,6 +90,7 @@
 :where([data-tint=chart-3]){--tint:var(--chart-3)}
 :where([data-tint=chart-4]){--tint:var(--chart-4)}
 :where([data-tint=chart-5]){--tint:var(--chart-5)}
+:where([data-pct="6"]){--pct:6%}
 :where([data-pct="9"]){--pct:9%}
 :where([data-pct="10"]){--pct:10%}
 :where([data-pct="12"]){--pct:12%}

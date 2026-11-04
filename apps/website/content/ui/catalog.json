@@ -36290,6 +36290,78 @@
                                                       "tag": "span",
                                                       "count": 1,
                                                       "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
                                                     }
                                                   ]
                                                 }
