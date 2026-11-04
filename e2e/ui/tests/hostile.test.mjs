@@ -1,11 +1,11 @@
 // The runtime against a hostile server and hostile markup, in Chromium and
-// Firefox. The committed dist/ runs under the page's exact content security
+// Firefox (UI_BROWSERS=chromium,firefox,webkit adds WebKit). The committed dist/ runs under the page's exact content security
 // policy, served by tests/support/fixture.mjs; the last section uses the proof app.
 // Each test states what must hold, so taking the protection away fails it.
 
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { chromium, firefox } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 import { CSP, page as doc, start } from "./support/fixture.mjs";
 
 const PROOF = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
@@ -18,7 +18,10 @@ const GIF = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
 let unique = 0;
 const key = (name) => `${name}-${++unique}`;
 
-for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]]) {
+// Chromium and Firefox; UI_BROWSERS=chromium,firefox,webkit adds WebKit.
+const ENGINES = { chromium, firefox, webkit };
+const NAMES = (process.env.UI_BROWSERS || "chromium,firefox").split(",").filter((name) => ENGINES[name]);
+for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
   describe(engine, () => {
     let browser, f;
 

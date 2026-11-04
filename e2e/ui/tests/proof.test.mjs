@@ -1,16 +1,19 @@
 // The proof pages, end to end in a real browser: what ships, forms, morph,
 // boosted links, the sidebar, native overlays, commands. Needs the proof app:
 //   cargo run --release -p ui-proof -- serve       (UI_PROOF_URL to point elsewhere)
+// In Chromium; UI_BROWSER=firefox or webkit picks another engine.
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { chromium } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 
 const URL_BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 
+const ENGINE = { chromium, firefox, webkit }[process.env.UI_BROWSER || "chromium"];
+
 let browser;
 before(async () => {
-  browser = await chromium.launch();
+  browser = await ENGINE.launch();
 });
 after(() => browser.close());
 
