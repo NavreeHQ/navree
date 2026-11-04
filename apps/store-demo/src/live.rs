@@ -96,14 +96,16 @@ impl Hub {
 
     /// The indexes each list reads by: every sort and filter of the orders table
     /// ends in the key, as keyset pages need; an order's lines and events, a
-    /// customer's orders and the feed by time each have their own.
+    /// customer's orders and the feed by time each have their own. Open orders
+    /// by fulfilment and state share one, since a third of the orders ship
+    /// within Punjab and a search there would otherwise read all of them.
     pub const INDEXES: [&'static str; 15] = [
         "CREATE INDEX orders_placed ON orders (placed_on, id)",
         "CREATE INDEX orders_status ON orders (status, placed_on, id)",
         "CREATE INDEX orders_fulfilment ON orders (fulfilment, placed_on, id)",
         "CREATE INDEX orders_payment ON orders (payment, placed_on, id)",
         "CREATE INDEX orders_state ON orders (state, placed_on, id)",
-        "CREATE INDEX orders_open ON orders (status, fulfilment)",
+        "CREATE INDEX orders_open ON orders (status, fulfilment, state, placed_on, id)",
         "CREATE INDEX orders_total ON orders (total, id)",
         "CREATE INDEX orders_number ON orders (number, id)",
         "CREATE INDEX orders_customer ON orders (customer_id, placed_at)",
