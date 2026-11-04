@@ -5,6 +5,7 @@
 mod backplane;
 mod cache;
 mod limiter;
+mod live;
 mod module;
 mod queue;
 mod session;
