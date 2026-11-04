@@ -1,0 +1,137 @@
+---
+title: "Carousel"
+description: "Slides in a row that scroll and snap, with previous and next buttons, slide pickers and rotation that stops for the reader. The track is the browser's own scroller, so it works by touch, wheel and keys with no script."
+---
+
+<UiPreview example="carousel/default" />
+
+`Carousel` shows slides one at a time, or a few at a time, in a track that scrolls and snaps. A slide can hold anything: a card, a stat, text, a link. The carousel follows the carousel pattern of the WAI-ARIA Authoring Practices.
+
+```rust
+use navree::ui::*;
+
+Carousel::new("offers", "Offers from Ludhiana")
+    .slide(CarouselSlide::new(
+        Card::titled("Phulkari dupatta").description("Hand-embroidered in Patiala. ₹2,499."),
+    ))
+    .slide(CarouselSlide::new(
+        Card::titled("Basmati rice, 5 kg").description("Aged for a year, from Karnal. ₹1,150."),
+    ))
+```
+
+`Carousel::new(id, label)` needs an `id` that is unique on the page, because the buttons, the pickers and the slides point at each other by it. The `label` names the carousel for assistive technology. Slides are numbered from 1, and each is named "1 of 4" by default.
+
+## When to use it
+
+Use a carousel for a set of things that are alike and that the person may look at or skip: offers, photos, testimonials. Do not hide content that must be read in one: a form, a set of steps (use a [Stepper](/docs/components/stepper/)), or a table. If every slide matters, show them in a list.
+
+<UiAnatomy component="carousel" />
+
+## How it works
+
+The track is a scroller with snap points. Touch, a trackpad, the wheel and the keys scroll it, and each slide snaps to the start. That needs no script.
+
+The `carousel` module adds the rest: the previous and next buttons, the keys of the pickers, the picker that follows the track, and rotation. Until it loads, the buttons are not drawn, and the track and the pickers work by themselves. The pickers are links to the slides, so they work with JavaScript off.
+
+## Buttons
+
+The buttons come before the track in the page, so a keyboard user meets them first. At the first slide, previous is disabled; at the last, next is. A disabled button keeps focus, so a keyboard user is not thrown out of the carousel when they press it for the last time.
+
+<UiPreview example="carousel/default" />
+
+## Pickers
+
+`.pickers()` draws a short bar for each slide under the track. They are tabs: one tab stop, `Left` and `Right` move to a tab and open its slide, `Home` and `End` go to the first and the last. A slide is the panel of its tab. A picker is named "Slide 2", or by its slide's `.title(..)`.
+
+Pickers need one slide in view at a time. With `.per_view(2)` or more they are not drawn, and neither are they for a single slide.
+
+<UiPreview example="carousel/pickers" />
+
+## Going round
+
+`.loop_around()` makes next on the last slide go to the first, and previous on the first go to the last. The buttons are never disabled.
+
+<UiPreview example="carousel/loop" />
+
+## Slides in view at once
+
+`.per_view(n)` shows 1 to 4 slides at once. The buttons still move one slide at a time. A tablet shows at most two, and a phone shows one.
+
+<UiPreview example="carousel/per-view" />
+
+## Rotation
+
+`.autoplay(Duration)` turns to the next slide every so often, between 2 and 60 seconds. It goes round at the end. Moving things need a way to stop, so a pause button always comes with it, and the carousel also stops:
+
+- while the pointer is on it;
+- while focus is anywhere inside it;
+- when the person presses Pause, until they press Play;
+- for anyone who asks their device for less motion. For them it never moves, and the carousel is a plain one.
+
+While it rotates, the track is not announced to a screen reader (`aria-live="off"`). When it stops, it is (`polite`).
+
+<UiPreview example="carousel/rotation" />
+
+## Vertical
+
+`.vertical()` runs the slides from top to bottom. `.height(CarouselHeight::Tall)` sets how tall it is: short is 12rem, medium 18rem, tall 26rem.
+
+<UiPreview example="carousel/vertical" />
+
+## Right to left
+
+In a right-to-left page the first slide is at the right, next goes left, the arrows are mirrored, and the pickers follow the page: `Left` goes on.
+
+<UiPreview example="carousel/rtl" />
+
+## Words in another language
+
+`CarouselLabels` holds every word the carousel says to assistive technology. `{n}` stands for a slide's number and `{total}` for how many there are.
+
+```rust
+use navree::ui::*;
+
+let labels = CarouselLabels {
+    previous: "ਪਿਛਲੀ ਸਲਾਈਡ".into(),
+    next: "ਅਗਲੀ ਸਲਾਈਡ".into(),
+    slide_of: "{total} ਵਿੱਚੋਂ {n}".into(),
+    ..CarouselLabels::default()
+};
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Goes to the rotation button (when there is one), previous, next, the track, then the pickers (one stop). |
+| `Enter`, `Space` | Press a button. On a picker, open its slide. |
+| `Left`, `Right` | On the pickers, move to the previous or next tab and open its slide, going round at the ends. In a right-to-left page they swap. |
+| `Home`, `End` | On the pickers, go to the first or the last. |
+| Arrow keys | On the track, scroll it, in the engines that snap keyboard scrolling to a slide. |
+
+- The carousel is a region with the role description "carousel". Each slide is a group with the role description "slide" and a name such as "2 of 4". With pickers, a slide is a tab panel named by its tab.
+- The track can be focused, so it can be scrolled by keyboard.
+- The buttons are at least 28 px square, and the pickers are 28 by 24 px.
+- Rotation always has a pause button. It never runs while the pointer or focus is on the carousel, or for a device that asks for less motion.
+
+</UiA11y>
+
+## API
+
+### Carousel
+
+<UiProps type="Carousel" />
+
+### CarouselSlide
+
+<UiProps type="CarouselSlide" />
+
+### CarouselLabels
+
+<UiProps type="CarouselLabels" />
+
+### CarouselHeight
+
+<UiProps type="CarouselHeight" />

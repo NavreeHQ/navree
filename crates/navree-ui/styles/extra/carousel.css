@@ -1,1 +1,59 @@
-/* The carousel styles: filled in with its component. */
+/*
+ * navree-ui's stylesheet: Carousel, linked only on a page that draws one. The track is
+ * a scroller with snap points, so it works by touch, wheel and keys with no script. The
+ * buttons and the rotation button wait for the carousel module, which marks the
+ * carousel ready.
+ */
+[data-slot=carousel]{--carousel-gap:1rem;display:flex;flex-direction:column;gap:.75rem;min-width:0}
+[data-slot=carousel-viewport]{position:relative;min-width:0}
+[data-slot=carousel-track]{display:flex;gap:var(--carousel-gap);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:var(--line-3) transparent;border-radius:var(--radius-lg);
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+}
+[data-slot=carousel-slide]{flex:0 0 100%;min-width:0;box-sizing:border-box;scroll-snap-align:start}
+
+/* Slides in view at once. A phone shows one, a tablet at most two. */
+[data-slot=carousel][data-per-view="2"] [data-slot=carousel-slide]{flex-basis:calc((100% - var(--carousel-gap)) / 2)}
+[data-slot=carousel][data-per-view="3"] [data-slot=carousel-slide]{flex-basis:calc((100% - 2 * var(--carousel-gap)) / 3)}
+[data-slot=carousel][data-per-view="4"] [data-slot=carousel-slide]{flex-basis:calc((100% - 3 * var(--carousel-gap)) / 4)}
+@media (max-width:900px){
+  [data-slot=carousel][data-per-view="3"] [data-slot=carousel-slide],[data-slot=carousel][data-per-view="4"] [data-slot=carousel-slide]{flex-basis:calc((100% - var(--carousel-gap)) / 2)}
+}
+@media (max-width:640px){
+  [data-slot=carousel][data-per-view] [data-slot=carousel-slide]{flex-basis:100%}
+}
+
+/* Top to bottom. */
+[data-slot=carousel][data-orientation=vertical] [data-slot=carousel-track]{flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior-x:auto;overscroll-behavior-y:contain;height:18rem}
+[data-slot=carousel][data-orientation=vertical][data-height=short] [data-slot=carousel-track]{height:12rem}
+[data-slot=carousel][data-orientation=vertical][data-height=tall] [data-slot=carousel-track]{height:26rem}
+
+/* The buttons sit over the track, so they need a fill of their own. */
+[data-slot=button][data-carousel]{position:absolute;z-index:1;background:var(--ink-1)}
+[data-slot=carousel] [data-carousel=prev],[data-slot=carousel] [data-carousel=next]{inset-block-start:50%;translate:0 -50%}
+[data-slot=carousel] [data-carousel=prev]{inset-inline-start:.5rem}
+[data-slot=carousel] [data-carousel=next]{inset-inline-end:.5rem}
+[data-slot=carousel][data-orientation=vertical] [data-carousel=prev],[data-slot=carousel][data-orientation=vertical] [data-carousel=next]{inset-inline:auto;left:50%;translate:-50% 0}
+[data-slot=carousel][data-orientation=vertical] [data-carousel=prev]{inset-block-start:.5rem}
+[data-slot=carousel][data-orientation=vertical] [data-carousel=next]{inset-block-start:auto;inset-block-end:.5rem}
+[data-slot=carousel] [data-carousel=rotation]{inset-block-start:.5rem;inset-inline-end:.5rem}
+[data-slot=carousel] [data-carousel=prev]:dir(rtl) svg,[data-slot=carousel] [data-carousel=next]:dir(rtl) svg{scale:-1 1}
+
+/* The pause button shows a pause until it has been pressed, then a play. */
+[data-slot=carousel] [data-carousel=rotation] svg:last-child{display:none}
+[data-slot=carousel][data-stopped] [data-carousel=rotation] svg:first-child{display:none}
+[data-slot=carousel][data-stopped] [data-carousel=rotation] svg:last-child{display:block}
+
+/* With no script the buttons would do nothing; the module shows them. The scrollbar is the way to scroll, until then. */
+[data-slot=carousel]:not([data-ready]) [data-carousel]{display:none}
+[data-slot=carousel][data-ready] [data-slot=carousel-track]{scrollbar-width:none;
+  &::-webkit-scrollbar{display:none}
+}
+
+/* The pickers: a short bar for each slide, the open one dark. The link is the whole target. */
+[data-slot=carousel-pickers]{display:flex;flex-wrap:wrap;justify-content:center;gap:.25rem}
+[data-slot=carousel-picker]{position:relative;display:inline-block;width:1.75rem;height:1.5rem;border-radius:var(--radius);cursor:pointer;
+  &::after{content:"";position:absolute;inset:auto .25rem calc(50% - 2px);height:4px;border-radius:2px;background:var(--line-3);transition:background-color .1s}
+  &:hover::after{background:var(--fg-3)}
+  &[aria-selected=true]::after{background:var(--fg)}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+}

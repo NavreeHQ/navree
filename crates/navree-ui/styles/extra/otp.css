@@ -1,1 +1,55 @@
-/* The otp styles: filled in with its component. */
+/*
+ * navree-ui's stylesheet: InputOtp, linked only on a page that draws one.
+ *
+ * The field is one text input. The font is monospace, so a character is exactly 1ch
+ * wide. The letter spacing adds --otp-gap to every character, so a character and its
+ * space take --otp-w, which is the width of one box. The wrapper is N boxes wide and
+ * draws the lines between them as a background that repeats every --otp-w. The input
+ * starts half a gap in from the wrapper's edge, which puts each character in the middle
+ * of its box (the space after a character is on its right), and it is wider than the
+ * wrapper by that half gap and 2px, which the wrapper clips: the caret after the last
+ * character then has room, and the text never scrolls. A code is read left to right
+ * whatever the page's direction.
+ */
+[data-slot=input-otp]{--otp-n:6;--otp-gap:2.4ch;--otp-w:calc(1ch + var(--otp-gap));position:relative;display:inline-block;box-sizing:content-box;vertical-align:top;width:calc(var(--otp-n) * var(--otp-w));height:2.5rem;overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius);background-color:var(--ink-1);color:var(--fg);font-family:var(--font-mono);font-size:1.25rem;line-height:1;direction:ltr;text-align:left;transition:border-color .1s;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent calc(var(--otp-w) - 1px),var(--line-2) calc(var(--otp-w) - 1px),var(--line-2) var(--otp-w));
+  background-size:calc(var(--otp-n) * var(--otp-w) - 1px) 100%;
+  background-repeat:no-repeat;
+  &:hover{border-color:var(--line-3)}
+  &:has(:focus-visible){outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
+  &:has([aria-invalid=true]){border-color:var(--danger)}
+  &:has(:disabled){opacity:.5;cursor:not-allowed}
+  &:has([readonly]){background-color:var(--ink-2)}
+  & > [data-slot=input-otp-field]{display:block;box-sizing:content-box;width:calc(var(--otp-n) * var(--otp-w) + 2px);height:100%;margin:0;padding:0 0 0 calc(var(--otp-gap) / 2);border:0;border-radius:0;background:transparent;color:inherit;font:inherit;letter-spacing:var(--otp-gap);text-align:left;caret-color:var(--fg);outline:0;
+    &:focus{outline:0}
+    &:disabled{cursor:not-allowed}
+    &:-webkit-autofill{transition:background-color 600000s 0s,color 600000s 0s}
+  }
+}
+
+/* The lengths a code field is drawn for. */
+[data-slot=input-otp][data-length="3"]{--otp-n:3}
+[data-slot=input-otp][data-length="4"]{--otp-n:4}
+[data-slot=input-otp][data-length="5"]{--otp-n:5}
+[data-slot=input-otp][data-length="6"]{--otp-n:6}
+[data-slot=input-otp][data-length="7"]{--otp-n:7}
+[data-slot=input-otp][data-length="8"]{--otp-n:8}
+[data-slot=input-otp][data-length="9"]{--otp-n:9}
+[data-slot=input-otp][data-length="10"]{--otp-n:10}
+[data-slot=input-otp][data-length="11"]{--otp-n:11}
+[data-slot=input-otp][data-length="12"]{--otp-n:12}
+
+/* A heavier line after every group of boxes. It stops short of the last edge, which the border draws. */
+[data-slot=input-otp][data-group="2"]{--otp-g:2}
+[data-slot=input-otp][data-group="3"]{--otp-g:3}
+[data-slot=input-otp][data-group="4"]{--otp-g:4}
+[data-slot=input-otp][data-group]{
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent calc(var(--otp-g) * var(--otp-w) - 2px),var(--line-3) calc(var(--otp-g) * var(--otp-w) - 2px),var(--line-3) calc(var(--otp-g) * var(--otp-w))),repeating-linear-gradient(to right,transparent 0,transparent calc(var(--otp-w) - 1px),var(--line-2) calc(var(--otp-w) - 1px),var(--line-2) var(--otp-w));
+  background-size:calc(var(--otp-n) * var(--otp-w) - 2px) 100%,calc(var(--otp-n) * var(--otp-w) - 1px) 100%;
+}
+
+/* On a phone the boxes get narrower so the longest codes fit. */
+@media (max-width:420px){
+  [data-slot=input-otp]{font-size:1rem}
+  [data-slot=input-otp][data-length="9"],[data-slot=input-otp][data-length="10"],[data-slot=input-otp][data-length="11"],[data-slot=input-otp][data-length="12"]{font-size:.8125rem}
+}
