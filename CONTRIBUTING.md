@@ -23,6 +23,9 @@ CRM built on top of them and the website:
   on the server, inventory with restocks, and the store's activity live over
   server-sent events. The website's `/ui/` page and `/showcase/store/` show
   its views, drawn by `apps/ui-docs`.
+- `apps/inbox-demo`: an example app on Navree UI, a support inbox in three
+  resizable panes with 100,000 conversations read lazily and live over
+  server-sent events, on SQLite.
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
 - `apps/crm-nuxt`: the same CRM front end in Nuxt 4, with its BFF in Nitro
