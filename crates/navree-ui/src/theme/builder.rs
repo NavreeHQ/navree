@@ -614,7 +614,14 @@ impl ThemeBuilder {
             "Greys",
             Neutral::ALL.iter().map(|n| (n.id(), n.label())),
             neutral_value.map_or("", Neutral::id),
-            |_| None,
+            |id| {
+                Some(
+                    el("span")
+                        .slot("theme-dot")
+                        .attr("data-neutral", id.to_owned())
+                        .attr("aria-hidden", "true"),
+                )
+            },
         );
         let radius = Self::choices(
             "radius",
@@ -890,10 +897,18 @@ impl ThemeBuilder {
         let key = self.draft.draft().key().to_owned();
         el("div").slot("theme-preview").children((
             el("h2").slot("theme-section-title").child("Preview"),
-            el("div").slot("theme-preview-pair").children((
-                Self::sample(&key, Side::Light),
-                Self::sample(&key, Side::Dark),
-            )),
+            el("p").slot("theme-help").attr("data-state", "note").child(
+                "A picture of the draft: real components drawn in it, light and dark. The contrast report below says in words what it shows.",
+            ),
+            // A picture, not controls to use: out of the focus order and the
+            // accessibility tree, so a failing draft's colours are shown, not read.
+            el("div")
+                .slot("theme-preview-pair")
+                .flag("inert", true)
+                .children((
+                    Self::sample(&key, Side::Light),
+                    Self::sample(&key, Side::Dark),
+                )),
         ))
     }
 
@@ -949,7 +964,7 @@ impl ThemeBuilder {
                             }),
                         )
                         .children((
-                            el("td").child(
+                            el("td").flag("inert", true).child(
                                 el("span")
                                     .slot("theme-contrast-sample")
                                     .attr("data-theme", draft.key().to_owned())

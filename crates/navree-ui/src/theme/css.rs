@@ -132,6 +132,20 @@ fn helpers(out: &mut String) {
 ",
         );
     }
+    // A swatch of each family of greys: its strongest border, which shows the tint.
+    for neutral in super::Neutral::ALL {
+        let mut spec = *Theme::NAVREE.spec();
+        neutral.apply(&mut spec);
+        let _ = write!(
+            out,
+            ":where([data-neutral={}]){{--swatch:light-dark(",
+            neutral.id()
+        );
+        spec.light.get(Token::Line3).write_hex(out);
+        out.push(',');
+        spec.dark.get(Token::Line3).write_hex(out);
+        out.push_str(")}\n");
+    }
     for font in super::Font::ALL {
         let _ = writeln!(
             out,

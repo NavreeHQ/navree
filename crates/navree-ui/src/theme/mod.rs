@@ -861,6 +861,13 @@ impl Theme {
         }
     }
 
+    /// The stylesheet of a theme of your own, as served at
+    /// [`stylesheet`](Self::stylesheet); `None` for a built-in, which is in the
+    /// toolkit's own.
+    pub fn css(&self) -> Option<String> {
+        (!self.is_builtin()).then(|| css::sheet(self))
+    }
+
     /// The short form a cookie or a URL carries: a built-in's id, or `v1-` and the
     /// theme's values.
     pub fn short_form(&self) -> &str {

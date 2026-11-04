@@ -332,7 +332,8 @@ pub(crate) fn respond_setting(headers: &HeaderMap, body: &[u8]) -> Response {
                 .into_response()
         }
         Err(ChoiceError::CrossSite) => StatusCode::FORBIDDEN.into_response(),
-        Err(ChoiceError::Invalid) => StatusCode::UNPROCESSABLE_ENTITY.into_response(),
+        // Input that isn't a choice is a 400, as every input error is in Navree.
+        Err(ChoiceError::Invalid) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
@@ -489,7 +490,7 @@ mod tests {
         for body in ["theme=nope", "mode=dim", "theme=%3Cscript%3E"] {
             assert_eq!(
                 respond_setting(&headers, body.as_bytes()).status(),
-                StatusCode::UNPROCESSABLE_ENTITY,
+                StatusCode::BAD_REQUEST,
                 "{body}"
             );
         }

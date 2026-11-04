@@ -34,7 +34,7 @@
   &[open] > [data-slot=theme-tokens-summary]{border-bottom:1px solid var(--line)}
 }
 [data-slot=theme-tokens-summary]{display:flex;align-items:center;min-height:2.25rem;padding:0 .75rem;color:var(--fg);font-size:13px;font-weight:500;cursor:pointer;list-style-position:inside}
-[data-slot=theme-help]{padding:.5rem .75rem 0;color:var(--fg-3);font-size:12px;&[data-state=blocked]{padding:0;color:var(--fg-2);font-size:13px}}
+[data-slot=theme-help]{padding:.5rem .75rem 0;color:var(--fg-3);font-size:12px;&[data-state=blocked]{padding:0;color:var(--fg-2);font-size:13px}&[data-state=note]{padding:0}}
 [data-slot=theme-token-table]{width:100%;border-collapse:collapse;font-size:13px;
   & caption{padding:.75rem .75rem .25rem;color:var(--fg);font-weight:500;text-align:start}
   & thead th{padding:0 .375rem .25rem;color:var(--fg-3);font-size:12px;font-weight:500;text-align:start}
