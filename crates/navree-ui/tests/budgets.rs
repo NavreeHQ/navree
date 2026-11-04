@@ -76,7 +76,12 @@ fn a_page_loads_the_live_module_only_for_a_live_region_or_a_live_table() {
     let page = |body: Node| View::new("x").body(body);
 
     // A live region, and no table.
-    let region = page(Region::new("feed").src("/fragments/feed").live_from("/events").into());
+    let region = page(
+        Region::new("feed")
+            .src("/fragments/feed")
+            .live_from("/events")
+            .into(),
+    );
     assert_eq!(region.uses(), Uses::CORE.with(Uses::LIVE));
     let html = region.to_html();
     assert!(html.contains(assets::CORE_URL), "{html}");
