@@ -141,7 +141,7 @@ export const picture = {
     "Seen from behind and a little to the side, a man with short, thick hair and a full beard, nothing on his head, sits in a mesh office chair at a desk, " +
     "his right hand on the keyboard, facing a glowing monitor in the middle of the picture with Navree code on its screen. " +
     "His young son, a small Sikh boy with his hair in a topknot under a glowing white patka, sits on his lap and watches the screen. " +
-    "His daughter, older and taller, stands on the right with two long braids down her back, one hand on the desk, watching and learning. " +
+    "His daughter, older and taller, stands on the right with her hair in two long, wavy pigtails, one hand on the desk, watching and learning. " +
     "A plant and a mug sit at the right end of the desk. Everything is drawn in glowing green lines, the clothes are made of columns of 0 and 1 digits, " +
     "and digits fall like rain at the left and right edges.",
   caption: `${founder.short} at his desk, Navraj on his lap and Navreet beside him, drawn in light and ones and zeros.`,
