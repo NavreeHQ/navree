@@ -101,6 +101,19 @@ impl View {
 
     /// The stylesheets of the themes the page draws, its own first: each URL once.
     fn theme_sheets(&self) -> Vec<String> {
+        self.own_themes()
+            .iter()
+            .filter_map(|theme| theme.stylesheet())
+            .collect()
+    }
+
+    /// The themes of your own that the page draws, its own first, each once: what
+    /// its `<link data-ui-theme>` stylesheets are for. A built-in is in the
+    /// toolkit's stylesheet and is not listed. A static copy of the page, such as
+    /// a docs preview, writes each one's [`Theme::css`] where its
+    /// [`Theme::stylesheet`] points.
+    pub fn own_themes(&self) -> Vec<&Theme> {
+        let mut themes: Vec<&Theme> = Vec::new();
         let mut urls: Vec<String> = Vec::new();
         let page = self.appearance.as_ref().map(Appearance::theme);
         for theme in page.into_iter().chain(&self.sheets) {
@@ -108,9 +121,38 @@ impl View {
                 && !urls.contains(&url)
             {
                 urls.push(url);
+                themes.push(theme);
             }
         }
-        urls
+        themes
+    }
+
+    /// What `<html>` carries for the page's look, in the order the page writes it:
+    /// `data-theme` and `data-mode` for a look other than the default, then
+    /// `data-density` for a density other than the default. Each value is a
+    /// theme's key, a mode's id or a density's id, never text from outside. A
+    /// static copy of the page writes them as they are.
+    pub fn look(&self) -> Vec<(&'static str, String)> {
+        let mut look = Vec::new();
+        if let Some(appearance) = self.appearance.as_ref().filter(|a| !a.is_default()) {
+            look.push(("data-theme", appearance.theme().key().to_owned()));
+            look.push(("data-mode", appearance.mode().id().to_owned()));
+        }
+        let density = self
+            .density
+            .or_else(|| self.appearance.as_ref().map(|a| a.theme().spec().density))
+            .unwrap_or_default();
+        if density != Density::Default {
+            look.push(("data-density", density.id().to_owned()));
+        }
+        look
+    }
+
+    /// The page's `color-scheme`: its mode's, or `dark`.
+    pub fn color_scheme(&self) -> &'static str {
+        self.appearance
+            .as_ref()
+            .map_or("dark", |appearance| appearance.mode().color_scheme())
     }
 
     /// Sets the page's language.
@@ -185,21 +227,12 @@ impl View {
         out.push_str("<!doctype html><html lang=\"");
         out.push_str(self.lang);
         out.push('"');
-        if let Some(appearance) = self.appearance.as_ref().filter(|a| !a.is_default()) {
-            // A built-in's id or `c` and hex digits, and a mode's id: never text from outside.
-            out.push_str(" data-theme=\"");
-            out.push_str(appearance.theme().key());
-            out.push_str("\" data-mode=\"");
-            out.push_str(appearance.mode().id());
-            out.push('"');
-        }
-        let density = self
-            .density
-            .or_else(|| self.appearance.as_ref().map(|a| a.theme().spec().density))
-            .unwrap_or_default();
-        if density != Density::Default {
-            out.push_str(" data-density=\"");
-            out.push_str(density.id());
+        // A built-in's id or `c` and hex digits, a mode's id, a density's id: never text from outside.
+        for (name, value) in self.look() {
+            out.push(' ');
+            out.push_str(name);
+            out.push_str("=\"");
+            out.push_str(&value);
             out.push('"');
         }
         if uses.has(Uses::CORE) || self.mark_build {
@@ -208,11 +241,7 @@ impl View {
             out.push('"');
         }
         out.push_str("><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"");
-        out.push_str(
-            self.appearance
-                .as_ref()
-                .map_or("dark", |appearance| appearance.mode().color_scheme()),
-        );
+        out.push_str(self.color_scheme());
         out.push_str("\"><title>");
         escape_into(out, &self.title);
         out.push_str("</title>");
@@ -521,6 +550,55 @@ mod tests {
             .csrf("tok")
             .to_html();
         assert!(!none.contains("ui-post"), "{none}");
+    }
+
+    #[test]
+    fn a_page_says_its_look_as_it_writes_it() {
+        use crate::theme::{Mode, ThemeId};
+        let plain = View::new("x");
+        assert!(plain.look().is_empty());
+        assert_eq!(plain.color_scheme(), "dark");
+        assert!(plain.own_themes().is_empty());
+
+        let ocean = View::new("x").appearance(Appearance::new(Theme::OCEAN, Mode::Light));
+        assert_eq!(
+            ocean.look(),
+            vec![
+                ("data-theme", "ocean".to_owned()),
+                ("data-mode", "light".to_owned())
+            ]
+        );
+        assert_eq!(ocean.color_scheme(), "light");
+        assert!(
+            ocean
+                .to_html()
+                .starts_with(r#"<!doctype html><html lang="en" data-theme="ocean" data-mode="light">"#)
+        );
+        // A built-in has no sheet of its own.
+        assert!(ocean.own_themes().is_empty());
+
+        let mine = Theme::custom(
+            ThemeId::parse("sutlej").unwrap(),
+            "Sutlej",
+            *Theme::VIOLET.spec(),
+        )
+        .unwrap();
+        let page = View::new("x")
+            .appearance(Appearance::new(mine.clone(), Mode::Dark))
+            .theme_sheet(&mine)
+            .density(Density::Compact);
+        assert_eq!(page.own_themes().len(), 1, "each theme once");
+        assert_eq!(page.own_themes()[0].key(), mine.key());
+        assert_eq!(
+            page.look().last(),
+            Some(&("data-density", "compact".to_owned()))
+        );
+        let html = page.to_html();
+        let url = mine.stylesheet().unwrap();
+        assert_eq!(html.matches(url.as_str()).count(), 1, "{html}");
+        for (name, value) in page.look() {
+            assert!(html.contains(&format!(" {name}=\"{value}\"")), "{html}");
+        }
     }
 
     #[test]
