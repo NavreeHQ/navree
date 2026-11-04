@@ -1,0 +1,31 @@
+[package]
+name = "campaign-demo"
+description = "An example app on Navree UI: an email campaign's recipients, a recipient's timeline in a sheet, and its activity live over server-sent events, on SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "campaign-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "validation-phone"] }
+serde = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "validation-phone", "testing"] }
+serde_json = { workspace = true }

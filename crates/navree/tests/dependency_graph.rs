@@ -540,6 +540,8 @@ const HIERARCHY: &[Rule] = &[
     // The toolkit's proof pages: one binary on the `navree` facade.
     rule("ui-proof", 9, &["navree"]),
     rule("ui-table-proof", 9, &["navree"]),
+    // The example app (an email campaign) on the `navree` facade.
+    rule("campaign-demo", 9, &["navree"]),
     // The website's UI docs generator: one binary on the `navree` facade.
     rule("ui-docs", 9, &["navree"]),
     // The skills' Rust blocks, compiled against the facade.

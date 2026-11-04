@@ -876,6 +876,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "campaign-demo"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "http",
+ "navree",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
