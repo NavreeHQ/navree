@@ -1,6 +1,6 @@
 ---
 name: navree-oauth
-description: "The OAuth 2.1 / OpenID Connect server of navree-oauth: `OAuthServerModule` and the `oauth` config section (scopes mapped to permission strings, `consent_url`, `device_url`, TTLs, Ed25519 signing keys), clients (`OAuthClients`, `NewClient`, `navree oauth:client`), the authorization code flow with PKCE and the consent API your front end calls, client credentials, device and refresh grants, `OAuthToken` in handlers, `insufficient_scope`, personal access tokens (`PersonalAccessTokens`), introspection, revocation, discovery, JWKS, userinfo, dynamic registration and `navree_oauth::testing`. Use when letting third-party apps, CLIs, TVs, integrations or AI clients act for your users, issuing personal access tokens for scripts, building a consent or device page, scoping what a token may do, or debugging a 401/403/invalid_grant from OAuth tokens."
+description: "The OAuth 2.1 / OpenID Connect server of navree-oauth: `OAuthServerModule` and the `oauth` config section (scopes mapped to permission strings, `consent_url`, `device_url`, TTLs, Ed25519 or RSA signing keys for EdDSA or RS256 ID tokens), clients (`OAuthClients`, `NewClient`, `navree oauth:client`), the authorization code flow with PKCE and the consent API your front end calls, client credentials, device and refresh grants, `OAuthToken` in handlers, `insufficient_scope`, personal access tokens (`PersonalAccessTokens`), introspection, revocation, discovery, JWKS, userinfo, dynamic registration and `navree_oauth::testing`. Use when letting third-party apps, CLIs, TVs, integrations or AI clients act for your users, issuing personal access tokens for scripts, building a consent or device page, scoping what a token may do, or debugging a 401/403/invalid_grant from OAuth tokens."
 ---
 
 # OAuth server
@@ -39,7 +39,8 @@ consent_url = "https://app.acme.test/oauth/consent"  # required for the code flo
 device_url = "https://app.acme.test/device"          # required for the device grant
 # path = "/oauth"  access_token_ttl_secs = 3600  refresh_token_ttl_secs = 2592000
 # request_ttl_secs = 600  code_ttl_secs = 60  token_cache_secs = 10 (0 = off)
-# signing_key = "ed25519:..."  (navree oauth:keys)   previous_signing_keys = [...]
+# signing_key = "ed25519:..."  (navree oauth:keys)  or "rsa:<base64 DER>" / PEM for RS256
+# id_token_signing_alg = "RS256"  (EdDSA | RS256; default: the key's)   previous_signing_keys = [...]
 # dynamic_registration = false
 
 [oauth.personal_access_tokens]
@@ -103,7 +104,9 @@ let created = clients
   `GET /oauth/jwks`, `/.well-known/openid-configuration`,
   `/.well-known/oauth-authorization-server`, `POST /oauth/register`
   (only with `dynamic_registration`).
-- ID tokens: EdDSA (Ed25519) JWT, `iss`, `sub`, `aud` (client id), `exp`,
+- ID tokens: EdDSA (Ed25519, default) or RS256 (an RSA key you make with
+  OpenSSL; what every OIDC client accepts; `navree oauth:keys --rsa`) JWT,
+  JWKS publishes current + previous keys of either kind; `iss`, `sub`, `aud` (client id), `exp`,
   `iat`, `nonce`, `name` (profile), `email` + `email_verified` (email).
 - Rate limits (`oauth.rate_limits.<endpoint> = { per_client, per_ip }`,
   per minute, per instance, `0` = off): `token` 300/120, `introspect`

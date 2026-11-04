@@ -55,9 +55,13 @@ pub(crate) fn commands() -> [CommandSpec; 6] {
         ),
         CommandSpec::new(
             "oauth:keys",
-            "Generate an Ed25519 signing key for ID tokens (APP_OAUTH__SIGNING_KEY)",
-            |_ctx, _args| async move {
-                print!("{}", generate_keys());
+            "Generate an Ed25519 signing key for ID tokens (APP_OAUTH__SIGNING_KEY); [--rsa] shows how to make an RSA key for RS256",
+            |_ctx, args| async move {
+                if has_flag(&args, "--rsa") {
+                    print!("{RSA_KEY_STEPS}");
+                } else {
+                    print!("{}", generate_keys());
+                }
                 Ok(())
             },
         ),
@@ -287,6 +291,21 @@ pub(crate) async fn revoke_client(ctx: &AppContext, args: &[String]) -> Result<S
     Ok(format!("Revoked client {id} and its tokens.\n"))
 }
 
+/// `oauth:keys --rsa`: how to make an RSA key for RS256 ID tokens. Navree
+/// reads RSA keys but does not make them.
+pub(crate) const RSA_KEY_STEPS: &str = "\
+RS256 ID tokens need an RSA private key of 2048 to 4096 bits. Make one with OpenSSL:
+
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out oauth-rsa.pem
+
+then add it to .env as one line, and choose the algorithm:
+
+  echo \"APP_OAUTH__SIGNING_KEY=rsa:$(openssl pkey -in oauth-rsa.pem -outform DER | base64 | tr -d '\\n')\" >> .env
+  echo \"APP_OAUTH__ID_TOKEN_SIGNING_ALG=RS256\" >> .env
+
+Keep the old key in APP_OAUTH__PREVIOUS_SIGNING_KEYS until the ID tokens it signed have expired.
+";
+
 /// `oauth:keys`: a new key as an environment line.
 pub(crate) fn generate_keys() -> String {
     let key = SigningKey25519::generate();
@@ -378,5 +397,13 @@ mod tests {
         assert!(line.starts_with("APP_OAUTH__SIGNING_KEY=ed25519:MC4CAQAwBQYDK2VwBCIEI"));
         let value = line.trim().split_once('=').unwrap().1;
         assert!(SigningKey25519::parse(value).is_ok());
+    }
+
+    // CONN-105
+    #[test]
+    fn rsa_steps_name_the_settings() {
+        assert!(RSA_KEY_STEPS.contains("openssl genpkey -algorithm RSA"));
+        assert!(RSA_KEY_STEPS.contains("APP_OAUTH__SIGNING_KEY=rsa:"));
+        assert!(RSA_KEY_STEPS.contains("APP_OAUTH__ID_TOKEN_SIGNING_ALG=RS256"));
     }
 }

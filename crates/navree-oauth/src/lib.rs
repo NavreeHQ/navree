@@ -17,7 +17,8 @@
 //!   to `oauth.consent_url`, which reads and decides the request through
 //!   [`OAuthApiController`]; approvals are remembered.
 //! - **OpenID Connect:** `openid`, `profile`, `email` and
-//!   `offline_access`; Ed25519-signed (EdDSA) ID tokens, userinfo, the JWKS
+//!   `offline_access`; ID tokens signed with Ed25519 (EdDSA) or RSA (RS256,
+//!   `oauth.id_token_signing_alg`), userinfo, the JWKS
 //!   and the discovery documents.
 //! - **Personal access tokens** ([`PersonalAccessTokens`]), revocation (RFC
 //!   7009), introspection (RFC 7662) and, behind
@@ -94,7 +95,10 @@ pub use config::{
 pub use entity::{Authorization, Client, PersonalAccessToken};
 pub use error::OAuthError;
 pub use grants::{Grant, TokenResponse};
-pub use keys::{KeyError, SIGNING_KEY_PREFIX, SigningKey25519, SigningKeys};
+pub use keys::{
+    IdTokenAlgorithm, IdTokenKey, KeyError, RSA_KEY_PREFIX, SIGNING_KEY_PREFIX, SigningKey25519,
+    SigningKeys,
+};
 pub use migration::OAUTH_MIGRATIONS;
 pub use module::OAuthServerModule;
 pub use pats::{

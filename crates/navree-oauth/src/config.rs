@@ -8,6 +8,7 @@ use navree_contracts::Secret;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
+use crate::keys::IdTokenAlgorithm;
 use crate::scope::{BUILT_IN_SCOPES, check_permission, check_scope_name};
 
 /// A scope the app defines under `oauth.scopes.<name>`.
@@ -130,6 +131,8 @@ impl Default for RateLimitOptions {
 /// code_ttl_secs = 60
 /// token_cache_secs = 10
 /// # signing_key = "ed25519:MC4CAQAwBQYDK2VwBCIEI..."  # navree oauth:keys
+/// # signing_key = "rsa:MIIEvgIBADANBgkqhkiG9w0BAQEF..."  # an RSA key for RS256
+/// # id_token_signing_alg = "RS256"                   # EdDSA | RS256; default: the key's
 /// # previous_signing_keys = ["ed25519:..."]
 /// dynamic_registration = false                        # POST {path}/register
 ///
@@ -181,9 +184,15 @@ pub struct OAuthOptions {
     /// How long each instance caches a token lookup, in seconds (`0`
     /// turns the cache off).
     pub token_cache_secs: u64,
-    /// The Ed25519 key that signs ID tokens (`ed25519:<base64 PKCS#8 or
-    /// seed>`, from `navree oauth:keys`). Derived from `app.key` when unset.
+    /// The key that signs ID tokens: Ed25519 (`ed25519:<base64 PKCS#8 or
+    /// seed>`, from `navree oauth:keys`) for EdDSA, or RSA (`rsa:<base64
+    /// DER>` or a PEM private key, 2048 to 4096 bits, made with OpenSSL) for
+    /// RS256. An Ed25519 key is derived from `app.key` when unset.
     pub signing_key: Option<Secret<String>>,
+    /// How ID tokens are signed: `EdDSA` or `RS256`. Unset, it follows
+    /// `signing_key` (EdDSA without one). Set, it must match the key:
+    /// `RS256` needs an RSA `signing_key`.
+    pub id_token_signing_alg: Option<IdTokenAlgorithm>,
     /// Older signing keys, still published in the JWKS so ID tokens issued
     /// before a rotation verify. A list, or a comma-separated string.
     #[serde(deserialize_with = "list_or_csv")]
@@ -212,6 +221,7 @@ impl Default for OAuthOptions {
             code_ttl_secs: 60,
             token_cache_secs: 10,
             signing_key: None,
+            id_token_signing_alg: None,
             previous_signing_keys: Vec::new(),
             personal_access_tokens: PersonalAccessTokenOptions::default(),
             dynamic_registration: false,

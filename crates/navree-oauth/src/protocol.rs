@@ -283,7 +283,7 @@ impl OAuthProtocolController {
             "revocation_endpoint_auth_methods_supported": auth_methods,
             "introspection_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
             "subject_types_supported": ["public"],
-            "id_token_signing_alg_values_supported": ["EdDSA"],
+            "id_token_signing_alg_values_supported": [core.keys.algorithm().as_str()],
             "claims_supported": ["iss", "sub", "aud", "exp", "iat", "nonce", "name", "email", "email_verified"],
             "authorization_response_iss_parameter_supported": true,
         });

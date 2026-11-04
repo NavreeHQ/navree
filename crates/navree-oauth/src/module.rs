@@ -14,7 +14,7 @@ use crate::api::OAuthApiController;
 use crate::commands::commands;
 use crate::core::{Core, clock_of};
 use crate::error::map_oauth_error;
-use crate::keys::{SigningKey25519, SigningKeys};
+use crate::keys::{IdTokenAlgorithm, IdTokenKey, SigningKey25519, SigningKeys};
 use crate::migration::migrations;
 use crate::offboarding::OAuthCredentialRevoker;
 use crate::protocol::OAuthProtocolController;
@@ -208,25 +208,42 @@ fn signing_keys(
     let previous = options
         .previous_signing_keys
         .iter()
-        .map(|key| SigningKey25519::parse(key.expose()))
+        .map(|key| IdTokenKey::parse(key.expose()))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("oauth.previous_signing_keys: {error}"))?;
     let current = match &options.signing_key {
-        Some(key) => SigningKey25519::parse(key.expose())
+        Some(key) => IdTokenKey::parse(key.expose())
             .map_err(|error| format!("oauth.signing_key: {error}"))?,
+        None if options.id_token_signing_alg == Some(IdTokenAlgorithm::RS256) => {
+            return Err(
+                "oauth.signing_key: RS256 ID tokens need an RSA private key of 2048 to 4096 bits \
+                 (`rsa:<base64 DER>` or PEM; make one with `openssl genpkey -algorithm RSA \
+                 -pkeyopt rsa_keygen_bits:3072`)"
+                    .into(),
+            );
+        }
         None => match encrypter.map(|encrypter| encrypter.derive_key(SIGNING_KEY_PURPOSE)) {
-            Some(Ok(seed)) => SigningKey25519::from_seed(seed),
+            Some(Ok(seed)) => SigningKey25519::from_seed(seed).into(),
             _ => {
                 tracing::warn!(
                     target: "navree::oauth",
                     "neither oauth.signing_key nor an application key (`app.key` / APP_KEY) is set: \
                      ID tokens are signed with a random key that changes when the process restarts"
                 );
-                SigningKey25519::generate()
+                SigningKey25519::generate().into()
             }
         },
     };
-    Ok(SigningKeys::new(current, previous))
+    if let Some(wanted) = options.id_token_signing_alg
+        && wanted != current.algorithm()
+    {
+        return Err(format!(
+            "oauth.id_token_signing_alg is {wanted}, but oauth.signing_key is a key for {}",
+            current.algorithm()
+        )
+        .into());
+    }
+    Ok(SigningKeys::with_keys(current, previous))
 }
 
 #[cfg(test)]
@@ -274,5 +291,59 @@ mod tests {
         // No key at all: a random one.
         let random = signing_keys(&OAuthOptions::default(), None).unwrap();
         assert_ne!(random.current().kid(), derived.current().kid());
+    }
+
+    // CONN-105
+    #[test]
+    fn rs256_needs_an_rsa_key_and_the_algorithm_follows_the_key() {
+        let rsa = include_str!("../tests/fixtures/rsa-2048.pem");
+        let encrypter = Encrypter::new(AppKey::parse(&generate_key()).unwrap());
+        // An RSA key signs RS256, with or without the setting.
+        for alg in [None, Some(IdTokenAlgorithm::RS256)] {
+            let options = OAuthOptions {
+                signing_key: Some(Secret::new(rsa.to_owned())),
+                id_token_signing_alg: alg,
+                ..OAuthOptions::default()
+            };
+            let keys = signing_keys(&options, Some(&encrypter)).unwrap();
+            assert_eq!(keys.algorithm(), IdTokenAlgorithm::RS256);
+        }
+        // RS256 without a key: Navree makes no RSA keys.
+        let options = OAuthOptions {
+            id_token_signing_alg: Some(IdTokenAlgorithm::RS256),
+            ..OAuthOptions::default()
+        };
+        let error = signing_keys(&options, Some(&encrypter))
+            .unwrap_err()
+            .to_string();
+        assert!(error.starts_with("oauth.signing_key"), "{error}");
+        assert!(error.contains("openssl genpkey"), "{error}");
+        // A setting that contradicts the key.
+        let options = OAuthOptions {
+            signing_key: Some(Secret::new(SigningKey25519::generate().encode())),
+            id_token_signing_alg: Some(IdTokenAlgorithm::RS256),
+            ..OAuthOptions::default()
+        };
+        let error = signing_keys(&options, None).unwrap_err().to_string();
+        assert!(error.contains("oauth.id_token_signing_alg"), "{error}");
+        // The previous keys may be of either kind.
+        let options = OAuthOptions {
+            signing_key: Some(Secret::new(rsa.to_owned())),
+            previous_signing_keys: vec![Secret::new(SigningKey25519::generate().encode())],
+            ..OAuthOptions::default()
+        };
+        let keys = signing_keys(&options, None).unwrap();
+        assert_eq!(keys.jwks()["keys"][0]["kty"], "RSA");
+        assert_eq!(keys.jwks()["keys"][1]["kty"], "OKP");
+        // The configured name of the algorithm.
+        let parsed: OAuthOptions =
+            serde_json::from_value(serde_json::json!({ "id_token_signing_alg": "RS256" })).unwrap();
+        assert_eq!(parsed.id_token_signing_alg, Some(IdTokenAlgorithm::RS256));
+        assert!(
+            serde_json::from_value::<OAuthOptions>(
+                serde_json::json!({ "id_token_signing_alg": "HS256" })
+            )
+            .is_err()
+        );
     }
 }

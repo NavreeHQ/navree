@@ -12,7 +12,7 @@ What you get:
 - **Grants:** authorization code with PKCE (S256 required), client credentials, the device authorization grant for TVs and CLIs, and refresh tokens with rotation and reuse detection.
 - **Scopes that map to permissions.** A scope such as `deals:read` grants a set of your [permission strings](/docs/security/authorization/). A token's abilities are the user's abilities narrowed to its scopes, so every `#[can]`, `#[permissions]` and `Accessible` check you already have applies to OAuth tokens unchanged.
 - **Consent,** shown by your own front end, remembered per user and client.
-- **OpenID Connect:** `openid`, `profile` and `email` scopes, ID tokens signed with Ed25519, `/oauth/userinfo`, discovery and a JWKS endpoint.
+- **OpenID Connect:** `openid`, `profile` and `email` scopes, ID tokens signed with Ed25519 (EdDSA) or RSA (RS256), `/oauth/userinfo`, discovery and a JWKS endpoint.
 - **Personal access tokens** that users create in their settings.
 - **Revocation and introspection** (RFC 7009 and RFC 7662), so other services can check a token, and optional **dynamic client registration** (RFC 7591).
 
@@ -72,7 +72,12 @@ Every key comes from the environment with the `APP_` prefix: `APP_OAUTH__CONSENT
 
 ### Signing keys
 
-Access and refresh tokens are opaque strings, stored as SHA-256 digests. Only ID tokens are signed, with Ed25519 (EdDSA), so any OpenID Connect client can verify them with the public key at `/oauth/jwks`. By default the key is derived from the application key (`APP_KEY`), like navree-auth's JWT key. To manage it on its own, generate one:
+Access and refresh tokens are opaque strings, stored as SHA-256 digests. Only ID tokens are signed, and clients verify them with the public keys at `/oauth/jwks`. Two algorithms are available:
+
+- **EdDSA** (Ed25519), the default: small, fast signatures, with a key Navree derives or generates for you. Modern client libraries verify it, but not every one does.
+- **RS256** (RSA with SHA-256): the algorithm OpenID Connect Discovery requires every provider to offer, and the one every client library and SaaS product accepts. Choose it when a client you don't control signs people in through your app.
+
+By default the EdDSA key is derived from the application key (`APP_KEY`), like navree-auth's JWT key. To manage it on its own, generate one:
 
 ```sh
 navree oauth:keys
@@ -83,6 +88,18 @@ APP_OAUTH__SIGNING_KEY=ed25519:MC4CAQAwBQYDK2VwBCIEIGq4m...
 ```
 
 Put the line in `.env`. The value is a base64 PKCS#8 Ed25519 key (a raw 32-byte seed after `ed25519:` works too). When you rotate it, move the old value to `oauth.previous_signing_keys` for a day, so ID tokens issued before the rotation still verify. Each key's `kid` is its RFC 7638 thumbprint.
+
+For RS256, make an RSA key of 2048 to 4096 bits with OpenSSL (Navree reads RSA keys but doesn't make them; `navree oauth:keys --rsa` prints these steps) and give it as one line, `rsa:` and the key's base64 DER:
+
+```sh
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out oauth-rsa.pem
+echo "APP_OAUTH__SIGNING_KEY=rsa:$(openssl pkey -in oauth-rsa.pem -outform DER | base64 | tr -d '\n')" >> .env
+echo "APP_OAUTH__ID_TOKEN_SIGNING_ALG=RS256" >> .env
+```
+
+`oauth.signing_key` also takes the PEM text itself (`-----BEGIN PRIVATE KEY-----` or `-----BEGIN RSA PRIVATE KEY-----`), in a TOML multi-line string or with literal `\n` in one variable. `oauth.id_token_signing_alg` is `EdDSA` or `RS256`; left out, it follows the key. `RS256` without an RSA key, a key that contradicts the setting, or an RSA key under 2048 bits fails the boot, naming the key but never printing it.
+
+The JWKS publishes the current key and every key in `oauth.previous_signing_keys`, of either kind: an RSA key as `kty: RSA` with `n` and `e`, an Ed25519 key as `kty: OKP`, each with its `kid`, `alg` and `use: sig`. To move from EdDSA to RS256, put the new RSA key in `oauth.signing_key` and the old Ed25519 key in `oauth.previous_signing_keys`, so ID tokens issued before still verify. Discovery advertises the algorithm new tokens are signed with.
 
 ## Clients
 
@@ -293,7 +310,7 @@ A refresh may ask for fewer scopes than the original grant, never more. The new 
 
 ## OpenID Connect
 
-With the `openid` scope, the token response includes an `id_token`, an EdDSA-signed JWT with `iss`, `sub` (the user's id), `aud` (the client id), `exp` (when the access token expires), `iat`, `nonce` when the request sent one, and the claims of the other scopes: `name` with `profile`, `email` and `email_verified` with `email`. `GET /oauth/userinfo` (or `POST`) returns the same claims for an access token with `openid`; without it the answer is 403 `insufficient_scope`.
+With the `openid` scope, the token response includes an `id_token`, a JWT signed with the configured algorithm (EdDSA or RS256) with `iss`, `sub` (the user's id), `aud` (the client id), `exp` (when the access token expires), `iat`, `nonce` when the request sent one, and the claims of the other scopes: `name` with `profile`, `email` and `email_verified` with `email`. `GET /oauth/userinfo` (or `POST`) returns the same claims for an access token with `openid`; without it the answer is 403 `insufficient_scope`.
 
 Discovery documents let client libraries configure themselves from your issuer URL:
 
@@ -303,7 +320,7 @@ Discovery documents let client libraries configure themselves from your issuer U
 | `GET /.well-known/oauth-authorization-server` | OAuth 2.0 authorization server metadata (RFC 8414) |
 | `GET /oauth/jwks` | The public keys that verify ID tokens |
 
-Both documents carry the same metadata: every endpoint, the supported scopes, grants (`authorization_code`, `client_credentials`, `refresh_token`, the device code grant), `code_challenge_methods_supported: ["S256"]`, the client authentication methods and `id_token_signing_alg_values_supported: ["EdDSA"]`.
+Both documents carry the same metadata: every endpoint, the supported scopes, grants (`authorization_code`, `client_credentials`, `refresh_token`, the device code grant), `code_challenge_methods_supported: ["S256"]`, the client authentication methods and `id_token_signing_alg_values_supported`: `["EdDSA"]` by default, `["RS256"]` with an RSA key.
 
 ## Personal access tokens
 
@@ -481,7 +498,8 @@ To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pa
 | `oauth.request_ttl_secs` | `600` | Authorization request and device code lifetime |
 | `oauth.code_ttl_secs` | `60` | Authorization code lifetime |
 | `oauth.token_cache_secs` | `10` | Token lookup cache per instance; `0` = off |
-| `oauth.signing_key` | derived from `app.key` | The Ed25519 key of ID tokens |
+| `oauth.signing_key` | derived from `app.key` | The key of ID tokens: `ed25519:...` for EdDSA, `rsa:...` or PEM for RS256 |
+| `oauth.id_token_signing_alg` | the key's | `EdDSA` or `RS256` |
 | `oauth.previous_signing_keys` | `[]` | Older keys still published in the JWKS |
 | `oauth.personal_access_tokens.enabled` | `true` | Mounts the personal access token routes |
 | `oauth.personal_access_tokens.max_days` | `365` | Longest lifetime; `0` = no limit |
@@ -497,7 +515,7 @@ To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pa
 | `oauth:clients` | Lists clients |
 | `oauth:client:secret <id>` | Rotates a confidential client's secret |
 | `oauth:client:revoke <id>` | Revokes a client and its tokens |
-| `oauth:keys` | Generates an Ed25519 signing key |
+| `oauth:keys [--rsa]` | Generates an Ed25519 signing key; with `--rsa`, prints how to make an RSA key for RS256 |
 | `oauth:prune [--days N]` | Deletes expired requests, codes and device codes, and expired or revoked tokens, older than N days (default 7) |
 
 | Route | |
