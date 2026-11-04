@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { Building2Icon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,14 +43,13 @@ export function CompaniesView() {
   const sortParam = url.get("sort") as CompanySort | undefined;
   const params: CompanyListParams = {
     search: url.get("search"),
-    owner_id: url.get("owner"),
-    industry: url.get("industry"),
+    filter: { owner_id: url.get("owner"), industry: url.get("industry") },
     sort: sortParam && SORTS.includes(sortParam) ? sortParam : "name",
     page: url.page,
     per_page: 25,
   };
   const companies = useCompanies(params);
-  const filtered = Boolean(params.search || params.owner_id || params.industry);
+  const filtered = Boolean(params.search || params.filter?.owner_id || params.filter?.industry);
   const total = companies.data?.meta.total;
 
   return (
@@ -71,9 +70,13 @@ export function CompaniesView() {
             onChange={(search) => url.set({ search })}
             placeholder="Search by name or domain"
           />
-          <OwnerFilter value={params.owner_id} onChange={(owner) => url.set({ owner })} currentUserId={me.data?.id} />
+          <OwnerFilter
+            value={params.filter?.owner_id}
+            onChange={(owner) => url.set({ owner })}
+            currentUserId={me.data?.id}
+          />
           <OptionFilter
-            value={params.industry}
+            value={params.filter?.industry}
             onChange={(industry) => url.set({ industry })}
             options={INDUSTRIES.map((i) => ({ value: i, label: i }))}
             anyLabel="Any industry"

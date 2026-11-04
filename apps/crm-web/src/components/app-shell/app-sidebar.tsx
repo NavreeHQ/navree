@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import {
   Building2Icon,
   ChevronRightIcon,
@@ -33,7 +33,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import type { User } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 
 export const SALES = [
   { href: "/", label: "Dashboard", icon: GaugeIcon },
@@ -55,7 +54,7 @@ export function isActive(pathname: string, href: string): boolean {
  */
 export function AppSidebar({ user }: { user: User }) {
   const pathname = usePathname();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const { setOpenMobile } = useSidebar();
   const closeMobile = () => setOpenMobile(false);
 

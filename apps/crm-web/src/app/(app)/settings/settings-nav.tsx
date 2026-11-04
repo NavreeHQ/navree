@@ -1,15 +1,14 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/features/auth/queries";
-import type { AppAbility } from "@/lib/casl/ability";
 import { cn } from "@/lib/utils";
 
 export function SettingsNav() {
   const pathname = usePathname();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const me = useCurrentUser();
   const items = [
     { href: "/settings", label: "General", show: true },

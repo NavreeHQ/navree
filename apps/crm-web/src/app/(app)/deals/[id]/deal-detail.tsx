@@ -1,6 +1,6 @@
 "use client";
 
-import { Can, useAbility } from "@casl/react";
+import { Can, useAbility } from "@navree/next/abilities";
 import { Building2Icon, CalendarIcon, CheckIcon, PencilIcon, Trash2Icon, UserIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,7 +20,6 @@ import { LostReasonDialog } from "@/features/deals/lost-reason-dialog";
 import { useDeal, useDeleteDeal, useMoveDeal } from "@/features/deals/queries";
 import type { Deal, DealStage } from "@/lib/api/types";
 import { DEAL_STAGES, stageLabel } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { formatDateLong, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +30,7 @@ const BACK = { href: "/deals", label: "Deals" };
  * filled with their depth tint; clicking a stage moves the deal (if allowed).
  */
 function StageBar({ deal }: { deal: Deal }) {
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const move = useMoveDeal();
   const [askLost, setAskLost] = useState(false);
   const canMove = ability.can("move", deal);

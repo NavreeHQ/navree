@@ -3,16 +3,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import type { CompanyInput, CompanySort, CompanyUpdateInput } from "@/lib/api/types";
+import type { CompanyInput, CompanyListQuery, CompanyUpdateInput } from "@/lib/api/types";
 
-export type CompanyListParams = {
-  search?: string;
-  owner_id?: string;
-  industry?: string;
-  sort?: CompanySort;
-  page?: number;
-  per_page?: number;
-};
+/** `filter` (owner_id, industry), `search`, `sort`, `page`, `per_page`: sent as `filter[industry]=Logistics`. */
+export type CompanyListParams = CompanyListQuery;
 
 export function useCompanies(params: CompanyListParams, enabled = true) {
   return useQuery({

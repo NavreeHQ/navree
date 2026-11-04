@@ -101,7 +101,11 @@ test("a rep creates a deal, drags it to proposal, and dropping it on lost asks f
 test("a rep cannot edit another rep's deal: no edit control, and the API answers 403", async ({ page }) => {
   await signIn(page, "rep1");
   const rep2 = await userId(page, "rep2");
-  const theirs = await callApi<{ data: Deal[] }>(page, "GET", `/api/v1/deals?owner_id=${rep2}&stage=qualified`);
+  const theirs = await callApi<{ data: Deal[] }>(
+    page,
+    "GET",
+    `/api/v1/deals?filter[owner_id]=${rep2}&filter[stage]=qualified`,
+  );
   expect(theirs.status).toBe(200);
   const deal = theirs.body.data[0];
   expect(deal, "a qualified deal owned by rep2").toBeTruthy();
@@ -134,7 +138,11 @@ test("a rep cannot edit another rep's deal: no edit control, and the API answers
 
   // Control: their own deal does have the edit control.
   const rep1 = await userId(page, "rep1");
-  const mine = await callApi<{ data: Deal[] }>(page, "GET", `/api/v1/deals?owner_id=${rep1}&stage=qualified`);
+  const mine = await callApi<{ data: Deal[] }>(
+    page,
+    "GET",
+    `/api/v1/deals?filter[owner_id]=${rep1}&filter[stage]=qualified`,
+  );
   await page.goto(`/deals/${mine.body.data[0].id}`);
   await expect(page.getByRole("heading", { level: 1, name: mine.body.data[0].title })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();

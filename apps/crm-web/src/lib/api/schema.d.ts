@@ -589,7 +589,7 @@ export interface paths {
         };
         /**
          * List activities
-         * @description Filters: subject_type, subject_id, kind, assignee_id, due (overdue | today | upcoming, by UTC day), completed (true | false); page, per_page. With due, earliest due first; with completed=true, most recently completed first; otherwise newest first.
+         * @description Query: `filter[subject_type]`, `filter[subject_id]`, `filter[kind]`, `filter[assignee_id]`, `filter[due]` (overdue | today | upcoming, by UTC day), `filter[completed]` (true | false), `page`, `per_page` (default 15, at most 100). With `filter[due]`, earliest due first; with `filter[completed]=true`, most recently completed first; otherwise newest first.
          */
         get: {
             parameters: {
@@ -905,7 +905,7 @@ export interface paths {
         };
         /**
          * List companies
-         * @description Query: `search` (name or domain, case-insensitive), `owner_id`, `industry`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).
+         * @description Query: `search` (name or domain, case-insensitive), `filter[owner_id]`, `filter[industry]`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).
          */
         get: {
             parameters: {
@@ -1196,7 +1196,7 @@ export interface paths {
         };
         /**
          * List contacts
-         * @description Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `company_id`, `status`, `owner_id` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.
+         * @description Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.
          */
         get: {
             parameters: {
@@ -1313,7 +1313,7 @@ export interface paths {
         };
         /**
          * Export contacts as CSV
-         * @description `text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's filters (`ContactFilters`), in list order.
+         * @description `text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search` (see `ContactFilters`), in list order.
          */
         get: {
             parameters: {
@@ -2082,7 +2082,7 @@ export interface paths {
         };
         /**
          * List users
-         * @description Query: `search` (part of the name or email, case-insensitive), `page`, `per_page` (default 15, at most 100). Ordered by name.
+         * @description Query: `search` (part of the name or email, case-insensitive), `sort` (a leading `-` sorts descending; default `name`), `page`, `per_page` (default 15, at most 100).
          */
         get: {
             parameters: {
@@ -2709,7 +2709,7 @@ export interface components {
             open_deals_count: number;
         };
         /**
-         * @description The query of `GET /api/v1/companies` (besides `page` and `per_page`).
+         * @description The query of `GET /api/v1/companies` (besides `page` and `per_page`). `owner_id` and `industry` are sent as `filter[owner_id]` and `filter[industry]`; `search` and `sort` are sent as they are.
          *     Blank values count as left out.
          */
         CompanyFilters: {
@@ -2924,7 +2924,7 @@ export interface components {
         };
         /**
          * @description The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and
-         *     of `GET /api/v1/contacts/export`. Blank values count as left out.
+         *     of `GET /api/v1/contacts/export`. `company_id`, `status` and `owner_id` are sent as `filter[company_id]`, `filter[status]` and `filter[owner_id]`; `search` is sent as it is. Blank values count as left out.
          */
         ContactFilters: {
             /**

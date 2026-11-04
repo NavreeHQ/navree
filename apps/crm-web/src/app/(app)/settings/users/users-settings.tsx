@@ -1,6 +1,6 @@
 "use client";
 
-import { Can, useAbility } from "@casl/react";
+import { Can, useAbility } from "@navree/next/abilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LockIcon, UserPlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -23,7 +23,6 @@ import { useCreateUser, useUpdateUser, useUsers } from "@/features/users/queries
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { Role, User } from "@/lib/api/types";
 import { ROLES } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { formatDate } from "@/lib/format";
 
 const ROLE_HELP: Record<Role, string> = {
@@ -137,7 +136,7 @@ function RoleSelect({ user, isSelf }: { user: User; isSelf: boolean }) {
 }
 
 export function UsersSettings() {
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const me = useCurrentUser();
   const users = useUsers({ per_page: 100 });
 

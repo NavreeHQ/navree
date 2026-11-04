@@ -42,8 +42,11 @@ export function RecordCombobox({
   const term = useDebouncedValue(search, 200) || undefined;
 
   const companies = useCompanies({ search: term, per_page: 8, sort: "name" }, open && type === "company");
-  const contacts = useContacts({ search: term, company_id: companyId, per_page: 8 }, open && type === "contact");
-  const deals = useDeals({ search: term, company_id: companyId, per_page: 8 }, open && type === "deal");
+  const contacts = useContacts(
+    { search: term, filter: { company_id: companyId }, per_page: 8 },
+    open && type === "contact",
+  );
+  const deals = useDeals({ search: term, filter: { company_id: companyId }, per_page: 8 }, open && type === "deal");
 
   const options: PickedRecord[] =
     type === "company"

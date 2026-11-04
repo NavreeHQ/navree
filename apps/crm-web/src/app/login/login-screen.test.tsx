@@ -149,7 +149,7 @@ describe("Login screen", () => {
             statusCode: 401,
             message: "Your sign-in attempt expired. Sign in again.",
             error: "Unauthorized",
-            code: "two_factor_challenge_expired",
+            code: "two_factor_expired",
           },
           { status: 401 },
         ),

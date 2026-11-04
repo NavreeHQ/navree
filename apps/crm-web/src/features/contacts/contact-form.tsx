@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -15,7 +15,6 @@ import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { CompanyRef, Contact, ContactInput, ContactStatus, ContactUpdateInput } from "@/lib/api/types";
 import { CONTACT_STATUSES } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { useCreateContact, useUpdateContact } from "./queries";
 
 export const STATUS_LABEL: Record<ContactStatus, string> = {
@@ -68,7 +67,7 @@ export function ContactFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const canAssign = ability.can("manage", "Contact");
   const create = useCreateContact();
   const update = useUpdateContact(contact?.id ?? "");

@@ -1,6 +1,5 @@
 "use client";
 
-import { AbilityProvider } from "@casl/react";
 import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -10,7 +9,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { apiEvents } from "@/lib/api/client";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { keys } from "@/lib/api/keys";
-import { createAppAbility } from "@/lib/casl/ability";
 import { env } from "@/lib/env";
 
 function makeQueryClient() {
@@ -90,18 +88,15 @@ function MockApiGate({ children }: { children: ReactNode }) {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
-  // One ability for the whole app; rules are loaded after sign-in with `ability.update()`.
-  const [ability] = useState(() => createAppAbility());
 
+  // The app's ability is provided by the shell behind sign-in, once the user's rules have loaded.
   return (
     <QueryClientProvider client={queryClient}>
-      <AbilityProvider value={ability}>
-        <TooltipProvider delayDuration={300}>
-          <ApiEventBridge queryClient={queryClient} />
-          <MockApiGate>{children}</MockApiGate>
-          <Toaster position="bottom-right" closeButton />
-        </TooltipProvider>
-      </AbilityProvider>
+      <TooltipProvider delayDuration={300}>
+        <ApiEventBridge queryClient={queryClient} />
+        <MockApiGate>{children}</MockApiGate>
+        <Toaster position="bottom-right" closeButton />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

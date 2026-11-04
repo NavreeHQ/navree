@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   CalendarDaysIcon,
@@ -396,7 +396,7 @@ export function ActivityComposer({ subjectType, subjectId }: { subjectType: Acti
 
 /** Timeline panel for a record: composer on top, history below. */
 export function RecordActivity({ subjectType, subjectId }: { subjectType: ActivitySubjectType; subjectId: string }) {
-  const activities = useActivities({ subject_type: subjectType, subject_id: subjectId, per_page: 50 });
+  const activities = useActivities({ filter: { subject_type: subjectType, subject_id: subjectId }, per_page: 50 });
   return (
     <div className="flex flex-col gap-5">
       <ActivityComposer subjectType={subjectType} subjectId={subjectId} />

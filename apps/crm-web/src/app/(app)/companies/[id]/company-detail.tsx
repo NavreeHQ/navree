@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { Building2Icon, GlobeIcon, MapPinIcon, PencilIcon, PlusIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ function Figures({ company }: { company: CompanyDetailT }) {
 }
 
 function CompanyDeals({ company }: { company: CompanyDetailT }) {
-  const deals = useDeals({ company_id: company.id, per_page: 50 });
+  const deals = useDeals({ filter: { company_id: company.id }, per_page: 50 });
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
@@ -101,7 +101,7 @@ function CompanyDeals({ company }: { company: CompanyDetailT }) {
 }
 
 function CompanyContacts({ company }: { company: CompanyDetailT }) {
-  const contacts = useContacts({ company_id: company.id, per_page: 50 });
+  const contacts = useContacts({ filter: { company_id: company.id }, per_page: 50 });
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">

@@ -1,12 +1,12 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import { roleLabel } from "@/components/app-shell/user-menu";
 import { DetailRow, Panel } from "@/components/page-header";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { UserAvatar } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
-import type { AppAbility, AppAction } from "@/lib/casl/ability";
+import type { AppAction } from "@/lib/casl/ability";
 import type { SubjectName } from "@/lib/api/types";
 import { formatDateLong } from "@/lib/format";
 import { env } from "@/lib/env";
@@ -27,7 +27,7 @@ const SHORTCUTS = [
 
 /** Summarises what the current rules allow, so people know why a button is missing. */
 function AccessSummary() {
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const describe = (subject: SubjectName): string => {
     const can = (action: AppAction) => ability.can(action, subject);
     const all = (action: AppAction) => ability.rulesFor(action, subject).some((r) => !r.inverted && !r.conditions);

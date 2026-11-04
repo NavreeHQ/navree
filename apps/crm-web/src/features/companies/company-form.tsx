@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -15,7 +15,6 @@ import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { Company, CompanyInput, CompanySize, CompanyUpdateInput } from "@/lib/api/types";
 import { COMPANY_SIZES } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { useCreateCompany, useUpdateCompany } from "./queries";
 
 export const INDUSTRIES = [
@@ -86,7 +85,7 @@ export function CompanyFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const canAssign = ability.can("manage", "Company");
   const create = useCreateCompany();
   const update = useUpdateCompany(company?.id ?? "");

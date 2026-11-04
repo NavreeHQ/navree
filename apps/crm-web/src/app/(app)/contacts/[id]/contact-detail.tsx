@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { BriefcaseIcon, Building2Icon, MailIcon, PencilIcon, PhoneIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,7 +24,10 @@ const BACK = { href: "/contacts", label: "Contacts" };
 
 /** Deals at the contact's company where this person is the main contact. */
 function ContactDeals({ contact }: { contact: Contact }) {
-  const deals = useDeals({ company_id: contact.company_id ?? undefined, per_page: 100 }, Boolean(contact.company_id));
+  const deals = useDeals(
+    { filter: { company_id: contact.company_id ?? undefined }, per_page: 100 },
+    Boolean(contact.company_id),
+  );
   const mine = deals.data?.data.filter((d) => d.contact_id === contact.id) ?? [];
   if (!contact.company_id)
     return <p className="text-sm text-muted-foreground">Link this contact to a company to track deals.</p>;

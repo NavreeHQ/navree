@@ -3,9 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import type { UserCreateInput, UserUpdateInput } from "@/lib/api/types";
+import type { UserCreateInput, UserListQuery, UserUpdateInput } from "@/lib/api/types";
 
-export type UserListParams = { search?: string; page?: number; per_page?: number };
+export type UserListParams = UserListQuery;
 
 /** Users: the whole (small) team for owner pickers and name lookups, or a filtered page. */
 export function useUsers(params: UserListParams = { per_page: 100 }) {

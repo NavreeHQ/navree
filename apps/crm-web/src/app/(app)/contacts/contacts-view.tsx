@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { DownloadIcon, PlusIcon, UsersIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -42,7 +42,7 @@ function NewContactButton({ openOnCreateIntent }: { openOnCreateIntent?: boolean
 }
 
 /** CSV export: only rendered for people the API lets export (admin, manager). */
-function ExportButton({ filters }: { filters: ContactListParams }) {
+function ExportButton({ query }: { query: ContactListParams }) {
   const [pending, setPending] = useState(false);
   return (
     <Can I="export" a="Contact">
@@ -52,8 +52,7 @@ function ExportButton({ filters }: { filters: ContactListParams }) {
         onClick={async () => {
           setPending(true);
           try {
-            const { search, company_id, status, owner_id } = filters;
-            await exportContactsCsv({ search, company_id, status, owner_id });
+            await exportContactsCsv({ filter: query.filter, search: query.search });
             toast.success("Contacts exported");
           } catch (error) {
             toast.error(errorMessage(error, "The export failed. Try again."));
@@ -89,14 +88,18 @@ export function ContactsView() {
   const status = url.get("status") as ContactStatus | undefined;
   const params: ContactListParams = {
     search: url.get("search"),
-    status: status && CONTACT_STATUSES.includes(status) ? status : undefined,
-    owner_id: url.get("owner"),
-    company_id: url.get("company"),
+    filter: {
+      status: status && CONTACT_STATUSES.includes(status) ? status : undefined,
+      owner_id: url.get("owner"),
+      company_id: url.get("company"),
+    },
     page: url.page,
     per_page: 25,
   };
   const contacts = useContacts(params);
-  const filtered = Boolean(params.search || params.status || params.owner_id || params.company_id);
+  const filtered = Boolean(
+    params.search || params.filter?.status || params.filter?.owner_id || params.filter?.company_id,
+  );
   const total = contacts.data?.meta.total;
 
   return (
@@ -110,7 +113,7 @@ export function ContactsView() {
         }
         actions={
           <>
-            <ExportButton filters={params} />
+            <ExportButton query={params} />
             <NewContactButton openOnCreateIntent />
           </>
         }
@@ -123,15 +126,19 @@ export function ContactsView() {
             placeholder="Search by name, email or title"
           />
           <OptionFilter
-            value={params.status}
+            value={params.filter?.status}
             onChange={(s) => url.set({ status: s })}
             options={CONTACT_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
             anyLabel="Any status"
             ariaLabel="Filter by status"
           />
-          <OwnerFilter value={params.owner_id} onChange={(owner) => url.set({ owner })} currentUserId={me.data?.id} />
-          {params.company_id ? (
-            <CompanyChip id={params.company_id} onClear={() => url.set({ company: undefined })} />
+          <OwnerFilter
+            value={params.filter?.owner_id}
+            onChange={(owner) => url.set({ owner })}
+            currentUserId={me.data?.id}
+          />
+          {params.filter?.company_id ? (
+            <CompanyChip id={params.filter.company_id} onClear={() => url.set({ company: undefined })} />
           ) : null}
         </div>
         <Table className="text-[13px]">

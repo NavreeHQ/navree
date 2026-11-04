@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import {
   Building2Icon,
   CornerDownLeftIcon,
@@ -38,7 +38,6 @@ import { useDeals } from "@/features/deals/queries";
 import { requestCreate, type CreateKind } from "@/hooks/use-create-intent";
 import { useDebouncedValue } from "@/hooks/use-url-state";
 import type { SubjectName } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { formatMoney } from "@/lib/format";
 
 type Page = { href: string; label: string; icon: LucideIcon; keywords?: string[] };
@@ -83,7 +82,7 @@ export function CommandSearch() {
   // Rendered only in the browser (behind sign-in), so the platform is known on first render.
   const [mod] = useState(() => (isMac() ? "⌘" : "Ctrl"));
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const me = useCurrentUser();
   const logout = useLogout();
   const term = useDebouncedValue(query.trim(), 200);

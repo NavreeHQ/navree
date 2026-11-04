@@ -1,6 +1,6 @@
 "use client";
 
-import { Can, useAbility } from "@casl/react";
+import { Can, useAbility } from "@navree/next/abilities";
 import {
   closestCorners,
   DndContext,
@@ -44,7 +44,6 @@ import { useDealBoard, useMoveDeal } from "@/features/deals/queries";
 import { useUrlState } from "@/hooks/use-url-state";
 import type { Deal, DealBoard, DealStage } from "@/lib/api/types";
 import { DEAL_STAGES, stageLabel } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { dueBucket, formatDate, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -127,7 +126,7 @@ function DealCardBody({ deal, lockReason, dragging }: { deal: Deal; lockReason?:
 
 function SortableDealCard({ deal, canMove }: { deal: Deal; canMove: boolean }) {
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: deal.id,
     disabled: !canMove,
@@ -250,7 +249,7 @@ type PendingMove = { deal: Deal; stage: DealStage; position: number };
 export function DealsBoardView() {
   const url = useUrlState();
   const me = useCurrentUser();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const ownerId = url.get("owner");
   const board = useDealBoard({ owner_id: ownerId });
   const move = useMoveDeal();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -17,7 +17,6 @@ import { useCreateIntent } from "@/hooks/use-create-intent";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { CompanyRef, Deal, DealInput, DealStage } from "@/lib/api/types";
 import { DEAL_STAGES, MAX_AMOUNT_CENTS } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { centsToInput, parseMoneyToCents } from "@/lib/format";
 import { useCreateDeal, useUpdateDeal } from "./queries";
 
@@ -94,7 +93,7 @@ export function DealFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const canAssign = ability.can("manage", "Deal");
   const create = useCreateDeal();
   const update = useUpdateDeal(deal?.id ?? "");

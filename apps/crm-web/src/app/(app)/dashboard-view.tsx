@@ -199,8 +199,14 @@ function PipelineChart({ data }: { data: Dashboard }) {
 }
 
 function MyTasks({ userId }: { userId: string }) {
-  const overdue = useActivities({ kind: "task", assignee_id: userId, due: "overdue", completed: false, per_page: 10 });
-  const today = useActivities({ kind: "task", assignee_id: userId, due: "today", completed: false, per_page: 10 });
+  const overdue = useActivities({
+    filter: { kind: "task", assignee_id: userId, due: "overdue", completed: false },
+    per_page: 10,
+  });
+  const today = useActivities({
+    filter: { kind: "task", assignee_id: userId, due: "today", completed: false },
+    per_page: 10,
+  });
   const tasks = [...(overdue.data?.data ?? []), ...(today.data?.data ?? [])];
 
   if (overdue.isPending || today.isPending) {

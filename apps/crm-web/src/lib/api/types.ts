@@ -59,20 +59,23 @@ export type UserCreateInput = Schemas["CreateUser"];
 export type UserUpdateInput = Schemas["UpdateUser"];
 
 export type CompanySize = Schemas["CompanySize"];
-export type CompanySort = Schemas["CompanySort"];
+/** The fields `GET /api/v1/companies` sorts by; a leading `-` sorts descending. */
+export type CompanySortField = "name" | "created_at";
+export type CompanySort = CompanySortField | `-${CompanySortField}`;
 export type Company = Schemas["Company"];
 export type CompanyDetail = Schemas["CompanyDetail"];
 export type CompanyInput = Schemas["CompanyInput"];
 export type CompanyUpdateInput = Schemas["CompanyUpdateInput"];
-export type CompanyFilters = Schemas["CompanyFilters"];
 
 export type ContactStatus = Schemas["ContactStatus"];
-export type ContactFilters = Schemas["ContactFilters"];
 export type Contact = Schemas["Contact"];
 export type ContactInput = Schemas["ContactInput"];
 export type ContactUpdateInput = Schemas["ContactUpdateInput"];
 
 export type DealStage = Schemas["Stage"];
+/** The fields `GET /api/v1/deals` sorts by; a leading `-` sorts descending. */
+export type DealSortField = "created_at" | "title" | "amount_cents" | "expected_close_date";
+export type DealSort = DealSortField | `-${DealSortField}`;
 export type Deal = Schemas["Deal"];
 export type DealInput = Schemas["DealInput"];
 export type DealUpdateInput = Schemas["DealUpdateInput"];
@@ -99,38 +102,43 @@ export type AppSubject = Company | Contact | Deal | Activity | User;
 //
 // navree-api cannot document query parameters yet, so
 // the generated `paths` say `query?: never` for every list endpoint. These are the
-// list filters, merged into `paths` below so the typed client checks them.
+// list queries, merged into `paths` below so the typed client checks them.
+//
+// Every list endpoint reads one grammar: each filter is `filter[name]=value`,
+// then `search`, `sort` (a leading `-` sorts descending), `page` and `per_page`
+// (at most 100). The typed client writes a nested `filter` object that way, so
+// `{ filter: { stage: "won" } }` is sent as `?filter[stage]=won`. A flat
+// `?stage=won` is ignored by the server.
 
 type Paging = { page?: number; per_page?: number };
 
-export type UserListQuery = { search?: string } & Paging;
+export type UserListQuery = { search?: string; sort?: string } & Paging;
 export type CompanyListQuery = {
+  filter?: { owner_id?: string; industry?: string };
   search?: string;
-  owner_id?: string;
-  industry?: string;
   sort?: CompanySort;
 } & Paging;
 export type ContactExportQuery = {
+  filter?: { company_id?: string; status?: ContactStatus; owner_id?: string };
   search?: string;
-  company_id?: string;
-  status?: ContactStatus;
-  owner_id?: string;
 };
 export type ContactListQuery = ContactExportQuery & Paging;
 export type DealListQuery = {
-  stage?: DealStage;
-  owner_id?: string;
-  company_id?: string;
+  filter?: { stage?: DealStage; owner_id?: string; company_id?: string };
   search?: string;
+  sort?: DealSort;
 } & Paging;
+/** The board is not a list: `owner_id` is a plain parameter. */
 export type DealBoardQuery = { owner_id?: string };
 export type ActivityListQuery = {
-  subject_type?: ActivitySubjectType;
-  subject_id?: string;
-  kind?: ActivityKind;
-  assignee_id?: string;
-  due?: ActivityDueFilter;
-  completed?: boolean;
+  filter?: {
+    subject_type?: ActivitySubjectType;
+    subject_id?: string;
+    kind?: ActivityKind;
+    assignee_id?: string;
+    due?: ActivityDueFilter;
+    completed?: boolean;
+  };
 } & Paging;
 export type NotificationListQuery = { unread?: boolean } & Paging;
 export type AuditListQuery = {

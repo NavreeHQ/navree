@@ -1,8 +1,5 @@
-import { bff } from "@/lib/bff/server";
+import { navree } from "@/lib/navree";
 
-/** Private-channel authorisation for the Pusher client: forwarded to Navree with the bearer token. */
-export function POST(request: Request): Promise<Response> {
-  return bff.proxy(request, "/broadcasting/auth");
-}
-
+/** Private-channel authorisation for the real-time client: forwarded to Navree with the bearer token. */
 export const dynamic = "force-dynamic";
+export const { POST } = navree.handlers;

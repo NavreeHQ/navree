@@ -1,6 +1,6 @@
 "use client";
 
-import { Can } from "@casl/react";
+import { Can } from "@navree/next/abilities";
 import { ListChecksIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { PastEndNotice } from "@/components/data-table";
@@ -31,8 +31,8 @@ type Tab = (typeof TABS)[number]["value"];
 
 function paramsFor(tab: Tab, assignee: string | undefined): ActivityListParams {
   return tab === "completed"
-    ? { kind: "task", assignee_id: assignee, completed: true }
-    : { kind: "task", assignee_id: assignee, due: tab, completed: false };
+    ? { filter: { kind: "task", assignee_id: assignee, completed: true } }
+    : { filter: { kind: "task", assignee_id: assignee, due: tab, completed: false } };
 }
 
 function TabCount({ tab, assignee, active }: { tab: Tab; assignee: string | undefined; active: boolean }) {

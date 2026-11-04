@@ -1,6 +1,6 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { useAbility } from "@navree/next/abilities";
 import { ChevronsUpDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -17,7 +17,6 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/c
 import { UserAvatar } from "@/components/user-avatar";
 import { useLogout } from "@/features/auth/queries";
 import type { User } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 
 export function roleLabel(roles: string[]): string {
   if (roles.includes("admin")) return "Admin";
@@ -44,7 +43,7 @@ function Identity({ user }: { user: User }) {
  */
 export function UserMenu({ user }: { user: User }) {
   const router = useRouter();
-  const ability = useAbility<AppAbility>();
+  const ability = useAbility();
   const logout = useLogout();
   const { isMobile, setOpenMobile } = useSidebar();
 

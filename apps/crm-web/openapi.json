@@ -647,7 +647,7 @@
         "description": "`GET /api/v1/companies/{id}`: the company plus its live contacts and\nopen (not won or lost) deals."
       },
       "CompanyFilters": {
-        "description": "The query of `GET /api/v1/companies` (besides `page` and `per_page`).\nBlank values count as left out.",
+        "description": "The query of `GET /api/v1/companies` (besides `page` and `per_page`). `owner_id` and `industry` are sent as `filter[owner_id]` and `filter[industry]`; `search` and `sort` are sent as they are.\nBlank values count as left out.",
         "properties": {
           "industry": {
             "description": "Only companies in this industry (case-insensitive).",
@@ -1089,7 +1089,7 @@
         "type": "object"
       },
       "ContactFilters": {
-        "description": "The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and\nof `GET /api/v1/contacts/export`. Blank values count as left out.",
+        "description": "The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and\nof `GET /api/v1/contacts/export`. `company_id`, `status` and `owner_id` are sent as `filter[company_id]`, `filter[status]` and `filter[owner_id]`; `search` is sent as it is. Blank values count as left out.",
         "properties": {
           "company_id": {
             "description": "Only contacts at this company.",
@@ -5335,7 +5335,7 @@
     },
     "/api/v1/activities": {
       "get": {
-        "description": "Filters: subject_type, subject_id, kind, assignee_id, due (overdue | today | upcoming, by UTC day), completed (true | false); page, per_page. With due, earliest due first; with completed=true, most recently completed first; otherwise newest first.",
+        "description": "Query: `filter[subject_type]`, `filter[subject_id]`, `filter[kind]`, `filter[assignee_id]`, `filter[due]` (overdue | today | upcoming, by UTC day), `filter[completed]` (true | false), `page`, `per_page` (default 15, at most 100). With `filter[due]`, earliest due first; with `filter[completed]=true`, most recently completed first; otherwise newest first.",
         "responses": {
           "200": {
             "content": {
@@ -5685,7 +5685,7 @@
     },
     "/api/v1/companies": {
       "get": {
-        "description": "Query: `search` (name or domain, case-insensitive), `owner_id`, `industry`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).",
+        "description": "Query: `search` (name or domain, case-insensitive), `filter[owner_id]`, `filter[industry]`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).",
         "responses": {
           "200": {
             "content": {
@@ -6023,7 +6023,7 @@
     },
     "/api/v1/contacts": {
       "get": {
-        "description": "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `company_id`, `status`, `owner_id` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
+        "description": "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
         "responses": {
           "200": {
             "content": {
@@ -6148,7 +6148,7 @@
     },
     "/api/v1/contacts/export": {
       "get": {
-        "description": "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's filters (`ContactFilters`), in list order.",
+        "description": "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search` (see `ContactFilters`), in list order.",
         "responses": {
           "200": {
             "description": "OK"
@@ -6983,7 +6983,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "Query: `search` (part of the name or email, case-insensitive), `page`, `per_page` (default 15, at most 100). Ordered by name.",
+        "description": "Query: `search` (part of the name or email, case-insensitive), `sort` (a leading `-` sorts descending; default `name`), `page`, `per_page` (default 15, at most 100).",
         "responses": {
           "200": {
             "content": {

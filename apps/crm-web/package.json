@@ -27,6 +27,8 @@
     "@fontsource-variable/mona-sans": "^5.3.0",
     "@fontsource/monaspace-neon": "^5.3.0",
     "@hookform/resolvers": "^6.0.0",
+    "@navree/client": "link:../../packages/js/client",
+    "@navree/next": "link:../../packages/js/next",
     "@tanstack/react-query": "^5.105.0",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",

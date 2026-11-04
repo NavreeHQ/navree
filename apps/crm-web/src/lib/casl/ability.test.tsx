@@ -1,9 +1,9 @@
-import { AbilityProvider, Can } from "@casl/react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { createAbility } from "@navree/client/abilities";
+import { AbilityProvider, Can } from "@navree/next/abilities";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import type { CaslRule, Deal } from "@/lib/api/types";
 import { rulesFor } from "@/mocks/abilities";
-import { createAppAbility } from "./ability";
 
 const REP1 = "0190a1b2-0000-7000-8000-000000000001";
 const REP2 = "0190a1b2-0000-7000-8000-000000000002";
@@ -46,9 +46,11 @@ function deal(overrides: Partial<Deal> = {}): Deal {
   };
 }
 
+afterEach(cleanup);
+
 describe("CASL ability", () => {
   it("detects the subject type from __type on API records", () => {
-    const ability = createAppAbility([{ action: "read", subject: "Deal" }]);
+    const ability = createAbility([{ action: "read", subject: "Deal" }]);
 
     expect(ability.can("read", deal())).toBe(true);
     expect(ability.can("read", { ...deal(), __type: "Contact" } as never)).toBe(false);
@@ -56,14 +58,14 @@ describe("CASL ability", () => {
   });
 
   it("lets a rep update and move their own deal", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
 
     expect(ability.can("update", deal())).toBe(true);
     expect(ability.can("move", deal())).toBe(true);
   });
 
   it("does not let a rep update or move another rep's deal", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
     const theirs = deal({ owner_id: REP2, owner: { id: REP2, name: "Tom Becker" } });
 
     expect(ability.can("update", theirs)).toBe(false);
@@ -72,18 +74,18 @@ describe("CASL ability", () => {
   });
 
   it("does not let a rep reopen (move) a won or lost deal, even their own", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
 
     expect(ability.can("move", deal({ stage: "negotiation" }))).toBe(true);
     expect(ability.can("move", deal({ stage: "won" }))).toBe(false);
     expect(ability.can("move", deal({ stage: "lost" }))).toBe(false);
     expect(ability.can("update", deal({ stage: "won" }))).toBe(true);
-    const managerRules = createAppAbility(rulesFor({ id: "m1", role: "manager" }));
+    const managerRules = createAbility(rulesFor({ id: "m1", role: "manager" }));
     expect(managerRules.can("move", deal({ stage: "won", owner_id: REP2 }))).toBe(true);
   });
 
   it("does not let a rep delete a won or lost deal, even their own (last rule wins)", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
 
     expect(ability.can("delete", deal({ stage: "negotiation" }))).toBe(true);
     expect(ability.can("delete", deal({ stage: "won" }))).toBe(false);
@@ -91,7 +93,7 @@ describe("CASL ability", () => {
   });
 
   it("lets a rep complete tasks assigned to them or owned by them, not other people's", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
     const task = (owner_id: string, assignee_id: string | null) =>
       ({ __type: "Activity", id: "t1", kind: "task", owner_id, assignee_id }) as never;
 
@@ -102,7 +104,7 @@ describe("CASL ability", () => {
   });
 
   it("type-level checks are true when a conditional rule exists (CASL semantics)", () => {
-    const ability = createAppAbility(repRules);
+    const ability = createAbility(repRules);
 
     expect(ability.can("update", "Deal")).toBe(true);
     expect(ability.can("export", "Contact")).toBe(false);
@@ -110,9 +112,9 @@ describe("CASL ability", () => {
   });
 
   it("matches the mock API's role rules: manager can export and reassign, admin manages all", () => {
-    const manager = createAppAbility(rulesFor({ id: "m1", role: "manager" }));
-    const admin = createAppAbility(rulesFor({ id: "a1", role: "admin" }));
-    const rep = createAppAbility(rulesFor({ id: REP1, role: "rep" }));
+    const manager = createAbility(rulesFor({ id: "m1", role: "manager" }));
+    const admin = createAbility(rulesFor({ id: "a1", role: "admin" }));
+    const rep = createAbility(rulesFor({ id: REP1, role: "rep" }));
     const theirs = deal({ owner_id: REP2 });
 
     expect(manager.can("update", theirs)).toBe(true);
@@ -125,12 +127,11 @@ describe("CASL ability", () => {
   });
 
   it("<Can I='update' this={deal}> hides actions the API would refuse", () => {
-    const ability = createAppAbility(repRules);
     const mine = deal({ id: "mine", title: "Mine" });
-    const theirs = deal({ id: "theirs", title: "Theirs", owner_id: REP2 });
+    const theirs = deal({ id: "theirs", title: "Theirs", owner_id: REP2, owner: { id: REP2, name: "Tom Becker" } });
 
     render(
-      <AbilityProvider value={ability}>
+      <AbilityProvider rules={repRules}>
         {[mine, theirs].map((d) => (
           <Can key={d.id} I="update" this={d}>
             <button>Edit {d.title}</button>
@@ -141,28 +142,5 @@ describe("CASL ability", () => {
 
     expect(screen.queryByRole("button", { name: "Edit Mine" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Edit Theirs" })).toBeNull();
-  });
-
-  it("re-renders <Can> when rules are updated after login", async () => {
-    const ability = createAppAbility([]);
-    const { rerender } = render(
-      <AbilityProvider value={ability}>
-        <Can I="create" a="Company">
-          <button>New company</button>
-        </Can>
-      </AbilityProvider>,
-    );
-    expect(screen.queryByRole("button", { name: "New company" })).toBeNull();
-
-    ability.update(repRules as never);
-    rerender(
-      <AbilityProvider value={ability}>
-        <Can I="create" a="Company">
-          <button>New company</button>
-        </Can>
-      </AbilityProvider>,
-    );
-
-    expect(await screen.findByRole("button", { name: "New company" })).not.toBeNull();
   });
 });

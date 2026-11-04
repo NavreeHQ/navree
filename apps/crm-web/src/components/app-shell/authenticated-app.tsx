@@ -1,8 +1,9 @@
 "use client";
 
-import { useAbility } from "@casl/react";
+import { AbilityProvider } from "@navree/next/abilities";
+import { RealtimeProvider } from "@navree/next/realtime";
 import { RefreshCwIcon, UnplugIcon } from "lucide-react";
-import { useLayoutEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { RealtimeBridge } from "@/components/app-shell/realtime-bridge";
 import { ShellSlotsProvider } from "@/components/app-shell/shell-slots";
@@ -14,7 +15,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAbilityRules, useCurrentUser } from "@/features/auth/queries";
 import { isApiError } from "@/lib/api/errors";
-import type { AppAbility } from "@/lib/casl/ability";
+import { env } from "@/lib/env";
 
 /** The shell's outline while the user and their permissions load (same widths as the real one). */
 function ShellSkeleton({ sidebarOpen }: { sidebarOpen: boolean }) {
@@ -76,23 +77,20 @@ function ApiUnavailable({ onRetry, detail }: { onRetry: () => void; detail?: str
   );
 }
 
+/** Where the API's real-time server is (the Pusher protocol), and the key it expects. */
+const REALTIME_SERVER = { key: env.pusherKey, wsHost: env.wsHost, wsPort: env.wsPort };
+
+/** With the mock API the "socket" is a window event bus; loaded only then, so mocks never ship in production. */
+const connectMockBus = async () => (await import("@/lib/realtime/mock-bus")).connectMockBus();
+
 /**
  * Everything behind sign-in: loads the user (401 → /login via the API client),
- * applies their CASL rules to the app-wide ability before rendering, connects
+ * gives the app their CASL rules as one ability before rendering, opens
  * real-time, and renders the shell.
  */
 export function AuthenticatedApp({ children, sidebarOpen = true }: { children: ReactNode; sidebarOpen?: boolean }) {
   const user = useCurrentUser();
   const rules = useAbilityRules(Boolean(user.data));
-  // useAbility re-renders on every `ability.update()`, so "applied" is derived from the ability itself.
-  const ability = useAbility<AppAbility>();
-  const applied = rules.data !== undefined && (ability.rules as unknown) === rules.data;
-
-  useLayoutEffect(() => {
-    if (rules.data && (ability.rules as unknown) !== rules.data) {
-      ability.update(rules.data as Parameters<AppAbility["update"]>[0]);
-    }
-  }, [ability, rules.data]);
 
   const unauthenticated = isApiError(user.error) && user.error.status === 401;
   if (user.isError && !unauthenticated) {
@@ -101,23 +99,31 @@ export function AuthenticatedApp({ children, sidebarOpen = true }: { children: R
   if (rules.isError) {
     return <ApiUnavailable onRetry={() => void rules.refetch()} detail="Your permissions couldn't be loaded." />;
   }
-  if (!user.data || !rules.data || !applied) {
+  if (!user.data || !rules.data) {
     return <ShellSkeleton sidebarOpen={sidebarOpen} />;
   }
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen}>
-      <ShellSlotsProvider>
-        <AppSidebar user={user.data} />
-        <SidebarInset className="min-w-0">
-          <TopBar />
-          {/* SidebarInset is the <main> landmark. */}
-          <div id="content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
-            {children}
-          </div>
-        </SidebarInset>
-      </ShellSlotsProvider>
-      <RealtimeBridge userId={user.data.id} />
-    </SidebarProvider>
+    <AbilityProvider rules={rules.data}>
+      <RealtimeProvider
+        enabled={env.mocks || env.realtime}
+        server={env.mocks ? undefined : REALTIME_SERVER}
+        connect={env.mocks ? connectMockBus : undefined}
+      >
+        <SidebarProvider defaultOpen={sidebarOpen}>
+          <ShellSlotsProvider>
+            <AppSidebar user={user.data} />
+            <SidebarInset className="min-w-0">
+              <TopBar />
+              {/* SidebarInset is the <main> landmark. */}
+              <div id="content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
+                {children}
+              </div>
+            </SidebarInset>
+          </ShellSlotsProvider>
+          <RealtimeBridge userId={user.data.id} />
+        </SidebarProvider>
+      </RealtimeProvider>
+    </AbilityProvider>
   );
 }

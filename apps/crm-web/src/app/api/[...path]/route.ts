@@ -1,9 +1,8 @@
-import { bff } from "@/lib/bff/server";
+import { navree } from "@/lib/navree";
 
-/** Every `/api/*` call from the browser is forwarded to Navree with the bearer token from the httpOnly cookie. */
-function handle(request: Request): Promise<Response> {
-  return bff.proxy(request, new URL(request.url).pathname);
-}
-
+/**
+ * Sign-in, two-factor, sign-out and refresh are answered here (the tokens stay in httpOnly
+ * cookies); every other `/api/*` call is forwarded to Navree with the bearer token.
+ */
 export const dynamic = "force-dynamic";
-export { handle as DELETE, handle as GET, handle as HEAD, handle as PATCH, handle as POST, handle as PUT };
+export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;
