@@ -109,6 +109,17 @@ for (const name of NAMES) {
       page.on("pageerror", (e) => page.problems.push("pageerror: " + e.message));
       await page.addInitScript(() => {
         document.addEventListener("securitypolicyviolation", (e) => (window.__csp ||= []).push(e.violatedDirective + " " + e.blockedURI));
+        // Every announcement of the board's live region, in order: a redraw from the server empties it.
+        window.__said = [];
+        new MutationObserver((records) => {
+          for (const record of records) {
+            const at = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+            // Through the prototype: the suite names form fields like the methods the page calls.
+            const status = at instanceof Element ? Element.prototype.closest.call(at, "[data-slot=sortable-status]") : null;
+            const text = status?.textContent.trim();
+            if (text && window.__said.at(-1) !== text) window.__said.push(text);
+          }
+        }).observe(document, { subtree: true, childList: true, characterData: true });
       });
       await page.goto(BASE + path);
       if (rest.javaScriptEnabled !== false) await until(page, () => document.documentElement.hasAttribute("data-ui-js"), null, "the runtime");
@@ -140,6 +151,8 @@ for (const name of NAMES) {
     const listOf = (page, id) => page.evaluate((id) => document.querySelector(`#columns-item-${id}`)?.closest("[data-slot=sortable-list]")?.getAttribute("data-list") ?? null, id);
     const keysIn = (page, list) => page.evaluate((list) => [...document.querySelectorAll(`#columns-list-${list} [data-slot=sortable-item]`)].map((i) => i.dataset.key), list);
     const status = (page) => page.locator("#columns-status").textContent();
+    /** Waits until the live region has said something matching `re`, whatever was said after. */
+    const said = (page, re, what = re.source) => until(page, (source) => (window.__said || []).some((text) => new RegExp(source).test(text)), re.source, `the board to say ${what}`);
     const settled = (page) => until(page, () => !document.querySelector("[data-slot=sortable-item][data-pending]") && !document.querySelector("[data-ghost]"), null, "the moves to settle");
     const handle = (page, id) => page.locator(`#columns-item-${id} [data-slot=sortable-handle]`);
 
@@ -198,7 +211,7 @@ for (const name of NAMES) {
       assert.equal(await listOf(page, 4), "ready");
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["4", "6"]);
       assert.deepEqual((await where(4, 6))["4"], ["ready", 0]);
-      assert.match(await status(page), /Dropped Crash when a swatch photo is over 20 MB at position 1 of 5 in Ready/);
+      await said(page, /Dropped Crash when a swatch photo is over 20 MB at position 1 of 5 in Ready/);
       // The count follows: Ready is full, and says so.
       assert.equal(await page.locator("#columns-list-ready [data-count]").textContent(), "5/5");
       // A click on a title is still a click: the drawer opens.
@@ -354,7 +367,7 @@ for (const name of NAMES) {
       await until(page, () => /That move wasn.t saved/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
       await settled(page);
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["6", "7"]);
-      assert.match(await status(page), /wasn't moved. It is back at position 1 of 4 in Ready/);
+      await said(page, /wasn't moved. It is back at position 1 of 4 in Ready/);
       assert.equal(await page.evaluate(() => /No connection/.test(document.body.textContent)), false, "the runtime leaves the telling to the board");
       await page.done();
     });
@@ -371,7 +384,7 @@ for (const name of NAMES) {
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Space");
       await settled(page);
-      await until(page, () => /is at position 2 of 4 in Ready/.test(document.querySelector("#columns-status")?.textContent || ""), null, "the place said once the board is drawn again");
+      await said(page, /is at position 2 of 4 in Ready/, "the place once the board is drawn again");
       assert.deepEqual((await where(6))["6"], ["ready", 1]);
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["7", "6"]);
       assert.equal(await page.evaluate(() => document.querySelectorAll("[data-slot=toast][data-tone=danger]").length), 0, "no toast says it failed");
@@ -389,7 +402,7 @@ for (const name of NAMES) {
       await until(page, () => /No connection. That move may not have been saved/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
       await settled(page);
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["6", "7"], "back where the server last had it");
-      assert.match(await status(page), /wasn't moved. It is back at position 1 of 4 in Ready/);
+      await said(page, /wasn't moved. It is back at position 1 of 4 in Ready/);
       await page.done();
     });
 
