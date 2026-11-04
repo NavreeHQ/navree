@@ -130,6 +130,9 @@ impl View {
     }
 
     /// Sets `Cache-Control` (`no-store` by default: pages show private data).
+    /// A page in the app shell is drawn in the reader's theme, read from a
+    /// cookie, so the same address differs from reader to reader: cache it as
+    /// `private`, never in a shared cache.
     pub fn cache(mut self, cache: &'static str) -> Self {
         self.cache = cache;
         self

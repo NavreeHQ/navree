@@ -71,7 +71,7 @@ To keep the choice in your own table, store `Appearance::to_value()` (`light.oce
 
 <UiPreview example="themes/menu" />
 
-By default it posts to the toolkit's route, which keeps the choice in a cookie for a year, `HttpOnly`, and sends the reader back to the page. The route refuses a post from another site, and only goes back to a path on this one. To keep the choice with the user instead, give the menu your own action: `ThemeMenu::new(&current, &themes).action("/settings/appearance")`. The form posts `theme`, `mode` and `back`.
+By default it posts to the toolkit's route, which keeps the choice in a cookie for a year, `HttpOnly`, and `Secure` when the page came over HTTPS, and sends the reader back to the page, without the `?theme=` and `?mode=` that would undo the choice. The route refuses a post from another site, and only goes back to a path on this one. To keep the choice with the user instead, give the menu your own action: `ThemeMenu::new(&current, &themes).action("/settings/appearance")`. The form posts `theme`, `mode` and `back`.
 
 ## A theme of your own
 

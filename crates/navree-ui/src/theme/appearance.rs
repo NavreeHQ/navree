@@ -251,13 +251,19 @@ pub(crate) fn read_setting(
     (cookie, url)
 }
 
-/// The `Set-Cookie` that keeps `appearance` in the browser for a year.
+/// The `Set-Cookie` that keeps `appearance` in the browser for a year. The
+/// toolkit's own route adds `Secure` when the request came over HTTPS.
 pub fn appearance_cookie(appearance: &Appearance) -> HeaderValue {
+    cookie(appearance, false)
+}
+
+fn cookie(appearance: &Appearance, secure: bool) -> HeaderValue {
     // The value is a mode id, a dot and a built-in id or a short form: only
     // `[0-9a-z.-]`, which a header always carries.
     HeaderValue::from_str(&format!(
-        "{THEME_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly",
-        appearance.to_value()
+        "{THEME_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
+        appearance.to_value(),
+        if secure { "; Secure" } else { "" }
     ))
     .unwrap_or(HeaderValue::from_static(
         "navree_ui_theme=; Path=/; Max-Age=0",
@@ -282,6 +288,32 @@ fn same_site(headers: &HeaderMap) -> bool {
     }
 }
 
+/// Whether the request came over HTTPS: the page's `Origin`, else what a proxy in
+/// front says (`X-Forwarded-Proto`, or `proto=` in `Forwarded`). The first value
+/// of each is the client's own.
+fn over_https(headers: &HeaderMap) -> bool {
+    let first = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(',').next())
+            .map(|value| value.trim().to_ascii_lowercase())
+    };
+    if let Some(origin) = first("origin").filter(|origin| origin != "null") {
+        return origin.starts_with("https://");
+    }
+    if let Some(proto) = first("x-forwarded-proto") {
+        return proto == "https";
+    }
+    first("forwarded").is_some_and(|element| {
+        element.split(';').any(|pair| {
+            pair.trim().split_once('=').is_some_and(|(name, value)| {
+                name.trim() == "proto" && value.trim_matches('"') == "https"
+            })
+        })
+    })
+}
+
 /// What the settings route does with a posted form: the cookie to set and where
 /// to go, or why not.
 pub(crate) fn decide(
@@ -297,9 +329,10 @@ pub(crate) fn decide(
             "theme" => theme = Some(Theme::from_short_form(&value).ok_or(ChoiceError::Invalid)?),
             "mode" => mode = Some(Mode::from_id(&value).ok_or(ChoiceError::Invalid)?),
             "back" => {
-                back = LocalHref::parse(&value)
+                back = LocalHref::parse(value.trim())
                     .ok()
                     .map(|href| href.as_str().to_owned())
+                    .filter(|href| !href.is_empty())
             }
             _ => {}
         }
@@ -326,7 +359,7 @@ pub(crate) fn respond_setting(headers: &HeaderMap, body: &[u8]) -> Response {
                 StatusCode::SEE_OTHER,
                 [
                     (LOCATION, location),
-                    (SET_COOKIE, appearance_cookie(&appearance)),
+                    (SET_COOKIE, cookie(&appearance, over_https(headers))),
                 ],
             )
                 .into_response()
@@ -516,6 +549,40 @@ mod tests {
             respond_setting(&headers, b"theme=ocean").status(),
             StatusCode::SEE_OTHER
         );
+    }
+
+    #[test]
+    fn the_cookie_is_secure_over_https_and_an_empty_back_goes_home() {
+        let post = |pairs: &[(&'static str, &'static str)], body: &str| {
+            let mut headers = HeaderMap::new();
+            for (name, value) in pairs {
+                headers.insert(*name, HeaderValue::from_static(value));
+            }
+            respond_setting(&headers, body.as_bytes())
+        };
+        let cookie =
+            |response: &Response| response.headers()[SET_COOKIE].to_str().unwrap().to_owned();
+        for plain in [
+            &[][..],
+            &[("origin", "http://app.example"), ("host", "app.example")][..],
+            &[("x-forwarded-proto", "http")][..],
+        ] {
+            let response = post(plain, "theme=ocean");
+            assert!(!cookie(&response).contains("Secure"), "{plain:?}");
+        }
+        for https in [
+            &[("origin", "https://app.example"), ("host", "app.example")][..],
+            &[("x-forwarded-proto", "https")][..],
+            &[("x-forwarded-proto", "HTTPS, http")][..],
+            &[("forwarded", "for=192.0.2.1;proto=https;by=203.0.113.4")][..],
+        ] {
+            let response = post(https, "theme=ocean");
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{https:?}");
+            assert!(cookie(&response).ends_with("; Secure"), "{https:?}");
+        }
+        for body in ["theme=ocean&back=", "theme=ocean&back=%20", "theme=ocean"] {
+            assert_eq!(post(&[], body).headers()[LOCATION], "/", "{body}");
+        }
     }
 
     fn urlencode(text: &str) -> String {
