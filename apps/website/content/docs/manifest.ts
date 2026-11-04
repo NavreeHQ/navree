@@ -228,6 +228,7 @@ export const sections: DocsSection[] = [
       "forms",
       "data-table",
       "dates",
+      "reports",
       "commands-and-ops",
       "regions",
       "live-hub",
@@ -330,6 +331,13 @@ export const sections: DocsSection[] = [
       "lazy-list",
       "stat",
       "sortable",
+      // Charts
+      "line-chart",
+      "area-chart",
+      "bar-chart",
+      "donut-chart",
+      "sparkline",
+      "funnel",
     ],
     groups: [
       { title: "Actions", from: "button" },
@@ -341,6 +349,7 @@ export const sections: DocsSection[] = [
       { title: "Navigation", from: "breadcrumb" },
       { title: "Steps, ranges and trees", from: "stepper" },
       { title: "Data", from: "table" },
+      { title: "Charts", from: "line-chart" },
     ],
   },
   {

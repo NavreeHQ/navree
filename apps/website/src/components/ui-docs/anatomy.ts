@@ -24,7 +24,17 @@ const COMPONENT_ROOTS = new Set([
 ]);
 
 /** Components whose outer element, with a label, has another slot. */
-const OWN_ROOT: Record<string, string> = { checkbox: "choice", switch: "choice", toast: "toaster" };
+const OWN_ROOT: Record<string, string> = {
+  checkbox: "choice",
+  switch: "choice",
+  toast: "toaster",
+  "line-chart": "chart",
+  "area-chart": "chart",
+  "bar-chart": "chart",
+  "donut-chart": "chart",
+  sparkline: "chart",
+  funnel: "chart",
+};
 
 function trim(slots: Slot[]): Slot[] {
   const out: Slot[] = [];

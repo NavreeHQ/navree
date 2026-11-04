@@ -1,0 +1,90 @@
+---
+title: "Funnel"
+description: "How many reach each stage of an ordered process, with each stage's share of the first and of the stage before. An ordered list with bars, drawn on the server."
+---
+
+<UiPreview example="funnel/default" />
+
+`Funnel` shows how many reach each stage of a process that has an order: delivered, opened, clicked, converted. Each stage is a bar as wide as its share of the first stage, with its count and that share beside it. From the third stage on, a line under the bar says what share of the stage before it reached this one.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Funnel::new("Campaign funnel")
+    .stage(Stage::new("Delivered", 9_412))
+    .stage(Stage::new("Opened", 4_120))
+    .stage(Stage::new("Clicked", 812))
+    .stage(Stage::new("Converted", 96).tone(Tone::Success))
+```
+
+It is an ordered list, so it reads in order without the picture. The stages step through one hue, faintest first, so the order is also in the color. `Stage::tone(Tone)` colors a stage by what it means, such as the last as a success.
+
+## When to use it
+
+Use a funnel when each stage holds some of the one before: sign-up, activation, payment. If the stages are not nested, or can be reached in any order, use [bars](/docs/components/bar-chart/). For one rate, use a [Stat](/docs/components/stat/).
+
+<UiChoose name="chart" current="Funnel" />
+
+## Anatomy
+
+<UiAnatomy component="funnel" />
+
+## Rates in your own words
+
+A stage's share is worked out from the counts and written in the chart's number format and locale. When the server has already worded a rate, `Stage::rate(text)` shows it instead: "86% of signed up". The table keeps the worked-out shares.
+
+<UiPreview example="funnel/rates" />
+
+`.rtl()` makes the bars grow from the right, for a right-to-left page.
+
+## Formats and languages
+
+`.format(NumberFormat)` writes the counts, and the shares are percentages in the chart's locale. `.locale("de")` writes them as `43,8 %`. See [Formats and languages](/docs/components/line-chart/#formats-and-languages) on the line chart page for the formats, the locales and the words a chart writes. The columns of the table and the "Of previous" line are `ChartLabels` fields: `of_first` and `of_previous`.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), and keep the height of the stages. A funnel with no stage, or with no value in any stage, is empty.
+
+<UiPreview example="funnel/states" />
+
+## The table
+
+The table has a row for each stage: its count, its share of the first stage and its share of the one before. `.table(TableMode)` says where it sits. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next stage. |
+| `Home`, `End` | Moves to the first or the last stage. |
+| `Page Up`, `Page Down` | Moves a tenth of the way back or on, and at least one stage. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: from the first stage and its count to the last and its count, and the share of the first that remains.
+- Stages are an ordered list, so a screen reader reads their number and their order. Each says its name, its count and its share in text.
+- A move by key marks the stage and is announced politely: its name, then its values.
+- The table twin lists every stage. A stage with no value shows a dash that a screen reader reads as "No value".
+- The steps of color are a second sign of order, never the only one: the order is the list's, and the share is in text. A tone colors a stage's bar, so keep what it means in the stage's name.
+
+</UiA11y>
+
+## Data rules
+
+- A stage's value is a finite number. NaN and infinity are no value: the stage keeps its place and has no bar.
+- Widths are shares of the first stage, from 0% to 100%. A stage larger than the first is drawn at 100%.
+- A share of a stage with no value, or of a first stage at zero, is a dash.
+- The stages keep the order you give them. Sort them in your query.
+
+## API
+
+### Funnel
+
+<UiProps type="Funnel" />
+
+### Stage
+
+<UiProps type="Stage" />

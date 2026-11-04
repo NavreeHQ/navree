@@ -49,6 +49,8 @@ Every page loads one stylesheet. Script loads only for what a page's markup uses
 | A form, a region or a command | `core`: delegation, commands, ops, morphing, boosted links, pending states. |
 | A select, a combobox, a multi-select or a command palette | `overlay` and `select`: the keys, the search, the chips and the palette. |
 | A data table | `core`, `table` and `overlay`. |
+| A line, area, bar, donut or funnel chart | `charts`: the tooltip, the crosshair and the keys. |
+| A sparkline, or a chart that is loading, failed or empty | No script. |
 | A live region, or a table that follows an event stream | `core` and `live`: one connection per stream, its reconnects and the fetches. |
 | A phone input | `phone` and `overlay`; the numbering plans (`phone-data`) the first time someone focuses one. |
 | The app shell | `core` and `sidebar`. |
@@ -67,6 +69,7 @@ The files are embedded in your binary with their brotli and gzip forms, and serv
 |---|---|
 | The `core` runtime | 12 KB |
 | The `table` module | 5 KB |
+| The `charts` module | 3 KB |
 | The `select` module | 10 KB |
 | The `phone` module | 5 KB |
 | The numbering plans the `phone` module loads on first use | 20 KB (brotli) |

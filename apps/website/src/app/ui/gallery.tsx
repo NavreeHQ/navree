@@ -22,6 +22,7 @@ const blurbs: Record<string, string> = {
   layout: "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll and divide a page.",
   navigation: "The app shell, breadcrumbs and pagination.",
   data: "Tables, the server-side DataTable, stats and bars.",
+  charts: "Line, area, bar, donut, sparkline and funnel charts drawn as SVG on the server, each with its data as a table.",
 };
 
 /**

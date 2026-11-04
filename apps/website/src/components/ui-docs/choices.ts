@@ -236,6 +236,19 @@ export const choices = {
       c("Stat", "One figure that matters", "/docs/components/stat/"),
     ],
   },
+  chart: {
+    title: "Which chart?",
+    question: "What are you showing?",
+    options: [
+      c("Line chart", "Change over time", "/docs/components/line-chart/"),
+      c("Area chart", "A total split over time", "/docs/components/area-chart/"),
+      c("Bar chart", "Amounts to compare", "/docs/components/bar-chart/"),
+      c("Donut chart", "A few parts of one whole", "/docs/components/donut-chart/"),
+      c("Funnel", "How far a process gets", "/docs/components/funnel/"),
+      c("Sparkline", "A trend beside a figure", "/docs/components/sparkline/"),
+      c("Stat", "One number", "/docs/components/stat/"),
+    ],
+  },
   conversation: {
     title: "Which piece of a conversation?",
     question: "What is it?",

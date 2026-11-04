@@ -142,6 +142,18 @@ pub const GROUPS: &[Group] = &[
         title: "Data",
         components: &["table", "data-table", "lazy-list", "stat", "sortable"],
     },
+    Group {
+        id: "charts",
+        title: "Charts",
+        components: &[
+            "line-chart",
+            "area-chart",
+            "bar-chart",
+            "donut-chart",
+            "sparkline",
+            "funnel",
+        ],
+    },
 ];
 
 /// A component, or a part of the toolkit with a page of its own.
@@ -159,6 +171,9 @@ pub struct Component {
     pub thumb: &'static str,
     /// The example whose parts the anatomy diagram draws.
     pub anatomy: Option<&'static str>,
+    /// The line under the name when the first type's doc comment doesn't say it:
+    /// several pages can show one type, each for another use of it.
+    pub about: Option<&'static str>,
 }
 
 const fn component(
@@ -174,6 +189,7 @@ const fn component(
         types,
         thumb,
         anatomy: None,
+        about: None,
     }
 }
 
@@ -185,6 +201,11 @@ impl Component {
 
     const fn parts(mut self, example: &'static str) -> Self {
         self.anatomy = Some(example);
+        self
+    }
+
+    const fn about(mut self, summary: &'static str) -> Self {
+        self.about = Some(summary);
         self
     }
 
@@ -643,6 +664,47 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
+    // Charts
+    component(
+        "line-chart",
+        "Line chart",
+        &[
+            "Chart",
+            "Series",
+            "Annotation",
+            "At",
+            "NumberFormat",
+            "TableMode",
+        ],
+        "thumb",
+    )
+    .about("Change over time: lines on a shared axis, with gaps, targets, events and bands.")
+    .parts("default"),
+    component(
+        "area-chart",
+        "Area chart",
+        &["Chart", "Series", "Annotation"],
+        "thumb",
+    )
+    .about("A line with a wash under it. Stacked, the parts of a total over time.")
+    .parts("default"),
+    component(
+        "bar-chart",
+        "Bar chart",
+        &["Chart", "Series", "Annotation", "Merge"],
+        "thumb",
+    )
+    .about("Bars from one baseline to compare amounts: grouped, stacked, negative, vertical or horizontal.")
+    .parts("default"),
+    component("donut-chart", "Donut chart", &["Donut"], "thumb")
+        .about("One whole split into a few parts, with the total in the middle. A pie has no hole.")
+        .parts("default"),
+    component("sparkline", "Sparkline", &["Sparkline"], "thumb")
+        .about("A small line with no axes, beside a figure: the shape of a series at a glance.")
+        .parts("default"),
+    component("funnel", "Funnel", &["Funnel", "Stage"], "thumb")
+        .about("How many reach each stage of an ordered process, and what share of the first and of the stage before.")
+        .parts("default"),
     // Pages that aren't components
     component("foundations", "Foundations", &["Size"], "radius").page("/docs/ui/foundations/"),
     component(
@@ -701,6 +763,21 @@ pub const COMPONENTS: &[Component] = &[
         "kinds",
     )
     .page("/docs/ui/errors-and-states/"),
+    component(
+        "reports",
+        "Reports",
+        &[
+            "Report",
+            "ReportQuery",
+            "Bucket",
+            "Grain",
+            "Metric",
+            "Bucketing",
+            "TimeColumn",
+        ],
+        "thumb",
+    )
+    .page("/docs/ui/reports/"),
     // The example apps' views, shown on `/ui/` rather than a docs page.
     component(
         "build-anything",

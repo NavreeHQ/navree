@@ -25,11 +25,18 @@ Stat::new("Open deals", "312").trend("+12 this week", true)
 
 <UiPreview example="stat/bars" />
 
+## A chart under the figure
+
+`Stat::chart(...)` puts a small chart under the figure, usually a [Sparkline](/docs/components/sparkline/) of its last periods. For the other charts, see the [line chart](/docs/components/line-chart/).
+
+<UiPreview example="sparkline/default" />
+
 ## Keyboard and accessibility
 
 <UiA11y>
 
 - The trend's colour isn't its only sign: write the direction in the text, such as "+3.1%".
+- A sparkline is a picture named by its title and described by its summary, with its values in a table that only a screen reader reads.
 - `Bars` has `role="img"` and the description you give it, which is all assistive technology gets: say what the chart shows.
 
 </UiA11y>

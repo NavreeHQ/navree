@@ -613,12 +613,14 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             id: component.id,
             name: component.name,
             url: component.url(),
-            summary: component
-                .types
-                .first()
-                .and_then(|name| api.get(*name))
-                .map(|doc| doc.summary.clone())
-                .unwrap_or_default(),
+            summary: component.about.map(str::to_owned).unwrap_or_else(|| {
+                component
+                    .types
+                    .first()
+                    .and_then(|name| api.get(*name))
+                    .map(|doc| doc.summary.clone())
+                    .unwrap_or_default()
+            }),
             group: GROUPS
                 .iter()
                 .find(|group| group.components.contains(&component.id))

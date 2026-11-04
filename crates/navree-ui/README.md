@@ -41,6 +41,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   check a post), Tree (children from the server, choices that post) and Toolbar.
   Panes: `SplitPane` and `Pane`, with `SplitSizes` and `SplitSave` for sizes kept on the server.
   Sortable lists and boards: Sortable, SortList, SortItem, and the Move each drop posts.
+  Charts (`navree_ui::charts`): `Chart` (line, area and bar), `Donut` (and a pie),
+  `Sparkline`, `Funnel`, and `Report`.
   Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
   list and the number, formatted as typed, read on the server in the country chosen.
   Components carry no outer margin: layout
@@ -101,6 +103,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A toast | `core`: the toaster, its time, pause and swipe are a CSS animation and a few lines. |
 | A data table | `core`, `table`, `overlay`. |
 | A live region, or a table that follows a stream | `core` and `live`: the stream, its reconnects and the fetches. |
+| A line, area, bar, donut or funnel chart | `charts`: the tooltip, the crosshair and the keys. |
+| A sparkline, or a chart that is loading, failed or empty | None. |
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | A phone input | `phone`, `overlay`; the numbering plans on first focus. |
@@ -404,6 +408,49 @@ Field::new("starts", "Starts at").control(TimePicker::new("starts").step_minutes
 - **A window is whole days.** `DateRange::utc_bounds(zone)` gives `[start, end)` right across 23- and 25-hour days.
 - **A time is on a wall.** `dates::zoned::resolve(date, time, &zone)` turns it into an instant and says
   when clock changes make it absent or doubled.
+
+## Charts and reports
+
+```rust
+use navree::ui::charts::*;
+
+Chart::line("Opens and clicks")
+    .days(days)
+    .series(Series::new("Opens", opens))
+    .series(Series::new("Clicks", clicks))
+    .annotation(Annotation::target(500, "Goal"))
+
+Stat::new("Opened", "4,120").chart(Sparkline::new("Opens, last 12 hours", hourly).area())
+
+// A report: the window comes from the URL, held to the rules of the range picker that wrote it.
+let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
+let opened = report.count(opens);
+report.chart(Chart::bar("Opens")).series(report.series("Opens", &opened))
+```
+
+- **Drawn on the server.** A chart is a `<figure>` with a title, a legend, an SVG, a text
+  summary and the same numbers as a table. The table is hidden from sight and read by screen
+  readers, and a "Show table" switch (a checkbox, so it works with JavaScript off) shows it.
+  There is no `style` attribute anywhere, so the page's content security policy holds.
+- **Six kinds.** Line, area and bar, with several series, stacks, stacks to 100%, negative
+  values and horizontal bars. A donut or a pie. A funnel. A sparkline beside a figure.
+- **Data rules.** Every series shares the chart's x values. A `None`, NaN or infinite value is a
+  gap. A chart draws at most eight series and folds the rest into Other. A line with more than
+  640 points is reduced with largest-triangle-three-buckets. Bars past 120 merge their neighbours,
+  or fold the tail of a list of categories into Other.
+- **Keys.** A chart is one tab stop. The arrow keys move between values, Home and End go to the
+  ends, Escape hides the tooltip, and each move is announced. Legend toggles work with
+  JavaScript off. Status colors add an icon to the legend, so color is never alone.
+- **Words and numbers.** `NumberFormat` and `NumberLocale` write counts, shares, money and
+  durations for a language (`de`, `en-IN`, `fr`, `ar` and more), and `ChartLabels` holds every
+  word a chart writes. A right-to-left chart is mirrored with `.rtl()`.
+- **A report.** `Report` reads `from`, `to` and `grain` from the URL with the same `RangeRules`
+  as the `DateRangePicker`, picks a grain from the window's length, and cuts the window into
+  periods on a time zone's clock, so a day is a day across a clock change. `count` and `sum`
+  count rows held in memory. With the `orm` feature, `measure` and `measure_by` count in the
+  database, on the app's scoped query: TimescaleDB's `time_bucket` on PostgreSQL when it is
+  installed and the report names its zone, exact bound comparisons on any SQL database, and hourly
+  buckets folded in Rust on MongoDB.
 
 ## Fetching ahead of a click
 

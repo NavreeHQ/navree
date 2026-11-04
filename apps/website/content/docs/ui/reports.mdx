@@ -1,0 +1,269 @@
+---
+title: "Reports"
+description: "Build a report page: a window read from the address, a grain that follows its length, periods in a time zone, figures from the database and a live refresh."
+---
+
+<UiPreview example="reports/default" />
+
+A report is a page whose figures cover a window of days that the reader chooses. `Report` does the parts every report repeats: it reads the window from the address with the same rules as the [DateRangePicker](/docs/components/date-range-picker/) that wrote it, picks a grain that suits the window's length, cuts the window into periods on a time zone's clock, and counts rows into those periods. You draw the figures with [line](/docs/components/line-chart/), [area](/docs/components/area-chart/) and [bar](/docs/components/bar-chart/) charts.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::dates::{DatePreset, DateRules, RangeRules};
+use navree::ui::*;
+
+let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
+let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
+
+let opened = report.count(opens);   // one number for each period
+let chart = report
+    .chart(Chart::area("Opens over the window").id("opens"))
+    .series(report.series("Opens", &opened));
+```
+
+`query` is the `ReportQuery` a handler reads from the address, `today` is the day in the zone the report is counted in, and `zone` is that zone. The sections below take these in turn.
+
+## The window
+
+The window lives in the address, as `?from=2026-10-28&to=2026-11-03`: both days are included. Put the picker in a `GET` form and its two fields are the query, so back, forward, reload and a shared link show the same window, and nothing needs the script to work. `report.picker()` gives the picker for the window, with the report's limits and today, and with no Clear button. Give the form `autocomplete="off"`, or Back brings the dates back as they were typed rather than as the page was drawn.
+
+`Report::from_query` reads the window with `RangeRules`, the same value the picker was given with `.limits(...)`, so the browser and the server can't differ:
+
+- A window the limits allow is used.
+- No window, or one that isn't a pair of days, means the **default window**: the `DatePreset` you pass, counted from `today`. `DatePreset::Last30Days` is a common one.
+- A window the limits **refuse**, such as one that is too long, ends after the last allowed day or holds a day that is off, also means the default window. `report.refused()` returns why, as a `DateError`, so the page can say so in the reader's language with `error.message(&locale)`.
+- A key sent twice is read as its first value, and a value longer than 32 characters is cut.
+
+<UiPreview example="reports/refused" />
+
+`report.from_url()` says whether the window came from the address, and `report.range()` is the window used. A request that doesn't come from the picker is held to the same limits.
+
+## The grain
+
+The grain is the length of one period. The window's length picks it, so a day is drawn by the hour and a year by the week:
+
+| The window | Grain |
+|---|---|
+| 1 or 2 days | Hour |
+| 3 to 92 days | Day |
+| 93 to 400 days | Week |
+| 401 to 3,660 days | Month |
+| More | Year |
+
+A reader can ask for another grain with `?grain=week`. The names are `hour`, `day`, `week`, `month`, `quarter` and `year`. A grain is used when it cuts the window into between 2 and 400 periods. Otherwise it is ignored and the window's own grain stands, so a year of hours, 8,760 periods, is drawn by the week. A minute is never taken from the address.
+
+`report.grains()` lists the grains a reader may switch to, and `report.grain_links("/reports", "Grain")` draws them as a row of links with the current one marked. They are plain links, so the switch works with JavaScript off. A grain that is not the window's own is carried in the address and in the links, and `report.href("/reports", Some(grain))` writes one. When the form posts, keep the grain with a hidden field, as the preview's code does.
+
+<UiPreview example="reports/grains" />
+
+`report.chart(chart)` gives a chart the report's periods as its times, and its grain, so the axis reads `2:00 PM`, `Nov 3` or `Nov 2026` as it should.
+
+## Periods in a time zone
+
+Periods are wall-clock periods in the zone you pass: a day is a day, a week starts on a Monday and a month is a month. A chart reports what a person in that zone saw. The zone can be any `chrono` time zone, such as the `Tz` of [`CurrentZone`](/docs/digging-deeper/time-zones/#the-requests-zone).
+
+- **Clock changes.** In New York, 7 to 9 March 2026 counted by the day is three periods of 24, 23 and 24 hours, and 1 November 2026 counted by the hour is 25 periods, with the 01:00 hour twice. Nothing is merged or split. A window's end is the start of the day after its last day, so the last day is counted whole.
+- **Half-hour zones.** Hours are real hours counted from the window's first instant, so a zone like Asia/Kolkata keeps its periods on its own hours.
+- **The edges.** A week or a month at the edge of the window is cut to it: it counts only the window's days, and is named by its first day, the week's Monday or the month's first.
+- **Weeks.** They start on Monday. `Report::from_query_starting(..., week_start, ...)` starts them on another day.
+
+`report.zone_name("Asia/Kolkata")` names the zone, which TimescaleDB needs to bucket in it (see below). The name is checked, and one that isn't a plain zone name is ignored. `report.buckets()` lists the periods, each with its `start`, its `end` and its name on the zone's clock. `report.bounds()` is the whole window as two instants, `[start, end)`, which is what a query filters on.
+
+## Counting rows
+
+### In memory
+
+When the rows are already in memory, such as a response from another service, count them into the periods:
+
+```rust
+let opened: Vec<u64> = report.count(events.iter().map(|event| event.opened_at));
+let revenue: Vec<f64> = report.sum(orders.iter().map(|order| (order.paid_at, order.amount)));
+```
+
+`count` takes instants as `DateTime<Utc>` and `sum` takes an instant and a value. An instant outside the window is ignored, and so is a value that is NaN or infinite. `report.bucket_of(instant)` finds the period of one instant. `report.series(name, &counts)` makes a series from counts.
+
+### Through the ORM
+
+When the rows are in a database, let it count them. `measure` runs one grouped query over the query you pass and returns a value for each period:
+
+```rust
+use navree::ui::charts::*;
+
+let deals = report
+    .measure(Deal::query(), "created_at", Metric::Count, &uow)
+    .await?;
+let chart = report
+    .chart(Chart::bar("Deals created").id("deals-created"))
+    .series(Series::new("Deals", deals));
+```
+
+The query is yours, so it carries everything the app puts on it. A model scoped to a [workspace](/docs/orm/workspaces-and-access/) counts only the current workspace's rows, and row-level security holds, because the report adds only the window's bounds to what you pass.
+
+| `Metric` | Is |
+|---|---|
+| `Count` | How many rows. A period with none is 0. |
+| `CountDistinct("col")` | How many distinct values of a column. SQL only. A period with none is 0. |
+| `Sum("col")` | The sum of a column. A period with no rows is 0. |
+| `Average("col")` | The mean of a column. A period with no rows has no value: a gap. |
+| `Min("col")`, `Max("col")` | The least or the greatest. A period with no rows is a gap. |
+
+The time column is a name such as `"created_at"`, for a timestamp column. A column of seconds or milliseconds since 1970 in an integer column is named with `TimeColumn::UnixSeconds("at")` or `TimeColumn::UnixMillis("at")`. A column name is a plain name, with letters, digits and `_` and at most one `.`, and any other name is an error rather than SQL.
+
+`measure_by` counts a measure for each value of a column, for a stacked chart of statuses over time. It returns one series for each name you give, in that order, and one more for every other value:
+
+```rust
+let by_stage = report
+    .measure_by(
+        Deal::query(),
+        "created_at",
+        "stage",
+        &["won", "lost", "open"],
+        Metric::Count,
+        &uow,
+    )
+    .await?;
+let chart = ["Won", "Lost", "Open", "Other"].into_iter().zip(by_stage).fold(
+    report.chart(Chart::bar("Deals by stage").id("deals-by-stage").stacked()),
+    |chart, (name, counts)| chart.series(Series::new(name, counts)),
+);
+```
+
+### How the database counts
+
+`report.measure_with(query, time, measure, Bucketing, &exec)` chooses how the periods are found. `measure` uses `Bucketing::Auto`.
+
+- **TimescaleDB**, on PostgreSQL. `time_bucket` buckets in the report's zone, which is why the report must name it with `zone_name`. `Auto` uses it when the extension is installed, the time column is a timestamp, the grain is an hour or the zone is named, and, for weeks, they start on Monday. Hours are counted from the window's first instant, so a clock change neither merges nor splits an hour. See [TimescaleDB](/docs/database/timescaledb/).
+- **Bound comparisons**, on every SQL database: PostgreSQL without TimescaleDB, MySQL and SQLite. Each row's period is found by comparing its time with the periods' ends, halving the list, so a row costs about log2 of the number of periods in comparisons, and the periods are exactly the report's in any zone. `Bucketing::Exact` asks for this everywhere.
+- **MongoDB.** The ORM buckets by the hour (by the quarter of an hour in a zone that is off UTC by part of an hour), and the report folds those into its periods. A report over MongoDB needs a date column, and can't count distinct values.
+
+`Bucketing::TimeBucket` insists on TimescaleDB and fails where it can't be used.
+
+## A report page
+
+The handler reads the query, builds the report, counts, and draws the form, the grain links and the charts. The form is a `GET` form, so the whole report lives in the address.
+
+```rust title="src/deals/report.rs"
+use chrono::NaiveDate;
+use navree::http::extract::Query;
+use navree::prelude::{Result, Uow};
+use navree::time::CurrentZone;
+use navree::ui::charts::*;
+use navree::ui::dates::{DatePreset, DateRules, RangeRules};
+use navree::ui::*;
+
+/// No day after today, and at most two years.
+fn limits(today: NaiveDate) -> RangeRules {
+    RangeRules::new(DateRules::new().max(today)).max_days(730)
+}
+
+async fn report(
+    shell: AppShell,
+    zone: CurrentZone,
+    uow: Uow,
+    Query(query): Query<ReportQuery>,
+) -> Result<AppPage> {
+    let today = zone.today().date();
+    let report = Report::from_query(&query, &limits(today), today, DatePreset::Last30Days, &zone.tz())
+        .zone_name(zone.name());
+
+    let created = report.measure(Deal::query(), "created_at", Metric::Count, &uow).await?;
+    let value = report.measure(Deal::query(), "created_at", Metric::Sum("amount"), &uow).await?;
+
+    let form = el("form")
+        .attr("method", "get")
+        .attr("action", "/deals/report")
+        .attr("autocomplete", "off")
+        .children((
+            report.picker().title("Window"),
+            // A grain chosen by hand rides along as a hidden field.
+            (report.grain() != report.auto_grain()).then(|| {
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", "grain")
+                    .attr("value", report.grain().key())
+            }),
+            Button::outline("Apply").submit(),
+        ));
+    let refused = report.refused().map(|error| {
+        Alert::new(AlertTone::Warning)
+            .title("That window can't be shown")
+            .body(format!(
+                "{}. Showing the last 30 days.",
+                error.message(&navree::ui::dates::DateLocale::english()).trim_end_matches('.')
+            ))
+    });
+
+    Ok(shell.page("Deals report").body(Stack::gap(4).children((
+        Row::gap(3).wrap().children((form, report.grain_links("/deals/report", "Grain"))),
+        refused,
+        report
+            .chart(Chart::bar("Deals created").id("deals-created"))
+            .description(format!("Per {} in {}", report.grain().key(), zone.name()))
+            .series(Series::new("Deals", created)),
+        report
+            .chart(Chart::area("Pipeline value").id("deals-value"))
+            .format(NumberFormat::currency("$").max_decimals(0))
+            .series(Series::new("Value", value))
+            .table(TableMode::Shown),
+    ))))
+}
+```
+
+`Deal` is a [model](/docs/orm/models/) with a `created_at` timestamp column and a numeric `amount`. The preview at the top of this page is the same page drawn from rows held in memory.
+
+The page says why when `report.refused()` has an answer, and shows the default window under the message. `Count` and `Sum` give 0 for a quiet period, so a window with no deals draws zeros, not an empty chart. Give each chart on the page its own `.id(...)`, and set `.table(TableMode::Shown)` on the chart a reader may want to copy from.
+
+## Refreshing a report
+
+Put the charts in a [Region](/docs/ui/regions/) whose source is the report's own address, and tell it which stream to follow. Here `created_chart` and `value_chart` are the two charts of the page above:
+
+```rust
+Region::new("report")
+    .src(report.href("/deals/report", None))
+    .live_from("/events/deals")
+    .children((created_chart, value_chart))
+```
+
+When the stream speaks, the region fetches the address again and morphs the answer in, keeping the window and the grain, since both are in the address. The charts need no wiring after a morph. The page can be the source: the runtime takes the element with the region's id from the answer. `.poll(Duration)` refreshes on a timer instead, and `.lazy()` loads the charts after the page paints. See [Regions](/docs/ui/regions/) for the stream and its reconnects.
+
+<UiPreview example="reports/live" />
+
+The preview follows no stream, since a static page has none. In an app, the server sends an event when the data changes, and the region does the rest.
+
+## Limits
+
+- A grain in the address draws between 2 and 400 periods, or it is ignored.
+- A window is whole days, from year 1 to year 9999.
+- `count` and `sum` read every instant you give them. For many rows, count in the database.
+- `CountDistinct` needs an SQL database.
+- A report counts one window. To compare two windows, make two reports and draw two series on charts of the same length.
+
+## API
+
+### Report
+
+<UiProps type="Report" />
+
+### ReportQuery
+
+<UiProps type="ReportQuery" />
+
+### Bucket
+
+<UiProps type="Bucket" />
+
+### Grain
+
+<UiProps type="Grain" />
+
+### Metric
+
+<UiProps type="Metric" />
+
+### Bucketing
+
+<UiProps type="Bucketing" />
+
+### TimeColumn
+
+<UiProps type="TimeColumn" />

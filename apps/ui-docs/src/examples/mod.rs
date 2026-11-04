@@ -6,6 +6,7 @@ use crate::catalog::Example;
 mod actions;
 mod activity;
 mod board;
+mod charts;
 mod data;
 mod dates;
 mod display;
@@ -55,6 +56,7 @@ pub fn all() -> Vec<Example> {
     all.extend(flow::all());
     all.extend(data::all());
     all.extend(sortable::all());
+    all.extend(charts::all());
     all.extend(patterns::all());
     all.extend(themes::all());
     all.extend(icons::all());

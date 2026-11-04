@@ -83,6 +83,15 @@ pub const FILES: &[&str] = &[
     "upload/labels.rs",
     "upload/limits.rs",
     "upload/server.rs",
+    "charts/mod.rs",
+    "charts/cartesian.rs",
+    "charts/donut.rs",
+    "charts/funnel.rs",
+    "charts/sparkline.rs",
+    "charts/format.rs",
+    "charts/scale.rs",
+    "charts/report.rs",
+    "charts/report_orm.rs",
 ];
 
 /// One constructor or method.
@@ -229,7 +238,7 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
 }
 
 /// The macros that write builder methods for several types.
-const SHARED_MACROS: &[&str] = &["picker_methods", "typed_methods"];
+const SHARED_MACROS: &[&str] = &["picker_methods", "typed_methods", "common_methods"];
 
 /// The public methods of an `impl` block: constructors (no `self`) and builders.
 fn impl_methods(item: &syn::ItemImpl) -> (Vec<Method>, Vec<Method>) {
@@ -280,14 +289,32 @@ fn shared_impl(definition: &str, name: &str) -> Option<syn::ItemImpl> {
     let body = definition.split_once("=>")?.1;
     let open = body.find('{')?;
     let close = body.rfind('}')?;
-    // The paths inside the crate are shown as the name a reader writes.
-    let text = body[open + 1..close]
-        .replace("$type", name)
-        .replace("$crate::components::", "")
-        .replace("$crate::select::", "")
-        .replace("$crate::node::", "")
-        .replace("$crate::html::", "")
-        .replace("$crate", "crate");
+    let inner = &body[open + 1..close];
+    // Token text puts a space after `$` and around `::`. A macro that writes its
+    // `impl` once for each type it is given (`$(impl $type { .. })+`) is read as
+    // the one `impl` inside the repetition.
+    let spaced = inner.replace("$ ", "$").replace(" :: ", "::");
+    let text = match spaced.trim().strip_prefix("$(") {
+        Some(repeated) => repeated
+            .trim_end()
+            .strip_suffix('+')?
+            .trim_end()
+            .strip_suffix(')')?
+            .replace("$type", name)
+            .replace("$crate::charts::", "")
+            .replace("$crate::dates::", "")
+            .replace("$crate::node::", "")
+            .replace("$crate::html::", "")
+            .replace("$crate", "crate"),
+        // The paths inside the crate are shown as the name a reader writes.
+        None => inner
+            .replace("$type", name)
+            .replace("$crate::components::", "")
+            .replace("$crate::select::", "")
+            .replace("$crate::node::", "")
+            .replace("$crate::html::", "")
+            .replace("$crate", "crate"),
+    };
     let file = syn::parse_file(&text).ok()?;
     file.items.into_iter().find_map(|item| match item {
         Item::Impl(item) => Some(item),
@@ -482,6 +509,26 @@ mod tests {
             "impl Into<crate::node::AttrValue>"
         );
         assert_eq!(tidy("< N : Into < Node > >"), "<N: Into<Node>>");
+    }
+
+    #[test]
+    fn every_chart_has_the_builders_all_charts_share() {
+        let api = read(|file| crate::read_repo(&format!("crates/navree-ui/src/{file}")));
+        for name in ["Chart", "Donut", "Funnel", "Sparkline"] {
+            let doc = &api[name];
+            for method in [
+                "id", "heading", "locale", "table", "loading", "failed", "retry",
+            ] {
+                assert!(
+                    doc.methods.iter().any(|m| m.name == method),
+                    "{name} has no `{method}`"
+                );
+            }
+            let locale = doc.methods.iter().find(|m| m.name == "locale");
+            assert_eq!(locale.map(|m| m.args.as_str()), Some("tag: &str"));
+            let table = doc.methods.iter().find(|m| m.name == "table");
+            assert_eq!(table.map(|m| m.args.as_str()), Some("mode: TableMode"));
+        }
     }
 
     #[test]

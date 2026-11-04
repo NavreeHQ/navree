@@ -1,0 +1,213 @@
+---
+title: "Line chart"
+description: "Change over time: lines on a shared axis, drawn on the server as SVG, with gaps, targets, events, a table of the same numbers and keyboard access."
+---
+
+<UiPreview example="line-chart/default" />
+
+`Chart::line` draws one or more series as lines over a shared x axis: categories, days, times or numbers. The server writes an `<svg>`, a legend, a text summary and the same numbers as a table. A chart reads without any script. The `charts` module adds the tooltip, the crosshair and the keys.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Chart::line("Opens and clicks")
+    .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    .series(Series::new("Opens", [412, 530, 498, 610, 584, 233, 198]))
+    .series(Series::new("Clicks", [96, 141, 120, 168, 152, 51, 44]))
+```
+
+Each series gives one value for each x. The title names the chart for everyone, including screen readers. Two charts on a page can share a title if each has its own `.id("...")`: the table switch and the names inside the chart are built from it.
+
+## When to use it
+
+Use a line for change over time. A line says that what lies between two points is on the way between them, so it fits values in order and doesn't fit unordered categories. To compare amounts, use [bars](/docs/components/bar-chart/). To show how a total divides over time, use an [area](/docs/components/area-chart/). For one number, use a [Stat](/docs/components/stat/), and add a [sparkline](/docs/components/sparkline/) when its trend matters.
+
+<UiChoose name="chart" current="Line chart" />
+
+## Anatomy
+
+<UiAnatomy component="line-chart" />
+
+## A time axis
+
+`.days(...)` takes `NaiveDate` values and `.times(...)` takes `NaiveDateTime` values, as wall-clock times in the zone the data was counted in. `.numbers(...)` and `.categories(...)` take the other two kinds of x.
+
+<UiPreview example="line-chart/hours" />
+
+The chart finds the grain of a time axis from the spacing of the times, and the grain sets how the axis and the table write them: a time on the locale's clock for an hour (`6:00 AM` in English, `06:00` in German), `Nov 3` for a day, `Nov 2026` for a month. `.grain(Grain)` sets it when the spacing would mislead. Ticks fall on the wall clock, on midnights and month starts, whatever the zone did that day. A week is written `Week of Nov 2`, and starts on Monday unless `.week_start(Weekday)` says otherwise. Times given out of order are put in order.
+
+A [report](/docs/ui/reports/) cuts a window into periods and gives the chart its times and grain.
+
+## Gaps
+
+A value that is `None`, NaN or infinite is a gap. The line breaks there, and one value between two gaps is drawn as a dot. In the table a gap is a dash, and a screen reader hears "No value". `Series::new` takes integers and floats of any width, and an `Option` of either.
+
+<UiPreview example="line-chart/gaps" />
+
+Leave out a reading that was never taken. Writing it as zero draws a drop that didn't happen.
+
+## Targets, events and bands
+
+`Annotation::target(value, label)` draws a dashed level across the chart. `Annotation::event(at, label)` draws a line up the chart at one place, and `Annotation::band(from, to, label)` shades a stretch. A place on the x axis can be a `NaiveDate` or `NaiveDateTime`, a number, a category name or `At::Index(n)`, the row at that index. A target also widens the value axis to hold it.
+
+<UiPreview example="line-chart/annotations" />
+
+The labels go into the summary too: "Marked: Holiday, Reminder sent, Target (80)." A reader who can't see the lines still hears them.
+
+## Hiding series, and colors that mean something
+
+`.toggles()` turns the legend into a set of switches. A reader hides and shows a series by clicking its name, and it works with JavaScript off. The tooltip leaves out a hidden series. Toggles don't apply to a stacked chart, whose stacks would lose a layer, so its legend stays a list.
+
+`Series::tone(Tone)` colors a series by what it means: `Tone::Success`, `Tone::Warning`, `Tone::Danger` or `Tone::Info`. The legend adds the tone's icon, so the meaning never rests on color alone. `Series::color(slot)` pins a series to one of the eight categorical colors, so it keeps its color when other series come and go.
+
+<UiPreview example="line-chart/toggles" />
+
+## More than eight series
+
+A chart draws at most eight series. When you give more, the first seven keep their colors and the rest are added up into one series called Other, drawn in a quiet gray. Few people can tell ten lines apart, so show fewer or split the chart.
+
+<UiPreview example="line-chart/many" />
+
+## The value axis
+
+The axis steps by 1, 2, 2.5 or 5 times a power of ten. A line's axis starts at zero. `.y_zero(false)` lets it start near the data, which suits a measure such as a response time that never gets near zero. `.y_min(value)` and `.y_max(value)` widen the axis to include a value, `.y_ticks(n)` asks for about that many ticks (2 to 12), and `.height(px)` sets the plot's height (60 to 800, and 200 by default).
+
+## Long series
+
+A line with more than 640 points keeps its shape. `.max_points(n)` changes the limit (at least 16). The points drawn are picked with largest-triangle-three-buckets: the first and the last stay, and each stretch between them keeps the point that makes the largest triangle with its neighbors, so peaks and dips survive. The summary is written from every value. The table lists the points drawn and says so under itself: "The drawing shows 640 of 1,000,000 points; the table lists the points drawn."
+
+The reduction is also a function. `lttb(&xs, &ys, most)` returns the indices to keep, for a chart you draw yourself. The budget for a line of a million points, cleaned, summarized, reduced and written, is under 100 ms (`tests/budgets.rs` in the crate holds it).
+
+## Formats and languages
+
+`.format(NumberFormat)` says how a value is written on the axis, in the tooltip and in the table.
+
+| Format | A value | Is written |
+|---|---|---|
+| `NumberFormat::number()` | `1234` | `1,234` |
+| `NumberFormat::number()` | `0.125` | `0.13` |
+| `NumberFormat::decimals(1)` | `2.0` | `2` |
+| `NumberFormat::decimals(1).fixed()` | `2.0` | `2.0` |
+| `NumberFormat::currency("$")` | `-1200.5` | `-$1,200.5` |
+| `NumberFormat::number().suffix(" ms")` | `85` | `85 ms` |
+| `NumberFormat::percent()` | `0.125` | `12.5%` |
+
+`NumberFormat::integer()` rounds to whole numbers, `percent_of_100()` writes a value that is already from 0 to 100 with a `%`, and `max_decimals`, `prefix` and `suffix` adjust any format. On the axis, a number that reaches 10,000 is written short (`12K`), and the table and the tooltip always write the full number. `.compact(Compact::Always)` shortens everywhere, and `Compact::Never` never does.
+
+`.locale("de")` writes numbers and dates for a language. A tag such as `en-IN` or `de-CH` adds its region. The digits are always Latin.
+
+<UiPreview example="line-chart/locales" />
+
+| Locale | `1234567.5` | `0.125` as a percentage |
+|---|---|---|
+| `en` | `1,234,567.5` | `12.5%` |
+| `de` | `1.234.567,5` | `12,5 %` |
+| `en-IN` | `12,34,567.5` | `12.5%` |
+| `fr` | `1 234 567,5` | `12,5 %` |
+
+The marks are built in for English, Hindi, Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam and Punjabi (grouped as 12,34,567), German, French, Spanish, Italian, Portuguese, Dutch, Russian, Ukrainian, Polish, Swedish, Norwegian, Danish, Finnish, Turkish, Arabic, Persian, Urdu, Hebrew, Japanese, Chinese and Korean. A tag the table doesn't have writes English marks. Month and day names come from the same tag, for the languages the [date pickers](/docs/ui/dates/#languages) know. `.number_locale(NumberLocale)` and `.date_locale(DateLocale)` set the two apart.
+
+The words a chart writes are fields of `ChartLabels`, in English by default. Change the ones you need and pass the struct to `.labels(...)`, as the German chart above does. A blank in braces is filled in.
+
+| Field | Holds | Blanks |
+|---|---|---|
+| `show_table` | The switch that shows the table | |
+| `chart` | The drawing's name for assistive technology | `{title}` |
+| `keys` | How to move through the values with the keys | |
+| `loading` | The text for a screen reader while loading | `{title}` |
+| `failed`, `retry` | A failure's heading, and the link that asks again | |
+| `empty`, `empty_text` | The heading of an empty chart and the line under it | |
+| `other` | The series or part that holds the rest | |
+| `total`, `share`, `category`, `time`, `value`, `no_value` | Table column heads, and a gap's words for a screen reader | |
+| `reduced` | The note under a table whose drawing has fewer points than the data | `{shown}`, `{total}` |
+| `week_of` | A week's name | `{date}` |
+| `summary_series`, `summary_one`, `summary_bars`, `summary_none`, `summary_marks`, `one_point` | The summary written from the data | `{series}`, `{first}`, `{first_x}`, `{last}`, `{last_x}`, `{max}`, `{max_x}`, `{min}`, `{min_x}`, `{value}`, `{x}`, `{total}`, `{marks}` |
+| `summary_parts`, `summary_funnel`, `of_first`, `of_previous` | The same for a [donut](/docs/components/donut-chart/) and a [funnel](/docs/components/funnel/) | `{count}`, `{total}`, `{name}`, `{share}`, `{first_name}`, `{first}`, `{last_name}`, `{last}`, `{rate}` |
+
+`.rtl()` mirrors the chart for a right-to-left page: time runs from right to left and the value axis stands on the right.
+
+## Loading, failed and empty
+
+A chart can say what state its data is in, and keeps its place on the page while it does.
+
+<UiPreview example="line-chart/states" />
+
+`.loading()` shows a placeholder as tall as the chart, with `aria-busy` on the chart and "Loading Opens by hour" for a screen reader. `.failed(reason)` says the data could not be loaded and shows the reason when there is one. It never draws zeros. `.retry(href)` adds a link that asks again. A chart with no rows, or with only gaps, is empty: it shows a heading and a line, which `.empty(title, text)` words for your page.
+
+Put a chart in a [Region](/docs/ui/regions/) to load it after the page paints, or to refresh it.
+
+## The table
+
+Every chart carries its numbers as a `<table>` with a caption, row headers and a column for each series. A stacked chart adds a Total column. `.table(TableMode)` says where it sits.
+
+| Mode | The table is |
+|---|---|
+| `TableMode::Switch` | Hidden from sight and read by screen readers. A "Show table" switch under the chart shows it. This is the default. |
+| `TableMode::Shown` | Shown under the drawing. |
+| `TableMode::ScreenReader` | Read by screen readers only, with no switch. |
+
+The switch is a checkbox, so it works with JavaScript off.
+
+<UiPreview example="line-chart/table" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. It shows the first value, or the one you were on. |
+| `→`, `↓` | Moves to the next value. |
+| `←`, `↑` | Moves to the previous value. |
+| `Home`, `End` | Moves to the first or the last value. |
+| `Page Down`, `Page Up` | Moves about a tenth of the way on or back. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title ("Opens and clicks, chart"), described by its summary and by "Use the arrow keys to move between values."
+- Each move by key is announced in a polite live region: the row's name, then the name and value of each series that shows.
+- The summary is written from the data: each series' first and last value, and its highest and lowest with where they fall. `.summary(text)` replaces it, and `.show_summary()` prints it under the drawing for everyone.
+- The table twin holds every value, so nothing depends on seeing the drawing or using a pointer.
+- The legend's switches are checkboxes. Tab reaches them, Space toggles them, and their focus ring shows.
+- A status tone adds an icon to the legend. Series are also told apart by their names in the legend, the tooltip and the table's headers, never by color alone.
+- With a pointer, the tooltip follows the cursor and a crosshair marks the value. In a right-to-left chart, `←` and `→` swap.
+- A title, a series name or a label is written as text, and the chart has no `style` attribute, so a strict content security policy holds. In forced-colors mode the text and the focus ring use the system's colors.
+
+</UiA11y>
+
+A page with a line, area, bar, donut or funnel chart loads the `charts` module. A [sparkline](/docs/components/sparkline/) loads none.
+
+## Data rules
+
+- Every series shares the chart's x values, like the columns of a table. A series with fewer values than x is padded with gaps.
+- `None`, NaN and infinite values are [gaps](#gaps).
+- At most [eight series](#more-than-eight-series): more fold into Other.
+- At most 640 points on a line or an area, picked with [largest-triangle-three-buckets](#long-series).
+- At most 120 bars (`.max_bars(n)`): [bars merge or fold](/docs/components/bar-chart/#more-bars-than-fit).
+- A value outside what a scale can hold is drawn at the edge and written in full in the table.
+
+## API
+
+### Chart
+
+<UiProps type="Chart" />
+
+### Series
+
+<UiProps type="Series" />
+
+### Annotation
+
+<UiProps type="Annotation" />
+
+### At
+
+<UiProps type="At" />
+
+### NumberFormat
+
+<UiProps type="NumberFormat" />
+
+### TableMode
+
+<UiProps type="TableMode" />

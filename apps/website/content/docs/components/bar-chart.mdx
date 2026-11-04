@@ -1,0 +1,124 @@
+---
+title: "Bar chart"
+description: "Bars from one baseline to compare amounts: grouped, stacked, negative, vertical or horizontal. Drawn on the server as SVG, with a table and keyboard access."
+---
+
+<UiPreview example="bar-chart/default" />
+
+`Chart::bar` draws each value as a bar from one baseline. The value axis always starts at zero, so the length of a bar is its amount. Several series sit side by side in each group. A bar is at most 24 px wide, and a group never takes more than 70% of its place, so a chart with few bars doesn't draw slabs.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Chart::bar("Sent per day")
+    .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    .series(Series::new("Sent", [1_204, 1_480, 990, 1_610, 1_820, 410, 302]))
+    .annotation(Annotation::target(1_500, "Goal"))
+```
+
+The x values, series, annotations, formats, languages and states are those of a [line chart](/docs/components/line-chart/). This page covers what bars add.
+
+## When to use it
+
+Use bars to compare amounts: what each day, team or plan holds. Use a [line](/docs/components/line-chart/) for change over time with many points. Use bars rather than a [donut](/docs/components/donut-chart/) when parts are close in size, because lengths on one baseline are easier to compare than angles. For one number, use a [Stat](/docs/components/stat/).
+
+<UiChoose name="chart" current="Bar chart" />
+
+## Anatomy
+
+<UiAnatomy component="bar-chart" />
+
+## Grouped bars
+
+Give a chart several series and its bars sit side by side. `.toggles()` lets a reader hide a series from the legend, with or without JavaScript.
+
+<UiPreview example="bar-chart/grouped" />
+
+## Stacked bars
+
+`.stacked()` puts each series on top of the ones before it, so a bar's height is the total. The table gets a Total column. Color a series with `Series::tone(Tone)` when it means something, as in the preview, where reported is good news and clicked is bad. The legend then adds an icon to each tone, so the meaning doesn't rest on color. A stacked chart has no toggles, since hiding a segment would move the others.
+
+<UiPreview example="bar-chart/stacked" />
+
+`.stacked_percent()` makes each bar a share of its own total, on an axis from 0% to 100%. Use it when the mix matters more than the amounts. The table still holds the real values.
+
+<UiPreview example="bar-chart/percent" />
+
+## Values below zero
+
+A value below zero hangs below the baseline, and the axis grows to hold it. In a stack, negative values stack downward, away from the positive ones.
+
+<UiPreview example="bar-chart/negative" />
+
+## Horizontal bars
+
+`.horizontal()` lays the bars along rows, with a label on each row and the value at its end. Use it for long names and for ranked lists: sort the categories, largest first, and a reader sees the order at once. It stacks too.
+
+<UiPreview example="bar-chart/horizontal" />
+
+<UiPreview example="bar-chart/horizontal-stacked" />
+
+## More bars than fit
+
+A chart draws at most 120 bars. `.max_bars(n)` changes the limit (at least 4). What happens past it depends on x:
+
+- **Times and numbers** merge their neighbors in runs, and the merged bar is named by its range, such as "Oct 5 – Oct 7". `.merge(Merge::Sum)` adds the values up, and is the default. `Merge::Mean` averages them, for rates and temperatures, and `Merge::Max` keeps the largest.
+- **Categories** keep the first bars and fold the rest into one bar called Other, combined the way `merge` says. Sort the categories, largest first, so what folds is the smallest.
+
+<UiPreview example="bar-chart/many" />
+
+The summary is written from every value before any is merged. The table lists the bars drawn and says so under itself.
+
+## Formats and languages
+
+`.format(NumberFormat)` and `.locale(tag)` write the axis, the bar values in a horizontal chart, the tooltip and the table. A ranked list of rates reads well with `NumberFormat::percent()`, as in the preview above. See [Formats and languages](/docs/components/line-chart/#formats-and-languages) on the line chart page for the formats, the locales and the words a chart writes. `.rtl()` mirrors a bar chart for a right-to-left page.
+
+## Loading, failed, empty and the table
+
+`.loading()`, `.failed(reason)`, `.retry(href)` and `.empty(title, text)` work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), and so does `.table(TableMode)`. A chart with no bars is empty.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next bar, or in a horizontal chart, row. |
+| `Home`, `End` | Moves to the first or the last bar. |
+| `Page Up`, `Page Down` | Moves about a tenth of the way back or on. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: for each series its highest and lowest bar with where they fall, and its total. A move by key is announced politely: the bar's name, then each series and its value.
+- The bar under the pointer or the key is marked, and the tooltip names its value, series and place.
+- The table twin lists every bar with its value, so nothing depends on seeing the drawing. The "Show table" switch is a checkbox and works with JavaScript off.
+- A series is told apart by the legend, the tooltip and the table's headers, never by color alone. A status tone adds an icon to the legend.
+- A horizontal chart is rows of text a reader can scan: the label, the bar, the value. Long labels wrap.
+
+</UiA11y>
+
+## Data rules
+
+- Every series shares the x values.
+- `None`, NaN and infinite values are gaps: the bar is left out, and the table shows a dash that a screen reader reads as "No value".
+- At most eight series. More fold into Other, and it is colored gray.
+- At most 120 bars, [merged or folded](#more-bars-than-fit).
+
+## API
+
+### Chart
+
+<UiProps type="Chart" />
+
+### Series
+
+<UiProps type="Series" />
+
+### Annotation
+
+<UiProps type="Annotation" />
+
+### Merge
+
+<UiProps type="Merge" />
