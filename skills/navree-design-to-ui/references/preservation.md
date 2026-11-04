@@ -75,7 +75,7 @@ owner's answer. A deviation the owner hasn't approved blocks stop 2.
 # Deviations
 
 | ID | Screen | What the design has | What the page will have | Why | Picture | Owner | Date |
-| DV-02 | all | primary #22c55e | accent #3dff8f (dark theme) | one accent until the theme builder | 04-reconcile/dv/DV-02.png | approved | 2026-11-04 |
+| DV-02 | all | primary #22c55e | accent #3dff8f (the Navree theme) | translate mode uses the Navree theme; keep mode would use a theme of the app's own | 04-reconcile/dv/DV-02.png | approved | 2026-11-04 |
 | DV-03 | DS-02, DS-04 | pill-shaped chips | Badge with 4 px corners | app rule: no pills | 04-reconcile/dv/DV-03.png | approved | 2026-11-04 |
 | DV-05 | DS-04 | the table sorts in the browser | sort on the server, in the URL | mistakes.md 2 | none | approved | 2026-11-04 |
 ```

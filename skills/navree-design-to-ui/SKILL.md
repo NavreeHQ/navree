@@ -1,6 +1,6 @@
 ---
 name: navree-design-to-ui
-description: "Design to Navree UI: turns a design (an HTML and CSS mock-up, a Figma, Sketch, Penpot or other design-tool export, a design handoff bundle, or screenshots) into Navree pages built from navree-ui's typed Rust components, rendered on the server: `AppShell` pages, forms from `#[derive(Form)]` (selects, comboboxes searched on the server through `OptionSource` and checked on save with `all_pickable`, multi-selects), a command palette, server-side tables from `#[derive(TableRow)]`, the design tokens. Phases that each write files to a design folder (intake with the design copied and served in development, inventory of screens, components, states, tokens, implied data and actions, token mapping, an element-by-element component map with gaps named instead of improvised, page specs, reconcile, build page by page, verify), one subagent brief per role with a refuter for every file, owner stop points, a catalog of design mistakes (wrong control for the data, client-only tables, options that must come from the server, missing empty, loading, error, read-only and forbidden states, right to left, phone width) and their Navree form, and verification with screenshots at 1440 and 390 pixels beside the design, axe, the keyboard and the app UI rules. Works alone from a design, or from the screen specs of a navree-reverse-engineering job. Use when asked to build pages from a design, mock-up, Figma or other design export, handoff or screenshots, to convert a design or prototype into Navree UI, to keep an existing look while moving to Navree, to check built pages against a design, or to add a select, a combobox that searches the server, a multi-select or a command palette to a navree-ui page."
+description: "Design to Navree UI: turns a design (an HTML and CSS mock-up, a Figma, Sketch, Penpot or other design-tool export, a design handoff bundle, or screenshots) into Navree pages built from navree-ui's typed Rust components, rendered on the server: `AppShell` pages, forms from `#[derive(Form)]` (selects, comboboxes searched on the server through `OptionSource` and checked on save with `all_pickable`, multi-selects), a command palette, server-side tables from `#[derive(TableRow)]`, the design tokens. Phases that each write files to a design folder (intake with the design copied and served in development, inventory of screens, components, states, tokens, implied data and actions, token mapping, an element-by-element component map with gaps named instead of improvised, page specs, reconcile, build page by page, verify), one subagent brief per role with a refuter for every file, owner stop points, a catalog of design mistakes (wrong control for the data, client-only tables, options that must come from the server, missing empty, loading, error, read-only and forbidden states, right to left, phone width) and their Navree form, and verification with screenshots at 1440 and 390 pixels beside the design, axe, the keyboard and the app UI rules. Works alone from a design, or from the screen specs of a navree-reverse-engineering job. Use when asked to build pages from a design, mock-up, Figma or other design export, handoff or screenshots, to convert a design or prototype into Navree UI, to keep an existing look while moving to Navree, to check built pages against a design, or to add a select, a combobox that searches the server, a multi-select or a command palette to a navree-ui page. With no design to start from, use navree-ui."
 ---
 
 # From a design to Navree UI
@@ -17,6 +17,11 @@ Each phase writes files to one design folder, so a long job survives
 restarts and every claim points at its source. Each job has a written
 brief for the agent that does it, and every file meets a second agent
 whose only job is to prove it wrong.
+
+With no design to start from (a page to add, a form, a list, a dashboard),
+use [`navree-ui`](../navree-ui/SKILL.md) instead: it builds Navree UI pages
+from scratch and indexes every component. Pages built here use the same
+components, so load it for the code of any component you map.
 
 ## The rules
 
@@ -156,9 +161,10 @@ pixels (`BASE-*`). Nothing is judged here.
 
 Group the raw values by role (surfaces, lines, text, accent, status,
 radii, spacing, type) and map each to a Navree token
-(`references/tokens.md`). A value with no token is a gap or a deviation:
-navree-ui has one token table and no per-app theme yet. Check contrast
-for every text pair with `navree::ui::tokens::contrast`.
+(`references/tokens.md`). A light design, brand colours or another font
+from the list are a theme: a built-in one, or a theme of the app's own from
+the theme builder. A value no theme can hold is a gap or a deviation.
+Check contrast for every text pair with `navree::ui::tokens::contrast`.
 
 ### 3. Mapping
 
@@ -328,9 +334,10 @@ The briefs, in phase order:
 [`fidelity-checker`](references/agents/fidelity-checker.md),
 [`access-checker`](references/agents/access-checker.md),
 [`verifier`](references/agents/verifier.md).
-Load the `navree` skill before phase 5; each page names the other skills
-it needs. The `navree-reverse-engineering` skill covers moving an old
-product, its rules and its data.
+Load the `navree` skill before phase 5, and
+[`navree-ui`](../navree-ui/SKILL.md) for the code of the components; each
+page names the other skills it needs. The `navree-reverse-engineering`
+skill covers moving an old product, its rules and its data.
 
 ## Docs
 

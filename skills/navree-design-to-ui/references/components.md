@@ -1,11 +1,13 @@
 # navree-ui components, and the design elements they take
 
 Phases 3 and 5. Every component here exists in `crates/navree-ui`
-(`src/components`, `src/form.rs`, `src/select`, `src/table`, `src/shell.rs`), imported
-from `navree::ui` (or `navree::ui::prelude::*`). A design element maps to
-one row. When no row fits, the element is a gap: record it with the
+(`src/components`, `src/dates`, `src/flow`, `src/pages`, `src/form.rs`,
+`src/select`, `src/sortable`, `src/table`, `src/theme`, `src/shell.rs`),
+imported from `navree::ui` (or `navree::ui::prelude::*`). A design element
+maps to one row. When no row fits, the element is a gap: record it with the
 "Coming" table at the end, never build a stand-in from raw elements, a
-stylesheet or a script.
+stylesheet or a script. The skill [`navree-ui`](../../navree-ui/SKILL.md)
+teaches building the pages themselves, and has the full index of components.
 
 Each component is a Rust struct with builder methods that becomes a
 `Node`. Variants are enums, so a typo doesn't compile. Components carry no
@@ -24,8 +26,10 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)` | `action` posts; the avatar is an icon, never initials |
 | Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
 | Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
-| A page outside the shell (sign-in, error) | `View::new(title).body(..)` | |
+| A page outside the shell (sign-in, receipt) | `View::new(title).body(..)` | |
 | A module's own frame (a tool page) | `Shell::for_request(path, &headers)` | |
+| Sidebar layouts, folding | `Shell::layout(ShellLayout::Sidebar \| Inset \| Floating \| Header)`, `Shell::collapse(Collapse::Icons \| Offcanvas \| Never)` | the choice is a cookie read on the server |
+| Light and dark switch, theme picker | `Shell::appearance(Appearance::new(Theme::OCEAN, Mode::System))`, `Shell::theme_menu()` | see "Themes and modes" below |
 
 ## Layout
 
@@ -38,6 +42,7 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Right to left | `Direction::rtl(..)`, or the page language; the table mirrors itself |
 | Hide below 768 px | `data-hide-mobile` (`TableHead::hide_on_mobile`, `#[col(hide_on_mobile)]`) |
 | Two panes side by side | a `Grid` with `data-pane` on the pane that scrolls on its own |
+| Resizable panes (a list, a thread, a detail) | `SplitPane::new(id).pane(Pane::new(id, label).size(30).min(22).max(45)).pane(Pane::fill(id, label))`, `.stack_below(SplitWidth::Md)`, `.save_to(url)` for sizes kept on the server |
 
 ## Text and display
 
@@ -57,7 +62,13 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Keyboard key | `Kbd::new("K")` |
 | Progress bar, spinner | `Progress::new(value, max, label)`, `Progress::indeterminate(label)`, `Spinner::new(label)` |
 | Placeholder while loading | `Skeleton::new(SkeletonShape::Line \| Short \| Block)` |
-| Nothing here yet | `Empty::new(title).icon(..).description(..).actions(..)` |
+| Nothing here yet | `Empty::new(title).icon(..).description(..).actions(..)`; for a list, `EmptyState::nothing_yet(what)`, `EmptyState::no_results().clear_filters(url)` and `EmptyState::caught_up()`; in a table, `.row(columns)` |
+| A part the user may not see, a record that is gone, a part that needs sign-in | `Forbidden::new().what(..)` (never says whether the thing exists), `NotFound::new().what(..)`, `SignInRequired::new(sign_in_url).what(..)`; each also `.compact()` for one line |
+| A whole error page (401, 403, 404, 500, ...) | `UiModule` draws it for every page route; your own is `ErrorPage::not_found()` or `ErrorPage::of(StateKind::..)` |
+| Session ended notice | `SessionEnded::new()` |
+| Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid` |
+| History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))` |
+| Recent activity feed | `ActivityFeed::new(id, label).summary(..).item(ActivityItem::new(who, what).object(..).tone(..).icon(..).time_text(..))` |
 | Divider | `Separator::horizontal()`, `Separator::vertical()` |
 | Picture held to a shape | `AspectRatio::new(Ratio::Square \| Video \| Photo \| Wide, content)` |
 | A small static table | `Table::new().caption(..).head(..).rows(..)` with `TableHead`, `TableRowEl`, `TableCell` |
@@ -117,6 +128,9 @@ form can't be a struct.
 | Time of day | time picker: typed or from a list, a native time field with JavaScript off | `NaiveTime` with `widget = time_picker` |
 | Day and time together | a date picker and a time picker side by side, or the browser's own input | two fields; `widget = datetime` for the native one |
 | A window of days, for a report | date range picker with presets, its two dates in the address | `DateRangePicker` in a `GET` form, read back with `DateRangeQuery` |
+| A month grid to browse, or to pick days | calendar | `Calendar::new(id)`, `.mode(CalendarMode::Multiple \| Range)`, `.rules(DateRules::new()..)` for days that can't be chosen |
+| A phone number | phone input: a country list and the number, formatted as typed | `PhoneInput::new(name).country("IN")`; a `Phone` or `PhoneNumber` field, or `widget = phone` on a `String` (E.164) |
+| A number on a scale, a range | slider | `Slider::new(name).max(100).step(5)`, `Slider::range(name)`; `SliderSpec` holds the post to the same grid |
 | Yes or no | checkbox, or switch | `bool`; `widget = switch` |
 | One of a small fixed set | radio buttons when all of them are worth seeing, else a select | an enum with `#[derive(Options)]`: `widget = radio`; with no hint, the browser's select (`NativeSelect`); `widget = listbox`, the styled `Select` |
 | One of a short list the server holds (a few dozen at most) | select | `String` with `widget = select` or `listbox`; choices from `FormView::options(field, ..)` |
@@ -200,35 +214,81 @@ filters, sort, pages, selection, bulk actions and export run on the server.
 One table per URL: its state is in the query string. A second table on
 the page gets its own route or a `Region`.
 
+Other lists and moves:
+
+| Design element | navree-ui |
+|---|---|
+| An inbox, a conversation, a feed: a stream read in one order | `LazyList::new(id, label, src).items(..).more_after(url)`; the source reads `LazyQuery` and answers `LazyPage` |
+| Drag to reorder, a board of columns | `Sortable::new(id, label).board().post(url).list(SortList::new(key, title).item(SortItem::new(key, title)))`; the server holds each `Move` to the lists with `Move::check` |
+
+## Steps and trees
+
+| Design element | navree-ui |
+|---|---|
+| Step bar | `Stepper::new(label).step(Step::new(..).state(StepState::Error)).current(n)`, `.vertical()`, `Step::link(href)` |
+| A form in steps, with a review | `Wizard::new(id).base(url).step(WizardStep::of::<T>(id, label)).review()`; each step is a `Form` struct, progress is a `Draft` on the server (`DraftStore`) |
+| Tree of folders, links or choices | `Tree::new(id, label).node(TreeNode::branch(..) \| leaf(..) \| lazy(id, label, src))`, `.select(TreeSelect::Single \| Multiple)`, `.cascade()` |
+| Row of tools with a More menu | `Toolbar::new(id, label).item(ToolbarItem::button(..) \| icon_toggle(..) \| radios(..) \| link(..) \| group(..) \| separator())` |
+
 ## Parts that load later
 
 `Region::new(id).src(url).lazy()` fetches a part after the page paints;
-`.poll(every)` refreshes it while visible; `.feed(..)` follows a stream.
+`.poll(every)` refreshes it while visible; `.feed(..)` follows a stream;
+`.live_from(url)` refetches when a server-sent event stream speaks.
 The handler returns a `View` of just that part.
+
+## Themes and modes
+
+| Design element | navree-ui |
+|---|---|
+| A light design, a dark design, "follow the device" | `Mode::Light`, `Mode::Dark`, `Mode::System` in `Appearance::new(theme, mode)` |
+| Brand colours, other corners, density or font | a built-in theme (`Theme::NAVREE`, `NEUTRAL`, `OCEAN`, `VIOLET`, `SUNSET`, `ROSE`, `CONTRAST`), or a theme of the app's own from the theme builder (`Theme::custom`); see `tokens.md` |
+| A theme per workspace or per person | `shell.workspace(ThemeSetting)` (`.locked()`), `shell.user(ThemeSetting)`, `Shell::theme_menu()` |
+
+## Errors and states
+
+A request for a page that ends in a 401, 403, 404, 405, 409, 410, 413, 419,
+422, 429 or a 5xx gets a page in the shell, with the next step and a
+reference to quote. `UiModule` draws it; a design needs nothing more than
+the sign-in address (`[ui] sign_in`) and, for its own words,
+`PagesOptions::labels`. A route marked `#[page]` (`RouteDef::page()`) always
+answers a browser with a page; a route marked `#[json_only]`
+(`RouteDef::json_only()`) always answers with Navree's JSON error, and so
+does a route under `http.api_prefix` that is not marked. The states inside
+a page (`Forbidden`, `NotFound`, `SignInRequired`, `EmptyState`) are in
+"Text and display".
+
+## Coming in the next release
+
+| Module | Covers in a design | Interim form, if the owner accepts one |
+|---|---|---|
+| Charts | line, bar, area and similar charts with a shared palette, and reports with a date window | `Stat` and `Bars` |
 
 ## Coming
 
-What navree-ui doesn't offer yet, in the order the toolkit's module
-standard builds it. A design element that needs one of these is a `gap`
-row in `GAPS.md` with an interim form the owner picks, or it waits.
+What navree-ui doesn't offer yet. A design element that needs one of these
+is a `gap` row in `GAPS.md` with an interim form the owner picks, or it
+waits.
 
-| Module (standard's order) | Covers in a design | Interim form, if the owner accepts one |
+| Module | Covers in a design | Interim form, if the owner accepts one |
 |---|---|---|
-| Theme system and theme builder | a light theme, brand colours, other radii or fonts, other sidebar layouts, user themes | Navree's dark theme and tokens (`tokens.md`) |
-| Charts | line, area, pie and stacked charts | `Stat` and `Bars` |
-| Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
 | Rich text | a formatted text editor | a textarea |
-| Toolbar, TreeView, Slider, ContextMenu, Menubar, NavigationMenu | those | none |
+| ContextMenu, Menubar, NavigationMenu | those | none |
 | Islands | a client-side widget of the app's own | none |
 
-Also not there yet, outside the standard's list:
+Also not there yet:
 
-- HTML error and sign-in pages for page routes: a page route's 401, 403
-  and 404 come back in Navree's JSON error format.
+- Browser sign-in for server-rendered pages (a cookie session with
+  two-factor), a workspace switcher in the shell, and live updates
+  connected to `navree-realtime`. Until they land: a sign-in page is a form
+  you write, `UserMenu::action` posts a button of your own, and a `Region`
+  follows a server-sent event stream you write, or polls.
+- A date and a time in one control: use a date picker and a time picker.
 - An app's own stylesheet or static files: the toolkit serves one
   stylesheet, and the content security policy loads styles, scripts,
   fonts and images only from the app's own origin.
-- Web fonts other than Geist (and the system monospace stack).
+- Web fonts other than Geist: a theme picks Geist or the System, Humanist,
+  Geometric or Serif stack, and monospace text uses the system stack.
 
 Check `crates/navree-ui/README.md`, `src/components/mod.rs` and
 `src/select/mod.rs` before naming a gap: the list shrinks as modules land.

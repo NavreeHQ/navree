@@ -396,7 +396,7 @@ each from a component; never leave one to chance.
 | Loading | a page renders whole on the server; a part fetched after paint is a `Region::new(id).src(url).lazy()` holding `Skeleton`s; a table's first load is `DataTable::loading()` |
 | Error | `DataTable::failed("Couldn't load deals. Try again.")`; elsewhere `Alert::new(AlertTone::Danger).title(..).body(..)` with a retry link |
 | Read-only | the same page without the actions: `DataTable::can_select(false)`, no `row_actions`, no New button, inputs `disabled(true)`; decided from the user's abilities |
-| Forbidden | the route's access attribute: `#[can(..)]` answers 403 or 404 before the page runs (see GAPS: HTML error pages) |
+| Forbidden | the route's access attribute: `#[can(..)]` answers 403 or 404 before the page runs, and `UiModule` draws it as a page in the shell; inside a page, `Forbidden::new().what(..)` for a card, a tab or a row |
 
 A detail page with its loading and error parts:
 

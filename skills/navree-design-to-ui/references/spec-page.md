@@ -86,7 +86,7 @@ From reverse engineering: none
 ## States
 | deals-index.20 | empty | a workspace with no deals | "No deals yet" and New deal | DataTable::empty(Empty::new("No deals yet").actions(..)) | none drawn | inferred | high | confirmed |
 | deals-index.21 | read-only | a viewer | no checkboxes, no row menu, no New deal | can_select(false), no row_actions, no actions | none drawn | inferred | high | confirmed |
-| deals-index.22 | forbidden | a user with no deals.read | 403 from #[can] | gap GAP-04 (HTML error pages) | none drawn | inferred | high | gap |
+| deals-index.22 | forbidden | a user with no deals.read | 403 from #[can], drawn by UiModule as a page in the shell | the error page; inside a card, `Forbidden::new().what("deals")` | none drawn | inferred | high | confirmed |
 
 ## Phone (390 pixels)
 | deals-index.30 | table | Company and Close date hidden; Deal sticky | #[col(hide_on_mobile)], #[col(sticky)] | BASE-04-390 | shot | high | confirmed |

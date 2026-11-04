@@ -29,8 +29,9 @@ token, or name it a deviation or a gap.
 5. Collect the design's fonts, radii, shadows and motion. A font other
    than Geist, a corner other than 4 or 6 pixels, any shadow or glow on a
    surface: a deviation with the Navree form.
-6. A light design, a second accent, a gradient: a gap under the theme
-   builder.
+6. A light design is `Mode::Light`. A second accent is a tone (`info`,
+   `violet`, `cyan`, `rose`) or a theme of the app's own from the theme
+   builder. A gradient is a gap.
 
 ## Evidence rules
 

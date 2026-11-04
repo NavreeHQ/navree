@@ -23,8 +23,8 @@ covered, and prepare stop 2.
 # Gaps
 
 | ID | Module coming | Pages | What the design needs | Interim form | Owner |
-| GAP-01 | Tabs, DropdownMenu, ToggleGroup | deals-show | tabs for Overview, Activity and Files | tabs as links to separate URLs | |
-| GAP-04 | HTML error pages | every page | forbidden and not-found states inside the shell | Navree's JSON error until it lands | |
+| GAP-01 | ContextMenu | deals-index | a menu on right-click of a row | the row menu (`DataTable::row_actions`) | |
+| GAP-04 | Charts | deals-show | a line chart of the deal value over 12 months | `Stat` and `Bars` until the charts land | |
 ```
 
 ## Method
