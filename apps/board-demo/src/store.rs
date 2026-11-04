@@ -1,8 +1,9 @@
 //! Reading the board and writing its moves. Every read is a page by an index:
 //! a column's cards by `(list, rank, id)`, a card's comments and history by
-//! `(card_id, at, id)`. A move is checked and written in one transaction, which
-//! SQLite starts with `BEGIN IMMEDIATE`: two moves at once queue for the write lock,
-//! and the second is checked against what the first left.
+//! `(card_id, at, id)`. A move is checked and written in one transaction that
+//! first locks the columns it touches: `SELECT ... FOR UPDATE` on their rows on
+//! PostgreSQL and MySQL, and on SQLite the write lock `BEGIN IMMEDIATE` takes. Two
+//! moves at once queue, and the second is checked against what the first left.
 
 use std::future::Future;
 
@@ -10,9 +11,9 @@ use chrono::{Days, NaiveDate};
 use navree::db::{DbError, ErrorKind, Uow};
 use navree::orm::{Model as _, OrmError};
 use navree::ui::ListState;
-use navree::ui::sortable::{Placement, RANK_GAP, RankedLists, Spot};
+use navree::ui::sortable::{self, Placement, RankedLists, Spot};
 
-use crate::data::{Activity, Card, Check, Column, Comment, Person};
+use crate::data::{Activity, Card, Check, Column, ColumnRow, Comment, Person};
 use crate::views::board::{BoardData, CAP, ColumnPage, Due, Filters, PAGE};
 use crate::views::card::{COMMENT_PAGE, CardData, HISTORY_PAGE};
 
@@ -181,6 +182,12 @@ fn id_of(key: &str) -> i64 {
 impl RankedLists for Ranks<'_> {
     type Error = OrmError;
 
+    fn lock(&self, lists: &[&str]) -> impl Future<Output = Result<(), OrmError>> + Send {
+        let (uow, lists) = (self.uow, lists.iter().map(|key| (*key).to_owned()));
+        let lists: Vec<String> = lists.collect();
+        async move { sortable::lock_lists(uow, &ColumnRow::KEY, lists).await }
+    }
+
     fn spot(&self, key: &str) -> impl Future<Output = Result<Option<Spot>, OrmError>> + Send {
         let (uow, id) = (self.uow, id_of(key));
         async move {
@@ -289,28 +296,11 @@ impl RankedLists for Ranks<'_> {
     }
 }
 
-/// Gives every card of `list` a fresh rank, [`RANK_GAP`] apart, in its order: for
-/// when two neighbours have no room left between them.
+/// Gives every card of `list` a fresh rank, [`RANK_GAP`](sortable::RANK_GAP) apart,
+/// in its order, in one statement: for when two neighbours have no room left
+/// between them.
 pub async fn renew_ranks(uow: &Uow, list: &str) -> Result<(), OrmError> {
-    let ids: Vec<i64> = Card::query()
-        .where_(Card::LIST.eq(list))
-        .order_by("rank")
-        .order_by("id")
-        .get(uow)
-        .await?
-        .into_vec()
-        .into_iter()
-        .map(|record| record.into_inner().id)
-        .collect();
-    for (at, id) in ids.into_iter().enumerate() {
-        Card::query()
-            .where_(Card::ID.eq(id))
-            .update(
-                uow,
-                [Card::RANK.set(i64::try_from(at).unwrap_or(0) * RANK_GAP)],
-            )
-            .await?;
-    }
+    sortable::renew_ranks(uow, &Card::LIST, &Card::RANK, &Card::ID, list.to_owned()).await?;
     Ok(())
 }
 

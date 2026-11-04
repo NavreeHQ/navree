@@ -18,10 +18,10 @@ use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
 use navree::http::response::{IntoResponse, Response};
 use navree::orm::Model as _;
 use navree::prelude::BoxError;
-use navree::ui::Move;
+use navree::ui::{Move, sortable};
 use tokio::sync::broadcast;
 
-use crate::data::{self, Activity, Card, Check, Column, Comment, Person};
+use crate::data::{self, Activity, Card, Check, Column, ColumnRow, Comment, Person};
 use crate::store;
 
 /// Who hears about changes, and the teammate's dice.
@@ -69,7 +69,9 @@ impl Hub {
             "DROP TABLE IF EXISTS comments",
             "DROP TABLE IF EXISTS checks",
             "DROP TABLE IF EXISTS cards",
+            "DROP TABLE IF EXISTS columns",
             "DROP TABLE IF EXISTS people",
+            "CREATE TABLE columns (key TEXT PRIMARY KEY, position INTEGER NOT NULL)",
             "CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, job TEXT NOT NULL, role TEXT NOT NULL)",
             "CREATE TABLE cards (id INTEGER PRIMARY KEY, list TEXT NOT NULL, rank INTEGER NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, assignee INTEGER, labels TEXT NOT NULL, due DATE, created_at INTEGER NOT NULL, checks_done INTEGER NOT NULL, checks_total INTEGER NOT NULL, comments INTEGER NOT NULL)",
             // A column's page, its count and a move's neighbours are each one walk of this index.
@@ -98,6 +100,8 @@ impl Hub {
                 Check::query().delete(&uow).await?;
                 Card::query().delete(&uow).await?;
                 Person::query().delete(&uow).await?;
+                ColumnRow::query().delete(&uow).await?;
+                ColumnRow::query().insert(&uow, seed.columns).await?;
                 Person::query().insert(&uow, seed.people).await?;
                 // Rows of a few columns each, a few hundred at a time: well under
                 // SQLite's limit of bound values in one statement.
@@ -135,11 +139,16 @@ impl Hub {
     ) -> Result<bool, BoxError> {
         let moved = db
             .transaction(|uow| async move {
-                let viewer = store::viewer(&uow, Some(by)).await.map_err(store::db)?;
+                // Where the card is isn't known until it is read, so every column is
+                // locked first, in order, as a move from the page locks its two.
+                sortable::lock_lists(&uow, &ColumnRow::KEY, Column::ALL.map(Column::key))
+                    .await
+                    .map_err(store::db)?;
                 let Some(card) = Card::query().find(&uow, item).await.map_err(store::db)? else {
                     return Ok(false);
                 };
                 let mv = Move::new(item.to_string(), card.into_inner().list, to.key());
+                let viewer = store::viewer(&uow, Some(by)).await.map_err(store::db)?;
                 let placed = store::place_and_write(&uow, &viewer, &mv, now())
                     .await
                     .map_err(store::db)?;

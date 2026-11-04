@@ -166,6 +166,18 @@ impl Person {
     }
 }
 
+/// A column, as stored: one row, which a move locks on PostgreSQL and MySQL
+/// (`SELECT ... FOR UPDATE`) so that two moves into it run one after the other.
+/// Its title and limit are [`Column`]'s.
+#[derive(Model, Clone, Debug, Default, serde::Serialize)]
+#[model(table = "columns", primary_key = "key")]
+pub struct ColumnRow {
+    /// A [`Column`]'s key.
+    pub key: String,
+    /// Where it stands on the board, 0 being first.
+    pub position: i64,
+}
+
 /// A card, as stored. Its place is its column and its rank there: cards are in
 /// rank order, and a move writes one rank between its new neighbours'.
 #[derive(Model, Clone, Debug, Default, serde::Serialize)]
@@ -231,6 +243,7 @@ pub struct Activity {
 #[derive(Clone, Debug, Default)]
 pub struct Seed {
     pub people: Vec<Person>,
+    pub columns: Vec<ColumnRow>,
     pub cards: Vec<Card>,
     pub checks: Vec<Check>,
     pub comments: Vec<Comment>,
@@ -644,8 +657,17 @@ pub fn seed(now: i64) -> Seed {
             role: (*role).to_owned(),
         })
         .collect::<Vec<_>>();
+    let columns = Column::ALL
+        .iter()
+        .enumerate()
+        .map(|(at, column)| ColumnRow {
+            key: column.key().to_owned(),
+            position: at as i64,
+        })
+        .collect();
     let mut seed = Seed {
         people,
+        columns,
         ..Seed::default()
     };
     let mut dice = Dice(0x5a17_3a25_1104);

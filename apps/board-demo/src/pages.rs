@@ -36,7 +36,7 @@ use navree::ui::*;
 use serde::Deserialize;
 
 use crate::Settings;
-use crate::data::{Check, Column, PROJECT, Person, TEAM, day_of};
+use crate::data::{Check, Column, ColumnRow, PROJECT, Person, TEAM, day_of};
 use crate::live::{Hub, now};
 use crate::store::{self, parse_cursor};
 use crate::views::board::{
@@ -196,6 +196,9 @@ impl Pages {
         let placed = self
             .db
             .transaction(|uow| async move {
+                // The columns are locked before anything is read, so every read sees
+                // the moves that went first, whatever the database's isolation.
+                made.lock(&uow, &ColumnRow::KEY).await.map_err(store::db)?;
                 let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
                 store::place_and_write(&uow, &viewer, &made, now())
                     .await
@@ -233,6 +236,7 @@ impl Pages {
         let (placed, card, viewer) = self
             .db
             .transaction(|uow| async move {
+                made.lock(&uow, &ColumnRow::KEY).await.map_err(store::db)?;
                 let viewer = store::viewer(&uow, who).await.map_err(store::db)?;
                 let placed = if made.from_list == made.to_list {
                     None
@@ -378,12 +382,16 @@ impl Pages {
     }
 
     /// `POST /cards/{id}/checks/moves`: a checklist line moved. A card's lines are
-    /// few, so the whole list is read and checked.
+    /// few, so the whole list is read and checked, under a lock on the card's row:
+    /// its checklist is that card's.
     async fn move_check(&self, id: i64, mv: Move) -> Result<Reply> {
         let made = mv.clone();
         let outcome = self
             .db
             .transaction(|uow| async move {
+                navree::ui::sortable::lock_lists(&uow, &crate::data::Card::ID, [id])
+                    .await
+                    .map_err(store::db)?;
                 let lines = store::checks(&uow, id).await.map_err(store::db)?;
                 let list = ListState::new(
                     "checks",
