@@ -374,28 +374,43 @@ pub fn actions(view: &OrderView) -> Row {
     ))
 }
 
-/// The dialogs the actions open. Each posts to the server, which checks again.
-pub fn dialogs(view: &OrderView) -> Node {
-    let order = &view.order;
-    let id = order.id;
-    let left = shop::refundable(order).unwrap_or(0);
-    let to = if order.method == "card" {
+/// Where a refund goes back to, in words.
+fn back_to(order: &Order) -> String {
+    if order.method == "card" {
         format!("{} ending {}", order.card_brand, order.card_last4)
     } else {
         "the account it came from".to_owned()
-    };
-    let refund = Dialog::new("refund", format!("Refund {}", order.number))
-        .description(format!("Up to {} can go back to {to}.", money(left)))
+    }
+}
+
+/// The refund dialog: an amount, which starts at what is left, and a reason.
+pub fn refund_dialog(view: &OrderView) -> Dialog {
+    let order = &view.order;
+    let left = shop::refundable(order).unwrap_or(0);
+    Dialog::new("refund", format!("Refund {}", order.number))
+        .description(format!(
+            "Up to {} can go back to {}.",
+            money(left),
+            back_to(order)
+        ))
         .body(
             FormView::new()
                 .of(&RefundForm {
                     amount: Money(left),
                     reason: Reason::default(),
                 })
-                .post(format!("/orders/{id}/refund"))
+                .post(format!("/orders/{}/refund", order.id))
                 .one_column()
                 .submit("Refund"),
-        );
+        )
+}
+
+/// The dialogs the actions open. Each posts to the server, which checks again.
+pub fn dialogs(view: &OrderView) -> Node {
+    let order = &view.order;
+    let id = order.id;
+    let to = back_to(order);
+    let refund = refund_dialog(view);
     let back = shop::refundable(order).unwrap_or(0);
     let cancel = AlertDialog::new(
         "cancel",

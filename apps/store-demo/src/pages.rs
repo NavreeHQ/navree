@@ -39,7 +39,8 @@ use crate::views::dashboard::{
 };
 use crate::views::inventory::{ProductRow, RestockForm, inventory_table};
 use crate::views::order::{
-    ConfirmForm, OrderView, PAGE, Parts, RefundForm, order_drawer, order_page, other_orders, steps,
+    ConfirmForm, OrderView, PAGE, Parts, RefundForm, order_drawer, order_page, other_orders,
+    refund_dialog, steps,
 };
 use crate::views::orders::{DRAWER, OrderRow, empty_drawer, orders_table};
 use crate::views::units;
@@ -395,6 +396,7 @@ impl Pages {
                 )
             }
         };
+        let done = status == StatusCode::OK;
         let mut reply = Reply::ops_or_redirect(format!("/orders/{id}")).op(Op::Close {
             target: dialog.to_owned(),
         });
@@ -415,6 +417,11 @@ impl Pages {
                         },
                     ),
                 );
+            // A morph keeps what was typed; after a refund, the form starts again
+            // from what is left.
+            if done {
+                reply = reply.op(Op::replace("refund", &refund_dialog(&view).into()));
+            }
         }
         Ok(reply
             .toast_with(Toast::new(tone, text).title(title))
