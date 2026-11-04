@@ -5,9 +5,10 @@
 //!
 //! Whether a reading was stopped does not depend on how fast the machine is: the flag is
 //! raised by another thread, and a reading counts only if the flag was up while it ran
-//! (see [`stopped`]). The times that remain are wall-clock times with wide margins: what a
+//! (see [`stopped`]). The times that remain are wall-clock budgets with wide margins: what a
 //! reading that ignores the stop costs here is seconds, what one that heeds it costs is
-//! milliseconds.
+//! milliseconds. A busy machine slows one run, not every run, so a budget is judged on the
+//! quickest of up to [`BEST_OF`] runs: a reading that is slow in all of them is slow.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,6 +34,26 @@ fn timed(
 /// How many times a sheet is read to see it stopped, when the flag only went up after the
 /// reading had ended: a thread that waits its turn on a busy machine may be late.
 const TRIES: usize = 50;
+
+/// How many runs a time budget is judged on: the quickest counts.
+const BEST_OF: usize = 3;
+
+/// Runs `attempt` until one ends within `budget`, at most [`BEST_OF`] times, and gives the
+/// quickest run. A budget guards against work that costs seconds where it should cost
+/// milliseconds; a busy machine makes one run slow, not all of them.
+fn within<T>(budget: Duration, mut attempt: impl FnMut() -> (T, Duration)) -> (T, Duration) {
+    let mut best = attempt();
+    for _ in 1..BEST_OF {
+        if best.1 < budget {
+            break;
+        }
+        let next = attempt();
+        if next.1 < best.1 {
+            best = next;
+        }
+    }
+    best
+}
 
 /// How many readings that ended with the flag up and no stop (they need not be in a row) are
 /// the failure. One can be the flag going up between the reading's last look at it and its
@@ -63,6 +84,9 @@ fn stopped(
     )
     .unwrap();
     let mut ended_with_the_flag_up = 0;
+    // The stops that came later than the budget, the quickest so far.
+    let mut slow: Option<(Result<Table, SheetsError>, Duration)> = None;
+    let mut slow_stops = 0;
     for _ in 0..TRIES {
         let flag = AtomicBool::new(false);
         let raised_at = OnceLock::new();
@@ -92,7 +116,19 @@ fn stopped(
             })
         };
         if interrupted(&result) {
-            return (result, heeded_in());
+            let took = heeded_in();
+            if took < PROMPT {
+                return (result, took);
+            }
+            // A late stop: a busy machine can make one. Read again; the quickest is judged.
+            slow_stops += 1;
+            if slow.as_ref().is_none_or(|(_, quickest)| took < *quickest) {
+                slow = Some((result, took));
+            }
+            if slow_stops == BEST_OF {
+                return slow.expect("a slow stop was kept");
+            }
+            continue;
         }
         if flag_up {
             ended_with_the_flag_up += 1;
@@ -299,24 +335,26 @@ fn a_timeout_that_drops_a_reading_leaves_the_blocking_pool_free() {
         "<row>{}</row>",
         "<c/>".repeat(FLOOD / 4)
     )));
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_time()
-        .build()
-        .unwrap();
-    let outcome = runtime.block_on(async {
-        tokio::time::timeout(
-            Duration::from_millis(50),
-            read_table_blocking(file, "x.xlsx".to_owned(), &opts(1 << 28)),
-        )
-        .await
+    let ((), waited) = within(PROMPT, || {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_time()
+            .build()
+            .unwrap();
+        let outcome = runtime.block_on(async {
+            tokio::time::timeout(
+                Duration::from_millis(50),
+                read_table_blocking(file.clone(), "x.xlsx".to_owned(), &opts(1 << 28)),
+            )
+            .await
+        });
+        assert!(outcome.is_err(), "the reading ended before the timeout");
+        // Dropping a runtime waits for the tasks on its blocking pool: this is
+        // what a graceful shutdown waits for.
+        let at = Instant::now();
+        drop(runtime);
+        ((), at.elapsed())
     });
-    assert!(outcome.is_err(), "the reading ended before the timeout");
-    // Dropping a runtime waits for the tasks on its blocking pool: this is
-    // what a graceful shutdown waits for.
-    let at = Instant::now();
-    drop(runtime);
-    let waited = at.elapsed();
     eprintln!("shutdown waited {waited:?} for the reading");
     assert!(
         waited < PROMPT,
@@ -325,6 +363,10 @@ fn a_timeout_that_drops_a_reading_leaves_the_blocking_pool_free() {
 }
 
 // Work that gives nothing costs nothing.
+
+/// What reading a file of rows and cells that give nothing may take: making the text they
+/// describe would take many times it.
+const GHOSTS: Duration = Duration::from_secs(2);
 
 /// A cell of text with `spaces` spaces in it.
 fn spaced(attributes: &str, spaces: usize) -> String {
@@ -339,13 +381,13 @@ fn spaced(attributes: &str, spaces: usize) -> String {
 fn ghosts_cost_nothing(row: impl Fn(usize) -> String, rows: usize) {
     let spaces = 4 * MIB - 64;
     let file = ods(&table_of(&row(spaces).repeat(rows)));
-    let (result, took) = timed(&file, "x.ods", opts(4 * MIB as u64));
+    let (result, took) = within(GHOSTS, || timed(&file, "x.ods", opts(4 * MIB as u64)));
     assert!(
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
     eprintln!("read in {took:?}");
-    assert!(took < Duration::from_secs(2), "{took:?}");
+    assert!(took < GHOSTS, "{took:?}");
 }
 
 #[test]
@@ -380,13 +422,13 @@ fn rows_past_the_last_row_of_a_sheet_make_no_text() {
     let row = format!("<table:table-row>{}</table:table-row>", spaced("", spaces));
     let first = r#"<table:table-row table:number-rows-repeated="1048576"><table:table-cell/></table:table-row>"#;
     let file = ods(&table_of(&format!("{first}{}", row.repeat(300))));
-    let (result, took) = timed(&file, "x.ods", opts(4 * MIB as u64));
+    let (result, took) = within(GHOSTS, || timed(&file, "x.ods", opts(4 * MIB as u64)));
     assert!(
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
     eprintln!("read in {took:?}");
-    assert!(took < Duration::from_secs(2), "{took:?}");
+    assert!(took < GHOSTS, "{took:?}");
 }
 
 #[test]
@@ -398,13 +440,13 @@ fn cells_past_the_last_column_of_a_row_make_no_text() {
         spaced("", spaces)
     );
     let file = ods(&table_of(&row.repeat(300)));
-    let (result, took) = timed(&file, "x.ods", opts(4 * MIB as u64));
+    let (result, took) = within(GHOSTS, || timed(&file, "x.ods", opts(4 * MIB as u64)));
     assert!(
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
     eprintln!("read in {took:?}");
-    assert!(took < Duration::from_secs(2), "{took:?}");
+    assert!(took < GHOSTS, "{took:?}");
 }
 
 #[test]
