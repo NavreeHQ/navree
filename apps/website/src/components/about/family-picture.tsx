@@ -1,6 +1,7 @@
 import { picture } from "@/content/about";
 import { cn } from "@/lib/utils";
 
+import { FamilyLive } from "./family-live";
 import { CODE, CODE_LAYOUT, CODE_TITLE, HEAD_OVER_SCREEN, IMAGE, SCREEN, WIDTHS, codeBaseline, codeX, imageSrc } from "./picture";
 
 /** On phones the frame is wider than the screen and cropped to the family, so they are drawn larger. */
@@ -69,7 +70,10 @@ function ScreenCode() {
  * The about picture: Amritpal at his desk with Navraj on his lap and Navreet
  * beside him, seen from behind, drawn in glowing lines and ones and zeros,
  * with real Navree code on the screen. This still is the whole picture
- * on every device.
+ * without JavaScript, under reduced motion and on devices that can't run
+ * the live one; `FamilyLive` brings the same picture to life over it where
+ * they can, and the still fades out (it stays in the page for screen
+ * readers).
  */
 export function FamilyPicture({ className }: { className?: string }) {
   return (
@@ -93,6 +97,7 @@ export function FamilyPicture({ className }: { className?: string }) {
           </picture>
           <ScreenCode />
         </div>
+        <FamilyLive frameClass={FRAME} />
       </div>
       <figcaption className="mt-3 text-sm leading-relaxed text-pretty text-fg-3 max-sm:mt-1">{picture.caption}</figcaption>
     </figure>
