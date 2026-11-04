@@ -1474,6 +1474,7 @@ pub struct Stat {
     label: Node,
     value: Node,
     trend: Option<(Node, bool)>,
+    chart: Option<Node>,
 }
 
 impl Stat {
@@ -1484,7 +1485,15 @@ impl Stat {
             label: label.into(),
             value: value.into(),
             trend: None,
+            chart: None,
         }
+    }
+
+    /// Puts a small chart under the figure, such as a
+    /// [`Sparkline`](crate::charts::Sparkline) of its last periods.
+    pub fn chart(mut self, chart: impl Into<Node>) -> Self {
+        self.chart = Some(chart.into());
+        self
     }
 
     /// Adds how it's moving; `good` colours it.
@@ -1504,6 +1513,8 @@ impl Stat {
                         .attr("data-tone", if good { "up" } else { "down" })
                         .child(text)
                 }),
+                self.chart
+                    .map(|chart| el("div").slot("stat-chart").child(chart)),
             ))
             .into()
     }

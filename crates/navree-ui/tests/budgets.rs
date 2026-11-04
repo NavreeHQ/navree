@@ -48,6 +48,29 @@ fn a_page_with_a_picker_loads_the_select_and_overlay_modules_and_nothing_else() 
 }
 
 #[test]
+fn the_charts_module_is_at_most_3_kb_gzip() {
+    assert!(size("charts") <= 3 * 1024, "{}", size("charts"));
+}
+
+/// A page to read with a chart on it loads the charts module and no other.
+#[test]
+fn a_page_with_a_chart_loads_the_charts_module_alone() {
+    use navree_ui::charts::{Chart, Series, Sparkline};
+    let page = View::new("x").body(
+        Chart::bar("Sent")
+            .categories(["a"])
+            .series(Series::new("Sent", [1])),
+    );
+    assert_eq!(page.uses(), Uses::CHARTS);
+    let html = page.to_html();
+    assert!(html.contains(assets::CHARTS_URL), "{html}");
+    assert!(!html.contains(assets::CORE_URL));
+    let picture = View::new("x").body(Stat::new("Sent", "1").chart(Sparkline::new("Sent", [1, 2])));
+    assert!(picture.uses().is_none());
+    assert!(!picture.to_html().contains("<script"));
+}
+
+#[test]
 fn the_live_module_is_at_most_3_kb_gzip() {
     assert!(size("live") <= 3 * 1024, "{}", size("live"));
 }
@@ -321,6 +344,9 @@ fn no_two_modules_share_a_bit() {
         Uses::MENUS,
         Uses::LIVE,
         Uses::DATES,
+        Uses::PHONE,
+        Uses::THEME_BUILDER,
+        Uses::CHARTS,
         Uses::SLIDER,
         Uses::TREE,
         Uses::TOOLBAR,
@@ -590,6 +616,28 @@ mod times {
             })
             .min()
             .expect("at least one round")
+    }
+
+    /// A line of a million points: cleaned, summarised over every value, reduced to
+    /// 640 with largest-triangle-three-buckets, and written.
+    #[test]
+    fn a_million_point_line_renders_in_under_100_ms() {
+        use navree_ui::charts::{Chart, Series};
+        let n = 1_000_000;
+        let xs: Vec<f64> = (0..n).map(|i| i as f64).collect();
+        let ys: Vec<f64> = (0..n)
+            .map(|i| ((i as f64) / 977.0).sin() * 50.0 + (i % 7) as f64)
+            .collect();
+        let time = best(5, || {
+            navree_ui::render(
+                &Chart::line("A million points")
+                    .numbers(xs.iter().copied())
+                    .series(Series::new("Walk", ys.iter().copied()))
+                    .into(),
+            )
+        });
+        println!("a million-point line renders in {time:?}");
+        assert!(time < Duration::from_millis(100), "{time:?}");
     }
 
     /// A page with a phone input and a saved number: the 245 countries of

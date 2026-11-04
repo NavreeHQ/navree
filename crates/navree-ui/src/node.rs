@@ -239,6 +239,9 @@ impl Uses {
     /// The theme builder's stylesheet: no script, only its styles, linked on a
     /// page that draws the builder.
     pub const THEME_BUILDER: Self = Self(1 << 9);
+    /// The charts module: tooltips, the crosshair and the keys that move through a
+    /// chart's values.
+    pub const CHARTS: Self = Self(1 << 11);
     /// The slider module: the filled part, the value as text, a gap between the
     /// two thumbs of a range and a click on its track.
     pub const SLIDER: Self = Self(1 << 12);

@@ -74,6 +74,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::SELECT, SELECT_URL),
         (Uses::DATES, DATES_URL),
         (Uses::MENUS, MENUS_URL),
+        (Uses::CHARTS, CHARTS_URL),
         (Uses::SLIDER, SLIDER_URL),
         (Uses::TREE, TREE_URL),
         (Uses::TOOLBAR, TOOLBAR_URL),

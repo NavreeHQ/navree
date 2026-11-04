@@ -16,6 +16,9 @@
 //! - [`form`]: `#[derive(Form)]`, [`FormView`], [`Submit`]. [`table`]:
 //!   `#[derive(TableRow)]`, [`DataTable`], [`TableQuery`], [`Region`].
 //! - [`sortable`]: [`Sortable`] lists and boards, and the [`Move`] each drop posts.
+//! - [`charts`]: line, area, bar, donut, sparkline and funnel charts drawn as SVG on
+//!   the server, each with its data as a table, and [`charts::Report`] for a date
+//!   range from the URL cut into periods.
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //! - [`pages`]: what the app shows when a request ends in an error, or a place has
@@ -70,6 +73,7 @@ pub mod prelude {
 pub mod assets;
 #[rustfmt::skip]
 mod assets_gen;
+pub mod charts;
 pub mod cmd;
 pub mod components;
 pub mod compress;
