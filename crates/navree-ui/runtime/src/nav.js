@@ -311,6 +311,51 @@ export function setUrl(href, mode) {
 /** The newest fetch of each region: an older answer is dropped. @type {Map<string, number>} */
 const regions = new Map();
 
+/** Statuses of a door that stays shut: a poll stops knocking on it. */
+const SHUT = [401, 403, 404, 410];
+
+/**
+ * What went wrong with a region lately: how many fetches in a row, when it may be asked again
+ * (a poll waits until then), and the status last said aloud.
+ * @type {WeakMap<Element, {n: number, until: number, said: number}>}
+ */
+const trouble = new WeakMap();
+
+/**
+ * The request of a region's fetch: the runtime's, and the region and the page it is on, so a
+ * refusal can say where to sign in and come back to.
+ * @param {string} id
+ */
+const asking = (id) => ({ ...HEADER, "x-navree-region": id, "x-navree-from": location.pathname + location.search });
+
+/**
+ * A fetch of a region ended in `status` (0: nothing answered). A shut door stops its poll. Any
+ * other failure makes the poll wait, twice as long each time up to five minutes, or as long as
+ * `Retry-After` says, up to an hour.
+ * @param {Element} el @param {number} status @param {string | null} [retry]
+ */
+function troubled(el, status, retry) {
+  if (SHUT.includes(status)) {
+    clearInterval(/** @type {any} */ (el).uiPoll);
+    /** @type {any} */ (el).uiPoll = 0;
+    el.removeAttribute("data-ui-poll");
+    return;
+  }
+  const mine = trouble.get(el) || { n: 0, until: 0, said: -1 };
+  const asked = Number(retry);
+  mine.until = Date.now() + (asked >= 1 ? Math.min(asked, 3600) * 1000 : Math.min((Number(el.getAttribute("data-ui-poll")) || 5000) * 2 ** ++mine.n, 300000));
+  trouble.set(el, mine);
+}
+
+/** Whether `status` is news for `el`: the same answer to the next poll says nothing new. @param {Element} el @param {number} status */
+function news(el, status) {
+  const mine = trouble.get(el) || { n: 0, until: 0, said: -1 };
+  trouble.set(el, mine);
+  const fresh = mine.said !== status;
+  mine.said = status;
+  return fresh;
+}
+
 /** How long a region's fetch may take, its answer's body included, before the page gives up on it. */
 const FETCH_LIMIT = 15000;
 
@@ -397,8 +442,18 @@ async function feed(el, src, current) {
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
   const stale = () => !current() || el.getAttribute("data-ui-src") !== src;
-  const response = await fetch(url, { headers: HEADER, signal: withinLimit() });
-  if (stale() || !takes(response)) return;
+  const response = await fetch(url, { headers: asking(el.id), signal: withinLimit() });
+  const taken = takes(response);
+  if (stale()) return;
+  // An error is not rows: it is not added to the feed, and a door that is shut stops the poll.
+  if (!taken || response.headers.has("x-navree-state")) {
+    if (!response.redirected) {
+      troubled(el, response.status, response.headers.get("retry-after"));
+      failed(el, response.status);
+    }
+    return;
+  }
+  trouble.delete(el);
   const html = await response.text();
   if (stale()) return;
   if (html.trim()) {
@@ -432,8 +487,8 @@ async function feed(el, src, current) {
   if (cursor) el.setAttribute("data-ui-after", cursor);
 }
 
-/** Refetches a region. @param {string} id */
-export async function refresh(id) {
+/** Refetches a region. `polled`: the poll asked, which says nothing it has said before. @param {string} id @param {boolean} [polled] */
+export async function refresh(id, polled = false) {
   const el = byId(id);
   const src = el?.getAttribute("data-ui-src");
   if (!el || !src) return;
@@ -443,17 +498,20 @@ export async function refresh(id) {
   const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
-    // The region and the page it is on, so a refusal can say where to sign in and come back to.
-    const response = await fetch(src, { headers: { ...HEADER, "x-navree-region": id, "x-navree-from": location.pathname + location.search }, signal: withinLimit() });
+    const response = await fetch(src, { headers: asking(id), signal: withinLimit() });
     if (regions.get(id) !== mine) return;
     // The user moved on while this was on its way: it answers a state that's gone.
     if (table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending"))) return;
     if (table && !response.ok) {
+      troubled(table, response.status, response.headers.get("retry-after"));
       tableFailed(table, src, response.status);
       return;
     }
     if (!takes(response)) {
-      if (!response.redirected) failed(el, response.status);
+      if (!response.redirected) {
+        troubled(el, response.status, response.headers.get("retry-after"));
+        failed(el, response.status);
+      }
       return;
     }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
@@ -480,21 +538,24 @@ export async function refresh(id) {
     to.removeAttribute("data-ui-lazy");
     to.removeAttribute("aria-busy");
     const state = Number(response.headers.get("x-navree-state"));
-    // A door that stays shut is not knocked on again.
-    if (state === 401 || state === 403 || state === 404 || state === 410) {
-      clearInterval(/** @type {any} */ (el).uiPoll);
-      to.removeAttribute("data-ui-poll");
-    }
+    if (state) {
+      troubled(el, state, response.headers.get("retry-after"));
+      // A door that stays shut is not knocked on again.
+      if (SHUT.includes(state)) to.removeAttribute("data-ui-poll");
+    } else trouble.delete(el);
     morph(el, to);
-    if (state) announce(all(el, "[data-slot=state-title]")[0]?.textContent || "");
-  } catch {
+    // Said once: a poll that gets the same answer again says nothing new.
+    if (state && (news(el, state) || !polled)) announce(all(el, "[data-slot=state-title]")[0]?.textContent || "");
+  } catch (error) {
     if (regions.get(id) !== mine) return;
+    troubled(el, 0);
     if (table) tableFailed(table, src, 0);
-    else failed(el, 0);
+    // Nothing answered (the connection failed), or the answer took too long: only the first is being offline.
+    else failed(el, /** @type {any} */ (error)?.name === "TimeoutError" ? "timeout" : 0);
   }
 }
 
-/** Says a region could not be fetched, to whatever draws that region. @param {Element} el @param {number} status */
+/** Says a region could not be fetched, to whatever draws that region. @param {Element} el @param {number | string} status */
 function failed(el, status) {
   // A lazy region is asked for once; with Retry it can be asked again, but a later swap doesn't.
   // The mark stays for whatever draws the failure and wasn't there yet to hear the event.
@@ -511,7 +572,7 @@ export function startRegions() {
     const every = Number(el.getAttribute("data-ui-poll")) || 5000;
     /** @type {any} */ (el).uiPoll = setInterval(() => {
       if (!el.isConnected) clearInterval(/** @type {any} */ (el).uiPoll);
-      else if (!hidden()) refresh(el.id);
+      else if (!hidden() && (trouble.get(el)?.until || 0) < Date.now()) refresh(el.id, true);
     }, every);
   }
 }

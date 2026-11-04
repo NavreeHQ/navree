@@ -53,6 +53,7 @@ pub struct View {
     appearance: Option<Appearance>,
     density: Option<Density>,
     sheets: Vec<Theme>,
+    mark_build: bool,
 }
 
 impl View {
@@ -69,6 +70,7 @@ impl View {
             appearance: None,
             density: None,
             sheets: Vec::new(),
+            mark_build: false,
         }
     }
 
@@ -146,6 +148,14 @@ impl View {
         self
     }
 
+    /// Writes the build on `<html>` though the page loads no runtime, so the runtime of the
+    /// page a boosted link comes from can show this one in place. A page that loads the runtime
+    /// carries it already.
+    pub fn mark_build(mut self) -> Self {
+        self.mark_build = true;
+        self
+    }
+
     /// Adds a `Set-Cookie` header.
     pub(crate) fn cookie(mut self, cookie: HeaderValue) -> Self {
         self.cookies.push(cookie);
@@ -192,7 +202,7 @@ impl View {
             out.push_str(density.id());
             out.push('"');
         }
-        if uses.has(Uses::CORE) {
+        if uses.has(Uses::CORE) || self.mark_build {
             out.push_str(" data-build=\"");
             out.push_str(assets::BUILD);
             out.push('"');

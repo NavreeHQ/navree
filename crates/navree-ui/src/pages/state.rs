@@ -343,8 +343,10 @@ pub struct ErrorPage {
     home: Href,
     sign_in: Href,
     retry: Option<Href>,
+    no_retry: bool,
     actions: Option<Vec<Node>>,
     debug: Option<Node>,
+    mark_build: bool,
 }
 
 impl ErrorPage {
@@ -362,8 +364,10 @@ impl ErrorPage {
             home: Href::from("/"),
             sign_in: Href::from("/sign-in"),
             retry: None,
+            no_retry: false,
             actions: None,
             debug: None,
+            mark_build: true,
         }
     }
 
@@ -451,6 +455,14 @@ impl ErrorPage {
         self
     }
 
+    /// Offers no "Try again" or "Reload": for a page that answers a request a link cannot
+    /// repeat, such as a form posted without script. A link would be a `GET` of an address
+    /// that only takes a `POST`. The page offers Home, and the way to sign in.
+    pub fn without_retry(mut self) -> Self {
+        self.no_retry = true;
+        self
+    }
+
     /// Replaces the actions the kind offers.
     pub fn actions(mut self, actions: impl IntoNodes) -> Self {
         let mut list = Vec::new();
@@ -487,11 +499,25 @@ impl ErrorPage {
                 .href(self.home.clone())
                 .icon(icons::HOUSE)
         };
-        let again = |label: &str| {
+        let again = |label: &str| -> Option<Node> {
+            if self.no_retry {
+                return None;
+            }
             let button = Button::primary(label.to_owned()).icon(icons::REFRESH_CW);
-            match &self.retry {
-                Some(href) => button.href(href.clone()),
-                None => button.href(""),
+            Some(
+                match &self.retry {
+                    Some(href) => button.href(href.clone()),
+                    None => button.href(""),
+                }
+                .into(),
+            )
+        };
+        // Try again, then Home beside it; Home alone is the main action when there is no retry.
+        let retry_then_home = |label: &str, home_too: bool| -> Vec<Node> {
+            match (again(label), home_too) {
+                (Some(retry), true) => vec![retry, home(ButtonVariant::Outline).into()],
+                (Some(retry), false) => vec![retry],
+                (None, _) => vec![home(ButtonVariant::Primary).into()],
             }
         };
         match self.kind {
@@ -501,19 +527,11 @@ impl ErrorPage {
                     .href(self.sign_in.clone())
                     .into(),
             ],
-            StateKind::Conflict | StateKind::Expired => {
-                vec![
-                    again(&labels.reload).into(),
-                    home(ButtonVariant::Outline).into(),
-                ]
-            }
+            StateKind::Conflict | StateKind::Expired => retry_then_home(&labels.reload, true),
             StateKind::RateLimited | StateKind::Unavailable | StateKind::Offline => {
-                vec![again(&labels.try_again).into()]
+                retry_then_home(&labels.try_again, false)
             }
-            StateKind::Failed => vec![
-                again(&labels.try_again).into(),
-                home(ButtonVariant::Outline).into(),
-            ],
+            StateKind::Failed => retry_then_home(&labels.try_again, true),
             _ => vec![home(ButtonVariant::Primary).into()],
         }
     }
@@ -568,9 +586,17 @@ impl ErrorPage {
         let title = self.short_title();
         let status = self.status;
         let state = self.state(Some(1), false).id("error");
-        View::new(title)
+        let view = View::new(title)
             .status(status)
-            .body(el("main").slot("state-page").id("main").child(state))
+            .body(el("main").slot("state-page").id("main").child(state));
+        // It loads no script, but the runtime of the page it replaces reads its build: with it
+        // a boosted link shows this page in place, and without it the runtime would fetch the
+        // address again as a page load.
+        if self.mark_build {
+            view.mark_build()
+        } else {
+            view
+        }
     }
 
     /// The page inside the app's shell, as `shell.page` would draw it: the shell's
@@ -1375,6 +1401,39 @@ mod tests {
         assert!(actions(429).contains("Try again") && !actions(429).contains("Go to home"));
         assert!(actions(500).contains("Try again") && actions(500).contains("Go to home"));
         assert!(actions(503).contains("Try again"));
+    }
+
+    #[test]
+    fn a_page_for_a_request_a_link_cannot_repeat_offers_home_and_no_retry() {
+        for status in [409, 419, 429, 500, 503] {
+            let page = ErrorPage::new(StatusCode::from_u16(status).unwrap())
+                .without_retry()
+                .retry_to("/post-address")
+                .into_view()
+                .to_html();
+            assert!(!page.contains("post-address"), "{status}: {page}");
+            // The explanation may still say "try again"; the actions are what is checked.
+            let actions = page
+                .split(r#"data-slot="state-actions""#)
+                .nth(1)
+                .and_then(|rest| rest.split("</div>").next())
+                .expect("actions");
+            assert!(
+                !actions.contains("Try again") && !actions.contains("Reload"),
+                "{status}: {actions}"
+            );
+            assert!(actions.contains("Go to home"), "{status}: {actions}");
+            assert!(
+                actions.contains(r#"data-variant="primary" href="/""#),
+                "Home is the main action: {actions}"
+            );
+        }
+        // The sign-in link is not a retry.
+        let page = ErrorPage::new(StatusCode::UNAUTHORIZED)
+            .without_retry()
+            .into_view()
+            .to_html();
+        assert!(page.contains(r#"href="/sign-in""#), "{page}");
     }
 
     #[test]

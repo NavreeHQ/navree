@@ -9,7 +9,11 @@
 //! | The runtime fetching a region | the state alone, to put where the region was |
 //! | The runtime posting an action | an ops envelope with a toast, so the form stays |
 
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
+use std::time::Duration;
+
+use futures_util::FutureExt as _;
 
 use http::header::{CACHE_CONTROL, HeaderName, HeaderValue, LOCATION, VARY};
 use http::{Method, StatusCode};
@@ -19,7 +23,7 @@ use navree_kernel::BoxFuture;
 
 use super::labels::{StateKind, StateLabels};
 use super::options::PagesOptions;
-use super::return_to::ReturnTo;
+use super::return_to::{ReturnTo, is_at_or_below};
 use super::state::ErrorPage;
 use crate::components::Toast;
 use crate::html::{Href, LocalHref};
@@ -42,17 +46,41 @@ pub const STATE_HEADER: &str = "x-navree-state";
 /// How a shell is built for a page when the app has not registered one `Shell`
 /// provider for everyone: a module contributes this to build the shell of a request,
 /// with its user's name in the menu. Return `None` for a request that has no shell.
+///
+/// It gets the [`ErrorContext`] of the request, owned, so the future it returns can keep it.
+/// It runs only for an error, and it has one second: a builder that is slower, that panics or
+/// that returns `None` leaves the page on its own, with no sidebar.
+///
+/// ```
+/// use navree_http::ErrorContext;
+/// use navree_kernel::ModuleBuilder;
+/// use navree_ui::{ErrorShell, NavGroup, NavItem, Shell, icons};
+/// use uuid::Uuid;
+///
+/// async fn shell_for(user: Option<Uuid>) -> Option<Shell> {
+///     user.map(|_| {
+///         Shell::new("Acme").group(
+///             NavGroup::plain().item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
+///         )
+///     })
+/// }
+///
+/// fn register(m: &mut ModuleBuilder) {
+///     m.contribute(ErrorShell::new(|request| async move { shell_for(request.user).await }));
+/// }
+/// # let _: fn(ErrorContext) = |_| {};
+/// ```
 #[derive(Clone)]
 pub struct ErrorShell(ShellBuilder);
 
 /// Builds the shell of the request it is given.
-type ShellBuilder = Arc<dyn Fn(&ErrorContext) -> BoxFuture<'static, Option<Shell>> + Send + Sync>;
+type ShellBuilder = Arc<dyn Fn(ErrorContext) -> BoxFuture<'static, Option<Shell>> + Send + Sync>;
 
 impl ErrorShell {
     /// A builder of shells.
     pub fn new<F, Fut>(build: F) -> Self
     where
-        F: Fn(&ErrorContext) -> Fut + Send + Sync + 'static,
+        F: Fn(ErrorContext) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Option<Shell>> + Send + 'static,
     {
         Self(Arc::new(move |request| Box::pin(build(request))))
@@ -165,8 +193,14 @@ fn page_of(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> 
     if let Some(seconds) = retry_after(error) {
         page = page.retry_after(seconds);
     }
-    let here = ReturnTo::of_uri(&request.uri);
-    if let Some(here) = &here {
+    // A link repeats a `GET`. After a form posted without script, "Reload" and "Try again" would
+    // be a `GET` of an address that only takes a `POST`, and a sign-in that comes back there would
+    // land on a 405: such a page offers Home, and a plain sign-in.
+    let repeatable = matches!(request.method, Method::GET | Method::HEAD);
+    let here = repeatable.then(|| ReturnTo::of_uri(&request.uri)).flatten();
+    if !repeatable {
+        page = page.without_retry();
+    } else if let Some(here) = &here {
         page = page.retry_to(Href::from(here.as_str()));
     }
     let back = back_to(request, &options.sign_in, here);
@@ -293,7 +327,13 @@ fn debug_details(request: &ErrorContext, error: &AppError) -> Node {
 async fn document(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
     let page = page_of(request, error, options);
     let kind = StateKind::of(error.status, &error.code);
-    if kind == StateKind::SignIn && options.redirect_guests && request.method == Method::GET {
+    // Not from the sign-in page itself, or from below it: when it answers a guest with a 401 the
+    // redirect would be to the page it came from, round and round.
+    if kind == StateKind::SignIn
+        && options.redirect_guests
+        && request.method == Method::GET
+        && !is_at_or_below(request.uri.path(), &options.sign_in)
+    {
         let target = back_to(request, &options.sign_in, ReturnTo::of_uri(&request.uri))
             .map_or_else(
                 || Href::from(options.sign_in.as_str()),
@@ -319,10 +359,24 @@ async fn document(request: &ErrorContext, error: &AppError, options: &PagesOptio
     page.into_view().into_response()
 }
 
-/// The shell of the app for this request, when it has one.
+/// How long the app's shell gets to be built. The page on its own is the answer when it takes
+/// longer; the hook that calls this has three seconds in all.
+const SHELL_DEADLINE: Duration = Duration::from_secs(1);
+
+/// The shell of the app for this request, when it has one. What builds it is the app's own
+/// code: one that panics, or that never answers, leaves the page on its own, and does not take
+/// the answer down with it.
 async fn shell_of(request: &ErrorContext) -> Option<Shell> {
+    let attempt = AssertUnwindSafe(build_shell(request)).catch_unwind();
+    match tokio::time::timeout(SHELL_DEADLINE, attempt).await {
+        Ok(Ok(shell)) => shell,
+        _ => None,
+    }
+}
+
+async fn build_shell(request: &ErrorContext) -> Option<Shell> {
     if let Some(build) = request.ctx.contributions::<ErrorShell>().into_iter().next() {
-        return (build.value.0)(request).await;
+        return (build.value.0)(request.clone()).await;
     }
     request
         .ctx
@@ -443,16 +497,10 @@ mod tests {
                 HeaderValue::from_str(value).expect("a value"),
             );
         }
-        ErrorContext {
-            method,
-            uri: uri.parse::<Uri>().expect("a uri"),
-            headers: map,
-            ctx: ctx.clone(),
-            request_id: None,
-            route: None,
-            user: None,
-            api_prefix: Arc::from("/api"),
-        }
+        let mut context =
+            ErrorContext::new(method, uri.parse::<Uri>().expect("a uri"), ctx.clone());
+        context.headers = map;
+        context
     }
 
     fn with_route(mut request: ErrorContext, kind: RouteKind) -> ErrorContext {

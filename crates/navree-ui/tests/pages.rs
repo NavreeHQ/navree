@@ -9,7 +9,7 @@ use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_testing::{TestApp, TestResponse, principal};
-use navree_ui::{NavGroup, NavItem, Shell, UiModule, View, el, icons};
+use navree_ui::{ErrorShell, NavGroup, NavItem, Shell, UiModule, View, el, icons};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -163,13 +163,60 @@ impl Controller for Pages {
     }
 }
 
+/// What the app's `ErrorShell` does.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Builder {
+    /// The app has none.
+    #[default]
+    Absent,
+    /// It builds a shell.
+    Works,
+    /// It panics when called.
+    PanicsAtOnce,
+    /// It returns a future that panics when polled.
+    PanicsLater,
+    /// Its future never finishes.
+    Hangs,
+}
+
+#[derive(Default)]
 struct App {
     shell: bool,
+    builder: Builder,
 }
 
 impl Module for App {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<Pages>();
+        let shell = || {
+            Shell::new("Acme").group(
+                NavGroup::plain().item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
+            )
+        };
+        match self.builder {
+            Builder::Absent => {}
+            Builder::Works => {
+                m.contribute(ErrorShell::new(move |_| async move { Some(shell()) }));
+            }
+            Builder::PanicsAtOnce => {
+                m.contribute(ErrorShell::new(|_| -> std::future::Ready<Option<Shell>> {
+                    panic!("the shell builder failed at once")
+                }));
+            }
+            Builder::PanicsLater => {
+                m.contribute(ErrorShell::new(|_| async move {
+                    if std::hint::black_box(true) {
+                        panic!("the shell builder failed later");
+                    }
+                    None::<Shell>
+                }));
+            }
+            Builder::Hangs => {
+                m.contribute(ErrorShell::new(|_| async move {
+                    std::future::pending::<Option<Shell>>().await
+                }));
+            }
+        }
         if self.shell {
             m.factory(Factory::<Shell>::new(|_| async {
                 Ok(Arc::new(Shell::new("Acme").group(NavGroup::plain().item(
@@ -187,7 +234,10 @@ async fn app_with(shell: bool, debug: bool) -> TestApp {
         .config("ui.debug", debug)
         .module(HttpModule::for_root(Default::default()))
         .module(UiModule)
-        .module(App { shell })
+        .module(App {
+            shell,
+            ..App::default()
+        })
         .build()
         .await
 }
@@ -519,7 +569,10 @@ async fn a_guest_can_be_redirected_instead() {
         .config("ui.sign_in", "/login")
         .module(HttpModule::for_root(Default::default()))
         .module(UiModule)
-        .module(App { shell: true })
+        .module(App {
+            shell: true,
+            ..App::default()
+        })
         .build()
         .await;
     let response = get(&app, "/mine?x=1", BROWSER).await;
@@ -742,7 +795,10 @@ async fn an_app_that_borrows_the_toolkit_gets_no_pages() {
     let app = TestApp::builder()
         .module(HttpModule::for_root(Default::default()))
         .module(UiOnDemand)
-        .module(App { shell: true })
+        .module(App {
+            shell: true,
+            ..App::default()
+        })
         .build()
         .await;
     let response = get(&app, "/secret", BROWSER).await;
@@ -770,7 +826,7 @@ async fn the_words_can_be_the_apps_own() {
                 .home("/accueil")
                 .debug(false),
         ))
-        .module(App { shell: false })
+        .module(App::default())
         .build()
         .await;
     let text = get(&app, "/nowhere", BROWSER).await.text();
@@ -790,7 +846,7 @@ fn a_region_can_say_what_to_show_when_it_gets_no_answer() {
 
     let html = render(&Region::new("kpis").src("/f").lazy().when_offline().into());
     assert!(
-        html.contains(r#"<div data-slot="region-failed" role="alert">"#),
+        html.contains(r#"<div data-slot="region-failed" role="alert" data-when="offline">"#),
         "{html}"
     );
     assert!(html.contains("You&#39;re offline"), "{html}");
@@ -815,9 +871,325 @@ fn a_region_can_say_what_to_show_when_it_gets_no_answer() {
             .when_failed(State::of(StateKind::Unavailable))
             .into(),
     );
+    // Not tied to being offline: any failure the server did not draw shows it.
+    assert!(!mine.contains("data-when"), "{mine}");
     assert!(
         mine.contains("Old numbers") && mine.contains("We&#39;ll be right back"),
         "{mine}"
     );
     assert!(mine.find("Old numbers").unwrap() < mine.find("region-failed").unwrap());
+}
+
+// ---- Review fixes -----------------------------------------------------------------------
+
+async fn configured(config: &[(&str, serde_json::Value)], shell: bool) -> TestApp {
+    let mut builder = TestApp::builder().fake_auth();
+    for (key, value) in config {
+        builder = builder.config(key, value.clone());
+    }
+    builder
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App {
+            shell,
+            ..App::default()
+        })
+        .build()
+        .await
+}
+
+fn links(html: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find(" href=\"") {
+        rest = &rest[at + 7..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        out.push(rest[..end].to_owned());
+        rest = &rest[end..];
+    }
+    out
+}
+
+#[tokio::test]
+async fn production_is_final_the_details_never_show() {
+    use serde_json::json;
+    // A debug build, so the default would show them; the environment says production.
+    for config in [
+        vec![("env", json!("production"))],
+        vec![("app.env", json!("production"))],
+        vec![("env", json!(" Production "))],
+        // Asked for in code or configuration: production still wins.
+        vec![("env", json!("production")), ("ui.debug", json!(true))],
+        vec![("app.env", json!("PRODUCTION")), ("ui.debug", json!(true))],
+    ] {
+        let app = configured(&config, true).await;
+        let response = get(&app, "/boom", BROWSER).await;
+        let text = response.text();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            !text.contains("Development only") && !text.contains("hunter2"),
+            "{config:?}: {text}"
+        );
+    }
+    // Any other environment keeps the rule: on when asked, and by default in a debug build.
+    let app = configured(
+        &[("env", json!("staging")), ("ui.debug", json!(true))],
+        true,
+    )
+    .await;
+    assert!(
+        get(&app, "/boom", BROWSER)
+            .await
+            .text()
+            .contains("Development only")
+    );
+    let app = configured(&[("env", json!("development"))], true).await;
+    assert_eq!(
+        get(&app, "/boom", BROWSER)
+            .await
+            .text()
+            .contains("Development only"),
+        cfg!(debug_assertions)
+    );
+    // Production wins over code, too.
+    use navree_ui::PagesOptions;
+    let app = TestApp::builder()
+        .config("env", "production")
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule::with_pages(PagesOptions::default().debug(true)))
+        .module(App::default())
+        .build()
+        .await;
+    assert!(!get(&app, "/boom", BROWSER).await.text().contains("hunter2"));
+}
+
+#[tokio::test]
+async fn after_a_post_without_script_the_links_never_point_at_the_post() {
+    let app = app().await;
+    let post = |path: &'static str| {
+        let client = app.client();
+        async move { client.post(path).header("accept", BROWSER).send().await }
+    };
+    // Reload and Try again would be a GET of an address that only takes a POST.
+    for (path, status) in [
+        ("/act", 403),
+        ("/act-conflict", 409),
+        ("/act-boom", 500),
+        ("/act-limited", 429),
+    ] {
+        let response = post(path).await;
+        let text = response.text();
+        assert_eq!(response.status().as_u16(), status, "{path}");
+        let found = links(&text);
+        assert!(
+            !found
+                .iter()
+                .any(|href| href.contains("/act") || href.is_empty()),
+            "{path}: {found:?}"
+        );
+        assert!(
+            found.contains(&"/".to_owned()),
+            "{path} offers Home: {found:?}"
+        );
+        let actions = text
+            .split(r#"data-slot="state-actions""#)
+            .nth(1)
+            .and_then(|rest| rest.split("</div>").next())
+            .unwrap_or_default();
+        assert!(
+            !actions.contains("Try again") && !actions.contains("Reload"),
+            "{path}: {actions}"
+        );
+    }
+    // A guest's sign-in has no way back to a post address.
+    let text = post("/act-guest").await.text();
+    let found = links(&text);
+    assert!(found.contains(&"/sign-in".to_owned()), "{found:?}");
+    assert!(!text.contains("next="), "{text}");
+    // A GET keeps all of it.
+    let text = get(&app, "/conflict", BROWSER).await.text();
+    assert!(links(&text).contains(&"/conflict".to_owned()), "{text}");
+    let text = get(&app, "/guarded?a=1", BROWSER).await.text();
+    assert!(text.contains("next=%2Fguarded%3Fa%3D1"), "{text}");
+}
+
+#[tokio::test]
+async fn a_failed_post_through_the_runtime_still_names_the_page_it_was_on() {
+    let app = app().await;
+    let response = app
+        .client()
+        .post("/act-guest")
+        .header("accept", "*/*")
+        .header("x-navree-ui", "1")
+        .header("x-navree-from", "/deals?per=50")
+        .send()
+        .await;
+    let body = response.json_value();
+    assert_eq!(body["ops"][1]["href"], "/sign-in?next=%2Fdeals%3Fper%3D50");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_shell_builder_that_fails_leaves_the_page_on_its_own_not_json() {
+    for builder in [Builder::PanicsAtOnce, Builder::PanicsLater, Builder::Hangs] {
+        let app = TestApp::builder()
+            .fake_auth()
+            .config("ui.debug", false)
+            .module(HttpModule::for_root(Default::default()))
+            .module(UiModule)
+            .module(App {
+                shell: true,
+                builder,
+            })
+            .build()
+            .await;
+        let response = get_as_user(&app, "/secret").await;
+        let text = response.text();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(
+            response
+                .header("content-type")
+                .unwrap_or("")
+                .starts_with("text/html"),
+            "a page, not JSON"
+        );
+        assert!(
+            text.contains(r#"data-slot="state-page""#),
+            "on its own: {text}"
+        );
+        assert!(!text.contains(r#"data-slot="sidebar""#), "{text}");
+    }
+    // And one that works is used.
+    let app = TestApp::builder()
+        .fake_auth()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App {
+            shell: false,
+            builder: Builder::Works,
+        })
+        .build()
+        .await;
+    let text = get_as_user(&app, "/secret").await.text();
+    assert!(text.contains(r#"data-slot="sidebar""#), "{text}");
+}
+
+#[tokio::test]
+async fn a_guest_is_not_redirected_in_a_circle_when_sign_in_itself_says_401() {
+    let app = TestApp::builder()
+        .fake_auth()
+        .config("ui.sign_in_redirect", true)
+        // The sign-in address is a page that needs a user: it answers a guest with a 401.
+        .config("ui.sign_in", "/mine")
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App::default())
+        .build()
+        .await;
+    let response = get(&app, "/mine?x=1", BROWSER).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "no 303 to itself"
+    );
+    assert!(response.text().contains(r#"data-slot="state""#));
+    // Another page still redirects.
+    let response = get(&app, "/guarded", BROWSER).await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), Some("/mine?next=%2Fguarded"));
+}
+
+#[tokio::test]
+async fn an_error_page_on_its_own_carries_the_build_so_a_boosted_link_is_one_request() {
+    let app = app().await;
+    for path in ["/secret", "/guarded", "/boom", "/nowhere"] {
+        let text = get(&app, path, BROWSER).await.text();
+        assert!(
+            text.contains(&format!(r#"data-build="{}""#, navree_ui::assets::BUILD)),
+            "{path}: {text}"
+        );
+        assert!(!text.contains("<script"), "{path}");
+    }
+}
+
+#[tokio::test]
+async fn json_the_pages_left_alone_is_marked_for_caches() {
+    let app = app().await;
+    // A browser asks the API, and a script asks a page: both get JSON, and the same address
+    // answers a page to the runtime, so a cache keeps them apart and keeps none.
+    let response = get(&app, "/api/v1/nowhere", BROWSER).await;
+    assert_eq!(response.header("content-type"), Some("application/json"));
+    let varies: Vec<String> = response
+        .headers()
+        .get_all("vary")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(|v| v.trim().to_ascii_lowercase())
+        .collect();
+    assert!(
+        varies.contains(&"accept".to_owned()) && varies.contains(&"x-navree-ui".to_owned()),
+        "{varies:?}"
+    );
+    assert_eq!(response.header("cache-control"), Some("no-store"));
+    let response = get(&app, "/secret", "application/json").await;
+    assert_eq!(response.header("content-type"), Some("application/json"));
+    assert_eq!(response.header("cache-control"), Some("no-store"));
+}
+
+#[tokio::test]
+async fn the_runtime_header_wins_over_an_accept_that_asks_for_json() {
+    // The runtime is the one asking, whatever it sends in Accept: it gets a page, and
+    // a route marked `json_only()` is the exception.
+    let app = app().await;
+    let ask = |path: &'static str| {
+        let client = app.client();
+        async move {
+            client
+                .get(path)
+                .header("accept", "application/json")
+                .header("x-navree-ui", "1")
+                .send()
+                .await
+        }
+    };
+    assert!(
+        ask("/secret")
+            .await
+            .header("content-type")
+            .unwrap_or("")
+            .starts_with("text/html")
+    );
+    assert_eq!(
+        ask("/data").await.header("content-type"),
+        Some("application/json")
+    );
+}
+
+#[tokio::test]
+async fn an_error_raised_before_its_route_ran_follows_the_route() {
+    // No token on a post to a json_only route: the CSRF check answers before the route does.
+    // (The session-backed case is in apps/ui-proof/tests/pages_session.rs.) Here a route that
+    // is json_only answers a 405 as data, and a page route as a page.
+    let app = app().await;
+    let response = app
+        .client()
+        .post("/data")
+        .header("accept", BROWSER)
+        .send()
+        .await;
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(response.header("content-type"), Some("application/json"));
+    let response = app
+        .client()
+        .request(Method::DELETE, "/deals")
+        .header("accept", BROWSER)
+        .send()
+        .await;
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert!(
+        response
+            .header("content-type")
+            .unwrap_or("")
+            .starts_with("text/html")
+    );
 }

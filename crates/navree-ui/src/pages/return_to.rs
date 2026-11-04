@@ -39,18 +39,13 @@ impl ReturnTo {
         safe(raw).then(|| Self(raw.to_owned()))
     }
 
-    /// Checks `raw` and also refuses the sign-in page itself, which would send the user
-    /// round in a circle. `sign_in` is its address.
+    /// Checks `raw` and also refuses the sign-in page itself, and anything below it, which
+    /// would send the user round in a circle. `sign_in` is its address; the two are compared
+    /// as a server reads them, with their escapes decoded (`/%73ign-in` is `/sign-in`). A
+    /// `sign_in` that is not a path on this site (a provider's address) refuses nothing.
     pub fn parse_for(raw: &str, sign_in: &str) -> Option<Self> {
         let found = Self::parse(raw)?;
-        let sign_in_path = path_of(sign_in);
-        let path = path_of(raw);
-        let here = !sign_in_path.is_empty()
-            && (path == sign_in_path
-                || path
-                    .strip_prefix(sign_in_path)
-                    .is_some_and(|rest| rest.starts_with('/')));
-        (!here).then_some(found)
+        (!is_at_or_below(path_of(raw), path_of(sign_in))).then_some(found)
     }
 
     /// The page a request asked for: its path and query. `None` when that could not be
@@ -73,6 +68,24 @@ impl ReturnTo {
     /// is yours and must also be on this site (anything else becomes `#`).
     pub fn resolve(next: Option<&str>, fallback: &str) -> LocalHref {
         match next.and_then(Self::parse) {
+            Some(found) => LocalHref::from(found.0),
+            None => LocalHref::from(fallback),
+        }
+    }
+
+    /// [`resolve`](Self::resolve) that also drops the sign-in page at `sign_in` (see
+    /// [`parse_for`](Self::parse_for)): what a sign-in handler should use.
+    ///
+    /// ```
+    /// use navree_ui::pages::ReturnTo;
+    ///
+    /// let after = ReturnTo::resolve_for(Some("/sign-in?next=/x"), "/sign-in", "/");
+    /// assert_eq!(after.as_str(), "/");
+    /// let after = ReturnTo::resolve_for(Some("/deals/42"), "/sign-in", "/");
+    /// assert_eq!(after.as_str(), "/deals/42");
+    /// ```
+    pub fn resolve_for(next: Option<&str>, sign_in: &str, fallback: &str) -> LocalHref {
+        match next.and_then(|raw| Self::parse_for(raw, sign_in)) {
             Some(found) => LocalHref::from(found.0),
             None => LocalHref::from(fallback),
         }
@@ -122,9 +135,45 @@ impl From<ReturnTo> for LocalHref {
     }
 }
 
-/// The path of an address, without its query or fragment.
+/// The path of an address, without its query or fragment: cut at the first `?` or `#` as
+/// written, so one that is escaped (`%3F`) stays in the path, as a browser reads it.
 fn path_of(address: &str) -> &str {
     address.split(['?', '#']).next().unwrap_or(address)
+}
+
+/// Whether `path` is the page at `page`, or below it, read as a server reads them. `page` that
+/// is not a path of this site is no page of it.
+pub(crate) fn is_at_or_below(path: &str, page: &str) -> bool {
+    if !page.starts_with('/') {
+        return false;
+    }
+    let read = |text: &str| {
+        let text = path_of(text);
+        decode_once(text).unwrap_or_else(|| text.to_owned())
+    };
+    let (path, page) = (read(path), read(page));
+    let page = page.trim_end_matches('/');
+    if page.is_empty() {
+        return path.trim_end_matches('/').is_empty();
+    }
+    path.trim_end_matches('/') == page
+        || path
+            .strip_prefix(page)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// Whether the path climbs: a `.` or `..` piece once its escapes are read, once and twice, so
+/// `%2e%2e`, `%2f..` and a doubly escaped dot count. A path of two slashes is what a climb
+/// can end in.
+fn climbs(path: &str) -> bool {
+    let Some(once) = decode_once(path) else {
+        return true;
+    };
+    let twice = decode_once(&once);
+    [Some(once), twice]
+        .into_iter()
+        .flatten()
+        .any(|text| text.split('/').any(|piece| piece == "." || piece == ".."))
 }
 
 /// Whether `raw` is an address on this site that no browser reads as another.
@@ -154,11 +203,10 @@ fn safe(raw: &str) -> bool {
     if decoded.starts_with(b"//") {
         return false;
     }
-    // A dot segment can climb to a path that starts with two slashes once it is resolved.
-    let path = path_of(std::str::from_utf8(decoded).unwrap_or(""));
-    path.split('/')
-        .skip(1)
-        .all(|segment| segment != "." && segment != "..")
+    // A dot segment can climb to a path that starts with two slashes once it is resolved. The
+    // path is cut at the `?` as written, before any escape is read: an escaped `?` is text in a
+    // segment, and the dot segments after it still count.
+    !climbs(path_of(raw))
 }
 
 /// `raw` with its `%xx` escapes read as UTF-8; `None` for a broken escape or bytes that
@@ -259,6 +307,17 @@ mod tests {
         "/%zz",
         "/%ff",
         "/%c0%af",
+        // A `?` or `#` that is only text in a segment does not end the path: the dot
+        // segments after it still climb to a path of two slashes.
+        "/a%3F/..//evil.example",
+        "/a%3f/..//evil.example",
+        "/a%23/..//evil.example",
+        "/x%3F/../../..//evil.example/path",
+        "/a%3F/../",
+        "/a%253F/..//evil.example",
+        "/%2e%2e%2f%2e%2e//evil.example",
+        "/a/%2e%2e%2f..",
+        "/a%2F..",
     ];
 
     #[test]
@@ -300,6 +359,10 @@ mod tests {
             "/a/.hidden",
             "/a/...",
             "/?",
+            // The dot segments are in the query, which is not a path.
+            "/a?b/../..//c",
+            "/a#/../..//c",
+            "/a%3Fb",
         ] {
             let found = ReturnTo::parse(raw).unwrap_or_else(|| panic!("{raw:?} is on this site"));
             assert_eq!(found.as_str(), raw);
@@ -323,6 +386,39 @@ mod tests {
         assert!(ReturnTo::parse_for("/sign-inside", "/sign-in").is_some());
         assert!(ReturnTo::parse_for("/deals", "/sign-in?x=1").is_some());
         assert!(ReturnTo::parse_for("/sign-in", "/sign-in?x=1").is_none());
+    }
+
+    #[test]
+    fn the_sign_in_page_is_dropped_however_it_is_spelled() {
+        for raw in [
+            "/sign-in",
+            "/sign-in/",
+            "/sign-in?next=/x",
+            "/%73ign-in",
+            "/sign%2Din",
+            "/sign-in/two-factor",
+            "/sign-in#top",
+        ] {
+            assert!(ReturnTo::parse_for(raw, "/sign-in").is_none(), "{raw}");
+            assert_eq!(
+                ReturnTo::resolve_for(Some(raw), "/sign-in", "/home").as_str(),
+                "/home",
+                "{raw}"
+            );
+        }
+        // Not the sign-in page: a sibling, and a page when sign-in is another site's.
+        for raw in ["/sign-inside", "/sign", "/deals"] {
+            assert!(ReturnTo::parse_for(raw, "/sign-in").is_some(), "{raw}");
+        }
+        assert!(ReturnTo::parse_for("/sign-in", "https://sso.example/sign-in").is_some());
+        assert_eq!(
+            ReturnTo::resolve_for(Some("/deals?x=1"), "/sign-in", "/home").as_str(),
+            "/deals?x=1"
+        );
+        assert_eq!(
+            ReturnTo::resolve_for(None, "/sign-in", "/home").as_str(),
+            "/home"
+        );
     }
 
     #[test]
@@ -384,6 +480,28 @@ mod tests {
         );
     }
 
+    /// The sign-in page as a server reads it: escapes decoded once, a trailing slash ignored.
+    /// Written apart from the code it checks, and the same in the fuzz target.
+    fn names_sign_in(address: &str) -> bool {
+        let path = address.split(['?', '#']).next().unwrap_or(address);
+        let (raw, mut bytes, mut at) = (path.as_bytes(), Vec::new(), 0);
+        while at < raw.len() {
+            let digit = |i: usize| raw.get(i).and_then(|b| (*b as char).to_digit(16));
+            if raw[at] == b'%'
+                && let (Some(high), Some(low)) = (digit(at + 1), digit(at + 2))
+            {
+                bytes.push((high * 16 + low) as u8);
+                at += 3;
+            } else {
+                bytes.push(raw[at]);
+                at += 1;
+            }
+        }
+        let path = String::from_utf8_lossy(&bytes);
+        let path = path.trim_end_matches('/');
+        path == "/sign-in" || path.starts_with("/sign-in/")
+    }
+
     /// What a browser does with a redirect `Location` is what the URL standard says, and
     /// `url` follows it: whatever is accepted stays on the site it was resolved against, for
     /// the addresses above, the generated ones below, and a page deep in the site.
@@ -406,12 +524,20 @@ mod tests {
             "/#x",
             "/search?q=%C3%A9",
             "/files/report.v2.pdf",
+            "/sign-in",
+            "/sign-in/",
+            "/sign-in/two",
+            "/sign-inx",
+            "/%73ign-in",
+            "/sign%2din",
+            "/sign-in?next=/x",
         ]
         .iter()
         .map(|s| (*s).to_owned())
         .collect();
         let alphabet = [
             "/", "\\", "%2f", "%5c", "%09", ".", "..", "%2e", "a", "?", "#", ":", "@", "%25", "b",
+            "%3f", "%3F", "%23", "%2e%2e",
         ];
         let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
         let mut next = move || {
@@ -433,6 +559,11 @@ mod tests {
                 continue;
             };
             accepted += 1;
+            assert_eq!(
+                ReturnTo::parse_for(raw, "/sign-in").is_some(),
+                !names_sign_in(raw),
+                "{raw:?}"
+            );
             for base in bases {
                 let base = url::Url::parse(base).unwrap();
                 let joined = base
@@ -442,6 +573,12 @@ mod tests {
                 assert_eq!(joined.host_str(), base.host_str(), "{raw:?} -> {joined}");
                 assert_eq!(joined.port(), base.port(), "{raw:?} -> {joined}");
                 assert!(joined.username().is_empty(), "{raw:?} -> {joined}");
+                // Once its dot segments are resolved the path is still one path of this site, and
+                // not two slashes that a later hop could read as a host.
+                assert!(
+                    !joined.path().starts_with("//"),
+                    "{raw:?} resolves to a path of two slashes: {joined}"
+                );
             }
         }
         assert!(
@@ -456,7 +593,7 @@ mod tests {
     fn nothing_generated_gets_through_unsafe() {
         let alphabet: Vec<&str> = vec![
             "/", "\\", "%2f", "%2F", "%5c", "%5C", "%09", "%0a", "%00", ".", "..", "%2e", "a", "?",
-            "#", ":", " ", "\t", "@", "%25", "2f", "%", "\u{e9}", "\u{0}",
+            "%3f", "%23", "%2e%2e", "#", ":", " ", "\t", "@", "%25", "2f", "%", "\u{e9}", "\u{0}",
         ];
         let mut seed = 0x2545_f491_4f6c_dd1d_u64;
         let mut next = move || {
@@ -486,6 +623,11 @@ mod tests {
                 "{raw:?}"
             );
             let decoded = decode(text).expect("accepted text decodes");
+            let path = decode_once(path_of(text)).expect("the path decodes");
+            assert!(
+                path.split('/').all(|piece| piece != "." && piece != ".."),
+                "{raw:?}"
+            );
             assert!(!decoded.starts_with("//"), "{raw:?}");
             assert!(!decoded.contains('\\'), "{raw:?}");
             assert!(decoded.bytes().all(|b| b >= 0x20 && b != 0x7f), "{raw:?}");

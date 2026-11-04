@@ -419,7 +419,12 @@ cargo run --release -p ui-proof -- bench    # render times, no server
 - Error pages draw only in an app that names `UiModule` itself. A module that borrows the
   toolkit with `UiOnDemand` keeps the JSON errors. A panic or a timeout cannot say who the
   user was, so it is drawn on its own, not in the shell. A shell built for each request needs
-  an `ErrorShell`; a `Shell` provider that is request-scoped cannot be found without one.
+  an `ErrorShell`, which has one second: one that is slower, panics or returns `None` leaves
+  the page on its own. In `production` (the app's `env` or `app.env`) the development details
+  are never shown, whatever asks for them.
+- A route's `page()` or `json_only()` mark decides its errors, including one raised before the
+  route ran (a refused CSRF token, a limit, a 405). The runtime's `X-Navree-UI` header decides
+  for its own requests whatever `Accept` says, except on a `json_only()` route.
 - A 404 does not show the address that was asked for: it is the address bar's text, and
   echoing it would let a link write words on the page.
 - There is no Back button: it needs a command the core does not have, and Home and Try again

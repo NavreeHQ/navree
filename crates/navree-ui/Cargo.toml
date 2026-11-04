@@ -15,7 +15,7 @@ default = []
 ## The table's backend: `TableQuery::load`, `export_csv`, `BulkRequest::resolve`
 ## and stored views, through navree-orm. The facade turns it on when both `ui`
 ## and `orm` are on.
-orm = ["dep:navree-orm", "dep:futures-util", "dep:tokio", "dep:base64"]
+orm = ["dep:navree-orm", "dep:base64"]
 ## `PhoneInput` and the phone widget of forms: a country picker, formatting
 ## as you type and E.164, on navree-phone. The facade turns it on when both
 ## `ui` and `validation-phone` are on.
@@ -23,13 +23,14 @@ phone = ["dep:navree-phone", "navree-validation/phone"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
-futures-util = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+# The page of an error never waits on the app's own shell builder for long: a deadline and a
+# panic guard around it.
+futures-util = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 navree-config = { workspace = true }
@@ -42,6 +43,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = { workspace = true }
+tokio = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
@@ -51,7 +53,8 @@ http-body-util = { workspace = true }
 # Its own `phone` feature, for the tests of the phone input.
 navree-ui = { workspace = true, features = ["phone"] }
 navree-testing = { workspace = true }
-tokio = { workspace = true }
+# A paused clock, for a test of something that never answers.
+tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
 # The independent URL parser the return address is checked against.
 url = { workspace = true }

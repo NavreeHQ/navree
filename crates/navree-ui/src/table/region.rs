@@ -24,6 +24,8 @@ pub struct Region {
     el: Element,
     placeholder: bool,
     failed: Option<Node>,
+    /// Whether `failed` shows only when nothing could be reached at all.
+    offline: bool,
 }
 
 impl Region {
@@ -37,6 +39,7 @@ impl Region {
                 .uses(Uses::CORE),
             placeholder: false,
             failed: None,
+            offline: false,
         }
     }
 
@@ -150,22 +153,25 @@ impl Region {
         self
     }
 
-    /// Says `state` when a fetch of the region gets no answer it can show: the connection
-    /// failed, the request ran out of time, or something between answered in its own words.
-    /// What the region had stays, and the state appears beside it. A fetch that gets an
-    /// error from your app is shown by the runtime as the state the server drew
-    /// (see [`ErrorPage`](crate::ErrorPage)), whether or not you call this.
+    /// Says `state` when a fetch of the region fails in a way the server did not draw: the
+    /// connection failed, the request ran out of time, or something between answered in its own
+    /// words (a proxy's page, an answer that is not HTML). What the region had stays, and the
+    /// state appears beside it. An error from your app is drawn by the server as a state and
+    /// shown by the runtime in place of the region (see [`ErrorPage`](crate::ErrorPage)),
+    /// whether or not you call this.
     ///
-    /// The state shows when the runtime marks the region failed, and goes when the next
-    /// fetch starts. It needs no script of its own, and its button can be a
-    /// [`data-ui-refresh`](Self::when_offline) button.
+    /// The state shows when the runtime marks the region failed, and goes when the next fetch
+    /// starts. It needs no script of its own, and its button can be a `data-ui-refresh` button.
     pub fn when_failed(mut self, state: impl Into<Node>) -> Self {
         self.failed = Some(state.into());
         self
     }
 
     /// [`when_failed`](Self::when_failed) with "You're offline" and a Try again button that
-    /// fetches the region again.
+    /// fetches the region again, shown only when the browser could not reach the server at all
+    /// (the connection failed). A request that ran out of time, or a server that answered with
+    /// an error, is not being offline: use [`when_failed`](Self::when_failed) with your own words
+    /// for those.
     ///
     /// ```
     /// use navree_ui::{Region, render};
@@ -173,7 +179,7 @@ impl Region {
     /// let html = render(&Region::new("kpis").src("/fragments/kpis").lazy().when_offline().into());
     /// assert!(html.contains(r#"data-slot="region-failed""#));
     /// ```
-    pub fn when_offline(self) -> Self {
+    pub fn when_offline(mut self) -> Self {
         let labels = StateLabels::default();
         let state = State::of(StateKind::Offline).labels(&labels).actions(
             Button::outline(labels.try_again.to_string())
@@ -181,7 +187,9 @@ impl Region {
                 .icon(icons::REFRESH_CW)
                 .attr("data-ui-refresh", ""),
         );
-        self.when_failed(state)
+        self = self.when_failed(state);
+        self.offline = true;
+        self
     }
 
     /// Adds its content.
@@ -192,10 +200,12 @@ impl Region {
     }
 
     fn into_node(self) -> Node {
+        let offline = self.offline;
         let failed = self.failed.map(|state| {
             el("div")
                 .slot("region-failed")
                 .attr("role", "alert")
+                .attr_opt("data-when", offline.then_some("offline"))
                 .child(state)
         });
         if self.placeholder {

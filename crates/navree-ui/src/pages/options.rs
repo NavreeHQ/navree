@@ -32,7 +32,8 @@ pub struct PagesOptions {
     pub redirect_guests: bool,
     /// Adds the status, code, message and cause to an error page, marked "Development
     /// only". On by default when the build has debug assertions, off in a release build.
-    /// Never turn it on where users can see it.
+    /// In `production` (the app's `env` or `app.env`) it is always off, whatever the build,
+    /// the configuration or the code say. Never turn it on where users can see it.
     pub debug: bool,
     /// The words of every state.
     pub labels: StateLabels,
@@ -96,6 +97,10 @@ impl PagesOptions {
         if let Some(value) = config.get_bool("ui.debug") {
             self.debug = value;
         }
+        // Production is final: whatever asked for the details, they stay off.
+        if is_production(environment(config).as_deref()) {
+            self.debug = false;
+        }
         self
     }
 
@@ -111,6 +116,20 @@ impl PagesOptions {
         }
         self
     }
+}
+
+/// The app's environment: top-level `env` (`APP_ENV`), else `app.env`; `None` when it names none.
+fn environment(config: &Config) -> Option<String> {
+    config
+        .get_string("env")
+        .or_else(|| config.get_string("app.env"))
+        .map(|env| env.trim().to_owned())
+        .filter(|env| !env.is_empty())
+}
+
+/// Whether `env` is `production`, in any case.
+pub(crate) fn is_production(env: Option<&str>) -> bool {
+    env.is_some_and(|env| env.trim().eq_ignore_ascii_case("production"))
 }
 
 /// Whether `address` can be a link target.
@@ -138,6 +157,16 @@ mod tests {
         assert_eq!(options.home, "/dashboard");
         let long = format!("/{}", "a".repeat(3000));
         assert_eq!(PagesOptions::default().home(long).checked().home, "/");
+    }
+
+    #[test]
+    fn production_is_production_in_any_case() {
+        assert!(is_production(Some("production")));
+        assert!(is_production(Some(" Production ")));
+        assert!(is_production(Some("PRODUCTION")));
+        assert!(!is_production(Some("staging")));
+        assert!(!is_production(Some("")));
+        assert!(!is_production(None));
     }
 
     #[test]
