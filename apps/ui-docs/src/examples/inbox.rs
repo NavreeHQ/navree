@@ -78,7 +78,6 @@ pub fn all() -> Vec<Example> {
             catalog::Kind::Single(palette_open),
             items(INBOX_RS, &["pub fn palette"]),
         )
-        .start()
         .show()
         .height(620),
     ]
