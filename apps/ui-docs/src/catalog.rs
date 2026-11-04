@@ -551,6 +551,10 @@ pub struct Example {
     /// Shows a closed dialog, sheet or popover in place, so the frame shows what
     /// it looks like before anyone clicks.
     pub show: bool,
+    /// Draws each dialog or sheet whose parent is marked `data-preview-open` open
+    /// at its own place over the page, with the scrim behind it: a drawer over its
+    /// page.
+    pub open: bool,
     /// Loads the core runtime: commands run in the preview.
     pub live: bool,
     /// Draws the live dot as it is in this state (`on`, `retry`, `paused`): a
@@ -579,6 +583,7 @@ impl Example {
             layout: Layout::Center,
             cells: Cells::Narrow,
             show: false,
+            open: false,
             live: false,
             streaming: None,
             width: None,
@@ -625,6 +630,13 @@ impl Example {
         self
     }
 
+    /// Draws the dialogs and sheets inside an element marked `data-preview-open`
+    /// open over their page, as they look after a click.
+    pub fn open(mut self) -> Self {
+        self.open = true;
+        self
+    }
+
     pub fn width(mut self, width: u32) -> Self {
         self.width = Some(width);
         self
@@ -640,6 +652,45 @@ impl Example {
         self.streaming = Some(state);
         self
     }
+}
+
+/// Top-level items of `source` as written, each from its attributes and doc
+/// comment to its closing brace, one after another: an example app's own code,
+/// shown as the app has it.
+pub fn items(source: &str, starts: &[&str]) -> String {
+    let source = source.replace("\r\n", "\n");
+    let lines: Vec<&str> = source.lines().collect();
+    let mut out = Vec::new();
+    for start in starts {
+        let at = lines
+            .iter()
+            .position(|line| {
+                line.starts_with(&format!("{start}("))
+                    || line.starts_with(&format!("{start} {{"))
+                    || line.starts_with(&format!("{start}<"))
+            })
+            .unwrap_or_else(|| panic!("no `{start}` at the start of a line"));
+        let mut first = at;
+        // Up through the doc comment and the attributes, an attribute that rustfmt
+        // spread over several lines too.
+        while first > 0 {
+            let above = lines[first - 1];
+            if above.starts_with("#[")
+                || above.starts_with("///")
+                || above.starts_with(")]")
+                || above.starts_with("    ")
+            {
+                first -= 1;
+            } else {
+                break;
+            }
+        }
+        let end = (at..lines.len())
+            .find(|line| lines[*line] == "}")
+            .unwrap_or_else(|| panic!("`{start}` doesn't end"));
+        out.push(lines[first..=end].join("\n"));
+    }
+    out.join("\n\n")
 }
 
 /// The body of `fn name` in `source`, dedented: what the docs show as its code.

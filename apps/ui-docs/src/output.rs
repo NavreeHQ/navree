@@ -283,10 +283,11 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
         ));
     }
     head.push_str("</head>\n");
-    let show = if example.show {
-        " data-preview-show"
-    } else {
-        ""
+    let show = match (example.show, example.open) {
+        (true, true) => " data-preview-show data-preview-open",
+        (true, false) => " data-preview-show",
+        (false, true) => " data-preview-open",
+        (false, false) => "",
     };
     // A static page has no server to stream from: a region that follows a stream would open
     // one, to an address the site does not have, and keep trying.
@@ -331,6 +332,8 @@ struct ExampleJson<'a> {
     layout: &'static str,
     cells: &'static str,
     show: bool,
+    /// Draws a drawer or dialog open over its page.
+    open: bool,
     live: bool,
     /// Drawn this wide and scaled to fit.
     width: Option<u32>,
@@ -501,6 +504,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             layout: example.layout.as_str(),
             cells: example.cells.as_str(),
             show: example.show,
+            open: example.open,
             live: example.live,
             width: example.width,
             scripts,
