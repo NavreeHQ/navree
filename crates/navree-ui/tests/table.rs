@@ -811,3 +811,16 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
     assert!(!html.contains(r#"data-v="A1""#), "{html}");
     assert!(!html.contains(r#"data-v="Acme""#), "{html}");
 }
+
+#[test]
+fn a_columns_alignment_is_for_its_cells_not_for_a_row_drawn_inside_one() {
+    // A cell may hold a `Row` centred on its cross axis, which writes the same
+    // `data-align` attribute: the column's text alignment must not reach into it.
+    let css = include_str!("../styles/25-table.css");
+    assert!(
+        !css.contains("& [data-align=center]{text-align:center}"),
+        "a centred row inside a cell would centre its text"
+    );
+    assert!(css.contains("& :is(th,td)[data-align=center]{text-align:center}"));
+    assert!(css.contains("& :is(th,td)[data-align=end]{text-align:end}"));
+}

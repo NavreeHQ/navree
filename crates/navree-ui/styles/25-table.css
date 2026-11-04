@@ -64,8 +64,8 @@
   &[data-fixed] td,&[data-fixed] th{overflow:hidden;text-overflow:ellipsis}
   &[data-fixed] th{overflow:visible}
   & td[data-strong]{color:var(--fg);font-weight:500}
-  & [data-align=center]{text-align:center}
-  & [data-align=end]{text-align:end}
+  & :is(th,td)[data-align=center]{text-align:center}
+  & :is(th,td)[data-align=end]{text-align:end}
   & td[data-numeric]{direction:ltr;text-align:right}
   & :dir(rtl) td[data-numeric]{text-align:left}
   & tr[data-ui-row-href]{cursor:pointer}
