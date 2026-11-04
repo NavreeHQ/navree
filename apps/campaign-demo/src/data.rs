@@ -622,7 +622,7 @@ fn one(id: i64, start: i64, now: i64) -> Seeded {
                 false,
             );
             // A proxy fetches the images again when the mailbox syncs, at any hour.
-            if dice.chance(45) {
+            if dice.chance(12) {
                 let again = delivered + 2 * 3600 + dice.below(27 * 3600) as i64;
                 push(
                     Kind::ProxyOpen,
@@ -634,7 +634,14 @@ fn one(id: i64, start: i64, now: i64) -> Seeded {
             }
         }
         if dice.chance(60) {
-            let opened = delivered + 40 + dice.soon(0, 26 * 3600);
+            // Half the opens come in the first hours; the rest through the day after.
+            let opened = delivered
+                + 40
+                + if dice.chance(50) {
+                    dice.soon(0, 3 * 3600)
+                } else {
+                    i64::try_from(dice.below(28 * 3600)).unwrap_or(0)
+                };
             push(Kind::Opened, opened, "", "", true);
             recipient.opens = 1;
             status = Status::Opened;
