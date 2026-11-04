@@ -225,7 +225,7 @@ Other lists and moves:
 
 | Design element | navree-ui |
 |---|---|
-| Step bar | `Stepper::new(label).step(Step::new(..).state(StepState::Error)).current(n)`, `.vertical()`, `Step::link(href)` |
+| Step bar | `Stepper::new(label).step(Step::new(..).state(StepState::Error)).current(n)`, `.vertical()`, a step that is a link: `Step::new(..).link(href)` |
 | A form in steps, with a review | `Wizard::new(id).base(url).step(WizardStep::of::<T>(id, label)).review()`; each step is a `Form` struct, progress is a `Draft` on the server (`DraftStore`) |
 | Tree of folders, links or choices | `Tree::new(id, label).node(TreeNode::branch(..) \| leaf(..) \| lazy(id, label, src))`, `.select(TreeSelect::Single \| Multiple)`, `.cascade()` |
 | Row of tools with a More menu | `Toolbar::new(id, label).item(ToolbarItem::button(..) \| icon_toggle(..) \| radios(..) \| link(..) \| group(..) \| separator())` |
