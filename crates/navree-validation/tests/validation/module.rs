@@ -237,3 +237,69 @@ fn lookup_and_fill_expose_the_templates() {
         "name needs 2 (:other)"
     );
 }
+
+// MOD-005: `AppMessages::of` is what the extractors render with: the app's
+// `validation.messages` and `validation.attributes`, and its translator when it has one.
+#[tokio::test]
+async fn app_messages_are_the_ones_the_extractors_use() {
+    use navree_validation::{AppMessages, Violation};
+
+    let plain = TestApp::builder()
+        .config("validation.messages.unique", ":Attribute is in use")
+        .config("validation.attributes.email", "e-mail")
+        .module(ValidationModule)
+        .build()
+        .await;
+    let messages = AppMessages::of(Some(plain.ctx())).await;
+    assert!(messages.translator().is_none());
+    assert_eq!(
+        messages.render_violation("email", &Violation::rule("unique")),
+        "E-mail is in use"
+    );
+    // A form names its fields its own way, over `validation.attributes`.
+    let labelled = messages.clone().with_attributes([("email", "Work email")]);
+    assert_eq!(
+        labelled.render_violation("email", &Violation::rule("unique")),
+        "Work email is in use"
+    );
+    // A key the app has no message for takes the default given; one it has keeps its own.
+    let defaults = labelled.with_default_messages([
+        ("form.number", ":attribute: enter a number."),
+        ("unique", "never used"),
+    ]);
+    assert_eq!(
+        defaults.render("age", "form.number", &[]),
+        "age: enter a number."
+    );
+    assert_eq!(
+        defaults.render("email", "unique", &[]),
+        "Work email is in use"
+    );
+
+    // Without an app: the built-in English templates.
+    let bare = AppMessages::of(None).await;
+    assert_eq!(
+        bare.render_violation("email", &Violation::rule("unique")),
+        "email has already been taken"
+    );
+
+    // With a translator: through it, display names included.
+    let translated = TestApp::builder()
+        .override_value::<dyn MessageTranslator>(Arc::new(French))
+        .module(ValidationModule)
+        .build()
+        .await;
+    let messages = AppMessages::of(Some(translated.ctx())).await;
+    assert!(messages.translator().is_some());
+    assert_eq!(
+        messages.render_violation("name", &Violation::rule("min.string").with("min", 2)),
+        "nom doit contenir au moins 2 caractères"
+    );
+    let mut violations = navree_validation::Violations::new();
+    violations.add("email", Violation::rule("email"));
+    let errors = messages.render_violations(&violations, "body");
+    assert_eq!(
+        errors.get("email"),
+        Some(&["email doit être une adresse e-mail valide".to_owned()][..])
+    );
+}

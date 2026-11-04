@@ -16,7 +16,9 @@ use navree_kernel::{
 use navree_testing::TestApp;
 use navree_validation::Validate;
 use navree_validation::rules::{self, confirmed};
-use navree_validation::{AsyncRule, AsyncRules, UowCheck, Valid, ValidAsync};
+use navree_validation::{
+    AsyncRule, AsyncRules, UowCheck, Valid, ValidAsync, Violations, check_async_rules,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -301,8 +303,44 @@ impl Controller for DatabaseController {
                 |ValidAsync(Json(input)): ValidAsync<Json<Sneaky>>| async move { ok(&input) },
             )
             .public(),
+            // MOD-005: the database rules run on a path of their own, as forms run them.
+            RouteDef::on(Method::POST, "/checked/users", checked_users).public(),
+            RouteDef::on(Method::PATCH, "/checked/users/{id}", checked_users).public(),
+            RouteDef::on(Method::POST, "/checked/deals", checked_deals).public(),
         ]
     }
+}
+
+/// The failed rules as `[[field, rule], ...]`.
+fn failed(violations: &Violations) -> Json<Value> {
+    let list: Vec<(String, String)> = violations
+        .iter()
+        .map(|(path, violation)| {
+            (
+                path.to_owned(),
+                violation.key().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    Json(json!({ "failed": list }))
+}
+
+/// `check_async_rules` on a [`UserEmail`], with the route's `{id}` ignored.
+async fn checked_users(
+    parts: http::request::Parts,
+    Json(input): Json<UserEmail>,
+) -> navree_http::Result<Json<Value>> {
+    let violations = check_async_rules(&parts, input.async_rules()).await?;
+    Ok(failed(&violations))
+}
+
+/// `check_async_rules` on a [`NewDeal`].
+async fn checked_deals(
+    parts: http::request::Parts,
+    Json(input): Json<NewDeal>,
+) -> navree_http::Result<Json<Value>> {
+    let violations = check_async_rules(&parts, input.async_rules()).await?;
+    Ok(failed(&violations))
 }
 
 /// Registers [`DatabaseController`].

@@ -250,6 +250,105 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
     assert!(!plain.passes_in(&uow).await.unwrap());
 }
 
+// MOD-005: `check_async_rules` runs what `ValidAsync` runs, in the request's unit of
+// work, and hands the failures back instead of answering: a taken address, a missing
+// company, the route's `{id}` ignored, a null skipped.
+async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
+    let app = database_app(&scratch).await;
+    let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
+    insert(&app, "users", alice, "alice@example.com").await;
+    insert(&app, "users", bob, "bob@example.com").await;
+    let acme = Uuid::now_v7();
+    insert(&app, "companies", acme, "Acme").await;
+
+    let failed = |response: navree_testing::TestResponse| response.assert_status(200).json_value();
+    let taken = app
+        .client()
+        .post("/db/checked/users")
+        .json(&json!({ "email": "alice@example.com" }))
+        .send()
+        .await;
+    assert_eq!(failed(taken), json!({ "failed": [["email", "unique"]] }));
+    let free = app
+        .client()
+        .post("/db/checked/users")
+        .json(&json!({ "email": "carol@example.com" }))
+        .send()
+        .await;
+    assert_eq!(failed(free), json!({ "failed": [] }));
+
+    // The route's `{id}` is the record itself: alice keeps her address, bob may not take it.
+    let own = app
+        .client()
+        .patch(&format!("/db/checked/users/{alice}"))
+        .json(&json!({ "email": "alice@example.com" }))
+        .send()
+        .await;
+    assert_eq!(failed(own), json!({ "failed": [] }));
+    let other = app
+        .client()
+        .patch(&format!("/db/checked/users/{bob}"))
+        .json(&json!({ "email": "alice@example.com" }))
+        .send()
+        .await;
+    assert_eq!(failed(other), json!({ "failed": [["email", "unique"]] }));
+
+    let missing = app
+        .client()
+        .post("/db/checked/deals")
+        .json(&json!({ "title": "Big deal", "company_id": Uuid::now_v7() }))
+        .send()
+        .await;
+    assert_eq!(
+        failed(missing),
+        json!({ "failed": [["company_id", "exists"]] })
+    );
+    for company in [json!(acme), json!(null)] {
+        let found = app
+            .client()
+            .post("/db/checked/deals")
+            .json(&json!({ "title": "Big deal", "company_id": company }))
+            .send()
+            .await;
+        assert_eq!(failed(found), json!({ "failed": [] }));
+    }
+
+    // And `ValidAsync` still answers as it did, on the same rules.
+    let response = app
+        .client()
+        .post("/db/users")
+        .json(&json!({ "email": "alice@example.com" }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "email": ["email has already been taken"] })
+    );
+}
+
+// MOD-005: a rule that can't run is an error, not a failed field: no unit of work is a
+// 500, and a rule with nothing to check needs none.
+#[tokio::test]
+async fn check_async_rules_without_a_unit_of_work_is_a_server_error() {
+    let app = crate::support::app_with(crate::support::DatabaseTestModule).await;
+    app.client()
+        .post("/db/checked/deals")
+        .json(&json!({ "title": "x", "company_id": Uuid::now_v7() }))
+        .send()
+        .await
+        .assert_error(500, "Internal server error");
+    let nothing = app
+        .client()
+        .post("/db/checked/deals")
+        .json(&json!({ "title": "x", "company_id": null }))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(nothing, json!({ "failed": [] }));
+}
+
 on_every_server!(
     "navree_validation";
     unique_rule_rejects_existing_and_ignores_self,
@@ -258,4 +357,5 @@ on_every_server!(
     rejects_bad_identifier_in_rule,
     async_rules_on_query_and_form,
     check_rules_run_in_the_unit_of_work_with_the_path_parameter,
+    check_async_rules_returns_what_valid_async_refuses,
 );
