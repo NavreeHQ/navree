@@ -30,9 +30,11 @@ const MAX_PAIRS: usize = 32;
 /// that isn't a number gets 400.
 ///
 /// Nothing in it is trusted: [`check`](Self::check) it against the lists as they
-/// are now, in the same transaction that writes the new order, so that two moves at
-/// once are applied one after the other and the second is checked against what the
-/// first left.
+/// are now, in the transaction that writes the new order, after taking a lock on the
+/// lists it touches (SQLite's `BEGIN IMMEDIATE` is one; on PostgreSQL and MySQL take
+/// `SELECT ... FOR UPDATE` on a row per list, or an advisory lock), so that two
+/// moves at once are applied one after the other and the second is checked against
+/// what the first left.
 ///
 /// ```ignore
 /// async fn moves(uow: Uow, mv: Move) -> Result<Reply> {

@@ -64,6 +64,8 @@ const keyOf = (el) => attr(el, "data-key") || "";
 const listKey = (list) => attr(list, "data-list") || "";
 /** @param {Element} el */
 const shown = (el) => el.getClientRects().length > 0;
+/** The items of `root`'s own lists. @param {Element} root */
+const itemsOfRoot = (root) => listsOf(root).flatMap((list) => itemsOf(list));
 /** The lists of `root`, not those of a sortable inside one of its items. @param {Element} root */
 const listsOf = (root) => [...all(root, LIST)].filter((list) => closest(list, ROOT) === root);
 /** @param {Element} list @returns {HTMLElement[]} */
@@ -128,7 +130,7 @@ const fill = (text, values) => String(text ?? "").replace(/\{(\w+)\}/g, (all, na
 function about(item) {
   const list = listOf(item);
   const items = list ? itemsOf(list).filter((i) => i === item || shown(i)) : [];
-  return { item: attr(item, "data-name") || keyOf(item), list: list ? titleOf(list) : "", position: items.indexOf(/** @type {HTMLElement} */ (item)) + 1, total: items.length };
+  return { item: attr(item, "data-name") || keyOf(item), list: list ? titleOf(list) : "", position: items.indexOf(/** @type {HTMLElement} */ (item)) + 1, total: list ? Math.max(items.length, sizeOf(list)) : items.length };
 }
 
 /** Says `text` in `root`'s live region. The same words twice are still said: a mark is added in turn. @param {Element} root @param {string} text */
@@ -204,8 +206,12 @@ function put(list, item, before) {
 function restore(root, item, place) {
   const list = listsOf(root).find((l) => listKey(l) === place.list);
   if (!list) return;
-  const next = place.next ? itemsOf(list).find((i) => keyOf(i) === place.next && i !== item) || null : null;
-  put(list, item, next);
+  const items = itemsOf(list).filter((i) => i !== item);
+  const prev = place.prev ? items.find((i) => keyOf(i) === place.prev) : null;
+  const next = place.next ? items.find((i) => keyOf(i) === place.next) : null;
+  // It was first: it goes first. After the item it followed, if that is still here; else before the one it preceded.
+  const at = place.prev === "" ? items[0] || null : prev ? prev.nextElementSibling : next || null;
+  put(list, item, at && at !== item ? at : null);
 }
 
 /** Writes each list's count as the page shows it now. @param {Element} root */
@@ -324,6 +330,11 @@ function settle(root, item, ok) {
   unset(item, "data-pending");
   if (!item.isConnected) return;
   if (drag?.item === item) end();
+  const region = closest(root, "[data-ui-region]");
+  if (region) {
+    waiting.add(region);
+    recheck.set(region, { root, key: keyOf(item) });
+  }
   const before = measure(root);
   restore(root, item, record.back);
   slide(before);
@@ -334,6 +345,8 @@ function settle(root, item, ok) {
 /* Redraws: a region that follows a stream waits while a drag or a move is under way, and
    what a redraw moves slides into place. */
 
+/** Regions redrawn after a refusal or a failure, and the item to say the place of once they are. @type {Map<Element, {root: Element, key: string}>} */
+const recheck = new Map();
 /** Regions whose redraw waits for the sortables in them. @type {Set<Element>} */
 const waiting = new Set();
 /** @param {Element} region */
@@ -381,12 +394,20 @@ on(document, "ui:before-swap", (e) => {
  */
 function tidy() {
   for (const root of every(ROOT)) {
-    const seen = new Set();
+    /** @type {Map<string, Element>} */
+    const seen = new Map();
     for (const item of all(root, ITEM)) {
       if (has(item, "data-ghost") || closest(item, ROOT) !== root) continue;
       const id = attr(item, "id");
-      if (id && seen.has(id) && item !== drag?.item) item.remove();
-      else if (id) seen.add(id);
+      if (!id) continue;
+      const older = seen.get(id);
+      // The copy a later page brought is where the server has it now.
+      if (older && older !== drag?.item) older.remove();
+      else if (older) {
+        item.remove();
+        continue;
+      }
+      seen.set(id, item);
     }
     const region = closest(root, "[data-ui-region]");
     const src = region && attr(region, "data-ui-src");
@@ -422,6 +443,12 @@ watch();
 
 on(document, "ui:swap", () => {
   tidy();
+  for (const [region, { root, key }] of recheck) {
+    if (waiting.has(region)) continue;
+    recheck.delete(region);
+    const item = root.isConnected ? itemsOfRoot(root).find((i) => keyOf(i) === key) : null;
+    if (item) say(root, fill(words(root).settled || words(root).moved, about(item)));
+  }
   if (drag) {
     if (!drag.item.isConnected || !drag.root.isConnected) end();
     else set(drag.item, drag.mode === "keys" ? "data-lifted" : "data-dragging", "");
@@ -442,7 +469,7 @@ function scrollersOf(root) {
     const style = getComputedStyle(el);
     return (/auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth) || (/auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight);
   };
-  const found = [...all(root, `${LIST},${BOX}`)].filter(scrolls);
+  const found = [...all(root, `${LIST},${BOX},[data-slot=sortable-lists]`)].filter(scrolls);
   for (let el = /** @type {Element | null} */ (root); el && el !== docRoot(); el = el.parentElement) if (scrolls(el)) found.push(el);
   found.push(docRoot());
   return found;
@@ -458,8 +485,10 @@ function scroll(x, y) {
   for (const el of drag.scrollers) {
     const page = el === docRoot();
     const r = page ? { left: 0, top: 0, right: innerWidth, bottom: innerHeight } : el.getBoundingClientRect();
-    if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
-    const dx = speed(r.right - x) - speed(x - r.left), dy = speed(r.bottom - y) - speed(y - r.top);
+    // Sideways while the pointer is level with it, up and down while it is in line: past an edge
+    // (the board's edge sits inside the page's margin on a phone) is as near as it gets.
+    const level = y >= r.top && y <= r.bottom, inline = x >= r.left && x <= r.right;
+    const dx = level ? speed(r.right - x) - speed(x - r.left) : 0, dy = inline ? speed(r.bottom - y) - speed(y - r.top) : 0;
     if (!dx && !dy) continue;
     const left = el.scrollLeft, top = el.scrollTop;
     el.scrollBy(dx, dy);
@@ -724,6 +753,8 @@ on(document, "contextmenu", (e) => {
 function lift(root, item) {
   drag = { root, item, mode: "keys", from: placeOf(item), over: listOf(item), refused: "", dx: 0, dy: 0, x: 0, y: 0, frame: 0, dirty: false, scrollers: [], said: null };
   set(item, "data-lifted", "");
+  // The keys go to the handle, however it was pressed: WebKit doesn't focus a button it clicks.
+  /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
   say(root, fill(words(root).picked, about(item)));
 }
 
@@ -821,7 +852,17 @@ on(document, "keydown", (e) => {
 
 // The handle's own click does nothing: Space and Enter are handled as they go down.
 on(document, "click", (e) => {
-  if (closest(e.target, HANDLE) && closest(e.target, ROOT)) e.preventDefault();
+  const handle = closest(e.target, HANDLE);
+  const item = /** @type {HTMLElement | null} */ (handle && closest(handle, ITEM));
+  const root = item && closest(item, ROOT);
+  if (!handle || !item || !root) return;
+  e.preventDefault();
+  if (drag?.mode === "keys" && drag.item === item) drop();
+  else if (!drag) {
+    const locked = attr(item, "data-locked");
+    if (locked !== null) say(root, `${fill(words(root).locked, about(item))} ${locked}`.trim());
+    else lift(root, item);
+  }
 });
 
 // Leaving the handle while a move with the keys is under way puts the item back.

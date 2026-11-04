@@ -193,6 +193,28 @@ fn a_sortable_reads_in_a_test_view() {
 }
 
 #[test]
+fn ids_made_from_keys_never_meet() {
+    // "5" with "-to" is the id of 5's move field; a key "5-to" must not make the same.
+    let html = html(
+        Sortable::new("s", "S").post("/m").list(
+            SortList::new("a", "A")
+                .item(SortItem::new("5", "Five"))
+                .item(SortItem::new("5-to", "Five to"))
+                .item(SortItem::new("5-position", "Five position")),
+        ),
+    );
+    let mut ids: Vec<&str> = html
+        .split(" id=\"")
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap_or_default())
+        .collect();
+    let all = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), all, "{ids:?}");
+}
+
+#[test]
 fn heading_levels_are_kept_between_two_and_six() {
     assert!(html(board().heading(3)).contains("<h3 data-slot=\"sortable-list-title\""));
     assert!(html(board().heading(9)).contains("<h6 data-slot=\"sortable-list-title\""));

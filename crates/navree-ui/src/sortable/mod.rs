@@ -64,6 +64,9 @@ pub struct SortLabels {
     pub cancelled: Cow<'static, str>,
     /// Said when a refused move puts the item back.
     pub returned: Cow<'static, str>,
+    /// Said once the lists are drawn again from the server after a refusal or a
+    /// failure: where the item really is.
+    pub settled: Cow<'static, str>,
     /// Said and shown when a list is full.
     pub full: Cow<'static, str>,
     /// Said when an item that can't move is picked up, before its reason.
@@ -106,6 +109,7 @@ impl Default for SortLabels {
             returned: Cow::Borrowed(
                 "{item} wasn't moved. It is back at position {position} of {total} in {list}.",
             ),
+            settled: Cow::Borrowed("{item} is at position {position} of {total} in {list}."),
             full: Cow::Borrowed("{list} holds at most {limit}."),
             locked: Cow::Borrowed("{item} can't be moved."),
             count: Cow::Borrowed("{count}"),
@@ -542,6 +546,7 @@ impl Sortable {
                 "dropped": labels.dropped,
                 "cancelled": labels.cancelled,
                 "returned": labels.returned,
+                "settled": labels.settled,
                 "full": labels.full,
                 "locked": labels.locked,
                 "count": labels.count,
@@ -805,9 +810,7 @@ fn slugs<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<String> {
     for key in keys {
         let plain = !key.is_empty()
             && key.len() <= 64
-            && key
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+            && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
         let base = if plain {
             key.to_owned()
         } else {

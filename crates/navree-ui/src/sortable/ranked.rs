@@ -110,8 +110,10 @@ impl Move {
     /// [`check`](Self::check): the item is where the browser saw it, its anchor is
     /// still in the list it goes to, and that list has room and takes items.
     ///
-    /// Run it in the transaction that writes the rank, so two moves at once are
-    /// placed one after the other.
+    /// Run it in the transaction that writes the rank, after locking the lists it
+    /// touches (SQLite's `BEGIN IMMEDIATE`; `SELECT ... FOR UPDATE` on a row per list
+    /// or an advisory lock on PostgreSQL and MySQL), so two moves at once are placed
+    /// one after the other.
     ///
     /// # Errors
     ///

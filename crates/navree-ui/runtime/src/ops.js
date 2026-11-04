@@ -3,7 +3,7 @@
 import { morph, parse, pieces } from "./morph.js";
 import { all, byId, emit, field, make, ownModule, rescue, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
-import { forget, go, leave, setUrl, refresh } from "./nav.js";
+import { forget, go, leave, setUrl } from "./nav.js";
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields @param {boolean} focus */
 function showErrors(form, fields, focus) {
@@ -75,7 +75,8 @@ function apply(op, how) {
     case "navigate": go(op.href); break;
     case "navigate_external": leave(op.href); break;
     case "reload": location.reload(); break;
-    case "invalidate": refresh(op.target); break;
+    // Through the event a module can hold, as a stream's refresh is: a sortable waits out a drag.
+    case "invalidate": if (target) EventTarget.prototype.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true })); break;
   }
 }
 
