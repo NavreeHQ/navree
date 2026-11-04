@@ -14,7 +14,16 @@ export const IMAGE = { width: 1376, height: 768 } as const;
 
 /** The picture's widths on disk, as AVIF and WebP: `/images/about/family-<width>.<ext>`. */
 export const WIDTHS = [640, 1280, 1920, 2560] as const;
-export const imageSrc = (width: number, ext: "avif" | "webp") => `/images/about/family-${width}.${ext}`;
+
+/**
+ * The first 10 hex digits of the SHA-256 of the picture's files (in name
+ * order). It goes in their URLs, so a browser that kept an earlier picture
+ * fetches the new one. `scripts/postbuild.ts` stops the build when it no
+ * longer matches the files, and prints the right value.
+ */
+export const PICTURE_VERSION = "b26d9765ed";
+
+export const imageSrc = (width: number, ext: "avif" | "webp") => `/images/about/family-${width}.${ext}?v=${PICTURE_VERSION}`;
 
 export type Point = readonly [x: number, y: number];
 

@@ -32,6 +32,9 @@
  *
  * 4. Keeps email addresses as written: pages that show one switch off the
  *    CDN's address rewriting, which would otherwise break hydration.
+ *
+ * 5. Checks the about picture's version: its URLs carry a digest of its
+ *    files, so a changed picture reaches browsers that kept the old one.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -170,3 +173,21 @@ for (const file of files(OUT).filter((f) => f.endsWith(".html"))) {
   guarded++;
 }
 console.log(`postbuild: ${guarded} pages with email addresses keep them as written (Cloudflare's rewrite switched off there)`);
+
+// ------------------------------------------------ 5. the about picture's version
+
+{
+  const dir = path.join(OUT, "images", "about");
+  const pictures = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^family-\d+\.(avif|webp)$/.test(f)).sort() : [];
+  if (pictures.length) {
+    const hash = crypto.createHash("sha256");
+    for (const file of pictures) hash.update(fs.readFileSync(path.join(dir, file)));
+    const digest = hash.digest("hex").slice(0, 10);
+    const page = fs.readFileSync(path.join(OUT, "about", "index.html"), "utf8");
+    const used = /\/images\/about\/family-\d+\.(?:avif|webp)\?v=([0-9a-f]+)/.exec(page)?.[1];
+    if (used !== digest) {
+      fail(`the about picture's files changed: set PICTURE_VERSION in src/components/about/picture.ts to "${digest}" (the page uses "${used ?? "none"}")`);
+    }
+    console.log(`postbuild: the about picture's URLs carry its files' digest (${digest})`);
+  }
+}
