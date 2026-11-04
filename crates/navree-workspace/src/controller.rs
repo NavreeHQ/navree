@@ -345,11 +345,19 @@ pub struct InviteInput {
     pub role: Option<WorkspaceRole>,
 }
 
-/// The body of `POST /invitations/accept`.
-#[derive(Clone, Debug, Deserialize, ToSchema)]
+/// The body of `POST /invitations/accept`. `Debug` never shows the token.
+#[derive(Clone, Deserialize, ToSchema)]
 pub struct AcceptInvitationInput {
     /// The token from the invitation mail.
     pub token: String,
+}
+
+impl std::fmt::Debug for AcceptInvitationInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AcceptInvitationInput")
+            .field("token", &"[redacted]")
+            .finish()
+    }
 }
 
 /// What `POST /invitations/accept` returns.
@@ -1111,5 +1119,18 @@ fn api(
         request,
         response,
         ..ApiMeta::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_invitation_token_never_shows_in_debug_output() {
+        let input: AcceptInvitationInput =
+            serde_json::from_value(serde_json::json!({ "token": "inv-7e57t0ken" })).unwrap();
+        let printed = format!("{input:?}");
+        assert!(!printed.contains("7e57t0ken"), "{printed}");
     }
 }
