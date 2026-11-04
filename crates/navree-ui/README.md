@@ -39,6 +39,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   Flow (`navree_ui::flow`): Stepper, Wizard (steps that are derived forms, with a
   `Draft` kept on the server), Slider (one value or a range, with `SliderSpec` to
   check a post), Tree (children from the server, choices that post) and Toolbar.
+  Panes: `SplitPane` and `Pane`, with `SplitSizes` and `SplitSave` for sizes kept on the server.
   Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
   list and the number, formatted as typed, read on the server in the country chosen.
   Components carry no outer margin: layout
@@ -106,6 +107,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A slider | `slider`: the filled part, the value text, a gap between thumbs. It posts with no script. |
 | A tree | `tree`: the roles, the keys, children fetched as a branch opens. A tree is a plain nested list with no script. |
 | A toolbar | `toolbar`, `menus`, `overlay`: one tab stop and the arrow keys, and a More menu for what does not fit. |
+| A split pane | `split`: dragging, the separator's keys, collapsing and saving the sizes. |
+| A hotkey | `keys`: single keys that click or focus what names them, never while someone types. |
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
@@ -113,6 +116,44 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
 `tests/budgets.rs` holds the sizes, and a regression fails the build.
+
+## Panes and hotkeys
+
+```rust
+fn layout() -> SplitPane {
+    SplitPane::new("inbox")
+        .height(SplitHeight::Screen)
+        .stack_below(SplitWidth::Md)
+        .save_to("/inbox/panes")
+        .pane(Pane::new("list", "Conversations").size(28).min(20).max(40))
+        .pane(Pane::fill("thread", "Conversation").min(30))
+        .pane(Pane::new("customer", "Customer").size(24).min(16).max(36).collapse_below(SplitWidth::Lg))
+}
+
+async fn save(save: SplitSave, uow: Uow) -> Result<StatusCode> {
+    let Some(sizes) = save.sizes_for(&layout()) else {
+        return Ok(StatusCode::UNPROCESSABLE_ENTITY);
+    };
+    // Keep `sizes.to_text()` for this user, and draw the next page with
+    // `layout().sizes(&SplitSizes::from_text(&kept, &layout())?)`.
+    Ok(StatusCode::NO_CONTENT)
+}
+```
+
+- **A separator** is the WAI-ARIA window splitter: the arrows move it (Shift for more), Home
+  and End take its pane to its least and most, and Enter collapses a collapsible pane and
+  brings it back. It moves the sized pane beside it; one pane fills the rest.
+- **Sizes are drawn by the server**, so the first paint is right and a page with no script
+  keeps its layout. `SplitSave` reads a save as a form is read, with the same answer to
+  forgery, and `SplitSizes` holds it to the layout's limits again.
+- **Small screens.** `stack_below(width)` shows one pane at a time below a width of the split
+  itself: the one marked `current`. `SplitPane::stacked_only` holds what shows only then, such as
+  a link back to the list. `Pane::collapse_below` hides a pane below a width until a
+  `SplitPane::toggle` or Enter opens it.
+- **Hotkeys.** `.hotkey("j")` on a link, a button or a field makes one key click it or focus it.
+  A key never fires while someone types in a field, edits text, uses a menu's or a list's own
+  letters, composes with an input method, holds Ctrl, Alt or Meta, or has a modal dialog open
+  that the element is outside of. `aria-keyshortcuts` says it to assistive technology.
 
 ## The data table
 

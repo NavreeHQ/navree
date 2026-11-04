@@ -262,3 +262,27 @@ impl Default for Container {
 
 root_methods!(Stack, Row, Grid, Container);
 into_node!(Stack, Row, Grid, Container);
+
+/// Wraps `content` so it shows only in a browser that runs scripts: a control the
+/// runtime drives, beside a stand-in for when it can't.
+///
+/// ```
+/// use navree_ui::{only_with_script, render};
+///
+/// assert_eq!(render(&only_with_script("Drag")), r#"<span data-script-only>Drag</span>"#);
+/// ```
+pub fn only_with_script(content: impl IntoNodes) -> Node {
+    el("span").flag("data-script-only", true).child(content).into()
+}
+
+/// Wraps `content` so it shows only when scripts don't run: a link to a page that does
+/// what a control does with a script.
+///
+/// ```
+/// use navree_ui::{only_without_script, render};
+///
+/// assert_eq!(render(&only_without_script("Choose")), r#"<span data-noscript-only>Choose</span>"#);
+/// ```
+pub fn only_without_script(content: impl IntoNodes) -> Node {
+    el("span").flag("data-noscript-only", true).child(content).into()
+}

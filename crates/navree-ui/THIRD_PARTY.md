@@ -115,8 +115,8 @@ without prior written authorization of the copyright holder.
 ## WAI-ARIA Authoring Practices
 
 The keyboard behaviour of tabs, the menu button, menus and submenus, radio groups, toggle
-buttons and alerts follows the W3C's WAI-ARIA Authoring Practices Guide
-(https://www.w3.org/WAI/ARIA/apg/). The behaviour is followed; the code is Navree's own.
+buttons, alerts and the window splitter follows the W3C's WAI-ARIA Authoring Practices
+Guide (https://www.w3.org/WAI/ARIA/apg/). The behaviour is followed; the code is Navree's own.
 
 ## Geist
 

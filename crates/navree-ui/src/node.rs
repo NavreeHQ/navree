@@ -210,7 +210,7 @@ impl From<Href> for AttrValue {
 /// What a page must load for the elements in it: a small set of bits, so
 /// finding out allocates nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Uses(pub(crate) u16);
+pub struct Uses(pub(crate) u32);
 
 impl Uses {
     /// Nothing: the page ships no script.
@@ -248,6 +248,12 @@ impl Uses {
     /// The toolbar module: one tab stop with the arrow keys, and what does not fit
     /// moved into a menu.
     pub const TOOLBAR: Self = Self(1 << 14);
+    /// The split module: separators that resize panes by pointer and by the keys of
+    /// the window splitter pattern, collapsing panes, and saving the sizes.
+    pub const SPLIT: Self = Self(1 << 16);
+    /// The keys module: single-key shortcuts ([`Element::hotkey`]) that click or focus
+    /// what names them, never while someone types.
+    pub const KEYS: Self = Self(1 << 17);
 
     /// Both sets together.
     #[must_use]
@@ -264,6 +270,13 @@ impl Uses {
     pub const fn is_none(self) -> bool {
         self.0 == 0
     }
+}
+
+/// Whether `key` can be a hotkey: one character that a key types, neither a space
+/// nor a control character.
+pub(crate) fn valid_hotkey(key: &str) -> bool {
+    let mut chars = key.chars();
+    matches!((chars.next(), chars.next()), (Some(c), None) if !c.is_whitespace() && !c.is_control())
 }
 
 /// One attribute. Names are static, and written without escaping.
@@ -526,6 +539,34 @@ impl Element {
         self.flag("data-ui-row-key", true)
     }
 
+    /// Makes `key` a shortcut for this element: pressed anywhere on the page, it clicks
+    /// the element, or focuses it if it is a field. It never fires while someone types in
+    /// a field or edits text, while a modifier other than Shift is held, during an input
+    /// method's composition, or from outside a modal dialog that is open, so a single
+    /// letter is safe. `aria-keyshortcuts` tells assistive technology.
+    ///
+    /// A key is one character a keyboard types: a letter, a digit or a sign such as `/`
+    /// or `?` (uppercase letters mean Shift). Anything else, a space or a word, is
+    /// refused, and the element is left as it was. When two elements name the same key,
+    /// the first in the page that can take it does.
+    ///
+    /// ```
+    /// use navree_ui::{el, render};
+    ///
+    /// let html = render(&el("a").href("/inbox/8").hotkey("j").child("Next").into());
+    /// assert!(html.contains(r#"data-ui-hotkey="j""#));
+    /// assert!(html.contains(r#"aria-keyshortcuts="j""#));
+    /// ```
+    #[must_use]
+    pub fn hotkey(self, key: &str) -> Self {
+        if !valid_hotkey(key) {
+            return self;
+        }
+        self.attr("data-ui-hotkey", key.to_owned())
+            .attr("aria-keyshortcuts", key.to_owned())
+            .uses(Uses::KEYS)
+    }
+
     /// Says this page must load `uses` when this element is on it.
     #[inline]
     #[must_use]
@@ -705,6 +746,40 @@ mod tests {
         assert!(el("div").uses.is_none());
         let element = el("button").on_click_one(Cmd::toggle("menu"));
         assert!(element.uses.has(Uses::CORE));
+    }
+
+    #[test]
+    fn a_hotkey_is_one_typed_character_and_loads_the_keys_module() {
+        for key in ["j", "K", "/", "?", "1", "é"] {
+            let element = el("a").hotkey(key);
+            assert_eq!(element.get("data-ui-hotkey"), Some(&AttrValue::Text(key.into())));
+            assert_eq!(element.get("aria-keyshortcuts"), Some(&AttrValue::Text(key.into())));
+            assert!(element.uses.has(Uses::KEYS));
+        }
+        for bad in ["", " ", "jk", "Enter", "\n", "\u{7}", "ctrl+k"] {
+            let element = el("a").hotkey(bad);
+            assert!(element.get("data-ui-hotkey").is_none(), "{bad:?}");
+            assert!(element.uses.is_none(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_new_modules_have_bits_of_their_own() {
+        let known = [
+            Uses::CORE,
+            Uses::SIDEBAR,
+            Uses::OVERLAY,
+            Uses::TABLE,
+            Uses::SELECT,
+            Uses::MENUS,
+            Uses::LIVE,
+            Uses::DATES,
+            Uses::PHONE,
+        ];
+        for module in [Uses::SPLIT, Uses::KEYS] {
+            assert!(known.iter().all(|other| other.0 & module.0 == 0));
+        }
+        assert_eq!(Uses::SPLIT.0 & Uses::KEYS.0, 0);
     }
 
     #[test]

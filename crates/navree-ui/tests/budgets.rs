@@ -122,6 +122,44 @@ fn the_menus_module_is_at_most_5_kb_gzip() {
 }
 
 #[test]
+fn the_split_module_is_at_most_3_kb_gzip() {
+    assert!(size("split") <= 3 * 1024, "{}", size("split"));
+}
+
+#[test]
+fn the_keys_module_is_at_most_1_kb_gzip() {
+    assert!(size("keys") <= 1024, "{}", size("keys"));
+}
+
+/// A split loads its own module and nothing else; a hotkey loads the keys module and
+/// nothing else; a page with neither loads neither.
+#[test]
+fn a_split_and_a_hotkey_load_their_own_modules_only() {
+    use navree_ui::{Pane, SplitPane, el};
+
+    let split = View::new("x").body(
+        SplitPane::new("s")
+            .pane(Pane::new("a", "A"))
+            .pane(Pane::fill("b", "B")),
+    );
+    assert_eq!(split.uses(), Uses::SPLIT);
+    let html = split.to_html();
+    assert!(html.contains(assets::SPLIT_URL), "{html}");
+    assert!(!html.contains(assets::CORE_URL));
+    assert!(!html.contains(assets::KEYS_URL));
+
+    let keys = View::new("x").body(el("a").href("/next").hotkey("j").child("Next"));
+    assert_eq!(keys.uses(), Uses::KEYS);
+    let html = keys.to_html();
+    assert!(html.contains(assets::KEYS_URL), "{html}");
+    assert!(!html.contains(assets::SPLIT_URL));
+
+    let plain = View::new("x").body(Button::primary("Go").href("/x"));
+    let html = plain.to_html();
+    assert!(!html.contains(assets::SPLIT_URL) && !html.contains(assets::KEYS_URL));
+}
+
+#[test]
 fn the_phone_module_is_at_most_5_kb_gzip() {
     assert!(size("phone") <= 5 * 1024, "{}", size("phone"));
 }

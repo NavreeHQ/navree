@@ -218,6 +218,12 @@ impl Button {
         self
     }
 
+    /// Says a page with this button loads `uses`.
+    pub(crate) fn with_uses(mut self, uses: crate::node::Uses) -> Self {
+        self.el = self.el.uses(uses);
+        self
+    }
+
     /// Sets `form`, `name` and the like, on the button itself.
     pub fn named(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.el = self

@@ -16,6 +16,7 @@ mod flag;
 mod inputs;
 mod layout;
 mod overlays;
+mod split;
 mod tabs;
 mod timeline;
 mod toast;
@@ -37,11 +38,14 @@ pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
     RadioGroup, Switch, Textarea,
 };
-pub use layout::{Align, Container, ContainerSize, Grid, Justify, Row, Stack};
+pub use layout::{
+    Align, Container, ContainerSize, Grid, Justify, Row, Stack, only_with_script, only_without_script,
+};
 pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, ScrollHeight, Sheet, SheetBackdrop, SheetSide, SheetWidth, Side, Tooltip,
 };
+pub use split::{Pane, SplitHeight, SplitPane, SplitSave, SplitSizes, SplitWidth};
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
 pub use timeline::{Timeline, TimelineEvent, TimelineState};
 pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
@@ -124,6 +128,13 @@ macro_rules! root_methods {
             /// with no request: a counter as a field is typed in, a label as a choice is made.
             pub fn on(mut self, trigger: $crate::Trigger, commands: impl Into<$crate::Commands>) -> Self {
                 self.el = self.el.on(trigger, commands);
+                self
+            }
+
+            /// Makes `key` a shortcut that clicks this, or focuses it if it is a field:
+            /// see [`Element::hotkey`](crate::Element::hotkey).
+            pub fn hotkey(mut self, key: &str) -> Self {
+                self.el = self.el.hotkey(key);
                 self
             }
 
