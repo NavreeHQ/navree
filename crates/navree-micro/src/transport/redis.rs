@@ -313,7 +313,9 @@ impl MicroTransport for RedisTransport {
                 group: self.service.clone(),
                 consumer: self.instance.clone(),
             };
-            let starts = last_entries(&group, &broadcast).await;
+            // Where the broadcast readers start: if the server will not say, there is no
+            // listening yet, and the listener that runs this starts it again.
+            let starts = last_entries(&group, &broadcast).await?;
             subscribed.signal();
             let mut tasks = JoinSet::new();
             if !grouped.is_empty() {
@@ -702,22 +704,23 @@ async fn claim(group: Group, streams: Arc<Vec<Stream>>, deliveries: mpsc::Sender
     }
 }
 
-/// The id of the last entry of each broadcast stream (`0-0` for none): where a broadcast
-/// reader starts, so that it gets the entries added after this.
-async fn last_entries(group: &Group, streams: &[Stream]) -> Vec<String> {
+/// The id of the last entry of each broadcast stream (`0-0` for a stream with none): where a
+/// broadcast reader starts, so that it gets the entries added after this. A server that does
+/// not answer is an error, never `0-0`: that would replay every entry the stream still holds.
+async fn last_entries(group: &Group, streams: &[Stream]) -> Result<Vec<String>, MicroError> {
     let mut commands = group.commands.clone();
     let mut last: Vec<String> = Vec::with_capacity(streams.len());
     for stream in streams {
         let mut cmd = redis::cmd("XREVRANGE");
         cmd.arg(&stream.key).arg("+").arg("-").arg("COUNT").arg(1);
-        let id = query(&mut commands, &cmd, &group.connected)
-            .await
-            .ok()
-            .and_then(|value| entries(value).into_iter().next())
+        let value = query(&mut commands, &cmd, &group.connected).await?;
+        let id = entries(value)
+            .into_iter()
+            .next()
             .map_or_else(|| "0-0".to_owned(), |entry| entry.id);
         last.push(id);
     }
-    last
+    Ok(last)
 }
 
 /// Reads broadcast streams with `XREAD` (no group: every instance gets

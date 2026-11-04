@@ -327,3 +327,46 @@ async fn real_redis_streams_conform() {
     let prefix = format!("conf{}:", &uuid::Uuid::now_v7().simple().to_string()[20..]);
     conformance::run(&RedisHarness::new(url, quick(&prefix))).await;
 }
+
+/// A broadcast reader starts after the last entry of its stream. When the server cannot say
+/// which that is, it must not start from the beginning, which would replay every entry the
+/// stream still holds: the listen fails, and whoever runs it starts it again.
+#[tokio::test]
+async fn a_broadcast_reader_never_starts_from_the_beginning_when_the_server_cannot_say_where() {
+    let server = MiniRedis::start().await;
+    let harness = RedisHarness::new(server.url(), quick("navree:"));
+    // An old broadcast is in the stream before anyone listens.
+    harness
+        .transport("shop")
+        .publish(published("cast.changed", "old"))
+        .await
+        .unwrap();
+    server.fail("XREVRANGE");
+    let transport = harness.transport("cast");
+    let (sender, mut received) = tokio::sync::mpsc::channel(8);
+    let broadcast = Subscription {
+        pattern: "cast.changed".to_owned(),
+        kind: PatternKind::Event,
+        group: Group::Instance("cast-1".to_owned()),
+        ordered: false,
+        ack_wait: Duration::ZERO,
+    };
+    let task = tokio::spawn(async move {
+        transport
+            .listen_subscribed(
+                vec![broadcast],
+                sender,
+                navree_micro::Subscribed::detached(),
+            )
+            .await
+    });
+    let outcome = tokio::time::timeout(HANG, task)
+        .await
+        .expect("the listen ends: it was not allowed to carry on from the beginning")
+        .unwrap();
+    assert!(outcome.is_err(), "{outcome:?}");
+    assert!(
+        received.try_recv().is_err(),
+        "the old broadcast was replayed"
+    );
+}

@@ -25,8 +25,8 @@ use crate::options::{TcpOptions, TlsOptions};
 use crate::pattern::{route_for, route_matches};
 use crate::transport::LocalRetry;
 use crate::{
-    Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind, Subscription,
-    pattern_matches,
+    Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind, Subscribed,
+    Subscription, pattern_matches,
 };
 
 /// Room for the envelope's headers on top of `micro.max_message_bytes`.
@@ -361,6 +361,17 @@ impl MicroTransport for TcpTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    /// A peer that connects before the listener is bound is refused, so the listener says it
+    /// is subscribed once it is bound, and not before.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             let listener = TcpListener::bind(&self.inner.addr).await.map_err(|error| {
                 MicroError::transport(format!("cannot listen on {}: {error}", self.inner.addr))
@@ -369,6 +380,7 @@ impl MicroTransport for TcpTransport {
                 .local_addr()
                 .map_err(|error| MicroError::transport(error.to_string()))?;
             self.inner.bound.send_replace(Some(local));
+            subscribed.signal();
             tracing::info!(target: "navree::micro", addr = %local, "TCP transport listening");
             let subscriptions = Arc::new(subscriptions);
             loop {
@@ -738,6 +750,39 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fallback.event_peers("user.created"), ["d:1"]);
+    }
+
+    /// The listener says it is subscribed once its socket is bound, and not before: a peer
+    /// that connects on the signal must find it. A transport that signals when `listen_subscribed`
+    /// is called, before the future has run, has said so with no socket yet, which is seen
+    /// here by looking before the future is polled, and again after.
+    #[tokio::test]
+    async fn the_listener_is_subscribed_once_it_is_bound() {
+        use std::future::Future;
+
+        let options = TcpOptions {
+            addr: "127.0.0.1:0".to_owned(),
+            ..TcpOptions::default()
+        };
+        let transport = TcpTransport::new(&options, None, 1024, Duration::from_secs(1)).unwrap();
+        let (sender, _deliveries) = mpsc::channel(1);
+        let (signal, mut answered) = Subscribed::channel();
+        let mut listening = Box::pin(transport.listen_subscribed(Vec::new(), sender, signal));
+        assert!(
+            answered.try_recv().is_err(),
+            "subscribed before anything was listening"
+        );
+        assert!(transport.local_addr().is_none());
+        let waker = futures_util::task::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+        assert!(listening.as_mut().poll(&mut cx).is_pending(), "it listens");
+        assert!(
+            answered.try_recv().is_ok(),
+            "the listener did not say it was subscribed once bound"
+        );
+        let addr = transport.local_addr().expect("bound");
+        // A peer that connects on the signal finds the socket.
+        tokio::net::TcpStream::connect(addr).await.expect("connect");
     }
 
     #[test]

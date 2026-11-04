@@ -304,7 +304,7 @@ Use it for services with no HTTP routes, or to scale message consumers separatel
 | `serve` (app with `HttpModule` only) | yes | no |
 | `micro:listen` | no | yes |
 
-A listener reports to [readiness](/docs/digging-deeper/health-and-metrics/): with `ObserveModule` in the app, `/health/ready` includes a `micro` check that fails while the transport is disconnected, so an orchestrator stops sending traffic to an instance that can't reach the broker.
+A listener reports to [readiness](/docs/digging-deeper/health-and-metrics/): with `ObserveModule` in the app, `/health/ready` includes a `micro` check that fails while the transport is disconnected, and while the listener is not subscribed to its messages, so an orchestrator stops sending traffic to an instance that can't reach the broker or hears nothing from it. A listener whose listen fails (a broker that refused the subscriptions, or didn't answer them in time) starts again after a pause of 100 ms that doubles to 30 seconds, and the check stays down until it has them.
 
 In tests and custom commands, `MicroModule::start_listener(ctx)` starts the listener (and the outbox relay) of a booted app the way `serve` does; it returns once the broker has registered the listener's subscriptions, so a message sent right after it is not lost, and `false` when the listener already runs. Apps on the in-memory transport don't need it: their listener starts at boot.
 

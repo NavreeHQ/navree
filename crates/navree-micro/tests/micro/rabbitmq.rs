@@ -126,6 +126,42 @@ async fn rabbitmq_conforms() {
     conformance::run(&RabbitHarness::new(url, run_options())).await;
 }
 
+/// "Subscribed" is a promise: an event sent as soon as the listener says it is subscribed is
+/// heard, so the queue is declared, bound and consumed before the signal. (This needs a
+/// broker, and is skipped without one: `NAVREE_TEST_RABBITMQ_URL`. `rabbitmq_conforms` runs the
+/// same check among the others.)
+#[tokio::test]
+async fn an_event_sent_once_the_listener_is_subscribed_reaches_it() {
+    let Some(url) = broker() else {
+        return;
+    };
+    let harness = RabbitHarness::new(url, run_options());
+    let subscription = Subscription {
+        pattern: "invoice.paid".to_owned(),
+        kind: PatternKind::Event,
+        group: Group::Service("billing".to_owned()),
+        ordered: false,
+        ack_wait: Duration::from_secs(30),
+    };
+    let mut listening =
+        conformance::Listening::start_subscribed(harness.transport("billing"), vec![subscription])
+            .await;
+    harness
+        .transport("shop")
+        .publish(
+            Envelope::new("invoice.paid", "now").with_header(headers::MESSAGE_ID, "m-subscribed"),
+        )
+        .await
+        .unwrap();
+    let delivery = listening
+        .next(Duration::from_secs(120))
+        .await
+        .expect("the event sent once the listener was subscribed");
+    assert_eq!(delivery.envelope().payload().as_ref(), b"now");
+    delivery.ack().await.unwrap();
+    listening.stop().await;
+}
+
 #[tokio::test]
 async fn setup_declares_the_exchanges_queues_and_bindings() {
     let Some(url) = broker() else {

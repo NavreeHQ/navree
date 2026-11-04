@@ -2,7 +2,7 @@
 //! codec with a session of Navree's own (packet ids, acknowledgments,
 //! resends and subscriptions across reconnects).
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -15,12 +15,12 @@ use rumqttc::v5::mqttbytes::QoS;
 use rumqttc::v5::mqttbytes::v5::{
     Codec, ConnAck, Connect, ConnectProperties, ConnectReturnCode, Disconnect,
     DisconnectReasonCode, Filter, Login, Packet, PingReq, PubAck, PubAckReason, Publish,
-    PublishProperties, SubAck, Subscribe, SubscribeProperties, SubscribeReasonCode, Unsubscribe,
+    PublishProperties, Subscribe, SubscribeProperties, SubscribeReasonCode, Unsubscribe,
 };
 use rustls::pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio::sync::{OnceCell, mpsc, oneshot, watch};
+use tokio::sync::{Notify, OnceCell, mpsc, oneshot, watch};
 use tokio_rustls::TlsConnector;
 use tokio_util::codec::Framed;
 use tokio_util::sync::CancellationToken;
@@ -85,6 +85,8 @@ pub struct MqttTransport {
     service: String,
     session: OnceCell<Arc<Session>>,
     closed: CancellationToken,
+    /// How long the broker has to accept a listener's subscriptions.
+    subscribe_timeout: Duration,
 }
 
 /// What a connection needs.
@@ -157,7 +159,17 @@ impl MqttTransport {
             service: service.to_owned(),
             session: OnceCell::new(),
             closed: CancellationToken::new(),
+            subscribe_timeout: ACK_TIMEOUT,
         })
+    }
+
+    /// Sets how long the broker has to accept all of a listener's subscriptions (30 seconds
+    /// by default). A listen that is not answered in that time fails, and the listener that
+    /// runs it starts it again.
+    #[must_use]
+    pub fn with_subscribe_timeout(mut self, timeout: Duration) -> Self {
+        self.subscribe_timeout = timeout;
+        self
     }
 
     /// The topic of `pattern`.
@@ -217,7 +229,9 @@ impl MicroTransport for MqttTransport {
             let pattern = envelope.pattern().to_owned();
             let session = self.session().await?;
             let reply_topic = self.reply_topic();
-            session.subscribe_replies(&reply_topic).await?;
+            session
+                .subscribe_replies(&reply_topic, ACK_TIMEOUT, &self.closed)
+                .await?;
             let correlation = Bytes::copy_from_slice(Uuid::now_v7().as_bytes());
             let (sender, reply) = oneshot::channel();
             session.lock().replies.insert(correlation.clone(), sender);
@@ -306,7 +320,13 @@ impl MicroTransport for MqttTransport {
     }
 
     /// An event is not kept for a topic nobody has subscribed to, so the listener says it is
-    /// subscribed once the broker has answered every subscription, and not before.
+    /// subscribed once the broker has accepted every subscription, and not before. All the
+    /// SUBSCRIBEs go out together and the broker has the subscribe timeout (30 seconds unless
+    /// [`with_subscribe_timeout`](Self::with_subscribe_timeout) says otherwise) to answer all
+    /// of them.
+    /// A connection that closes first only delays that: the subscriptions are asked for again
+    /// when it comes back. If the broker refuses one, does not answer in time or the transport
+    /// closes, the listen fails, and the listener that runs it starts it again.
     fn listen_subscribed(
         &self,
         subscriptions: Vec<Subscription>,
@@ -340,10 +360,15 @@ impl MicroTransport for MqttTransport {
             let (incoming, mut received) = mpsc::unbounded_channel();
             session.set_route(Route { incoming });
             for entry in &entries {
-                if let Err(error) = session.subscribe(&entry.path, Some(entry.index + 1)).await {
-                    session.clear_route(&mut received);
-                    return Err(error);
-                }
+                session.subscribe(&entry.path, Some(entry.index + 1));
+            }
+            let paths: Vec<String> = entries.iter().map(|entry| entry.path.clone()).collect();
+            if let Err(error) = session
+                .subscribed(&paths, self.subscribe_timeout, &self.closed)
+                .await
+            {
+                session.clear_route(&mut received);
+                return Err(error);
             }
             subscribed.signal();
             loop {
@@ -449,6 +474,8 @@ struct Route {
 struct Session {
     state: Mutex<State>,
     status: watch::Sender<Status>,
+    /// Woken when a SUBACK says what became of a subscription.
+    subscription_answered: Notify,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -465,7 +492,12 @@ struct State {
     seq: u64,
     /// Outgoing QoS 1 publishes the broker has not acknowledged.
     inflight: HashMap<u16, Inflight>,
-    subacks: HashMap<u16, oneshot::Sender<SubAck>>,
+    /// SUBSCRIBEs sent on this connection and not yet answered: packet id to path.
+    sub_pending: HashMap<u16, String>,
+    /// The paths the broker has accepted, on this connection or in the session it kept.
+    confirmed: HashSet<String>,
+    /// The paths the broker refused, and what it said.
+    refused: HashMap<String, String>,
     /// Every subscription, restored on a reconnect without a session.
     subscriptions: Vec<(String, Option<usize>)>,
     replies: HashMap<Bytes, oneshot::Sender<Envelope>>,
@@ -486,7 +518,7 @@ impl State {
         loop {
             self.last_pkid = self.last_pkid.wrapping_add(1).max(1);
             if !self.inflight.contains_key(&self.last_pkid)
-                && !self.subacks.contains_key(&self.last_pkid)
+                && !self.sub_pending.contains_key(&self.last_pkid)
             {
                 return self.last_pkid;
             }
@@ -511,6 +543,7 @@ impl Session {
         let session = Arc::new(Session {
             state: Mutex::new(State::default()),
             status,
+            subscription_answered: Notify::new(),
         });
         let id = SESSIONS.fetch_add(1, Ordering::Relaxed);
         tokio::spawn(run(session.clone(), settings, closed, id));
@@ -580,49 +613,87 @@ impl Session {
         }
     }
 
-    /// Subscribes `path` with QoS 1 (and a subscription identifier), and
-    /// keeps it across reconnects. Waits for the SUBACK when connected.
-    async fn subscribe(&self, path: &str, id: Option<usize>) -> Result<(), MicroError> {
-        let (sender, ack) = oneshot::channel();
-        {
-            let mut state = self.lock();
-            if !state.subscriptions.iter().any(|(known, _)| known == path) {
-                state.subscriptions.push((path.to_owned(), id));
-            }
-            if state.writer.is_none() {
-                // Sent when the connection comes back.
-                return Ok(());
-            }
+    /// Asks for `path` with QoS 1 (and a subscription identifier) and keeps it across
+    /// reconnects, without waiting: the SUBSCRIBE goes out now when connected, and when the
+    /// connection comes back otherwise. [`subscribed`](Self::subscribed) waits for the answer.
+    fn subscribe(&self, path: &str, id: Option<usize>) {
+        let mut state = self.lock();
+        if !state.subscriptions.iter().any(|(known, _)| known == path) {
+            state.subscriptions.push((path.to_owned(), id));
+        }
+        state.refused.remove(path);
+        if state.writer.is_some() {
             let pkid = state.next_pkid();
-            state.subacks.insert(pkid, sender);
+            state.sub_pending.insert(pkid, path.to_owned());
             state.write(subscribe_packet(pkid, path, id));
         }
-        let ack = tokio::time::timeout(ACK_TIMEOUT, ack)
-            .await
-            .map_err(|_| {
-                MicroError::transport(format!(
-                    "the MQTT broker did not acknowledge the subscription to {path}"
-                ))
-            })?
-            .map_err(|_| {
-                MicroError::transport(format!(
-                    "the connection closed before the subscription to {path}"
-                ))
-            })?;
-        match ack.return_codes.first() {
-            Some(SubscribeReasonCode::Success(_)) => Ok(()),
-            other => Err(MicroError::transport(format!(
-                "the MQTT broker refused the subscription to {path}: {other:?}"
-            ))),
+    }
+
+    /// Waits until the broker has accepted every one of `paths`, all of them against one
+    /// `deadline`: they were all asked for together, so they are answered together. A
+    /// connection that closes first only delays it, because a subscription that was asked for
+    /// is asked again when the connection comes back, and its answer counts then. Fails when
+    /// the broker refuses one, when the deadline passes, or when `closed` is cancelled.
+    async fn subscribed(
+        &self,
+        paths: &[String],
+        deadline: Duration,
+        closed: &CancellationToken,
+    ) -> Result<(), MicroError> {
+        let until = tokio::time::Instant::now() + deadline;
+        loop {
+            let answered = self.subscription_answered.notified();
+            tokio::pin!(answered);
+            // Listening before looking, so an answer between the two is not missed.
+            answered.as_mut().enable();
+            let waiting: Vec<&String> = {
+                let state = self.lock();
+                if let Some((path, why)) = paths
+                    .iter()
+                    .find_map(|path| state.refused.get(path).map(|why| (path, why)))
+                {
+                    return Err(MicroError::transport(format!(
+                        "the MQTT broker refused the subscription to {path}: {why}"
+                    )));
+                }
+                paths
+                    .iter()
+                    .filter(|path| !state.confirmed.contains(*path))
+                    .collect()
+            };
+            if waiting.is_empty() {
+                return Ok(());
+            }
+            tokio::select! {
+                () = &mut answered => {}
+                () = tokio::time::sleep_until(until) => {
+                    return Err(MicroError::transport(format!(
+                        "the MQTT broker did not acknowledge the subscription to {}",
+                        waiting.iter().map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
+                    )));
+                }
+                () = closed.cancelled() => {
+                    return Err(MicroError::transport(
+                        "the transport closed before the broker acknowledged the subscriptions",
+                    ));
+                }
+            }
         }
     }
 
     /// Subscribes this instance's reply topic, once.
-    async fn subscribe_replies(&self, topic: &str) -> Result<(), MicroError> {
+    async fn subscribe_replies(
+        &self,
+        topic: &str,
+        deadline: Duration,
+        closed: &CancellationToken,
+    ) -> Result<(), MicroError> {
         if self.lock().reply_topic.as_deref() == Some(topic) {
             return Ok(());
         }
-        self.subscribe(topic, None).await?;
+        self.subscribe(topic, None);
+        self.subscribed(&[topic.to_owned()], deadline, closed)
+            .await?;
         self.lock().reply_topic = Some(topic.to_owned());
         Ok(())
     }
@@ -670,9 +741,12 @@ impl Session {
         let mut state = self.lock();
         state.writer = Some(writer);
         if !session_present {
+            // The broker forgot them: they are asked for again, and counted once it says yes.
+            state.confirmed.clear();
             let subscriptions = state.subscriptions.clone();
             for (path, id) in subscriptions {
                 let pkid = state.next_pkid();
+                state.sub_pending.insert(pkid, path.clone());
                 state.write(subscribe_packet(pkid, &path, id));
             }
         }
@@ -696,8 +770,8 @@ impl Session {
     fn on_disconnected(&self, error: String) {
         let mut state = self.lock();
         state.writer = None;
-        // Subscriptions waiting for a SUBACK are restored on reconnect.
-        state.subacks.clear();
+        // Subscriptions waiting for a SUBACK are asked for again on reconnect.
+        state.sub_pending.clear();
         drop(state);
         self.status.send_replace(Status::Down(error));
     }
@@ -713,8 +787,18 @@ impl Session {
                 }
             }
             Packet::SubAck(ack) => {
-                if let Some(waiter) = self.lock().subacks.remove(&ack.pkid) {
-                    let _ = waiter.send(ack);
+                let mut state = self.lock();
+                if let Some(path) = state.sub_pending.remove(&ack.pkid) {
+                    match ack.return_codes.first() {
+                        Some(SubscribeReasonCode::Success(_)) => {
+                            state.confirmed.insert(path);
+                        }
+                        other => {
+                            state.refused.insert(path, format!("{other:?}"));
+                        }
+                    }
+                    drop(state);
+                    self.subscription_answered.notify_waiters();
                 }
             }
             Packet::Publish(publish) => self.on_publish(publish),
@@ -1275,8 +1359,7 @@ mod tests {
         };
         assert_eq!(state.next_pkid(), u16::MAX);
         assert_eq!(state.next_pkid(), 1, "wraps past zero");
-        let (sender, _) = oneshot::channel();
-        state.subacks.insert(2, sender);
+        state.sub_pending.insert(2, "a/b".to_owned());
         assert_eq!(state.next_pkid(), 3, "2 is in use");
     }
 }

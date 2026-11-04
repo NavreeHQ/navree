@@ -18,7 +18,8 @@ use crate::options::DeadLetterMode;
 use crate::pipeline::{MessageRouter, Outcome, Registered};
 use crate::runtime::MicroRuntime;
 use crate::{
-    DeadLetter, Delivery, DeliveryActions, Envelope, Group, PatternKind, Subscribed, Subscription,
+    DeadLetter, Delivery, DeliveryActions, Envelope, Group, MicroError, PatternKind, Subscribed,
+    Subscription,
 };
 
 /// Outbox rows younger than this are left to the after-commit hook that
@@ -109,6 +110,70 @@ impl Gates {
     }
 }
 
+/// The pause before the transport's listen is started again, after its `attempt`th failure:
+/// 100 ms, doubling to 30 seconds.
+fn restart_delay(attempt: u32) -> Duration {
+    let exponent = attempt.saturating_sub(1).min(16);
+    Duration::from_millis(100u64.saturating_mul(1u64 << exponent)).min(Duration::from_secs(30))
+}
+
+/// Runs the transport's listen, and starts it again when it fails (a broker that refused or
+/// did not answer the subscriptions, a stream that could not be read), until the listener is
+/// stopped. A listener that failed once and was never started again would leave an app that
+/// looks healthy and hears nothing; this one keeps trying, and the app's health says it is not
+/// subscribed until it is. `boot` is for the first attempt only: boot waits for it.
+async fn listen_until_stopped(
+    runtime: Arc<MicroRuntime>,
+    subscriptions: Vec<Subscription>,
+    deliveries: mpsc::Sender<Delivery>,
+    boot: Subscribed,
+    stop: CancellationToken,
+) -> Result<(), MicroError> {
+    let mut boot = Some(boot);
+    let mut failures = 0u32;
+    loop {
+        runtime.set_subscribed(false);
+        let (signal, answered) = Subscribed::channel();
+        let state = runtime.clone();
+        let boot_now = boot.take();
+        tokio::spawn(async move {
+            // Dropped unanswered when the attempt fails: `boot_now` goes with it, and boot
+            // goes on without a listener, which the health check reports.
+            if answered.await.is_ok() {
+                state.set_subscribed(true);
+                if let Some(boot) = boot_now {
+                    boot.signal();
+                }
+            }
+        });
+        let outcome = runtime
+            .transport
+            .listen_subscribed(subscriptions.clone(), deliveries.clone(), signal)
+            .await;
+        let error = match outcome {
+            Ok(()) => return Ok(()),
+            Err(error) => error,
+        };
+        if stop.is_cancelled() || deliveries.is_closed() {
+            return Err(error);
+        }
+        failures = failures.saturating_add(1);
+        let pause = restart_delay(failures);
+        tracing::warn!(
+            target: "navree::micro",
+            %error,
+            retry_in_ms = u64::try_from(pause.as_millis()).unwrap_or(u64::MAX),
+            "the {} listener failed; starting it again",
+            runtime.transport.name()
+        );
+        tokio::select! {
+            () = tokio::time::sleep(pause) => {}
+            () = stop.cancelled() => return Err(error),
+            () = deliveries.closed() => return Err(error),
+        }
+    }
+}
+
 /// Runs the listener until `stop` is cancelled: subscribes the app's
 /// patterns, handles deliveries (up to `micro.concurrency` at once), then
 /// stops taking messages and finishes the ones in flight.
@@ -138,16 +203,33 @@ pub(crate) async fn run(
     }
     let concurrency = runtime.options.concurrency.max(1);
     let (sender, mut deliveries) = mpsc::channel::<Delivery>(concurrency);
-    let transport = runtime.transport.clone();
     // Boot goes on once the transport says the broker has registered the
-    // subscriptions (or its listen ended without saying so).
+    // subscriptions, or its first listen ended without saying so, or the app is stopping.
     let (subscribed, is_subscribed) = Subscribed::channel();
-    let listening = tokio::spawn(async move {
-        transport
-            .listen_subscribed(subscriptions, sender, subscribed)
-            .await
-    });
-    let _ = is_subscribed.await;
+    let listening = tokio::spawn(listen_until_stopped(
+        runtime.clone(),
+        subscriptions,
+        sender,
+        subscribed,
+        stop.clone(),
+    ));
+    // A broker that never answers must not keep the app from starting: boot goes on after six
+    // times the connect timeout (a connection and the subscriptions take two, and a broker
+    // that has to agree on a group first, as Kafka does, takes longer), the listener keeps
+    // trying, and the readiness check says it is not subscribed until it is.
+    let boot_wait = Duration::from_millis(runtime.options.connect_timeout_ms).saturating_mul(6);
+    tokio::select! {
+        _ = is_subscribed => {}
+        () = stop.cancelled() => {}
+        () = tokio::time::sleep(boot_wait) => {
+            tracing::warn!(
+                target: "navree::micro",
+                waited_ms = u64::try_from(boot_wait.as_millis()).unwrap_or(u64::MAX),
+                "the {} listener is not subscribed yet; starting the app without waiting",
+                runtime.transport.name()
+            );
+        }
+    }
     let _ = started.send(());
     tracing::info!(
         target: "navree::micro",

@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures_util::{SinkExt, StreamExt};
@@ -89,6 +89,22 @@ impl MiniMqtt {
             .collect()
     }
 
+    /// Makes the broker read SUBSCRIBEs and never answer them, as a broker that has hung would.
+    pub fn never_answer_subscriptions(&self) {
+        self.state.mute_subscribe.store(true, Ordering::SeqCst);
+    }
+
+    /// How many SUBSCRIBE packets the broker has read.
+    pub fn subscribe_requests(&self) -> usize {
+        self.state.subscribe_requests.load(Ordering::SeqCst)
+    }
+
+    /// Makes the broker close the connection of each of the next `times` SUBSCRIBEs it reads,
+    /// before it answers: the connection is lost with the SUBACK on its way.
+    pub fn drop_connection_on_subscribe(&self, times: usize) {
+        self.state.drop_on_subscribe.store(times, Ordering::SeqCst);
+    }
+
     /// Makes the broker take `delay` to start on each SUBSCRIBE, as a busy broker would: what
     /// a client does in that time happens before the subscription is there.
     pub fn slow_subscriptions(&self, delay: std::time::Duration) {
@@ -141,6 +157,9 @@ struct State {
     changed: tokio::sync::Notify,
     /// How long the broker takes to start on a SUBSCRIBE: see `MiniMqtt::slow_subscriptions`.
     subscribe_delay: Mutex<std::time::Duration>,
+    mute_subscribe: AtomicBool,
+    subscribe_requests: AtomicUsize,
+    drop_on_subscribe: AtomicUsize,
 }
 
 #[derive(Clone)]
@@ -233,6 +252,14 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
                         }))
                     }
                     Packet::Subscribe(subscribe) => {
+                        state.subscribe_requests.fetch_add(1, Ordering::SeqCst);
+                        if state
+                            .drop_on_subscribe
+                            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| left.checked_sub(1))
+                            .is_ok()
+                        {
+                            break;
+                        }
                         let delay = *state.subscribe_delay.lock().unwrap();
                         if !delay.is_zero() {
                             tokio::time::sleep(delay).await;
@@ -254,7 +281,9 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
                         }
                         drop(subs);
                         state.changed.notify_waiters();
-                        Some(Packet::SubAck(SubAck { pkid: subscribe.pkid, return_codes: codes, properties: None }))
+                        (!state.mute_subscribe.load(Ordering::SeqCst)).then(|| {
+                            Packet::SubAck(SubAck { pkid: subscribe.pkid, return_codes: codes, properties: None })
+                        })
                     }
                     Packet::Unsubscribe(unsubscribe) => {
                         let mut subs = state.subs.lock().unwrap();

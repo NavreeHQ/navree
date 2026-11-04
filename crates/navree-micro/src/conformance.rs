@@ -71,6 +71,7 @@ pub async fn run(harness: &dyn Harness) {
     consumer_groups_share_messages(harness).await;
     broadcast_reaches_every_instance(harness).await;
     retries_redeliver_events(harness).await;
+    events_sent_once_subscribed_are_heard(harness).await;
     per_key_order(harness).await;
     durable_events_wait(harness).await;
     wildcards(harness).await;
@@ -83,10 +84,28 @@ pub struct Listening {
 }
 
 impl Listening {
-    /// Starts `transport` listening to `subscriptions`.
+    /// Starts `transport` listening to `subscriptions`, and gives it a moment after it says
+    /// it is subscribed: some checks send at once, but most do not depend on being first.
     pub async fn start(
         transport: Arc<dyn MicroTransport>,
         subscriptions: Vec<Subscription>,
+    ) -> Listening {
+        Self::begin(transport, subscriptions, true).await
+    }
+
+    /// Starts `transport` listening to `subscriptions` and returns as soon as it says it is
+    /// subscribed, with no pause: what is sent next must be heard.
+    pub async fn start_subscribed(
+        transport: Arc<dyn MicroTransport>,
+        subscriptions: Vec<Subscription>,
+    ) -> Listening {
+        Self::begin(transport, subscriptions, false).await
+    }
+
+    async fn begin(
+        transport: Arc<dyn MicroTransport>,
+        subscriptions: Vec<Subscription>,
+        pause: bool,
     ) -> Listening {
         let (sender, deliveries) = mpsc::channel(64);
         let (subscribed, is_subscribed) = Subscribed::channel();
@@ -98,7 +117,9 @@ impl Listening {
         // The transport says when the broker has the subscriptions; the
         // pause covers transports that start consuming a moment later.
         let _ = tokio::time::timeout(WAIT, is_subscribed).await;
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        if pause {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
         Listening { deliveries, task }
     }
 
@@ -361,6 +382,28 @@ pub async fn retries_redeliver_events(harness: &dyn Harness) {
         listening.next(QUIET).await.is_none(),
         "acknowledged events stay handled"
     );
+    listening.stop().await;
+}
+
+/// "Subscribed" is a promise: an event sent as soon as the listener says it is subscribed is
+/// heard, with no wait in between. A transport that says so before its consumer group, its
+/// binding or its socket exists loses this event.
+pub async fn events_sent_once_subscribed_are_heard(harness: &dyn Harness) {
+    let service = "conf-promise";
+    let transport = harness.instance(service, &["conf-promise.happened"]).await;
+    let mut listening =
+        Listening::start_subscribed(transport, vec![event("conf-promise.happened", service)]).await;
+    let client = harness.client().await;
+    client
+        .publish(published("conf-promise.happened", "now".into()))
+        .await
+        .expect("published");
+    let delivery = listening
+        .next(WAIT)
+        .await
+        .expect("the event sent once the listener was subscribed");
+    assert_eq!(delivery.envelope().payload().as_ref(), b"now");
+    delivery.ack().await.expect("ack");
     listening.stop().await;
 }
 

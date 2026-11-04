@@ -63,6 +63,16 @@ impl MiniRedis {
         self.state.data.lock().unwrap().streams.contains_key(key)
     }
 
+    /// Makes the server answer `command` (`XREVRANGE`) with an error, as one that is
+    /// overloaded or restarting does.
+    pub fn fail(&self, command: &str) {
+        self.state
+            .failing
+            .lock()
+            .unwrap()
+            .insert(command.to_owned());
+    }
+
     /// Makes the server slow with `command` (`XGROUP`, `XREVRANGE`): it takes `delay` to
     /// start on it, as a busy server would, so what a client does in that time happens first.
     pub fn slow(&self, command: &str, delay: std::time::Duration) {
@@ -89,6 +99,8 @@ struct State {
     added: Notify,
     /// How long the server takes to start on a command: see `MiniRedis::slow`.
     delays: Mutex<HashMap<String, std::time::Duration>>,
+    /// The commands the server answers with an error: see `MiniRedis::fail`.
+    failing: Mutex<std::collections::HashSet<String>>,
 }
 
 #[derive(Default)]
@@ -242,6 +254,9 @@ async fn execute(state: &State, args: &[Vec<u8>]) -> Reply {
     let Some(name) = args.first() else {
         return Reply::Error("ERR empty command".into());
     };
+    if state.failing.lock().unwrap().contains(&upper(name)) {
+        return Reply::Error("ERR the server cannot answer right now".into());
+    }
     let delay = state.delays.lock().unwrap().get(&upper(name)).copied();
     if let Some(delay) = delay {
         tokio::time::sleep(delay).await;

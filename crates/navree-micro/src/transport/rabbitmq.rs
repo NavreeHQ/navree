@@ -31,7 +31,7 @@ use crate::transport::LocalRetry;
 use crate::transport::broker::reconnect_delay;
 use crate::{
     DeadLetter, Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind,
-    Subscription,
+    Subscribed, Subscription,
 };
 
 /// RabbitMQ's direct reply-to pseudo-queue.
@@ -494,7 +494,20 @@ impl MicroTransport for RabbitmqTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    /// The queues are declared, bound and consumed in `consume`, and a message sent before that
+    /// is dropped by a broadcast exchange or waits in a durable queue it was not bound to, so
+    /// the listener says it is subscribed once the first `consume` has succeeded.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
+            let mut subscribed = Some(subscribed);
             let mut attempt = 0u32;
             loop {
                 let (channel, mut consumers, retry_queues) = match self
@@ -503,6 +516,9 @@ impl MicroTransport for RabbitmqTransport {
                 {
                     Ok(consuming) => {
                         attempt = 0;
+                        if let Some(subscribed) = subscribed.take() {
+                            subscribed.signal();
+                        }
                         consuming
                     }
                     Err(error) => {

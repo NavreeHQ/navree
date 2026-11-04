@@ -38,6 +38,9 @@ pub(crate) struct MicroRuntime {
     app: WeakAppContext,
     router: OnceCell<Arc<MessageRouter>>,
     listening: AtomicBool,
+    /// True while a started listener that has subscriptions is not subscribed: the broker has
+    /// not accepted them yet, or the listen failed and is waiting to start again.
+    unsubscribed: AtomicBool,
 }
 
 impl MicroRuntime {
@@ -96,6 +99,7 @@ impl MicroRuntime {
             app: ctx.downgrade(),
             router: OnceCell::new(),
             listening: AtomicBool::new(false),
+            unsubscribed: AtomicBool::new(false),
         })
     }
 
@@ -175,8 +179,11 @@ impl MicroRuntime {
             }
         });
         // Subscribed (or done) before returning, so a message sent right
-        // after boot finds its handler.
-        let _ = is_started.await;
+        // after boot finds its handler. A boot that is stopped does not wait for it.
+        tokio::select! {
+            _ = is_started => {}
+            () = token.cancelled() => {}
+        }
         self.start_relay(ctx, token);
         Ok(true)
     }
@@ -192,9 +199,14 @@ impl MicroRuntime {
         });
     }
 
+    /// Says whether the listener has its subscriptions (see `unsubscribed`).
+    pub(crate) fn set_subscribed(&self, subscribed: bool) {
+        self.unsubscribed.store(!subscribed, Ordering::SeqCst);
+    }
+
     /// The `micro` readiness check.
     pub(crate) fn health(self: &Arc<Self>) -> Arc<dyn HealthCheck> {
-        Arc::new(MicroHealth(self.transport.clone()))
+        Arc::new(MicroHealth(self.clone()))
     }
 }
 
@@ -427,8 +439,9 @@ impl Lifecycle for Starter {
     }
 }
 
-/// The `micro` readiness check: down while the transport is disconnected.
-struct MicroHealth(Arc<dyn MicroTransport>);
+/// The `micro` readiness check: down while the transport is disconnected, and while a started
+/// listener has not got its subscriptions.
+struct MicroHealth(Arc<MicroRuntime>);
 
 impl HealthCheck for MicroHealth {
     fn name(&self) -> &str {
@@ -437,10 +450,19 @@ impl HealthCheck for MicroHealth {
 
     fn check(&self) -> BoxFuture<'_, HealthStatus> {
         Box::pin(async move {
-            if self.0.is_connected() {
-                HealthStatus::Up
+            let transport = &self.0.transport;
+            if !transport.is_connected() {
+                HealthStatus::Down(format!(
+                    "the {} transport is disconnected",
+                    transport.name()
+                ))
+            } else if self.0.unsubscribed.load(Ordering::SeqCst) {
+                HealthStatus::Down(format!(
+                    "the {} listener is not subscribed to its messages",
+                    transport.name()
+                ))
             } else {
-                HealthStatus::Down(format!("the {} transport is disconnected", self.0.name()))
+                HealthStatus::Up
             }
         })
     }

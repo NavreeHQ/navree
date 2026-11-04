@@ -298,3 +298,133 @@ async fn a_real_broker_conforms() {
     ))
     .await;
 }
+
+/// A transport on `broker` that gives the broker `subscribe_timeout` to accept subscriptions.
+fn transport_on(broker: &MiniMqtt, subscribe_timeout: Duration) -> Arc<dyn MicroTransport> {
+    Arc::new(
+        MqttTransport::new(
+            broker.url(),
+            &MqttOptions::default(),
+            "billing",
+            "billing-1",
+            Duration::from_secs(5),
+        )
+        .expect("an MQTT transport")
+        .with_subscribe_timeout(subscribe_timeout),
+    )
+}
+
+fn three_subscriptions() -> Vec<Subscription> {
+    vec![
+        event("invoice.paid", "billing"),
+        event("invoice.refunded", "billing"),
+        event("invoice.voided", "billing"),
+    ]
+}
+
+/// Starts `transport` listening, with nothing said to anyone.
+fn listen_in_background(
+    transport: Arc<dyn MicroTransport>,
+    subscriptions: Vec<Subscription>,
+) -> tokio::task::JoinHandle<Result<(), MicroError>> {
+    let (sender, receiver) = tokio::sync::mpsc::channel(8);
+    tokio::spawn(async move {
+        // Held, so the listen ends only because of what the broker does.
+        let _receiver = receiver;
+        transport
+            .listen_subscribed(subscriptions, sender, navree_micro::Subscribed::detached())
+            .await
+    })
+}
+
+/// A broker that answers nothing must not be waited for one subscription at a time: every
+/// SUBSCRIBE goes out before any answer is waited for, and the listen then fails at one
+/// deadline, naming the subscriptions that were not answered.
+#[tokio::test]
+async fn every_subscribe_goes_out_before_any_answer_is_waited_for() {
+    let broker = MiniMqtt::start().await;
+    broker.never_answer_subscriptions();
+    let task = listen_in_background(
+        transport_on(&broker, Duration::from_secs(3)),
+        three_subscriptions(),
+    );
+    // The guard only ends a hang: a transport that sends one and waits for its answer never
+    // gets here, and a transport that sends them all gets here at once.
+    tokio::time::timeout(
+        Duration::from_secs(20),
+        broker.until(|broker| broker.subscribe_requests() >= 3),
+    )
+    .await
+    .expect("all three SUBSCRIBEs were sent without waiting for an answer to the first");
+    let error = tokio::time::timeout(Duration::from_secs(60), task)
+        .await
+        .expect("the listen ends at its deadline")
+        .unwrap()
+        .expect_err("a broker that never answers fails the listen");
+    let text = error.to_string();
+    assert!(text.contains("did not acknowledge"), "{text}");
+    for topic in ["invoice/paid", "invoice/refunded", "invoice/voided"] {
+        assert!(text.contains(topic), "{topic}: {text}");
+    }
+}
+
+/// Stopping the transport ends a listen that is waiting for the broker, however long the
+/// broker was given.
+#[tokio::test]
+async fn a_listen_waiting_for_the_broker_ends_when_the_transport_closes() {
+    let broker = MiniMqtt::start().await;
+    broker.never_answer_subscriptions();
+    let transport = transport_on(&broker, Duration::from_secs(3_600));
+    let task = listen_in_background(transport.clone(), three_subscriptions());
+    tokio::time::timeout(
+        Duration::from_secs(20),
+        broker.until(|broker| broker.subscribe_requests() >= 3),
+    )
+    .await
+    .expect("the SUBSCRIBEs were sent");
+    transport.close().await;
+    // The old wait was 30 seconds, for each subscription, whatever was said: this is well
+    // inside it.
+    let outcome = tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("the listen ends when the transport closes")
+        .unwrap();
+    assert!(outcome.is_err(), "{outcome:?}");
+}
+
+/// A connection that is lost with the SUBACK on its way only delays the subscription: it is
+/// asked for again when the connection comes back, and the listener is subscribed then.
+#[tokio::test]
+async fn a_connection_lost_before_the_suback_only_delays_the_subscription() {
+    let broker = MiniMqtt::start().await;
+    broker.drop_connection_on_subscribe(1);
+    let harness = MqttHarness::new(broker.url(), MqttOptions::default());
+    let listener = harness.transport("billing");
+    let mut listening =
+        Listening::start_subscribed(listener, vec![event("invoice.paid", "billing")]).await;
+    // The broker read the first SUBSCRIBE and dropped the connection; it read another once the
+    // client was back, and holds the subscription now.
+    tokio::time::timeout(
+        HANG,
+        broker.until(|broker| !broker.subscriptions().is_empty()),
+    )
+    .await
+    .expect("the client came back and subscribed");
+    assert!(
+        broker.subscribe_requests() >= 2,
+        "{}",
+        broker.subscribe_requests()
+    );
+    harness
+        .transport("shop")
+        .publish(published("invoice.paid", "late"))
+        .await
+        .unwrap();
+    let delivery = listening
+        .next(HANG)
+        .await
+        .expect("the listener subscribed once the connection was back");
+    assert_eq!(delivery.envelope().payload().as_ref(), b"late");
+    delivery.ack().await.unwrap();
+    listening.stop().await;
+}

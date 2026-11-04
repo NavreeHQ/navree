@@ -113,10 +113,18 @@ pub trait MicroTransport: Send + Sync + 'static {
     /// of an app whose transport [`listens_at_boot`](Self::listens_at_boot)
     /// finishes) only then, so a request sent right after is not lost on a
     /// transport that drops messages nobody has subscribed to. Override it
-    /// when subscribing takes a round trip to the broker; signal once the
-    /// broker has confirmed. The default signals at once and calls `listen`,
-    /// which is right for a transport that keeps messages for a subscriber
-    /// that has not arrived yet.
+    /// when subscribing takes a round trip to the broker, or when the
+    /// listener has anything to create first (a socket to bind, a queue to
+    /// declare, a consumer group, a starting point in a stream): signal once
+    /// the broker has confirmed, and an event sent after the signal must be
+    /// heard. The default signals at once and calls `listen`, which is right
+    /// only for a transport that keeps messages for a subscriber that has not
+    /// arrived yet.
+    ///
+    /// A listen that fails is started again by the listener, after a pause
+    /// that doubles to 30 seconds, and the app's readiness check is down
+    /// until a listen has signalled. Dropping `subscribed` without a signal
+    /// lets the boot go on.
     fn listen_subscribed(
         &self,
         subscriptions: Vec<Subscription>,
