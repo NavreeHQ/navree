@@ -21,7 +21,7 @@ export const WIDTHS = [640, 1280, 1920, 2560] as const;
  * fetches the new one. `scripts/postbuild.ts` stops the build when it no
  * longer matches the files, and prints the right value.
  */
-export const PICTURE_VERSION = "b26d9765ed";
+export const PICTURE_VERSION = "720ef38e9c";
 
 export const imageSrc = (width: number, ext: "avif" | "webp") => `/images/about/family-${width}.${ext}?v=${PICTURE_VERSION}`;
 
