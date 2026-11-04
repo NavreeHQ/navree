@@ -326,12 +326,14 @@ fn a_sheet_dims_the_page_behind_unless_asked_to_keep_it_readable() {
     assert!(light.starts_with("<dialog"), "{light}");
     let css = include_str!("../styles/30-overlays.css");
     assert!(
-        css.contains("&::backdrop{background:rgb(1 3 2/.72)}"),
-        "the default backdrop"
+        css.contains("&::backdrop{background:var(--scrim,rgb(1 3 2/.72))}"),
+        "the default backdrop is the mode's scrim"
     );
     assert!(
-        css.contains("&[data-backdrop=light]::backdrop{background:rgb(1 3 2/.4)}"),
-        "the light backdrop"
+        css.contains(
+            "&[data-backdrop=light]::backdrop{background:color-mix(in srgb,var(--scrim,rgb(1 3 2/.72)) 55%,transparent)}"
+        ),
+        "the light backdrop is part of the same scrim, in light and dark"
     );
 }
 
