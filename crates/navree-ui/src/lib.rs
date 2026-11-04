@@ -118,8 +118,8 @@ pub use select::{
 };
 pub use shell::{AppPage, AppShell, Collapse, NavGroup, NavItem, Shell, ShellLayout, UserMenu};
 pub use sortable::{
-    Landing, ListState, Move, MoveError, MoveRejected, Refusal, SortItem, SortLabels, SortLayout,
-    SortList, Sortable,
+    Landing, ListState, Move, MoveError, MoveRejected, Placement, RankedLists, Refusal, SortItem,
+    SortLabels, SortLayout, SortList, Sortable, Spot,
 };
 pub use table::{
     BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,

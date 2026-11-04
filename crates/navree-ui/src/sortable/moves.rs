@@ -56,10 +56,14 @@ pub struct Move {
     pub from_list: String,
     /// The list it goes to: the same list to reorder it.
     pub to_list: String,
-    /// The item it goes before in that list, or `None` for after the last one.
+    /// The item it goes before in that list.
     pub before: Option<String>,
+    /// The item it goes after, when it was dropped below the last item the browser
+    /// had: a long list the page holds only the start of. Read when `before` is
+    /// `None`; with neither, it goes after the last one.
+    pub after: Option<String>,
     /// Where it goes by number, 1 being first, from the form a person fills in with
-    /// JavaScript off. Read only when `before` is `None`.
+    /// JavaScript off. Read only when `before` and `after` are `None`.
     pub position: Option<u32>,
 }
 
@@ -75,6 +79,7 @@ impl Move {
             from_list: from_list.into(),
             to_list: to_list.into(),
             before: None,
+            after: None,
             position: None,
         }
     }
@@ -86,6 +91,13 @@ impl Move {
         self
     }
 
+    /// Puts it after `item`.
+    #[must_use]
+    pub fn after(mut self, item: impl Into<String>) -> Self {
+        self.after = Some(item.into());
+        self
+    }
+
     /// Puts it at `position`, 1 being first.
     #[must_use]
     pub fn at(mut self, position: u32) -> Self {
@@ -94,7 +106,7 @@ impl Move {
     }
 
     /// Reads a move from a urlencoded body. The first value of each field counts;
-    /// `before` and `position` may be empty.
+    /// `before`, `after` and `position` may be empty.
     ///
     /// # Errors
     ///
@@ -105,6 +117,7 @@ impl Move {
         let mut from_list = None;
         let mut to_list = None;
         let mut before = None;
+        let mut after = None;
         let mut position = None;
         for (count, (name, value)) in urlencoded::parse(body).enumerate() {
             if count >= MAX_PAIRS {
@@ -115,6 +128,7 @@ impl Move {
                 "from_list" => &mut from_list,
                 "to_list" => &mut to_list,
                 "before" => &mut before,
+                "after" => &mut after,
                 "position" => &mut position,
                 _ => continue,
             };
@@ -126,11 +140,13 @@ impl Move {
             Some(value) if !value.is_empty() && value.len() <= MAX_KEY => Ok(value),
             _ => Err(MoveError::Field(name)),
         };
-        let before = match before {
-            Some(value) if value.len() > MAX_KEY => return Err(MoveError::Field("before")),
-            Some(value) if !value.is_empty() => Some(value),
-            _ => None,
+        let anchor = |value: Option<String>, name: &'static str| match value {
+            Some(value) if value.len() > MAX_KEY => Err(MoveError::Field(name)),
+            Some(value) if !value.is_empty() => Ok(Some(value)),
+            _ => Ok(None),
         };
+        let before = anchor(before, "before")?;
+        let after = anchor(after, "after")?;
         let position = match position.as_deref().map(str::trim) {
             None | Some("") => None,
             Some(text) => {
@@ -147,6 +163,7 @@ impl Move {
             from_list: key(from_list, "from_list")?,
             to_list: key(to_list, "to_list")?,
             before,
+            after,
             position,
         })
     }
@@ -180,7 +197,9 @@ impl Move {
             .iter()
             .position(|list| list.key == self.to_list)
             .ok_or(Refusal::NoList)?;
-        if self.before.as_deref() == Some(self.item.as_str()) {
+        if self.before.as_deref() == Some(self.item.as_str())
+            || self.after.as_deref() == Some(self.item.as_str())
+        {
             return Err(Refusal::Malformed);
         }
         let target = &lists[to_at];
@@ -206,15 +225,19 @@ impl Move {
             .filter(|key| **key != self.item)
             .cloned()
             .collect();
-        let index = match (&self.before, self.position) {
-            (Some(anchor), _) => order
+        let anchored = |anchor: &str| {
+            order
                 .iter()
                 .position(|key| key == anchor)
-                .ok_or(Refusal::Moved)?,
-            (None, Some(position)) => usize::try_from(position.saturating_sub(1))
+                .ok_or(Refusal::Moved)
+        };
+        let index = match (&self.before, &self.after, self.position) {
+            (Some(anchor), _, _) => anchored(anchor)?,
+            (None, Some(anchor), _) => anchored(anchor)? + 1,
+            (None, None, Some(position)) => usize::try_from(position.saturating_sub(1))
                 .unwrap_or(usize::MAX)
                 .min(order.len()),
-            (None, None) => order.len(),
+            (None, None, None) => order.len(),
         };
         order.insert(index, self.item.clone());
         let left = if same {
@@ -408,7 +431,8 @@ pub enum Refusal {
         /// Where it is now.
         list: String,
     },
-    /// The item it was dropped before has left the list since the page was drawn.
+    /// The item it was dropped before, or after, has left the list since the page
+    /// was drawn.
     Moved,
     /// The list is full.
     Full {
@@ -422,7 +446,7 @@ pub enum Refusal {
         /// Why, as the list says it.
         reason: String,
     },
-    /// The move makes no sense: an item before itself.
+    /// The move makes no sense: an item before or after itself.
     Malformed,
 }
 

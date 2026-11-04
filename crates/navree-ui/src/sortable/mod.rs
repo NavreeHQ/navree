@@ -17,10 +17,13 @@ use crate::form::csrf_field;
 use crate::html::Href;
 use crate::icons;
 use crate::node::{IntoNodes, Node, Uses, el, into_node};
+use crate::op::Op;
 
 mod moves;
+mod ranked;
 
 pub use moves::{Landing, ListState, Move, MoveError, MoveRejected, Refusal};
+pub use ranked::{Placement, RANK_GAP, RankedLists, Spot, rank_between};
 
 /// How a sortable's lists sit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -83,6 +86,8 @@ pub struct SortLabels {
     pub move_submit: Cow<'static, str>,
     /// A full list in the move form's choices.
     pub full_option: Cow<'static, str>,
+    /// The button that loads a list's next items.
+    pub more: Cow<'static, str>,
 }
 
 impl Default for SortLabels {
@@ -112,6 +117,7 @@ impl Default for SortLabels {
             move_position: Cow::Borrowed("Position"),
             move_submit: Cow::Borrowed("Move"),
             full_option: Cow::Borrowed("{list} (full)"),
+            more: Cow::Borrowed("Load more"),
         }
     }
 }
@@ -163,6 +169,8 @@ pub struct SortList {
     title: String,
     items: Vec<SortItem>,
     total: Option<usize>,
+    start: usize,
+    more: Option<More>,
     limit: Option<u32>,
     refuse: Option<String>,
     actions: Vec<Node>,
@@ -179,6 +187,8 @@ impl SortList {
             title: title.into(),
             items: Vec::new(),
             total: None,
+            start: 0,
+            more: None,
             limit: None,
             refuse: None,
             actions: Vec::new(),
@@ -204,6 +214,43 @@ impl SortList {
     /// shows some. The count beside the title, and the limit, go by this.
     pub fn total(mut self, total: usize) -> Self {
         self.total = Some(total);
+        self
+    }
+
+    /// Says the items drawn start at this place in the list, 0 being first: a page
+    /// after the first. Their move forms count positions from there.
+    pub fn from(mut self, start: usize) -> Self {
+        self.start = start;
+        self
+    }
+
+    /// Ends the list with a button that loads its next items: a `GET` of `action`
+    /// with `fields`, such as a cursor and a count. The `sortable` module presses it
+    /// as it scrolls into sight; the answer is [`Sortable::page`]. With JavaScript
+    /// off it is a plain form: answer it with the page, the list showing more.
+    pub fn more<K, V>(
+        mut self,
+        action: impl Into<Href>,
+        fields: impl IntoIterator<Item = (K, V)>,
+    ) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.more = Some(More::Form {
+            action: action.into(),
+            fields: fields
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect(),
+        });
+        self
+    }
+
+    /// Ends the list with a note in place of more items: the page holds as many as
+    /// it will ("Showing the first 200 of 12,034").
+    pub fn end_note(mut self, note: impl Into<String>) -> Self {
+        self.more = Some(More::Note(note.into()));
         self
     }
 
@@ -247,6 +294,18 @@ impl SortList {
         self.hide_title = true;
         self
     }
+}
+
+/// What ends a list the page holds only the start of.
+#[derive(Clone, Debug)]
+enum More {
+    /// A form that asks for the next items.
+    Form {
+        action: Href,
+        fields: Vec<(String, String)>,
+    },
+    /// A note that no more will come into the page.
+    Note(String),
 }
 
 impl SortList {
@@ -372,21 +431,7 @@ impl Sortable {
             _ => "h2",
         };
         let labels = &self.labels;
-        let choices: Vec<(String, String, bool)> = self
-            .lists
-            .iter()
-            .map(|list| {
-                let full = list
-                    .limit
-                    .is_some_and(|limit| list.count() >= limit as usize);
-                let title = if full {
-                    labels.full_option.replace("{list}", &list.title)
-                } else {
-                    list.title.clone()
-                };
-                (list.key.clone(), title, list.refuse.is_some() || full)
-            })
-            .collect();
+        let choices = self.choices();
         let list_slugs = slugs(self.lists.iter().map(|list| list.key.as_str()));
         let item_slugs = slugs(
             self.lists
@@ -399,12 +444,18 @@ impl Sortable {
             let list_id = format!("{}-list-{list_slug}", self.id);
             let title_id = format!("{list_id}-title");
             let count = list.count();
-            let hidden = count - list.items.len();
             let mut items = Vec::with_capacity(list.items.len());
             for (at, item) in list.items.iter().enumerate() {
                 let item_slug = item_slugs.next().unwrap_or_default();
                 let item_id = format!("{}-item-{item_slug}", self.id);
-                items.push(self.item_node(item, &item_id, &list.key, at + 1, &choices, &help_id));
+                items.push(self.item_node(
+                    item,
+                    &item_id,
+                    &list.key,
+                    list.start + at + 1,
+                    &choices,
+                    &help_id,
+                ));
             }
             let count_text = list.limit.map_or_else(
                 || labels.count.replace("{count}", &count.to_string()),
@@ -458,22 +509,24 @@ impl Sortable {
             lists.push(
                 el("section")
                     .slot("sortable-list")
-                    .attr("id", list_id)
+                    .attr("id", list_id.clone())
                     .attr("data-list", list.key.clone())
                     .attr("aria-labelledby", title_id.clone())
                     .attr_opt("data-limit", list.limit.map(i64::from))
-                    .attr_opt(
-                        "data-hidden",
-                        (hidden > 0).then(|| i64::try_from(hidden).unwrap_or(i64::MAX)),
-                    )
+                    .attr("data-total", i64::try_from(count).unwrap_or(i64::MAX))
+                    .flag("data-paged", list.more.is_some() || list.start > 0)
                     .attr_opt("data-refuse", list.refuse.clone())
                     .children((
                         header,
                         el("ol")
                             .slot("sortable-items")
+                            .attr("id", format!("{list_id}-items"))
                             .attr("aria-labelledby", title_id)
                             .child(items),
                         el("p").slot("sortable-empty").child(empty),
+                        list.more
+                            .as_ref()
+                            .map(|more| self.more_node(&list_id, more)),
                         (!list.footer.is_empty()).then(|| {
                             el("div")
                                 .slot("sortable-list-footer")
@@ -528,6 +581,109 @@ impl Sortable {
             el("div").slot("sortable-lists").child(lists),
         ))
         .into()
+    }
+
+    /// The next items of the list `key`, as ops: they join the end of that list in
+    /// the page, and its "Load more" button gives way to the list's own: another
+    /// one for the page after, its note, or nothing when the list is all there.
+    /// Build the sortable as for the whole page, with that list holding only the new
+    /// items, [`from`](SortList::from) where they start.
+    pub fn page(self, key: &str) -> Vec<Op> {
+        let slugs_of_lists = slugs(self.lists.iter().map(|list| list.key.as_str()));
+        let Some((list, list_slug)) = self
+            .lists
+            .iter()
+            .zip(slugs_of_lists)
+            .find(|(list, _)| list.key == key)
+        else {
+            return Vec::new();
+        };
+        let list_id = format!("{}-list-{list_slug}", self.id);
+        let help_id = format!("{}-help", self.id);
+        let choices = self.choices();
+        let items: Vec<Node> = list
+            .items
+            .iter()
+            .zip(slugs(list.items.iter().map(|item| item.key.as_str())))
+            .enumerate()
+            .map(|(at, (item, slug))| {
+                let item_id = format!("{}-item-{slug}", self.id);
+                self.item_node(
+                    item,
+                    &item_id,
+                    &list.key,
+                    list.start + at + 1,
+                    &choices,
+                    &help_id,
+                )
+            })
+            .collect();
+        let more = list
+            .more
+            .as_ref()
+            .map_or(Node::Empty, |more| self.more_node(&list_id, more));
+        vec![
+            Op::append(format!("{list_id}-items"), &Node::list(items)),
+            Op::replace(format!("{list_id}-more"), &more),
+        ]
+    }
+
+    /// The lists a move form offers: key, name, and whether it is closed to items
+    /// from other lists.
+    fn choices(&self) -> Vec<(String, String, bool)> {
+        self.lists
+            .iter()
+            .map(|list| {
+                let full = list
+                    .limit
+                    .is_some_and(|limit| list.count() >= limit as usize);
+                let title = if full {
+                    self.labels.full_option.replace("{list}", &list.title)
+                } else {
+                    list.title.clone()
+                };
+                (list.key.clone(), title, list.refuse.is_some() || full)
+            })
+            .collect()
+    }
+
+    /// The end of a list the page holds only the start of.
+    fn more_node(&self, list_id: &str, more: &More) -> Node {
+        let id = format!("{list_id}-more");
+        match more {
+            More::Form { action, fields } => el("form")
+                .slot("sortable-more")
+                .attr("id", id)
+                .attr("method", "get")
+                .attr("action", action.clone())
+                .flag("data-ui-form", true)
+                .flag("data-ui-autoload", true)
+                .children((
+                    fields
+                        .iter()
+                        .map(|(name, value)| {
+                            Node::from(
+                                el("input")
+                                    .attr("type", "hidden")
+                                    .attr("name", name.clone())
+                                    .attr("value", value.clone()),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                    el("button")
+                        .slot("button")
+                        .attr("type", "submit")
+                        .attr("data-variant", "ghost")
+                        .attr("data-size", "sm")
+                        .child(self.labels.more.clone()),
+                ))
+                .into(),
+            More::Note(note) => el("p")
+                .slot("sortable-more")
+                .attr("id", id)
+                .child(note.clone())
+                .into(),
+        }
     }
 
     /// One item: its handle, what it shows, and the form that moves it.
@@ -590,6 +746,7 @@ impl Sortable {
                             hidden("item", item.key.clone()),
                             hidden("from_list", list_key.to_owned()),
                             hidden("before", String::new()),
+                            hidden("after", String::new()),
                             el("label")
                                 .slot("sortable-move-field")
                                 .attr("for", to_id.clone())

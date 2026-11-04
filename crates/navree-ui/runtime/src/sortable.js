@@ -17,7 +17,7 @@
 // Every read of the page goes through the prototypes, so no element named like a
 // method (`<img name="elementFromPoint">`, `<input name="requestSubmit">`) changes
 // what this does.
-import { active, all, attr, body, closest, field, has, holds, on, root as docRoot, set, unset } from "./dom.js";
+import { active, all, attr, body, closest, every, field, has, holds, on, root as docRoot, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-sortable]";
 const LIST = "[data-slot=sortable-list]";
@@ -46,7 +46,7 @@ const insert = (parent, node, before) => {
 const fire = (target, event) => TP.dispatchEvent.call(target, event);
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** @typedef {{list: string, next: string}} Place where an item is: its list's key, and the key of the item after it ("" for none) */
+/** @typedef {{list: string, next: string, prev?: string}} Place where an item is: its list's key, and the keys of the items after and before it ("" for none) */
 /** @typedef {{root: Element, item: HTMLElement, mode: "pointer" | "keys", from: Place, over: Element | null, refused: string, ghost?: HTMLElement, id?: number, dx: number, dy: number, x: number, y: number, frame: number, dirty: boolean, scrollers: Element[], said: Element | null}} Drag */
 
 /** The drag under way: one at a time in a page. @type {Drag | null} */
@@ -72,10 +72,21 @@ const itemsOf = (list) => /** @type {HTMLElement[]} */ ([...all(list, ITEM)].fil
 const boxOf = (list) => [...all(list, BOX)].find((box) => closest(box, LIST) === list) || null;
 /** @param {Element} item */
 const listOf = (item) => closest(item, LIST);
-/** How many items `list` holds: those drawn, and those a filter left out. @param {Element} list @param {Element | null} [leaving] */
+/** The number a list says it holds, drawn or not, or null. @param {Element} list */
+const totalOf = (list) => {
+  const total = attr(list, "data-total");
+  return total !== null && /^\d+$/.test(total) ? Number(total) : null;
+};
+/** How many items `list` holds, `leaving` left out: its total, which every move here keeps true. @param {Element} list @param {Element | null} [leaving] */
 const sizeOf = (list, leaving = null) => {
-  const hidden = attr(list, "data-hidden");
-  return itemsOf(list).filter((i) => i !== leaving).length + (hidden && /^\d+$/.test(hidden) ? Number(hidden) : 0);
+  const total = totalOf(list);
+  const here = !!leaving && listOf(leaving) === list;
+  return total === null ? itemsOf(list).filter((i) => i !== leaving).length : Math.max(0, total - (here ? 1 : 0));
+};
+/** Adds `by` to the total of `list`. @param {Element | null} list @param {number} by */
+const shiftTotal = (list, by) => {
+  const total = list && totalOf(list);
+  if (list && total !== null) set(list, "data-total", String(Math.max(0, total + by)));
 };
 /** @param {Element} list */
 const titleOf = (list) => ([...all(list, "[data-slot=sortable-list-title]")].find((t) => closest(t, LIST) === list)?.textContent || listKey(list)).trim();
@@ -87,7 +98,9 @@ const nextOf = (item) => {
 /** @param {Element} item @returns {Place} */
 const placeOf = (item) => {
   const list = listOf(item), next = nextOf(item);
-  return { list: list ? listKey(list) : "", next: next ? keyOf(next) : "" };
+  let prev = item.previousElementSibling;
+  while (prev && attr(prev, "data-slot") !== "sortable-item") prev = prev.previousElementSibling;
+  return { list: list ? listKey(list) : "", next: next ? keyOf(next) : "", prev: prev ? keyOf(prev) : "" };
 };
 /** @param {Place} a @param {Place} b */
 const samePlace = (a, b) => a.list === b.list && a.next === b.next;
@@ -173,11 +186,16 @@ function put(list, item, before) {
   const at = before && before.parentNode === box ? before : null;
   if (item.parentNode === box && (at ? item.nextElementSibling === at : !item.nextElementSibling)) return;
   const focused = holds(item, active());
+  const was = listOf(item);
   moving = true;
   try {
     insert(box, item, at);
   } finally {
     moving = false;
+  }
+  if (was !== list) {
+    shiftTotal(was, -1);
+    shiftTotal(list, 1);
   }
   if (focused && !holds(item, active())) /** @type {HTMLElement | undefined} */ (all(item, HANDLE)[0])?.focus({ preventScroll: true });
 }
@@ -247,7 +265,7 @@ function commit(root, item, from) {
   records.set(item, record);
   set(item, "data-pending", "");
   formRoot.set(form, root);
-  queueOf(root).waiting.push({ item, form, to, fields: { item: keyOf(item), from_list: from.list, to_list: to.list, before: to.next, position: "" } });
+  queueOf(root).waiting.push({ item, form, to, fields: { item: keyOf(item), from_list: from.list, to_list: to.list, before: to.next, after: to.prev || "", position: "" } });
   pump(root);
 }
 
@@ -356,7 +374,54 @@ on(document, "ui:before-swap", (e) => {
   for (const root of roots) for (const [item, rect] of measure(root)) rects.set(item, rect);
   redraw = { rects, roots };
 });
+/**
+ * After a page of items joins a list: an item the page has already (it moved down
+ * past the cursor) is not kept twice, and the region the lists stand in asks for as
+ * many items as the page now holds, so the next redraw doesn't take them away.
+ */
+function tidy() {
+  for (const root of every(ROOT)) {
+    const seen = new Set();
+    for (const item of all(root, ITEM)) {
+      if (has(item, "data-ghost") || closest(item, ROOT) !== root) continue;
+      const id = attr(item, "id");
+      if (id && seen.has(id) && item !== drag?.item) item.remove();
+      else if (id) seen.add(id);
+    }
+    const region = closest(root, "[data-ui-region]");
+    const src = region && attr(region, "data-ui-src");
+    if (!region || !src) continue;
+    const url = new URL(src, location.href);
+    for (const list of listsOf(root)) {
+      if (has(list, "data-paged")) url.searchParams.set("show." + listKey(list), String(itemsOf(list).length));
+    }
+    const next = url.pathname + url.search;
+    if (next !== src) set(region, "data-ui-src", next);
+  }
+  watch();
+}
+
+/* Long lists: the "Load more" button of a list is pressed as it comes into sight, one page at a time. */
+
+/** @type {IntersectionObserver | null} */
+let seer = null;
+function watch() {
+  if (typeof IntersectionObserver !== "function") return;
+  seer ||= new IntersectionObserver((seen) => {
+    for (const entry of seen) {
+      const form = /** @type {HTMLFormElement} */ (entry.target);
+      if (!entry.isIntersecting || !form.isConnected || has(form, "data-pending")) continue;
+      try {
+        HTMLFormElement.prototype.requestSubmit.call(form);
+      } catch {}
+    }
+  }, { rootMargin: "320px" });
+  for (const form of every("form[data-ui-autoload]")) seer.observe(form);
+}
+watch();
+
 on(document, "ui:swap", () => {
+  tidy();
   if (drag) {
     if (!drag.item.isConnected || !drag.root.isConnected) end();
     else set(drag.item, drag.mode === "keys" ? "data-lifted" : "data-dragging", "");

@@ -5,9 +5,10 @@ use http::StatusCode;
 use navree_http::body::Body;
 use navree_http::extract::FromRequest;
 use navree_http::response::IntoResponse;
+use navree_ui::sortable::{Placement, RANK_GAP, RankedLists, Spot, rank_between};
 use navree_ui::{
-    ListState, Move, MoveError, Refusal, SortItem, SortLabels, SortList, Sortable, TestView, Uses,
-    View, render,
+    ListState, Move, MoveError, Op, Refusal, SortItem, SortLabels, SortList, Sortable, TestView,
+    Uses, View, render,
 };
 use proptest::prelude::*;
 
@@ -36,7 +37,8 @@ fn html(sortable: Sortable) -> String {
 fn a_board_draws_its_lists_with_titles_counts_and_limits() {
     let html = html(board());
     assert!(html.contains(r#"data-slot="sortable" id="sprint" data-layout="board" role="group" aria-label="Sprint board" data-ui-sortable"#), "{html}");
-    assert!(html.contains(r#"<section data-slot="sortable-list" id="sprint-list-ready" data-list="ready" aria-labelledby="sprint-list-ready-title">"#), "{html}");
+    assert!(html.contains(r#"<section data-slot="sortable-list" id="sprint-list-ready" data-list="ready" aria-labelledby="sprint-list-ready-title" data-total="2">"#), "{html}");
+    assert!(html.contains(r#"<ol data-slot="sortable-items" id="sprint-list-ready-items" aria-labelledby="sprint-list-ready-title">"#), "{html}");
     assert!(html.contains(
         r#"<h2 data-slot="sortable-list-title" id="sprint-list-ready-title">Ready</h2>"#
     ));
@@ -72,6 +74,7 @@ fn each_item_has_a_form_that_moves_it_with_javascript_off() {
         r#"<input type="hidden" name="item" value="14">"#,
         r#"<input type="hidden" name="from_list" value="ready">"#,
         r#"<input type="hidden" name="before" value="">"#,
+        r#"<input type="hidden" name="after" value="">"#,
         r#"<select data-slot="native-select" id="sprint-item-14-to" name="to_list">"#,
         r#"<option value="ready" selected>Ready</option>"#,
         // A full list and one that refuses are offered, switched off: the server says why if they're sent anyway.
@@ -565,5 +568,293 @@ proptest! {
         let opened = html.matches('<').count();
         let tags = html.matches("<li").count();
         prop_assert!(opened > 0 && tags == 1);
+    }
+}
+
+/* Long lists. */
+
+#[test]
+fn a_long_list_counts_every_item_and_ends_with_a_button_for_the_next() {
+    let html = html(
+        Sortable::new("b", "Board").post("/m").list(
+            SortList::new("backlog", "Backlog")
+                .total(12_034)
+                .item(SortItem::new("1", "First"))
+                .more("/columns/backlog", [("after", "65536.1"), ("show", "40")]),
+        ),
+    );
+    assert!(html.contains(r#"data-total="12034" data-paged"#), "{html}");
+    assert!(html.contains("<span data-count>12034</span>"), "{html}");
+    assert!(html.contains(r#"<form data-slot="sortable-more" id="b-list-backlog-more" method="get" action="/columns/backlog" data-ui-form data-ui-autoload><input type="hidden" name="after" value="65536.1"><input type="hidden" name="show" value="40"><button data-slot="button" type="submit" data-variant="ghost" data-size="sm">Load more</button></form>"#), "{html}");
+    let html = html_of(
+        Sortable::new("b", "Board")
+            .post("/m")
+            .list(SortList::new("done", "Done").end_note("Showing the first 200 of 8,000.")),
+    );
+    assert!(html.contains(r#"<p data-slot="sortable-more" id="b-list-done-more">Showing the first 200 of 8,000.</p>"#), "{html}");
+}
+
+fn html_of(sortable: Sortable) -> String {
+    render(&sortable.into())
+}
+
+#[test]
+fn the_next_page_of_a_list_is_two_ops() {
+    let board = Sortable::new("b", "Board")
+        .post("/m")
+        .list(SortList::new("ready", "Ready").limit(5))
+        .list(
+            SortList::new("backlog", "Backlog")
+                .from(20)
+                .item(SortItem::new("21", "Twenty-first"))
+                .more("/columns/backlog", [("after", "9.21")]),
+        );
+    let ops = board.clone().page("backlog");
+    assert_eq!(ops.len(), 2);
+    let json = serde_json::to_string(&ops).unwrap();
+    assert!(
+        json.contains(r#""target":"b-list-backlog-items""#),
+        "{json}"
+    );
+    assert!(json.contains(r#""target":"b-list-backlog-more""#), "{json}");
+    // Positions count on from where the page starts.
+    assert!(json.contains(r#"value=\"21\""#), "{json}");
+    assert!(json.contains(r#"id=\"b-item-21\""#), "{json}");
+    // The last page takes the button away.
+    let last = Sortable::new("b", "Board").post("/m").list(
+        SortList::new("backlog", "Backlog")
+            .from(40)
+            .item(SortItem::new("41", "Last")),
+    );
+    let ops = last.page("backlog");
+    assert!(
+        matches!(&ops[1], Op::Replace { html, .. } if html.is_empty()),
+        "{ops:?}"
+    );
+    assert!(board.page("nowhere").is_empty());
+}
+
+#[test]
+fn a_move_after_an_item_lands_below_it() {
+    let mv = Move::from_form(b"item=1&from_list=ready&to_list=ready&before=&after=3").unwrap();
+    assert_eq!(mv, Move::new("1", "ready", "ready").after("3"));
+    assert_eq!(mv.check(&lists()).unwrap().order, ["2", "3", "1"]);
+    let landing = Move::new("3", "ready", "ready")
+        .after("1")
+        .check(&lists())
+        .unwrap();
+    assert_eq!(landing.order, ["1", "3", "2"]);
+    // Before wins over after; an anchor that left is stale; after itself makes no sense.
+    let landing = Move::new("3", "ready", "ready")
+        .before("1")
+        .after("2")
+        .check(&lists())
+        .unwrap();
+    assert_eq!(landing.order, ["3", "1", "2"]);
+    assert_eq!(
+        Move::new("1", "ready", "ready").after("4").check(&lists()),
+        Err(Refusal::Moved)
+    );
+    assert_eq!(
+        Move::new("1", "ready", "ready").after("1").check(&lists()),
+        Err(Refusal::Malformed)
+    );
+}
+
+#[test]
+fn ranks_leave_room_and_say_when_there_is_none() {
+    assert_eq!(rank_between(None, None), Some(0));
+    assert_eq!(rank_between(Some(0), None), Some(RANK_GAP));
+    assert_eq!(rank_between(None, Some(0)), Some(-RANK_GAP));
+    assert_eq!(rank_between(Some(0), Some(RANK_GAP)), Some(RANK_GAP / 2));
+    assert_eq!(rank_between(Some(4), Some(5)), None);
+    assert_eq!(rank_between(Some(5), Some(4)), None);
+    assert_eq!(rank_between(Some(i64::MAX), None), None);
+    assert_eq!(rank_between(Some(i64::MIN), Some(i64::MAX)), None);
+    assert_eq!(rank_between(None, Some(i64::MIN)), None);
+}
+
+/// Lists in memory, kept by rank: what a database answers for [`Move::place`].
+#[derive(Clone, Debug)]
+struct Ranks(Vec<(ListState, Vec<(String, i64)>)>);
+
+impl Ranks {
+    fn of(lists: &[ListState]) -> Self {
+        Self(
+            lists
+                .iter()
+                .map(|list| {
+                    let items = list
+                        .items
+                        .iter()
+                        .enumerate()
+                        .map(|(at, key)| (key.clone(), at as i64 * RANK_GAP))
+                        .collect();
+                    (list.clone(), items)
+                })
+                .collect(),
+        )
+    }
+
+    fn sorted(&self, list: &str, item: &str) -> Vec<i64> {
+        let mut ranks: Vec<i64> = self
+            .0
+            .iter()
+            .filter(|(l, _)| l.key == list)
+            .flat_map(|(_, items)| items.iter().filter(|(k, _)| k != item).map(|(_, r)| *r))
+            .collect();
+        ranks.sort_unstable();
+        ranks
+    }
+
+    /// The orders once `placement` is written.
+    fn apply(&self, placement: &Placement) -> Vec<(String, Vec<String>)> {
+        let mut all: Vec<(String, String, i64)> = self
+            .0
+            .iter()
+            .flat_map(|(l, items)| items.iter().map(|(k, r)| (l.key.clone(), k.clone(), *r)))
+            .filter(|(_, k, _)| *k != placement.item)
+            .collect();
+        all.push((
+            placement.to_list.clone(),
+            placement.item.clone(),
+            placement.rank.unwrap_or(0),
+        ));
+        self.0
+            .iter()
+            .map(|(l, _)| {
+                let mut here: Vec<&(String, String, i64)> =
+                    all.iter().filter(|(list, ..)| *list == l.key).collect();
+                here.sort_by_key(|(_, _, rank)| *rank);
+                (
+                    l.key.clone(),
+                    here.into_iter().map(|(_, k, _)| k.clone()).collect(),
+                )
+            })
+            .collect()
+    }
+}
+
+impl RankedLists for Ranks {
+    type Error = std::convert::Infallible;
+
+    async fn spot(&self, key: &str) -> Result<Option<Spot>, Self::Error> {
+        Ok(self.0.iter().find_map(|(l, items)| {
+            items.iter().find(|(k, _)| k == key).map(|(_, r)| Spot {
+                list: l.key.clone(),
+                rank: *r,
+            })
+        }))
+    }
+
+    async fn list(&self, key: &str, item: &str) -> Result<Option<(ListState, u64)>, Self::Error> {
+        Ok(self.0.iter().find(|(l, _)| l.key == key).map(|(l, items)| {
+            (
+                l.clone(),
+                items.iter().filter(|(k, _)| k != item).count() as u64,
+            )
+        }))
+    }
+
+    async fn beside(
+        &self,
+        list: &str,
+        rank: i64,
+        lower: bool,
+        item: &str,
+    ) -> Result<Option<i64>, Self::Error> {
+        let ranks = self.sorted(list, item);
+        Ok(if lower {
+            ranks.into_iter().filter(|r| *r < rank).max()
+        } else {
+            ranks.into_iter().filter(|r| *r > rank).min()
+        })
+    }
+
+    async fn nth(&self, list: &str, index: u64, item: &str) -> Result<Option<i64>, Self::Error> {
+        Ok(self.sorted(list, item).get(index as usize).copied())
+    }
+
+    async fn last(&self, list: &str, item: &str) -> Result<Option<i64>, Self::Error> {
+        Ok(self.sorted(list, item).last().copied())
+    }
+}
+
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap()
+        .block_on(future)
+}
+
+#[test]
+fn a_placed_move_writes_one_rank_between_its_neighbours() {
+    let ranks = Ranks::of(&lists());
+    let placed = block_on(Move::new("3", "ready", "ready").before("2").place(&ranks))
+        .unwrap()
+        .unwrap();
+    assert_eq!(placed.rank, Some(RANK_GAP / 2));
+    assert!(placed.moved);
+    let placed = block_on(Move::new("1", "ready", "ready").before("2").place(&ranks))
+        .unwrap()
+        .unwrap();
+    assert!(!placed.moved, "dropped where it was");
+    assert_eq!(placed.rank, Some(0));
+    let refused = block_on(Move::new("1", "ready", "doing").place(&ranks)).unwrap();
+    assert!(matches!(refused, Err(Refusal::Full { .. })));
+    let refused = block_on(Move::new("4", "ready", "ready").place(&ranks)).unwrap();
+    assert!(matches!(refused, Err(Refusal::Stale { list }) if list == "In progress"));
+    // Neighbours with no room between them: the list wants fresh ranks first.
+    let mut tight = ranks.clone();
+    tight.0[0].1[1].1 = 1;
+    let placed = block_on(Move::new("3", "ready", "ready").before("2").place(&tight))
+        .unwrap()
+        .unwrap();
+    assert_eq!(placed.rank, None);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1_000))]
+
+    /// Placed by rank, reading only the neighbours, a move ends where the check over
+    /// whole lists puts it, and is refused for the same reasons.
+    #[test]
+    fn placing_by_rank_agrees_with_the_whole_list_check(
+        sizes in proptest::collection::vec(0usize..7, 1..5),
+        limits in proptest::collection::vec(proptest::option::of(0u32..7), 5),
+        item in 0usize..30,
+        from in 0usize..6,
+        to in 0usize..6,
+        before in proptest::option::of(0usize..30),
+        after in proptest::option::of(0usize..30),
+        position in proptest::option::of(0u32..10),
+    ) {
+        let mut next = 0;
+        let lists: Vec<ListState> = sizes
+            .iter()
+            .enumerate()
+            .map(|(at, size)| {
+                let items: Vec<String> = (0..*size).map(|_| { next += 1; next.to_string() }).collect();
+                ListState::new(format!("l{at}"), format!("List {at}"), items).limit(limits[at])
+            })
+            .collect();
+        let mut mv = Move::new(item.to_string(), format!("l{from}"), format!("l{to}"));
+        mv.before = before.map(|b| b.to_string());
+        mv.after = after.map(|a| a.to_string());
+        mv.position = position;
+        let ranks = Ranks::of(&lists);
+        let checked = mv.check(&lists);
+        let placed = block_on(mv.place(&ranks)).unwrap();
+        match (checked, placed) {
+            (Ok(landing), Ok(placement)) => {
+                prop_assert!(placement.rank.is_some());
+                prop_assert_eq!(landing.moved, placement.moved);
+                let orders = ranks.apply(&placement);
+                let got = &orders.iter().find(|(key, _)| *key == landing.to_list).unwrap().1;
+                prop_assert_eq!(got, &landing.order);
+            }
+            (Err(a), Err(b)) => prop_assert_eq!(a, b),
+            (a, b) => prop_assert!(false, "check {:?} but place {:?}", a, b),
+        }
     }
 }
