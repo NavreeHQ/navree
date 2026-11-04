@@ -103,6 +103,39 @@ async fn store(shell: AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal
 
 With the runtime, a rejected form answers `422` with an `errors` op, and the errors appear under the fields without reloading the page. With JavaScript off, it answers `422` with the page.
 
+## What was posted
+
+A `Rejected<T>` holds what was posted. `value("owner_id")` is the first text sent under a field, `values_of("tags")` every text sent under a list field, and `values()` all of them, as `(field, text)` pairs of the form's own fields: never a password, and never a field marked `#[form(skip)]`.
+
+A picker that searches the server, such as a [Combobox](/docs/components/combobox/#searching-on-the-server), posts only the id of its choice, and the page that comes back would show that id. Look the choice up and give its label to the form with `options(field, ...)` before you answer, or `choices(field, ...)` for a choice with more than a label:
+
+```rust
+async fn store(
+    shell: AppShell,
+    uow: Uow,
+    submit: Result<Submit<NewDeal>, Rejected<NewDeal>>,
+) -> Result<Response> {
+    match submit {
+        Ok(Submit(deal)) => Ok(Reply::redirect("/deals")
+            .toast(ToastTone::Success, format!("{} created", deal.title))
+            .into_response()),
+        Err(rejected) => {
+            let owner = match rejected.value("owner_id").and_then(|id| id.parse::<i64>().ok()) {
+                Some(id) => Person::find(&uow, id)
+                    .await?
+                    .map(|person| (id.to_string(), person.into_inner().name)),
+                None => None,
+            };
+            Ok(rejected.options("owner_id", owner).respond(|form| {
+                shell.page("New deal").body(form.post("/deals").submit("Create deal"))
+            }))
+        }
+    }
+}
+```
+
+The runtime keeps the page and shows only the errors, so the label matters for the page that answers with JavaScript off. A person who is not there leaves the id, as before.
+
 ## Sent back with errors
 
 <UiPreview example="forms/errors" />

@@ -1833,6 +1833,8 @@ pub struct Rejected<T> {
     from_runtime: bool,
     action: String,
     refused: Option<StatusCode>,
+    options: BTreeMap<&'static str, Vec<(String, String)>>,
+    rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -1858,7 +1860,7 @@ impl<T: Form> Rejected<T> {
     /// `Parts` beside `Submit` to give it.
     ///
     /// ```ignore
-    /// async fn store(parts: Parts, Submit(deal): Submit<NewDeal>, uow: Uow) -> Result<Response> {
+    /// async fn store(parts: Parts, uow: Uow, Submit(deal): Submit<NewDeal>) -> Result<Response> {
     ///     if !PEOPLE.all_pickable(Person::query(), &deal.owner_id, &uow, OptionSource::as_int).await? {
     ///         let errors = FieldErrors::from([("owner_id".to_owned(), vec!["Choose from the list.".to_owned()])]);
     ///         return Ok(Rejected::after_decode(&deal, errors, &parts).into_response());
@@ -1881,6 +1883,8 @@ impl<T: Form> Rejected<T> {
                 |path| path.as_str().to_owned(),
             ),
             refused: None,
+            options: BTreeMap::new(),
+            rich: BTreeMap::new(),
             marker: PhantomData,
         }
     }
@@ -1888,6 +1892,73 @@ impl<T: Form> Rejected<T> {
     /// The errors by field.
     pub fn errors(&self) -> &FieldErrors {
         &self.errors
+    }
+
+    /// What was posted, as `(field, text)` in the order it was sent: the fields of the
+    /// form and nothing else, so a `#[form(skip)]` field a client made up is not here,
+    /// and never a password. A form refused before it was read (a body from another
+    /// site, one too large) has none.
+    ///
+    /// A handler reads it to look up what the person picked: a searched combobox posts
+    /// only an id, and the form can show the id's label only when it is given one with
+    /// [`options`](Self::options).
+    pub fn values(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
+        self.values
+            .iter()
+            .filter(|(name, _)| T::FIELDS.iter().any(|field| field.name == name))
+            .map(|(name, text)| (name.as_str(), text.as_str()))
+    }
+
+    /// The first text posted under `name`: `None` when the form has no such field or
+    /// nothing was posted under it. An empty field was posted, so it is `Some("")`.
+    pub fn value(&self, name: &str) -> Option<&str> {
+        self.values()
+            .find(|(field, _)| *field == name)
+            .map(|(_, text)| text)
+    }
+
+    /// Every text posted under `name`, in order: a field that is a list ([`Many`]) has
+    /// several.
+    pub fn values_of(&self, name: &str) -> Vec<&str> {
+        self.values()
+            .filter(|(field, _)| *field == name)
+            .map(|(_, text)| text)
+            .collect()
+    }
+
+    /// Gives the labels of the choices posted for a picker field, as
+    /// [`FormView::options`] does for a form that is drawn the first time. Without it a
+    /// searched combobox, which posts an id and has no list to look it up in, shows the
+    /// id when the form comes back.
+    ///
+    /// ```ignore
+    /// Err(rejected) => {
+    ///     let owner = match rejected.value("owner_id").and_then(|id| id.parse::<i64>().ok()) {
+    ///         Some(id) => Person::find(&uow, id).await?.map(|person| (id.to_string(), person.name)),
+    ///         None => None,
+    ///     };
+    ///     Ok(rejected.options("owner_id", owner).into_response())
+    /// }
+    /// ```
+    pub fn options(
+        mut self,
+        field: &'static str,
+        options: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        self.options.insert(field, options.into_iter().collect());
+        self
+    }
+
+    /// Gives the choices of a picker field with more than a label: see
+    /// [`FormView::choices`]. This and [`options`](Self::options) are for the form that
+    /// comes back with script off; the runtime keeps the page and shows only the errors.
+    pub fn choices(
+        mut self,
+        field: &'static str,
+        choices: impl IntoIterator<Item = crate::select::Choice>,
+    ) -> Self {
+        self.rich.insert(field, choices.into_iter().collect());
+        self
     }
 
     /// Ops for the runtime; with JavaScript off, what `page` makes of a form
@@ -1909,10 +1980,16 @@ impl<T: Form> Rejected<T> {
             }];
             return (StatusCode::UNPROCESSABLE_ENTITY, Envelope::new(ops)).into_response();
         }
-        let form = FormView::<T>::new()
+        let mut form = FormView::<T>::new()
             .post(self.action)
             .with_values(self.values)
             .with_errors(self.errors);
+        for (field, options) in self.options {
+            form = form.options(field, options);
+        }
+        for (field, choices) in self.rich {
+            form = form.choices(field, choices);
+        }
         let mut response = page(form).into_response();
         *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
         response
@@ -1949,6 +2026,8 @@ where
             from_runtime,
             action,
             refused: Some(status),
+            options: BTreeMap::new(),
+            rich: BTreeMap::new(),
             marker: PhantomData,
         };
         if let Some(status) = refusal(&parts).await {
@@ -1969,6 +2048,8 @@ where
                 from_runtime,
                 action,
                 refused: None,
+                options: BTreeMap::new(),
+                rich: BTreeMap::new(),
                 marker: PhantomData,
             }),
         }

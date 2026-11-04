@@ -123,6 +123,8 @@ async fn store(parts: Parts, Submit(deal): Submit<NewDeal>, uow: Uow) -> Result<
 
 Without `.search`, `.options` are the whole list. With it, they are only the labels of what is chosen.
 
+A form that comes back refused, with script off, would show the id of a searched choice: `Rejected::after_decode` knows only the id. Look the person up and give the label to the refusal with `Rejected::options("owner_id", ...)` before it answers: [how](/docs/ui/forms/#what-was-posted). `Rejected::value("owner_id")` is the id that was posted.
+
 ## Keyboard and accessibility
 
 <UiA11y>

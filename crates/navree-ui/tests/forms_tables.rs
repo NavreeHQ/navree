@@ -656,3 +656,134 @@ fn only_a_pattern_marked_browser_reaches_the_page() {
     assert!(!html.contains("SECRET"), "{html}");
     assert_eq!(html.matches("pattern=").count(), 1, "{html}");
 }
+
+/// A refusal from a real post, as `Result<Submit<T>, Rejected<T>>` hands it to a handler.
+async fn refused<T>(body: &str) -> navree_ui::form::Rejected<T>
+where
+    T: Form + serde::de::DeserializeOwned + Validate + Send + 'static,
+{
+    use navree_http::extract::FromRequest;
+    let request = http::Request::builder()
+        .method("POST")
+        .uri("/pick")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(navree_http::body::Body::from(body.to_owned()))
+        .unwrap();
+    match navree_ui::Submit::<T>::from_request(request).await {
+        Err(rejected) => rejected,
+        Ok(_) => panic!("the post was meant to be refused"),
+    }
+}
+
+#[tokio::test]
+async fn a_handler_reads_what_was_posted_from_a_refusal() {
+    // No stage was chosen, so the form is refused; the person did pick an owner.
+    let rejected = refused::<Pick>("stage=&owner=7&tags=a&tags=b%20c").await;
+    assert!(rejected.errors().contains_key("stage"));
+    assert_eq!(rejected.value("owner"), Some("7"));
+    assert_eq!(
+        rejected.value("stage"),
+        Some(""),
+        "an empty field was posted"
+    );
+    assert_eq!(rejected.value("nothing"), None);
+    assert_eq!(rejected.values_of("tags"), ["a", "b c"]);
+    assert!(rejected.values_of("nothing").is_empty());
+    let names: Vec<&str> = rejected.values().map(|(name, _)| name).collect();
+    assert_eq!(names, ["stage", "owner", "tags", "tags"]);
+    // A field the form does not have is not there to read.
+    let rejected = refused::<Pick>("stage=&owner=7&admin=1").await;
+    assert_eq!(rejected.value("admin"), None);
+}
+
+#[tokio::test]
+async fn a_refusal_after_decoding_has_the_same_values_to_read() {
+    use navree_ui::form::{FieldErrors, Rejected};
+    let value = Pick {
+        stage: "won".to_owned(),
+        owner: Some("7".to_owned()),
+        tags: vec!["a".to_owned(), "b".to_owned()].into(),
+        stages: Vec::new().into(),
+    };
+    let (parts, ()) = http::Request::builder()
+        .method("POST")
+        .uri("/pick")
+        .body(())
+        .unwrap()
+        .into_parts();
+    let refused = Rejected::<Pick>::after_decode(&value, FieldErrors::new(), &parts);
+    assert_eq!(refused.value("owner"), Some("7"));
+    assert_eq!(refused.values_of("tags"), ["a", "b"]);
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct SignUp {
+    #[validate(length(min = 1))]
+    email: String,
+    #[validate(length(min = 8))]
+    #[form(widget = password)]
+    password: String,
+}
+
+#[tokio::test]
+async fn a_password_is_never_among_the_values_a_refusal_gives_back() {
+    let rejected = refused::<SignUp>("email=a%40b.example&password=hunter2").await;
+    assert_eq!(rejected.value("email"), Some("a@b.example"));
+    assert_eq!(rejected.value("password"), None);
+    assert!(rejected.values().all(|(name, _)| name != "password"));
+}
+
+#[tokio::test]
+async fn a_refused_form_shows_the_label_of_the_option_that_was_picked() {
+    // Without the label the combobox can only show what it has: the posted id.
+    let rejected = refused::<Pick>("stage=&owner=7").await;
+    let bare = response_text(rejected).await;
+    assert!(!bare.contains("Grace Hopper"), "{bare}");
+    assert!(
+        bare.contains(r#"value="7" placeholder="Search people""#),
+        "the input shows the id: {bare}"
+    );
+    // The handler looks the person up from the posted id and hands the label over.
+    let rejected = refused::<Pick>("stage=&owner=7").await;
+    let owner = rejected.value("owner").unwrap().to_owned();
+    let rejected = rejected.options("owner", [(owner, "Grace Hopper".to_owned())]);
+    let html = response_text(rejected).await;
+    assert!(
+        html.contains(r#"value="Grace Hopper" placeholder="Search people""#),
+        "the input shows the label: {html}"
+    );
+    assert!(
+        html.contains(r#"<option value="7" selected>Grace Hopper</option>"#),
+        "{html}"
+    );
+    // The error is still there, and so is the status.
+    assert!(html.contains("Choose a stage."), "{html}");
+}
+
+#[tokio::test]
+async fn a_refused_form_takes_rich_choices_too_and_a_custom_page_still_gets_the_form() {
+    use navree_ui::Choice;
+    let rejected = refused::<Pick>("stage=&owner=7").await.choices(
+        "owner",
+        [Choice::new("7", "Grace Hopper").description("Admiral")],
+    );
+    let page =
+        rejected.respond(|form| View::new("Pick").body(navree_ui::Node::from(form.one_column())));
+    assert_eq!(page.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    let html = body_text(page).await;
+    assert!(html.contains("Grace Hopper"), "{html}");
+    assert!(html.contains("Admiral"), "{html}");
+}
+
+async fn body_text(response: navree_http::response::Response) -> String {
+    use http_body_util::BodyExt;
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
+
+async fn response_text(rejected: navree_ui::form::Rejected<Pick>) -> String {
+    use navree_http::response::IntoResponse;
+    let response = rejected.into_response();
+    assert_eq!(response.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    body_text(response).await
+}
