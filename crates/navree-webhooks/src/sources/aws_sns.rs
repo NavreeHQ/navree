@@ -1,14 +1,11 @@
 //! [`AwsSns`]: SNS messages signed with the signing certificate of the
 //! topic's region (signature version 1 and 2), and subscription
-//! confirmation.
+//! confirmation. The signature itself is checked by `navree_crypto::sns`,
+//! which navree-mail's SES routes share.
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
-use navree_crypto::jose::{Algorithm, VerifyingKey};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use navree_crypto::jose::VerifyingKey;
+use navree_crypto::sns::{self, SnsSignatureError};
 
 use crate::options::SourceOptions;
 use crate::request::{Handshake, IncomingRequest, Verdict};
@@ -45,41 +42,21 @@ impl AwsSns {
     /// (`sns.<region>.amazonaws.com` or `sns.<region>.amazonaws.com.cn`),
     /// with no credentials and the default port.
     pub fn is_sns_url(url: &str) -> bool {
-        let Ok(url) = url::Url::parse(url) else {
-            return false;
-        };
-        let Some(host) = url.host_str() else {
-            return false;
-        };
-        let region = host
-            .strip_suffix(".amazonaws.com")
-            .or_else(|| host.strip_suffix(".amazonaws.com.cn"))
-            .and_then(|rest| rest.strip_prefix("sns."));
-        url.scheme() == "https"
-            && url.username().is_empty()
-            && url.password().is_none()
-            && url.port().is_none()
-            && region.is_some_and(|region| {
-                region.len() >= 3
-                    && region
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            })
+        sns::is_sns_url(url)
     }
 
     /// Verifies `message`'s signature with `key`, the public key of its
     /// signing certificate.
     pub fn verify_signature(message: &SnsMessage, key: &VerifyingKey) -> Result<(), VerifyError> {
-        let signature = STANDARD
-            .decode(message.signature.trim())
-            .map_err(|_| VerifyError::MalformedBody("`Signature`".to_owned()))?;
-        let signed = message.string_to_sign();
-        let verified = match message.signature_version.trim() {
-            "1" => key.verify_legacy_sha1(signed.as_bytes(), &signature),
-            "2" => key.verify(Algorithm::RS256, signed.as_bytes(), &signature),
-            _ => return Err(VerifyError::MalformedBody("`SignatureVersion`".to_owned())),
-        };
-        verified.map_err(|_| VerifyError::SignatureMismatch)
+        message.verify_signature(key).map_err(|error| match error {
+            SnsSignatureError::MalformedSignature => {
+                VerifyError::MalformedBody("`Signature`".to_owned())
+            }
+            SnsSignatureError::UnsupportedVersion => {
+                VerifyError::MalformedBody("`SignatureVersion`".to_owned())
+            }
+            SnsSignatureError::Mismatch => VerifyError::SignatureMismatch,
+        })
     }
 }
 
@@ -105,9 +82,7 @@ impl WebhookVerifier for AwsSns {
             ));
         }
         let certificate_url = message.signing_cert_url.trim();
-        let is_pem = url::Url::parse(certificate_url)
-            .is_ok_and(|url| url.path().ends_with(".pem") && url.query().is_none());
-        if !Self::is_sns_url(certificate_url) || !is_pem {
+        if !sns::is_signing_cert_url(certificate_url) {
             return Err(VerifyError::Rejected(
                 "`SigningCertURL` is not an SNS certificate URL".to_owned(),
             ));
@@ -169,106 +144,9 @@ impl WebhookSource for AwsSns {
     type Verifier = AwsSns;
 }
 
-/// An SNS message: the JSON body SNS posts.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct SnsMessage {
-    /// `Notification`, `SubscriptionConfirmation` or
-    /// `UnsubscribeConfirmation`.
-    #[serde(rename = "Type")]
-    pub message_type: String,
-    /// The message id.
-    #[serde(rename = "MessageId")]
-    pub message_id: String,
-    /// The topic.
-    #[serde(rename = "TopicArn")]
-    pub topic_arn: String,
-    /// The subject, when the publisher gave one (notifications).
-    #[serde(rename = "Subject", default, skip_serializing_if = "Option::is_none")]
-    pub subject: Option<String>,
-    /// The message: for SES, a JSON event (see
-    /// [`message_json`](SnsMessage::message_json)).
-    #[serde(rename = "Message")]
-    pub message: String,
-    /// When it was published (ISO 8601).
-    #[serde(rename = "Timestamp")]
-    pub timestamp: String,
-    /// `1` (SHA-1) or `2` (SHA-256).
-    #[serde(rename = "SignatureVersion")]
-    pub signature_version: String,
-    /// The base64 signature.
-    #[serde(rename = "Signature")]
-    pub signature: String,
-    /// The signing certificate.
-    #[serde(rename = "SigningCertURL", alias = "SigningCertUrl")]
-    pub signing_cert_url: String,
-    /// The URL that confirms the subscription (confirmations).
-    #[serde(
-        rename = "SubscribeURL",
-        alias = "SubscribeUrl",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub subscribe_url: Option<String>,
-    /// The URL that ends the subscription (notifications).
-    #[serde(
-        rename = "UnsubscribeURL",
-        alias = "UnsubscribeUrl",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub unsubscribe_url: Option<String>,
-    /// The confirmation token (confirmations).
-    #[serde(rename = "Token", default, skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
-    /// The message attributes, when the publisher set any.
-    #[serde(
-        rename = "MessageAttributes",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub message_attributes: Option<Value>,
-}
-
-impl SnsMessage {
-    /// Whether it is a `Notification`.
-    pub fn is_notification(&self) -> bool {
-        self.message_type == "Notification"
-    }
-
-    /// The `Message` read as JSON of type `T` (an SES event, for
-    /// instance).
-    pub fn message_json<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
-        serde_json::from_str(&self.message)
-    }
-
-    /// What SNS signs: `name\nvalue\n` for `Message`, `MessageId`,
-    /// `Subject` (when present), `Timestamp`, `TopicArn` and `Type` of a
-    /// notification, and for `Message`, `MessageId`, `SubscribeURL`,
-    /// `Timestamp`, `Token`, `TopicArn` and `Type` of a confirmation.
-    pub fn string_to_sign(&self) -> String {
-        let mut fields: Vec<(&str, &str)> =
-            vec![("Message", &self.message), ("MessageId", &self.message_id)];
-        if self.is_notification() {
-            if let Some(subject) = &self.subject {
-                fields.push(("Subject", subject));
-            }
-        } else if let Some(url) = &self.subscribe_url {
-            fields.push(("SubscribeURL", url));
-        }
-        fields.push(("Timestamp", &self.timestamp));
-        if !self.is_notification()
-            && let Some(token) = &self.token
-        {
-            fields.push(("Token", token));
-        }
-        fields.push(("TopicArn", &self.topic_arn));
-        fields.push(("Type", &self.message_type));
-        fields
-            .into_iter()
-            .map(|(name, value)| format!("{name}\n{value}\n"))
-            .collect()
-    }
-}
+/// An SNS message: the JSON body SNS posts. Defined in `navree_crypto::sns`
+/// with the signature check, and shared with navree-mail's SES routes.
+pub use navree_crypto::sns::SnsMessage;
 
 #[cfg(test)]
 mod tests {
@@ -276,7 +154,7 @@ mod tests {
 
     use http::{HeaderMap, Method};
     use navree_http_client::{FakeResponse, FakeServer, HttpClient};
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::*;
     use crate::keys::SenderKeys;
