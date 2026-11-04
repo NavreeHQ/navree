@@ -333,56 +333,13 @@ impl SearchEngine for DatabaseEngine {
                     );
                     statements.push(sql.statement());
                 } else {
-                    // The FTS row shares its document's rowid, so it is
-                    // found through the documents' primary key (an index)
-                    // and goes first, while the document still has a rowid.
-                    let mut delete_fts = Sql::new(backend);
-                    delete_fts
-                        .push(&format!(
-                            "DELETE FROM {FTS_TABLE} WHERE rowid IN (SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
-                        ))
-                        .bind(index)
-                        .push(" AND id = ")
-                        .bind(document.id())
-                        .push(")");
-                    statements.push(delete_fts.statement());
-                    let mut delete = Sql::new(backend);
-                    delete
-                        .push(&format!(
-                            "DELETE FROM {DOCUMENTS_TABLE} WHERE index_name = "
-                        ))
-                        .bind(index)
-                        .push(" AND id = ")
-                        .bind(document.id());
-                    statements.push(delete.statement());
-                    let mut insert = Sql::new(backend);
-                    insert
-                        .push(&format!(
-                            "INSERT INTO {DOCUMENTS_TABLE} (index_name, id, fields) VALUES ("
-                        ))
-                        .bind(index)
-                        .push(", ")
-                        .bind(document.id())
-                        .push(", ")
-                        .bind(fields)
-                        .push(")");
-                    statements.push(insert.statement());
-                    let mut fts = Sql::new(backend);
-                    fts.push(&format!(
-                        "INSERT INTO {FTS_TABLE} (rowid, index_name, id, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) VALUES ((SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
-                    ))
-                    .bind(index)
-                    .push(" AND id = ")
-                    .bind(document.id())
-                    .push("), ")
-                    .bind(index)
-                    .push(", ")
-                    .bind(document.id());
-                    for text in texts {
-                        fts.push(", ").bind(text);
-                    }
-                    fts.push(")");
-                    statements.push(fts.statement());
+                    statements.extend(replace_document(
+                        backend,
+                        index,
+                        document.id(),
+                        fields,
+                        texts,
+                    ));
                 }
             }
             self.write(statements).await
@@ -703,6 +660,71 @@ fn postgres_from(
     }
 }
 
+/// The statements that put one document in place where the FTS table is SQLite's: the
+/// old FTS row and document go, then the document and its FTS row are written.
+///
+/// The FTS row shares its document's rowid, so it is found through the documents'
+/// primary key (an index) and goes first, while the document still has a rowid. No
+/// statement may scan a table: an import runs these for every document, and a scan
+/// makes it grow with the square of the index.
+fn replace_document(
+    backend: Backend,
+    index: &str,
+    id: &str,
+    fields: String,
+    texts: [String; 10],
+) -> Vec<Statement> {
+    let mut statements = Vec::with_capacity(4);
+    let mut delete_fts = Sql::new(backend);
+    delete_fts
+        .push(&format!(
+            "DELETE FROM {FTS_TABLE} WHERE rowid IN (SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
+        ))
+        .bind(index)
+        .push(" AND id = ")
+        .bind(id)
+        .push(")");
+    statements.push(delete_fts.statement());
+    let mut delete = Sql::new(backend);
+    delete
+        .push(&format!(
+            "DELETE FROM {DOCUMENTS_TABLE} WHERE index_name = "
+        ))
+        .bind(index)
+        .push(" AND id = ")
+        .bind(id);
+    statements.push(delete.statement());
+    let mut insert = Sql::new(backend);
+    insert
+        .push(&format!(
+            "INSERT INTO {DOCUMENTS_TABLE} (index_name, id, fields) VALUES ("
+        ))
+        .bind(index)
+        .push(", ")
+        .bind(id)
+        .push(", ")
+        .bind(fields)
+        .push(")");
+    statements.push(insert.statement());
+    let mut fts = Sql::new(backend);
+    fts.push(&format!(
+        "INSERT INTO {FTS_TABLE} (rowid, index_name, id, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) VALUES ((SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
+    ))
+    .bind(index)
+    .push(" AND id = ")
+    .bind(id)
+    .push("), ")
+    .bind(index)
+    .push(", ")
+    .bind(id);
+    for text in texts {
+        fts.push(", ").bind(text);
+    }
+    fts.push(")");
+    statements.push(fts.statement());
+    statements
+}
+
 /// The `fields` column of a result row.
 fn fields_of(row: &Row, postgres: bool) -> Result<BTreeMap<String, Value>, SearchError> {
     let value: Value = if postgres {
@@ -720,6 +742,8 @@ fn fields_of(row: &Row, postgres: bool) -> Result<BTreeMap<String, Value>, Searc
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_db::navree_schema::{Migration, Schema};
+    use navree_db::{DbOptions, Pool};
 
     fn terms(text: &str) -> QueryTerms {
         let synonyms = BTreeMap::from([("acme".to_owned(), vec!["acme corp".to_owned()])]);
@@ -791,6 +815,80 @@ mod tests {
             "{count}"
         );
         assert_eq!(tsquery_any(&terms("ada lovlace")), "ada | lovlace:*");
+    }
+
+    /// What SQLite says it does for `statement`, one line for each step.
+    async fn plan(pool: &Pool, statement: &Statement) -> Vec<String> {
+        let explain = Statement::new(
+            Backend::Sqlite,
+            format!("EXPLAIN QUERY PLAN {}", statement.sql()),
+            statement.values().to_vec(),
+        );
+        pool.fetch_all(&explain)
+            .await
+            .unwrap()
+            .iter()
+            .map(|row| row.get::<String>("detail").unwrap())
+            .collect()
+    }
+
+    /// An import writes every document through these statements, so none of them may
+    /// read a whole table: the work would grow with the square of the index. The FTS table
+    /// is a virtual table, which SQLite always names a `SCAN`; it says it was handed a rowid
+    /// to look up with `:=` after the index number. This is the same check a clock made
+    /// (10,000 documents inside a time limit), without the clock.
+    #[tokio::test]
+    async fn replacing_a_document_never_scans_a_table() {
+        let pool = Pool::connect(&DbOptions {
+            url: "sqlite::memory:".to_owned(),
+            max_connections: 1,
+            ..DbOptions::default()
+        })
+        .await
+        .unwrap();
+        crate::migration::CreateSearchDocuments
+            .up(&Schema::new(&pool))
+            .await
+            .unwrap();
+
+        // What the check sees when a statement does scan: the delete that found the FTS
+        // row by its UNINDEXED columns, as the import once did.
+        let scanning = Statement::new(
+            Backend::Sqlite,
+            format!("DELETE FROM {FTS_TABLE} WHERE index_name = ? AND id = ?"),
+            [
+                navree_db::Value::from("notes"),
+                navree_db::Value::from("n1"),
+            ],
+        );
+        let steps = plan(&pool, &scanning).await;
+        assert!(
+            steps
+                .iter()
+                .any(|step| step.starts_with("SCAN ") && !step.ends_with(":=")),
+            "the check can tell a scan: {steps:?}"
+        );
+
+        let statements = replace_document(
+            Backend::Sqlite,
+            "notes",
+            "n1",
+            "{}".to_owned(),
+            Default::default(),
+        );
+        assert_eq!(statements.len(), 4);
+        for statement in &statements {
+            let steps = plan(&pool, statement).await;
+            for step in &steps {
+                if step.starts_with("SCAN ") {
+                    assert!(
+                        step.contains("VIRTUAL TABLE") && step.ends_with(":="),
+                        "{} scans: {steps:?}",
+                        statement.sql()
+                    );
+                }
+            }
+        }
     }
 
     #[test]

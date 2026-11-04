@@ -76,7 +76,7 @@ impl Migration for KeyFtsByRowid {
 /// and its GIN index; on SQLite with an FTS5 table beside it. On MySQL
 /// it creates nothing: the `postgres` engine does not run there (the app
 /// refuses it at boot), the other engines keep no tables.
-struct CreateSearchDocuments;
+pub(crate) struct CreateSearchDocuments;
 
 impl Migration for CreateSearchDocuments {
     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {

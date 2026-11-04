@@ -138,32 +138,42 @@ async fn fts_rows_are_keyed_by_the_documents_rowid() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn importing_many_documents_does_not_scan_the_fts_table_per_row() {
+async fn importing_many_documents_keeps_one_fts_row_for_each_document() {
     use navree_search::{Document, IndexSettings};
 
-    if !on_sqlite("importing_many_documents_does_not_scan_the_fts_table_per_row") {
+    if !on_sqlite("importing_many_documents_keeps_one_fts_row_for_each_document") {
         return;
     }
     let app = support::app("postgres", "off").await;
+    let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let engine = search.engine().clone();
     let settings = IndexSettings::new("Note", "notes").text("title", 1);
     engine.prepare("notes", &settings).await.unwrap();
 
     // Deleting a document's old FTS row by its two UNINDEXED columns scans
-    // the whole table, so the import grows with the square of the index:
-    // this size took about 20 s that way and well under 5 s by rowid.
-    let started = std::time::Instant::now();
-    for chunk in 0..20 {
+    // the whole table, so the import grows with the square of the index. The engine's
+    // unit test reads the plan of every statement an import runs and fails on a scan; this
+    // runs a whole import, with replaced documents among the new ones, and checks that it
+    // leaves exactly one FTS row for each document, keyed by the document's rowid.
+    for chunk in 0..4 {
         let documents = (0..500)
             .map(|n| Document::new(format!("n{chunk}-{n}")).field("title", format!("note {n}")))
             .collect();
         engine.upsert("notes", &settings, documents).await.unwrap();
     }
-    let elapsed = started.elapsed();
-    assert_eq!(engine.count("notes").await.unwrap(), 10_000);
+    assert_eq!(engine.count("notes").await.unwrap(), 2_000);
+    let replaced = (0..500)
+        .map(|n| Document::new(format!("n0-{n}")).field("title", format!("renamed {n}")))
+        .collect();
+    engine.upsert("notes", &settings, replaced).await.unwrap();
+    assert_eq!(engine.count("notes").await.unwrap(), 2_000);
+    assert_eq!(fts_rows(&db).await, 2_000);
     assert!(
-        elapsed < std::time::Duration::from_secs(8),
-        "10,000 documents took {elapsed:?}"
+        rowids(&db)
+            .await
+            .iter()
+            .all(|(_, doc, fts)| Some(*doc) == *fts),
+        "every document has its FTS row, under its own rowid"
     );
 }
