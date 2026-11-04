@@ -88,6 +88,9 @@ function tidy(bar) {
   if (waiting) set(waiting, "hidden", "");
 }
 
+/** The width each bar had when it was last laid out: a resize report for the same width needs no second pass. @type {WeakMap<Element, number>} */
+const widths = new WeakMap();
+
 /** Puts the real tools and the twins of the tools that do not fit where they belong. @param {HTMLElement} bar */
 function layout(bar) {
   const more = moreOf(bar);
@@ -127,6 +130,7 @@ function layout(bar) {
     rove(bar, trigger);
     trigger.focus({ preventScroll: true });
   }
+  widths.set(bar, bar.clientWidth);
   settle(bar);
 }
 
@@ -166,7 +170,16 @@ function later(bar) {
 
 /** @type {WeakSet<Element>} */
 const watched = new WeakSet();
-const resizes = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => { for (const entry of entries) later(/** @type {HTMLElement} */ (entry.target)); }) : null;
+const resizes =
+  typeof ResizeObserver === "function"
+    ? new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const bar = /** @type {HTMLElement} */ (entry.target);
+          // Some engines report a resize again after the pass that already fitted the new width.
+          if (widths.get(bar) !== bar.clientWidth) later(bar);
+        }
+      })
+    : null;
 
 // ---- Keys ----------------------------------------------------------------
 
@@ -237,4 +250,6 @@ start();
 on(document, "ui:swap", start);
 on(window, "load", start);
 on(window, "pageshow", start);
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(start);
+// A named element in the page can stand in for `document.fonts`: it is read through the prototype.
+const fonts = Object.getOwnPropertyDescriptor(Document.prototype, "fonts")?.get?.call(document);
+if (fonts && fonts.ready) fonts.ready.then(start);

@@ -1,15 +1,20 @@
-// The tree module. The server writes nested lists, links and inputs that work with
-// no script; this makes them WAI-ARIA's tree view: the roles, one tab stop, the keys,
+// The tree module. The server writes nested lists, links and inputs that work with no
+// script; this makes them WAI-ARIA's tree view: the roles, one tab stop, the keys,
 // type-ahead, opening and closing, tri-state parents, and children fetched as a branch
 // opens. Everything is delegated from `document` and read through dom.js, so a morph
 // needs no wiring and a name in stored markup can't shadow a method.
-import { active, all, attr, byId, clean, closest, every, has, make, on, sameOrigin, set, unset } from "./dom.js";
+//
+// The list items are `role=none` and each item's row is the `treeitem`: its name is its
+// own label, not the text of everything under it, and its group is owned with
+// `aria-owns`. A row is what has the tab stop and the focus.
+import { active, all, attr, body, byId, clean, closest, every, has, make, on, sameOrigin, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-tree]";
-const ITEM = "li[data-slot=tree-item],li[data-slot=tree-more]";
+const ITEM = "li[data-slot=tree-item],li[data-slot=tree-more],li[data-slot=tree-note]";
 const BRANCH = "li[data-slot=tree-item]";
-/** What this module adds to an element, which a morph must leave: the element lists it itself. */
-const KEEP = "data-ui-keep-attrs role aria-expanded aria-checked aria-selected aria-level aria-setsize aria-posinset aria-labelledby aria-label aria-busy aria-multiselectable tabindex data-open data-checked data-enhanced";
+const TREEITEM = "[role=treeitem]";
+/** What this module adds, which a morph must leave: the element lists it itself. */
+const KEEP = "data-ui-keep-attrs role aria-expanded aria-checked aria-selected aria-level aria-setsize aria-posinset aria-labelledby aria-label aria-owns aria-busy tabindex data-checked data-enhanced";
 /** How long a fetch may take. */
 const LIMIT = 15000;
 /** The words, in English; the server sends its own in `data-l`. */
@@ -23,6 +28,8 @@ const list = (node, selector) => /** @type {any} */ ([...all(node, selector)]);
 const itemOf = (node) => /** @type {any} */ (closest(node, ITEM));
 /** @param {Element} node @returns {HTMLElement | null} */
 const rootOf = (node) => /** @type {any} */ (closest(node, ROOT));
+/** The row of an item: what is the treeitem. @param {Element} item @returns {HTMLElement | null} */
+const rowOf = (item) => first(item, ":scope > [data-slot=tree-row]");
 /** The item a nested item hangs from. @param {Element} item @returns {HTMLElement | null} */
 const parentOf = (item) => /** @type {any} */ (closest(item.parentNode, BRANCH));
 /** @param {Element} node */
@@ -50,41 +57,56 @@ function visible(item) {
 const shown = (root) => list(root, ITEM).filter(visible);
 /** @param {Element} item */
 const isBranch = (item) => has(item, "data-branch");
+/** @param {Element} item */
+const isMore = (item) => attr(item, "data-slot") === "tree-more";
+/** A row that says something about a group: it is loading, or failed. @param {Element} item */
+const isNote = (item) => attr(item, "data-slot") === "tree-note";
 /** @param {Element} item @returns {HTMLInputElement | null} */
 const inputOf = (item) => /** @type {any} */ (first(item, ":scope > [data-slot=tree-row] input"));
 /** The words an item starts with, for type-ahead. @param {Element} item */
-const textOf = (item) => (first(item, ":scope > [data-slot=tree-row] [data-slot=tree-text]") || first(item, "a"))?.textContent?.trim().toLowerCase() || "";
+const textOf = (item) => first(item, ":scope > [data-slot=tree-row] [data-slot=tree-text]")?.textContent?.trim().toLowerCase() || "";
 
 let counter = 0;
-/** @param {Element} item */
+/** An id that nothing on the page has. */
+function fresh() {
+  let id;
+  do id = "ut" + counter++;
+  while (byId(id));
+  return id;
+}
+
+/** @param {HTMLElement} item */
 function enhanceItem(item) {
-  const more = has(item, "data-slot") && attr(item, "data-slot") === "tree-more";
-  set(item, "role", "treeitem");
-  set(item, "data-ui-keep-attrs", KEEP);
-  for (const [from, to] of [["data-level", "aria-level"], ["data-setsize", "aria-setsize"], ["data-posinset", "aria-posinset"]]) {
+  set(item, "role", "none");
+  const row = rowOf(item);
+  if (!row) return;
+  set(row, "role", "treeitem");
+  set(row, "data-ui-keep-attrs", KEEP);
+  for (const [from, to] of [["data-setsize", "aria-setsize"], ["data-posinset", "aria-posinset"]]) {
     const value = attr(item, from);
-    if (value) set(item, to, value);
+    if (value) set(row, to, value);
   }
-  if (!has(item, "tabindex")) set(item, "tabindex", "-1");
-  const row = first(item, ":scope > [data-slot=tree-row]");
-  const text = more ? first(item, "a") : row && first(row, "[data-slot=tree-text]");
+  // How deep it stands, from where it is: a branch that was fetched knows nothing of what it hangs from.
+  let depth = 1;
+  for (let up = parentOf(item); up; up = parentOf(up)) depth++;
+  set(row, "aria-level", String(depth));
+  if (!has(row, "tabindex")) set(row, "tabindex", "-1");
+  const text = isMore(item) ? first(row, "a") : isNote(item) ? null : first(row, "[data-slot=tree-text]");
   if (text) {
-    if (!text.id) {
-      do text.id = "ut" + counter++;
-      while (byId(text.id) !== text);
-    }
-    set(item, "aria-labelledby", text.id);
+    if (!text.id) text.id = fresh();
+    set(row, "aria-labelledby", text.id);
   }
-  if (more) {
-    for (const link of list(item, "a")) set(link, "tabindex", "-1");
-    return;
-  }
-  if (isBranch(item)) set(item, "aria-expanded", String(has(item, "data-open")));
-  const group = first(item, ":scope > [data-slot=tree-group]");
-  if (group) set(group, "role", "group");
   // What the keys of the tree do, its controls need not be reached by Tab.
-  if (row) for (const control of list(row, "a,input,button")) set(control, "tabindex", "-1");
-  const toggle = row && first(row, "[data-slot=tree-toggle]");
+  for (const control of list(row, "a,input,button")) set(control, "tabindex", "-1");
+  if (isMore(item) || isNote(item)) return;
+  if (isBranch(item)) set(row, "aria-expanded", String(has(item, "data-open")));
+  const group = first(item, ":scope > [data-slot=tree-group]");
+  if (group) {
+    set(group, "role", "group");
+    if (!group.id) group.id = fresh();
+    set(row, "aria-owns", group.id);
+  }
+  const toggle = first(row, "[data-slot=tree-toggle]");
   if (toggle) set(toggle, "aria-hidden", "true");
   checks(item);
 }
@@ -93,13 +115,14 @@ function enhanceItem(item) {
 function checks(item) {
   const root = rootOf(item);
   const input = inputOf(item);
-  if (!root || !input) return;
+  const row = rowOf(item);
+  if (!root || !input || !row) return;
   const single = attr(root, "data-select") === "single";
   const mixed = has(root, "data-cascade") && attr(item, "data-checked") === "mixed" && !input.checked;
   input.indeterminate = mixed;
   const state = mixed ? "mixed" : input.checked ? "true" : "false";
   set(item, "data-checked", state);
-  set(item, single ? "aria-selected" : "aria-checked", state);
+  set(row, single ? "aria-selected" : "aria-checked", state);
 }
 
 /** @param {HTMLElement} root */
@@ -112,24 +135,30 @@ function enhance(root) {
   set(top, "aria-label", attr(root, "data-label") || "");
   set(top, "data-ui-keep-attrs", KEEP);
   const items = list(root, ITEM);
-  for (const item of items) enhanceItem(item);
-  // One tab stop: the item that has it, or the first.
-  const stops = items.filter((item) => attr(item, "tabindex") === "0");
+  for (const item of items) {
+    // The items can be marked again by a morph that brought them back as the server wrote them.
+    enhanceItem(item);
+    set(item, "data-ui-keep-attrs", "data-ui-keep-attrs role data-open data-checked");
+  }
+  // One tab stop: the row that has it, or the first.
+  const rows = items.map(rowOf).filter((row) => !!row);
+  const stops = rows.filter((row) => attr(row, "tabindex") === "0");
   for (const extra of stops.slice(1)) set(extra, "tabindex", "-1");
-  if (!stops.length && items[0]) set(items[0], "tabindex", "0");
+  if (!stops.length && rows[0]) set(rows[0], "tabindex", "0");
   // A branch the server drew open, whose children are still to come.
   for (const item of items) if (has(item, "data-open") && has(item, "data-lazy")) load(item);
 }
 
-/** Makes `item` the one tab stop and focuses it. @param {HTMLElement} item @param {boolean} [focus] */
+/** Makes the row of `item` the one tab stop of its tree and focuses it. @param {HTMLElement} item @param {boolean} [focus] */
 function go(item, focus = true) {
   const root = rootOf(item);
-  if (!root) return;
-  for (const other of list(root, ITEM + "[tabindex='0']")) if (other !== item) set(other, "tabindex", "-1");
-  set(item, "tabindex", "0");
+  const row = rowOf(item);
+  if (!root || !row) return;
+  for (const other of list(root, TREEITEM + "[tabindex='0']")) if (other !== row) set(other, "tabindex", "-1");
+  set(row, "tabindex", "0");
   if (focus) {
-    item.focus({ preventScroll: true });
-    item.scrollIntoView({ block: "nearest", inline: "nearest" });
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 }
 
@@ -139,7 +168,8 @@ function go(item, focus = true) {
 function open(item) {
   if (!isBranch(item) || has(item, "data-open")) return;
   set(item, "data-open", "");
-  set(item, "aria-expanded", "true");
+  const row = rowOf(item);
+  if (row) set(row, "aria-expanded", "true");
   if (has(item, "data-lazy")) load(item);
 }
 
@@ -147,11 +177,13 @@ function open(item) {
 function close(item) {
   if (!isBranch(item) || !has(item, "data-open")) return;
   const focused = active();
+  const row = rowOf(item);
   unset(item, "data-open");
-  set(item, "aria-expanded", "false");
+  if (row) set(row, "aria-expanded", "false");
   // Focus, or the tab stop, on a node that is no longer shown goes to the one that was closed.
-  const lost = list(item, ITEM + "[tabindex='0']").length > 0;
-  if (lost || (focused && focused !== item && item.contains(focused))) go(item, !!focused && item.contains(focused));
+  const lost = list(item, ":scope > [data-slot=tree-group] " + TREEITEM + "[tabindex='0']").length > 0;
+  const inside = !!focused && focused !== row && item.contains(focused);
+  if (lost || inside) go(item, inside);
 }
 
 /** @param {HTMLElement} item */
@@ -177,9 +209,12 @@ async function fetchItems(src) {
   });
   if (!response.ok || !(response.headers.get("content-type") || "").startsWith("text/html")) return null;
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-  clean(doc.body);
-  const wrapped = first(doc.body, "ul[data-slot=tree-group]");
-  const from = wrapped || doc.body;
+  // The answer is read through the prototype: a named element in it can't stand in for `doc.body`.
+  const holder = body(doc);
+  clean(holder);
+  // The items, or a list that holds them and nothing else.
+  const only = holder.children.length === 1 ? holder.children[0] : null;
+  const from = only && only.matches("ul[data-slot=tree-group]") ? only : holder;
   /** @type {HTMLElement[]} */
   const items = [];
   for (const child of from.children) {
@@ -191,36 +226,45 @@ async function fetchItems(src) {
   return items;
 }
 
-/** A row that says something about the group: loading, or that it failed. @param {string} text @param {string} [retry] */
+/** A row that says something about the group: loading, or that it failed. Its row is a treeitem like the others, and the one to press to try again. @param {string} text @param {string} [retry] */
 function note(text, retry) {
-  const row = make("li");
-  set(row, "data-slot", "tree-note");
-  set(row, "role", "none");
+  const item = make("li");
+  set(item, "data-slot", "tree-note");
+  const row = make("div");
+  set(row, "data-slot", "tree-row");
+  if (retry) set(row, "data-retry", "");
   const span = make("span");
   span.textContent = text;
   row.append(span);
   if (retry) {
-    const button = make("button");
-    set(button, "type", "button");
-    set(button, "data-slot", "tree-retry");
-    set(button, "data-variant", "link");
-    button.textContent = retry;
-    row.append(button);
+    const again = make("span");
+    set(again, "data-slot", "tree-retry");
+    again.textContent = retry;
+    row.append(" ", again);
   }
-  return row;
+  item.append(row);
+  return item;
+}
+
+/** Puts a note in a group and gives it its role. @param {HTMLElement} group @param {string} text @param {string} [retry] */
+function say_in(group, text, retry) {
+  const item = note(text, retry);
+  group.replaceChildren(item);
+  enhanceItem(item);
+  set(item, "data-ui-keep-attrs", "data-ui-keep-attrs role");
 }
 
 /** Fetches the children of a lazy branch and puts them in its group. @param {HTMLElement} item */
 async function load(item) {
   const root = rootOf(item);
+  const row = rowOf(item);
   const group = first(item, ":scope > [data-slot=tree-group]");
   const src = group && attr(group, "data-src");
-  if (!root || !group || !src || pending.has(group)) return;
+  if (!root || !row || !group || !src || pending.has(group)) return;
   const l = words(root);
-  const mine = (pending.get(group) || 0) + 1;
-  pending.set(group, mine);
-  set(item, "aria-busy", "true");
-  group.replaceChildren(note(l.loading));
+  pending.set(group, 1);
+  set(row, "aria-busy", "true");
+  say_in(group, l.loading);
   say(root, l.loading);
   let items = null;
   try {
@@ -229,56 +273,67 @@ async function load(item) {
   pending.delete(group);
   // The branch went away, or was pointed somewhere else, while this was on its way.
   if (!item.isConnected || attr(group, "data-src") !== src) return;
-  unset(item, "aria-busy");
+  unset(row, "aria-busy");
   if (!items) {
-    group.replaceChildren(note(l.failed, l.retry));
+    say_in(group, l.failed, l.retry);
     say(root, l.failed);
     return;
   }
   unset(group, "data-src");
   unset(item, "data-lazy");
-  set(item, "data-loaded", "");
   group.replaceChildren(...items);
   settle(root, item, items);
   say(root, l.loaded.replace("{n}", String(items.length)));
 }
 
-/** Fetches the next page of a list and puts it where the row stood. @param {HTMLElement} row */
-async function more(row) {
-  const root = rootOf(row);
-  const link = first(row, "a");
+/** Asks again for the children of the branch a failed note stands in. @param {HTMLElement} note */
+function again(note) {
+  const owner = parentOf(note);
+  const group = owner && first(owner, ":scope > [data-slot=tree-group]");
+  if (!owner || !group) return;
+  pending.delete(group);
+  load(owner);
+}
+
+/** Fetches the next page of a list and puts it where the row stood. @param {HTMLElement} item */
+async function more(item) {
+  const root = rootOf(item);
+  const row = rowOf(item);
+  const link = row && first(row, "a");
   const src = link && attr(link, "href");
-  if (!root || !src || pending.has(row)) return;
+  if (!root || !row || !src || pending.has(item)) return;
   const l = words(root);
-  pending.set(row, 1);
+  pending.set(item, 1);
   set(row, "aria-busy", "true");
   say(root, l.loading);
   let items = null;
   try {
     items = await fetchItems(src);
   } catch {}
-  pending.delete(row);
-  if (!row.isConnected) return;
+  pending.delete(item);
+  if (!item.isConnected) return;
   unset(row, "aria-busy");
   if (!items) {
     say(root, l.failed);
     return;
   }
-  const holder = row.parentNode;
-  const parent = parentOf(row);
+  const parent = parentOf(item);
   const focusedHere = active() === row;
-  row.replaceWith(...items);
+  item.replaceWith(...items);
   settle(root, parent, items);
-  say(root, l.loaded.replace("{n}", String(items.filter((item) => attr(item, "data-slot") === "tree-item").length)));
-  const next = items.find((item) => attr(item, "data-slot") === "tree-item") || items[0];
-  if (focusedHere && next && holder) go(next);
+  say(root, l.loaded.replace("{n}", String(items.filter((each) => !isMore(each)).length)));
+  const next = items.find((each) => !isMore(each)) || items[0];
+  if (focusedHere && next) go(next);
 }
 
 /** Gives new items their roles, and the choice their parent already made. @param {HTMLElement} root @param {HTMLElement | null} parent @param {HTMLElement[]} items */
 function settle(root, parent, items) {
   const input = parent && inputOf(parent);
   for (const item of items) {
-    for (const child of [item, ...list(item, ITEM)]) enhanceItem(child);
+    for (const child of [item, ...list(item, ITEM)]) {
+      enhanceItem(child);
+      set(child, "data-ui-keep-attrs", "data-ui-keep-attrs role data-open data-checked");
+    }
   }
   // A branch that was chosen before its children came stands for them.
   if (parent && input && input.checked && has(root, "data-cascade")) {
@@ -309,7 +364,8 @@ function setBelow(item, on) {
 function refresh(item) {
   for (let up = item; up; up = parentOf(up)) {
     const input = inputOf(up);
-    const kids = list(up, ":scope > [data-slot=tree-group] > li[data-slot=tree-item]");
+    // A choice that is disabled is not the person's to make: it doesn't count.
+    const kids = list(up, ":scope > [data-slot=tree-group] > li[data-slot=tree-item]").filter((kid) => !has(kid, "data-disabled"));
     if (input && kids.length) {
       const states = kids.map((kid) => attr(kid, "data-checked") || "false");
       const every = states.every((s) => s === "true");
@@ -330,7 +386,8 @@ on(document, "change", (e) => {
   if (attr(root, "data-select") === "single") {
     for (const other of list(root, BRANCH)) {
       const radio = inputOf(other);
-      if (radio) set(other, "aria-selected", String(radio.checked));
+      const row = rowOf(other);
+      if (radio && row) set(row, "aria-selected", String(radio.checked));
     }
     return;
   }
@@ -365,12 +422,8 @@ on(document, "click", (e) => {
     more(item);
     return;
   }
-  const retry = closest(node, "[data-slot=tree-retry]");
-  const owner = retry && retry.parentNode && closest(/** @type {Element} */ (retry.parentNode), BRANCH);
-  if (retry && owner) {
-    const group = first(owner, ":scope > [data-slot=tree-group]");
-    if (group) pending.delete(group);
-    load(owner);
+  if (item && isNote(item) && has(/** @type {Element} */ (rowOf(item)), "data-retry")) {
+    again(item);
     return;
   }
   // A click on the words of a branch with nothing to choose opens it.
@@ -379,16 +432,14 @@ on(document, "click", (e) => {
   if (item) go(item, false);
 });
 
-// Focus that lands on a control inside an item goes to the item, which is what the keys act on.
+// Focus that lands on a control inside a row goes to the row, which is what the keys act on.
 on(document, "focusin", (e) => {
   const node = /** @type {Element} */ (e.target);
   const item = itemOf(node);
-  if (!item || !rootOf(item)) return;
-  if (item !== node && closest(node, "[data-slot=tree-row]")) {
-    go(item);
-    return;
-  }
-  go(item, false);
+  const row = item && rowOf(item);
+  if (!item || !row || !rootOf(item) || !has(/** @type {Element} */ (rootOf(item)), "data-enhanced")) return;
+  if (node !== row && closest(node, "[data-slot=tree-row]") === row) go(item);
+  else if (node === row) go(item, false);
 });
 
 let buffer = "";
@@ -398,7 +449,7 @@ function typeahead(root, from, key) {
   clearTimeout(bufferTimer);
   bufferTimer = window.setTimeout(() => { buffer = ""; }, 500);
   buffer += key.toLowerCase();
-  const items = shown(root).filter((item) => attr(item, "data-slot") === "tree-item");
+  const items = shown(root).filter((item) => !isMore(item) && !isNote(item));
   const repeated = [...buffer].every((c) => c === buffer[0]);
   const query = repeated ? buffer[0] : buffer;
   const start = items.indexOf(from) + (repeated ? 1 : 0);
@@ -433,12 +484,12 @@ function range(root, from, to) {
 }
 
 on(document, "keydown", (e) => {
-  if (e.altKey || e.defaultPrevented) return;
+  if (e.altKey || e.defaultPrevented || e.metaKey) return;
   const item = itemOf(e.target);
+  const row = item && rowOf(item);
   const root = item && rootOf(item);
-  if (!item || !root || !has(root, "data-enhanced")) return;
-  // Keys that mean something to the page: leave them to it.
-  if (e.metaKey) return;
+  // Only keys that land on a row act: a key inside the row's own control is left to it.
+  if (!item || !row || !root || !has(root, "data-enhanced") || e.target !== row) return;
   const key = e.key;
   const multiple = attr(root, "data-select") === "multiple";
   const single = attr(root, "data-select") === "single";
@@ -481,8 +532,11 @@ on(document, "keydown", (e) => {
   } else if (key === "Home" || key === "End") {
     done();
     go(items[key === "Home" ? 0 : items.length - 1]);
+  } else if ((key === "Enter" || key === " ") && isNote(item)) {
+    done();
+    if (has(row, "data-retry")) again(item);
   } else if (key === "Enter") {
-    const link = first(item, ":scope > [data-slot=tree-row] a[href]:not([data-slot=tree-toggle])") || (attr(item, "data-slot") === "tree-more" ? first(item, "a") : null);
+    const link = isMore(item) ? first(row, "a") : first(row, "a[href]:not([data-slot=tree-toggle])");
     done();
     if (link) link.click();
     else if (single) choose(item, true);
@@ -493,14 +547,14 @@ on(document, "keydown", (e) => {
     if (e.shiftKey && multiple) {
       const anchor = /** @type {HTMLElement | undefined} */ (anchors.get(root));
       range(root, anchor && shown(root).includes(anchor) ? anchor : item, item);
-    } else if (attr(item, "data-slot") === "tree-more") first(item, "a")?.click();
+    } else if (isMore(item)) first(row, "a")?.click();
     else if (multiple) choose(item);
     else if (single) choose(item, true);
   } else if (key === "*") {
     done();
     const group = item.parentNode;
-    for (const sibling of list(/** @type {Element} */ (group), ":scope > " + BRANCH)) open(sibling);
-  } else if (key.length === 1 && !e.ctrlKey) {
+    if (group) for (const sibling of list(/** @type {Element} */ (group), ":scope > " + BRANCH)) open(sibling);
+  } else if (key.length === 1) {
     done();
     typeahead(root, item, key);
   }

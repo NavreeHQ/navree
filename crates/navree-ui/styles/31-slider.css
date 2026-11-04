@@ -51,7 +51,7 @@
 [data-slot=slider-marks] > g[data-dir=rtl]{display:none}
 [data-slot=slider-marks]:dir(rtl) > g[data-dir=ltr]{display:none}
 [data-slot=slider-marks]:dir(rtl) > g[data-dir=rtl]{display:inline}
-[data-slot=slider-value]{grid-column:2;grid-row:1;min-width:2.5ch;color:var(--fg-1);font-size:13px;font-variant-numeric:tabular-nums;text-align:end;overflow-wrap:anywhere}
+[data-slot=slider-value]{grid-column:2;grid-row:1;min-width:2.5ch;color:var(--fg-1);font-size:13px;font-variant-numeric:tabular-nums;text-align:end;unicode-bidi:plaintext;overflow-wrap:anywhere}
 
 /* Many labels on a narrow track: every other one, then three of four, so none overlap. */
 @container (max-width:30rem){[data-slot=slider-mark-labels] text:nth-child(even){display:none}}

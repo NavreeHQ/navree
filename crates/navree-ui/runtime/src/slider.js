@@ -17,6 +17,9 @@ const clamp = (n) => (n < 0 ? 0 : n > 100 ? 100 : n);
 /** @param {string} text @returns {number} */
 const num = (text) => (text === "" || !Number.isFinite(Number(text)) ? NaN : Number(text));
 
+/** The decimals the page writes a value with, held to what a toolkit number can have: 0 to 9. @param {Element} root */
+const decimalsOf = (root) => Math.min(9, Math.max(0, Math.floor(Number(attr(root, "data-decimals")) || 0)));
+
 /** @type {WeakMap<Element, string[]>} */
 const named = new WeakMap();
 /** The names of the steps, or none. @param {Element} root */
@@ -41,7 +44,7 @@ function say(root, input) {
     const at = Math.round((value - min) / step);
     if (names[at] !== undefined) return names[at];
   }
-  const decimals = Number(attr(root, "data-decimals")) || 0;
+  const decimals = decimalsOf(root);
   let text = input.value;
   if (Number.isFinite(value) && decimals > 0) {
     const [whole, fraction = ""] = text.split(".");
@@ -81,6 +84,23 @@ function announce(input) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/**
+ * Moves a value by one step, on the browser's grid. An input with `step="any"` has none, so it
+ * moves by a hundredth of its track.
+ * @param {HTMLInputElement} input @param {number} by 1 or -1
+ */
+function nudge(input, by) {
+  try {
+    if (by > 0) input.stepUp();
+    else input.stepDown();
+    return;
+  } catch {}
+  const min = num(input.min), max = num(input.max);
+  if (!(max > min)) return;
+  const next = Math.min(max, Math.max(min, num(input.value) + (by * (max - min)) / 100));
+  input.value = String(next);
+}
+
 /** The gap between the thumbs of a range, as a number. @param {Element} root @param {HTMLInputElement} input */
 function gapOf(root, input) {
   const steps = Number(attr(root, "data-gap")) || 0;
@@ -93,12 +113,12 @@ function keepApart(root, moved) {
   const [a, b] = thumbs(root);
   if (!b || !has(root, "data-range")) return;
   const gap = gapOf(root, moved);
-  const decimals = Number(attr(root, "data-decimals")) || 0;
+  const decimals = decimalsOf(root);
   const write = (/** @type {HTMLInputElement} */ input, /** @type {number} */ value) => {
     input.value = value.toFixed(decimals);
     // The browser has put it on its grid; if the edge fell between two steps, take the one inside.
-    if (input === a && num(a.value) > num(b.value) - gap) input.stepDown();
-    if (input === b && num(b.value) < num(a.value) + gap) input.stepUp();
+    if (input === a && num(a.value) > num(b.value) - gap) nudge(input, -1);
+    if (input === b && num(b.value) < num(a.value) + gap) nudge(input, 1);
   };
   if (moved === a && num(a.value) > num(b.value) - gap) write(a, num(b.value) - gap);
   if (moved === b && num(b.value) < num(a.value) + gap) write(b, num(a.value) + gap);
@@ -148,10 +168,7 @@ on(document, "keydown", (e) => {
   // Move by whole steps: the browser puts the value on its grid and inside its bounds.
   const times = large ? Math.max(1, Math.round(big / step)) : 1;
   const before = field.value;
-  for (let n = 0; n < times; n++) {
-    if (by > 0) field.stepUp();
-    else field.stepDown();
-  }
+  for (let n = 0; n < times; n++) nudge(field, by);
   keepApart(root, field);
   if (field.value !== before) announce(field);
 });
@@ -176,7 +193,7 @@ on(document, "pointerdown", (e) => {
   const value = min + along * (max - min);
   const near = Math.abs(value - num(a.value)) <= Math.abs(value - num(b.value)) ? (value > num(b.value) ? b : a) : b;
   const step = num(near.step);
-  const decimals = Number(attr(root, "data-decimals")) || 0;
+  const decimals = decimalsOf(root);
   near.value = (step > 0 ? min + Math.round((value - min) / step) * step : value).toFixed(decimals);
   keepApart(root, near);
   near.focus();
