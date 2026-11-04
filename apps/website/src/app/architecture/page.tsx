@@ -10,6 +10,7 @@ import { Screens } from "@/components/architecture/screens";
 import { DiagramFigure, diagrams } from "@/components/diagrams";
 import { patterns, type Pattern } from "@/components/diagrams/patterns";
 import { GrowThumb, PatternThumb } from "@/components/diagrams/thumbs";
+import { Faq } from "@/components/faq";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { CopyButton } from "@/components/mdx/copy-button";
 import { pageMetadata } from "@/lib/metadata";
@@ -374,6 +375,7 @@ export default function ArchitecturePage() {
       <Grow />
       <BuiltIn />
       <Kits />
+      <Faq name="architecture" />
       <PageSchema path="/architecture/" metadata={metadata} />
     </>
   );

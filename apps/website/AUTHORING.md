@@ -479,7 +479,7 @@ edit them, but what you write shapes them:
   finds the page by itself. `src/lib/site-pages.ts` takes a short name for
   the breadcrumb, a parent and the files that date the page.
 - **Questions and answers.** `src/content/faq.ts` holds the questions of the
-  homepage, `/ui/`, `/ai/`, `/about/` and the docs introduction. Each answer is 40 to 80
+  homepage, `/ui/`, `/ai/`, `/about/`, `/architecture/` and the docs introduction. Each answer is 40 to 80
   words, starts with the answer, is plain text with `code` spans and is true
   on `main`. A number that can change is computed from the file that owns it,
   as the component count and the roadmap are. `<Faq name="ui" />` draws the

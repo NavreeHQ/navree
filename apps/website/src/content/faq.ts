@@ -166,6 +166,38 @@ export const aiFaq: FaqSet = {
   ],
 };
 
+/** The architecture page (`/architecture/`): the shapes, the lists, the script and the page's safety. */
+export const architectureFaq: FaqSet = {
+  path: "/architecture/",
+  heading: "Questions about Navree's architecture",
+  items: [
+    {
+      question: "Can I start as a monolith and split later?",
+      answer:
+        "Yes. `navree new` writes one binary, and each feature is a module that keeps its services, routes, access rules, migrations and tests wherever it runs. Add `WorkspaceModule` when you serve many customers. When one module needs its own deploys, it moves into a service of its own with `MicroModule`, and its callers send a message instead of calling a method.",
+      link: { href: "#grow", label: "Grow without rewriting" },
+    },
+    {
+      question: "How does Navree keep lists fast with millions of rows?",
+      answer:
+        "By reading one page at a time. `cursor_paginate` pages by keyset: it reads the rows after the last one seen, with no count and no offset, so a deep page costs what the first does. The DataTable sorts, filters and pages on the server, can cap its count or skip it, and reads a deep numbered page from the nearer end of the index.",
+      link: { href: "/docs/orm/pagination-and-streaming/#cursor-pagination", label: "Read about cursor pagination" },
+    },
+    {
+      question: "Does Navree UI need JavaScript?",
+      answer:
+        "Not for most of a page. The server renders pages to HTML, and a page with nothing interactive ships no script. Links, forms, dialogs and the DataTable's sorting, filtering and paging work with JavaScript off. Script comes in small modules, and a page loads only the ones its markup uses, such as the table module for a DataTable or the live module for a region that follows events.",
+      link: { href: "/docs/ui/overview/#what-ships-to-the-browser", label: "See what ships to the browser" },
+    },
+    {
+      question: "How does Navree stop script injection in pages?",
+      answer:
+        "With a strict content security policy on every page: scripts, styles and requests from the page's own origin only, and no inline script or style at all. Text goes through one escaper, every URL through `Href`, which refuses `javascript:`, and elements that load or run something are refused. The runtime reads the page through the DOM's own prototypes, so a field named to trick it changes nothing.",
+      link: { href: "/docs/ui/overview/#security", label: "Read how pages stay safe" },
+    },
+  ],
+};
+
 /** The introduction of the docs (`/docs/prologue/introduction/`). */
 export const introductionFaq: FaqSet = {
   path: "/docs/prologue/introduction/",
