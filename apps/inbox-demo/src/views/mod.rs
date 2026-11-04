@@ -4,7 +4,7 @@
 
 use chrono::DateTime;
 use navree::ui::flags::CountryCode;
-use navree::ui::{NavGroup, NavItem, Shell, UserMenu, icons};
+use navree::ui::{NavGroup, NavItem, Shell, ToastPosition, UserMenu, icons};
 
 use crate::data::{Agent, COMPANY, OFFSET};
 
@@ -197,6 +197,8 @@ pub fn shell(me: &Agent, team: &[Agent], counts: ViewCounts, current: View) -> S
     Shell::new(COMPANY)
         .context("Support")
         .home("/inbox")
+        // At the top: at the bottom a toast would cover the composer's Send button.
+        .toasts(ToastPosition::TopCenter)
         .group(
             NavGroup::new("Inbox")
                 .item(item(View::All, Some(counts.all)))

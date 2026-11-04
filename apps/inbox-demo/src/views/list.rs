@@ -237,11 +237,11 @@ pub fn list_lazy(page: &ListPage<'_>, filters: &Filters, open: Option<i64>, now:
     };
     let mut list = LazyList::new(LIST, "Conversations", rows_src(filters))
         .view(filters.query())
-        .items(page.rows.iter().enumerate().map(|(at, row)| {
-            // Nothing open: j opens the first.
-            let key = (open.is_none() && at == 0 && !page.more_before).then_some("j");
-            conversation_item(row, filters, open, now, key)
-        }))
+        .items(
+            page.rows
+                .iter()
+                .map(|row| conversation_item(row, filters, open, now, None)),
+        )
         .since(page.since.to_string())
         .live_from(stream.to_owned(), Some("conversations"), LazyEnd::Start)
         .max(300)

@@ -500,6 +500,111 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
     })
 }
 
+/// Generated conversation `id` and its messages, as [`seed`] writes them into a desk of
+/// [`FULL`] size at `now`, worked out here with the same arithmetic: for pages that draw
+/// one with no database, such as the docs.
+pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::data::Message>) {
+    let i = (id - FIRST_CONVERSATION).max(0);
+    let a = (i * 2_654_435_761 + 97) % 4_294_967_296;
+    let b = (i * 40_503 + 7_919) % 1_000_003;
+    let c = (i * 69_069 + 12_345) % 2_147_483_647;
+    let d = ((i * 1_103_515_245 + 12_345) % 2_147_483_648) / 65_536;
+    let share = b as f64 / 1_000_003.0;
+    let age = 25_200 + (share * share * 63_072_000.0) as i64;
+    let m = 10 + d % 91;
+    let subjects = SUBJECTS.len() as i64 + TOPICS.len() as i64;
+    let at = usize::try_from(a % subjects).unwrap_or(0);
+    let (subject, channel, priority) = match SUBJECTS.get(at) {
+        Some((subject, channel, priority)) => ((*subject).to_owned(), *channel, *priority),
+        None => {
+            let topic = &TOPICS[at - SUBJECTS.len()];
+            (topic.subject.to_owned(), topic.channel.key(), topic.priority.key())
+        }
+    };
+    let status = if age < 259_200 {
+        match a % 10 {
+            0..=3 => "open",
+            4..=6 => "pending",
+            _ => "closed",
+        }
+    } else if age < 1_209_600 {
+        match a % 20 {
+            0..=4 => "pending",
+            5..=6 => "snoozed",
+            _ => "closed",
+        }
+    } else {
+        "closed"
+    };
+    let customers = (FULL / 20).clamp(50, 5_000);
+    let customer_id = if a % 25 == 0 {
+        1 + a % 24
+    } else {
+        FIRST_CUSTOMER + (a / 3) % customers
+    };
+    let names = FIRST_NAMES.len() * LAST_NAMES.len();
+    let n = usize::try_from(((customer_id - FIRST_CUSTOMER).max(0) * 37) % names as i64).unwrap_or(0);
+    let customer = format!("{} {}", FIRST_NAMES[n / LAST_NAMES.len()], LAST_NAMES[n % LAST_NAMES.len()]);
+    let active: Vec<(i64, &str)> = AGENTS
+        .iter()
+        .enumerate()
+        .filter(|(at, _)| !matches!(at, 21 | 23))
+        .map(|(at, (name, _))| (i64::try_from(at).unwrap_or(0) + 1, *name))
+        .collect();
+    let (agent_id, agent) = active[usize::try_from((a / 7) % active.len() as i64).unwrap_or(0)];
+    let assignee = (!(status == "open" && a % 10 == 3)).then_some(agent_id);
+    let last_at = now - age;
+    let created_at = last_at - m * (600 + c % 7_200);
+    let line = |k: i64| -> &'static str {
+        let kind = kind_of(k);
+        let pool: &[&str] = match kind {
+            "customer" => &CUSTOMER_LINES,
+            "agent" => &AGENT_LINES,
+            _ => &NOTE_LINES,
+        };
+        pool[usize::try_from((id * 7 + k * 13) % pool.len() as i64).unwrap_or(0)]
+    };
+    let shown = if m % 9 == 0 { m - 1 } else { m };
+    let conversation = crate::data::Conversation {
+        id,
+        customer_id,
+        subject,
+        channel: channel.to_owned(),
+        status: status.to_owned(),
+        priority: priority.to_owned(),
+        assignee_id: assignee,
+        created_at,
+        last_at,
+        sla_due: None,
+        sla_from: None,
+        snoozed_until: None,
+        unread: 0,
+        preview: line(shown).chars().take(120).collect(),
+        rev: 1,
+        messages: m,
+        inbox: crate::data::inbox_of(status).to_owned(),
+    };
+    let messages = (1..=m)
+        .map(|k| {
+            let kind = kind_of(k);
+            crate::data::Message {
+                id: 1_000_000 + id * 100 + k,
+                conversation_id: id,
+                kind: kind.to_owned(),
+                author: if kind == "customer" {
+                    customer.clone()
+                } else {
+                    assignee.map_or("Priya Raman", |_| agent).to_owned()
+                },
+                agent_id: (kind != "customer").then_some(assignee.unwrap_or(2)),
+                body: line(k).to_owned(),
+                at: created_at + ((last_at - created_at) * (k - 1)) / (m - 1).max(1),
+            }
+        })
+        .collect();
+    (conversation, messages)
+}
+
 /// The indexes every query of the app reads by, and the search index, built once the
 /// rows are in. Then the planner's statistics.
 pub const INDEXES: [&str; 12] = [

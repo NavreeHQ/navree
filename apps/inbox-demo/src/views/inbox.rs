@@ -72,6 +72,9 @@ pub struct Inbox<'a> {
     pub list: ListPage<'a>,
     pub summary: Summary,
     pub open: Option<&'a OpenThread>,
+    /// The customer pane's content, when the page draws it at once; otherwise the
+    /// pane loads after the page.
+    pub customer: Option<&'a CustomerView>,
     /// Which pane the page is about: the one shown when the panes stack.
     pub pane: &'a str,
     pub now: i64,
@@ -206,18 +209,26 @@ pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
                         thread.conversation.id,
                         thread.customer.id,
                         page.filters,
-                        None,
+                        page.customer,
                         page.now,
                     ))
                 })
         }
         None => split
             .pane_with("thread", |pane| {
-                pane.body(
-                    Empty::new("Choose a conversation")
-                        .icon(icons::MESSAGES_SQUARE)
-                        .description("Pick one from the list, or press j to open the first. Press ? for every key."),
-                )
+                let first = page.list.rows.first().map(|row| {
+                    // j opens the first; on a conversation's page, j and k are its neighbours.
+                    Button::outline("Open the first")
+                        .href(page.filters.href(&format!("/inbox/{}", row.conversation.id)))
+                        .hotkey("j")
+                });
+                let empty = Empty::new("Choose a conversation")
+                    .icon(icons::MESSAGES_SQUARE)
+                    .description("Pick one from the list, or press j to open the first. Press ? for every key.");
+                pane.body(match first {
+                    Some(button) => empty.actions(button),
+                    None => empty,
+                })
             })
             .pane_with("customer", |pane| {
                 pane.body(

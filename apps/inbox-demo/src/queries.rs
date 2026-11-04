@@ -85,12 +85,12 @@ fn inner(records: navree::orm::Collection<Conversation>) -> Vec<Conversation> {
 }
 
 /// After the cursor `(last_at, id)` in the list: older activity.
-fn after(at: i64, id: i64) -> Filter {
+pub(crate) fn after(at: i64, id: i64) -> Filter {
     Filter::raw("(\"last_at\", \"id\") < (?, ?)", [Value::I64(at), Value::I64(id)])
 }
 
 /// Before the cursor in the list: newer activity.
-fn before(at: i64, id: i64) -> Filter {
+pub(crate) fn before(at: i64, id: i64) -> Filter {
     Filter::raw("(\"last_at\", \"id\") > (?, ?)", [Value::I64(at), Value::I64(id)])
 }
 
@@ -248,8 +248,9 @@ pub async fn changes(
     filters: &Filters,
     me: i64,
     since: i64,
+    window: Option<(&str, &str)>,
 ) -> Result<(Vec<ListRow>, Vec<String>, i64)> {
-    let changed = inner(
+    let mut changed = inner(
         Conversation::query()
             .where_(Conversation::REV.gt(since))
             .order_by("rev")
@@ -258,6 +259,13 @@ pub async fn changes(
             .await?,
     );
     let newest = changed.iter().map(|c| c.rev).max().unwrap_or(since);
+    if let Some(window) = window {
+        for clock in clocks_in(uow, filters, me, window).await? {
+            if !changed.iter().any(|c| c.id == clock.id) {
+                changed.push(clock);
+            }
+        }
+    }
     let searched_ids: Option<Vec<i64>> = match (searched(filters), changed.is_empty()) {
         (Some(search), false) => Some(
             Conversation::query()
@@ -285,6 +293,44 @@ pub async fn changes(
         }
     }
     Ok((hydrate(uow, keep).await?, gone, newest))
+}
+
+/// The conversations in a loaded window of the list whose clock is running: their
+/// countdown changes with no write, so a live answer draws them again. At most what the
+/// page holds, read by the view's index between the window's two cursors.
+pub async fn clocks_in(
+    uow: &Uow,
+    filters: &Filters,
+    me: i64,
+    window: (&str, &str),
+) -> Result<Vec<Conversation>> {
+    let (Some((top_at, top_id)), Some((bottom_at, bottom_id))) =
+        (read_cursor(window.0), read_cursor(window.1))
+    else {
+        return Ok(Vec::new());
+    };
+    if matches!(filters.view, View::Snoozed | View::Closed) {
+        return Ok(Vec::new());
+    }
+    Ok(inner(
+        in_view(filters, me)
+            .where_(Filter::raw(
+                "(\"last_at\", \"id\") <= (?, ?) AND (\"last_at\", \"id\") >= (?, ?)",
+                [
+                    Value::I64(top_at),
+                    Value::I64(top_id),
+                    Value::I64(bottom_at),
+                    Value::I64(bottom_id),
+                ],
+            ))
+            .where_(Conversation::STATUS.eq(Status::Open.key()))
+            .where_(Conversation::SLA_DUE.is_not_null())
+            .order_by_desc("last_at")
+            .order_by_desc("id")
+            .limit(400)
+            .get(uow)
+            .await?,
+    ))
 }
 
 /// A window of a conversation's messages, oldest first, and their files: the newest page,

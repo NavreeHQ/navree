@@ -447,6 +447,7 @@ impl Pages {
             },
             summary,
             open: thread.as_ref(),
+            customer: None,
             pane,
             now,
             today: today(),
@@ -946,7 +947,7 @@ impl Pages {
     /// `POST /inbox/panes`: the agent's pane sizes, held to the layout's rules.
     async fn panes(&self, uow: Uow, headers: HeaderMap, save: SplitSave) -> Result<Response> {
         let Some(sizes) = save.sizes_for(&layout()) else {
-            return Ok(StatusCode::UNPROCESSABLE_ENTITY.into_response());
+            return Ok(StatusCode::BAD_REQUEST.into_response());
         };
         let me = who(&uow, &headers).await?;
         let text = sizes.to_text();
@@ -1076,9 +1077,13 @@ impl Controller for Pages {
                     let since = since.parse::<i64>().unwrap_or(i64::MAX);
                     // Read the revision first: a change made while this runs comes next time.
                     let at = pages.hub.current_rev();
-                    let (rows, gone, newest) = queries::changes(&uow, &filters, me.id, since).await?;
+                    let (rows, gone, newest) = queries::changes(&uow, &filters, me.id, since, ask.window()).await?;
                     let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
-                    return Ok::<_, AppError>(LazyPage::changes(items, newest.max(at.min(since.max(newest))).to_string(), gone).into_response());
+                    // A write takes its revision before it commits, so the newest few are asked
+                    // for again next time: one still on its way when this read can't be missed.
+                    // The list replaces what it has, so a row sent twice shows once.
+                    let next = since.max(newest.min(at) - 8);
+                    return Ok::<_, AppError>(LazyPage::changes(items, next.to_string(), gone).into_response());
                 }
                 let (rows, more_after, more_before) = queries::list_page(&uow, &filters, me.id, ask.ask()).await?;
                 let more = match ask.ask() {
@@ -1271,7 +1276,10 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 .hub
                 .step(&pages.db, now(), what, query.on)
                 .await
-                .map_err(|error| AppError::internal(error.to_string()))?;
+                .map_err(|error| {
+                    eprintln!("inbox-demo: a step failed: {error}");
+                    AppError::internal(error.to_string())
+                })?;
             Ok::<_, AppError>(change.map_or_else(String::new, |change| {
                 format!("{} {}", change.conversation, change.customer)
             }))
@@ -1299,9 +1307,18 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
         }),
         route!(me, Method::POST, "!/__test/reset", pages, [] => {
-            pages.hub.seed(&pages.db, now(), pages.settings.scale).await.map_err(|error| {
+            // On its own task, one at a time: a client that gives up can't stop a write
+            // half way and leave the database locked.
+            let (hub, db, scale) = (pages.hub.clone(), pages.db.clone(), pages.settings.scale);
+            let written = tokio::spawn(async move {
+                let _one = hub.writing.lock().await;
+                hub.seed(&db, now(), scale).await.map_err(|error| error.to_string())
+            })
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+            written.map_err(|error| {
                 eprintln!("inbox-demo: reset failed: {error}");
-                AppError::internal(error.to_string())
+                AppError::internal(error)
             })?;
             pages.hub.tell(Change::TICK);
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
@@ -1320,6 +1337,10 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 .unwrap_or_default();
             Ok(Json(serde_json_lite(&found, &last)).into_response())
         }),
+        route!(me, Method::GET, "!/__test/explain", pages, [uow: Uow] => {
+            let _ = &pages;
+            explain(&uow).await
+        }),
         route!(me, Method::GET, "!/__test/layout/{agent}", pages, [uow: Uow, Path(agent): Path<i64>] => {
             let _ = &pages;
             let kept = Layout::query()
@@ -1331,6 +1352,62 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
             Ok::<_, AppError>(kept)
         }),
     ]
+}
+
+/// The plans SQLite makes for the queries the pages run, as the ORM writes them: each
+/// query's name, its SQL, and `EXPLAIN QUERY PLAN`'s lines. For the numbers in the
+/// report and the scale suite.
+async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
+    use navree::db::{Executor as _, Statement};
+    use navree::orm::Dialect;
+
+    let at = now() - 30 * 86_400;
+    let all = Filters::default();
+    let closed = Filters::with_view(View::Closed);
+    let mine = Filters::with_view(View::Mine);
+    let unassigned = Filters::with_view(View::Unassigned);
+    let searched = Filters::read(Some("closed"), Some("booking page"), None, None);
+    let channel = Filters::read(Some("closed"), None, Some("api"), Some("high"));
+    let conversations = [
+        ("list: the first page of all open", queries::in_view(&all, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("list: the page after a cursor, closed", queries::in_view(&closed, 1).where_(queries::after(at, 50_000)).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("list: the page before a cursor, closed", queries::in_view(&closed, 1).where_(queries::before(at, 50_000)).order_by("last_at").order_by("id").limit(51)),
+        ("list: assigned to me", queries::in_view(&mine, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("list: unassigned", queries::in_view(&unassigned, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("list: closed, one channel and priority", queries::in_view(&channel, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("search: closed, \"booking page\"", queries::in_view(&searched, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
+        ("live: what changed since a revision", Conversation::query().where_(Conversation::REV.gt(1_i64)).order_by("rev").limit(300)),
+        ("count: all open", queries::in_view(&all, 1)),
+    ];
+    let messages = [
+        ("thread: the newest thirty", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).order_by_desc("id").limit(31)),
+        ("thread: thirty before a cursor", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).where_(Message::ID.lt(500_i64)).order_by_desc("id").limit(31)),
+        ("thread: what is new since a message", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).where_(Message::ID.gt(500_i64)).order_by("id").limit(200)),
+    ];
+    let mut statements = Vec::new();
+    for (name, builder) in conversations {
+        statements.push((name, builder.to_sql(Dialect::Sqlite).map_err(|e| AppError::internal(e.to_string()))?));
+    }
+    for (name, builder) in messages {
+        statements.push((name, builder.to_sql(Dialect::Sqlite).map_err(|e| AppError::internal(e.to_string()))?));
+    }
+    let mut out = String::new();
+    for (name, statement) in statements {
+        let plan = uow
+            .fetch_all(&Statement::portable(
+                format!("EXPLAIN QUERY PLAN {}", statement.sql),
+                statement.values.clone(),
+            ))
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        out.push_str(&format!("## {name}\n{}\n", statement.sql));
+        for row in plan {
+            let detail: String = row.get("detail").unwrap_or_default();
+            out.push_str(&format!("  {detail}\n"));
+        }
+        out.push('\n');
+    }
+    Ok(out)
 }
 
 /// What the tests read of a conversation: its own row and its latest message.

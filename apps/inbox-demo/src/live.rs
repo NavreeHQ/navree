@@ -104,6 +104,8 @@ const NOTES: [&str; 4] = [
 
 /// What happens next, and who hears about it.
 pub struct Hub {
+    /// Held while the desk is written afresh: one at a time.
+    pub writing: tokio::sync::Mutex<()>,
     tx: broadcast::Sender<Change>,
     dice: Mutex<Dice>,
     next_rev: AtomicI64,
@@ -122,6 +124,7 @@ impl Default for Hub {
 impl Hub {
     pub fn new() -> Self {
         Self {
+            writing: tokio::sync::Mutex::new(()),
             tx: broadcast::channel(256).0,
             dice: Mutex::new(Dice::new(4_111)),
             next_rev: AtomicI64::new(2),
@@ -223,8 +226,7 @@ impl Hub {
             db.pool().execute_script(statement).await?;
         }
         let most = |table: &'static str| async move {
-            db.pool()
-                .fetch_scalar::<i64>(&navree::db::Statement::text(format!(
+            db.fetch_scalar::<i64>(&navree::db::Statement::text(format!(
                     "SELECT COALESCE(MAX(id), 0) FROM {table}"
                 )))
                 .await
@@ -322,8 +324,7 @@ impl Hub {
             )
             .await?;
         Message::query().insert(db, [message.clone()]).await?;
-        db.pool()
-            .execute(&navree::db::Statement::portable(
+        db.execute(&navree::db::Statement::portable(
                 "INSERT INTO conversations_fts (rowid, subject, customer, company) VALUES (?, ?, ?, ?)",
                 [
                     navree::db::Value::I64(id),
