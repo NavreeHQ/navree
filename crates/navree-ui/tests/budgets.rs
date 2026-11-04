@@ -470,4 +470,41 @@ mod times {
         });
         assert!(time < Duration::from_millis(1), "{time:?}");
     }
+
+    /// An error page is drawn on the error path of a request: it has to cost next to nothing.
+    #[test]
+    fn an_error_page_renders_in_under_100_us() {
+        use http::StatusCode;
+        use navree_ui::pages::ErrorPage;
+        let time = best(300, || {
+            ErrorPage::new(StatusCode::NOT_FOUND)
+                .reference("01a1a48c27697468b09935ddd4286017")
+                .into_view()
+                .to_html()
+        });
+        println!("an error page renders in {time:?}");
+        assert!(time < Duration::from_micros(100), "{time:?}");
+    }
+
+    #[test]
+    fn an_error_page_in_the_shell_renders_in_under_300_us() {
+        use http::{HeaderMap, StatusCode};
+        use navree_ui::pages::ErrorPage;
+        use navree_ui::{NavGroup, NavItem, Shell, icons};
+        let shell = Shell::new("Acme").group(
+            NavGroup::new("Sales")
+                .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE))
+                .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),
+        );
+        let time = best(300, || {
+            let app = shell.for_request("/missing", &HeaderMap::new());
+            ErrorPage::new(StatusCode::FORBIDDEN)
+                .reference("01a1a48c27697468b09935ddd4286017")
+                .in_shell(&app)
+                .to_view()
+                .to_html()
+        });
+        println!("an error page in the shell renders in {time:?}");
+        assert!(time < Duration::from_micros(300), "{time:?}");
+    }
 }

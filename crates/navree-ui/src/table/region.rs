@@ -2,9 +2,11 @@
 
 use std::time::Duration;
 
-use crate::components::{Skeleton, SkeletonShape};
+use crate::components::{Button, Size, Skeleton, SkeletonShape};
 use crate::html::Href;
+use crate::icons;
 use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
+use crate::pages::{State, StateKind, StateLabels};
 
 /// A named part of a page that updates by itself: fetched after paint, polled,
 /// or refetched when an op invalidates it. Its answer morphs in.
@@ -21,6 +23,7 @@ use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
 pub struct Region {
     el: Element,
     placeholder: bool,
+    failed: Option<Node>,
 }
 
 impl Region {
@@ -33,6 +36,7 @@ impl Region {
                 .flag("data-ui-region", true)
                 .uses(Uses::CORE),
             placeholder: false,
+            failed: None,
         }
     }
 
@@ -146,6 +150,40 @@ impl Region {
         self
     }
 
+    /// Says `state` when a fetch of the region gets no answer it can show: the connection
+    /// failed, the request ran out of time, or something between answered in its own words.
+    /// What the region had stays, and the state appears beside it. A fetch that gets an
+    /// error from your app is shown by the runtime as the state the server drew
+    /// (see [`ErrorPage`](crate::ErrorPage)), whether or not you call this.
+    ///
+    /// The state shows when the runtime marks the region failed, and goes when the next
+    /// fetch starts. It needs no script of its own, and its button can be a
+    /// [`data-ui-refresh`](Self::when_offline) button.
+    pub fn when_failed(mut self, state: impl Into<Node>) -> Self {
+        self.failed = Some(state.into());
+        self
+    }
+
+    /// [`when_failed`](Self::when_failed) with "You're offline" and a Try again button that
+    /// fetches the region again.
+    ///
+    /// ```
+    /// use navree_ui::{Region, render};
+    ///
+    /// let html = render(&Region::new("kpis").src("/fragments/kpis").lazy().when_offline().into());
+    /// assert!(html.contains(r#"data-slot="region-failed""#));
+    /// ```
+    pub fn when_offline(self) -> Self {
+        let labels = StateLabels::default();
+        let state = State::of(StateKind::Offline).labels(&labels).actions(
+            Button::outline(labels.try_again.to_string())
+                .size(Size::Sm)
+                .icon(icons::REFRESH_CW)
+                .attr("data-ui-refresh", ""),
+        );
+        self.when_failed(state)
+    }
+
     /// Adds its content.
     pub fn children(mut self, children: impl IntoNodes) -> Self {
         self.el = self.el.child(children);
@@ -154,16 +192,23 @@ impl Region {
     }
 
     fn into_node(self) -> Node {
+        let failed = self.failed.map(|state| {
+            el("div")
+                .slot("region-failed")
+                .attr("role", "alert")
+                .child(state)
+        });
         if self.placeholder {
             return self
                 .el
                 .children((
                     Skeleton::new(SkeletonShape::Line),
                     Skeleton::new(SkeletonShape::Short),
+                    failed,
                 ))
                 .into();
         }
-        self.el.into()
+        self.el.child(failed).into()
     }
 }
 

@@ -472,6 +472,8 @@ export async function refresh(id) {
       }
       to = /** @type {HTMLElement} */ (el.cloneNode(false));
       to.append(...body(doc).childNodes);
+      // What the region says when a fetch gets no answer stays, whatever the fragment holds.
+      for (const kept of all(el, ":scope > [data-slot=region-failed]")) to.append(kept.cloneNode(true));
       // The page has its post form already: a second one would only share its name.
       if (byId("ui-post")) for (const form of all(to, "#ui-post")) form.remove();
     }

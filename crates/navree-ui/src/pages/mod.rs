@@ -15,7 +15,7 @@
 mod labels;
 mod options;
 mod render;
-mod return_to;
+pub mod return_to;
 mod state;
 
 pub use labels::{KindWords, StateKind, StateLabels};

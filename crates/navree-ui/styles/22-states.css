@@ -39,6 +39,11 @@
 }
 [data-slot=table] [data-slot=state-row] > td,[data-slot=data-table] [data-slot=table] tbody tr[data-slot=state-row] > td{height:auto;max-width:none;padding:0;overflow:visible;text-overflow:clip;white-space:normal}
 
+/* A region whose fetch got no answer shows its state beside what it had */
+[data-slot=region-failed]{display:none}
+[data-ui-region][data-ui-failed] > [data-slot=region-failed]{display:block;margin-top:.75rem}
+[data-ui-region][data-ui-failed] > [data-slot=skeleton]{display:none}
+
 /* A page of its own, with no shell */
 [data-slot=state-page]{display:grid;place-items:center;min-height:100dvh;padding:1.5rem 1rem;outline:0}
 

@@ -519,12 +519,17 @@ impl ErrorPage {
     }
 
     /// The state this page shows. `heading` is the level of its headline, if it is one.
+    ///
+    /// It has no `id`, so several can stand in one page; give it one with
+    /// [`State::id`] when it is the page's only state.
     pub fn state(&self, heading: Option<u8>, copy: bool) -> State {
         let mut state = State::of(self.kind)
             .labels(&self.labels)
-            .status(self.status)
-            .size(StateSize::Page)
-            .id("error");
+            .size(StateSize::Page);
+        // No answer came, so there is no status to show.
+        if self.kind != StateKind::Offline {
+            state = state.status(self.status);
+        }
         if let Some(level) = heading {
             state = state.heading(level);
         }
@@ -562,7 +567,7 @@ impl ErrorPage {
     pub fn into_view(self) -> View {
         let title = self.short_title();
         let status = self.status;
-        let state = self.state(Some(1), false);
+        let state = self.state(Some(1), false).id("error");
         View::new(title)
             .status(status)
             .body(el("main").slot("state-page").id("main").child(state))
@@ -573,7 +578,7 @@ impl ErrorPage {
     pub fn in_shell(self, shell: &AppShell) -> AppPage {
         let title = self.short_title();
         let status = self.status;
-        let state = self.state(None, true);
+        let state = self.state(None, true).id("error");
         shell.page(title).status(status).body(state)
     }
 

@@ -606,6 +606,10 @@ async fn a_region_gets_the_state_alone() {
         !text.contains("data-ui-click"),
         "no copy button, no script: {text}"
     );
+    assert!(
+        !text.contains(r#" id=""#) && !text.contains("aria-labelledby"),
+        "no id that a second region would repeat: {text}"
+    );
 }
 
 #[tokio::test]
@@ -773,4 +777,47 @@ async fn the_words_can_be_the_apps_own() {
     assert!(text.contains("<title>Introuvable</title>"), "{text}");
     assert!(text.contains("Page introuvable"), "{text}");
     assert!(text.contains(r#"href="/accueil""#), "{text}");
+}
+
+#[test]
+fn a_region_can_say_what_to_show_when_it_gets_no_answer() {
+    use navree_ui::{Region, State, StateKind, render};
+    let plain = render(&Region::new("kpis").src("/f").lazy().into());
+    assert!(
+        !plain.contains("region-failed"),
+        "nothing unless asked: {plain}"
+    );
+
+    let html = render(&Region::new("kpis").src("/f").lazy().when_offline().into());
+    assert!(
+        html.contains(r#"<div data-slot="region-failed" role="alert">"#),
+        "{html}"
+    );
+    assert!(html.contains("You&#39;re offline"), "{html}");
+    assert!(
+        html.contains("data-ui-refresh"),
+        "Try again fetches the region: {html}"
+    );
+    assert!(
+        !html.contains("data-status"),
+        "no answer, no status: {html}"
+    );
+    // It comes after the content, so what the region had is read first.
+    assert!(
+        html.find("skeleton").unwrap() < html.find("region-failed").unwrap(),
+        "{html}"
+    );
+
+    let mine = render(
+        &Region::new("kpis")
+            .src("/f")
+            .children("Old numbers")
+            .when_failed(State::of(StateKind::Unavailable))
+            .into(),
+    );
+    assert!(
+        mine.contains("Old numbers") && mine.contains("We&#39;ll be right back"),
+        "{mine}"
+    );
+    assert!(mine.find("Old numbers").unwrap() < mine.find("region-failed").unwrap());
 }

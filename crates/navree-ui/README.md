@@ -55,6 +55,16 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   way ignores a second submit that sends the same thing, and sends the latest one that
   differs when the first answer is back, to the same record on the same page. When it
   can't, a toast says the change wasn't saved, and what was typed stays in the field.
+- **Errors and states.** A request for a page that ends in a 401, 403, 404, 405, 409, 410,
+  419, 422, 429, 500 or 503 gets a page, not JSON: in the shell for a signed-in user, on its
+  own (one `h1`, no script) for a guest, a 401, a 429, a 503 and a panic. `UiModule` draws it
+  for every page route; an API route, a route marked `json_only()` and a client that asks for
+  JSON alone keep the JSON error. A region that gets an error shows the state in place, and an
+  action gets one toast. A 5xx never shows its source, SQL, paths or panic text, and every page
+  shows the request id. `ErrorPage`, `State`, `Forbidden`, `NotFound`, `SignInRequired`,
+  `SessionEnded` and `EmptyState` are the same markup for a card, a tab, a region or a table
+  row (`.row(columns)`), and `ReturnTo` checks the `next` of a sign-in so it cannot be an open
+  redirect. See `navree_ui::pages` and the docs page "Errors and states".
 - **Tables.** One definition, `#[derive(TableRow)]`, drives the URL, the query, the
   drawing, the export and bulk actions. See [The data table](#the-data-table).
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
@@ -92,6 +102,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
+| An error page, or a state that shows no copy button | None. A page in the shell has a Copy button for the reference, which is the `core` the shell loads anyway. |
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
 `tests/budgets.rs` holds the sizes, and a regression fails the build.
@@ -404,6 +415,15 @@ cargo run --release -p ui-proof -- bench    # render times, no server
 ```
 
 ## Known limits
+
+- Error pages draw only in an app that names `UiModule` itself. A module that borrows the
+  toolkit with `UiOnDemand` keeps the JSON errors. A panic or a timeout cannot say who the
+  user was, so it is drawn on its own, not in the shell. A shell built for each request needs
+  an `ErrorShell`; a `Shell` provider that is request-scoped cannot be found without one.
+- A 404 does not show the address that was asked for: it is the address bar's text, and
+  echoing it would let a link write words on the page.
+- There is no Back button: it needs a command the core does not have, and Home and Try again
+  work without a script.
 
 - Behind navree-session a plain form proves itself with the token field:
   `FormView::csrf(session.csrf_token())`, or `form::csrf_field` in any other form.

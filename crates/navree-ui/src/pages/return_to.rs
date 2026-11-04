@@ -384,6 +384,72 @@ mod tests {
         );
     }
 
+    /// What a browser does with a redirect `Location` is what the URL standard says, and
+    /// `url` follows it: whatever is accepted stays on the site it was resolved against, for
+    /// the addresses above, the generated ones below, and a page deep in the site.
+    #[test]
+    fn an_independent_url_parser_keeps_every_accepted_address_on_the_site() {
+        let bases = [
+            "https://site.example/",
+            "https://site.example/a/b/c?x=1#y",
+            "http://site.example:8080/deep/page/",
+        ];
+        let mut samples: Vec<String> = [
+            "/",
+            "/deals",
+            "/deals?per=50&tab=a%20b",
+            "/a//b",
+            "/a:b",
+            "/a/.hidden",
+            "/%7Euser",
+            "/?",
+            "/#x",
+            "/search?q=%C3%A9",
+            "/files/report.v2.pdf",
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+        let alphabet = [
+            "/", "\\", "%2f", "%5c", "%09", ".", "..", "%2e", "a", "?", "#", ":", "@", "%25", "b",
+        ];
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..20_000 {
+            let mut raw = String::from("/");
+            for _ in 0..(next() % 8) {
+                raw.push_str(alphabet[(next() as usize) % alphabet.len()]);
+            }
+            samples.push(raw);
+        }
+        let mut accepted = 0;
+        for raw in &samples {
+            let Some(found) = ReturnTo::parse(raw) else {
+                continue;
+            };
+            accepted += 1;
+            for base in bases {
+                let base = url::Url::parse(base).unwrap();
+                let joined = base
+                    .join(found.as_str())
+                    .unwrap_or_else(|e| panic!("{raw:?}: {e}"));
+                assert_eq!(joined.scheme(), base.scheme(), "{raw:?}");
+                assert_eq!(joined.host_str(), base.host_str(), "{raw:?} -> {joined}");
+                assert_eq!(joined.port(), base.port(), "{raw:?} -> {joined}");
+                assert!(joined.username().is_empty(), "{raw:?} -> {joined}");
+            }
+        }
+        assert!(
+            accepted > 1000,
+            "the generator reaches accepted addresses: {accepted}"
+        );
+    }
+
     /// The same check from a different angle: whatever string comes in, what goes out is
     /// on this site, or is nothing.
     #[test]

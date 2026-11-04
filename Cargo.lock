@@ -6172,6 +6172,7 @@ dependencies = [
  "sha2 0.11.1",
  "tokio",
  "tower",
+ "url",
  "uuid",
 ]
 
