@@ -17,7 +17,7 @@ Chart::line("Opens and clicks")
     .series(Series::new("Clicks", [96, 141, 120, 168, 152, 51, 44]))
 ```
 
-Each series gives one value for each x. The title names the chart for everyone, including screen readers. Two charts on a page can share a title if each has its own `.id("...")`: the table switch and the names inside the chart are built from it.
+Each series gives one value for each x. The title names the chart for everyone, including screen readers. The chart's id is made from its title, in any script, with a short hash of the whole title, so charts with different titles never share one. Two charts on a page with the same title each need their own `.id("...")`: the table switch and the names inside the chart are built from it.
 
 ## When to use it
 
@@ -49,7 +49,7 @@ Leave out a reading that was never taken. Writing it as zero draws a drop that d
 
 ## Targets, events and bands
 
-`Annotation::target(value, label)` draws a dashed level across the chart. `Annotation::event(at, label)` draws a line up the chart at one place, and `Annotation::band(from, to, label)` shades a stretch. A place on the x axis can be a `NaiveDate` or `NaiveDateTime`, a number, a category name or `At::Index(n)`, the row at that index. A target also widens the value axis to hold it.
+`Annotation::target(value, label)` draws a dashed level across the chart. `Annotation::event(at, label)` draws a line up the chart at one place, and `Annotation::band(from, to, label)` shades a stretch. A place on the x axis can be a `NaiveDate` or `NaiveDateTime`, a number, a category name or `At::Index(n)`, the row at that index in your data (after times or numbers are put in order). It finds its place when the drawing keeps fewer points or merges bars: an event on day 555 of 1,000 sits on the bar that holds that day. A target also widens the value axis to hold it.
 
 <UiPreview example="line-chart/annotations" />
 

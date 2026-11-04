@@ -52,6 +52,8 @@ The grain is the length of one period. The window's length picks it, so a day is
 
 A reader can ask for another grain with `?grain=week`. The names are `hour`, `day`, `week`, `month`, `quarter` and `year`. A grain is used when it cuts the window into between 2 and 400 periods. Otherwise it is ignored and the window's own grain stands, so a year of hours, 8,760 periods, is drawn by the week. A minute is never taken from the address.
 
+No report has more than 400 periods, whatever made its grain. A grain that would make more, from the window's length or from `Report::new` in your code, gives way to the finest coarser one that doesn't, and `report.grain()` says which was used (`report.asked_grain()` is the one asked for). A window too long even for years, more than 400 of them, is cut to its last 400, and `report.cut()` returns the window that was asked for, so the page can say so.
+
 `report.grains()` lists the grains a reader may switch to, and `report.grain_links("/reports", "Grain")` draws them as a row of links with the current one marked. They are plain links, so the switch works with JavaScript off. A grain that is not the window's own is carried in the address and in the links, and `report.href("/reports", Some(grain))` writes one. When the form posts, keep the grain with a hidden field, as the preview's code does.
 
 <UiPreview example="reports/grains" />
@@ -67,7 +69,10 @@ Periods are wall-clock periods in the zone you pass: a day is a day, a week star
 - **The edges.** A week or a month at the edge of the window is cut to it: it counts only the window's days, and is named by its first day, the week's Monday or the month's first.
 - **Weeks.** They start on Monday. `Report::from_query_starting(..., week_start, ...)` starts them on another day.
 
-`report.zone_name("Asia/Kolkata")` names the zone, which TimescaleDB needs to bucket in it (see below). The name is checked, and one that isn't a plain zone name is ignored. `report.buckets()` lists the periods, each with its `start`, its `end` and its name on the zone's clock. `report.bounds()` is the whole window as two instants, `[start, end)`, which is what a query filters on.
+- **Zones that kept their own time.** Before standard time, some zones were off UTC by minutes and seconds (Kolkata by 5:21:10 until 1906). Their midnights fall on those seconds, and their periods do too.
+- **The repeated hour.** On the day the clocks go back, the second of the two hours with the same name is called, in the table and the tooltip, `Nov 1, 2026, 1:00 AM, second time`.
+
+`report.zone()` is the zone's name in the IANA database, taken from the zone you passed: `Asia/Kolkata` for a `chrono_tz::Tz`, `UTC` for `Utc`, and none for a fixed offset other than zero. That name is what TimescaleDB is given (see below), so it can never differ from the zone the periods were cut in. `report.buckets()` lists the periods, each with its `start`, its `end` and its name on the zone's clock. `report.bounds()` is the whole window as two instants, `[start, end)`, which is what a query filters on. No instant is earlier than 0001-01-01 or later than the end of 9999-12-31, in UTC: a window that ends on 9999-12-31 in a zone behind UTC stops there.
 
 ## Counting rows
 
@@ -109,7 +114,9 @@ The query is yours, so it carries everything the app puts on it. A model scoped 
 
 The time column is a name such as `"created_at"`, for a timestamp column. A column of seconds or milliseconds since 1970 in an integer column is named with `TimeColumn::UnixSeconds("at")` or `TimeColumn::UnixMillis("at")`. A column name is a plain name, with letters, digits and `_` and at most one `.`, and any other name is an error rather than SQL.
 
-`measure_by` counts a measure for each value of a column, for a stacked chart of statuses over time. It returns one series for each name you give, in that order, and one more for every other value:
+Only rows inside the window count, whatever the query you pass says. Its conditions are grouped before the window's are added, so `.where_(a).or_where(b)` counts `(a OR b)` in the window, never `a` from any time; and every path drops a row outside the window as well. Your query's scopes, such as a workspace scope, hold the same way.
+
+`measure_by` counts a measure for each value of a column, for a stacked chart of statuses over time. It returns one series for each name you give, in that order, and one more for every other value, rows with no value included. A chart draws eight series, so at most the first seven names are counted on their own, and the rest go into the last series. On an SQL database it is one grouped query; on MongoDB, one query for each series:
 
 ```rust
 let by_stage = report
@@ -132,9 +139,9 @@ let chart = ["Won", "Lost", "Open", "Other"].into_iter().zip(by_stage).fold(
 
 `report.measure_with(query, time, measure, Bucketing, &exec)` chooses how the periods are found. `measure` uses `Bucketing::Auto`.
 
-- **TimescaleDB**, on PostgreSQL. `time_bucket` buckets in the report's zone, which is why the report must name it with `zone_name`. `Auto` uses it when the extension is installed, the time column is a timestamp, the grain is an hour or the zone is named, and, for weeks, they start on Monday. Hours are counted from the window's first instant, so a clock change neither merges nor splits an hour. See [TimescaleDB](/docs/database/timescaledb/).
+- **TimescaleDB**, on PostgreSQL. `time_bucket` buckets in the report's zone, by the zone's own name. `Auto` uses it when the extension is installed, the time column is a timestamp, the grain is an hour or the zone has an IANA name, and, for weeks, they start on Monday. Hours are counted from the window's first instant, so a clock change neither merges nor splits an hour. See [TimescaleDB](/docs/database/timescaledb/).
 - **Bound comparisons**, on every SQL database: PostgreSQL without TimescaleDB, MySQL and SQLite. Each row's period is found by comparing its time with the periods' ends, halving the list, so a row costs about log2 of the number of periods in comparisons, and the periods are exactly the report's in any zone. `Bucketing::Exact` asks for this everywhere.
-- **MongoDB.** The ORM buckets by the hour (by the quarter of an hour in a zone that is off UTC by part of an hour), and the report folds those into its periods. A report over MongoDB needs a date column, and can't count distinct values.
+- **MongoDB.** The ORM buckets by the hour, and the report folds those into its periods. In a zone off UTC by part of an hour, by minutes or by seconds, it buckets by the quarter of an hour, the minute or the second instead: whichever every period starts and ends on. An average counts the rows that have a value, as SQL does. A report over MongoDB needs a date column, and can't count distinct values.
 
 `Bucketing::TimeBucket` insists on TimescaleDB and fails where it can't be used.
 
@@ -163,8 +170,7 @@ async fn report(
     Query(query): Query<ReportQuery>,
 ) -> Result<AppPage> {
     let today = zone.today().date();
-    let report = Report::from_query(&query, &limits(today), today, DatePreset::Last30Days, &zone.tz())
-        .zone_name(zone.name());
+    let report = Report::from_query(&query, &limits(today), today, DatePreset::Last30Days, &zone.tz());
 
     let created = report.measure(Deal::query(), "created_at", Metric::Count, &uow).await?;
     let value = report.measure(Deal::query(), "created_at", Metric::Sum("amount"), &uow).await?;
@@ -232,7 +238,8 @@ The preview follows no stream, since a static page has none. In an app, the serv
 
 ## Limits
 
-- A grain in the address draws between 2 and 400 periods, or it is ignored.
+- A grain in the address draws between 2 and 400 periods, or it is ignored. No report has more than 400 periods: a grain gives way, and a window longer than 400 years keeps its last 400 (`report.cut()`).
+- `measure_by` names at most seven groups; the rest are Other.
 - A window is whole days, from year 1 to year 9999.
 - `count` and `sum` read every instant you give them. For many rows, count in the database.
 - `CountDistinct` needs an SQL database.

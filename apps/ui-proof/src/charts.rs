@@ -490,8 +490,7 @@ fn limits() -> RangeRules {
 
 fn report_page(shell: &AppShell, query: &ReportQuery) -> AppPage {
     let tz = zone();
-    let report = Report::from_query(query, &limits(), today(), DatePreset::Last30Days, &tz)
-        .zone_name("Asia/Kolkata");
+    let report = Report::from_query(query, &limits(), today(), DatePreset::Last30Days, &tz);
     let count =
         |kind: &str| report.count(EVENTS.iter().filter(|(_, k)| *k == kind).map(|(at, _)| *at));
     let opened = count("opened");
@@ -568,18 +567,27 @@ fn big(shell: &AppShell, query: &Big) -> AppPage {
             level
         })
         .collect();
-    let start = std::time::Instant::now();
-    let chart = Chart::line(format!("{n} points"))
-        .id("big")
-        .numbers((0..n).map(|i| i as f64))
-        .y_zero(false)
-        .series(Series::new("Random walk", values));
-    let node: Node = chart.into();
-    let took = start.elapsed();
+    // The fastest of three builds: what the code costs, not what a busy machine adds.
+    let mut took = std::time::Duration::MAX;
+    let mut node = Node::Empty;
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        let built: Node = Chart::line(format!("{n} points"))
+            .id("big")
+            .numbers((0..n).map(|i| i as f64))
+            .y_zero(false)
+            .series(Series::new("Random walk", values.iter().copied()))
+            .into();
+        took = took.min(start.elapsed());
+        node = built;
+    }
     shell.page("A large series").body(
         Stack::gap(3).children((
-            Text::muted(format!("Built in {} ms.", took.as_millis()))
-                .attr("data-built-ms", took.as_millis().to_string()),
+            Text::muted(format!(
+                "Built in {} ms, the fastest of three builds.",
+                took.as_millis()
+            ))
+            .attr("data-built-ms", took.as_millis().to_string()),
             Card::new().body(node),
         )),
     )
