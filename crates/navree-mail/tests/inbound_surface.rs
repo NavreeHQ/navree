@@ -51,9 +51,11 @@ fn the_configuration_keys_have_their_documented_defaults() {
         token,
         topic_arns,
         disk,
+        tolerance_secs,
         confirm_subscriptions,
     } = ses;
     assert!(token.is_none() && topic_arns.is_empty() && disk.is_none());
+    assert_eq!(tolerance_secs, 3600);
     assert!(confirm_subscriptions);
     let MailgunInboundOptions { signing_key } = mailgun;
     let PostmarkInboundOptions { token: postmark } = postmark;
@@ -77,6 +79,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
                     "token": "t",
                     "topic_arns": ["arn:aws:sns:eu-west-1:123456789012:inbound-mail"],
                     "disk": "ses-mail",
+                    "tolerance_secs": 600,
                     "confirm_subscriptions": false
                 },
                 "mailgun": { "signing_key": "k" },
@@ -99,6 +102,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
     );
     assert_eq!(options.reply_token_ttl_days, 30);
     assert_eq!(options.ses.disk.as_deref(), Some("ses-mail"));
+    assert_eq!(options.ses.tolerance_secs, 600);
     assert!(!options.ses.confirm_subscriptions);
     assert_eq!(options.raw.token.unwrap().expose(), "r");
 
@@ -112,6 +116,11 @@ fn the_configuration_keys_have_their_documented_defaults() {
         (json!({ "path": "/abs" }), "inbound.path"),
         (json!({ "disk": " " }), "inbound.disk"),
         (json!({ "raw": { "token": "" } }), "inbound.raw.token"),
+        (json!({ "ses": { "token": "t" } }), "inbound.ses.topic_arns"),
+        (
+            json!({ "ses": { "token": "t", "topic_arns": ["arn:aws:sns:eu-west-1:1:x"], "tolerance_secs": 0 } }),
+            "inbound.ses.tolerance_secs",
+        ),
     ] {
         let error = Config::load(&ConfigSources::new().set("mail", json!({ "inbound": inbound })))
             .unwrap()

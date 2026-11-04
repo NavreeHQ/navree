@@ -118,6 +118,7 @@ mod options;
 pub mod render;
 mod report;
 mod smtp;
+mod sns;
 mod transport;
 mod transport_config;
 

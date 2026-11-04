@@ -1,0 +1,85 @@
+{
+  "ses_bounce_v1": {
+    "Type": "Notification",
+    "MessageId": "9e1b6f0a-3c2d-4e5f-8a7b-1c2d3e4f5a6b",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
+    "Subject": "Amazon SES Email Event Notification",
+    "Message": "{\"eventType\":\"Bounce\",\"mail\":{\"messageId\":\"fake-1\",\"timestamp\":\"2026-10-27T10:00:00.000Z\",\"destination\":[\"ada@example.com\"]},\"bounce\":{\"bounceType\":\"Permanent\",\"bounceSubType\":\"General\",\"bouncedRecipients\":[{\"emailAddress\":\"ada@example.com\",\"diagnosticCode\":\"smtp; 550 5.1.1 user unknown\"}],\"timestamp\":\"2026-10-27T10:00:01.000Z\"}}",
+    "Timestamp": "2026-10-27T10:00:02.000Z",
+    "UnsubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:123456789012:ses:4b9d2c1e-7f6a-4e3d-9c8b-2a1f0e9d8c7b",
+    "SignatureVersion": "1",
+    "Signature": "KZPACBYiHlj8pQyg63eXbUg14MYmQXwaeKltuzRilxz9FwuU0axKpAu3J9FcDVgG0qrRGmzqTEhQdLBZdZMWGAzUkZman50LF59/gP8wOgFUSEKxs46C7+uXInb3JZhIkfIYbBjxE26XEzhgvm3HGoEmNQtUfxDPc9ZijtkeF0NgJfCDhCSvPzAF0BBsJHn4wu2fhtm1M9OeD/mDPi/TRebtPgBTi2O/7f5FOzrSPi7fAsSTUN0w7Avc5ZS1/6c3/+V3EpJgDlmLyo3Bzo9MvI+4ORSXwdhpxndtIZ3btP0F0ATeLvq+CIe143WtzZbPbniMH/l14eTUEB1DRZ/2eQ==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "ses_bounce_v2": {
+    "Type": "Notification",
+    "MessageId": "9e1b6f0a-3c2d-4e5f-8a7b-1c2d3e4f5a6b",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
+    "Subject": "Amazon SES Email Event Notification",
+    "Message": "{\"eventType\":\"Bounce\",\"mail\":{\"messageId\":\"fake-1\",\"timestamp\":\"2026-10-27T10:00:00.000Z\",\"destination\":[\"ada@example.com\"]},\"bounce\":{\"bounceType\":\"Permanent\",\"bounceSubType\":\"General\",\"bouncedRecipients\":[{\"emailAddress\":\"ada@example.com\",\"diagnosticCode\":\"smtp; 550 5.1.1 user unknown\"}],\"timestamp\":\"2026-10-27T10:00:01.000Z\"}}",
+    "Timestamp": "2026-10-27T10:00:02.000Z",
+    "UnsubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:123456789012:ses:4b9d2c1e-7f6a-4e3d-9c8b-2a1f0e9d8c7b",
+    "SignatureVersion": "2",
+    "Signature": "kNYKt6UQehpDebT2XCvAfy57dlnEt/EOjgR9sWInujv1PqIU99WevoqrMR9VHow9OvEeuhuGYw+iwspt4yZPs6B315z/Uh2w3Sqj2GLRpNtE5VVYadZ9tEHiTtRjS1GHX+x664zrWy2gsFx4Zv3PMg4NNhwbbKT2vRsUJriBFW4YemW1aD/rYetJACosq7jQ+PeJUDhqMQ8SjPFYg4Cfqtd5psjJEvegsRxc+PdjmeS3Kgj+m5lFDhX0oICaDICeK2h7CTaNnzPxcNTKm4jL6geNogvq7dzCZIiwURtVVxidsIAbIOsjPj8749NwXsAWQ+ntFLfFgBAD+BXAFD0G/Q==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "ses_bounce_other_key_v2": {
+    "Type": "Notification",
+    "MessageId": "9e1b6f0a-3c2d-4e5f-8a7b-1c2d3e4f5a6b",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
+    "Subject": "Amazon SES Email Event Notification",
+    "Message": "{\"eventType\":\"Bounce\",\"mail\":{\"messageId\":\"fake-1\",\"timestamp\":\"2026-10-27T10:00:00.000Z\",\"destination\":[\"ada@example.com\"]},\"bounce\":{\"bounceType\":\"Permanent\",\"bounceSubType\":\"General\",\"bouncedRecipients\":[{\"emailAddress\":\"ada@example.com\",\"diagnosticCode\":\"smtp; 550 5.1.1 user unknown\"}],\"timestamp\":\"2026-10-27T10:00:01.000Z\"}}",
+    "Timestamp": "2026-10-27T10:00:02.000Z",
+    "UnsubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:123456789012:ses:4b9d2c1e-7f6a-4e3d-9c8b-2a1f0e9d8c7b",
+    "SignatureVersion": "2",
+    "Signature": "Q/GbdjmcY64/JddALysIj6Ah2Ibj6vulXxSReAQuUHITocvgBmiJMUQTkw269WAsCngND6DljYIN/g0uz+HAyU9rmIg1WKu9JEJi1v2KgJqWmfgg8PobqRL+i+ESFrPFvvVSA9/MqsUhAhFTuGoPUavq6N5+HTZ//r9Uc1I8zAgjkyYHa1gmc+c/XEH6lZB89KVpFT96SnttOC13ZNo5flpButz5RuOfcuH6Wc0xXK0CqgMk/NwTOqteGgEzanFH0VKZfA9mqyjNLjRZ16Sb21d7mW7gLYBQT887Fu5KFZUmFuZT3m/GgKo7IViVM+zfY2u4jURnjtDnbBHt8Epdyg==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "ses_subscription_confirmation_v1": {
+    "Type": "SubscriptionConfirmation",
+    "MessageId": "7a3f9c2e-1b4d-4f6a-8c0e-2d4f6a8c0e1b",
+    "Token": "2336412f37fb687f5d51e6e241d09c805a5a57b30d712f794cc5f6a988666d92",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
+    "Message": "You have chosen to subscribe to the topic arn:aws:sns:eu-west-1:123456789012:ses.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+    "SubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:eu-west-1:123456789012:ses&Token=2336412f37fb687f5d51e6e241d09c805a5a57b30d712f794cc5f6a988666d92",
+    "Timestamp": "2026-10-27T09:59:00.000Z",
+    "SignatureVersion": "1",
+    "Signature": "LfT8KCSPSQwNR6YDvxTj7iqhrtHeH7sQxZNGNrMIRg5vkiQ8Q8KuaEGNfrQsxpszk/6k7OcCI0kzG+BPFeub0QNLRmPcZw7geDEkjdvhD1nVbbD3KJ/d8TKm8Q0Xr/fXj0qF4LrjrYxhilG7PW7hngah13IyvF43OGMXo/aOVDhF9exhkYYfu/whsaJD0jraR3w09ZVKJVcGoXbFnOjOeCBB7OciQSOxkVGbUL/GO/8caJIV80Gxhd4V618TTx4qLltOGn1rqJ7Q0n3vmk0NooxeljSF+VqAKvDC9D8yiQO+HMD9RbqCfeu2o0T29EYKn7GdqgBSUfYVsKJSPmfvLQ==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "ses_unsubscribe_confirmation_v2": {
+    "Type": "UnsubscribeConfirmation",
+    "MessageId": "2c4e6a8b-0d1f-4a3c-9e5b-7d9f1b3d5f7a",
+    "Token": "6f4a1c9e2b7d5f3a8c0e4b6d2f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d2f4a",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
+    "Message": "You have chosen to deactivate subscription to arn:aws:sns:eu-west-1:123456789012:ses.",
+    "SubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:eu-west-1:123456789012:ses&Token=6f4a1c9e2b7d5f3a8c0e4b6d2f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d2f4a",
+    "Timestamp": "2026-10-27T10:00:03.000Z",
+    "SignatureVersion": "2",
+    "Signature": "NzyLzuxyI2y42R0Kqt1bRJddyLgj48kGX2epeHViZ7P7zbVVUTYh55Z6K8c7f+HDOjvhP4x70ifbtWlf1dcAwbsh/eoB4PxizS+KeOsfeRpCzRX6chXN2YtZovWnRjGIN/kngT1CDuf7lnF0Ibeu19Lk+PG76YP/AtvAcnC1DrjyKLC2yNy2nwtw5OC0k0ZM3JOEVyZduJhw7P7PNdUOWqM2BhaFULg3zQEoNRfIadj64Gn7vYcFSD3T8R+p/dLmgm0oNUeskS36QVOl9nG4sjju56eZ6qj3jUNFrAkkQ86ZneFNvz958ID+SWcezrOsGOSa+loG5NhlS4jzoGhAiw==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "inbound_bounce_v2": {
+    "Type": "Notification",
+    "MessageId": "5e7a9c1b-3d5f-4a7c-9e1b-3d5f7a9c1e3a",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:inbound-mail",
+    "Subject": "Amazon SES Email Receipt Notification",
+    "Message": "{\"notificationType\":\"Bounce\"}",
+    "Timestamp": "2026-10-27T09:14:10.000Z",
+    "SignatureVersion": "2",
+    "Signature": "aIa/gT1p9ko9vj94RK1smD1tyKGOm8EIp0NfZI6iJ+ZD1Stwffh5aehRgW7C7Zx/CP8gpJUFVTW/srsJqdoxhmTMjYgWcc2K6EVT0L055/aVb3FUiYEPiKM/cbzuDDtoShFT3e60XiLhfIPvCiXfZqy89NrBJgAivRFEcDG5T5Ila89+RLlg/9cgOix/9ACl+inoCRJhhws3jMNQvKIAsL3HqBEGq/TbZXEGzWgcSTHR1cSR9aMVZILbGMmg/ORa8GVNFHIkkG+daUuciOyF8h6Q5ILLeB5g8XAGWFq64jOomhYgolmG0bCYULbkeL0gWThR8WYm83M5wMAwDu6t/A==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  },
+  "inbound_subscription_confirmation_v2": {
+    "Type": "SubscriptionConfirmation",
+    "MessageId": "3d5f7a9c-1e3a-4c5e-8b7d-9f1b3d5f7a9c",
+    "Token": "9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+    "TopicArn": "arn:aws:sns:eu-west-1:123456789012:inbound-mail",
+    "Message": "You have chosen to subscribe to the topic arn:aws:sns:eu-west-1:123456789012:inbound-mail.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+    "SubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:eu-west-1:123456789012:inbound-mail&Token=9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+    "Timestamp": "2026-10-27T09:14:00.000Z",
+    "SignatureVersion": "2",
+    "Signature": "Vjd4EzwnE6asbSxt3cd5iBNM+F2PsBIsw1CwyXPu9qCw+fFlhgjvfzPpw8vlpnZtFpaaeQ/mXSHZBjFHoi8Eg6mcMmtUp6ADvOXpxYSxMZ8DiAH0ebt++W0EXAawRIGgwGNLwscX65zBixbE0j6p6aU4/wq/F+0Bs7VEQRsK/ry7TAVZcBCUjJGHhFHYQ7O+zf1Qo2dcQNCBKW5hGF79X5ftnqadnVt7rkAxjJ8/LqDMwVvJdXZ+klMVPYWGm6AdbiDTUpsZhTpkvZoFJiyZpQ6yfV77TIfq/f68ZxXxKrrwO3X985KPvDs1Y3DdtXWU8qDpotq6aBgbfCZLaJsW2Q==",
+    "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem"
+  }
+}

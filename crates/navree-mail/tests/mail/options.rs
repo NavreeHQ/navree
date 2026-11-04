@@ -182,3 +182,35 @@ fn transport_config_builds_transports() {
         .expect_err("empty failover");
     assert!(matches!(error, MailError::Config(_)), "{error}");
 }
+
+#[test]
+fn the_ses_route_needs_its_topics_and_a_tolerance() {
+    let options = parse(json!({})).unwrap();
+    assert_eq!(options.webhooks.ses.tolerance_secs, 3600);
+    assert!(options.webhooks.ses.topic_arns.is_empty());
+
+    // SNS signs every topic's messages with the same keys: the token alone
+    // never lets a message in.
+    let error = parse(json!({ "webhooks": { "ses": { "token": "ses-token" } } }))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("webhooks.ses.topic_arns"), "{error}");
+    assert!(!error.contains("ses-token"), "{error}");
+
+    let error = parse(json!({ "webhooks": { "ses": {
+        "token": "ses-token",
+        "topic_arns": ["arn:aws:sns:eu-west-1:123456789012:ses"],
+        "tolerance_secs": 0,
+    } } }))
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("webhooks.ses.tolerance_secs"), "{error}");
+
+    let options = parse(json!({ "webhooks": { "ses": {
+        "token": "ses-token",
+        "topic_arns": ["arn:aws:sns:eu-west-1:123456789012:ses"],
+        "tolerance_secs": 600,
+    } } }))
+    .unwrap();
+    assert_eq!(options.webhooks.ses.tolerance_secs, 600);
+}

@@ -18,7 +18,9 @@ use super::{Inbound, InboundError, Incoming, Received};
 use crate::MailOptions;
 use crate::delivery::controller::{
     INVALID_SIGNATURE_CODE, basic_auth_or_token, confirm_sns_subscription, mailgun_signature_valid,
+    sns_refused, sns_token_matches,
 };
+use crate::sns::SnsVerifier;
 
 /// The routes the providers post received mail to, under
 /// `{http.api_prefix}/mail/inbound`. Each is public, checked with its
@@ -26,7 +28,7 @@ use crate::delivery::controller::{
 ///
 /// | Route | Source | Checked with |
 /// |---|---|---|
-/// | `POST /mail/inbound/ses?token=..` | an SNS topic of SES receipt rules (SNS or S3 action) | `mail.inbound.ses.token`, `topic_arns` |
+/// | `POST /mail/inbound/ses?token=..` | an SNS topic of SES receipt rules (SNS or S3 action) | the SNS signature, the topic (`topic_arns`) and age (`tolerance_secs`), and `mail.inbound.ses.token` |
 /// | `POST /mail/inbound/mailgun`, `/mailgun/mime` | a Mailgun route's `forward()` | the signature, `mail.inbound.mailgun.signing_key` |
 /// | `POST /mail/inbound/postmark` | a Postmark inbound stream | basic auth or `?token=`, `mail.inbound.postmark.token` |
 /// | `POST /mail/inbound/raw` | raw MIME (`message/rfc822`) from your server | `Authorization: Bearer`, `mail.inbound.raw.token` |
@@ -37,11 +39,14 @@ use crate::delivery::controller::{
 /// message that cannot be read, and 500 when the mailbox failed (the
 /// provider delivers again). The raw route reads the envelope from
 /// `X-Envelope-From` and `X-Envelope-To` (comma-separated) when given.
+/// The SES route answers 503 when the SNS signing certificate cannot be
+/// fetched (SNS delivers the message again).
 pub struct InboundController {
     inbound: Arc<Inbound>,
     options: Arc<MailOptions>,
     client: Option<HttpClient>,
     clock: Arc<dyn Clock>,
+    sns: SnsVerifier,
 }
 
 impl Injectable for InboundController {
@@ -62,6 +67,7 @@ impl Injectable for InboundController {
             Ok(InboundController {
                 inbound: r.get::<Inbound>().await?,
                 options: r.get::<MailOptions>().await?,
+                sns: SnsVerifier::new(client.clone()),
                 client,
                 clock: match app.try_get::<dyn Clock>().await {
                     Some(clock) => clock,
@@ -239,43 +245,41 @@ impl InboundController {
             .filter(|key| !key.is_empty())
     }
 
-    /// SES through SNS: the URL token, the topic, then the notification.
+    /// SES through SNS: the URL token, then the SNS message (its type,
+    /// topic, signing certificate URL, age and signature), then the
+    /// notification.
     async fn ses(
         &self,
         query: &HashMap<String, String>,
         body: &[u8],
     ) -> Result<Json<Received>, AppError> {
         let options = &self.options.inbound.ses;
-        let expected = options
-            .token
-            .as_ref()
-            .map(|t| t.expose().as_str())
-            .unwrap_or_default();
-        let given = query.get("token").map(String::as_str).unwrap_or_default();
-        if expected.is_empty()
-            || !navree_crypto::constant_time_eq(given.as_bytes(), expected.as_bytes())
-        {
+        if !sns_token_matches(options.token.as_ref(), query) {
             return Err(invalid_signature());
         }
-        let envelope: Value =
-            serde_json::from_slice(body).map_err(|_| malformed("ses", "the body is not JSON"))?;
-        let topic = envelope["TopicArn"].as_str().unwrap_or_default();
-        if !options.topic_arns.is_empty() && !options.topic_arns.iter().any(|t| t == topic) {
-            return Err(invalid_signature());
-        }
-        match envelope["Type"].as_str().unwrap_or_default() {
+        let message = self
+            .sns
+            .verify(
+                body,
+                &options.topic_arns,
+                options.tolerance_secs,
+                self.now(),
+            )
+            .await
+            .map_err(|refusal| sns_refused(refusal, || malformed("ses", "the body is not JSON")))?;
+        match message.message_type.as_str() {
             "SubscriptionConfirmation" => {
                 confirm_sns_subscription(
                     self.client.as_ref(),
-                    &envelope,
+                    &message,
                     options.confirm_subscriptions,
                 )
                 .await;
                 Ok(Json(self.empty()))
             }
             "Notification" => {
-                let message = envelope["Message"].as_str().unwrap_or_default();
-                let notification: Value = serde_json::from_str(message)
+                let notification: Value = message
+                    .message_json()
                     .map_err(|_| malformed("ses", "the SNS message is not JSON"))?;
                 answer(self.inbound.receive_ses(&notification).await)
             }

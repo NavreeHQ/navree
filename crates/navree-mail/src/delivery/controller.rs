@@ -8,7 +8,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Method, StatusCode, Uri, header};
-use navree_contracts::{Clock, SystemClock};
+use navree_contracts::{Clock, Secret, SystemClock};
+use navree_crypto::sns::SnsMessage;
 use navree_db::{ErrorKind, PageQuery};
 use navree_http::body::Bytes;
 use navree_http::response::{IntoResponse, Response};
@@ -28,6 +29,7 @@ use super::outbox::{HeldMail, Outbox, OutboxStatus};
 use super::resolver::TransportResolver;
 use super::suppressions::{Suppression, SuppressionReason, Suppressions};
 use super::tracking::{CLICK_PATH, OPEN_PATH};
+use crate::sns::{SnsRefusal, SnsVerifier};
 use crate::{
     DeliveryStatus, MailError, MailEventKind, MailOptions, ProviderEvent, SendReport,
     TransportConfig, TransportTier,
@@ -129,7 +131,10 @@ struct ListQuery {
 ///   secret is set: `POST /mail/webhooks/ses`, `/mailgun`, `/postmark`,
 ///   `/resend`. Each records the reported events
 ///   ([`Deliveries::record`]) and answers 204; a bad signature is 401
-///   `invalid_signature`.
+///   `invalid_signature`. The SES route checks the SNS signature, the
+///   topic and the age of each message as well as its URL token, and
+///   answers 503 when the signing certificate cannot be fetched (SNS
+///   delivers the message again).
 /// - **Tracking** (public, signed links), mounted when opens or clicks are
 ///   tracked: `GET /mail/t/o/{delivery}` (the open image) and
 ///   `GET /mail/t/c/{delivery}?u=..` (a 302 to the link), at the root
@@ -159,6 +164,7 @@ pub struct MailController {
     signer: Option<Arc<UrlSigner>>,
     clock: Arc<dyn Clock>,
     client: Option<HttpClient>,
+    sns: SnsVerifier,
 }
 
 impl Injectable for MailController {
@@ -200,6 +206,7 @@ impl Injectable for MailController {
                     Some(clock) => clock,
                     None => Arc::new(SystemClock),
                 },
+                sns: SnsVerifier::new(client.clone()),
                 client,
             })
         })
@@ -271,7 +278,10 @@ impl MailController {
                 RouteDef::on(Method::POST, "/webhooks/ses", ses)
                     .public()
                     .name("mail.webhooks.ses")
-                    .api(api("Receive Amazon SES events (through SNS)", &[401])),
+                    .api(api(
+                        "Receive Amazon SES events (through SNS)",
+                        &[400, 401, 503],
+                    )),
             );
         }
         if webhooks.mailgun.signing_key.is_some() {
@@ -339,53 +349,48 @@ impl MailController {
         routes
     }
 
-    /// SES events through SNS: the URL token, the topic, then the message.
+    /// SES events through SNS: the URL token, then the SNS message (its
+    /// type, topic, signing certificate URL, age and signature), then its
+    /// events.
     async fn ses(
         &self,
         query: &HashMap<String, String>,
         body: &[u8],
     ) -> Result<NoContent, AppError> {
         let options = &self.options.webhooks.ses;
-        let expected = options
-            .token
-            .as_ref()
-            .map(|t| t.expose().as_str())
-            .unwrap_or_default();
-        let given = query.get("token").map(String::as_str).unwrap_or_default();
-        if expected.is_empty()
-            || !navree_crypto::constant_time_eq(given.as_bytes(), expected.as_bytes())
-        {
+        if !sns_token_matches(options.token.as_ref(), query) {
             return Err(invalid_signature());
         }
-        let envelope: Value = serde_json::from_slice(body)
-            .map_err(|_| AppError::bad_request("The body is not JSON"))?;
-        let topic = envelope["TopicArn"].as_str().unwrap_or_default();
-        if !options.topic_arns.is_empty() && !options.topic_arns.iter().any(|t| t == topic) {
-            return Err(invalid_signature());
-        }
-        match envelope["Type"].as_str().unwrap_or_default() {
+        let message = self
+            .sns
+            .verify(
+                body,
+                &options.topic_arns,
+                options.tolerance_secs,
+                self.now(),
+            )
+            .await
+            .map_err(|refusal| {
+                sns_refused(refusal, || AppError::bad_request("The body is not JSON"))
+            })?;
+        match message.message_type.as_str() {
             "SubscriptionConfirmation" => {
-                self.confirm_subscription(&envelope).await;
+                confirm_sns_subscription(
+                    self.client.as_ref(),
+                    &message,
+                    options.confirm_subscriptions,
+                )
+                .await;
                 Ok(NoContent)
             }
             "Notification" => {
-                let message = envelope["Message"].as_str().unwrap_or_default();
-                let event: Value = serde_json::from_str(message)
+                let event: Value = message
+                    .message_json()
                     .map_err(|_| AppError::bad_request("The SNS message is not JSON"))?;
                 self.ingest(ProviderEvent::from_ses(&event)).await
             }
             _ => Ok(NoContent),
         }
-    }
-
-    /// Fetches an SNS `SubscribeURL` (only `https://sns.<region>.amazonaws.com`).
-    async fn confirm_subscription(&self, envelope: &Value) {
-        confirm_sns_subscription(
-            self.client.as_ref(),
-            envelope,
-            self.options.webhooks.ses.confirm_subscriptions,
-        )
-        .await;
     }
 
     /// Mailgun: HMAC-SHA256 of `timestamp + token` with the signing key,
@@ -755,27 +760,50 @@ impl MailError {
     }
 }
 
+/// Whether `query` carries the SES route's secret `token`, compared in
+/// constant time. Without a configured token nothing matches.
+pub(crate) fn sns_token_matches(
+    expected: Option<&Secret<String>>,
+    query: &HashMap<String, String>,
+) -> bool {
+    let expected = expected.map(|t| t.expose().as_str()).unwrap_or_default();
+    let given = query.get("token").map(String::as_str).unwrap_or_default();
+    !expected.is_empty() && navree_crypto::constant_time_eq(given.as_bytes(), expected.as_bytes())
+}
+
+/// The answer to an SNS message the SES routes refuse: `not_json()` for a
+/// body that is not JSON; 401 `invalid_signature` for a message that cannot
+/// be trusted (the reason is logged, never sent); 503 when the signing
+/// certificate cannot be fetched, which SNS retries.
+pub(crate) fn sns_refused(refusal: SnsRefusal, not_json: impl FnOnce() -> AppError) -> AppError {
+    match refusal {
+        SnsRefusal::NotJson => not_json(),
+        SnsRefusal::Unverified(reason) => {
+            tracing::warn!(target: "navree::mail", reason, "SES message refused");
+            invalid_signature()
+        }
+        SnsRefusal::Unavailable => {
+            tracing::warn!(target: "navree::mail", "SES message not checked: the SNS signing certificate could not be fetched");
+            AppError::service_unavailable("The SNS signing certificate could not be fetched")
+        }
+    }
+}
+
 /// Fetches an SNS subscription's `SubscribeURL` when `confirm` is on (only
 /// `https://sns.<region>.amazonaws.com` URLs); logs otherwise.
 pub(crate) async fn confirm_sns_subscription(
     client: Option<&HttpClient>,
-    envelope: &Value,
+    message: &SnsMessage,
     confirm: bool,
 ) {
-    let url = envelope["SubscribeURL"].as_str().unwrap_or_default();
-    let allowed = url::Url::parse(url).is_ok_and(|parsed| {
-        parsed.scheme() == "https"
-            && parsed.host_str().is_some_and(|host| {
-                host.starts_with("sns.")
-                    && (host.ends_with(".amazonaws.com") || host.ends_with(".amazonaws.com.cn"))
-            })
-    });
-    if !allowed {
+    let url = message.subscribe_url.as_deref().unwrap_or_default().trim();
+    if !navree_crypto::sns::is_sns_url(url) {
         tracing::warn!(target: "navree::mail", "SNS subscription confirmation with an unexpected SubscribeURL ignored");
         return;
     }
+    let topic = message.topic_arn.as_str();
     if !confirm {
-        tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription waiting for confirmation: open its SubscribeURL");
+        tracing::info!(target: "navree::mail", topic, "SNS subscription waiting for confirmation: open its SubscribeURL");
         return;
     }
     let Some(client) = client else {
@@ -783,7 +811,7 @@ pub(crate) async fn confirm_sns_subscription(
     };
     match client.get(url).send().await {
         Ok(response) if response.is_success() => {
-            tracing::info!(target: "navree::mail", topic = envelope["TopicArn"].as_str().unwrap_or_default(), "SNS subscription confirmed");
+            tracing::info!(target: "navree::mail", topic, "SNS subscription confirmed");
         }
         Ok(response) => {
             tracing::warn!(target: "navree::mail", status = response.status().as_u16(), "SNS subscription confirmation failed");

@@ -115,6 +115,16 @@ impl ConfigSection for MailOptions {
                 return Err("`tracking.base_url` must be an http(s) URL".to_owned());
             }
         }
+        let ses = &self.webhooks.ses;
+        if ses.token.is_some() && ses.topic_arns.is_empty() {
+            return Err(
+                "`webhooks.ses.topic_arns` must list the SNS topics when `webhooks.ses.token` is set: SNS signs every topic's messages with the same keys"
+                    .to_owned(),
+            );
+        }
+        if ses.tolerance_secs == 0 {
+            return Err("`webhooks.ses.tolerance_secs` must be greater than 0".to_owned());
+        }
         #[cfg(feature = "inbound")]
         self.inbound.validate()?;
         Ok(())
@@ -222,7 +232,8 @@ impl TrackingOptions {
 /// ```toml
 /// [mail.webhooks.ses]
 /// token = "..."           # POST /api/mail/webhooks/ses?token=...
-/// topic_arns = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]
+/// topic_arns = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]   # required
+/// tolerance_secs = 3600   # how old a message may be
 ///
 /// [mail.webhooks.mailgun]
 /// signing_key = "..."     # POST /api/mail/webhooks/mailgun
@@ -246,14 +257,25 @@ pub struct WebhookOptions {
     pub resend: ResendWebhookOptions,
 }
 
-/// `mail.webhooks.ses`.
+/// `mail.webhooks.ses`: SES events through an SNS topic. Every message is
+/// checked before its events are recorded: its SNS signature (version 1 or
+/// 2, with the signing certificate fetched from
+/// `https://sns.<region>.amazonaws.com`), its topic, its age, and the URL
+/// token.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct SesWebhookOptions {
-    /// The secret in the subscription URL's `token` query parameter.
+    /// The secret in the subscription URL's `token` query parameter,
+    /// checked on top of the signature. The route is mounted when it is
+    /// set.
     pub token: Option<Secret<String>>,
-    /// The SNS topics accepted (every topic when empty).
+    /// The SNS topics accepted. Required with `token`: SNS signs every
+    /// topic's messages with the same keys.
     pub topic_arns: Vec<String>,
+    /// How far a message's `Timestamp` may be from now, in seconds
+    /// (default 3600: SNS retries a delivery for at most an hour, with the
+    /// first timestamp).
+    pub tolerance_secs: u64,
     /// Confirm SNS subscriptions by fetching their `SubscribeURL` (default
     /// `true`; only `https://sns.<region>.amazonaws.com` URLs).
     pub confirm_subscriptions: bool,
@@ -264,6 +286,7 @@ impl Default for SesWebhookOptions {
         Self {
             token: None,
             topic_arns: Vec::new(),
+            tolerance_secs: crate::sns::DEFAULT_TOLERANCE_SECS,
             confirm_subscriptions: true,
         }
     }

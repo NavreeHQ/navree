@@ -1,8 +1,14 @@
 //! The source routes: raw MIME, Amazon SES (SNS and S3 actions), Mailgun
 //! routes and Postmark inbound.
 
+use std::sync::Arc;
+
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
+use chrono::{DateTime, Utc};
+use http::Method;
+use navree_contracts::{Clock, FixedClock};
+use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_mail::inbound::{InboundStatus, StoredMail, Verdict, Verdicts};
 use navree_mail::{InboundError, Incoming};
 use navree_storage::Storage;
@@ -164,14 +170,62 @@ async fn a_failing_mailbox_answers_500_so_the_provider_retries() {
 // Amazon SES
 // ---------------------------------------------------------------------
 
+const SNS_CERT_URL: &str = "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem";
+
+/// A file of `tests/fixtures/sns`: the test signing certificate that signed
+/// `ses-sns-action.json` and `ses-s3-action.json` (see `generate.py` there).
+fn sns_fixture(name: &str) -> String {
+    let path = format!("{}/tests/fixtures/sns/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
+}
+
+/// A fake client that serves the test certificate and confirms
+/// subscriptions.
+fn sns_senders() -> (HttpClient, FakeServer) {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        SNS_CERT_URL,
+        FakeResponse::new(200).text(sns_fixture("signer-cert.pem")),
+    );
+    server.on(
+        Method::GET,
+        "https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription*",
+        FakeResponse::new(200),
+    );
+    (client, server)
+}
+
+/// A minute after the receipt notifications were published
+/// (2026-10-27 09:14:03 UTC).
+fn after_receipt() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-10-27T09:15:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+/// The SES route, with `client` fetching the signing certificate and the
+/// clock at `now`.
+fn ses_config(
+    client: HttpClient,
+    now: DateTime<Utc>,
+) -> impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder {
+    move |b| {
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(now));
+        b.config("mail.inbound.ses.token", "t0ken")
+            .config(
+                "mail.inbound.ses.topic_arns",
+                vec!["arn:aws:sns:eu-west-1:123456789012:inbound-mail"],
+            )
+            .config("mail.inbound.ses.disk", "ses")
+            .config("mail.inbound.ses.confirm_subscriptions", false)
+            .override_value(Arc::new(client))
+            .override_value::<dyn Clock>(clock)
+    }
+}
+
 fn ses_app_config(b: navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder {
-    b.config("mail.inbound.ses.token", "t0ken")
-        .config(
-            "mail.inbound.ses.topic_arns",
-            vec!["arn:aws:sns:eu-west-1:123456789012:inbound-mail"],
-        )
-        .config("mail.inbound.ses.disk", "ses")
-        .config("mail.inbound.ses.confirm_subscriptions", false)
+    ses_config(sns_senders().0, after_receipt())(b)
 }
 
 #[tokio::test]
@@ -276,9 +330,125 @@ async fn ses_checks_the_token_and_the_topic() {
 }
 
 #[tokio::test]
-async fn ses_subscription_confirmations_receive_nothing() {
-    let mail = inbound_app(MAILBOXES, ses_app_config).await;
+async fn ses_mail_is_received_only_from_messages_sns_signed() {
+    let (client, server) = sns_senders();
+    let mail = inbound_app(MAILBOXES, ses_config(client, after_receipt())).await;
+    let signed: Value = serde_json::from_slice(&fixture("ses-sns-action.json")).unwrap();
+    let post = |message: &Value| {
+        mail.app
+            .client()
+            .post("/api/mail/inbound/ses?token=t0ken")
+            .header("content-type", "text/plain; charset=UTF-8")
+            .body(serde_json::to_vec(message).unwrap())
+            .send()
+    };
 
+    // The envelope as the route used to accept it: the right token and
+    // topic, no signature.
+    let unsigned = json!({
+        "Type": "Notification",
+        "MessageId": signed["MessageId"],
+        "TopicArn": signed["TopicArn"],
+        "Message": signed["Message"],
+    });
+    post(&unsigned)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // Tampered with: another recipient.
+    let mut tampered = signed.clone();
+    tampered["Message"] = json!(
+        signed["Message"]
+            .as_str()
+            .unwrap()
+            .replace("reply+abc@in.acme.test", "support@acme.test")
+    );
+    post(&tampered)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // A certificate on a host that is not SNS.
+    let mut foreign = signed.clone();
+    foreign["SigningCertURL"] = json!("https://attacker.example/sns.eu-west-1.amazonaws.com.pem");
+    post(&foreign)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    server.assert_not_sent(|request| request.url().as_str().contains("attacker.example"));
+    // A signature version SNS does not use.
+    let mut version = signed.clone();
+    version["SignatureVersion"] = json!("3");
+    post(&version)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    assert!(mail.seen().is_empty());
+
+    // The signed message itself is received.
+    post(&signed).await.assert_status(200);
+    assert_eq!(mail.seen().len(), 1);
+}
+
+#[tokio::test]
+async fn ses_mail_published_more_than_an_hour_ago_is_refused() {
+    // Published at 09:14:03.7; an hour and a minute later.
+    let late = DateTime::parse_from_rfc3339("2026-10-27T10:15:04Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let mail = inbound_app(MAILBOXES, ses_config(sns_senders().0, late)).await;
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/ses?token=t0ken")
+        .body(fixture("ses-sns-action.json"))
+        .send()
+        .await
+        .assert_error_code(401, "invalid_signature");
+    assert!(mail.seen().is_empty());
+}
+
+#[tokio::test]
+async fn ses_mail_signed_by_another_key_is_refused() {
+    // The certificate served is not the one that signed the message.
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        SNS_CERT_URL,
+        FakeResponse::new(200).text(sns_fixture("other-cert.pem")),
+    );
+    let mail = inbound_app(MAILBOXES, ses_config(client, after_receipt())).await;
+
+    for name in ["ses-sns-action.json", "ses-s3-action.json"] {
+        mail.app
+            .client()
+            .post("/api/mail/inbound/ses?token=t0ken")
+            .body(fixture(name))
+            .send()
+            .await
+            .assert_error_code(401, "invalid_signature");
+    }
+    assert!(mail.seen().is_empty());
+}
+
+#[tokio::test]
+async fn ses_subscription_confirmations_receive_nothing() {
+    let (client, server) = sns_senders();
+    let confirmation_time = DateTime::parse_from_rfc3339("2026-10-27T09:14:30Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let mail = inbound_app(MAILBOXES, ses_config(client, confirmation_time)).await;
+    let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
+    let confirmation = &messages["inbound_subscription_confirmation_v2"];
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/ses?token=t0ken")
+        .json(confirmation)
+        .send()
+        .await
+        .assert_status(200);
+
+    assert!(mail.seen().is_empty());
+    // `confirm_subscriptions = false`: the URL is logged, not fetched.
+    server.assert_not_sent(|request| request.url().as_str().contains("Action="));
+
+    // An unsigned confirmation is refused.
     mail.app
         .client()
         .post("/api/mail/inbound/ses?token=t0ken")
@@ -289,21 +459,38 @@ async fn ses_subscription_confirmations_receive_nothing() {
         }))
         .send()
         .await
-        .assert_status(200);
-
-    assert!(mail.seen().is_empty());
+        .assert_error_code(401, "invalid_signature");
 }
 
 #[tokio::test]
 async fn ses_notifications_of_other_kinds_are_refused() {
     let mail = inbound_app(MAILBOXES, ses_app_config).await;
+    let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
+
+    // Signed by SNS, but a bounce, not received mail.
+    mail.app
+        .client()
+        .post("/api/mail/inbound/ses?token=t0ken")
+        .json(&messages["inbound_bounce_v2"])
+        .send()
+        .await
+        .assert_error_code(400, "invalid_inbound_mail");
+    // A receipt notification turned into a bounce after SNS signed it:
+    // refused before it is read.
     let mut envelope: Value = serde_json::from_slice(&fixture("ses-sns-action.json")).unwrap();
     envelope["Message"] = json!(json!({"notificationType": "Bounce"}).to_string());
-
     mail.app
         .client()
         .post("/api/mail/inbound/ses?token=t0ken")
         .json(&envelope)
+        .send()
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // A body that is not JSON.
+    mail.app
+        .client()
+        .post("/api/mail/inbound/ses?token=t0ken")
+        .body(b"not json".to_vec())
         .send()
         .await
         .assert_error_code(400, "invalid_inbound_mail");

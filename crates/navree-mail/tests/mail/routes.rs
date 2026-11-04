@@ -1,9 +1,14 @@
 //! The mail routes: tracking, provider webhooks and the admin routes.
 
+use std::sync::Arc;
+
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use http::Method;
+use navree_contracts::{Clock, FixedClock};
 use navree_db::PageQuery;
+use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_mail::{
     Deliveries, DeliveryFilter, DeliveryStatus, MANAGE_PERMISSION, Message, Outbox, Suppressions,
     TemplateMail,
@@ -362,62 +367,78 @@ async fn postmark_events_need_the_token() {
     assert!(delivery.opened_at.is_some());
 }
 
-#[tokio::test]
-async fn ses_events_arrive_through_sns() {
+const SES_TOPIC: &str = "arn:aws:sns:eu-west-1:123456789012:ses";
+const SNS_CERT_URL: &str = "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-01d088a6f77103d0fe307c0069e40ed6.pem";
+
+/// A file of `tests/fixtures/sns`: the test signing certificate, and SNS
+/// messages signed by OpenSSL with its key (see `generate.py` there).
+fn sns_fixture(name: &str) -> String {
+    let path = format!("{}/tests/fixtures/sns/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
+}
+
+/// A signed message of `sns-messages.json`.
+fn sns_message(name: &str) -> Value {
+    let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
+    assert!(messages[name].is_object(), "no SNS message {name}");
+    messages[name].clone()
+}
+
+/// 2026-10-27 at `time`, UTC (the bounce was published at 10:00:02).
+fn on_the_27th(time: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(&format!("2026-10-27T{time}Z"))
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+/// The SES events route on topic `SES_TOPIC`, a fake client that serves
+/// the test certificate as `SNS_CERT_URL` (with `certificate`'s status)
+/// and confirms subscriptions, and a clock a minute after the bounce.
+async fn ses_app(certificate: u16) -> (MailApp, FakeServer, Arc<FixedClock>) {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        SNS_CERT_URL,
+        FakeResponse::new(certificate).text(sns_fixture("signer-cert.pem")),
+    );
+    server.on(
+        Method::GET,
+        "https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription*",
+        FakeResponse::new(200),
+    );
+    let clock = Arc::new(FixedClock::new(on_the_27th("10:01:02")));
+    let app_clock: Arc<dyn Clock> = clock.clone();
     let mail = mail_app(|b| {
-        b.config("mail.webhooks.ses.token", "ses-token").config(
-            "mail.webhooks.ses.topic_arns",
-            json!(["arn:aws:sns:eu-west-1:123456789012:ses"]),
-        )
+        b.config("mail.webhooks.ses.token", "ses-token")
+            .config("mail.webhooks.ses.topic_arns", json!([SES_TOPIC]))
+            .override_value(Arc::new(client))
+            .override_value::<dyn Clock>(app_clock)
     })
     .await;
-    let id = sent_to_ada(&mail).await;
-    let event = json!({
-        "eventType": "Bounce",
-        "mail": { "messageId": "fake-1", "timestamp": "2026-10-27T10:00:00.000Z", "destination": ["ada@example.com"] },
-        "bounce": {
-            "bounceType": "Permanent",
-            "bounceSubType": "General",
-            "bouncedRecipients": [{ "emailAddress": "ada@example.com", "diagnosticCode": "smtp; 550 5.1.1 user unknown" }],
-            "timestamp": "2026-10-27T10:00:01.000Z",
-        },
-    });
-    let envelope = |topic: &str| {
-        json!({
-            "Type": "Notification",
-            "MessageId": "b6a0d6b0",
-            "TopicArn": topic,
-            "Message": event.to_string(),
-        })
-    };
-    let client = mail.app.client();
+    (mail, server, clock)
+}
 
-    client
-        .post("/api/mail/webhooks/ses?token=wrong")
-        .json(&envelope("arn:aws:sns:eu-west-1:123456789012:ses"))
+/// Posts `message` to the SES route the way SNS does, with `token`.
+async fn post_ses(mail: &MailApp, token: &str, message: &Value) -> navree_testing::TestResponse {
+    mail.app
+        .client()
+        .post(&format!("/api/mail/webhooks/ses?token={token}"))
+        .header("content-type", "text/plain; charset=UTF-8")
+        .header(
+            "x-amz-sns-message-type",
+            message["Type"].as_str().unwrap_or_default(),
+        )
+        .body(serde_json::to_vec(message).unwrap())
         .send()
         .await
-        .assert_status(401);
-    client
-        .post("/api/mail/webhooks/ses?token=ses-token")
-        .json(&envelope("arn:aws:sns:eu-west-1:123456789012:other"))
-        .send()
-        .await
-        .assert_status(401);
-    client
-        .post("/api/mail/webhooks/ses?token=ses-token")
-        .json(&json!({
-            "Type": "SubscriptionConfirmation",
-            "TopicArn": "arn:aws:sns:eu-west-1:123456789012:ses",
-            "SubscribeURL": "https://evil.test/confirm",
-        }))
-        .send()
-        .await
-        .assert_status(204);
-    client
-        .post("/api/mail/webhooks/ses?token=ses-token")
-        .json(&envelope("arn:aws:sns:eu-west-1:123456789012:ses"))
-        .send()
+}
+
+#[tokio::test]
+async fn ses_events_arrive_through_signed_sns_messages() {
+    let (mail, server, _clock) = ses_app(200).await;
+    let id = sent_to_ada(&mail).await;
+
+    post_ses(&mail, "ses-token", &sns_message("ses_bounce_v1"))
         .await
         .assert_status(204);
 
@@ -427,6 +448,131 @@ async fn ses_events_arrive_through_sns() {
         events[0].detail.as_deref(),
         Some("smtp; 550 5.1.1 user unknown")
     );
+    // The certificate was fetched from the SNS host.
+    server.assert_sent(|request| request.url().as_str() == SNS_CERT_URL);
+}
+
+#[tokio::test]
+async fn ses_confirmations_of_both_signature_versions_are_checked() {
+    let (mail, server, _clock) = ses_app(200).await;
+
+    // Version 1 (SHA-1): the subscription is confirmed at its SNS URL.
+    post_ses(
+        &mail,
+        "ses-token",
+        &sns_message("ses_subscription_confirmation_v1"),
+    )
+    .await
+    .assert_status(204);
+    server.assert_sent(|request| {
+        request
+            .url()
+            .as_str()
+            .starts_with("https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription")
+    });
+    // Version 2 (SHA-256): unsubscribing is acknowledged.
+    post_ses(
+        &mail,
+        "ses-token",
+        &sns_message("ses_unsubscribe_confirmation_v2"),
+    )
+    .await
+    .assert_status(204);
+
+    // A forged confirmation never makes the app fetch its URL.
+    let mut forged = sns_message("ses_subscription_confirmation_v1");
+    forged["SubscribeURL"] =
+        json!("https://sns.eu-west-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=forged");
+    post_ses(&mail, "ses-token", &forged)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    server.assert_not_sent(|request| request.url().as_str().contains("forged"));
+}
+
+#[tokio::test]
+async fn ses_messages_that_cannot_be_trusted_record_nothing() {
+    let (mail, server, clock) = ses_app(200).await;
+    let id = sent_to_ada(&mail).await;
+    let bounce = sns_message("ses_bounce_v2");
+
+    // The token is still checked, on top of the signature.
+    post_ses(&mail, "wrong", &bounce)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // An unsigned envelope, with the right token and topic.
+    post_ses(
+        &mail,
+        "ses-token",
+        &json!({
+            "Type": "Notification",
+            "MessageId": "b6a0d6b0",
+            "TopicArn": SES_TOPIC,
+            "Message": bounce["Message"],
+        }),
+    )
+    .await
+    .assert_error_code(401, "invalid_signature");
+    // Tampered with: the bounce is no longer what SNS signed.
+    let mut tampered = bounce.clone();
+    tampered["Message"] = json!(
+        bounce["Message"]
+            .as_str()
+            .unwrap()
+            .replace("ada@example.com", "grace@example.com")
+    );
+    post_ses(&mail, "ses-token", &tampered)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // Signed by another key.
+    post_ses(&mail, "ses-token", &sns_message("ses_bounce_other_key_v2"))
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // A certificate on a host that is not SNS.
+    let mut foreign = bounce.clone();
+    foreign["SigningCertURL"] = json!("https://sns.eu-west-1.amazonaws.com.evil.example/cert.pem");
+    post_ses(&mail, "ses-token", &foreign)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    server.assert_not_sent(|request| request.url().as_str().contains("evil.example"));
+    // A signature version SNS does not use.
+    let mut version = bounce.clone();
+    version["SignatureVersion"] = json!("3");
+    post_ses(&mail, "ses-token", &version)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // Another topic.
+    let mut topic = bounce.clone();
+    topic["TopicArn"] = json!("arn:aws:sns:eu-west-1:123456789012:other");
+    post_ses(&mail, "ses-token", &topic)
+        .await
+        .assert_error_code(401, "invalid_signature");
+    // Stale: published more than an hour ago.
+    clock.set(on_the_27th("11:00:03"));
+    post_ses(&mail, "ses-token", &bounce)
+        .await
+        .assert_error_code(401, "invalid_signature");
+
+    let events = mail.get::<Deliveries>().await.events(id).await.unwrap();
+    assert!(events.is_empty(), "{events:?}");
+    assert_ne!(status(&mail, id).await, DeliveryStatus::Bounced);
+
+    // Within the hour, the same message is recorded.
+    clock.set(on_the_27th("10:30:00"));
+    post_ses(&mail, "ses-token", &bounce)
+        .await
+        .assert_status(204);
+    assert_eq!(status(&mail, id).await, DeliveryStatus::Bounced);
+}
+
+#[tokio::test]
+async fn an_unreachable_signing_certificate_is_a_503_that_sns_retries() {
+    let (mail, _server, _clock) = ses_app(503).await;
+    let id = sent_to_ada(&mail).await;
+
+    post_ses(&mail, "ses-token", &sns_message("ses_bounce_v1"))
+        .await
+        .assert_status(503);
+    assert_ne!(status(&mail, id).await, DeliveryStatus::Bounced);
 }
 
 #[tokio::test]
