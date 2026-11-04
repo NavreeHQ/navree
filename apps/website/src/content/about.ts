@@ -51,7 +51,20 @@ export type Lesson = {
   /** What that part does. */
   text: string;
   link: { href: string; label: string };
+  /**
+   * The rules on `/architecture/` that show this lesson in the code (the ids
+   * of their cards). The lesson links to the first one the page shows, and
+   * each of them links back here.
+   */
+  rules?: string[];
 };
+
+/** The id of a lesson's row on `/about/`, from its part of Navree: `lesson-lazy-by-default`. */
+export const lessonId = (lesson: Lesson) =>
+  `lesson-${lesson.feature
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}`;
 
 export const lessons: Lesson[] = [
   {
@@ -74,6 +87,7 @@ export const lessons: Lesson[] = [
     feature: "Secure by default",
     text: "A route that doesn't say who may call it doesn't compile. The code that reads untrusted input, from the router and the SQL to tokens, mail and files, is Navree's own, with limits and fuzz tests.",
     link: { href: "/docs/prologue/release-notes/#security-hardening", label: "Security hardening in 1.0" },
+    rules: ["no-injection"],
   },
   {
     title: "Load only what the screen needs.",
@@ -81,6 +95,7 @@ export const lessons: Lesson[] = [
     feature: "Lazy by default",
     text: "Lists come a page at a time and large results stream in constant memory. The DataTable sorts and pages on the server, and a page loads script only for what it uses.",
     link: { href: "/docs/orm/pagination-and-streaming/", label: "Pagination and streaming" },
+    rules: ["lazy-by-default"],
   },
   {
     title: "Give the server the last word.",
@@ -88,6 +103,7 @@ export const lessons: Lesson[] = [
     feature: "The server decides",
     text: "Every rule a Navree UI form shows in the browser runs again on the server, and the form works with JavaScript off.",
     link: { href: "/docs/ui/forms/", label: "Forms" },
+    rules: ["server-authority", "refused-forms"],
   },
   {
     title: "Plan for teams from the start.",

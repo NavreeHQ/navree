@@ -40,7 +40,10 @@ export const pageInfo: Record<string, PageInfo> = {
     kind: "CollectionPage",
     sources: ["src/components/ecosystem", "src/content/ecosystem.ts"],
   },
-  "/architecture/": { name: "Architecture", sources: ["src/components/diagrams"] },
+  "/architecture/": {
+    name: "Architecture",
+    sources: ["src/components/architecture", "src/components/diagrams", "src/content/faq.ts"],
+  },
   "/ai/": { name: "AI", sources: ["src/components/ai"] },
   "/ui/": {
     name: "UI",

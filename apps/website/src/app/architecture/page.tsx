@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { BuiltIn } from "@/components/architecture/built-in";
+import { rules } from "@/components/architecture/rules";
 import { DiagramFigure, diagrams } from "@/components/diagrams";
 import { patterns, type Pattern } from "@/components/diagrams/patterns";
 import { GrowThumb, PatternThumb } from "@/components/diagrams/thumbs";
@@ -360,7 +362,11 @@ function Kits() {
 }
 
 export default function ArchitecturePage() {
-  const nav = [...patterns.map((p) => ({ id: p.id, label: p.name })), { id: "grow", label: "Grow without rewriting" }];
+  const nav = [
+    ...patterns.map((p) => ({ id: p.id, label: p.name })),
+    { id: "grow", label: "Grow without rewriting" },
+    ...(rules().length ? [{ id: "built-in", label: "Built in" }] : []),
+  ];
   return (
     <>
       <Hero />
@@ -369,6 +375,7 @@ export default function ArchitecturePage() {
         <PatternSection key={p.id} pattern={p} index={i} />
       ))}
       <Grow />
+      <BuiltIn />
       <Kits />
       <PageSchema path="/architecture/" metadata={metadata} />
     </>
