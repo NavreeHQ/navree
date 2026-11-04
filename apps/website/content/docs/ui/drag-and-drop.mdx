@@ -82,7 +82,7 @@ In one page, moves go to the server one at a time, in the order they were made. 
 
 ## When no answer comes
 
-A move waits 15 seconds for its answer (`Sortable::deadline_ms`). A move with no answer, or with a failure from the server, may have landed all the same, so nothing is said yet: the item stays where it was dropped, and the lists are drawn again from the server. If the item is where it was dropped, the move landed and nothing went wrong. If it isn't, the page says the move wasn't saved, with a toast, and the item is where the server has it. If the server can't be reached to ask, the item goes back to where the server last had it, and the toast says so. The core runtime leaves the telling to the sortable: its own "No connection" toast is not shown for a move.
+A move waits 15 seconds for its answer (`Sortable::deadline_ms`). A move with no answer, or with a failure from the server, may have landed all the same, so nothing is said yet: the item stays where it was dropped, and the lists are drawn again from the server. If the item is where it was dropped, the move landed and nothing went wrong. If it isn't, the page says the move wasn't saved, with a toast, and the item is where the server has it. If the server can't be reached to ask, or the sortable is in no [region](/docs/ui/regions/) to draw again, the item goes back to where the server last had it, and the toast says so. The core runtime leaves the telling to the sortable: its own "No connection" toast is not shown for a move.
 
 ## Live for everyone
 
