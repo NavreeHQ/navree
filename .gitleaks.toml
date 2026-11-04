@@ -117,6 +117,16 @@ regexes = [
 
 [[allowlists]]
 description = """
+The account key of Azurite, Microsoft's Azure Blob emulator. Microsoft
+publishes it for local development ("devstoreaccount1"), it appears in the
+storage tests and in scripts/ci-services.sh, and it opens only an emulator that
+listens on 127.0.0.1."""
+regexes = [
+  '''Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==''',
+]
+
+[[allowlists]]
+description = """
 Placeholder PEM bodies in the key-parsing tests ("AAAA", and "U0VDUkVU", which
 is base64 for the word SECRET): malformed keys on purpose, to test the error
 path and that errors never echo the input."""

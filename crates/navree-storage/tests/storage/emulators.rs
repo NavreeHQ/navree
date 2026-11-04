@@ -112,7 +112,10 @@ mod gcs {
         assert_eq!(disk.size("docs/readme.txt").await.unwrap(), 5);
         let meta = disk.metadata("docs/readme.txt").await.unwrap();
         assert_eq!((meta.path.as_str(), meta.size), ("docs/readme.txt", 5));
-        assert!(meta.last_modified > Utc::now() - Duration::minutes(5), "{meta:?}");
+        assert!(
+            meta.last_modified > Utc::now() - Duration::minutes(5),
+            "{meta:?}"
+        );
         let streamed: Vec<u8> = disk
             .get_stream("docs/readme.txt")
             .await
@@ -176,7 +179,9 @@ mod gcs {
             vec!["my files/report (final) #2+\u{fc}.txt"]
         );
         assert_eq!(
-            disk.get("my files/report (final) #2+\u{fc}.txt").await.unwrap(),
+            disk.get("my files/report (final) #2+\u{fc}.txt")
+                .await
+                .unwrap(),
             "x"
         );
         let files = disk.files("docs").await.unwrap();
@@ -186,7 +191,11 @@ mod gcs {
             .collect();
         assert_eq!(
             listed,
-            [("docs/2026/report.pdf", 1), ("docs/a.txt", 1), ("docs/b.txt", 1)]
+            [
+                ("docs/2026/report.pdf", 1),
+                ("docs/a.txt", 1),
+                ("docs/b.txt", 1)
+            ]
         );
     }
 

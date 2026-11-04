@@ -133,7 +133,9 @@ fn message(subject: &str) -> Message {
 
 /// What a client that checks certificates says about a self-signed one.
 fn mentions_the_certificate(text: &str) -> bool {
-    text.contains("certificate") || text.contains("unknownissuer") || text.contains("unknown issuer")
+    text.contains("certificate")
+        || text.contains("unknownissuer")
+        || text.contains("unknown issuer")
 }
 
 // CONN-030
@@ -158,7 +160,10 @@ async fn mailpit_receives_a_message_with_its_recipients_and_both_bodies() {
         .text("Hello, Simran")
         .html("<p>Hello, <b>Simran</b></p>");
 
-    transport.send(&message).await.expect("Mailpit accepts the message");
+    transport
+        .send(&message)
+        .await
+        .expect("Mailpit accepts the message");
 
     let received = received(&api, &subject).await;
     assert_eq!(received["Subject"], subject.as_str());
@@ -196,12 +201,19 @@ async fn mailpit_keeps_a_subject_and_body_that_are_not_ascii() {
     let transport = SmtpTransport::from_url(&smtp).expect("url");
     let message = message(&subject).text(body);
 
-    transport.send(&message).await.expect("Mailpit accepts the message");
+    transport
+        .send(&message)
+        .await
+        .expect("Mailpit accepts the message");
 
     let received = received(&api, &subject).await;
     assert_eq!(received["Subject"], subject.as_str());
     assert_eq!(
-        received["Text"].as_str().unwrap().replace("\r\n", "\n").trim_end(),
+        received["Text"]
+            .as_str()
+            .unwrap()
+            .replace("\r\n", "\n")
+            .trim_end(),
         body
     );
 }
