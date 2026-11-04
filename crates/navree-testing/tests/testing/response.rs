@@ -237,22 +237,6 @@ async fn assert_error_code_checks_the_machine_readable_code() {
     );
 }
 
-#[tokio::test]
-#[allow(deprecated)]
-async fn assert_problem_is_a_deprecated_alias_of_assert_error() {
-    let app = TestApp::builder().module(DemoModule).build().await;
-    app.client()
-        .get("/api/nowhere")
-        .send()
-        .await
-        .assert_problem(404, "not_found")
-        .assert_problem(404, None);
-    let wrong = panic_message(|| {
-        not_found_response().assert_problem(404, "gone");
-    });
-    assert!(wrong.contains("no `code`"), "checks the code: {wrong}");
-}
-
 /// A 404 error response like the one an app returns for unknown paths.
 fn not_found_response() -> TestResponse {
     let mut headers = http::HeaderMap::new();

@@ -270,27 +270,6 @@ impl TestResponse {
         }
     }
 
-    /// The former RFC 9457 assertion, kept for existing tests: asserts an
-    /// error response with `status` like
-    /// [`assert_error(status, None)`](Self::assert_error) and, when `code`
-    /// is given, its `code` like
-    /// [`assert_error_code`](Self::assert_error_code).
-    ///
-    /// # Panics
-    ///
-    /// Like [`assert_error_code`](Self::assert_error_code).
-    #[deprecated(
-        since = "0.1.0",
-        note = "errors use the JSON error shape; use `assert_error(status, message)` or `assert_error_code(status, code)`"
-    )]
-    #[track_caller]
-    pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
-        match code.into() {
-            Some(code) => self.assert_error_code(status, code),
-            None => self.assert_error(status, None),
-        }
-    }
-
     /// The status and the (possibly shortened) body, for failure messages.
     fn describe(&self) -> String {
         let text = self.text();
