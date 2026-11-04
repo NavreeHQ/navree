@@ -64,8 +64,10 @@ pub struct Deal {
 #[derive(Clone, TableRow)]
 #[table(sort = "title", per = 25)]
 pub struct DealRow {
+    /// The key.
     #[col(skip)]
     pub id: Uuid,
+    /// The title.
     #[col(sortable, search)]
     pub title: String,
 }
