@@ -6271,7 +6271,13 @@
         "name": "derive_accent",
         "generics": "",
         "args": "fill: Rgb",
-        "doc": "Sets the accent to `fill` and derives what reads on and around it: the text on it (white where white reads, else a deep shade of its hue), the accent as text (moved toward the page's text until it reaches 4.5:1 on the page and on cards) and the focus ring (3:1 on the page and cards)."
+        "doc": "Sets the accent to `fill` and derives what reads on and around it: the text on it (white where white reads, else a deep shade of its hue), the accent as text (moved toward the page's text until it reaches 4.5:1 on every surface) and the focus ring (3:1 on every surface)."
+      },
+      {
+        "name": "hover_mix",
+        "generics": "",
+        "args": "",
+        "doc": "What the accent is mixed toward on hover: away from the text on it, so the text reads better on hover, never worse. Black under light text, white under dark text."
       }
     ],
     "variants": [],
@@ -7004,6 +7010,12 @@
         "generics": "",
         "args": "other: Self, amount: f64",
         "doc": "`self` mixed with `other` in OKLab: `0.0` is `self`, `1.0` is `other`."
+      },
+      {
+        "name": "over",
+        "generics": "",
+        "args": "under: Self, alpha: f64",
+        "doc": "`self` at `alpha` (0 to 1) laid over `under`, as a browser composites: in sRGB."
       },
       {
         "name": "until_contrast",
@@ -8505,7 +8517,7 @@
         "name": "key",
         "generics": "",
         "args": "",
-        "doc": "The `data-theme` value: a built-in's id, or `c` and twelve hex digits of the theme's hash. Never text you gave."
+        "doc": "The `data-theme` value: a built-in's id, or `c` and 24 hex digits of the SHA-256 of the theme's short form. Never text you gave."
       },
       {
         "name": "stylesheet",
@@ -8632,6 +8644,12 @@
         "generics": "",
         "args": "",
         "doc": "Leaves the mode out: for an app that keeps one mode for everyone."
+      },
+      {
+        "name": "without_themes",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the themes out: for a page whose workspace keeps its theme, where the reader picks only the mode."
       },
       {
         "name": "sheets",
