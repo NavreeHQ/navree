@@ -18,6 +18,10 @@
 //! | `/phone` | a contact form with phone numbers, and the phone input in its states |
 //! | `/display` | the timeline, activity feed, fact cards and badges in every state |
 //! | `/display/live` | a live feed and a live table on one server-sent event stream |
+//! | `/themes` | every theme in light and dark, the theme menu, `?theme=` and `?mode=` |
+//! | `/themes/layouts/{layout}` | the same page in each layout, folding three ways |
+//! | `/themes/builder` | the theme builder, saving to memory and importing |
+//! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -31,6 +35,7 @@ use navree::logbook::{LogbookOptions, StoreKind};
 use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
 
+mod acme_theme;
 mod bench;
 mod dashboard;
 mod dates;
@@ -42,9 +47,10 @@ mod icons_flags;
 mod menus;
 mod phone;
 mod select;
+mod themes;
 
 /// The app's one shell.
-fn shell() -> Shell {
+pub(crate) fn shell() -> Shell {
     Shell::new("Navree CRM")
         .context("Proof pages")
         .group(
@@ -99,7 +105,8 @@ impl Module for ProofModule {
             .controller::<dates::DatePages>()
             .controller::<menus::MenuPages>()
             .controller::<phone::PhonePages>()
-            .controller::<display::DisplayPages>();
+            .controller::<display::DisplayPages>()
+            .controller::<themes::ThemePages>();
     }
 }
 
