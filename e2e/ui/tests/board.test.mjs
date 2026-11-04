@@ -145,6 +145,8 @@ for (const name of NAMES) {
 
     /** Drags card `id` with the mouse to the middle top of card `onto` (or the list `list`'s end). */
     async function drag(page, id, { onto, list } = {}) {
+      // The cards finish sliding first: a box measured mid-slide is not where the card stays.
+      await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => {}))));
       const from = await page.locator(`#columns-item-${id} [data-slot=sortable-body]`).boundingBox();
       const target = onto ? await page.locator(`#columns-item-${onto}`).boundingBox() : await page.locator(`#columns-list-${list} [data-slot=sortable-items]`).boundingBox();
       await page.mouse.move(from.x + 40, from.y + 12);
