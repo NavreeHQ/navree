@@ -99,6 +99,7 @@ const FILES = [
   ["select", "js", "text/javascript; charset=utf-8", await js("select.js")],
   ["dates", "js", "text/javascript; charset=utf-8", await js("dates.js")],
   ["menus", "js", "text/javascript; charset=utf-8", await js("menus.js")],
+  ["slider", "js", "text/javascript; charset=utf-8", await js("slider.js")],
   ["phone", "js", "text/javascript; charset=utf-8", await js("phone.js", { PHONE_DATA_FILE }), "phone"],
   // The numbering plans the phone module formats with, written by
   // crates/navree-phone/tools/metadata.mjs.

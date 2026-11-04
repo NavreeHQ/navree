@@ -17,6 +17,10 @@
 //! Each of these is markup that works with no script. The slider, tree and toolbar
 //! modules add the patterns of WAI-ARIA's Authoring Practices when they run.
 
+mod number;
+mod slider;
 mod stepper;
 
+pub use number::{Decimal, DecimalError};
+pub use slider::{Slider, SliderError, SliderLabels, SliderSpec};
 pub use stepper::{Step, StepState, Stepper, StepperLabels};

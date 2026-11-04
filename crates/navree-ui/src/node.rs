@@ -239,6 +239,15 @@ impl Uses {
     /// The theme builder's stylesheet: no script, only its styles, linked on a
     /// page that draws the builder.
     pub const THEME_BUILDER: Self = Self(1 << 9);
+    /// The slider module: the filled part, the value as text, a gap between the
+    /// two thumbs of a range and a click on its track.
+    pub const SLIDER: Self = Self(1 << 12);
+    /// The tree module: the keys of a tree view, expanding, choosing and children
+    /// loaded as they are opened.
+    pub const TREE: Self = Self(1 << 13);
+    /// The toolbar module: one tab stop with the arrow keys, and what does not fit
+    /// moved into a menu.
+    pub const TOOLBAR: Self = Self(1 << 14);
 
     /// Both sets together.
     #[must_use]
