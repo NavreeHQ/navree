@@ -160,6 +160,34 @@ inBrowsers(({ open, browserName }) => {
     await close();
   });
 
+  test("an optional step with an answer the rules refuse is checked however it was left, and holds back the steps after it", async () => {
+    const { page, close } = await open("/flow/wizard/start");
+    await first(page);
+    await second(page);
+    // A note too long (set by script: the box itself stops typing at its limit), and the stepper's Terms pressed instead of Next.
+    await page.evaluate(() => {
+      document.querySelector("[name=notes]").value = "n".repeat(300);
+    });
+    await go(page, "goto:terms");
+    await page.waitForSelector("[data-slot=field-error]");
+    assert.equal(stepOf(page), "extras", "the step after it did not open");
+    assert.match((await errors(page)).join(" "), /shorter than or equal to 200/);
+    const now = await states(page);
+    assert.equal(now[3], "disabled", "Terms is closed until the note is right");
+    assert.equal(now[2], "current");
+    // Back leaves it too, and the stepper then calls it an error, and the review is out of reach.
+    await moveTo(page, "back", "contact");
+    assert.equal((await states(page))[2], "error");
+    assert.equal((await states(page))[3], "disabled");
+    await moveTo(page, "goto:extras", "extras");
+    assert.equal(await page.inputValue("[name=notes]"), "n".repeat(300), "what was typed is kept");
+    // Mended and sent on with Next (Terms stays closed in the stepper until the draft holds a note that passes), it opens the way.
+    await page.fill("[name=notes]", "short");
+    await moveTo(page, "next", "terms");
+    assert.equal((await states(page))[2], "done");
+    await close();
+  });
+
   test("Finish makes the deal once, and the draft is gone", async () => {
     const { page, close } = await open("/flow/wizard/start");
     await toReview(page);

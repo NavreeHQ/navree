@@ -139,6 +139,73 @@ inBrowsers(({ open, browserName }) => {
     await close();
   });
 
+  test("a slider that takes any value moves by a hundredth of the track on the arrows, in every engine, and by a tenth on Shift and the Page keys", async () => {
+    const { page, close } = await open("/flow");
+    await room(page, "sl-mix");
+    await page.focus("#sl-mix");
+    const at = async () => Number((await read(page, "sl-mix")).value);
+    const near = (got, want) => assert.ok(Math.abs(got - want) < 1e-6, `${got} is not ${want}`);
+    near(await at(), 0.5);
+    await page.keyboard.press("ArrowRight");
+    near(await at(), 0.51);
+    await page.keyboard.press("ArrowUp");
+    near(await at(), 0.52);
+    await page.keyboard.press("ArrowLeft");
+    near(await at(), 0.51);
+    await page.keyboard.press("ArrowDown");
+    near(await at(), 0.5);
+    await page.keyboard.press("Shift+ArrowRight");
+    near(await at(), 0.6);
+    await page.keyboard.press("PageDown");
+    near(await at(), 0.5);
+    await page.keyboard.press("End");
+    near(await at(), 1);
+    await page.keyboard.press("ArrowRight");
+    near(await at(), 1);
+    // What is written is the number, to no more than nine places.
+    await page.keyboard.press("Home");
+    near(await at(), 0);
+    await page.keyboard.press("ArrowRight");
+    assert.equal((await read(page, "sl-mix")).output, "0.01");
+    await close();
+  });
+
+  test("a very small step is written as a number, never as an exponent, and the server reads what the browser posts for it and for a drag", async () => {
+    const { page, close } = await open("/flow");
+    await room(page, "sl-fine");
+    await page.focus("#sl-fine");
+    await page.keyboard.press("ArrowRight");
+    const now = await read(page, "sl-fine");
+    assert.equal(Number(now.value), 1e-7);
+    assert.equal(now.output, "0.0000001", "the number, not 1e-7");
+    // A drag lands on a double written with many digits.
+    await page.evaluate(() => {
+      document.getElementById("sl-mix").value = "0.5033333333333333";
+    });
+    await Promise.all([page.waitForURL("**/flow/echo"), page.click("#sl-post")]);
+    const posted = await page.locator("#posted").innerText();
+    assert.ok(/^fine=(1e-7|0\.0000001)$/m.test(posted), posted);
+    assert.ok(/^mix=0\.50333333/m.test(posted), posted);
+    const judged = await page.locator("#judged").innerText();
+    assert.match(judged, /mix: ok 0\.503333333/);
+    assert.match(judged, /fine: ok 0\.0000001/);
+    await close();
+  });
+
+  test("the value is written with the page's decimal point and posted with a point", async () => {
+    const { page, close } = await open("/flow");
+    await room(page, "sl-comma");
+    assert.equal((await read(page, "sl-comma")).output, "0,50");
+    await page.focus("#sl-comma");
+    await page.keyboard.press("ArrowRight");
+    const now = await read(page, "sl-comma");
+    assert.equal(now.value, "0.75", "the input keeps the point");
+    assert.equal(now.output, "0,75");
+    await Promise.all([page.waitForURL("**/flow/echo"), page.click("#sl-post")]);
+    assert.ok((await page.locator("#posted").innerText()).split("\n").includes("menge=0.75"));
+    await close();
+  });
+
   test("the two thumbs of a range keep their order and their gap, and the value reads from one to the other", async () => {
     const { page, close } = await open("/flow");
     assert.equal((await read(page, "sl-price-min")).output, "$200 to $800");
@@ -276,9 +343,14 @@ inBrowsers(({ open, browserName }) => {
     assert.match(await post(good + "37"), /volume: Choose a value in steps of 5\./);
     assert.match(await post(good + "105"), /volume: Choose 100 or less\./);
     assert.match(await post(good + "-5"), /volume: Choose 0 or more\./);
-    for (const bad of ["1e2", "0x10", "NaN", "5%20", "%205", "5,0", "", "9".repeat(400), "%00", "%E2%88%9E"]) {
+    for (const bad of ["0x10", "NaN", "Infinity", "5%20", "%205", "5,0", "", "9".repeat(400), "%00", "%E2%88%9E", "1e", "e2", "1e999999999"]) {
       assert.match(await post(good + bad), /volume: (Enter a number|Choose a value)\./, bad);
     }
+    // What a browser may write for a number is read: an exponent, and a long fraction rounded to nine places.
+    assert.match(await post(good + "1e2"), /volume: ok 100/);
+    assert.match(await post(good + "1.0e%2B2"), /volume: ok 100/);
+    assert.match(await post("volume=5&tenths=0.30000000000000004&price_min=200&price_max=800&level=1"), /tenths: ok 0\.3/);
+    assert.match(await post("volume=5&mix=0.5033333333333333&fine=1e-7&tenths=0.3&price_min=200&price_max=800&level=1"), /mix: ok 0\.503333333[\s\S]*fine: ok 0\.0000001/);
     assert.match(await post("volume=5&volume=10&" + good.slice(0, -8)), /volume: Choose one value\./);
     assert.match(await post("volume=5&tenths=0.35&price_min=200&price_max=800&level=1"), /tenths: Choose a value in steps of 0\.1\./);
     assert.match(await post("volume=5&tenths=0.3&price_min=900&price_max=100&level=1"), /price: The lower value can't be above the upper one\./);
@@ -308,6 +380,9 @@ inBrowsers(({ open, browserName }) => {
   ]) {
     test(`axe finds nothing in the sliders, and the page does not scroll sideways (${label})`, async () => {
       const { page, close } = await open("/flow", options);
+      // The pointer is off the buttons and the colours have settled, so axe reads what a person sees.
+      await page.mouse.move(2, 2);
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 80)))));
       assert.deepEqual(await axe(page, "#sliders"), []);
       const width = options.viewport?.width || 1440;
       const past = await page.locator("#sliders").evaluate(

@@ -533,7 +533,8 @@ mod times {
     #[test]
     fn a_tree_of_ten_thousand_nodes_renders_in_under_30_ms() {
         use navree_ui::{Tree, TreeNode};
-        let time = best(10, || {
+        // The best of thirty: a machine with other builds on it can make a few runs three times as slow.
+        let time = best(30, || {
             let tree = Tree::new("t", "People")
                 .nodes((0..10_000).map(|n| TreeNode::leaf(format!("n{n}"), format!("Person {n}"))));
             View::new("Tree").body(tree).to_html()

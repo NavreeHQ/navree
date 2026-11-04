@@ -52,6 +52,15 @@ struct Extras {
     news: bool,
 }
 
+/// A step with a text and no rule on it, so that what is typed in it always passes.
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Free {
+    /// Notes
+    #[validate(skip)]
+    #[form(widget = textarea)]
+    notes: String,
+}
+
 #[derive(Debug, Deserialize, Validate, Form)]
 struct Terms {
     /// I accept
@@ -520,6 +529,73 @@ fn what_a_password_got_wrong_is_said_again_in_words_and_never_in_value() {
     assert!(!html.contains("longer than or equal to 8"), "{html}");
 }
 
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Account {
+    /// Email
+    #[validate(email)]
+    #[form(widget = email)]
+    email: String,
+    /// Password
+    #[validate(length(min = 8), custom(not_common))]
+    #[form(widget = password)]
+    password: String,
+    /// Again
+    #[validate(skip)]
+    #[form(widget = password)]
+    again: String,
+}
+
+/// A rule that says the value back, as a message often does.
+fn not_common(value: &String) -> Result<(), String> {
+    if value == "hunter2hunter2" {
+        Err(format!("{value} is on the list of common passwords."))
+    } else {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_rule_that_says_a_password_back_has_it_masked_before_the_words_are_kept() {
+    let wizard = Wizard::new("account")
+        .base("/join")
+        .step(WizardStep::of::<Account>("account", "Account"))
+        .review();
+    let mut draft = wizard.start();
+    let out = post(
+        &wizard,
+        &mut draft,
+        "account",
+        "next",
+        &[
+            ("email", "ada@example.com"),
+            ("password", "hunter2hunter2"),
+            ("again", "hunter2hunter2"),
+        ],
+    );
+    assert_eq!(out, WizardOutcome::Invalid("account".into()));
+    let json = serde_json::to_string(&draft).unwrap();
+    assert!(
+        !json.contains("hunter2hunter2"),
+        "the value is not kept: {json}"
+    );
+    // The words are still said, with the value hidden.
+    let html = render(&wizard.page(&draft, "account").unwrap().into());
+    assert!(
+        html.contains("is on the list of common passwords."),
+        "{html}"
+    );
+    assert!(!html.contains("hunter2hunter2"), "{html}");
+    // A password inside the words of another field's rule is masked as well.
+    let words = &draft.record("account").unwrap().secret_errors;
+    assert!(
+        words
+            .values()
+            .flatten()
+            .all(|text| !text.contains("hunter2")),
+        "{words:?}"
+    );
+}
+
 #[test]
 fn a_post_over_the_limits_is_refused_and_leaves_the_draft_as_it_was() {
     let wizard = wizard();
@@ -542,7 +618,7 @@ fn a_post_over_the_limits_is_refused_and_leaves_the_draft_as_it_was() {
     // Many steps each just under the value limit pass the total.
     let mut big = Wizard::new("big").base("/b");
     for n in 0..6 {
-        big = big.step(WizardStep::of::<Extras>(format!("s{n}"), format!("S{n}")).optional());
+        big = big.step(WizardStep::of::<Free>(format!("s{n}"), format!("S{n}")).optional());
     }
     let mut d = big.start();
     let chunk = "y".repeat(50 * 1024);
@@ -562,6 +638,130 @@ fn a_post_over_the_limits_is_refused_and_leaves_the_draft_as_it_was() {
     }
     assert!(refused);
     assert!(d.bytes() <= navree_ui::flow::MAX_DRAFT_BYTES);
+}
+
+#[test]
+fn an_optional_step_with_an_answer_is_checked_whichever_way_it_was_left() {
+    let long = "n".repeat(300);
+    for action in ["back", "goto:terms", "save"] {
+        let wizard = wizard();
+        let mut draft = wizard.start();
+        post(&wizard, &mut draft, "basics", "next", BASICS);
+        post(&wizard, &mut draft, "contact", "next", CONTACT);
+        post(&wizard, &mut draft, "extras", action, &[("notes", &long)]);
+        // The answer is kept, counts as tried, and the rules refuse it: the stepper says so, the
+        // steps after it are closed, and the step says what is wrong when it is opened again.
+        assert_eq!(draft.value("extras", "notes").map(str::len), Some(300));
+        assert_eq!(
+            states(&wizard, &draft, "contact")[2],
+            StepState::Error,
+            "{action}"
+        );
+        assert_eq!(
+            wizard.page(&draft, "terms").unwrap_err(),
+            WizardError::NotReachable,
+            "{action}"
+        );
+        let html = render(&wizard.page(&draft, "extras").unwrap().into());
+        assert!(
+            html.contains("shorter than or equal to 200"),
+            "{action}: {html}"
+        );
+    }
+    // An answer that holds is as good as Next: the steps after it open, and it is Done.
+    let wizard = wizard();
+    let mut draft = wizard.start();
+    post(&wizard, &mut draft, "basics", "next", BASICS);
+    post(&wizard, &mut draft, "contact", "next", CONTACT);
+    post(
+        &wizard,
+        &mut draft,
+        "extras",
+        "goto:terms",
+        &[("notes", "fine")],
+    );
+    assert_eq!(draft.step, "terms");
+    assert_eq!(states(&wizard, &draft, "terms")[2], StepState::Done);
+    // An optional step with nothing in it is skipped, whichever way it was left.
+    let wizard = self::wizard();
+    let mut draft = wizard.start();
+    post(&wizard, &mut draft, "basics", "next", BASICS);
+    post(&wizard, &mut draft, "contact", "next", CONTACT);
+    post(
+        &wizard,
+        &mut draft,
+        "extras",
+        "goto:terms",
+        &[("notes", "  ")],
+    );
+    assert_eq!(draft.step, "terms");
+    assert_eq!(states(&wizard, &draft, "terms")[2], StepState::Upcoming);
+}
+
+#[test]
+fn finish_and_the_review_check_an_optional_answer_the_person_left_by_back() {
+    // In a wizard that can be left in any order, the review opens whatever the steps hold.
+    let long = "n".repeat(300);
+    let wizard = self::wizard().free();
+    let mut draft = wizard.start();
+    post(&wizard, &mut draft, "basics", "next", BASICS);
+    post(&wizard, &mut draft, "contact", "next", CONTACT);
+    post(&wizard, &mut draft, "extras", "back", &[("notes", &long)]);
+    post(
+        &wizard,
+        &mut draft,
+        "contact",
+        "goto:terms",
+        &[("email", "ada@example.com")],
+    );
+    post(&wizard, &mut draft, "terms", "next", TERMS);
+    let html = render(&wizard.page(&draft, "review").unwrap().into());
+    let words = "This step needs attention.";
+    assert_eq!(html.matches(words).count(), 1, "one step is flagged");
+    assert!(
+        html.find(words) > html.find("review-extras")
+            && html.find(words) < html.find("review-terms"),
+        "and it is the optional one"
+    );
+    assert_eq!(
+        post(&wizard, &mut draft, "review", "finish", &[]),
+        WizardOutcome::Invalid("extras".into())
+    );
+    assert!(!draft.submitted);
+    // Corrected, it finishes.
+    post(
+        &wizard,
+        &mut draft,
+        "extras",
+        "goto:review",
+        &[("notes", "short")],
+    );
+    assert_eq!(
+        post(&wizard, &mut draft, "review", "finish", &[]),
+        WizardOutcome::Done
+    );
+    // Left empty it is skipped and nothing is flagged.
+    let mut draft = wizard.start();
+    post(&wizard, &mut draft, "basics", "next", BASICS);
+    post(&wizard, &mut draft, "contact", "next", CONTACT);
+    post(&wizard, &mut draft, "extras", "back", &[("notes", "")]);
+    post(
+        &wizard,
+        &mut draft,
+        "contact",
+        "goto:terms",
+        &[("email", "ada@example.com")],
+    );
+    post(&wizard, &mut draft, "terms", "next", TERMS);
+    let html = render(&wizard.page(&draft, "review").unwrap().into());
+    assert!(
+        !html.contains("This step needs attention."),
+        "nothing is flagged"
+    );
+    assert_eq!(
+        post(&wizard, &mut draft, "review", "finish", &[]),
+        WizardOutcome::Done
+    );
 }
 
 #[test]
@@ -965,4 +1165,46 @@ fn a_slider_field_draws_its_grid_and_the_server_holds_the_post_to_it() {
             .into(),
     );
     assert!(again.contains("steps of 5"), "{again}");
+}
+
+fn unit_any() -> navree_ui::flow::SliderSpec {
+    navree_ui::flow::SliderSpec::new(0, 1).any_step()
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Mixer {
+    /// Mix
+    #[validate(skip)]
+    #[form(widget = slider, slider = unit_any)]
+    mix: f64,
+}
+
+#[test]
+fn a_slider_that_takes_any_value_posts_what_a_drag_lands_on_and_it_is_accepted() {
+    use navree_ui::form::{FormView, decode};
+    // A browser posts a double written with up to 17 digits, or an exponent for a tiny value.
+    let ok: Mixer = decode(&pairs(&[("mix", "0.5033333333333333")])).unwrap();
+    assert!((ok.mix - 0.503_333_333_333_333_3).abs() < 1e-12);
+    let tiny: Mixer = decode(&pairs(&[("mix", "1e-7")])).unwrap();
+    assert!((tiny.mix - 1e-7).abs() < 1e-15);
+    // Outside the grid is still refused, and so is what is not a number.
+    for (text, says) in [
+        ("1.5", "1 or less"),
+        ("-0.2", "0 or more"),
+        ("NaN", "number"),
+    ] {
+        let errors = decode::<Mixer>(&pairs(&[("mix", text)])).unwrap_err();
+        let said = errors
+            .get("mix")
+            .unwrap_or_else(|| panic!("{text}: {errors:?}"))
+            .join(" ");
+        assert!(said.contains(says), "{text}: {said}");
+    }
+    // A form drawn again after an error keeps the long value on the thumb, not the minimum.
+    let again = render(
+        &FormView::<Mixer>::new()
+            .with_values(pairs(&[("mix", "0.5033333333333333")]))
+            .into(),
+    );
+    assert!(again.contains(r#"value="0.503333333""#), "{again}");
 }

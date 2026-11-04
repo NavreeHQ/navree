@@ -138,8 +138,9 @@ inBrowsers(({ open, browserName }) => {
     await page.keyboard.press("ArrowDown"); // Web
     await page.keyboard.press("Space");
     assert.equal(await item(page, "#t-multi", "Web").getAttribute("aria-checked"), "true");
-    // The parent had one of two enabled children: now both, so it is whole.
-    assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "true");
+    // Both enabled children are chosen, but the one that is disabled is not: the parent is half chosen, not whole,
+    // so it does not stand for what the person could not choose.
+    assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "mixed");
     await page.keyboard.press("Space");
     assert.equal(await item(page, "#t-multi", "Web").getAttribute("aria-checked"), "false");
     assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "mixed");
@@ -151,18 +152,25 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await focusedText(page), "API");
     assert.equal(await item(page, "#t-multi", "API").getAttribute("aria-checked"), "false", "API was chosen, and Shift+Down toggles it");
     assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "mixed");
-    // A branch that is half chosen, chosen: all that is under it is chosen, but not what is disabled.
+    // A branch that is half chosen, chosen: all that is under it is chosen, but not what is disabled, and so it stays half chosen.
     await page.keyboard.press("Home");
     await page.keyboard.press("Space");
     assert.deepEqual(await page.locator("#t-multi > [role=tree] > li:first-child li [role=treeitem]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-checked"))), ["true", "true", "false"]);
-    assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "true");
+    assert.equal(await item(page, "#t-multi", "Engineering").getAttribute("aria-checked"), "mixed");
+    assert.equal(await page.locator("#t-multi li[data-slot=tree-item] > [data-slot=tree-row] input").first().isChecked(), false, "and does not post its own id");
     // And unchosen, it unchooses them.
     await page.keyboard.press("Space");
     assert.deepEqual(await page.locator("#t-multi > [role=tree] > li:first-child li [role=treeitem]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-checked"))), ["false", "false", "false"]);
     // Ctrl+A.
     await page.keyboard.press("Control+a");
-    const all = await page.locator("#t-multi [role=treeitem]").evaluateAll((els) => els.filter((e) => e.getClientRects().length && !e.closest("li").hasAttribute("data-disabled")).map((e) => e.getAttribute("aria-checked")));
-    assert.ok(all.every((state) => state === "true"), `everything showing is chosen: ${all}`);
+    // Everything showing is chosen but for a parent that has a child that is disabled, and the branches whose
+    // children have not been fetched: nobody has been shown what is in them.
+    const left = await page.locator("#t-multi [role=treeitem]").evaluateAll((els) =>
+      els
+        .filter((e) => e.getClientRects().length && !e.closest("li").hasAttribute("data-disabled") && e.getAttribute("aria-checked") !== "true")
+        .map((e) => e.querySelector("[data-slot=tree-text]").textContent.trim() + ":" + e.getAttribute("aria-checked")),
+    );
+    assert.deepEqual(left, ["Engineering:mixed", "Operations:false", "Slow folder:false", "Folder that fails:false", "Folder with nothing:false"]);
     await close();
   });
 
@@ -225,17 +233,104 @@ inBrowsers(({ open, browserName }) => {
     await close();
   });
 
-  test("a branch chosen before its children came chooses them when they arrive", async () => {
+  test("a branch chosen before its children came opens, waits for them, and chooses what it shows", async () => {
     const { page, close } = await open("/flow");
-    await item(page, "#t-multi", "Operations").locator("input").click();
-    assert.equal(await item(page, "#t-multi", "Operations").getAttribute("aria-checked"), "true");
-    await item(page, "#t-multi", "Operations").locator("[data-slot=tree-toggle]").click();
+    const ops = item(page, "#t-multi", "Operations");
+    await ops.locator("input").click();
+    // It opens by itself: the person is shown what they chose. Until it has, the branch does not post.
     await item(page, "#t-multi", "Plans").waitFor();
-    const states = await holder(item(page, "#t-multi", "Operations")).locator("li [role=treeitem]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-checked")));
-    assert.deepEqual(states, ["true", "true", "true"]);
-    // Unchoose one and the branch is half chosen.
+    assert.equal(await ops.getAttribute("aria-expanded"), "true");
+    assert.equal(await holder(ops).getAttribute("data-pending"), null, "nothing is held once the children are here");
+    assert.equal(await ops.locator("input").isDisabled(), false);
+    // Plans and Notes are chosen; Archive is a branch of its own whose children have not been fetched, so it is not.
+    const states = await holder(ops).locator("li [role=treeitem]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-checked")));
+    assert.deepEqual(states, ["true", "false", "true"]);
+    // So Operations is half chosen, not whole: it does not stand for what is in Archive.
+    assert.equal(await ops.getAttribute("aria-checked"), "mixed");
+    // Unchoose one and it is still half chosen.
     await item(page, "#t-multi", "Notes").locator("input").click();
-    assert.equal(await item(page, "#t-multi", "Operations").getAttribute("aria-checked"), "mixed");
+    assert.equal(await ops.getAttribute("aria-checked"), "mixed");
+    await close();
+  });
+
+  test("a branch chosen while its children are on their way posts nothing until they are here, and is not chosen if they never come", async () => {
+    const { page, close } = await open("/flow");
+    const slow = item(page, "#t-multi", "Slow folder");
+    await slow.locator("input").click();
+    // The box shows chosen and waits; the form posts neither it nor anything standing for what it holds.
+    assert.equal(await slow.locator("input").isDisabled(), true);
+    assert.equal(await slow.getAttribute("aria-checked"), "true");
+    const early = await page.evaluate(() => new FormData(document.getElementById("t-form")).getAll("access"));
+    assert.ok(!early.includes("slow"), `the held branch posts nothing: ${early}`);
+    await item(page, "#t-multi", "Slow A").waitFor({ state: "attached", timeout: 8000 });
+    assert.equal(await slow.locator("input").isDisabled(), false);
+    const late = await page.evaluate(() => new FormData(document.getElementById("t-form")).getAll("access"));
+    assert.ok(late.includes("slow") && late.includes("slow/a"), `chosen with what it shows: ${late}`);
+    // One that fails is not chosen after all.
+    const failing = item(page, "#t-multi", "Folder that fails");
+    await failing.locator("input").click();
+    await holder(failing).locator("[data-slot=tree-retry]").waitFor();
+    assert.equal(await failing.locator("input").isDisabled(), false);
+    assert.equal(await failing.locator("input").isChecked(), false);
+    assert.equal(await failing.getAttribute("aria-checked"), "false");
+    await close();
+  });
+
+  test("a parent never stands for what the person could not choose or was not shown, and a chosen node that is disabled still posts", async () => {
+    const { page, close } = await open("/flow");
+    const posted = () => page.evaluate(() => new FormData(document.getElementById("t-form")).getAll("grant"));
+    // As drawn: Projects has a disabled child that is not chosen, so it is half chosen.
+    assert.equal(await item(page, "#t-grant", "Projects").getAttribute("aria-checked"), "mixed");
+    assert.equal(await item(page, "#t-grant", "Teams").getAttribute("aria-checked"), "false");
+    assert.equal(await item(page, "#t-grant", "Always on").getAttribute("aria-checked"), "true");
+    assert.equal(await item(page, "#t-grant", "Always on").locator("input[type=checkbox]").isDisabled(), true);
+    assert.deepEqual((await posted()).sort(), ["kept", "proj/open"], "the disabled node that was chosen is kept, and the half-chosen parent is not posted");
+    // Choose Team A: Teams is half chosen, because Locked team is disabled and not chosen.
+    await item(page, "#t-grant", "Team A").locator("input").click();
+    assert.equal(await item(page, "#t-grant", "Teams").getAttribute("aria-checked"), "mixed");
+    assert.deepEqual((await posted()).sort(), ["kept", "proj/open", "team/a"]);
+    // The parent, pressed when everything that can be chosen under it is chosen, clears them; pressed again it chooses
+    // them and stays half chosen, since Locked team can't be.
+    await item(page, "#t-grant", "Teams").locator("input").click();
+    assert.equal(await item(page, "#t-grant", "Team A").getAttribute("aria-checked"), "false");
+    assert.equal(await item(page, "#t-grant", "Teams").getAttribute("aria-checked"), "false");
+    await item(page, "#t-grant", "Teams").locator("input").click();
+    assert.equal(await item(page, "#t-grant", "Team A").getAttribute("aria-checked"), "true");
+    assert.equal(await item(page, "#t-grant", "Locked team").getAttribute("aria-checked"), "false");
+    assert.equal(await item(page, "#t-grant", "Teams").getAttribute("aria-checked"), "mixed");
+    assert.ok(!(await posted()).includes("team"), "a parent that is not whole does not post");
+    assert.ok(!(await posted()).includes("team/locked"));
+    // A disabled node that is chosen can't be changed, and its copy stays.
+    assert.ok((await posted()).includes("kept"));
+    await close();
+  });
+
+  test("a branch drawn in pages is never whole by the page that is shown, and a page that arrives does not make it whole", async () => {
+    const { page, close } = await open("/flow");
+    const posted = () => page.evaluate(() => new FormData(document.getElementById("t-form")).getAll("grant"));
+    const pool = item(page, "#t-grant", "Pool in pages");
+    assert.equal(await pool.getAttribute("aria-checked"), "false");
+    await pool.locator("input").click();
+    // The two shown are chosen; the rest of ten thousand have not been shown, so Pool is half chosen and does not post.
+    assert.equal(await item(page, "#t-grant", "Member 0").getAttribute("aria-checked"), "true");
+    assert.equal(await item(page, "#t-grant", "Member 1").getAttribute("aria-checked"), "true");
+    assert.equal(await pool.getAttribute("aria-checked"), "mixed");
+    let now = await posted();
+    assert.ok(now.includes("person-0") && now.includes("person-1") && !now.includes("pool"), `${now}`);
+    // Show more: the next page comes unchosen, and Pool is still half chosen.
+    await page.locator("#t-grant [data-slot=tree-more] a").click();
+    await item(page, "#t-grant", "Person 2").waitFor();
+    assert.equal(await item(page, "#t-grant", "Person 2").getAttribute("aria-checked"), "false");
+    assert.equal(await pool.getAttribute("aria-checked"), "mixed");
+    // Choose them all and it is still not whole: there are 9,948 more.
+    await pool.locator("input").click();
+    assert.equal(await item(page, "#t-grant", "Person 2").getAttribute("aria-checked"), "true");
+    assert.equal(await pool.getAttribute("aria-checked"), "mixed");
+    now = await posted();
+    assert.ok(!now.includes("pool"), `${now}`);
+    // (The proof's answer for the next page is drawn as another tree's, so its choices post under that name.)
+    const later = await page.evaluate(() => new FormData(document.getElementById("t-form")).getAll("big"));
+    assert.ok(later.includes("person-2"), `${later}`);
     await close();
   });
 
@@ -313,10 +408,11 @@ inBrowsers(({ open, browserName }) => {
     await item(page, "#t-single", "Ada").locator("input").click();
     await Promise.all([page.waitForURL("**/flow/echo"), page.click("#t-post")]);
     const posted = (await page.locator("#posted").innerText()).split("\n");
-    for (const line of ["access=eng", "access=eng/api", "access=eng/web", "owner=sales/ada"]) assert.ok(posted.includes(line), `${line} in ${posted}`);
+    for (const line of ["access=eng/api", "access=eng/web", "owner=sales/ada"]) assert.ok(posted.includes(line), `${line} in ${posted}`);
     assert.ok(!posted.includes("access=eng/old"), "a disabled choice posts nothing");
+    assert.ok(!posted.includes("access=eng"), "and the parent that has one is half chosen, so it is not posted");
     const judged = await page.locator("#judged").innerText();
-    assert.match(judged, /access: 3 chosen: eng \| eng\/web \| eng\/api/);
+    assert.match(judged, /access: 2 chosen: eng\/web \| eng\/api/);
     assert.match(judged, /owner: 1 chosen: sales\/ada/);
     await close();
   });

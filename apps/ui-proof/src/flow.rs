@@ -19,7 +19,8 @@ use navree::http::response::{IntoResponse, Response};
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::flow::{
-    DraftStore, MemoryDrafts, SliderError, SliderLabels, SliderSpec, TreeSelection, WizardError,
+    Decimal, DraftStore, MemoryDrafts, SliderError, SliderLabels, SliderSpec, TreeSelection,
+    WizardError,
 };
 use navree::ui::*;
 use serde::Deserialize;
@@ -98,6 +99,11 @@ fn field(id: &'static str, label: &'static str, control: impl Into<Node>) -> Nod
     Field::new(id, label).control(control).into()
 }
 
+/// A number written out, for a grid with a very small step.
+fn tiny(text: &str) -> Decimal {
+    text.parse().unwrap_or(Decimal::ONE)
+}
+
 fn sliders() -> Element {
     let many_marks = (0..=12).fold(
         Slider::new("many")
@@ -132,6 +138,38 @@ fn sliders() -> Element {
                         .step(0.1_f64)
                         .value(0.3_f64),
                 ),
+                Stack::gap(5).children((
+                    field(
+                        "sl-mix",
+                        "Mix",
+                        Slider::new("mix")
+                            .id("sl-mix")
+                            .max(1)
+                            .any_step()
+                            .value(0.5_f64),
+                    ),
+                    field(
+                        "sl-fine",
+                        "Fine",
+                        Slider::new("fine")
+                            .id("sl-fine")
+                            .max(tiny("0.00001"))
+                            .step(tiny("0.0000001")),
+                    ),
+                    field(
+                        "sl-comma",
+                        "Menge",
+                        Slider::new("menge")
+                            .id("sl-comma")
+                            .max(1)
+                            .step(0.25_f64)
+                            .value(0.5_f64)
+                            .labels(SliderLabels {
+                                decimal_point: ",".into(),
+                                ..SliderLabels::default()
+                            }),
+                    ),
+                )),
                 el("div").children((
                     el("p").attr("id", "sl-price-label").child("Price"),
                     Slider::range("price")
@@ -363,6 +401,55 @@ fn big_page(after: usize) -> (Vec<TreeNode>, Option<(Href, Option<usize>)>) {
     (nodes, more)
 }
 
+/// Choices that reach what is under them, with children the person can't choose and children they
+/// haven't been shown: a disabled child, a chosen node that is disabled, and a branch in pages.
+fn grant_tree() -> Tree {
+    Tree::new("grant", "Grant access")
+        .id("t-grant")
+        .select(TreeSelect::Multiple)
+        .cascade()
+        .node(
+            TreeNode::branch(
+                "proj",
+                "Projects",
+                [
+                    TreeNode::leaf("proj/open", "Open project").selected(true),
+                    TreeNode::leaf("proj/secret", "Secret project").disabled(true),
+                ],
+            )
+            .open(true),
+        )
+        .node(
+            TreeNode::branch(
+                "team",
+                "Teams",
+                [
+                    TreeNode::leaf("team/a", "Team A"),
+                    TreeNode::leaf("team/locked", "Locked team").disabled(true),
+                ],
+            )
+            .open(true),
+        )
+        .node(
+            TreeNode::leaf("kept", "Always on")
+                .selected(true)
+                .disabled(true),
+        )
+        .node(
+            TreeNode::branch(
+                "pool",
+                "Pool in pages",
+                [
+                    TreeNode::leaf("person-0", "Member 0"),
+                    TreeNode::leaf("person-1", "Member 1"),
+                ],
+            )
+            .open(true)
+            .children_total(BIG)
+            .more("/flow/tree/children?parent=big&after=2", Some(BIG - 2)),
+        )
+}
+
 fn hostile_tree() -> Tree {
     Tree::new("hostile", "Hostile names")
         .id("t-hostile")
@@ -387,7 +474,13 @@ fn trees(query: &str) -> Element {
         .attr("method", "post")
         .attr("action", "/flow/echo")
         .children((
-            Stack::gap(4).children((multi_tree(), single_tree(), big_tree(), hostile_tree())),
+            Stack::gap(4).children((
+                multi_tree(),
+                single_tree(),
+                big_tree(),
+                hostile_tree(),
+                grant_tree(),
+            )),
             Button::primary("Post the choices")
                 .attr("id", "t-post")
                 .submit(),
@@ -585,6 +678,20 @@ fn echo(shell: &AppShell, body: &str) -> AppPage {
             "price",
             spec.read_range(&all, "price")
                 .map(|(a, b)| format!("{a}-{b}"))
+                .map_err(|e| (spec, e)),
+        );
+        let spec = SliderSpec::new(0, 1).any_step();
+        judge(
+            "mix",
+            spec.read(&all, "mix")
+                .map(|v| v.to_string())
+                .map_err(|e| (spec, e)),
+        );
+        let spec = SliderSpec::new(0, tiny("0.00001")).step(tiny("0.0000001"));
+        judge(
+            "fine",
+            spec.read(&all, "fine")
+                .map(|v| v.to_string())
                 .map_err(|e| (spec, e)),
         );
         let spec = SliderSpec::new(0, 2);
