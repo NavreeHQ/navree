@@ -11,7 +11,7 @@
 }
 [data-slot=toolbar-tool][data-kind=separator]{align-self:stretch}
 [data-slot=toolbar-group]{display:flex;align-items:center;gap:.25rem}
-[data-orientation=vertical] > [data-slot=toolbar-tool],[data-orientation=vertical] [data-slot=toolbar-group]{flex-direction:column;align-items:stretch}
+[data-orientation=vertical] > [data-slot=toolbar-tool],[data-orientation=vertical] [data-slot=toolbar-group]{flex-direction:column;align-items:stretch;& [data-slot=button]{justify-content:flex-start}}
 [data-slot=toolbar-separator]{align-self:stretch;width:1px;margin-inline:.25rem;background:var(--line-2);
   [data-orientation=vertical] > [data-slot=toolbar-tool] > &{width:auto;height:1px;margin:.25rem 0}
 }

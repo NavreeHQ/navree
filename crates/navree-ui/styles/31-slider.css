@@ -3,24 +3,24 @@
  * filled part and the ticks are SVG whose percentages are attributes, so no inline
  * style is needed. The thumb has the 4px control corner.
  */
-[data-slot=slider]{container-type:inline-size;--thumb-w:14px;--thumb-h:20px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:.875rem;row-gap:0;width:100%;min-width:0;
+[data-slot=slider]{container-type:inline-size;--thumb-w:14px;--thumb-h:24px;display:grid;grid-template-columns:minmax(0,1fr) 4.5rem;align-items:center;column-gap:.875rem;row-gap:0;width:100%;min-width:0;
+  &[data-range]{grid-template-columns:minmax(0,1fr) 7.5rem}
   &[data-labelled]{padding-inline:.75rem}
-  &[data-disabled]{opacity:.5}
 }
-[data-slot=slider-control]{position:relative;grid-column:1;height:20px;min-width:0}
+[data-slot=slider-control]{position:relative;grid-column:1;height:24px;min-width:0}
 /* The track and fill sit inside the half a thumb on each side that the thumb's centre never reaches. */
-[data-slot=slider-graphic],[data-slot=slider-marks]{display:block;position:absolute;inset-inline-start:calc(var(--thumb-w) / 2);width:calc(100% - var(--thumb-w));overflow:visible;pointer-events:none;
-  &:dir(rtl){scale:-1 1}
-}
-[data-slot=slider-graphic]{inset-block-start:0;height:20px}
+[data-slot=slider-graphic],[data-slot=slider-marks]{display:block;position:absolute;inset-inline-start:calc(var(--thumb-w) / 2);width:calc(100% - var(--thumb-w));overflow:visible;pointer-events:none}
+[data-slot=slider-graphic]:dir(rtl){scale:-1 1}
+[data-slot=slider-graphic]{inset-block-start:0;height:24px}
 [data-slot=slider-track]{fill:var(--ink-3)}
 [data-slot=slider-fill]{fill:var(--accent)}
 [data-disabled] [data-slot=slider-fill]{fill:var(--fg-3)}
+[data-disabled] [data-slot=slider-control],[data-disabled] [data-slot=slider-marks]{opacity:.5}
 [data-invalid] [data-slot=slider-fill]{fill:var(--danger)}
 
 [data-slot=slider-input]{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer;touch-action:none;
-  &::-webkit-slider-runnable-track{height:20px;background:transparent;border:0}
-  &::-moz-range-track{height:20px;background:transparent;border:0}
+  &::-webkit-slider-runnable-track{height:24px;background:transparent;border:0}
+  &::-moz-range-track{height:24px;background:transparent;border:0}
   &::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:var(--thumb-w);height:var(--thumb-h);margin-top:0;border:1px solid var(--line-3);border-radius:var(--radius);background:var(--fg);box-shadow:0 1px 2px #0006;cursor:grab}
   &::-moz-range-thumb{box-sizing:border-box;width:var(--thumb-w);height:var(--thumb-h);border:1px solid var(--line-3);border-radius:var(--radius);background:var(--fg);box-shadow:0 1px 2px #0006;cursor:grab}
   &:active::-webkit-slider-thumb{cursor:grabbing}
@@ -47,8 +47,11 @@
 [data-slot=slider-marks]{position:static;grid-column:1;grid-row:2;margin-inline:calc(var(--thumb-w) / 2);width:calc(100% - var(--thumb-w));color:var(--fg-3)}
 [data-slot=slider-marks] line{stroke:var(--line-3);stroke-width:1;shape-rendering:crispEdges}
 [data-slot=slider-marks] text{fill:var(--fg-3);font:12px/1 var(--font-sans);font-variant-numeric:tabular-nums}
-[data-slot=slider-marks]:dir(rtl) text{scale:-1 1;transform-box:fill-box;transform-origin:center}
-[data-slot=slider-value]{grid-column:2;grid-row:1;min-width:2.5ch;color:var(--fg-1);font-size:13px;font-variant-numeric:tabular-nums;text-align:end;white-space:nowrap}
+/* The marks are drawn from each side; the one that fits the direction shows. */
+[data-slot=slider-marks] > g[data-dir=rtl]{display:none}
+[data-slot=slider-marks]:dir(rtl) > g[data-dir=ltr]{display:none}
+[data-slot=slider-marks]:dir(rtl) > g[data-dir=rtl]{display:inline}
+[data-slot=slider-value]{grid-column:2;grid-row:1;min-width:2.5ch;color:var(--fg-1);font-size:13px;font-variant-numeric:tabular-nums;text-align:end;overflow-wrap:anywhere}
 
 /* Many labels on a narrow track: every other one, then three of four, so none overlap. */
 @container (max-width:30rem){[data-slot=slider-mark-labels] text:nth-child(even){display:none}}

@@ -23,6 +23,7 @@
 //! | `/themes/builder` | the theme builder, saving to memory and importing |
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
 //! | `/pages` | error pages, sign-in and the states inside a page, in every case |
+//! | `/flow` | the stepper, slider, tree view and toolbar in every state, and a wizard at `/flow/wizard/start` |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -43,6 +44,7 @@ mod dates;
 mod deal_form;
 mod deals;
 mod display;
+mod flow;
 mod gallery;
 mod icons_flags;
 mod menus;
@@ -80,7 +82,8 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST))
                 .item(NavItem::new("States", "/pages").icon(icons::SHIELD_ALERT))
                 .item(NavItem::new("Display", "/display").icon(icons::LAYERS))
-                .item(NavItem::new("Live activity", "/display/live").icon(icons::ACTIVITY)),
+                .item(NavItem::new("Live activity", "/display/live").icon(icons::ACTIVITY))
+                .item(NavItem::new("Flow", "/flow").icon(icons::LIST_TREE)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -114,7 +117,8 @@ impl Module for ProofModule {
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
             .controller::<themes::ThemePages>()
-            .controller::<pages::Pages>();
+            .controller::<pages::Pages>()
+            .controller::<flow::FlowPages>();
     }
 }
 

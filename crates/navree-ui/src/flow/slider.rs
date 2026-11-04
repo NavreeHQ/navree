@@ -664,19 +664,19 @@ impl Slider {
             .slot("slider-graphic")
             .attr("aria-hidden", "true")
             .attr("focusable", "false")
-            .attr("height", 20_i64)
+            .attr("height", 24_i64)
             .children((
                 el("rect")
                     .slot("slider-track")
                     .attr("x", "0")
-                    .attr("y", 8_i64)
+                    .attr("y", 10_i64)
                     .attr("width", "100%")
                     .attr("height", 4_i64)
                     .attr("rx", 2_i64),
                 el("rect")
                     .slot("slider-fill")
                     .attr("x", pct(fill_from))
-                    .attr("y", 8_i64)
+                    .attr("y", 10_i64)
                     .attr("width", pct(fill_to - fill_from))
                     .attr("height", 4_i64),
             ));
@@ -767,40 +767,49 @@ impl Slider {
             return (None, false);
         }
         let labelled = marks.iter().any(|(_, label)| label.is_some());
-        let lines: Vec<Element> = marks
-            .iter()
-            .map(|(at, _)| {
-                el("line")
-                    .attr("x1", pct(*at))
-                    .attr("x2", pct(*at))
-                    .attr("y1", 0_i64)
-                    .attr("y2", 6_i64)
-            })
-            .collect();
-        let texts: Vec<Element> = marks
-            .iter()
-            .filter_map(|(at, label)| {
-                let label = label.as_ref()?;
-                Some(
-                    el("text")
-                        .attr("x", pct(*at))
-                        .attr("y", 20_i64)
-                        .attr("text-anchor", "middle")
-                        .child(label.clone()),
-                )
-            })
-            .collect();
-        let label_count = texts.len();
+        // Drawn twice: once from the left and once from the right, and the stylesheet shows the one
+        // that fits the page's direction. Nothing in the picture is mirrored by a transform, which
+        // browsers do not agree on for text in SVG.
+        let group = |flip: bool| -> Element {
+            let at_of = |at: f64| if flip { 100.0 - at } else { at };
+            let lines: Vec<Element> = marks
+                .iter()
+                .map(|(at, _)| {
+                    el("line")
+                        .attr("x1", pct(at_of(*at)))
+                        .attr("x2", pct(at_of(*at)))
+                        .attr("y1", 0_i64)
+                        .attr("y2", 6_i64)
+                })
+                .collect();
+            let texts: Vec<Element> = marks
+                .iter()
+                .filter_map(|(at, label)| {
+                    let label = label.as_ref()?;
+                    Some(
+                        el("text")
+                            .attr("x", pct(at_of(*at)))
+                            .attr("y", 20_i64)
+                            .attr("text-anchor", "middle")
+                            .child(label.clone()),
+                    )
+                })
+                .collect();
+            el("g")
+                .attr("data-dir", if flip { "rtl" } else { "ltr" })
+                .children((
+                    el("g").slot("slider-ticks").children(lines),
+                    el("g").slot("slider-mark-labels").children(texts),
+                ))
+        };
+        let label_count = marks.iter().filter(|(_, label)| label.is_some()).count();
         let marks = el("svg")
             .slot("slider-marks")
             .attr("aria-hidden", "true")
             .attr("focusable", "false")
             .attr("height", if labelled { 26_i64 } else { 8_i64 })
             .attr("data-labels", i64::try_from(label_count).unwrap_or(0))
-            .children((
-                el("g").slot("slider-ticks").children(lines),
-                el("g").slot("slider-mark-labels").children(texts),
-            ));
+            .children((group(false), group(true)));
         (Some(marks), labelled)
     }
 }
@@ -844,9 +853,9 @@ mod tests {
     fn the_filled_part_is_drawn_in_attributes_not_style() {
         let out = html(Slider::new("v").value(40));
         assert!(!out.contains("style="), "{out}");
-        assert!(out.contains(r#"data-slot="slider-fill" x="0%" y="8" width="40%""#), "{out}");
+        assert!(out.contains(r#"data-slot="slider-fill" x="0%" y="10" width="40%""#), "{out}");
         let range = html(Slider::range("r").values(25, 75));
-        assert!(range.contains(r#"x="25%" y="8" width="50%""#), "{range}");
+        assert!(range.contains(r#"x="25%" y="10" width="50%""#), "{range}");
     }
 
     #[test]
@@ -898,28 +907,30 @@ mod tests {
             assert!(out.contains("<input"), "{out}");
         }
         let out = html(Slider::range("r").min(i64::MIN).max(u64::MAX).step(1).ticks_every(1));
-        assert!(out.matches("<line").count() <= 101, "{out}");
+        assert!(out.matches("<line").count() <= 202, "{out}");
     }
 
     #[test]
     fn ticks_marks_and_names_are_drawn_where_they_belong() {
         let out = html(Slider::new("v").ticks_every(25));
-        assert_eq!(out.matches("<line").count(), 5, "{out}");
+        // Five ticks, drawn from each side.
+        assert_eq!(out.matches("<line").count(), 10, "{out}");
         assert!(out.contains(r#"x1="50%""#), "{out}");
+        assert!(out.contains(r#"data-dir="rtl""#), "{out}");
         let marked = html(Slider::new("v").mark(0, "0").mark(50, "Half").mark(500, "Off"));
-        assert!(marked.contains(">Half</text>"), "{marked}");
+        assert_eq!(marked.matches(">Half</text>").count(), 2, "{marked}");
         assert!(!marked.contains("Off"), "a mark off the track is left out: {marked}");
         assert!(marked.contains("data-labelled"), "{marked}");
         let named = html(Slider::new("v").max(2).names(["Low", "Mid", "High"]).value(1));
         assert!(named.contains(r#"aria-valuetext="Mid""#), "{named}");
-        assert!(named.contains(">High</text>"), "{named}");
+        assert_eq!(named.matches(">High</text>").count(), 2, "{named}");
         assert!(named.contains(">Mid</output>"), "{named}");
     }
 
     #[test]
     fn a_fine_grid_gets_at_most_101_ticks() {
         let out = html(Slider::new("v").max(1_000_000).ticks_every(1));
-        assert!(out.matches("<line").count() <= 101, "{}", out.matches("<line").count());
+        assert!(out.matches("<line").count() <= 202, "{}", out.matches("<line").count());
     }
 
     #[test]

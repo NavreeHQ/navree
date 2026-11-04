@@ -3,7 +3,7 @@
  * components (4px controls, 6px surfaces, state in words as well as colour).
  */
 [data-slot=stepper]{container-type:inline-size;min-width:0}
-[data-slot=stepper-list]{display:flex;min-width:0}
+[data-slot=stepper-list]{display:flex;flex-wrap:wrap;gap:.75rem 0;min-width:0}
 [data-slot=step]{display:flex;flex:1 1 auto;align-items:flex-start;min-width:0;
   &:last-child{flex:0 1 auto}
   /* The line to the next step. */
@@ -17,7 +17,7 @@
   &:disabled,&[data-disabled]{cursor:default}
 }
 [data-slot=step-indicator]{display:inline-flex;flex:none;align-items:center;justify-content:center;width:2.125rem;height:2.125rem;border:1px solid var(--line-3);border-radius:50%;background:var(--ink-1);color:var(--fg-2);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;transition:background-color .1s,border-color .1s,color .1s}
-[data-slot=step-text]{display:flex;flex-direction:column;min-width:0;padding-block:.375rem;line-height:1.3}
+[data-slot=step-text]{display:flex;flex-direction:column;min-width:0;max-width:16rem;padding-block:.375rem;line-height:1.3}
 [data-slot=step-title]{color:var(--fg-1);font-size:14px;font-weight:500;overflow-wrap:anywhere}
 [data-slot=step-description],[data-slot=step-note]{color:var(--fg-3);font-size:12px;overflow-wrap:anywhere}
 [data-slot=step-note]{font-style:italic}
@@ -27,10 +27,11 @@
 [data-state=done] [data-slot=step-indicator]{border-color:var(--accent);color:var(--accent)}
 [data-state=error] [data-slot=step-indicator]{border-color:var(--danger);color:var(--danger)}
 [data-state=error] [data-slot=step-title]{color:var(--danger)}
-[data-state=disabled] [data-slot=step-indicator],[data-state=disabled] [data-slot=step-text]{opacity:.55}
+[data-state=disabled] [data-slot=step-indicator]{opacity:.55}
+[data-state=disabled] [data-slot=step-title],[data-state=disabled] [data-slot=step-description]{color:var(--fg-3)}
 
 /* Vertical: the line runs down from each indicator. */
-[data-slot=stepper][data-orientation=vertical] > [data-slot=stepper-list]{flex-direction:column}
+[data-slot=stepper][data-orientation=vertical] > [data-slot=stepper-list]{flex-direction:column;flex-wrap:nowrap;gap:0}
 [data-orientation=vertical] > [data-slot=stepper-list] > [data-slot=step]{position:relative;flex:none;padding-bottom:1.25rem;
   &:last-child{padding-bottom:0}
   &:not(:last-child)::after{content:"";position:absolute;inset-block:calc(2.125rem + .375rem) .125rem;inset-inline-start:calc(1.0625rem - 1px);width:2px;height:auto;min-width:0;margin:0;flex:none}

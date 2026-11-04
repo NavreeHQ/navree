@@ -126,18 +126,27 @@ on(document, "keydown", (e) => {
   if (!input || !root || e.altKey || e.ctrlKey || e.metaKey || /** @type {HTMLInputElement} */ (input).disabled) return;
   const field = /** @type {HTMLInputElement} */ (input);
   const rtl = getComputedStyle(field).direction === "rtl";
+  const horizontal = e.key === "ArrowLeft" || e.key === "ArrowRight";
+  // The arrows move the thumb the way it looks: in a right-to-left page the least is at the right, and
+  // browsers differ on whether Right means more there, so the sideways arrows are done here.
+  const toward = e.key === (rtl ? "ArrowLeft" : "ArrowRight") || e.key === "ArrowUp" ? 1 : -1;
   let by = 0;
-  if (e.key === "PageUp") by = 1;
-  else if (e.key === "PageDown") by = -1;
-  else if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "ArrowLeft")) {
-    by = e.key === "ArrowUp" || e.key === (rtl ? "ArrowLeft" : "ArrowRight") ? 1 : -1;
+  let large = false;
+  if (e.key === "PageUp" || e.key === "PageDown") {
+    by = e.key === "PageUp" ? 1 : -1;
+    large = true;
+  } else if (e.shiftKey && (horizontal || e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    by = toward;
+    large = true;
+  } else if (rtl && !e.shiftKey && horizontal) {
+    by = toward;
   }
   if (!by) return;
   e.preventDefault();
   const big = bigStep(root, field);
   const step = num(field.step) > 0 ? num(field.step) : big;
   // Move by whole steps: the browser puts the value on its grid and inside its bounds.
-  const times = Math.max(1, Math.round(big / step));
+  const times = large ? Math.max(1, Math.round(big / step)) : 1;
   const before = field.value;
   for (let n = 0; n < times; n++) {
     if (by > 0) field.stepUp();
