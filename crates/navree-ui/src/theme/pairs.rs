@@ -211,6 +211,8 @@ fn build() -> Vec<Pair> {
             add(T(fg), Tint(Token::Accent, 16, surface), text);
             add(T(fg), Tint(Token::Accent, 30, surface), text);
         }
+        // A sortable item while it is dragged: its text on a thin tint of the accent.
+        add(T(Token::Fg1), Tint(Token::Accent, 6, surface), text);
     }
     // An internal note in a conversation: the text on the panel with 9% amber mixed in.
     add(T(Token::Fg), Mix(Token::Amber, 9, Token::Ink1), text);
