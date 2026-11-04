@@ -129,7 +129,11 @@ for (const name of NAMES) {
     async function open(path, options = {}) {
       const { light, agent, ...rest } = options;
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, bypassCSP: !!light, ...rest });
-      if (agent) await context.addCookies([{ name: "inbox_agent", value: String(agent), url: BASE }]);
+      // The agent is a cookie the server signs: work as them the way the account menu does.
+      if (agent) {
+        const answer = await context.request.post(`${BASE}/as/${agent}`, { headers: { origin: BASE, "content-type": "application/x-www-form-urlencoded" }, data: "", maxRedirects: 0 });
+        assert.ok([302, 303].includes(answer.status()), `worked as ${agent}: ${answer.status()}`);
+      }
       contexts.push(context);
       const page = await context.newPage();
       page.problems = [];
@@ -559,20 +563,26 @@ for (const name of NAMES) {
       assert.equal(await page.locator("#composer-body").inputValue(), "jke?");
       assert.match(page.url(), new RegExp(`/inbox/${ids[0]}$`));
       await page.locator("#composer-body").fill("");
-      await page.locator("#thread-subject").click();
+      // e from the list closes nothing: it works only inside the open conversation.
+      await page.locator(`#conversation-${ids[1]} a`).focus();
+      await page.keyboard.press("e");
+      assert.equal((await held(ids[0])).conversation.status === "closed", false);
+      assert.equal((await held(ids[1])).conversation.status === "closed", false);
+      await page.locator("#thread [data-slot=split-pane-body]").focus();
       // e closes, and e again reopens.
       await page.keyboard.press("e");
       await page.locator("[data-slot=toast]", { hasText: "is closed" }).waitFor();
       assert.equal((await held(ids[0])).conversation.status, "closed");
       await page.getByRole("button", { name: "Reopen" }).waitFor();
+      await page.locator("#thread [data-slot=split-pane-body]").focus();
       await page.keyboard.press("e");
       await page.locator("[data-slot=toast]", { hasText: "back in the open list" }).waitFor();
       assert.equal((await held(ids[0])).conversation.status, "open");
       // / searches; ? opens the list of keys, and Esc closes it.
-      await page.locator("#thread-subject").click();
+      await page.locator("#thread [data-slot=split-pane-body]").focus();
       await page.keyboard.press("/");
       assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("name")), "q");
-      await page.locator("#thread-subject").click();
+      await page.locator("#thread [data-slot=split-pane-body]").focus();
       await page.keyboard.press("?");
       const dialog = page.locator("dialog#shortcuts[open]");
       await dialog.waitFor();
@@ -586,6 +596,36 @@ for (const name of NAMES) {
       // A key with Ctrl is no shortcut either.
       await page.keyboard.press("Control+j").catch(() => {});
       assert.match(page.url(), new RegExp(`/inbox/${ids[0]}$`));
+      await page.done();
+    });
+
+    test("an agent can turn single keys off and on again, and the server keeps the choice", async () => {
+      const page = await open("/inbox");
+      assert.ok((await page.locator("[data-ui-hotkey]").count()) > 0);
+      await page.keyboard.press("?");
+      const dialog = page.locator("dialog#shortcuts[open]");
+      await dialog.waitFor();
+      await dialog.getByRole("button", { name: "Turn single keys off" }).click();
+      await page.locator("[data-slot=toast]", { hasText: "Single-key shortcuts are off" }).waitFor();
+      // No key is drawn for them, on this page or the next, and none acts.
+      assert.equal(await page.locator("[data-ui-hotkey]").count(), 0);
+      assert.equal(await page.locator("[aria-keyshortcuts]").count(), 0);
+      await page.keyboard.press("j");
+      assert.match(page.url(), /\/inbox$/);
+      await page.goto(BASE + "/inbox/1");
+      assert.equal(await page.locator("[data-ui-hotkey]").count(), 0);
+      await page.locator("#thread [data-slot=split-pane-body]").focus();
+      await page.keyboard.press("e");
+      assert.notEqual((await held(1)).conversation.status, "closed");
+      // Ctrl+K still opens the palette.
+      await page.keyboard.press("ControlOrMeta+k");
+      await page.locator("dialog#palette[open]").waitFor();
+      await page.keyboard.press("Escape");
+      // On again, from the same dialog.
+      await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+      await page.locator("dialog#shortcuts[open]").getByRole("button", { name: "Turn single keys on" }).click();
+      await page.locator("[data-slot=toast]", { hasText: "Single-key shortcuts are on" }).waitFor();
+      assert.ok((await page.locator("[data-ui-hotkey]").count()) > 0);
       await page.done();
     });
 
@@ -615,7 +655,7 @@ for (const name of NAMES) {
       await page.waitForURL(/q=webhook/);
       await until(page, () => [...document.querySelectorAll("#conversation-list li[data-key]")].every((li) => /webhook/i.test(li.textContent)), null, "only webhook rows");
       assert.ok((await rowIds(page)).length < all);
-      assert.equal(await page.locator("#thread-subject").isVisible(), true, "the open conversation stays");
+      assert.equal(await page.locator("#thread-head").isVisible(), true, "the open conversation stays");
       await page.locator("#conversations select[name=priority]").selectOption("high");
       await page.waitForURL(/priority=high/);
       // Nothing matches: say so, with a way out.
@@ -657,7 +697,7 @@ for (const name of NAMES) {
       const top = await row.evaluate((el) => el.getBoundingClientRect().top);
       await row.click();
       await page.waitForURL(new RegExp(`/inbox/${target}\\?view=closed$`));
-      await page.locator("#thread-subject").waitFor();
+      await page.locator("#thread-head").waitFor();
       assert.ok((await rowIds(page)).length >= 250, "the rows loaded are still there");
       assert.equal(await page.locator(`#conversation-${target} a`).getAttribute("aria-current"), "page");
       assert.ok(Math.abs((await page.locator(`#conversation-${target} a`).evaluate((el) => el.getBoundingClientRect().top)) - top) < 4, "and where they were");
@@ -705,6 +745,121 @@ for (const name of NAMES) {
       await earlier.click();
       await page.waitForURL(/older=\d{12}/);
       assert.equal(await messageCount(page), 30);
+      await page.done();
+    });
+
+    test("a focused row keeps its focus, and the list its place, through twenty live merges and clock ticks", async () => {
+      const page = await open("/inbox");
+      await live(page, "conversation-list");
+      const ids = await rowIds(page);
+      const target = ids[6];
+      const steady = ids[12];
+      // Every answer the list merges sets its revision again: count them.
+      await page.evaluate(() => {
+        window.__merged = 0;
+        const box = document.querySelector("#conversation-list [data-slot=lazy-items]");
+        new MutationObserver(() => window.__merged++).observe(box, { attributes: true, attributeFilter: ["data-ui-since"] });
+      });
+      await page.locator(`#conversation-${target} a`).focus();
+      await page.evaluate(() => (window.__focused = document.activeElement));
+      const others = (await rowIds(page)).slice(20, 40);
+      for (let i = 0; i < 20; i++) {
+        const merged = await page.evaluate(() => window.__merged);
+        const steadyTop = await page.locator(`#conversation-${steady}`).evaluate((el) => el.getBoundingClientRect().top);
+        let moves = false;
+        switch (i % 4) {
+          case 0: // the clock
+            await post("/__test/tick");
+            break;
+          case 1: // another row below moves to the top
+            await happen("customer", others[i]);
+            moves = true;
+            break;
+          case 2: // the focused row's own clock changes where it stands
+            await post(`/__test/sla?on=${target}&left=${3600 - i * 120}`);
+            break;
+          default: // the focused row moves to the top
+            await happen("customer", target);
+        }
+        await until(page, (n) => window.__merged > n, merged, `merge ${i}`);
+        const state = await page.evaluate(() => ({ same: document.activeElement === window.__focused, key: document.activeElement?.closest("li[data-key]")?.getAttribute("data-key") }));
+        assert.deepEqual(state, { same: true, key: String(target) }, `the focus after merge ${i}`);
+        if (moves) {
+          const top = await page.locator(`#conversation-${steady}`).evaluate((el) => el.getBoundingClientRect().top);
+          assert.ok(Math.abs(top - steadyTop) < 2, `the rows in view stay where they were after merge ${i}: ${steadyTop} then ${top}`);
+        }
+      }
+      // The focused row is the conversation as it is now: at the top, with its clock.
+      assert.equal((await rowIds(page))[0], target);
+      await page.done();
+    });
+
+    test("opening a conversation changes nothing; it is read once its messages show, and the list hears it", async () => {
+      const unread = [];
+      for (let id = 1; id < 60 && unread.length < 2; id++) if ((await held(id)).conversation?.unread > 0) unread.push(id);
+      assert.equal(unread.length, 2);
+      const [id, other] = unread;
+      // A GET from anywhere, a prefetch, an image on another site: nothing is marked.
+      assert.equal((await fetch(`${BASE}/inbox/${other}`)).status, 200);
+      assert.equal((await fetch(`${BASE}/inbox/${other}/messages?dir=live&since=0`, { headers: { "x-navree-ui": "1" } })).status, 200);
+      assert.ok((await held(other)).conversation.unread > 0, "a GET changes nothing");
+      // A page that shows the messages says so with a POST, and the row loses its mark.
+      const page = await open(`/inbox/${id}`);
+      await live(page, "conversation-list");
+      for (const end = Date.now() + 8000; (await held(id)).conversation.unread > 0 && Date.now() < end; ) await sleep(100);
+      assert.equal((await held(id)).conversation.unread, 0, "seen once shown");
+      await until(page, (id) => !document.querySelector(`#conversation-${id} [data-unread]`), id, "the row without its new mark");
+      // A seen from another site is refused.
+      const forged = await fetch(`${BASE}/inbox/${other}/seen`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "cross-site", origin: "https://elsewhere.example" }, body: "" });
+      assert.equal(forged.status, 403);
+      assert.ok((await held(other)).conversation.unread > 0);
+      await page.done();
+    });
+
+    test("a new message is announced briefly, the count line is a polite live region, and the sidebar's counts follow the desk", async () => {
+      const id = await firstOpen();
+      const page = await open(`/inbox/${id}`);
+      await live(page, "thread-messages");
+      await live(page, "inbox-views");
+      assert.equal(await page.locator("#list-summary [role=status][aria-live=polite]").count(), 1);
+      const status = page.locator("#thread-messages > [data-slot=lazy-status]");
+      assert.equal(await status.getAttribute("aria-live"), "polite");
+      await happen("customer", id);
+      await until(page, () => /^New message from /.test(document.querySelector("#thread-messages > [data-slot=lazy-status]")?.textContent || ""), null, "the announcement");
+      // Three at once are one announcement, said once they stop coming.
+      await Promise.all([happen("customer", id), happen("customer", id), happen("customer", id)]);
+      await until(page, () => /^3 new messages/.test(document.querySelector("#thread-messages > [data-slot=lazy-status]")?.textContent || ""), null, "one announcement for three");
+      // The agent's own reply is not announced to them.
+      const said = await status.textContent();
+      await page.locator("#composer-body").fill("On it.");
+      await page.locator("#composer").getByRole("button", { name: "Send" }).click();
+      await page.locator("[data-slot=toast]", { hasText: "Reply sent" }).waitFor();
+      await until(page, () => document.querySelector("#thread-messages li[data-key]:last-child article")?.getAttribute("data-author") === "agent", null, "the reply");
+      assert.equal(await page.locator("#thread-messages li[data-key]:last-child").getAttribute("data-ui-quiet"), "", "drawn as the agent's own");
+      assert.equal(await status.textContent(), said);
+      // A customer nobody has answered writes in: Unassigned counts one more.
+      const count = () => page.locator("#inbox-views a[title=Unassigned] [data-slot=sidebar-count]").textContent();
+      const before = Number(await count());
+      await happen("new");
+      await until(page, (n) => Number(document.querySelector("#inbox-views a[title=Unassigned] [data-slot=sidebar-count]")?.textContent) === n, before + 1, "the sidebar's count");
+      await page.done();
+    });
+
+    test("a snoozed conversation comes back on its day, and leaves the snoozed list live", async () => {
+      const id = await firstOpen();
+      const snoozed = await fetch(`${BASE}/inbox/${id}/snooze/tomorrow`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: BASE, "x-navree-ui": "1" }, body: "" });
+      assert.equal(snoozed.status, 200);
+      assert.equal((await held(id)).conversation.status, "snoozed");
+      const page = await open("/inbox?view=snoozed");
+      await live(page, "conversation-list");
+      assert.ok((await rowIds(page)).includes(id));
+      assert.equal(await (await post("/__test/wake?left=0")).text(), "0", "not today");
+      assert.notEqual(await (await post("/__test/wake?left=1")).text(), "0", "tomorrow");
+      const { conversation, last } = await held(id);
+      assert.equal(conversation.status, "open");
+      assert.equal(conversation.snoozed_until, null);
+      assert.match(last.body, /^Back from snooze/);
+      await until(page, (id) => !document.querySelector(`#conversation-${id}`), id, "the row gone from the snoozed list");
       await page.done();
     });
 
@@ -803,6 +958,19 @@ for (const name of NAMES) {
       await page.locator("#snooze input[type=date]").fill(day);
       await submit(page.locator("#snooze").getByRole("button", { name: "Snooze", exact: true }));
       assert.equal((await held(id)).conversation.snoozed_until, day);
+      await page.done();
+    });
+
+    test("with JavaScript off, a button marks a conversation read", async () => {
+      let id = 0;
+      for (let at = 1; at < 60 && !id; at++) if ((await held(at)).conversation?.unread > 0) id = at;
+      const page = await open(`/inbox/${id}`, { javaScriptEnabled: false });
+      assert.ok((await held(id)).conversation.unread > 0, "opening it changed nothing");
+      const loaded = page.waitForEvent("load");
+      await page.getByRole("button", { name: "Mark as read" }).click();
+      await loaded;
+      assert.equal((await held(id)).conversation.unread, 0);
+      assert.equal(await page.getByRole("button", { name: "Mark as read" }).count(), 0);
       await page.done();
     });
 
