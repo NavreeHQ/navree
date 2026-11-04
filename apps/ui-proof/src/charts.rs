@@ -474,6 +474,11 @@ static EVENTS: LazyLock<Vec<(DateTime<Utc>, &'static str)>> = LazyLock::new(|| {
     out
 });
 
+/// A count with its thousands marked.
+fn whole(count: u64) -> String {
+    NumberFormat::integer().format(count as f64, &NumberLocale::english())
+}
+
 fn limits() -> RangeRules {
     RangeRules::new(
         DateRules::new()
@@ -526,9 +531,9 @@ fn report_page(shell: &AppShell, query: &ReportQuery) -> AppPage {
                 .children((form, report.grain_links("/charts/report", "Grain"))),
             refused,
             Grid::cols(3).gap(3).children((
-                Stat::new("Events", total.to_string()),
-                Stat::new("Opened", opened.iter().sum::<u64>().to_string()),
-                Stat::new("Reported", reported.iter().sum::<u64>().to_string()),
+                Stat::new("Events", whole(total)),
+                Stat::new("Opened", whole(opened.iter().sum::<u64>())),
+                Stat::new("Reported", whole(reported.iter().sum::<u64>())),
             )),
             Card::new().body(
                 report
