@@ -217,7 +217,7 @@
         "name": "new",
         "generics": "",
         "args": "actor: impl Into<Node>, verb: impl Into<Node>",
-        "doc": "`actor` did `verb`: \"Lena Fischer\" \"replied to\"."
+        "doc": "`actor` did `verb`: \"Manpreet Gill\" \"replied to\"."
       }
     ],
     "methods": [
@@ -4048,13 +4048,13 @@
         "name": "new",
         "generics": "",
         "args": "code: CountryCode",
-        "doc": "The flag of `code`: `Flag::new(flags::AE)`."
+        "doc": "The flag of `code`: `Flag::new(flags::IN)`."
       },
       {
         "name": "country",
         "generics": "",
         "args": "code: impl AsRef<str>",
-        "doc": "The flag of a code that comes from data, such as `\"ae\"` or `\"GB-SCT\"`. A code no flag has draws a neutral placeholder and never panics."
+        "doc": "The flag of a code that comes from data, such as `\"in\"` or `\"GB-SCT\"`. A code no flag has draws a neutral placeholder and never panics."
       }
     ],
     "methods": [
@@ -5874,7 +5874,7 @@
         "name": "country",
         "generics": "",
         "args": "code: &str",
-        "doc": "The country chosen when the field has no number of its own, by its code (`\"GB\"`); an unknown code chooses none."
+        "doc": "The country chosen when the field has no number of its own, by its code (`\"IN\"`); an unknown code chooses none."
       },
       {
         "name": "number",
@@ -7910,7 +7910,7 @@
         "name": "zone_note",
         "generics": "",
         "args": "text: impl Into<String>",
-        "doc": "Writes a note under the picker about the clock it counts on, such as `Times are in Europe/London (UTC+0)`."
+        "doc": "Writes a note under the picker about the clock it counts on, such as `Times are in Asia/Kolkata (UTC+5:30)`."
       },
       {
         "name": "label",
