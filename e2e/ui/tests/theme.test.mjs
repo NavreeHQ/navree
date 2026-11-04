@@ -214,6 +214,24 @@ for (const name of NAMES) {
       });
     }
 
+    test("high contrast: every text on the module pages reaches 7:1 by axe's enhanced rule, light and dark", async () => {
+      const page = await open(null);
+      const found = new Set();
+      for (const mode of ["light", "dark"]) {
+        for (const path of ["/gallery", "/", "/deals", "/deals/new", "/menus", "/display", "/dates", "/select", "/phone"]) {
+          await page.goto(`${BASE}${path}?theme=contrast&mode=${mode}`, { waitUntil: "load" });
+          await page.evaluate(axeSource);
+          const under = await page.evaluate(async () => {
+            const out = await window.axe.run({ exclude: [["[inert]"]] }, { runOnly: ["color-contrast-enhanced"] });
+            return out.violations.flatMap((v) => v.nodes.map((n) => `${n.any[0]?.data?.contrastRatio}:1 ${n.target.join(" ")}`));
+          });
+          for (const line of under) found.add(`${mode} ${path}: ${line}`);
+        }
+      }
+      assert.deepEqual([...found], []);
+      await page.done();
+    });
+
     test("1440px: the component gallery is axe clean in every built-in theme, light and dark", async () => {
       const page = await open(null);
       for (const theme of BUILT_IN) {
