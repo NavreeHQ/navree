@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { active, all, body, byId, clean, closest, cookies, emit, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { active, all, attr, body, byId, clean, closest, cookies, emit, every, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -16,6 +16,12 @@ const MOST = 10000;
 /** @type {Map<string, {at: number, epoch: number, cookies: string, page: Promise<Response>}>} */
 const prefetched = new Map();
 let generation = 0;
+/** Moves on with every page or region shown: one that waited for its styles shows only if no later one began. */
+let shows = 0;
+/** What a page's look hangs on, on `<html>`: the server writes them, and a swap brings them along. */
+const LOOK = ["data-theme", "data-mode", "data-density"];
+/** How long a swap waits for stylesheets it brings before it shows anyway. */
+const STYLE_WAIT = 4000;
 /** Moves on whenever the page is swapped for another, or is about to be. */
 let swaps = 0;
 /** How many times the page has been swapped: what was typed on one belongs to it. */
@@ -101,23 +107,61 @@ function prefetch(url) {
 /**
  * Adds the stylesheets and the toolkit's modules of `doc` that this page lacks. A
  * script from `DOMParser` never runs, so a module gets a new element; no other
- * script loads, whatever the page's head says.
+ * script loads, whatever the page's head says. Resolves when the stylesheets it
+ * added have loaded or failed, or after `STYLE_WAIT`: a page that changes theme
+ * shows only once its theme is there, so it never paints in the wrong one.
  * @param {Document} doc
+ * @returns {Promise<unknown> | null}
  */
 function mergeHead(doc) {
   setTitle(titleOf(doc));
+  /** @type {Promise<unknown>[]} */
+  const loading = [];
   for (const el of head(doc).querySelectorAll("link[rel=stylesheet],script[src]")) {
-    const attr = el.nodeName === "LINK" ? "href" : "src";
-    const url = el.getAttribute(attr) || "";
-    if (head().querySelector(`[${attr}="${CSS.escape(url)}"]`)) continue;
-    if (el.nodeName === "LINK") head().append(el);
-    else if (el.getAttribute("type") === "module" && ownModule(url)) {
+    const name = el.nodeName === "LINK" ? "href" : "src";
+    const url = attr(el, name) || "";
+    if (head().querySelector(`[${name}="${CSS.escape(url)}"]`)) continue;
+    if (el.nodeName === "LINK") {
+      loading.push(new Promise((done) => {
+        on(el, "load", done, { once: true });
+        on(el, "error", done, { once: true });
+      }));
+      head().append(el);
+    } else if (attr(el, "type") === "module" && ownModule(url)) {
       const script = /** @type {HTMLScriptElement} */ (make("script"));
       script.type = "module";
       script.src = url;
       head().append(script);
     }
   }
+  return loading.length ? Promise.race([Promise.all(loading), new Promise((done) => setTimeout(done, STYLE_WAIT))]) : null;
+}
+
+/**
+ * Takes the look of `doc` onto this page: the theme, mode and density on `<html>`,
+ * and the `color-scheme` meta. Only those: nothing else of the new root is copied.
+ * @param {Document} doc
+ */
+function takeLook(doc) {
+  const to = root(doc), from = root();
+  for (const name of LOOK) {
+    const value = attr(to, name);
+    if (value === null) unset(from, name);
+    else if (attr(from, name) !== value) set(from, name, value);
+  }
+  const scheme = head(doc).querySelector("meta[name=color-scheme]");
+  const mine = head().querySelector("meta[name=color-scheme]");
+  if (scheme && mine) set(mine, "content", attr(scheme, "content") || "");
+}
+
+/**
+ * Takes out the theme stylesheets `doc` no longer names, once it shows: a theme
+ * left behind matches nothing, but would stay loaded for good.
+ * @param {Document} doc
+ */
+function dropSheets(doc) {
+  const wanted = new Set([...head(doc).querySelectorAll("link[data-ui-theme]")].map((link) => attr(link, "href")));
+  for (const link of head().querySelectorAll("link[data-ui-theme]")) if (!wanted.has(attr(link, "href"))) link.remove();
 }
 
 /**
@@ -128,6 +172,7 @@ function mergeHead(doc) {
  */
 export async function showPage(response, how = {}) {
   const url = how.url || response.url;
+  const ticket = ++shows;
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
   const build = root(doc).getAttribute("data-build");
   // A page from another build, or one without the runtime, loads for real.
@@ -140,18 +185,29 @@ export async function showPage(response, how = {}) {
   if (!how.region) swaps++;
   // A toast the last request left joins the standing toaster; the page's own is never morphed.
   adoptToasts(doc);
+  // The styles it brings first: a page or region shows only in its own theme.
+  const styles = mergeHead(doc);
+  if (styles) await styles;
+  if (ticket !== shows) return;
   if (how.region) {
     const from = byId(how.region), to = byId(how.region, doc);
     if (from && to) {
+      takeLook(doc);
       morph(from, to);
+      dropSheets(doc);
       setTitle(titleOf(doc));
       return;
     }
   }
-  mergeHead(doc);
+  takeLook(doc);
   morph(body(), body(doc), { reset: !how.region && !how.keep });
-  if (how.push !== false) scrollTo(0, 0);
-  /** @type {HTMLElement | null} */ (one("main"))?.focus({ preventScroll: true });
+  dropSheets(doc);
+  // The same page again is no navigation: the reader stays where they were, focus and scroll.
+  const stay = how.keep && active() !== body() && holds(body(), active());
+  if (!stay) {
+    if (how.push !== false) scrollTo(0, 0);
+    /** @type {HTMLElement | null} */ (one("main"))?.focus({ preventScroll: true });
+  }
   announce(titleOf(doc));
   whenQuiet();
 }
