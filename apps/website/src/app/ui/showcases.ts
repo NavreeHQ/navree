@@ -17,6 +17,7 @@ import store from "@content/showcase/store.json";
 import toolkit from "@content/ui/toolkit.json";
 
 import type { Excerpt, ExcerptPart } from "@/lib/excerpt";
+import { indian } from "@/lib/format";
 import { uiRenderCeilings } from "@/lib/ui-page-data";
 
 export type ShowcaseView = {
@@ -77,8 +78,6 @@ export type Showcase = AppCard & {
   run: string;
 };
 
-/** 2,00,000: Indian digit grouping. */
-export const indian = (n: number) => n.toLocaleString("en-IN");
 const seconds = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 
