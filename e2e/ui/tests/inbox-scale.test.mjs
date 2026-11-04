@@ -11,6 +11,7 @@
 
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
+import { brotliCompressSync } from "node:zlib";
 import { after, before, describe, test } from "node:test";
 import { chromium } from "playwright";
 
@@ -51,10 +52,14 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
     const bytes = { document: 0, script: 0, stylesheet: 0, font: 0, other: 0 };
+    const scripts = new Set();
     const client = await context.newCDPSession(page);
     await client.send("Network.enable");
     const kinds = new Map();
-    client.on("Network.responseReceived", (e) => kinds.set(e.requestId, e.type));
+    client.on("Network.responseReceived", (e) => {
+      kinds.set(e.requestId, e.type);
+      if (e.type === "Script") scripts.add(new URL(e.response.url).pathname);
+    });
     client.on("Network.loadingFinished", (e) => {
       const kind = (kinds.get(e.requestId) || "other").toLowerCase();
       bytes[kind in bytes ? kind : "other"] += e.encodedDataLength;
@@ -74,7 +79,7 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
         }),
     );
     await context.close();
-    return { ...timing, bytes };
+    return { ...timing, bytes, scripts: [...scripts].map((path) => path.replace(/^\/_navree\/ui\//, "").replace(/-[0-9a-f]{12}\.js$/, "")).sort() };
   }
 
   async function measure(label, path) {
@@ -89,6 +94,7 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
       dom_nodes: runs[0].nodes,
       bytes: Object.fromEntries(Object.entries(runs[0].bytes).map(([k, v]) => [k, v])),
       bytes_total: Object.values(runs[0].bytes).reduce((a, b) => a + b, 0),
+      scripts: runs[0].scripts,
       runs: RUNS,
     };
     numbers[label] = result;
@@ -166,18 +172,51 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
     await context.close();
   });
 
-  test("every query reads by an index: list, thread, search, live", async () => {
+  test("every query reads by an index that matches all it filters on: every view under every filter, thread, search, live", async () => {
     const plans = await (await fetch(`${BASE}/__test/explain`)).text();
     numbers["query plans"] = plans;
     const sections = plans.split("\n## ").map((part) => part.replace(/^## /, ""));
+    let checked = 0;
     for (const section of sections) {
-      const [name] = section.split("\n");
+      const [name, expectLine = ""] = section.split("\n");
       if (!name.trim()) continue;
-      const plan = section.split("\n").slice(2).join("\n");
+      const plan = section.split("\n").slice(3).join("\n");
       assert.ok(/USING (COVERING )?INDEX|USING INTEGER PRIMARY KEY|VIRTUAL TABLE INDEX/.test(plan), `${name}: ${plan}`);
-      assert.ok(!/SCAN conversations\b(?! USING)|SCAN messages\b(?! USING)/.test(plan), `${name} scans a table: ${plan}`);
+      // A walk of a whole table or index, checking each row, is a SCAN: a filter that
+      // matches little would read everything.
+      assert.ok(!/^\s*SCAN (conversations|messages)\b/m.test(plan), `${name} walks a table: ${plan}`);
+      // The index matches every column the query filters on with "=": one of the
+      // indexes the query names, each good enough.
+      const expect = expectLine.replace(/^expect:/, "").trim();
+      const search = plan.split("\n").find((line) => /SEARCH (conversations|messages)\b/.test(line)) || "";
+      if (expect) assert.ok(expect.split("|").some((columns) => columns.trim().split(/\s+/).every((column) => search.includes(`${column}=?`))), `${name}: the index matches ${expect}: ${plan}`);
       if (!name.startsWith("count")) assert.ok(!/USE TEMP B-TREE FOR ORDER BY/.test(plan) || name.startsWith("search"), `${name} sorts: ${plan}`);
+      checked++;
     }
+    assert.ok(checked >= 20, `${checked} plans`);
+  });
+
+  test("a live answer sends only what changed: after a clock tick, and after one change", async () => {
+    const UA = { "x-navree-ui": "1" };
+    const html = await (await fetch(`${BASE}/inbox`)).text();
+    const list = html.slice(html.indexOf('id="conversation-list"'));
+    const since = /data-slot="lazy-items"[^>]*data-ui-since="([^"]+)"/.exec(list)[1];
+    const cursors = [...list.matchAll(/data-cursor="(\d{24})"/g)].map((m) => m[1]);
+    const keys = [...list.matchAll(/<li data-key="(\d+)"/g)].map((m) => m[1]);
+    const ask = async (from) => {
+      const r = await fetch(`${BASE}/inbox/rows?dir=live&since=${encodeURIComponent(from)}&from=${cursors[0]}&to=${cursors.at(-1)}`, { headers: UA });
+      const body = Buffer.from(await r.arrayBuffer());
+      return { rows: (body.toString().match(/<li data-key=/g) || []).length, bytes: body.length, brotli: brotliCompressSync(body).length, next: r.headers.get("x-ui-since") };
+    };
+    await fetch(`${BASE}/__test/tick`, { method: "POST" });
+    const tick = await ask(since);
+    await fetch(`${BASE}/__test/step?what=customer&on=${keys[10]}`, { method: "POST" });
+    const change = await ask(tick.next);
+    numbers["live answer"] = { window: cursors.length, tick: { rows: tick.rows, bytes: tick.bytes, brotli: tick.brotli }, change: { rows: change.rows, bytes: change.bytes, brotli: change.brotli } };
+    // Drawn a moment ago, the window's times read the same: a tick sends a row only if
+    // its text moved. One change sends that row.
+    assert.ok(tick.rows <= 5, JSON.stringify(numbers["live answer"]));
+    assert.ok(change.rows >= 1 && change.rows <= 5, JSON.stringify(numbers["live answer"]));
   });
 
   test("server times at full size, 200 requests each, four at a time", async () => {
@@ -196,6 +235,8 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
       "list: the first page": () => `/inbox/rows`,
       "list: a page deep in the closed list": (i) => `/inbox/rows?view=closed&dir=end&cursor=${deep[i % deep.length]}`,
       "search": (i) => `/inbox/rows?view=closed&q=${["booking", "invoice", "webhook", "refund", "calendar"][i % 5]}`,
+      "list: closed, a channel and a priority that match little": (i) => `/inbox/rows?view=closed&channel=${["api", "phone", "in-app"][i % 3]}&priority=urgent`,
+      "page: closed, api and urgent": () => `/inbox?view=closed&channel=api&priority=urgent`,
       "thread: the newest thirty": (i) => `/inbox/${1001 + ((i * 37) % 99000)}/messages`,
       "thread: thirty older": (i) => `/inbox/${1001 + ((i * 37) % 99000)}/messages?dir=start&cursor=999999999999`,
       "page: the inbox": () => `/inbox`,
