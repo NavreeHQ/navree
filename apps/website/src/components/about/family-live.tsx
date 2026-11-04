@@ -41,7 +41,7 @@ const SWAY = { x: 28, y: 16, scroll: 14 } as const;
 type Nav = Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
 type CaptureWindow = Window & {
   __navreeAboutCapture?: boolean;
-  __navreeAboutScene?: { ready: boolean; render(t: number): void; glyphs: number };
+  __navreeAboutScene?: { ready: boolean; render(t: number, view?: { x: number; y: number }): void; glyphs: number };
 };
 
 const storage = {
@@ -114,7 +114,10 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
     let last = 0;
     let lastDraw = 0;
     const view = { x: 0, y: 0 };
-    const target = { x: 0, y: 0, scroll: 0 };
+    const target = { x: 0, y: 0 };
+    let seen = t >= BEATS.settled;
+    // An opening interrupted (scrolled away, tab hidden) resumes as the finished picture.
+    let interrupted = false;
     // Frame budget, and stepping down when frames come late.
     const coarse = window.matchMedia("(pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 4) < 6;
     let interval = 1000 / (coarse ? 30 : 60);
@@ -147,7 +150,10 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
       lastDraw = now;
       t += dt * rate;
       if (rate > 1 && t >= BEATS.settled) rate = 1;
-      if (t >= BEATS.settled) storage.set("session", SEEN_KEY, "1");
+      if (!seen && t >= BEATS.settled) {
+        seen = true;
+        storage.set("session", SEEN_KEY, "1");
+      }
       const k = 1 - Math.exp(-dt * 5);
       const scrollY = ((size.top + size.height / 2 - window.scrollY - window.innerHeight / 2) / window.innerHeight) * SWAY.scroll;
       view.x += (target.x - view.x) * k;
@@ -176,12 +182,19 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
       }
       if (running()) {
         if (!raf) {
+          if (interrupted && t < BEATS.settled) {
+            t = BEATS.settled;
+            rate = 1;
+            draw();
+          }
+          interrupted = false;
           last = 0;
           raf = requestAnimationFrame(frame);
         }
       } else if (raf) {
         cancelAnimationFrame(raf);
         raf = 0;
+        if (!paused) interrupted = true;
       }
     };
 
@@ -197,8 +210,7 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
           measure();
           const font = getComputedStyle(canvas).fontFamily;
           await document.fonts.load(`32px ${font}`, "01{}()#[]").catch(() => []);
-          const { createScene } = await import("./scene/scene");
-          const { TIERS } = await import("./scene/layout");
+          const { createScene, TIERS } = await import("./scene/scene");
           if (dead) return;
           const built = await createScene({
             canvas,
@@ -208,7 +220,6 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
             width: size.width,
             height: size.height,
             pixelRatio: ratio,
-            antialias: size.width >= 640 && ratio < 2,
           });
           if (dead) {
             built?.dispose();
@@ -222,7 +233,7 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
           if (capture) {
             (window as CaptureWindow).__navreeAboutScene = {
               ready: true,
-              render: (time: number) => built.render(time),
+              render: (time: number, at?: { x: number; y: number }) => built.render(time, at),
               glyphs: built.glyphs,
             };
             return;

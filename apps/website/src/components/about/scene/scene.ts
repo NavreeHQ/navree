@@ -40,6 +40,8 @@ import { CODE, IMAGE } from "../picture.ts";
 import { drawAtlas } from "./atlas.ts";
 import { buildDepth } from "./depth.ts";
 import { buildLayout, type Tier } from "./layout.ts";
+
+export { TIERS } from "./layout.ts";
 import { glyphFragment, glyphVertex, pictureFragment, pictureVertex } from "./shaders.ts";
 import { CENTER, DEPTH, FOV, toWorld } from "./space.ts";
 import { BEATS, FALL, PULSE, SLOW_FOR, TYPING, cameraAt, levels, progress } from "./timeline.ts";
@@ -55,7 +57,6 @@ export type SceneOptions = {
   width: number;
   height: number;
   pixelRatio: number;
-  antialias: boolean;
 };
 
 export type LiveScene = {
@@ -89,7 +90,7 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
   try {
     renderer = new WebGLRenderer({
       canvas: opts.canvas,
-      antialias: opts.antialias,
+      antialias: false,
       alpha: false,
       powerPreference: "low-power",
       preserveDrawingBuffer: false,
