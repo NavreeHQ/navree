@@ -27,9 +27,8 @@ function showsDemo(frame: HTMLIFrameElement): boolean {
  * served by the demo app at `/demo/ui/`, where every control works. Until the demo
  * says it is up, and whenever it isn't (it doesn't answer, or a page in the frame
  * isn't one of its own: an error from the proxy, say), the frame shows `picture`,
- * the static preview, which says what each control would ask a server for. The
- * live frame loads only after the demo has answered, so a reader never sees a
- * page that isn't there.
+ * the static preview, inert and captioned. The live frame loads only after the
+ * demo has answered, so a reader never sees a page that isn't there.
  */
 export function LiveDemo({ live, title, picture }: { live: string; title: string; picture: ReactNode }) {
   const [state, setState] = useState<"asking" | "live" | "picture">("asking");
@@ -48,13 +47,14 @@ export function LiveDemo({ live, title, picture }: { live: string; title: string
   }, []);
 
   if (state !== "live") {
+    // A picture, not controls to use: out of the focus order and the pointer's reach.
     return (
       <div data-live-demo={state}>
-        {picture}
+        <div inert>{picture}</div>
         {state === "picture" ? (
           <p className="border-t border-line px-4 py-2.5 text-xs leading-relaxed text-fg-3">
-            A picture of the builder: the live demo isn&apos;t answering, so each control says what your app would
-            ask its server for.
+            A picture of the builder for one draft: the live demo isn&apos;t answering right now, so its controls are
+            off. In your app, each change redraws the page.
           </p>
         ) : null}
       </div>

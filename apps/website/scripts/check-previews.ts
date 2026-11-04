@@ -180,6 +180,9 @@ const own: Record<string, (page: Page, frame: Frame, iframe: Locator, fail: (wha
     }));
     if (Math.abs(drawn.shown - drawn.own) > 1) fail(`the builder is scaled: ${drawn.own} px drawn in ${Math.round(drawn.shown)} px`);
     if (drawn.shown < drawn.column * 0.95) fail(`the builder is ${Math.round(drawn.shown)} px wide in a ${drawn.column} px column`);
+    // In place of the live demo, the picture's controls are off; on its own, a choice
+    // says what it would ask the app's server for, and goes nowhere.
+    if (await iframe.evaluate((el) => !!el.closest("[inert]"))) return;
     const at = frame.url();
     await frame.locator("label[data-slot=theme-choice]", { hasText: "Violet" }).first().click();
     await wait(300);
@@ -293,6 +296,7 @@ async function main() {
           if (DEMO === "live" && shown !== "live") fail(`the live demo is not shown (${shown})`);
           if (DEMO === "down" && shown !== "picture") fail(`the picture is not shown while the demo is down (${shown})`);
           if (shown === "picture" && !(await demo.first().textContent())?.includes("isn't answering")) fail("the picture doesn't say the demo isn't answering");
+          if (shown === "picture" && !(await demo.first().locator("[inert] iframe").count())) fail("the picture in place of the demo is not inert");
         }
         const iframes = page.locator(".ui-preview iframe");
         const count = await iframes.count();
@@ -320,11 +324,13 @@ async function main() {
           await wait(400);
           frames++;
           const home = frame.url();
+          // A picture shown in place of the live demo is inert: there is nothing to open in it.
+          const inert = await iframe.evaluate((el) => !!el.closest("[inert]"));
           if (MEASURE && !live && viewport === viewports[0] && !(id in heights)) heights[id] = await heightOf(frame);
 
           // Every opener, one at a time.
           const openers = frame.locator(OPENERS);
-          const many = Math.min(await openers.count(), MOST_OPENERS);
+          const many = inert ? 0 : Math.min(await openers.count(), MOST_OPENERS);
           for (let k = 0; k < many; k++) {
             const opener = openers.nth(k);
             if (!(await opener.isVisible()) || !(await opener.isEnabled())) continue;
@@ -360,7 +366,7 @@ async function main() {
 
           // Hover cards and tooltips stay open while the pointer rests.
           const hovers = frame.locator("[data-ui-hover]");
-          const hovered = Math.min(await hovers.count(), MOST_HOVERS);
+          const hovered = inert ? 0 : Math.min(await hovers.count(), MOST_HOVERS);
           for (let k = 0; k < hovered; k++) {
             const trigger = hovers.nth(k);
             if (!(await trigger.isVisible())) continue;
@@ -385,7 +391,7 @@ async function main() {
           // A submit says what it would send; nothing is posted and the frame stays. The
           // live demo's forms post to its server, which its own check works through.
           const submits = frame.locator("button[type=submit], input[type=submit]");
-          const sent = live ? 0 : Math.min(await submits.count(), MOST_SUBMITS);
+          const sent = live || inert ? 0 : Math.min(await submits.count(), MOST_SUBMITS);
           for (let k = 0; k < sent; k++) {
             const submit = submits.nth(k);
             if (!(await submit.isVisible()) || !(await submit.isEnabled())) continue;
