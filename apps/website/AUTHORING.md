@@ -353,6 +353,14 @@ fails when it is stale, so nothing on these pages is drawn by hand.
   The preview is a static page rendered by navree-ui with its own stylesheet,
   framed, so the toolkit's CSS and the site's never meet. Add `defer` to a
   whole page drawn below the fold: its frame then loads after the page has.
+  A preview has no server: a link, a submit or a request in it shows a short
+  note saying what the app would do instead, and nothing leaves the frame.
+  A popup that opens in a preview grows the frame while it is open, so give
+  an example that opens a list a `.height()` with room for it.
+- `<UiPreview example="theme-builder/default" live="/demo/ui/themes/builder?base=ocean&mode=dark" />`:
+  with `live`, the frame shows that page of the live theme demo when the demo
+  answers, and the example's picture, with a line saying the demo is down,
+  when it doesn't. See "The live theme demo" below.
 - `<UiAnatomy component="button" />`: the component's `data-slot` parts.
 - `<UiProps type="Button" />`: a type's constructors and methods, or an
   enum's variants, read from the toolkit's source.
@@ -365,6 +373,39 @@ fails when it is stale, so nothing on these pages is drawn by hand.
 
 To add an example, write the function, list it in its module's `all()`,
 run `cargo run -p ui-docs`, then use its id in a page.
+
+After `pnpm build`, `pnpm check:previews` opens every popup, list, picker,
+menu and dialog in every preview at a desktop and a phone width, and fails
+on one that is cut by its frame, covers its own control or makes the frame
+jump, and on any console error or failed request. `pnpm check:previews
+--measure` also writes the height each preview settles at to
+`src/components/ui-docs/heights.json`; build again and the frames start at
+that height, so the page doesn't shift as they load.
+
+### The live theme demo
+
+The theme builder needs a server, so its docs page frames a small Navree
+app, `apps/theme-demo`, served at `navree.com/demo/ui/`. It has the
+builder, the themes and the layouts and nothing else, and keeps nothing:
+a draft lives in its address, the theme menu's choice in the reader's
+cookie, and Save and Import check a theme without storing it. It refuses a
+post from another site, allows 300 requests a minute per visitor, and only
+navree.com may frame it.
+
+The docs ask `/demo/ui/health` first and load the live frame only when the
+demo answers; otherwise, and whenever a page in the frame isn't one of the
+demo's own, they show the builder's picture. To try it locally:
+
+```sh
+cargo run -p theme-demo                          # http://127.0.0.1:8095/demo/ui/themes/builder
+cd apps/website && pnpm build
+DEMO_UI=http://127.0.0.1:8095 pnpm serve         # the site, with /demo/ui/ passed to the demo
+```
+
+On the server, `deploy/navree.com/theme-demo.sh` builds it and runs it under
+pm2 as `navree-theme-demo` on `127.0.0.1:8095`, with no sudo;
+`deploy/navree.com/demo-ui-setup.sh`, run once with sudo, adds the nginx
+locations for `/demo/ui/` and `/_navree/ui/` and the request limit.
 
 ### Plain Markdown
 
