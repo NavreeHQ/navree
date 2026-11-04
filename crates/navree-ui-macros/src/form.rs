@@ -175,7 +175,11 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         // A `Many<T>` is a multi-select; its options come from the element's type.
         let many = many_inner(inner);
         let element = many.unwrap_or(inner);
-        let inferred = inferred_widget(&ui, type_name(element).as_deref());
+        let element_name = type_name(element);
+        let inferred = inferred_widget(&ui, element_name.as_deref());
+        // A date and time read as UTC: what the widget alone can't say, and the form needs
+        // to read the field.
+        let instant = matches!(element_name.as_deref(), Some("DateTime"));
         let phone_type = matches!(type_name(inner).as_deref(), Some("Phone" | "PhoneNumber"));
         let widget = match &hint.widget {
             // A phone input on text keeps the number as E.164 text.
@@ -232,6 +236,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 wide: #wide,
                 options: #options,
                 max: #max,
+                instant: #instant,
                 date_rules: #date_rules,
                 time_rules: #time_rules,
             },

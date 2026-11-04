@@ -29,7 +29,7 @@ use crate::components::{
     Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect,
     RadioGroup, Switch, Textarea,
 };
-use crate::dates::{DateLocale, DatePicker, TimePicker};
+use crate::dates::{DateLocale, DatePicker, DateRules, TimePicker, TimeRules};
 use crate::html::Href;
 use crate::node::{Element, Node, Uses, el};
 use crate::op::{Envelope, Op, UI_HEADER};
@@ -118,6 +118,9 @@ pub struct FormField {
     /// The most values a [`Many`] field takes: the browser stops at it, and
     /// [`decode`] refuses a post that goes past it.
     pub max: Option<u32>,
+    /// A `DateTime<Utc>`: the date and time a browser posts have no zone, and are read as
+    /// UTC. A value posted with its own offset is read with it.
+    pub instant: bool,
     /// A date picker's rules, from `#[form(date_rules = path)]`: the function that gives the
     /// days that can't be chosen. The picker draws them for the browser, and [`decode`]
     /// holds the posted value to them, so the rules are written once and a value drawn as
@@ -321,6 +324,7 @@ display_values!(
     uuid::Uuid,
     chrono::NaiveDate,
     chrono::NaiveTime,
+    rust_decimal::Decimal,
 );
 
 #[cfg(feature = "phone")]
@@ -337,9 +341,28 @@ impl FieldValue for navree_phone::PhoneNumber {
     }
 }
 
+/// A date and time as the browser's field holds it: to the minute, or to the second when
+/// the seconds are not zero, so editing a value does not drop them.
+fn moment_text(at: &chrono::NaiveDateTime) -> String {
+    use chrono::Timelike;
+    let format = if at.second() == 0 && at.nanosecond() == 0 {
+        "%Y-%m-%dT%H:%M"
+    } else {
+        "%Y-%m-%dT%H:%M:%S"
+    };
+    at.format(format).to_string()
+}
+
 impl FieldValue for chrono::NaiveDateTime {
     fn field_value(&self) -> Option<String> {
-        Some(self.format("%Y-%m-%dT%H:%M").to_string())
+        Some(moment_text(self))
+    }
+}
+
+/// An instant is shown in UTC, and read back as UTC.
+impl FieldValue for chrono::DateTime<chrono::Utc> {
+    fn field_value(&self) -> Option<String> {
+        Some(moment_text(&self.naive_utc()))
     }
 }
 
@@ -721,6 +744,11 @@ impl<T: Form> FormView<T> {
                 let mut input = Input::new(kind, field.name).invalid(invalid);
                 if kind == InputKind::Number && rules.min.is_none_or(|min| min.contains('.')) {
                     input = input.attr("step", "any");
+                }
+                // A browser's date and time field steps by the minute unless told
+                // otherwise, and refuses a value that has seconds.
+                if kind == InputKind::DateTime && value.is_some_and(|text| text.len() > 16) {
+                    input = input.attr("step", "1");
                 }
                 self.finish_input(input, field, &rules, value).into()
             }
@@ -1262,25 +1290,58 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// A time posted as hours and minutes, with its seconds: `14:30` is `14:30:00`.
-fn clock_text<T: Form>(name: &str, value: &str) -> String {
-    let is_time = T::FIELDS.iter().any(|field| {
-        field.name == name
-            && matches!(
-                field.widget,
-                Widget::TimePicker | Widget::Input(InputKind::Time)
-            )
-    });
-    let bytes = value.as_bytes();
-    if is_time
-        && bytes.len() == 5
+/// Whether `bytes` is `HH:MM`.
+fn is_hour_minute(bytes: &[u8]) -> bool {
+    bytes.len() == 5
         && bytes[2] == b':'
         && bytes[..2].iter().chain(&bytes[3..]).all(u8::is_ascii_digit)
+}
+
+/// Whether the field holds a date and time: a `NaiveDateTime` on the browser's field, or
+/// an instant.
+fn is_moment(field: &FormField) -> bool {
+    field.instant || field.widget == Widget::Input(InputKind::DateTime)
+}
+
+/// What a browser posts, put the way the type reads it. A time is posted as hours and
+/// minutes: `14:30` is `14:30:00`. A date and time is posted to the minute and with no
+/// zone: `2026-11-04T14:30` is `2026-11-04T14:30:00`, and for an instant it is in UTC, so
+/// it ends in `Z`. Text that already has a zone, or isn't a date and time, is left as it is.
+fn browser_text<T: Form>(name: &str, value: &str) -> String {
+    let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
+        return value.to_owned();
+    };
+    let bytes = value.as_bytes();
+    if matches!(
+        field.widget,
+        Widget::TimePicker | Widget::Input(InputKind::Time)
+    ) && is_hour_minute(bytes)
     {
-        format!("{value}:00")
-    } else {
-        value.to_owned()
+        return format!("{value}:00");
     }
+    if !is_moment(field) {
+        return value.to_owned();
+    }
+    let mut text = value.to_owned();
+    if bytes.len() == 16 && bytes[10] == b'T' && is_hour_minute(&bytes[11..]) {
+        text.push_str(":00");
+    }
+    if field.instant && text.parse::<chrono::NaiveDateTime>().is_ok() {
+        text.push('Z');
+    }
+    text
+}
+
+/// The date and time `text` says, in the zone it names or in none.
+fn moment(text: &str) -> Option<chrono::NaiveDateTime> {
+    text.trim()
+        .parse::<chrono::NaiveDateTime>()
+        .ok()
+        .or_else(|| {
+            chrono::DateTime::parse_from_rfc3339(text.trim())
+                .ok()
+                .map(|at| at.naive_local())
+        })
 }
 
 /// What the date and time fields say of the posted text, which the typed value can't: a
@@ -1297,6 +1358,22 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
             continue;
         };
         let why = match field.widget {
+            // A date and time has no picker rules of its own, but the calendar and the
+            // time of day are the same: a year outside 1 to 9999, a leap second and a
+            // fraction of a second are refused.
+            _ if is_moment(field) => {
+                let Some(at) = moment(value) else { continue };
+                DateRules::default()
+                    .check(at.date())
+                    .err()
+                    .map(|error| error.message(&english))
+                    .or_else(|| {
+                        TimeRules::default()
+                            .check(at.time())
+                            .err()
+                            .map(|error| error.message(&english))
+                    })
+            }
             Widget::DatePicker | Widget::Input(InputKind::Date) => {
                 let Ok(day) = value.trim().parse::<NaiveDate>() else {
                     continue;
@@ -1383,10 +1460,11 @@ fn decode_values<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
-    // A browser's time field posts `14:30`; the type reads `14:30:00`.
+    // A browser posts `14:30` for a time and `2026-11-04T14:30` for a date and time; the
+    // type reads `14:30:00` and `2026-11-04T14:30:00`.
     let pairs: Vec<(String, String)> = pairs
         .iter()
-        .map(|(name, value)| (name.clone(), clock_text::<T>(name, value)))
+        .map(|(name, value)| (name.clone(), browser_text::<T>(name, value)))
         .collect();
     let refused = refused_by_pickers::<T>(&pairs);
     let outcome = read::<T>(&pairs);
@@ -1568,6 +1646,18 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
             label,
             ..
         }) => format!("{label}: enter a time."),
+        Some(
+            FormField {
+                widget: Widget::Input(InputKind::DateTime),
+                label,
+                ..
+            }
+            | FormField {
+                instant: true,
+                label,
+                ..
+            },
+        ) => format!("{label}: enter a date and time."),
         Some(FormField {
             widget:
                 Widget::Select | Widget::Listbox | Widget::Combobox | Widget::Multi | Widget::Radio,
