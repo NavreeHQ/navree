@@ -18,8 +18,8 @@ use super::{
     TableRow, ValueKind,
 };
 use crate::components::{
-    AlertDialog, Button, ButtonVariant, Empty, Input, NativeSelect, Pagination, Size, Skeleton,
-    SkeletonShape, icon,
+    AlertDialog, Button, ButtonVariant, Empty, Input, NativeSelect, Pagination, PopupAlign, Size,
+    Skeleton, SkeletonShape, icon, menu_element,
 };
 use crate::html::{Href, SafeHtml, escape_into};
 use crate::icons::{self, Icon};
@@ -313,6 +313,7 @@ pub struct RowAction {
     href: Href,
     post: bool,
     destructive: bool,
+    disabled: bool,
     icon: Option<Icon>,
 }
 
@@ -324,6 +325,7 @@ impl RowAction {
             href: href.into(),
             post: false,
             destructive: false,
+            disabled: false,
             icon: None,
         }
     }
@@ -335,6 +337,7 @@ impl RowAction {
             href: href.into(),
             post: true,
             destructive: false,
+            disabled: false,
             icon: None,
         }
     }
@@ -348,6 +351,13 @@ impl RowAction {
     /// Adds an icon.
     pub fn icon(mut self, glyph: Icon) -> Self {
         self.icon = Some(glyph);
+        self
+    }
+
+    /// Shows it in the menu but doesn't let it be taken: the arrow keys still reach it, and
+    /// it has no address to go to. The handler checks again: this is courtesy.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 }
@@ -420,6 +430,7 @@ pub struct TableLabels {
     pub show_details: Cow<'static, str>,
     pub hide_details: Cow<'static, str>,
     pub actions: Cow<'static, str>,
+    pub row_actions: Cow<'static, str>,
     pub density: Cow<'static, str>,
     pub compact: Cow<'static, str>,
     pub default_density: Cow<'static, str>,
@@ -497,6 +508,7 @@ impl Default for TableLabels {
             show_details: "Show details".into(),
             hide_details: "Hide details".into(),
             actions: "Actions".into(),
+            row_actions: "Actions for {label}".into(),
             density: "Density".into(),
             compact: "Compact".into(),
             default_density: "Default".into(),
@@ -2195,56 +2207,102 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         out.push_str("</a></td>");
     }
 
-    fn actions_cell(&self, key: &str, row: &R, out: &mut String) {
+    /// The cell of a row's menu: a button named for the row, and the menu it opens, which has
+    /// the roles and keys of a menu. A post is a small form inside the row's own menu, not a
+    /// control tied to the page's one form, so a thousand rows tie nothing to any form.
+    fn actions_cell(
+        &self,
+        key: &str,
+        row: &R,
+        first: Option<usize>,
+        label: &mut String,
+        out: &mut String,
+    ) {
         let Some(actions) = &self.row_actions else {
             return;
         };
-        let items: Vec<Node> = actions(row)
-            .into_iter()
-            .map(|action| {
-                let content = (action.icon.map(icon), action.label.to_string());
-                if action.post {
-                    el("form")
-                        .attr("method", "post")
-                        .attr("action", action.href)
-                        .flag("data-ui-form", true)
-                        .children((
-                            self.csrf
-                                .as_ref()
-                                .map(|token| crate::form::csrf_field(token.clone())),
-                            el("button")
-                                .slot("menu-link")
-                                .attr("type", "submit")
-                                .flag("data-destructive", action.destructive)
-                                .children(content),
-                        ))
-                        .into()
-                } else {
-                    el("a")
-                        .slot("menu-link")
-                        .href(action.href)
-                        .flag("data-destructive", action.destructive)
-                        .children(content)
-                        .into()
-                }
-            })
-            .collect();
-        let trigger = el("button")
-            .slot("button")
-            .attr("data-variant", "ghost")
-            .attr("data-size", "sm")
-            .flag("data-icon-only", true)
-            .attr("aria-label", self.labels.actions.to_string())
-            .child(icon(icons::ELLIPSIS));
-        let menu = self.popover(
-            format!("{}-a-{key}", self.id),
-            trigger,
-            self.labels.actions.to_string(),
-            el("div").slot("menu-links").child(items),
-        );
         out.push_str("<td data-slot=\"cell-actions\" data-sticky=\"e\">");
-        crate::render::render_into(out, &menu);
+        let actions = actions(row);
+        if !actions.is_empty() {
+            label.clear();
+            if let Some(at) = first {
+                row.write_text(at, label);
+            }
+            let name = self.labels.row_actions.replace("{label}", label);
+            let menu_id = format!("{}-a-{key}", self.id);
+            let trigger_id = format!("{menu_id}-t");
+            let items: Vec<Node> = actions
+                .into_iter()
+                .map(|action| self.action_item(action))
+                .collect();
+            let trigger = el("button")
+                .slot("button")
+                .attr("data-variant", "ghost")
+                .attr("data-size", "sm")
+                .flag("data-icon-only", true)
+                .attr("id", trigger_id.clone())
+                .attr("type", "button")
+                .attr("popovertarget", menu_id.clone())
+                .attr("aria-haspopup", "menu")
+                .attr("aria-expanded", "false")
+                // The menus module keeps it true while the menu is open, through a morph.
+                .attr("data-ui-keep-attrs", "aria-expanded")
+                .attr("aria-label", name)
+                .child(icon(icons::ELLIPSIS));
+            let menu = menu_element(
+                &menu_id,
+                &trigger_id,
+                None,
+                "bottom",
+                PopupAlign::End,
+                false,
+            )
+            .child(items);
+            crate::render::render_into(out, &Node::list((trigger, menu)));
+        }
         out.push_str("</td>");
+    }
+
+    /// One item of a row's menu: a link, a small form that posts, or an item that can't be taken.
+    fn action_item(&self, action: RowAction) -> Node {
+        let content = (
+            action.icon.map(icon),
+            el("span").slot("menu-text").child(action.label.to_string()),
+        );
+        let item = |tag: &'static str| el(tag).slot("menu-item").attr("role", "menuitem");
+        if action.disabled {
+            return item("button")
+                .attr("type", "button")
+                .attr("aria-disabled", "true")
+                .flag("data-disabled", true)
+                .flag("data-destructive", action.destructive)
+                .children(content)
+                .into();
+        }
+        if action.post {
+            el("form")
+                .attr("method", "post")
+                .attr("action", action.href)
+                .flag("data-ui-form", true)
+                // The form groups nothing a reader meets: the item inside it is the menu's.
+                .attr("role", "none")
+                .children((
+                    self.csrf
+                        .as_ref()
+                        .map(|token| crate::form::csrf_field(token.clone())),
+                    item("button")
+                        .attr("type", "submit")
+                        .flag("data-destructive", action.destructive)
+                        .children(content),
+                ))
+                .into()
+        } else {
+            item("a")
+                .href(action.href)
+                .flag("data-destructive", action.destructive)
+                .children(content)
+                .into()
+        }
     }
 
     /// Rows are the bulk of a page, so they skip the tree: each writes straight to
@@ -2344,7 +2402,13 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 out.push_str("</td>");
             }
             if self.has_actions() {
-                self.actions_cell(key.as_deref().unwrap_or_default(), row, &mut out);
+                self.actions_cell(
+                    key.as_deref().unwrap_or_default(),
+                    row,
+                    opens.first().map(|(at, _)| *at),
+                    &mut label,
+                    &mut out,
+                );
             }
             out.push_str("</tr>");
             if is_open && let Some(detail) = &self.detail {
@@ -2687,6 +2751,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .uses(Uses::CORE.with(Uses::TABLE));
         if self.live_from.is_some() {
             root = root.uses(Uses::LIVE);
+        }
+        // The rows are written straight to a string, so the page is told here what their menus
+        // need, whether or not this page of rows has any yet: a later page will.
+        if self.has_actions() {
+            root = root.uses(Uses::MENUS.with(Uses::OVERLAY));
         }
         if self.local.contains(&true) {
             root = root

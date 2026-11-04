@@ -172,9 +172,12 @@ On a desktop with no throttling, a 25-row page sorts in 43 ms, a tick filters it
 | `Tab` | Moves through the toolbar, the headers' sort links, the checkboxes and the row links. |
 | `Enter` | Sorts by a header, follows a row's link. |
 | Arrow keys, `Home`, `End`, `Page Up`, `Page Down` | With `.keyboard_grid()`, move between cells with one tab stop. |
-| `Esc` | Closes an open column menu. |
+| `Esc` | Closes an open column menu, or a row's menu and returns to its button. |
+| `Enter`, `Space`, `Down`, `Up` on a row's menu button | Open the row's menu on its first or last item. |
+| `Down`, `Up`, `Home`, `End`, letters | Move through the items of an open row menu. |
 
 - The sorted header has `aria-sort`; the table has its caption; a refetch marks the table `aria-busy`.
+- A row's actions (`.row_actions(fn)`) are a menu: the button is named "Actions for" and the row's first column, and the items are links and small forms that post, with the keys of a [DropdownMenu](/docs/components/dropdown-menu/). `RowAction::destructive()` marks one, and `RowAction::disabled(true)` shows one that can't be taken. A row whose function returns no actions has no button.
 - Nothing a hover can fire changes anything: every action is a `POST`.
 
 </UiA11y>

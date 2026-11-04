@@ -1029,7 +1029,8 @@ for (const browserName of browsers) {
       await page.locator(`tr[data-key="${key}"] [data-slot=cell-actions] [popovertarget]`).click();
       await shot(page, `${browserName}-row-actions`);
       assert.deepEqual(await axe(page), []);
-      await page.locator(`#deals-a-${key}`).getByRole("button", { name: "Archive" }).click();
+      // A row's actions are a menu now: its items are menu items.
+      await page.locator(`#deals-a-${key}`).getByRole("menuitem", { name: "Archive" }).click();
       await page.locator("[data-slot=toast]").first().waitFor();
       await page.keyboard.press("Escape");
       await page.goto(BASE + "/deals?per_page=100");
