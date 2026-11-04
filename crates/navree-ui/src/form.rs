@@ -14,12 +14,12 @@ use chrono::{NaiveDate, NaiveTime};
 use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
-use navree_http::HttpOptions;
 use navree_http::body::{BodyLimit, read_body};
 use navree_http::extract::{FromRequest, Request, urlencoded};
 use navree_http::response::{IntoResponse, Response};
+use navree_http::{AppError, HttpOptions};
 use navree_kernel::AppContext;
-use navree_validation::{Messages, Rule, Validate};
+use navree_validation::{AppMessages, Rule, Validate, Violations, check_async_rules};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -272,6 +272,51 @@ pub trait Form {
 
     /// The current values, as text, for an edit form.
     fn values(&self) -> Vec<(&'static str, String)>;
+
+    /// The database rules (`unique`, `exists`) [`Submit`] runs once the form's own rules
+    /// pass, in the request's unit of work, as `ValidAsync` runs them for an API: a
+    /// failed one is a field error under its field, in the app's words. `#[derive(Form)]`
+    /// gives the type's own `navree_validation::AsyncRules` here, so a struct that
+    /// implements them needs nothing more (a generic struct doesn't get them). None by
+    /// default.
+    fn database_rules(&self) -> Vec<navree_validation::AsyncRule> {
+        Vec::new()
+    }
+}
+
+/// What `#[derive(Form)]` uses to find a type's `AsyncRules`: the rules of a type
+/// that implements them, and none for one that doesn't. Not public API.
+#[doc(hidden)]
+pub mod __rules {
+    pub use navree_validation::AsyncRule;
+    use navree_validation::AsyncRules;
+
+    /// A form's value, asked for its database rules.
+    pub struct Probe<'a, T>(pub &'a T);
+
+    /// Chosen when the type implements `AsyncRules`.
+    pub trait ViaRules {
+        /// The type's rules.
+        fn navree_database_rules(&self) -> Vec<AsyncRule>;
+    }
+
+    impl<T: AsyncRules> ViaRules for Probe<'_, T> {
+        fn navree_database_rules(&self) -> Vec<AsyncRule> {
+            self.0.async_rules()
+        }
+    }
+
+    /// Chosen otherwise.
+    pub trait NoRules {
+        /// No rules.
+        fn navree_database_rules(&self) -> Vec<AsyncRule>;
+    }
+
+    impl<T> NoRules for &Probe<'_, T> {
+        fn navree_database_rules(&self) -> Vec<AsyncRule> {
+            Vec::new()
+        }
+    }
 }
 
 /// An enum whose variants are a select's choices. `#[derive(Options)]`
@@ -1381,6 +1426,74 @@ impl<T: Form> From<FormView<T>> for Node {
 /// Field errors by name.
 pub type FieldErrors = BTreeMap<String, Vec<String>>;
 
+/// The words of a form's own checks, by rule key: what a value of the wrong type, a
+/// list with more values than it takes, a number with too many decimal places and a
+/// phone number that doesn't read say. `:attribute` is the field's label.
+///
+/// They are defaults. A form reads its messages from the app's validation messages
+/// (navree-validation's `AppMessages`): the app's `validation.messages` replace them
+/// (`form.number = ":attribute takes digits only"`, or for one field
+/// `amount.form.amount`), a translator renders them in the reader's language when it
+/// has them (with navree-i18n, a `validation-form-number` message), and a field's
+/// `#[form(error = "...")]` wins over all of them.
+pub const FORM_MESSAGES: &[(&str, &str)] = &[
+    (
+        "form.amount",
+        ":attribute: enter an amount, like 12,500.50.",
+    ),
+    ("form.choice", ":attribute: choose one of the options."),
+    ("form.date", ":attribute: enter a date."),
+    (
+        "form.decimal_places",
+        ":attribute: use at most 28 decimal places.",
+    ),
+    ("form.invalid", ":attribute is not valid."),
+    ("form.max_choices", "Choose at most :max."),
+    ("form.moment", ":attribute: enter a date and time."),
+    ("form.number", ":attribute: enter a number."),
+    (
+        "form.phone",
+        ":attribute: enter a phone number, with its country.",
+    ),
+    (
+        "form.phone_extension",
+        ":attribute: enter the number without an extension.",
+    ),
+    ("form.time", ":attribute: enter a time."),
+    ("form.unreadable", "This form could not be read."),
+];
+
+/// The app's messages as a form of `T` says them: its labels name its fields (over the
+/// app's `validation.attributes`; a translator's own names still come first), and the
+/// form's own words fill the keys the app has no message for.
+fn words<T: Form>(messages: &AppMessages) -> AppMessages {
+    messages
+        .clone()
+        .with_attributes(T::FIELDS.iter().map(|field| (field.name, field.label)))
+        .with_default_messages(FORM_MESSAGES.iter().copied())
+}
+
+/// The messages of failed rules, by field: a field's own `error`, else the rule's
+/// message in the app's words.
+fn rule_errors<T: Form>(violations: &Violations, words: &AppMessages) -> FieldErrors {
+    let mut errors = FieldErrors::new();
+    for (path, violation) in violations.iter() {
+        let text = match T::FIELDS
+            .iter()
+            .find(|field| field.name == path)
+            .and_then(|field| field.error)
+        {
+            Some(text) => text.to_owned(),
+            None => words.render_violation(path, violation),
+        };
+        let list = errors.entry(path.to_owned()).or_default();
+        if !list.contains(&text) {
+            list.push(text);
+        }
+    }
+    errors
+}
+
 /// The most name-and-value pairs read from one body. A form has far fewer: a body
 /// with more is refused before anything is decoded.
 const MAX_PAIRS: usize = 1000;
@@ -1422,7 +1535,10 @@ fn is_phone_country<T: Form>(name: &str) -> bool {
 /// A `Phone` posted without a country is left to read in the request's
 /// region; text without one must carry its calling code.
 #[cfg(feature = "phone")]
-fn read_phones<T: Form>(pairs: &[(String, String)]) -> (Vec<(String, String)>, FieldErrors) {
+fn read_phones<T: Form>(
+    pairs: &[(String, String)],
+    words: &AppMessages,
+) -> (Vec<(String, String)>, FieldErrors) {
     use navree_phone::{PhoneNumber, Region};
     let mut errors = FieldErrors::new();
     let read = pairs
@@ -1453,10 +1569,7 @@ fn read_phones<T: Form>(pairs: &[(String, String)]) -> (Vec<(String, String)>, F
             };
             match PhoneNumber::parse(value, region) {
                 Ok(number) if text && number.extension().is_some() => {
-                    refuse(
-                        &mut errors,
-                        format!("{}: enter the number without an extension.", field.label),
-                    );
+                    refuse(&mut errors, words.render(name, "form.phone_extension", &[]));
                     as_typed
                 }
                 Ok(number) => {
@@ -1467,10 +1580,7 @@ fn read_phones<T: Form>(pairs: &[(String, String)]) -> (Vec<(String, String)>, F
                     (name.clone(), written)
                 }
                 Err(_) => {
-                    refuse(
-                        &mut errors,
-                        format!("{}: enter a phone number, with its country.", field.label),
-                    );
+                    refuse(&mut errors, words.render(name, "form.phone", &[]));
                     as_typed
                 }
             }
@@ -1577,8 +1687,9 @@ fn slider_spec<T: Form>(field: &FormField) -> crate::flow::SliderSpec {
 /// (a leap second, a fraction of a second) are always refused, and the rules a field was
 /// given with `date_rules` or `time_rules` hold the server as they held the browser, so a
 /// value the picker drew as off is off here. Text that isn't a day or a time is left to the
-/// type's own error. The words are English, or the field's own `error`.
-fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
+/// type's own error. The days' and times' words are English, or the field's own `error`;
+/// the decimal places' are the app's (`form.decimal_places`).
+fn refused_by_pickers<T: Form>(pairs: &[(String, String)], words: &AppMessages) -> FieldErrors {
     let english = DateLocale::english();
     let mut out = FieldErrors::new();
     for (name, value) in pairs {
@@ -1607,7 +1718,7 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
                 let text = value.trim();
                 (rust_decimal::Decimal::from_str_exact(text).is_err()
                     && text.parse::<rust_decimal::Decimal>().is_ok())
-                .then(|| format!("{}: use at most 28 decimal places.", field.label))
+                .then(|| words.render(name, "form.decimal_places", &[]))
             }
             Widget::DatePicker | Widget::Input(InputKind::Date) => {
                 let Ok(day) = value.trim().parse::<NaiveDate>() else {
@@ -1659,8 +1770,20 @@ pub fn decode<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
-    let over = over_limit::<T>(pairs);
-    match decode_values::<T>(pairs) {
+    decode_with(pairs, &AppMessages::default())
+}
+
+/// [`decode`] in the app's words: the rules' messages, and the form's own
+/// ([`FORM_MESSAGES`]), come from `messages` (the app's `validation.messages` and its
+/// translator, navree-validation's `AppMessages::of`), with the form's labels as the
+/// fields' names. What [`Submit`] uses.
+pub fn decode_with<T>(pairs: &[(String, String)], messages: &AppMessages) -> Result<T, FieldErrors>
+where
+    T: Form + DeserializeOwned + Validate,
+{
+    let words = words::<T>(messages);
+    let over = over_limit::<T>(pairs, &words);
+    match decode_values::<T>(pairs, &words) {
         Ok(value) if over.is_empty() => Ok(value),
         Ok(_) => Err(over),
         Err(mut errors) => {
@@ -1685,7 +1808,7 @@ fn list_values<'a>(pairs: &'a [(String, String)], name: &'a str) -> impl Iterato
 /// The list fields that took more values than their limit. A limit the browser keeps
 /// is only a convenience, so the post is held to it too: with JavaScript off, this is
 /// the only check.
-fn over_limit<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
+fn over_limit<T: Form>(pairs: &[(String, String)], words: &AppMessages) -> FieldErrors {
     let mut errors = FieldErrors::new();
     for field in T::FIELDS {
         let (Widget::Multi, Some(max)) = (field.widget, field.max) else {
@@ -1694,14 +1817,14 @@ fn over_limit<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
         if list_values(pairs, field.name).count() > max as usize {
             errors.insert(
                 field.name.to_owned(),
-                vec![format!("Choose at most {max}.")],
+                vec![words.render(field.name, "form.max_choices", &[("max", max.to_string())])],
             );
         }
     }
     errors
 }
 
-fn decode_values<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
+fn decode_values<T>(pairs: &[(String, String)], words: &AppMessages) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
@@ -1711,8 +1834,8 @@ where
         .iter()
         .map(|(name, value)| (name.clone(), browser_text::<T>(name, value)))
         .collect();
-    let refused = refused_by_pickers::<T>(&pairs);
-    let outcome = read::<T>(&pairs);
+    let refused = refused_by_pickers::<T>(&pairs, words);
+    let outcome = read::<T>(&pairs, words);
     if refused.is_empty() {
         return outcome;
     }
@@ -1738,12 +1861,12 @@ where
 }
 
 /// The value the pairs say, and the rules of its type.
-fn read<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
+fn read<T>(pairs: &[(String, String)], words: &AppMessages) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
     #[cfg(feature = "phone")]
-    let (phones, phone_errors) = read_phones::<T>(pairs);
+    let (phones, phone_errors) = read_phones::<T>(pairs, words);
     #[cfg(feature = "phone")]
     let pairs = phones.as_slice();
     // A list field's values are read together: the deserializer takes a name once.
@@ -1823,7 +1946,7 @@ where
             Ok(value) if wrong.is_empty() => break value,
             Ok(_) => return Err(wrong),
             Err(error) => {
-                let more = type_error::<T>(&error);
+                let more = type_error::<T>(&error, words);
                 let before = kept.len();
                 let mut known = false;
                 for name in more.keys() {
@@ -1846,84 +1969,24 @@ where
     };
     match value.validate() {
         Ok(()) => Ok(value),
-        Err(violations) => {
-            let mut messages = Messages::default();
-            for field in T::FIELDS {
-                messages = messages.with_attribute(field.name, field.label);
-            }
-            let mut errors = FieldErrors::new();
-            for (path, violation) in violations.iter() {
-                let text = match T::FIELDS
-                    .iter()
-                    .find(|field| field.name == path)
-                    .and_then(|field| field.error)
-                {
-                    Some(text) => text.to_owned(),
-                    None => violation.render(path, &messages),
-                };
-                let list = errors.entry(path.to_owned()).or_default();
-                if !list.contains(&text) {
-                    list.push(text);
-                }
-            }
-            Err(errors)
-        }
+        Err(violations) => Err(rule_errors::<T>(&violations, words)),
     }
 }
 
-/// What a value of the wrong type says.
-fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) -> FieldErrors {
+/// What a value of the wrong type says: the field's own `error`, else the app's words for
+/// its kind of field ([`FORM_MESSAGES`]).
+fn type_error<T: Form>(
+    error: &serde_path_to_error::Error<urlencoded::Error>,
+    words: &AppMessages,
+) -> FieldErrors {
     let path = error.path().to_string();
     let field = T::FIELDS.iter().find(|field| field.name == path);
     let text = match field {
         Some(FormField {
             error: Some(text), ..
         }) => (*text).to_owned(),
-        Some(FormField {
-            widget: Widget::Money,
-            label,
-            ..
-        }) => format!("{label}: enter an amount, like 12,500.50."),
-        Some(FormField {
-            widget: Widget::Input(InputKind::Number),
-            label,
-            ..
-        }) => format!("{label}: enter a number."),
-        Some(FormField {
-            widget: Widget::Input(InputKind::Date) | Widget::DatePicker,
-            label,
-            ..
-        }) => format!("{label}: enter a date."),
-        Some(FormField {
-            widget: Widget::Input(InputKind::Time) | Widget::TimePicker,
-            label,
-            ..
-        }) => format!("{label}: enter a time."),
-        Some(
-            FormField {
-                widget: Widget::Input(InputKind::DateTime),
-                label,
-                ..
-            }
-            | FormField {
-                instant: true,
-                label,
-                ..
-            },
-        ) => format!("{label}: enter a date and time."),
-        Some(FormField {
-            widget:
-                Widget::Select | Widget::Listbox | Widget::Combobox | Widget::Multi | Widget::Radio,
-            label,
-            ..
-        }) => format!("{label}: choose one of the options."),
-        Some(FormField {
-            widget: Widget::Phone | Widget::PhoneText,
-            label,
-            ..
-        }) => format!("{label}: enter a phone number, with its country."),
-        Some(FormField { label, .. }) => format!("{label} is not valid."),
-        None => "This form could not be read.".to_owned(),
+        Some(field) => words.render(field.name, type_error_key(field), &[]),
+        None => words.render("_form", "form.unreadable", &[]),
     };
     let mut errors = FieldErrors::new();
     errors.insert(
@@ -1935,6 +1998,23 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
         vec![text],
     );
     errors
+}
+
+/// The rule key of a value of the wrong type in `field` (see [`FORM_MESSAGES`]).
+fn type_error_key(field: &FormField) -> &'static str {
+    match field.widget {
+        Widget::Money => "form.amount",
+        Widget::Input(InputKind::Number) => "form.number",
+        Widget::Input(InputKind::Date) | Widget::DatePicker => "form.date",
+        Widget::Input(InputKind::Time) | Widget::TimePicker => "form.time",
+        Widget::Input(InputKind::DateTime) => "form.moment",
+        _ if field.instant => "form.moment",
+        Widget::Select | Widget::Listbox | Widget::Combobox | Widget::Multi | Widget::Radio => {
+            "form.choice"
+        }
+        Widget::Phone | Widget::PhoneText => "form.phone",
+        _ => "form.invalid",
+    }
 }
 
 /// Encodes pairs for [`urlencoded`].
@@ -2068,6 +2148,14 @@ pub(crate) async fn refusal(parts: &Parts) -> Option<StatusCode> {
 /// `GET` or `HEAD` with 405, so no link or prefetch can fill one. Behind navree-session
 /// the token check also runs.
 ///
+/// It checks a post as the API checks a body: the messages are the app's (its
+/// `validation.messages`, and its translator, so a reader gets them in their language),
+/// with the form's labels as the fields' names; and once the form's own rules pass, its
+/// database rules ([`Form::database_rules`]: the type's `AsyncRules`, `unique` and
+/// `exists`) run in the request's unit of work, a failed one answered as a field error
+/// like any other. A rule that can't run (no unit of work, a database error) is the
+/// app's error answer (a 500), not a field error.
+///
 /// ```ignore
 /// async fn store(Submit(input): Submit<NewDeal>) -> Reply {
 ///     Reply::redirect("/deals").toast(ToastTone::Success, "Deal created")
@@ -2086,6 +2174,8 @@ pub struct Rejected<T> {
     from_runtime: bool,
     action: String,
     refused: Option<StatusCode>,
+    /// A database rule could not run: the error, answered as the app answers it.
+    failed: Option<AppError>,
     options: BTreeMap<&'static str, Vec<(String, String)>>,
     rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
     marker: PhantomData<fn() -> T>,
@@ -2100,6 +2190,7 @@ impl<T> std::fmt::Debug for Rejected<T> {
             .field("errors", &self.errors)
             .field("from_runtime", &self.from_runtime)
             .field("refused", &self.refused)
+            .field("failed", &self.failed.is_some())
             .finish()
     }
 }
@@ -2136,6 +2227,7 @@ impl<T: Form> Rejected<T> {
                 |path| path.as_str().to_owned(),
             ),
             refused: None,
+            failed: None,
             options: BTreeMap::new(),
             rich: BTreeMap::new(),
             marker: PhantomData,
@@ -2227,6 +2319,9 @@ impl<T: Form> Rejected<T> {
     /// Ops for the runtime; with JavaScript off, what `page` makes of a form
     /// holding what was typed and the errors.
     pub fn respond<R: IntoResponse>(self, page: impl FnOnce(FormView<T>) -> R) -> Response {
+        if let Some(error) = self.failed {
+            return error.into_response();
+        }
         if let Some(status) = self.refused {
             let mut response = status.into_response();
             if status == StatusCode::METHOD_NOT_ALLOWED {
@@ -2289,6 +2384,7 @@ where
             from_runtime,
             action,
             refused: Some(status),
+            failed: None,
             options: BTreeMap::new(),
             rich: BTreeMap::new(),
             marker: PhantomData,
@@ -2303,18 +2399,41 @@ where
         let Some(values) = read_pairs::<T>(&bytes) else {
             return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
         };
-        match decode::<T>(&values) {
-            Ok(value) => Ok(Self(value)),
-            Err(errors) => Err(Rejected {
+        // The app's messages, and its translator: the reader's language.
+        let ctx = parts.extensions.get::<AppContext>().cloned();
+        let messages = AppMessages::of(ctx.as_ref()).await;
+        let rejected =
+            |values: Vec<(String, String)>, errors: FieldErrors, action: String| Rejected {
                 values: echo::<T>(values),
                 errors,
                 from_runtime,
                 action,
                 refused: None,
+                failed: None,
                 options: BTreeMap::new(),
                 rich: BTreeMap::new(),
                 marker: PhantomData,
-            }),
+            };
+        let value = match decode_with::<T>(&values, &messages) {
+            Ok(value) => value,
+            Err(errors) => return Err(rejected(values, errors, action)),
+        };
+        // Then the database rules, as `ValidAsync` runs them for an API.
+        let rules = Form::database_rules(&value);
+        if rules.is_empty() {
+            return Ok(Self(value));
+        }
+        match check_async_rules(&parts, rules).await {
+            Ok(violations) if violations.is_empty() => Ok(Self(value)),
+            Ok(violations) => {
+                let errors = rule_errors::<T>(&violations, &words::<T>(&messages));
+                Err(rejected(values, errors, action))
+            }
+            Err(error) => {
+                let mut failed = rejected(Vec::new(), FieldErrors::new(), action);
+                failed.failed = Some(error);
+                Err(failed)
+            }
         }
     }
 }

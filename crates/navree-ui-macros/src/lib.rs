@@ -14,7 +14,9 @@ mod table;
 /// Implements `Form` from a struct's fields: the type picks the widget (`bool`
 /// a checkbox, a number a number input, an enum with `Options` a select), the
 /// doc comment is the label, `Option` means optional, and the rules come from
-/// `#[derive(Validate)]`.
+/// `#[derive(Validate)]`. A type that implements navree-validation's
+/// `AsyncRules` (`unique`, `exists`) gets them as its `database_rules`, which
+/// `Submit` runs once the rules pass (a generic type doesn't).
 ///
 /// ```ignore
 /// #[derive(Deserialize, Validate, Form)]

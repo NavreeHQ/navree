@@ -281,6 +281,18 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
     }
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    // The type's `AsyncRules`, if it has them: the probe takes the type's rules when it
+    // implements the trait, and none otherwise. A generic type can't be asked, so it
+    // keeps the trait's default (none).
+    let database_rules = input.generics.params.is_empty().then(|| {
+        quote! {
+            fn database_rules(&self) -> ::std::vec::Vec<#ui::form::__rules::AsyncRule> {
+                #[allow(unused_imports)]
+                use #ui::form::__rules::{NoRules as _, ViaRules as _};
+                (&#ui::form::__rules::Probe(self)).navree_database_rules()
+            }
+        }
+    });
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #ui::form::Form for #ident #ty_generics #where_clause {
@@ -293,6 +305,8 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 #(#values)*
                 out
             }
+
+            #database_rules
         }
     })
 }
