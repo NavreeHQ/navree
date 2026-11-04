@@ -1,28 +1,30 @@
-//! `campaign-demo`: an example app on Navree UI. It follows one email campaign,
-//! "Spring launch", sent by an invented company to 1,240 invented people.
+//! `store-demo`: an example app on Navree UI. It runs the back office of an
+//! invented shop, Fernhill Supply, which sells goods for the home and the
+//! outdoors from three warehouses.
 //!
 //! ```text
-//! cargo run -p campaign-demo                       # http://127.0.0.1:8095
-//! PORT=9000 cargo run -p campaign-demo             # another port
-//! CAMPAIGN_SIMULATOR=off cargo run -p campaign-demo  # nothing happens by itself
+//! cargo run -p store-demo                        # http://127.0.0.1:8095
+//! PORT=9000 cargo run -p store-demo              # another port
+//! STORE_SIMULATOR=off cargo run -p store-demo    # nothing happens by itself
 //! ```
 //!
-//! - **The overview** (`/`): the campaign's figures, a chart and a funnel drawn
-//!   with plain SVG elements, and a feed of what readers do, live over
-//!   server-sent events. Opens a mail privacy proxy made sit behind a notice.
-//! - **The recipients** (`/recipients`): a table whose search, status, country and
-//!   date filters, sort and pages run on the server, with each recipient's status
-//!   as a badge. It refreshes when the stream speaks.
-//! - **A recipient**: a row opens them in a sheet (or a page, with JavaScript
-//!   off): outcome chips, fact cards with a flag, and tabs with a timeline
-//!   grouped by day.
-//! - **A contact form**: a phone number read in the country chosen beside it, a
-//!   country found by typing, a date typed or picked, and a toast on save.
+//! - **The dashboard** (`/`): today's figures, the order activity as it happens,
+//!   live over server-sent events, the shelves running low and today's best
+//!   sellers.
+//! - **The orders** (`/orders`): a table whose search, status, fulfilment,
+//!   payment, country and date filters, sort and pages run on the server. It
+//!   refreshes when the stream speaks.
+//! - **An order**: a row opens it in a drawer over the table (or a page, with
+//!   JavaScript off): its lines, its steps from placed to delivered, the customer,
+//!   the payment, the route from the warehouse, the notes, and refund, resend and
+//!   cancel, each confirmed in a dialog and checked again on the server.
+//! - **The inventory** (`/inventory`): every product with its stock, a badge when
+//!   it runs low, and a restock form in its row.
 //!
-//! The data is SQLite, written afresh at every start (`CAMPAIGN_DATABASE_URL`,
-//! `sqlite://target/campaign-demo.db?mode=rwc` by default). While the app runs, a
-//! simulator makes someone open, click, convert or leave every few seconds
-//! (`CAMPAIGN_SIMULATOR=<milliseconds>`, 3000 by default, or `off`).
+//! The data is SQLite, written afresh at every start (`STORE_DATABASE_URL`,
+//! `sqlite://target/store-demo.db?mode=rwc` by default). While the app runs, a
+//! simulator places, packs, ships and delivers orders and restocks shelves every
+//! few seconds (`STORE_SIMULATOR=<milliseconds>`, 3000 by default, or `off`).
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -37,6 +39,7 @@ use navree::ui::{Shell, UiModule};
 pub mod data;
 pub mod live;
 pub mod pages;
+pub mod shop;
 pub mod views;
 
 use live::{Hub, now};
@@ -60,9 +63,9 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// From `CAMPAIGN_SIMULATOR` and `CAMPAIGN_TEST_HOOKS`.
+    /// From `STORE_SIMULATOR` and `STORE_TEST_HOOKS`.
     pub fn from_env() -> Self {
-        let simulate_every = match std::env::var("CAMPAIGN_SIMULATOR").as_deref() {
+        let simulate_every = match std::env::var("STORE_SIMULATOR").as_deref() {
             Ok("off") | Ok("0") => None,
             Ok(ms) => ms
                 .parse()
@@ -72,12 +75,12 @@ impl Settings {
         };
         Self {
             simulate_every,
-            test_hooks: std::env::var_os("CAMPAIGN_TEST_HOOKS").is_some(),
+            test_hooks: std::env::var_os("STORE_TEST_HOOKS").is_some(),
         }
     }
 }
 
-/// Writes the campaign when the app boots, then starts the simulator.
+/// Writes the shop when the app boots, then starts the simulator.
 #[injectable]
 pub struct Seeder {
     db: Arc<Db>,
@@ -109,12 +112,12 @@ impl Lifecycle for Seeder {
     }
 }
 
-/// The campaign's pages, its data and its simulator.
-pub struct CampaignModule {
+/// The shop's pages, its data and its simulator.
+pub struct StoreModule {
     pub settings: Settings,
 }
 
-impl Module for CampaignModule {
+impl Module for StoreModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.factory(Factory::<Shell>::new(|_| async {
             Ok(Arc::new(views::shell()))
@@ -150,5 +153,5 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
         .module(UiModule::from_config())
-        .module(CampaignModule { settings })
+        .module(StoreModule { settings })
 }

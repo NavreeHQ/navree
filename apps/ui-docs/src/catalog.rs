@@ -450,12 +450,12 @@ pub const COMPONENTS: &[Component] = &[
     component("commands", "Commands", &["Cmd", "Op", "Reply"], "toggle")
         .page("/docs/ui/commands-and-ops/"),
     component("regions", "Regions", &["Region"], "lazy").page("/docs/ui/regions/"),
-    // The example app's views, shown on `/ui/` rather than a docs page.
+    // The example apps' views, shown on `/ui/` rather than a docs page.
     component(
         "build-anything",
         "Build anything",
         &["DataTable", "Sheet", "ActivityFeed"],
-        "recipients",
+        "store-drawer",
     )
     .page("/ui/#build-anything"),
 ];

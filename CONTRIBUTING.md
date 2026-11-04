@@ -18,9 +18,11 @@ CRM built on top of them and the website:
 - `apps/evidence-app`: the evidence app, one Navree application that wires
   every package and tool, built into a Docker image and run under load by
   the evidence harness in `e2e/` (see [`e2e/README.md`](e2e/README.md)).
-- `apps/campaign-demo`: an example app on Navree UI, an email campaign's
-  recipients and its activity live over server-sent events, on SQLite. The
-  website's `/ui/` page shows its views, drawn by `apps/ui-docs`.
+- `apps/store-demo`: an example app on Navree UI, a store's back office:
+  200,000 orders on SQLite with an order drawer, refunds and cancels checked
+  on the server, inventory with restocks, and the store's activity live over
+  server-sent events. The website's `/ui/` page and `/showcase/store/` show
+  its views, drawn by `apps/ui-docs`.
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
 - `apps/crm-nuxt`: the same CRM front end in Nuxt 4, with its BFF in Nitro

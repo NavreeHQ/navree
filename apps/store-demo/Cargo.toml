@@ -1,6 +1,6 @@
 [package]
-name = "campaign-demo"
-description = "An example app on Navree UI: an email campaign's recipients, a recipient's timeline in a sheet, and its activity live over server-sent events, on SQLite."
+name = "store-demo"
+description = "An example app on Navree UI: a shop's orders, an order in a drawer with refunds and cancels checked on the server, inventory with restocks, and the store's activity live over server-sent events, on SQLite."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "campaign-demo"
+name = "store-demo"
 path = "src/main.rs"
 
 # Application code: unsafe stays forbidden, but undocumented items are fine.
@@ -22,10 +22,10 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "validation-phone"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "validation-phone", "testing"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "testing"] }
 serde_json = { workspace = true }

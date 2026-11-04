@@ -5,7 +5,6 @@ use crate::catalog::Example;
 
 mod actions;
 mod activity;
-mod campaign;
 mod data;
 mod dates;
 mod display;
@@ -19,6 +18,7 @@ mod overlays;
 mod patterns;
 mod phone;
 mod pickers;
+mod store;
 
 /// Every example, in the order the docs list them.
 pub fn all() -> Vec<Example> {
@@ -38,6 +38,6 @@ pub fn all() -> Vec<Example> {
     all.extend(data::all());
     all.extend(patterns::all());
     all.extend(icons::all());
-    all.extend(campaign::all());
+    all.extend(store::all());
     all
 }

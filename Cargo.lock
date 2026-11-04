@@ -876,19 +876,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "campaign-demo"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "futures-util",
- "http",
- "navree",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8775,6 +8762,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7beae5182595e9a8b683fa98c4317f956c9a2dec3b9716990d20023cc60c766"
 
 [[package]]
+name = "store-demo"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "http",
+ "navree",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9823,13 +9823,13 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 name = "ui-docs"
 version = "1.0.0"
 dependencies = [
- "campaign-demo",
  "chrono",
  "navree",
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
+ "store-demo",
  "syn 3.0.9",
 ]
 
