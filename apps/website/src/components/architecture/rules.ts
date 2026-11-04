@@ -10,7 +10,8 @@
  * a rule reaches the site with the code that keeps it, never before. A
  * measurement file that is there but has changed shape fails the build
  * instead of showing a stale number. Numbers are read from the files that
- * own them, never typed in.
+ * own them, never typed in, and written in Indian digit grouping (`indian`
+ * in `src/lib/format.ts`), as the rest of the site writes counts.
  *
  * Server components only: this reads the repository with `node:fs`.
  */
@@ -21,6 +22,7 @@ import GithubSlugger from "github-slugger";
 
 import { sections } from "@content/docs/manifest";
 import { lessonId, lessons } from "@/content/about";
+import { indian } from "@/lib/format";
 
 /** The repository's root, from `apps/website`. */
 const REPO = path.resolve(process.cwd(), "..", "..");
@@ -89,7 +91,6 @@ function first(...checks: (() => string | null)[]): string | null {
   return null;
 }
 
-const count = (n: number) => n.toLocaleString("en-US");
 
 /** A JSON file of the repository, or null when there is none. */
 function json(file: string): unknown {
@@ -103,7 +104,7 @@ function numberAt(value: unknown, at: string, file: string): number {
     .split(".")
     .reduce<unknown>((v, key) => (v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined), value);
   if (typeof found === "number") return found;
-  // A count written for reading ("5,499,392") counts too.
+  // A count written for reading ("5,499,392" or "54,99,392") counts too.
   if (typeof found === "string" && /^\d[\d,]*$/.test(found)) return Number(found.replace(/,/g, ""));
   throw new Error(`architecture: ${file} has no number at ${at}`);
 }
@@ -121,7 +122,7 @@ function storeProof(): Proof | null {
   const page = data.pages?.find((p) => p.name === "Orders");
   if (!page) throw new Error(`architecture: ${file} has no Orders page`);
   const paint = numberAt(page, "desktop.lcp_ms", file);
-  return { what: `The store: ${count(orders)} orders, and the orders page paints in ${count(paint)}\u00a0ms`, file, note: measuredOn(data.measured_on) };
+  return { what: `The store: ${indian(orders)} orders, and the orders page paints in ${indian(paint)}\u00a0ms`, file, note: measuredOn(data.measured_on) };
 }
 
 /**
@@ -147,9 +148,9 @@ function inboxProof(): Proof | null {
   const stated = (data as { conversations?: unknown }).conversations;
   const scale = /pub const FULL: i64 = ([\d_]+);/.exec(read("apps/inbox-demo/src/scale.rs") ?? "");
   const conversations = typeof stated === "number" ? stated : scale ? Number(scale[1].replace(/_/g, "")) : null;
-  const what = conversations ? `${count(conversations)} conversations and ${count(messages)} messages` : `${count(messages)} messages`;
+  const what = conversations ? `${indian(conversations)} conversations and ${indian(messages)} messages` : `${indian(messages)} messages`;
   return {
-    what: `The support inbox: ${what}. The first screen paints in ${count(paint)}\u00a0ms with ${count(bytes)}\u00a0bytes, and the page never holds more than ${count(rows)} rows`,
+    what: `The support inbox: ${what}. The first screen paints in ${indian(paint)}\u00a0ms with ${indian(bytes)}\u00a0bytes, and the page never holds more than ${indian(rows)} rows`,
     file,
     note: measuredOn((data as { measured?: unknown }).measured),
   };
@@ -213,7 +214,7 @@ function serverAuthority(): Built {
     proof: [
       { what: "Test `a_page_with_nothing_interactive_ships_no_script`", file: "crates/navree-ui/tests/budgets.rs" },
       {
-        what: `The core runtime is ${count(budgets.core)}\u00a0bytes gzip, under its ${budgets.coreCeiling}\u00a0KB ceiling. Of the ${budgets.modules} modules, ${budgets.own} have a ceiling of their own, and all ${budgets.modules} together are ${count(budgets.total)}\u00a0bytes, under ${budgets.allCeiling}\u00a0KB`,
+        what: `The core runtime is ${indian(budgets.core)}\u00a0bytes gzip, under its ${budgets.coreCeiling}\u00a0KB ceiling. Of the ${budgets.modules} modules, ${budgets.own} have a ceiling of their own, and all ${budgets.modules} together are ${indian(budgets.total)}\u00a0bytes, under ${budgets.allCeiling}\u00a0KB`,
         file: "apps/website/content/ui/toolkit.json",
       },
     ],

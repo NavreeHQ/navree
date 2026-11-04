@@ -6,6 +6,11 @@ export function fmtInt(n: number): string {
   return int.format(Math.round(n));
 }
 
+/** A count in Indian digit grouping, as the site writes its counts: 2,00,000 and 54,99,392. */
+export function indian(n: number): string {
+  return n.toLocaleString("en-IN");
+}
+
 /** 214,257 → "214k", 1,233,097 → "1.23M", 6,126 → "6.1k", 927 → "927". */
 export function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2)}M`;
