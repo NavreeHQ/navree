@@ -113,7 +113,7 @@ pub struct NewDeal {
     pub title: String,
     /// Value
     #[validate(skip)]
-    #[form(placeholder = "12,500", help = "In US dollars.")]
+    #[form(placeholder = "1,25,000", help = "In rupees.")]
     pub amount: Money,
     /// Stage
     #[validate(skip)]
@@ -145,7 +145,7 @@ fn forms_errors() -> FormView<NewDeal> {
     FormView::<NewDeal>::new()
         .post("/deals")
         .submit("Create deal")
-        .with_values(vec![("amount".to_owned(), "12,500".to_owned())])
+        .with_values(vec![("amount".to_owned(), "1,25,000".to_owned())])
         .with_errors(errors)
 }
 
@@ -165,7 +165,8 @@ fn commands_open() -> (Button, Dialog) {
     (
         Button::outline("Rename").on_click(vec![Cmd::open("rename"), Cmd::focus("rename-name")]),
         Dialog::new("rename", "Rename deal").body(
-            Field::new("rename-name", "Name").control(Input::text("title").value("Acme renewal")),
+            Field::new("rename-name", "Name")
+                .control(Input::text("title").value("Sutlej Supply renewal")),
         ),
     )
 }
@@ -173,10 +174,10 @@ fn commands_open() -> (Button, Dialog) {
 fn commands_text() -> Stack {
     Stack::gap(3).align(Align::Center).children((
         Row::gap(2).children((
-            Button::outline("Monthly").on_click(Cmd::text("plan-price", "$12 a month")),
-            Button::outline("Yearly").on_click(Cmd::text("plan-price", "$120 a year")),
+            Button::outline("Monthly").on_click(Cmd::text("plan-price", "₹999 a month")),
+            Button::outline("Yearly").on_click(Cmd::text("plan-price", "₹9,999 a year")),
         )),
-        Heading::h3("$12 a month").id("plan-price"),
+        Heading::h3("₹999 a month").id("plan-price"),
     ))
 }
 
@@ -211,8 +212,8 @@ fn commands_fill() -> (Table, Dialog) {
                 el("th").child(""),
             ))
             .rows((
-                row("7", "Acme renewal", "12,500"),
-                row("8", "Globex expansion", "48,000"),
+                row("7", "Sutlej Supply renewal", "₹48,000"),
+                row("8", "Haveli Home expansion", "₹12,500"),
             )),
         Dialog::new("deal-details-dialog", "Deal").body(el("p").children((
             el("strong").fill_cell("title"),
@@ -233,8 +234,8 @@ fn regions_poll() -> Card {
             .src("/fragments/activity")
             .poll(Duration::from_secs(5))
             .children(Stack::gap(1).children((
-                Text::muted("Ada moved Acme renewal to Proposal"),
-                Text::muted("Alan created Globex renewal"),
+                Text::muted("Gurpreet moved Sutlej Supply renewal to Proposal"),
+                Text::muted("Harleen created Haveli Home renewal"),
             ))),
     )
 }

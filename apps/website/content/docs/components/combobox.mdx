@@ -13,7 +13,7 @@ use navree::ui::*;
 Field::new("deal-country", "Country").control(
     Combobox::new("country")
         .placeholder("Search countries")
-        .options([("in", "India"), ("fr", "France"), ("jp", "Japan")])
+        .options([("in", "India"), ("lk", "Sri Lanka"), ("np", "Nepal")])
         .selected("in")
         .clearable(),
 )
@@ -58,7 +58,7 @@ Combobox::new("owner_id")
     .placeholder("Search people")
     .search("/people/options")
     .min_chars(2)
-    .selected_choice(("7", "Grace Hopper"))
+    .selected_choice(("7", "Gurpreet Singh"))
 ```
 
 The endpoint reads an `OptionQuery` and answers a `ChoiceList`. With `navree-orm`, `OptionSource` does the query:
@@ -101,7 +101,7 @@ struct NewDeal {
 
 FormView::<NewDeal>::new()
     .search("owner_id", "/people/options")
-    .options("owner_id", [("7".into(), "Grace Hopper".into())])
+    .options("owner_id", [("7".into(), "Gurpreet Singh".into())])
 ```
 
 ## Check what was picked

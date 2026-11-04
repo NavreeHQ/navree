@@ -19,7 +19,7 @@ pub struct Deal {
     pub company: &'static str,
     #[col(badge = tone)]
     pub stage: &'static str,
-    #[col(sortable, numeric, filter = range)]
+    #[col(sortable, numeric, filter = range, label = "Amount (₹)")]
     pub amount: Money,
     #[col(sortable, filter = date, label = "Closes")]
     pub closes_on: chrono::NaiveDate,

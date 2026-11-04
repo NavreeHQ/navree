@@ -66,18 +66,17 @@ fn stages() -> Vec<Choice> {
 
 fn countries() -> Vec<Choice> {
     [
-        ("br", "Brazil"),
+        ("au", "Australia"),
+        ("bd", "Bangladesh"),
         ("ca", "Canada"),
-        ("fr", "France"),
-        ("de", "Germany"),
         ("in", "India"),
-        ("it", "Italy"),
-        ("jp", "Japan"),
         ("ke", "Kenya"),
-        ("mx", "Mexico"),
-        ("nl", "Netherlands"),
-        ("tr", "Türkiye"),
+        ("np", "Nepal"),
+        ("sg", "Singapore"),
+        ("lk", "Sri Lanka"),
+        ("ae", "United Arab Emirates"),
         ("gb", "United Kingdom"),
+        ("us", "United States"),
     ]
     .into_iter()
     .map(|(code, name)| Choice::new(code, name))
@@ -112,17 +111,17 @@ fn select_open() -> Field {
 }
 
 fn select_groups() -> Field {
-    Field::new("zone", "Time zone").control(
+    Field::new("zone", "City").control(
         Select::new("zone")
             .id("zone-select")
-            .placeholder("Choose a zone")
-            .group("Europe", [("lon", "London"), ("par", "Paris")])
+            .placeholder("Choose a city")
+            .group("Punjab", [("ldh", "Ludhiana"), ("asr", "Amritsar")])
             .group(
-                "Asia",
+                "Delhi NCR",
                 [
-                    Choice::new("tok", "Tokyo"),
-                    Choice::new("del", "Delhi").disabled(true),
-                    Choice::new("seo", "Seoul"),
+                    Choice::new("del", "Delhi"),
+                    Choice::new("ggn", "Gurugram").disabled(true),
+                    Choice::new("noi", "Noida"),
                 ],
             ),
     )
@@ -134,13 +133,13 @@ fn select_rich() -> Field {
             .id("owner-select")
             .placeholder("Choose an owner")
             .choice(
-                Choice::new("ada", "Ada Lovelace")
+                Choice::new("gurpreet", "Gurpreet Singh")
                     .description("Engineering")
                     .icon(icons::USER)
-                    .selected_label("Ada"),
+                    .selected_label("Gurpreet"),
             )
             .choice(
-                Choice::new("alan", "Alan Turing")
+                Choice::new("harleen", "Harleen Kaur")
                     .description("Research")
                     .icon(icons::USER),
             ),
@@ -244,7 +243,7 @@ fn combobox_states() -> impl IntoIterator<Item = (&'static str, Combobox)> {
             Combobox::new("c2")
                 .aria_label("Disabled")
                 .options(countries())
-                .selected("fr")
+                .selected("in")
                 .disabled(true),
         ),
         (
@@ -264,7 +263,7 @@ fn multi_thumb() -> MultiSelect {
         .aria_label("Countries")
         .placeholder("Countries")
         .options(countries())
-        .selected_values(["fr", "de"])
+        .selected_values(["in", "ae"])
 }
 
 fn multi_default() -> Field {
@@ -272,7 +271,7 @@ fn multi_default() -> Field {
         MultiSelect::new("markets")
             .placeholder("Add a market")
             .options(countries())
-            .selected_values(["fr", "de"]),
+            .selected_values(["in", "ae"]),
     )
 }
 
@@ -295,7 +294,7 @@ fn multi_limits() -> impl IntoIterator<Item = (&'static str, MultiSelect)> {
                 .placeholder("Add")
                 .options(countries())
                 .max(3)
-                .selected_values(["fr", "de", "jp"]),
+                .selected_values(["in", "ae", "sg"]),
         ),
         (
             "One chip for many",
@@ -304,7 +303,7 @@ fn multi_limits() -> impl IntoIterator<Item = (&'static str, MultiSelect)> {
                 .placeholder("Add")
                 .options(countries())
                 .summary_after(2)
-                .selected_values(["fr", "de", "jp"]),
+                .selected_values(["in", "ae", "sg"]),
         ),
         (
             "Select all",

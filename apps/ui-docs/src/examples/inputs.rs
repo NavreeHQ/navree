@@ -63,7 +63,7 @@ pub fn all() -> Vec<Example> {
 fn field_thumb() -> Field {
     Field::new("thumb-email", "Email")
         .help("We never share it.")
-        .control(Input::email("email").placeholder("ada@example.com"))
+        .control(Input::email("email").placeholder("gurpreet@example.com"))
 }
 
 fn field_help() -> Field {
@@ -74,7 +74,7 @@ fn field_help() -> Field {
 
 fn field_error() -> Field {
     Field::new("deal-amount", "Value")
-        .error("Enter an amount of 0 or more, like 12,500.")
+        .error("Enter an amount of 0 or more, like 1,25,000.")
         .control(Input::text("amount").value("-40"))
 }
 
@@ -89,12 +89,13 @@ fn field_set() -> FieldSet {
         Grid::cols(2).gap(3).children((
             Field::new("street", "Street").control(Input::text("street")),
             Field::new("city", "City").control(Input::text("city")),
-            Field::new("postcode", "Postcode").control(Input::text("postcode")),
+            Field::new("postcode", "PIN code").control(Input::text("postcode")),
             Field::new("country", "Country").control(
                 NativeSelect::new("country")
                     .prompt("Choose")
-                    .option("gb", "United Kingdom")
-                    .option("in", "India"),
+                    .option("in", "India")
+                    .option("ae", "United Arab Emirates")
+                    .selected("in"),
             ),
         )),
     )
@@ -103,7 +104,7 @@ fn field_set() -> FieldSet {
 fn field_label() -> Stack {
     Stack::gap(2).children((
         Label::new("search-deals", "Search deals"),
-        Input::search("q").id("search-deals").placeholder("Acme"),
+        Input::search("q").id("search-deals").placeholder("Sutlej"),
     ))
 }
 
@@ -116,7 +117,7 @@ fn input_kinds() -> impl IntoIterator<Item = (&'static str, Input)> {
         ("text", Input::text("title").placeholder("Title")),
         (
             "email",
-            Input::email("email").placeholder("ada@example.com"),
+            Input::email("email").placeholder("gurpreet@example.com"),
         ),
         (
             "password",
@@ -127,7 +128,7 @@ fn input_kinds() -> impl IntoIterator<Item = (&'static str, Input)> {
         ("date", Input::date("closes_on").value("2026-11-30")),
         (
             "tel",
-            Input::new(InputKind::Tel, "phone").placeholder("+44 20 7946 0000"),
+            Input::new(InputKind::Tel, "phone").placeholder("+91 98765 43210"),
         ),
         (
             "url",
@@ -139,10 +140,13 @@ fn input_kinds() -> impl IntoIterator<Item = (&'static str, Input)> {
 fn input_states() -> impl IntoIterator<Item = (&'static str, Input)> {
     [
         ("Empty", Input::text("a").placeholder("Placeholder")),
-        ("Filled", Input::text("b").value("Acme renewal")),
+        ("Filled", Input::text("b").value("Sutlej Supply renewal")),
         ("Invalid", Input::text("c").value("-40").invalid(true)),
         ("Disabled", Input::text("d").value("Locked").disabled(true)),
-        ("Read only", Input::text("e").value("ACME-0042").readonly()),
+        (
+            "Read only",
+            Input::text("e").value("SUTLEJ-0042").readonly(),
+        ),
     ]
 }
 
@@ -150,11 +154,11 @@ fn input_group_default() -> Field {
     Field::new("deal-value", "Value").control(
         InputGroup::new(
             Input::text("amount")
-                .placeholder("12,500")
+                .placeholder("1,25,000")
                 .inputmode("decimal"),
         )
-        .start("$")
-        .end("USD"),
+        .start("₹")
+        .end("INR"),
     )
 }
 
@@ -293,8 +297,8 @@ fn radio_group_default() -> RadioGroup {
 
 fn radio_group_disabled() -> RadioGroup {
     RadioGroup::new("region", "Data region")
-        .option("eu", "Europe")
-        .option("us", "United States")
-        .selected("eu")
+        .option("mum", "Mumbai")
+        .option("del", "Delhi")
+        .selected("mum")
         .disabled(true)
 }

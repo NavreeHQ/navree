@@ -121,8 +121,11 @@ fn tabs_thumb() -> Tabs {
 
 fn tabs_default() -> Tabs {
     Tabs::new("deal-tabs", "Deal sections")
-        .tab(Tab::new("overview", "Overview").panel(Text::muted("Acme renewal, in Proposal.")))
-        .tab(Tab::new("notes", "Notes").panel(Text::muted("Three notes, the last from Ada.")))
+        .tab(
+            Tab::new("overview", "Overview")
+                .panel(Text::muted("Sutlej Supply renewal, in Proposal.")),
+        )
+        .tab(Tab::new("notes", "Notes").panel(Text::muted("Three notes, the last from Gurpreet.")))
         .tab(Tab::new("files", "Files").disabled(true))
         .tab(Tab::new("history", "History").panel(Text::muted("Every change to this deal.")))
 }
@@ -339,7 +342,8 @@ fn dropdown_groups() -> DropdownMenu {
             MenuGroup::new("Share")
                 .item(MenuItem::action("Copy link").icon(icons::LINK))
                 .item(
-                    MenuItem::link("Email the owner", "mailto:ada@example.com").icon(icons::MAIL),
+                    MenuItem::link("Email the owner", "mailto:gurpreet@example.com")
+                        .icon(icons::MAIL),
                 ),
         )
 }
@@ -393,7 +397,7 @@ fn dropdown_row() -> Table {
         .caption("Deals")
         .head((TableHead::new("Deal"), TableHead::new("Actions")))
         .rows(
-            [("Acme renewal", 1), ("Globex expansion", 2)].map(|(title, id)| {
+            [("Sutlej Supply renewal", 1), ("Haveli Home expansion", 2)].map(|(title, id)| {
                 TableRowEl::new((
                     TableCell::new(title),
                     TableCell::new(
@@ -433,9 +437,12 @@ fn toast_tones() -> impl IntoIterator<Item = (&'static str, Toaster)> {
 
 fn toast_action() -> Toaster {
     Toaster::new().toast(
-        Toast::new(ToastTone::Success, "Acme renewal moved to the archive.")
-            .title("Archived")
-            .action(ToastAction::post("Undo", "/deals/42/restore")),
+        Toast::new(
+            ToastTone::Success,
+            "Sutlej Supply renewal moved to the archive.",
+        )
+        .title("Archived")
+        .action(ToastAction::post("Undo", "/deals/42/restore")),
     )
 }
 

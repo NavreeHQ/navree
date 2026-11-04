@@ -30,7 +30,7 @@ pub struct NewDeal {
     pub title: String,
     /// Value
     #[validate(skip)]
-    #[form(placeholder = "12,500", help = "In US dollars.")]
+    #[form(placeholder = "1,25,000", help = "In rupees.")]
     pub amount: Money,
     /// Stage
     #[validate(skip)]

@@ -33,7 +33,7 @@ pub fn all() -> Vec<Example> {
 fn alert_default() -> Alert {
     Alert::new(AlertTone::Success)
         .title("Deal saved")
-        .body("Acme renewal moved to Proposal.")
+        .body("Sutlej Supply renewal moved to Proposal.")
 }
 
 fn alert_tones() -> impl IntoIterator<Item = (&'static str, Alert)> {
@@ -54,13 +54,13 @@ fn alert_tones() -> impl IntoIterator<Item = (&'static str, Alert)> {
             "Warning",
             Alert::new(AlertTone::Warning)
                 .title("Trial ends in 3 days")
-                .body("Add a card to keep your data."),
+                .body("Add a UPI ID or a card to keep your data."),
         ),
         (
             "Danger",
             Alert::new(AlertTone::Danger)
                 .title("Payment failed")
-                .body("The card was declined. Try another one."),
+                .body("The payment was declined. Try another UPI ID or card."),
         ),
     ]
 }
@@ -81,7 +81,7 @@ fn empty_default() -> Empty {
 }
 
 fn empty_search() -> Empty {
-    Empty::new("Nothing matches “globx”")
+    Empty::new("Nothing matches “sutlj”")
         .icon(icons::SEARCH)
         .description("Check the spelling, or clear the filters.")
         .actions(Button::outline("Clear filters"))

@@ -40,13 +40,13 @@ pub fn all() -> Vec<Example> {
 }
 
 fn card_thumb() -> Card {
-    Card::titled("Acme renewal")
-        .description("Proposal · $48,000")
+    Card::titled("Sutlej Supply renewal")
+        .description("Proposal · ₹48,000")
         .action(Badge::new("Hot").variant(BadgeVariant::Warning))
 }
 
 fn card_default() -> Card {
-    Card::titled("Acme renewal")
+    Card::titled("Sutlej Supply renewal")
         .description("Annual platform license, 120 seats.")
         .action(Button::ghost("Edit").size(Size::Sm).icon(icons::PENCIL))
         .body(Text::new(
@@ -61,8 +61,8 @@ fn card_default() -> Card {
 fn card_grid() -> Grid {
     Grid::cols(3).gap(3).children((
         Card::titled("Open deals").body(Stat::new("Count", "312")),
-        Card::titled("Pipeline").body(Stat::new("Value", "$4.2M")),
-        Card::titled("Won").body(Stat::new("This month", "$640K")),
+        Card::titled("Pipeline").body(Stat::new("Value", "₹4.2 crore")),
+        Card::titled("Won").body(Stat::new("This month", "₹64 lakh")),
     ))
 }
 
@@ -104,38 +104,38 @@ fn badge_icon() -> Row {
 
 fn avatar_default() -> Row {
     Row::gap(2).children((
-        Avatar::placeholder("Ada Lovelace"),
-        Avatar::placeholder("Alan Turing"),
-        Avatar::placeholder("Grace Hopper"),
+        Avatar::placeholder("Gurpreet Singh"),
+        Avatar::placeholder("Harleen Kaur"),
+        Avatar::placeholder("Manpreet Gill"),
     ))
 }
 
 fn avatar_sizes() -> impl IntoIterator<Item = (&'static str, Avatar)> {
     [
-        ("Xs", Avatar::placeholder("Ada Lovelace").size(Size::Xs)),
-        ("Sm", Avatar::placeholder("Ada Lovelace").size(Size::Sm)),
-        ("Md", Avatar::placeholder("Ada Lovelace")),
-        ("Lg", Avatar::placeholder("Ada Lovelace").size(Size::Lg)),
+        ("Xs", Avatar::placeholder("Gurpreet Singh").size(Size::Xs)),
+        ("Sm", Avatar::placeholder("Gurpreet Singh").size(Size::Sm)),
+        ("Md", Avatar::placeholder("Gurpreet Singh")),
+        ("Lg", Avatar::placeholder("Gurpreet Singh").size(Size::Lg)),
     ]
 }
 
 fn item_thumb() -> Item {
-    Item::new("Ada Lovelace")
-        .description("ada@example.com")
-        .media(Avatar::placeholder("Ada Lovelace"))
+    Item::new("Gurpreet Singh")
+        .description("gurpreet@example.com")
+        .media(Avatar::placeholder("Gurpreet Singh"))
         .variant(ItemVariant::Outline)
 }
 
 fn item_default() -> Stack {
     Stack::gap(2).children((
-        Item::new("Ada Lovelace")
-            .description("Owner · ada@example.com")
-            .media(Avatar::placeholder("Ada Lovelace"))
+        Item::new("Gurpreet Singh")
+            .description("Owner · gurpreet@example.com")
+            .media(Avatar::placeholder("Gurpreet Singh"))
             .variant(ItemVariant::Outline)
             .actions(Button::ghost("Remove").size(Size::Sm)),
-        Item::new("Alan Turing")
-            .description("Member · alan@example.com")
-            .media(Avatar::placeholder("Alan Turing"))
+        Item::new("Harleen Kaur")
+            .description("Member · harleen@example.com")
+            .media(Avatar::placeholder("Harleen Kaur"))
             .variant(ItemVariant::Outline)
             .actions(Button::ghost("Remove").size(Size::Sm)),
     ))
@@ -167,7 +167,7 @@ fn item_variants() -> impl IntoIterator<Item = (&'static str, Item)> {
 }
 
 fn item_link() -> Item {
-    Item::new("Acme renewal")
+    Item::new("Sutlej Supply renewal")
         .description("Proposal · closes 30 November")
         .media(components::icon(icons::HANDSHAKE))
         .variant(ItemVariant::Outline)
@@ -185,7 +185,7 @@ fn typography_headings() -> Stack {
     Stack::gap(3).children((
         Heading::h1("Deals"),
         Heading::h2("Open this quarter"),
-        Heading::h3("Acme renewal"),
+        Heading::h3("Sutlej Supply renewal"),
         Heading::h4("Notes"),
     ))
 }
@@ -208,9 +208,9 @@ fn kbd_default() -> Row {
 }
 
 fn attachment_default() -> Attachment {
-    Attachment::new("proposal-acme.pdf")
+    Attachment::new("proposal-sutlej.pdf")
         .meta("PDF · 2.4 MB")
-        .href("/files/proposal-acme.pdf")
+        .href("/files/proposal-sutlej.pdf")
 }
 
 fn attachment_action() -> Attachment {
@@ -231,8 +231,8 @@ fn message_default() -> Stack {
     Stack::gap(3).children((
         Marker::new(MarkerVariant::Separator, "Today"),
         Message::new(BubbleSide::Start)
-            .avatar(Avatar::placeholder("Ada Lovelace"))
-            .header("Ada Lovelace")
+            .avatar(Avatar::placeholder("Simran Kaur"))
+            .header("Simran Kaur")
             .content(Bubble::new(
                 BubbleSide::Start,
                 "Procurement signed off. Can we send the contract?",
@@ -241,7 +241,7 @@ fn message_default() -> Stack {
         Message::new(BubbleSide::End)
             .content((
                 Bubble::new(BubbleSide::End, "Sending it now."),
-                Attachment::new("contract-acme.pdf").meta("PDF · 310 KB"),
+                Attachment::new("contract-sutlej.pdf").meta("PDF · 310 KB"),
             ))
             .footer("10:44"),
     ))
@@ -251,7 +251,7 @@ fn message_markers() -> impl IntoIterator<Item = (&'static str, Marker)> {
     [
         (
             "Plain",
-            Marker::new(MarkerVariant::Plain, "Alan joined the chat"),
+            Marker::new(MarkerVariant::Plain, "Harleen joined the chat"),
         ),
         (
             "Separator",

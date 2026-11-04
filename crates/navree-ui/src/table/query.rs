@@ -3,12 +3,12 @@
 //! still show.
 //!
 //! ```text
-//! q=ada                      the global search
+//! q=sutlej                   the global search
 //! sort=-amount,title         columns, in priority order; `-` is descending; `sort=` is none
 //! page=3  per=50             a numbered page, and the page size
 //! after=...  before=...      a cursor, in cursor mode
 //! count=1                    count now, for a table that doesn't by itself
-//! f.title=ada                a filter: text, select, boolean, relation
+//! f.title=sutlej             a filter: text, select, boolean, relation
 //! f.stage=won&f.stage=lost   any of these
 //! f.amount.min=1  .max=9     a range; dates too
 //! f.owner.empty=1            is NULL

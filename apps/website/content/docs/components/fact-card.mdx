@@ -11,12 +11,12 @@ description: "A small label, a value and the details under it, in a card, with a
 use navree::ui::*;
 
 FactGrid::new().cards([
-    FactCard::new("Customer", "Fernwood Supply")
+    FactCard::new("Customer", "Haveli Home Goods")
         .icon(icons::BUILDING_COMPLEX)
         .tone(Tone::Info)
         .detail("Business plan")
         .detail("14 users"),
-    FactCard::new("Assigned to", "Dev Mehta")
+    FactCard::new("Assigned to", "Manpreet Gill")
         .icon(icons::USER_ROUND)
         .detail("Billing team"),
 ])
@@ -44,7 +44,7 @@ The label is small and uppercase. The value is large and may be any node: text, 
 
 <UiA11y>
 
-- Each card is a description list: the label is the term, and the value and details are its descriptions. A screen reader reads "Customer, Fernwood Supply, Business plan since March 2024".
+- Each card is a description list: the label is the term, and the value and details are its descriptions. A screen reader reads "Customer, Haveli Home Goods, Business plan since March 2024".
 - The icon is hidden from assistive technology.
 - A card is not interactive. Put a link in the value or a detail when it should lead somewhere.
 - Long values and details wrap between words, and a word breaks only when it is wider than the card. Each sits in a `<bdi>`, so right-to-left text keeps its direction.

@@ -17,14 +17,14 @@ Type a country, a code or a word such as `region`.
 
 Like icons, a flag is a constant, so a binary holds the flags its code names and no others.
 
-- **A constant**, `flags::AE`. Your editor completes it, and a code that does not exist does not compile.
-- **`flag!("ae")`** takes the code as a person writes it, in any case, with `-` or `_` in `GB-SCT`. It is checked while your app compiles, and a code no flag has stops the build.
+- **A constant**, `flags::IN`. Your editor completes it, and a code that does not exist does not compile.
+- **`flag!("in")`** takes the code as a person writes it, in any case, with `-` or `_` in `GB-SCT`. It is checked while your app compiles, and a code no flag has stops the build.
 - **`Flag::country(code)`** is for a code that comes from data. It finds the flag in any case, and a code no flag has draws a neutral placeholder and never panics. Because the code could be any flag, this one call puts all of them in the binary: in a release build, naming two flags adds about 17 KB to a program, and calling `Flag::country` adds 3.7 MB.
 
 ```rust
 use navree::ui::{Flag, flag, flags};
 
-Flag::new(flags::AE)        // a constant
+Flag::new(flags::IN)        // a constant
 flag!("gb-sct")             // a literal, checked while the app compiles
 Flag::country(&row.country) // data: the whole set comes along
 ```

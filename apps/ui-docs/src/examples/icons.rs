@@ -77,30 +77,30 @@ fn icons_own() -> Row {
 
 fn flags_usage() -> Row {
     Row::gap(6).children((
-        Row::gap(2).children((flag!("AE").decorative(), "United Arab Emirates")),
-        Row::gap(2).children((Flag::new(flags::IN).decorative(), "India")),
-        Row::gap(2).children((flag!("gb-sct").decorative(), "Scotland")),
+        Row::gap(2).children((flag!("in").decorative(), "India")),
+        Row::gap(2).children((Flag::new(flags::NP).decorative(), "Nepal")),
+        Row::gap(2).children((flag!("lk").decorative(), "Sri Lanka")),
     ))
 }
 
 fn flags_sizes() -> Vec<(&'static str, Vec<Flag>)> {
     vec![
-        ("Xs, 20 px", vec![flag!("BR").size(FlagSize::Xs)]),
-        ("Sm, 24 px (default)", vec![flag!("BR")]),
-        ("Md, 32 px", vec![flag!("BR").size(FlagSize::Md)]),
-        ("Lg, 40 px", vec![flag!("BR").size(FlagSize::Lg)]),
-        ("Xl, 48 px", vec![flag!("BR").size(FlagSize::Xl)]),
+        ("Xs, 20 px", vec![flag!("IN").size(FlagSize::Xs)]),
+        ("Sm, 24 px (default)", vec![flag!("IN")]),
+        ("Md, 32 px", vec![flag!("IN").size(FlagSize::Md)]),
+        ("Lg, 40 px", vec![flag!("IN").size(FlagSize::Lg)]),
+        ("Xl, 48 px", vec![flag!("IN").size(FlagSize::Xl)]),
     ]
 }
 
 fn flags_shapes() -> Vec<(&'static str, Vec<Flag>)> {
     vec![
-        ("Rect, 4 by 3", vec![flag!("CH").size(FlagSize::Lg)]),
+        ("Rect, 4 by 3", vec![flag!("IN").size(FlagSize::Lg)]),
         (
             "Square",
-            vec![flag!("CH").size(FlagSize::Lg).shape(FlagShape::Square)],
+            vec![flag!("IN").size(FlagSize::Lg).shape(FlagShape::Square)],
         ),
-        ("Round", vec![flag!("CH").size(FlagSize::Lg).round()]),
+        ("Round", vec![flag!("IN").size(FlagSize::Lg).round()]),
     ]
 }
 
@@ -117,19 +117,21 @@ fn flags_places() -> Row {
 fn flags_in_components() -> Stack {
     Stack::gap(4).children((
         Row::gap(2).children((
-            Badge::new(Row::gap(1).children((flag!("DE").decorative(), "Germany"))),
-            Badge::new(Row::gap(1).children((flag!("JP").decorative(), "Japan")))
+            Badge::new(Row::gap(1).children((flag!("IN").decorative(), "India"))),
+            Badge::new(Row::gap(1).children((flag!("AE").decorative(), "United Arab Emirates")))
                 .variant(BadgeVariant::Outline),
         )),
         Table::new()
             .head((TableHead::new("Country"), TableHead::new("Opens").numeric()))
             .rows((
                 TableRowEl::new((
-                    TableCell::new(Row::gap(2).children((flag!("FR").decorative(), "France"))),
+                    TableCell::new(Row::gap(2).children((flag!("IN").decorative(), "India"))),
                     TableCell::new("12,480").numeric(),
                 )),
                 TableRowEl::new((
-                    TableCell::new(Row::gap(2).children((flag!("BR").decorative(), "Brazil"))),
+                    TableCell::new(
+                        Row::gap(2).children((flag!("AE").decorative(), "United Arab Emirates")),
+                    ),
                     TableCell::new("9,215").numeric(),
                 )),
             )),
@@ -139,7 +141,7 @@ fn flags_in_components() -> Stack {
 fn flags_from_data() -> Row {
     // A code that comes from data: any case, `gb-sct` or `GB_SCT`. One no flag
     // has draws a neutral placeholder, and never panics.
-    let codes = ["us", "GB-SCT", "xx-unknown"];
+    let codes = ["in", "GB-SCT", "xx-unknown"];
     Row::gap(4).children(
         codes
             .iter()

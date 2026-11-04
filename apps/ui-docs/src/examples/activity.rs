@@ -60,16 +60,9 @@ pub fn all() -> Vec<Example> {
     ]
 }
 
-/// A small flag, drawn as SVG: the flag slot takes any node.
-fn flag(code: &str) -> Node {
-    let shapes = match code {
-        "DE" => {
-            r##"<rect width="3" height=".67" fill="#111"/><rect y=".67" width="3" height=".67" fill="#d00"/><rect y="1.33" width="3" height=".67" fill="#fc0"/>"##
-        }
-        _ => {
-            r##"<rect width="3" height=".67" fill="#f93"/><rect y=".67" width="3" height=".67" fill="#fff"/><rect y="1.33" width="3" height=".67" fill="#138808"/>"##
-        }
-    };
+/// A small flag of India, drawn as SVG: the flag slot takes any node.
+fn flag() -> Node {
+    let shapes = r##"<rect width="3" height=".67" fill="#f93"/><rect y=".67" width="3" height=".67" fill="#fff"/><rect y="1.33" width="3" height=".67" fill="#138808"/>"##;
     el("svg")
         .attr("viewBox", "0 0 3 2")
         .child(Node::Static(shapes))
@@ -92,7 +85,7 @@ fn timeline_thumb() -> Timeline {
 }
 
 fn timeline_default() -> Timeline {
-    Timeline::new("order", "Order 4821 for Lena Fischer")
+    Timeline::new("order", "Order 4821 for Harleen Kaur")
         .time_zone("Asia/Kolkata", 19_800)
         .event(
             TimelineEvent::new("Order placed")
@@ -103,27 +96,27 @@ fn timeline_default() -> Timeline {
             TimelineEvent::new("Payment accepted")
                 .at(1_793_592_668)
                 .tone(Tone::Success)
-                .detail("Card ending 4242"),
+                .detail("Paid by UPI"),
         )
         .event(
             TimelineEvent::new("Packed")
                 .at(1_793_594_468)
                 .tone(Tone::Info)
                 .meta(Meta::icon(icons::PACKAGE, "2 boxes"))
-                .meta(Meta::flag(flag("IN"), "Pune warehouse")),
+                .meta(Meta::flag(flag(), "Ludhiana warehouse")),
         )
         .event(
             TimelineEvent::new("Handed to the courier")
                 .at(1_793_598_068)
                 .tone(Tone::Success)
-                .meta(Meta::icon(icons::TRUCK, "Swiftline Express")),
+                .meta(Meta::icon(icons::TRUCK, "Malwa Couriers")),
         )
         .event(
             TimelineEvent::new("Refund requested")
                 .at(1_793_679_700)
                 .tone(Tone::Warning)
                 .detail("Ordered the wrong size")
-                .meta(Meta::flag(flag("DE"), "Berlin")),
+                .meta(Meta::flag(flag(), "Jaipur")),
         )
 }
 
@@ -178,15 +171,15 @@ fn timeline_states() -> Timeline {
 
 fn timeline_meta() -> Timeline {
     Timeline::new("meta", "A parcel scan")
-        .time_zone("Europe/Berlin", 3600)
+        .time_zone("Asia/Kolkata", 19_800)
         .event(
             TimelineEvent::new("Scanned at the sorting hub")
                 .at(1_793_620_000)
                 .tone(Tone::Info)
-                .meta(Meta::icon(icons::TRUCK, "Swiftline Express"))
-                .meta(Meta::flag(flag("DE"), "Leipzig, Germany"))
+                .meta(Meta::icon(icons::TRUCK, "Malwa Couriers"))
+                .meta(Meta::flag(flag(), "Ludhiana, Punjab"))
                 .meta(Meta::icon(icons::PACKAGE, "2 of 2 boxes"))
-                .meta(Meta::icon(icons::TAG, "SL-90417-DE").ltr()),
+                .meta(Meta::icon(icons::TAG, "MC-90417-IN").ltr()),
         )
 }
 
@@ -237,29 +230,29 @@ fn timeline_text() -> Timeline {
 
 fn feed_rows() -> Vec<ActivityItem> {
     vec![
-        ActivityItem::new("Dev Mehta", "replied to")
+        ActivityItem::new("Manpreet Gill", "replied to")
             .object("Ticket 2041")
             .tone(Tone::Success)
             .icon(icons::MESSAGE_SQUARE_REPLY)
             .at(1_793_592_667)
             .tag("Billing")
             .meta(Meta::icon(icons::TIMER, "First reply in 12 min"))
-            .meta(Meta::icon(icons::BUILDING_COMPLEX, "Fernwood Supply"))
+            .meta(Meta::icon(icons::BUILDING_COMPLEX, "Haveli Home Goods"))
             .href("#ticket-2041"),
-        ActivityItem::new("Tomás García", "assigned")
-            .object("Ticket 2038 to Dev Mehta")
+        ActivityItem::new("Jaspreet Dhillon", "assigned")
+            .object("Ticket 2038 to Manpreet Gill")
             .tone(Tone::Info)
             .icon(icons::USER_PLUS)
             .at(1_793_592_600)
             .meta(Meta::icon(icons::FLAG, "High priority"))
             .href("#ticket-2038"),
-        ActivityItem::new("Aiko Tanaka", "escalated")
+        ActivityItem::new("Rohit Malhotra", "escalated")
             .object("Ticket 2031")
             .tone(Tone::Warning)
             .icon(icons::TRIANGLE_ALERT)
             .at(1_793_592_540)
             .meta(Meta::icon(icons::CLOCK, "Misses the SLA in 20 min"))
-            .meta(Meta::icon(icons::USER_ROUND, "mira@example.com").ltr())
+            .meta(Meta::icon(icons::USER_ROUND, "simran@example.com").ltr())
             .href("#ticket-2031"),
         ActivityItem::new("The routing bot", "tagged")
             .object("Ticket 2041")
@@ -272,13 +265,13 @@ fn feed_rows() -> Vec<ActivityItem> {
 fn feed_thumb() -> ActivityFeed {
     ActivityFeed::new("thumb", "Recent activity")
         .item(
-            ActivityItem::new("Dev Mehta", "replied to a ticket")
+            ActivityItem::new("Manpreet Gill", "replied to a ticket")
                 .tone(Tone::Success)
                 .icon(icons::MESSAGE_SQUARE_REPLY)
                 .time_text("2 min ago"),
         )
         .item(
-            ActivityItem::new("Tomás García", "assigned a ticket")
+            ActivityItem::new("Jaspreet Dhillon", "assigned a ticket")
                 .tone(Tone::Info)
                 .icon(icons::USER_PLUS)
                 .time_text("5 min ago"),
@@ -308,7 +301,7 @@ fn feed_hidden() -> ActivityFeed {
     ActivityFeed::new("hidden", "Recent activity")
         .summary("3 events")
         .item(
-            ActivityItem::new("Dev Mehta", "replied to a ticket")
+            ActivityItem::new("Manpreet Gill", "replied to a ticket")
                 .tone(Tone::Success)
                 .icon(icons::MESSAGE_SQUARE_REPLY)
                 .time_text("2 min ago"),
@@ -355,7 +348,7 @@ fn feed_states() -> impl IntoIterator<Item = (&'static str, ActivityFeed)> {
 }
 
 fn fact_thumb() -> FactCard {
-    FactCard::new("Customer", "Fernwood Supply")
+    FactCard::new("Customer", "Haveli Home Goods")
         .icon(icons::BUILDING_COMPLEX)
         .detail("Business plan since March 2024")
 }
@@ -366,12 +359,12 @@ fn fact_default() -> FactGrid {
             .icon(icons::CHECK_CHECK)
             .tone(Tone::Success)
             .detail("After 5 h 33 min"),
-        FactCard::new("Customer", "Fernwood Supply")
+        FactCard::new("Customer", "Haveli Home Goods")
             .icon(icons::BUILDING_COMPLEX)
             .tone(Tone::Info)
             .detail("Business plan")
             .detail("14 users"),
-        FactCard::new("Assigned to", "Dev Mehta")
+        FactCard::new("Assigned to", "Manpreet Gill")
             .icon(icons::USER_ROUND)
             .tone(Tone::named("violet"))
             .detail("Billing team"),
@@ -425,7 +418,7 @@ fn regions_live() -> Region {
     ActivityFeed::new("live-activity", "Live activity")
         .summary("New rows arrive as the stream speaks")
         .item(
-            ActivityItem::new("Priya Nair", "replied to")
+            ActivityItem::new("Priya Verma", "replied to")
                 .object("Ticket 2044")
                 .tone(Tone::Success)
                 .icon(icons::MESSAGE_SQUARE_REPLY)

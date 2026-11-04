@@ -75,11 +75,11 @@ fn dialog_thumb() -> Dialog {
 fn dialog_default() -> (Button, Dialog) {
     (
         Button::outline("Share deal").opens_dialog("share"),
-        Dialog::new("share", "Share Acme renewal")
+        Dialog::new("share", "Share Sutlej Supply renewal")
             .description("People with access can see the deal and its notes.")
             .body(
                 Field::new("share-email", "Email")
-                    .control(Input::email("email").placeholder("alan@example.com")),
+                    .control(Input::email("email").placeholder("harleen@example.com")),
             )
             .footer((
                 Button::outline("Cancel").closes_dialog("share"),
@@ -123,7 +123,7 @@ fn alert_dialog_default() -> (Button, AlertDialog) {
         Button::destructive("Delete deal").opens_dialog("delete-deal"),
         AlertDialog::new(
             "delete-deal",
-            "Delete Acme renewal?",
+            "Delete Sutlej Supply renewal?",
             "Its notes and files go too. This can't be undone.",
         )
         .action(
@@ -151,8 +151,8 @@ fn sheet_default() -> (Button, Sheet) {
                     Field::new("filter-owner", "Owner").control(
                         NativeSelect::new("owner")
                             .prompt("Anyone")
-                            .option("ada", "Ada Lovelace")
-                            .option("alan", "Alan Turing"),
+                            .option("gurpreet", "Gurpreet Singh")
+                            .option("harleen", "Harleen Kaur"),
                     ),
                     Switch::new("hot").label("Hot deals only"),
                 )),
@@ -191,7 +191,7 @@ fn drawer_default() -> (Button, Drawer) {
             .icon(icons::PLUS)
             .opens_dialog("quick-add"),
         Drawer::new("quick-add", "Quick add")
-            .description("Add a task to Acme renewal.")
+            .description("Add a task to Sutlej Supply renewal.")
             .body(Field::new("task-title", "Task").control(Input::text("title")))
             .footer((
                 Button::outline("Cancel").closes_dialog("quick-add"),
@@ -203,7 +203,7 @@ fn drawer_default() -> (Button, Drawer) {
 fn popover_thumb() -> Popover {
     Popover::new("thumb-popover", "Owner")
         .label("Owner")
-        .body(Text::muted("Ada Lovelace"))
+        .body(Text::muted("Gurpreet Singh"))
 }
 
 fn popover_default() -> Popover {
@@ -271,18 +271,21 @@ fn tooltip_default() -> Row {
 }
 
 fn hover_card_thumb() -> HoverCard {
-    HoverCard::new("thumb-hover", el("a").href("/people/ada").child("@ada"))
-        .body(Text::muted("Ada Lovelace · Sales"))
+    HoverCard::new(
+        "thumb-hover",
+        el("a").href("/people/gurpreet").child("@gurpreet"),
+    )
+    .body(Text::muted("Gurpreet Singh · Sales"))
 }
 
 fn hover_card_default() -> HoverCard {
     HoverCard::new(
-        "ada-card",
-        el("a").href("/people/ada").child("Ada Lovelace"),
+        "gurpreet-card",
+        el("a").href("/people/gurpreet").child("Gurpreet Singh"),
     )
     .body(
-        Item::new("Ada Lovelace")
+        Item::new("Gurpreet Singh")
             .description("Account executive · 42 open deals")
-            .media(Avatar::placeholder("Ada Lovelace")),
+            .media(Avatar::placeholder("Gurpreet Singh")),
     )
 }

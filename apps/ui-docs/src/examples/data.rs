@@ -64,10 +64,13 @@ fn table_thumb() -> Table {
     Table::new()
         .head((TableHead::new("Deal"), TableHead::new("Value").numeric()))
         .rows((
-            TableRowEl::new((TableCell::new("Acme"), TableCell::new("$48,000").numeric())),
             TableRowEl::new((
-                TableCell::new("Globex"),
-                TableCell::new("$12,500").numeric(),
+                TableCell::new("Sutlej Supply"),
+                TableCell::new("₹48,000").numeric(),
+            )),
+            TableRowEl::new((
+                TableCell::new("Haveli Home"),
+                TableCell::new("₹12,500").numeric(),
             )),
         ))
 }
@@ -83,22 +86,22 @@ fn table_default() -> Table {
         ))
         .rows((
             TableRowEl::new((
-                TableCell::new("Acme renewal"),
+                TableCell::new("Sutlej Supply renewal"),
                 TableCell::new(Badge::new("Proposal")),
-                TableCell::new("Ada Lovelace"),
-                TableCell::new("$48,000").numeric(),
+                TableCell::new("Gurpreet Singh"),
+                TableCell::new("₹48,000").numeric(),
             )),
             TableRowEl::new((
-                TableCell::new("Globex expansion"),
+                TableCell::new("Haveli Home expansion"),
                 TableCell::new(Badge::new("Won").variant(BadgeVariant::Success)),
-                TableCell::new("Alan Turing"),
-                TableCell::new("$12,500").numeric(),
+                TableCell::new("Harleen Kaur"),
+                TableCell::new("₹12,500").numeric(),
             )),
             TableRowEl::new((
-                TableCell::new("Initech pilot"),
+                TableCell::new("Doaba Traders pilot"),
                 TableCell::new(Badge::new("Lead")),
-                TableCell::new("Grace Hopper"),
-                TableCell::new("$3,200").numeric(),
+                TableCell::new("Manpreet Gill"),
+                TableCell::new("₹3,200").numeric(),
             )),
         ))
 }
@@ -112,16 +115,16 @@ fn table_states() -> Table {
         ))
         .rows((
             TableRowEl::new((
-                TableCell::new("Acme renewal"),
-                TableCell::new("Ada Lovelace").hide_on_mobile(),
-                TableCell::new("$48,000").numeric(),
+                TableCell::new("Sutlej Supply renewal"),
+                TableCell::new("Gurpreet Singh").hide_on_mobile(),
+                TableCell::new("₹48,000").numeric(),
             ))
             .key("42")
             .selected(true),
             TableRowEl::new((
-                TableCell::new("Globex expansion"),
-                TableCell::new("Alan Turing").hide_on_mobile(),
-                TableCell::new("$12,500").numeric(),
+                TableCell::new("Haveli Home expansion"),
+                TableCell::new("Harleen Kaur").hide_on_mobile(),
+                TableCell::new("₹12,500").numeric(),
             ))
             .key("43"),
         ))
@@ -147,7 +150,7 @@ pub struct Deal {
     pub company: &'static str,
     #[col(badge = tone)]
     pub stage: &'static str,
-    #[col(sortable, numeric, filter = range)]
+    #[col(sortable, numeric, filter = range, label = "Amount (₹)")]
     pub amount: Money,
     #[col(sortable, filter = date, label = "Closes")]
     pub closes_on: chrono::NaiveDate,
@@ -157,11 +160,46 @@ pub struct Deal {
 fn deals() -> Vec<Deal> {
     let day = |d| chrono::NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();
     [
-        (1, "Acme renewal", "Acme", "Negotiation", 4_800_000, day(30)),
-        (2, "Globex expansion", "Globex", "Won", 1_250_000, day(4)),
-        (3, "Initech pilot", "Initech", "Lead", 320_000, day(21)),
-        (4, "Hooli platform", "Hooli", "Proposal", 2_100_000, day(18)),
-        (5, "Stark support", "Stark", "Qualified", 640_000, day(12)),
+        (
+            1,
+            "Sutlej Supply renewal",
+            "Sutlej Supply",
+            "Negotiation",
+            4_800_000,
+            day(30),
+        ),
+        (
+            2,
+            "Haveli Home expansion",
+            "Haveli Home",
+            "Won",
+            1_250_000,
+            day(4),
+        ),
+        (
+            3,
+            "Doaba Traders pilot",
+            "Doaba Traders",
+            "Lead",
+            320_000,
+            day(21),
+        ),
+        (
+            4,
+            "Phulkari Textiles platform",
+            "Phulkari Textiles",
+            "Proposal",
+            2_100_000,
+            day(18),
+        ),
+        (
+            5,
+            "Pind Pantry support",
+            "Pind Pantry",
+            "Qualified",
+            640_000,
+            day(12),
+        ),
     ]
     .map(|(id, title, company, stage, amount, closes_on)| Deal {
         id,
@@ -264,8 +302,8 @@ fn stat_thumb() -> Stat {
 fn stat_default() -> Grid {
     Grid::cols(3).gap(4).children((
         Stat::new("Open deals", "312").trend("+12 this week", true),
-        Stat::new("Pipeline value", "$4.2M").trend("+3.1%", true),
-        Stat::new("Won this month", "$640K").trend("-2.4%", false),
+        Stat::new("Pipeline value", "₹4.2 crore").trend("+3.1%", true),
+        Stat::new("Won this month", "₹64 lakh").trend("-2.4%", false),
     ))
 }
 

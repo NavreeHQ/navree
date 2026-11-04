@@ -18,10 +18,10 @@ use crate::node::into_node;
 /// let owner = Combobox::new("owner_id")
 ///     .placeholder("Search people")
 ///     .search("/people/options")
-///     .selected_choice(("7", "Grace Hopper"));
+///     .selected_choice(("7", "Gurpreet Singh"));
 /// let html = render(&owner.into());
 /// assert!(html.contains(r#"data-ui-search="/people/options""#));
-/// assert!(html.contains(r#"value="Grace Hopper""#));
+/// assert!(html.contains(r#"value="Gurpreet Singh""#));
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]

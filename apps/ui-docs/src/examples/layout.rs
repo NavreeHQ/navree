@@ -62,7 +62,7 @@ fn layout_thumb() -> Stack {
 
 fn layout_stack() -> Stack {
     Stack::gap(3).children((
-        Heading::h3("Acme renewal"),
+        Heading::h3("Sutlej Supply renewal"),
         Text::muted("Proposal · closes 30 November"),
         Row::gap(2).children((Button::primary("Mark won"), Button::outline("Edit"))),
     ))
@@ -106,8 +106,8 @@ fn layout_justify() -> impl IntoIterator<Item = (&'static str, Row)> {
 fn layout_grid() -> Grid {
     Grid::cols(4).gap(3).children((
         Stat::new("Open deals", "312"),
-        Stat::new("Pipeline", "$4.2M"),
-        Stat::new("Won", "$640K"),
+        Stat::new("Pipeline", "₹4.2 crore"),
+        Stat::new("Won", "₹64 lakh"),
         Stat::new("Due today", "18"),
     ))
 }
@@ -118,7 +118,9 @@ fn layout_span() -> Grid {
             "Revenue by month, rising from 12 to 61",
             &[12, 18, 15, 24, 31, 28, 36, 41, 39, 48, 55, 61],
         )),
-        Card::titled("Activity").body(Text::muted("Ada moved Acme renewal to Proposal")),
+        Card::titled("Activity").body(Text::muted(
+            "Gurpreet moved Sutlej Supply renewal to Proposal",
+        )),
     ))
 }
 
@@ -168,14 +170,14 @@ fn scroll_area_default() -> ScrollArea {
     ScrollArea::new("Activity").children(
         Stack::gap(2).children(
             [
-                "Ada moved Acme renewal to Proposal",
-                "Alan created Globex renewal",
-                "Grace closed Initech expansion",
-                "Ada added a note to Hooli pilot",
-                "Alan changed the owner of Stark deal",
-                "Grace archived Umbrella trial",
-                "Ada uploaded contract-acme.pdf",
-                "Alan invited Edsger to the workspace",
+                "Gurpreet moved Sutlej Supply renewal to Proposal",
+                "Harleen created Haveli Home renewal",
+                "Manpreet closed Doaba Traders expansion",
+                "Gurpreet added a note to Phulkari Textiles pilot",
+                "Harleen changed the owner of Pind Pantry deal",
+                "Manpreet archived Majha Mills trial",
+                "Gurpreet uploaded contract-sutlej.pdf",
+                "Harleen invited Ravneet to the workspace",
             ]
             .map(Text::muted),
         ),
@@ -184,14 +186,14 @@ fn scroll_area_default() -> ScrollArea {
 
 fn separator_default() -> Stack {
     Stack::gap(3).children((
-        Text::new("Acme renewal"),
+        Text::new("Sutlej Supply renewal"),
         Separator::horizontal(),
         Row::gap(3).children((
             Text::muted("Proposal").inline(),
             Separator::vertical(),
-            Text::muted("$48,000").inline(),
+            Text::muted("₹48,000").inline(),
             Separator::vertical(),
-            Text::muted("Ada Lovelace").inline(),
+            Text::muted("Gurpreet Singh").inline(),
         )),
     ))
 }
@@ -226,8 +228,8 @@ fn aspect_ratio_ratios() -> impl IntoIterator<Item = (&'static str, AspectRatio)
 
 fn direction_default() -> Direction {
     Direction::rtl(
-        Field::new("rtl-name", "الاسم")
-            .help("كما يظهر في الفواتير")
-            .control(Input::text("name").value("شركة أكمي")),
+        Field::new("rtl-name", "نام")
+            .help("جیسا بلوں پر نظر آتا ہے")
+            .control(Input::text("name").value("ستلج سپلائی کمپنی")),
     )
 }

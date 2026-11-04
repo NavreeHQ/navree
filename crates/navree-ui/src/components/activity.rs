@@ -19,7 +19,7 @@ use crate::table::Region;
 /// ```
 /// use navree_ui::{ActivityItem, Meta, Tone, icons};
 ///
-/// let row = ActivityItem::new("Lena Fischer", "replied to")
+/// let row = ActivityItem::new("Manpreet Gill", "replied to")
 ///     .object("Ticket 2041")
 ///     .tone(Tone::Info)
 ///     .icon(icons::MESSAGE_SQUARE)
@@ -46,7 +46,7 @@ pub struct ActivityItem {
 }
 
 impl ActivityItem {
-    /// `actor` did `verb`: "Lena Fischer" "replied to".
+    /// `actor` did `verb`: "Manpreet Gill" "replied to".
     pub fn new(actor: impl Into<Node>, verb: impl Into<Node>) -> Self {
         Self {
             actor: actor.into(),
@@ -253,8 +253,8 @@ enum Status {
 /// use navree_ui::{ActivityFeed, ActivityItem, Tone, render};
 ///
 /// let feed = ActivityFeed::new("activity", "Recent activity")
-///     .item(ActivityItem::new("Lena Fischer", "replied to").tone(Tone::Info));
-/// assert!(render(&feed.into()).contains("Lena Fischer"));
+///     .item(ActivityItem::new("Manpreet Gill", "replied to").tone(Tone::Info));
+/// assert!(render(&feed.into()).contains("Manpreet Gill"));
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -429,7 +429,7 @@ impl ActivityFeed {
     /// ```
     /// use navree_ui::{ActivityFeed, ActivityItem, render};
     ///
-    /// let rows = ActivityFeed::rows([ActivityItem::new("Lena Fischer", "replied to").id("event-9")], 19_800);
+    /// let rows = ActivityFeed::rows([ActivityItem::new("Manpreet Gill", "replied to").id("event-9")], 19_800);
     /// assert!(render(&rows).starts_with("<li"));
     /// ```
     pub fn rows(items: impl IntoIterator<Item = ActivityItem>, offset_seconds: i32) -> Node {

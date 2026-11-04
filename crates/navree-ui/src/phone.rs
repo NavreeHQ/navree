@@ -77,11 +77,11 @@ pub fn text_flag(region: Region) -> Node {
 /// use navree_phone::Region;
 /// use navree_ui::{PhoneInput, render};
 ///
-/// let html = render(&PhoneInput::new("phone").region(Region::parse("GB")).into());
+/// let html = render(&PhoneInput::new("phone").region(Region::parse("IN")).into());
 /// assert!(html.contains(r#"name="phone_country""#));
-/// assert!(html.contains(r#"<option value="GB" selected>United Kingdom +44</option>"#));
+/// assert!(html.contains(r#"<option value="IN" selected>India +91</option>"#));
 /// assert!(html.contains(r#"type="tel" name="phone""#));
-/// assert!(html.contains(r#"placeholder="07400 123456""#));
+/// assert!(html.contains(r#"placeholder="081234 56789""#));
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -134,7 +134,7 @@ impl PhoneInput {
     }
 
     /// The country chosen when the field has no number of its own, by its
-    /// code (`"GB"`); an unknown code chooses none.
+    /// code (`"IN"`); an unknown code chooses none.
     pub fn country(self, code: &str) -> Self {
         self.region(Region::parse(code))
     }

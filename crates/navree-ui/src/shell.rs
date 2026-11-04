@@ -384,7 +384,7 @@ impl UserMenu {
 /// ```
 /// use navree_ui::{NavGroup, NavItem, Shell, icons};
 ///
-/// let shell = Shell::new("Acme").context("Production").group(
+/// let shell = Shell::new("Cloudworks CRM").context("Production").group(
 ///     NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
 /// );
 /// let html = shell.page("Deals", "/deals").body("Hello").to_view().to_html();

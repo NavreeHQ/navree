@@ -11,16 +11,16 @@ description: "A phone number field with a searchable country list, formatting as
 use navree::ui::*;
 
 Field::new("contact-mobile", "Mobile")
-    .control(PhoneInput::new("mobile").country("GB"))
+    .control(PhoneInput::new("mobile").country("IN"))
 ```
 
 It posts three fields:
 
 | Field | Holds |
 |---|---|
-| `mobile` | the number as typed, `07400 123456` |
-| `mobile_country` | the country chosen, `GB` |
-| `mobile_e164` | the browser's reading of the number in E.164, `+447400123456`, once it has a possible length (with the browser module only) |
+| `mobile` | the number as typed, `098765 43210` |
+| `mobile_country` | the country chosen, `IN` |
+| `mobile_e164` | the browser's reading of the number in E.164, `+919876543210`, once it has a possible length (with the browser module only) |
 
 With JavaScript off it is the browser's `<select>` of countries beside a `tel` input, and posts the first two. Either way the server reads the number from the first two and never trusts `mobile_e164`: that field is a hint for code that reads the post without Navree, and it can be wrong (the browser checks lengths, not every rule of a plan) or forged.
 
@@ -49,12 +49,12 @@ async fn create(shell: AppShell) -> AppPage {
     // The country a field starts on: the workspace's, the user's.
     let form = FormView::<NewContact>::new()
         .post("/contacts")
-        .phone_region(navree::phone::Region::parse("GB"));
+        .phone_region(navree::phone::Region::parse("IN"));
     shell.page("New contact").body(form)
 }
 
 async fn store(Submit(contact): Submit<NewContact>) -> Reply {
-    // `contact.mobile` is valid, in E.164: `+447400123456`.
+    // `contact.mobile` is valid, in E.164: `+919876543210`.
     Reply::redirect("/contacts")
 }
 ```
@@ -65,9 +65,9 @@ An edit form shows a saved number the way its country writes it, unless that nat
 
 ## Typing and pasting
 
-The browser module formats as people type, with the rules of each country's numbering plan: `07400123456` becomes `07400 123456`, `+33612345678` becomes `+33 6 12 34 56 78`. Backspace after a space it added takes the digit before it. Digits of any script (`٠٥٠`, `०५०`, `０５０`) count as digits.
+The browser module formats as people type, with the rules of each country's numbering plan: `09876543210` becomes `098765 43210`, `+33612345678` becomes `+33 6 12 34 56 78`. Backspace after a space it added takes the digit before it. Digits of any script (`٠٥٠`, `०५०`, `０５０`) count as digits.
 
-A number pasted or typed with `+` and its country code picks its country, and a screen reader hears which: `+1 416 979 5000` chooses Canada. So does one dialled with the chosen country's international prefix, such as `00 44 ...` from France, and the box writes it with `+` (`+44 ...`), so it reads the same whatever country is chosen. A country that shares its code with others stays chosen while the number may still be its own, and changes when the number belongs elsewhere: with Canada chosen, `+1 650 253 0000` chooses the United States. Text with letters, such as an extension (`ext. 12`), is left as typed for the server to read.
+A number pasted or typed with `+` and its country code picks its country, and a screen reader hears which: `+1 416 979 5000` chooses Canada. So does one dialled with the chosen country's international prefix, such as `00 91 ...` from France, and the box writes it with `+` (`+91 ...`), so it reads the same whatever country is chosen. A country that shares its code with others stays chosen while the number may still be its own, and changes when the number belongs elsewhere: with Canada chosen, `+1 650 253 0000` chooses the United States. Text with letters, such as an extension (`ext. 12`), is left as typed for the server to read.
 
 The numbering plans the module formats with load once, on the first focus of a phone field, from a file cached for good: 18 KB with brotli. A page that shows a phone input but where nobody touches it loads only the module, under 5 KB.
 
@@ -111,7 +111,7 @@ The control mirrors in a right-to-left page: the country picker moves to the sta
 | `Enter` | Chooses the highlighted country and returns to the number. |
 | `Escape` | Closes the list and returns to the country button. |
 
-- The field's label names the number box; the country button is named "Country: United Kingdom +44".
+- The field's label names the number box; the country button is named "Country: India +91".
 - The list is a WAI-ARIA combobox: the search box owns a `listbox`, and the highlighted country is its active descendant.
 - A country chosen by a pasted number, and the number of countries a search finds, are announced politely.
 - Errors are tied to the number box with `aria-describedby`, and mark it `aria-invalid`.

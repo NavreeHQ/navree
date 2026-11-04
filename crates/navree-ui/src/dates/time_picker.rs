@@ -204,7 +204,7 @@ impl TimePicker {
     }
 
     /// Writes a note under the picker about the clock it counts on, such as
-    /// `Times are in Europe/London (UTC+0)`.
+    /// `Times are in Asia/Kolkata (UTC+5:30)`.
     pub fn zone_note(mut self, text: impl Into<String>) -> Self {
         self.zone_note = Some(text.into());
         self

@@ -32,7 +32,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 A Next.js app in `web/`, beside the API. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never holds one.
 
 ```sh
-navree new acme --ui next
+navree new sutlej --ui next
 ```
 
 - **Gives:** React and its libraries, and instant interactions in the browser. `--ui next` writes the app with its own sign-in page and route handlers that keep the tokens in httpOnly cookies. `@navree/next` is a package you add for two-factor sign-in, a typed client, `useListQuery`, a `DataTable`, live channels and abilities. The [SaaS starter kit](/docs/getting-started/starter-kits/) ships a complete Next.js front end with a backend-for-frontend of its own.

@@ -13,7 +13,7 @@ use navree::ui::*;
 async fn archive(uow: Uow, id: Path<i64>) -> Result<Reply> {
     // ...
     Ok(Reply::ops_or_redirect("/deals").toast_with(
-        Toast::new(ToastTone::Success, "Acme renewal moved to the archive.")
+        Toast::new(ToastTone::Success, "Sutlej Supply renewal moved to the archive.")
             .title("Archived")
             .action(ToastAction::post("Undo", format!("/deals/{id}/restore"))),
     ))

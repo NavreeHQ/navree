@@ -11,7 +11,7 @@ The app shell gives every page of an app the same frame: a sidebar of grouped li
 use navree::ui::*;
 
 pub fn shell() -> Shell {
-    Shell::new("Acme CRM")
+    Shell::new("Cloudworks CRM")
         .context("Production")
         .group(
             NavGroup::new("Sales")
@@ -19,7 +19,7 @@ pub fn shell() -> Shell {
                 .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),
         )
         .user(
-            UserMenu::new("Ada Lovelace", "ada@example.com")
+            UserMenu::new("Gurpreet Singh", "gurpreet@example.com")
                 .link("Profile", "/profile")
                 .action("Sign out", "/sign-out"),
         )
@@ -38,7 +38,7 @@ m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) }))
 ```rust title="src/deals/pages.rs"
 async fn show(shell: AppShell) -> AppPage {
     shell
-        .page("Acme renewal")
+        .page("Sutlej Supply renewal")
         .crumb("Deals", "/deals")
         .actions(Button::primary("Edit").href("/deals/42/edit"))
         .body(Card::titled("Notes").body(Text::new("Two-year term, same price.")))

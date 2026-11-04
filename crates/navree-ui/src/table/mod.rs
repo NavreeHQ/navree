@@ -157,7 +157,7 @@ pub enum FilterKind {
     /// None.
     #[default]
     None,
-    /// Contains this text, ignoring case: `f.title=ada`.
+    /// Contains this text, ignoring case: `f.title=sutlej`.
     Text,
     /// Between two values, each optional: `f.amount.min=1&f.amount.max=9`.
     Range,

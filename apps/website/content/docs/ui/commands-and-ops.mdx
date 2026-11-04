@@ -45,7 +45,7 @@ A price that changes with a plan, a counter under a field, a row's details in a 
 <UiPreview example="commands/text" />
 
 ```rust
-Button::outline("Yearly").on_click(Cmd::text("plan-price", "$120 a year"))
+Button::outline("Yearly").on_click(Cmd::text("plan-price", "₹9,999 a year"))
 ```
 
 `Cmd::count` counts characters the way the server's `length` rule does, so `12/160` in the browser means what the rule means. Put it on the field, on `Trigger::Input`:
@@ -89,7 +89,7 @@ async fn update(Submit(deal): Submit<NewDeal>) -> Reply {
 
 ```json title="What the runtime receives"
 {"build":"7dcd57c4af7d","ops":[
-  {"op":"morph","target":"deal-title","html":"<h1 data-slot=\"heading\">Acme renewal</h1>"},
+  {"op":"morph","target":"deal-title","html":"<h1 data-slot=\"heading\">Sutlej Supply renewal</h1>"},
   {"op":"toast","tone":"success","text":"Saved"}
 ]}
 ```

@@ -4,8 +4,8 @@
 //! code, its English name and the artwork. Each code is a constant, so an app's
 //! binary holds the flags its code names and no others:
 //!
-//! - `flags::AE`: a constant. A code that does not exist does not compile.
-//! - `flag!("AE")`: the code as a string, checked while the app compiles.
+//! - `flags::IN`: a constant. A code that does not exist does not compile.
+//! - `flag!("IN")`: the code as a string, checked while the app compiles.
 //! - [`CountryCode::parse`] and [`Flag::country`](crate::Flag::country): a code
 //!   that arrives at run time. This is the one call that puts all of the flags
 //!   into a binary.
@@ -252,8 +252,8 @@ impl<'de> Deserialize<'de> for CountryCode {
 /// ```
 /// use navree_ui::{flag, flags};
 ///
-/// let flag = flag!("ae");
-/// assert_eq!(flag.code(), Some(flags::AE));
+/// let flag = flag!("in");
+/// assert_eq!(flag.code(), Some(flags::IN));
 /// ```
 ///
 /// A code that no flag has stops the build and names the code:

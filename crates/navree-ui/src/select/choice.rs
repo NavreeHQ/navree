@@ -9,7 +9,7 @@ use crate::icons::Icon;
 /// ```
 /// use navree_ui::Choice;
 ///
-/// let choice = Choice::new("42", "Ada Lovelace").description("Engineer").keywords(["analytical"]);
+/// let choice = Choice::new("42", "Harleen Kaur").description("Engineer").keywords(["backend"]);
 /// # let _ = choice;
 /// ```
 #[derive(Clone, Debug)]

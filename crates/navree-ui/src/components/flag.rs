@@ -61,13 +61,13 @@ const UNKNOWN_SQUARE: &str = r##"<rect width="512" height="512" fill="currentCol
 /// use navree_ui::{Flag, FlagShape, FlagSize, flag, flags, render};
 ///
 /// // A constant or the macro: only this flag goes into the binary.
-/// let html = render(&Flag::new(flags::AE).size(FlagSize::Md).into());
-/// assert!(html.contains(r#"aria-label="United Arab Emirates""#));
-/// let same = render(&flag!("AE").size(FlagSize::Md).into());
+/// let html = render(&Flag::new(flags::IN).size(FlagSize::Md).into());
+/// assert!(html.contains(r#"aria-label="India""#));
+/// let same = render(&flag!("IN").size(FlagSize::Md).into());
 /// assert_eq!(html, same);
 ///
 /// // A code from data: any case, and an unknown one draws a neutral box.
-/// let from_data = Flag::country("gb-sct").shape(FlagShape::Round);
+/// let from_data = Flag::country("in").shape(FlagShape::Round);
 /// let unknown = Flag::country("??");
 /// assert!(render(&unknown.into()).contains(r#"data-state="unknown""#));
 /// # let _ = from_data;
@@ -88,7 +88,7 @@ pub struct Flag {
 }
 
 impl Flag {
-    /// The flag of `code`: `Flag::new(flags::AE)`.
+    /// The flag of `code`: `Flag::new(flags::IN)`.
     pub fn new(code: CountryCode) -> Self {
         Self {
             el: el("svg").slot("flag"),
@@ -100,7 +100,7 @@ impl Flag {
         }
     }
 
-    /// The flag of a code that comes from data, such as `"ae"` or `"GB-SCT"`. A
+    /// The flag of a code that comes from data, such as `"in"` or `"GB-SCT"`. A
     /// code no flag has draws a neutral placeholder and never panics.
     ///
     /// This puts every flag into the binary, since the code could be any of

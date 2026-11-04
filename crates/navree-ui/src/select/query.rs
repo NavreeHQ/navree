@@ -4,13 +4,13 @@
 //! ```
 //! use navree_ui::{ChoiceList, OptionQuery};
 //!
-//! // GET /people/options?q=ada
-//! let query = OptionQuery::parse("q=ada");
+//! // GET /people/options?q=har
+//! let query = OptionQuery::parse("q=har");
 //! let list = ChoiceList::new()
-//!     .option("7", "Ada Lovelace")
-//!     .option("9", "Ada Smith");
-//! assert_eq!(query.text(), "ada");
-//! assert!(list.to_html().contains("Ada Lovelace"));
+//!     .option("7", "Harleen Kaur")
+//!     .option("9", "Harpreet Gill");
+//! assert_eq!(query.text(), "har");
+//! assert!(list.to_html().contains("Harleen Kaur"));
 //! ```
 
 use std::collections::HashSet;

@@ -13,8 +13,8 @@ use navree::ui::*;
 Field::new("deal-markets", "Markets").control(
     MultiSelect::new("markets")
         .placeholder("Add a market")
-        .options([("fr", "France"), ("de", "Germany"), ("jp", "Japan")])
-        .selected_values(["fr", "de"]),
+        .options([("in", "India"), ("ae", "United Arab Emirates"), ("sg", "Singapore")])
+        .selected_values(["in", "ae"]),
 )
 ```
 
@@ -58,7 +58,7 @@ struct NewDeal {
 }
 
 FormView::<NewDeal>::new()
-    .options("markets", [("fr".into(), "France".into()), ("de".into(), "Germany".into())])
+    .options("markets", [("in".into(), "India".into()), ("ae".into(), "United Arab Emirates".into())])
 ```
 
 The values are read as text: strings, enums with `#[derive(Options)]`, UUIDs and dates. A `Many<Stage>` of an enum takes its options from the enum.
@@ -80,7 +80,7 @@ Like a [Combobox](/docs/components/combobox/#check-what-was-picked), a form does
 | `Esc`, `Enter` on a chip | Back to the input. |
 
 - The chips are a list. Each has a button named "Remove" and its label, but it is the keys above that a keyboard uses: the buttons are for the pointer.
-- Adding, removing, reaching a limit and moving to a chip are announced ("France removed", "You can choose at most 3").
+- Adding, removing, reaching a limit and moving to a chip are announced ("India removed", "You can choose at most 3").
 - The list is `aria-multiselectable`. A removed chip never takes focus with it: it moves on.
 
 </UiA11y>

@@ -25,7 +25,7 @@ pub fn all() -> Vec<Example> {
 }
 
 fn app_shell_default() -> AppPage {
-    let shell = Shell::new("Acme CRM")
+    let shell = Shell::new("Cloudworks CRM")
         .context("Production")
         .group(
             NavGroup::new("Sales")
@@ -48,7 +48,7 @@ fn app_shell_default() -> AppPage {
                 .item(NavItem::new("Settings", "/settings").icon(icons::SETTINGS)),
         )
         .user(
-            UserMenu::new("Ada Lovelace", "ada@example.com")
+            UserMenu::new("Gurpreet Singh", "gurpreet@example.com")
                 .link("Profile", "/profile")
                 .action("Sign out", "/sign-out"),
         );
@@ -61,16 +61,16 @@ fn app_shell_default() -> AppPage {
         )
         .body(Grid::cols(3).gap(4).children((
             Stat::new("Open deals", "312").trend("+12 this week", true),
-            Stat::new("Pipeline value", "$4.2M").trend("+3.1%", true),
-            Stat::new("Won this month", "$640K").trend("-2.4%", false),
+            Stat::new("Pipeline value", "₹4.2 crore").trend("+3.1%", true),
+            Stat::new("Won this month", "₹64 lakh").trend("-2.4%", false),
         )))
 }
 
 fn breadcrumb_default() -> Breadcrumb {
     Breadcrumb::new()
         .link("Deals", "/deals")
-        .link("Acme", "/companies/acme")
-        .current("Acme renewal")
+        .link("Sutlej Supply", "/companies/sutlej-supply")
+        .current("Sutlej Supply renewal")
 }
 
 fn pagination_default() -> Pagination {

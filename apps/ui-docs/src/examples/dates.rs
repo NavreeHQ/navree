@@ -514,6 +514,6 @@ fn time_picker_states() -> impl IntoIterator<Item = (&'static str, TimePicker)> 
 fn time_picker_zone() -> TimePicker {
     TimePicker::new("meeting")
         .value(NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
-        .zone_note("Times are in America/New_York.")
+        .zone_note("Times are in Asia/Kolkata (IST).")
         .label("Meeting")
 }

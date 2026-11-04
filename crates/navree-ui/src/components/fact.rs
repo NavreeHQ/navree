@@ -10,13 +10,13 @@ use crate::node::{Element, Node, el, into_node};
 /// ```
 /// use navree_ui::{FactCard, Tone, icons, render};
 ///
-/// let card = FactCard::new("Device", "iPhone 15")
+/// let card = FactCard::new("Device", "Delivery handset")
 ///     .icon(icons::MONITOR)
 ///     .tone(Tone::Info)
-///     .detail("Safari 18 on iOS 19");
+///     .detail("Chrome 130 on Android 15");
 /// let html = render(&card.into());
 /// assert!(html.contains("<dt"));
-/// assert!(html.contains("Safari 18 on iOS 19"));
+/// assert!(html.contains("Chrome 130 on Android 15"));
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
