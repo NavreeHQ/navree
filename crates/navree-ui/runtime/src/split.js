@@ -279,6 +279,7 @@ on(document, "keydown", (/** @type {KeyboardEvent} */ e) => {
   commit(root);
 });
 
+// Ahead of link boosting, which would otherwise follow the toggle's link.
 on(document, "click", (/** @type {MouseEvent} */ e) => {
   const button = closest(e.target, "[data-ui-split-toggle]");
   if (!button || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
@@ -290,7 +291,7 @@ on(document, "click", (/** @type {MouseEvent} */ e) => {
   if (shown(pane)) collapse(pane);
   else expand(root, pane);
   commit(root);
-});
+}, true);
 
 /** @type {WeakSet<Element>} */
 const watched = new WeakSet();

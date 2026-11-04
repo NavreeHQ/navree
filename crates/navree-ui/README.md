@@ -163,7 +163,7 @@ fn layout() -> SplitPane {
 
 async fn save(save: SplitSave, uow: Uow) -> Result<StatusCode> {
     let Some(sizes) = save.sizes_for(&layout()) else {
-        return Ok(StatusCode::UNPROCESSABLE_ENTITY);
+        return Ok(StatusCode::BAD_REQUEST);
     };
     // Keep `sizes.to_text()` for this user, and draw the next page with
     // `layout().sizes(&SplitSizes::from_text(&kept, &layout())?)`.

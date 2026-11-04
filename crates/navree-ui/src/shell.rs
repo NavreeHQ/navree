@@ -478,6 +478,7 @@ pub struct Shell {
     theme_menu: bool,
     layout: ShellLayout,
     collapse: Collapse,
+    toasts: crate::components::ToastPosition,
 }
 
 impl Shell {
@@ -496,6 +497,7 @@ impl Shell {
             theme_menu: false,
             layout: ShellLayout::Sidebar,
             collapse: Collapse::Icons,
+            toasts: crate::components::ToastPosition::BottomEnd,
         }
     }
 
@@ -558,6 +560,14 @@ impl Shell {
             setting.theme = None;
         }
         setting
+    }
+
+    /// Where the pages' toasts appear: at the bottom, at the end, unless the app keeps
+    /// something there that a toast must not cover, such as a composer's Send button.
+    #[must_use]
+    pub fn toasts(mut self, position: crate::components::ToastPosition) -> Self {
+        self.toasts = position;
+        self
     }
 
     /// Fetches the page the app's name links to when the pointer rests on it or it
@@ -973,7 +983,7 @@ impl AppPage {
             }),
         ));
         let had_flash = self.flash.is_some();
-        let mut toaster = Toaster::new();
+        let mut toaster = Toaster::new().position(shell.toasts);
         if let Some((tone, text)) = self.flash {
             toaster = toaster.toast(Toast::new(tone, text));
         }

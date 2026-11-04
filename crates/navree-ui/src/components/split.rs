@@ -482,6 +482,11 @@ fn pane_node(pane: Pane, current: bool) -> Node {
         .flag("data-collapsed", pane.collapsed)
         .attr_opt("data-collapse-below", pane.collapse_below.map(SplitWidth::as_str))
         .flag("data-split-current", current)
+        // The pane a page is about shows, though it was collapsed: the link to it says so.
+        .flag(
+            "data-split-open",
+            current && !pane.fill && (pane.collapsed || pane.collapse_below.is_some()),
+        )
         // What the person did in this page stays through a morph: the size they dragged
         // to, a pane they opened or collapsed.
         .attr("data-ui-keep-attrs", "data-collapsed data-split-open")
@@ -697,7 +702,7 @@ fn write_tenths(out: &mut String, value: u16) {
 /// ```ignore
 /// async fn panes(save: SplitSave, uow: Uow, me: Agent) -> Result<StatusCode> {
 ///     let Some(sizes) = save.sizes_for(&inbox_layout()) else {
-///         return Ok(StatusCode::UNPROCESSABLE_ENTITY);
+///         return Ok(StatusCode::BAD_REQUEST);
 ///     };
 ///     store(&uow, me.id, save.split(), &sizes.to_text()).await?;
 ///     Ok(StatusCode::NO_CONTENT)
