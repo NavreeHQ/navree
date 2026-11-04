@@ -15,8 +15,11 @@ mod icons;
 mod inbox;
 mod inputs;
 mod layout;
+mod markdown;
+mod menu_bars;
 mod menus;
 mod navigation;
+mod otp_carousel;
 mod overlays;
 mod panes;
 mod patterns;
@@ -26,16 +29,20 @@ mod sortable;
 mod states;
 mod store;
 mod themes;
+mod upload;
 
 /// Every example, in the order the docs list them.
 pub fn all() -> Vec<Example> {
     let mut all = Vec::new();
     all.extend(actions::all());
     all.extend(inputs::all());
+    all.extend(upload::all());
+    all.extend(otp_carousel::all());
     all.extend(pickers::all());
     all.extend(dates::all());
     all.extend(phone::all());
     all.extend(display::all());
+    all.extend(markdown::all());
     all.extend(activity::all());
     all.extend(feedback::all());
     all.extend(states::all());
@@ -44,6 +51,7 @@ pub fn all() -> Vec<Example> {
     all.extend(panes::all());
     all.extend(navigation::all());
     all.extend(menus::all());
+    all.extend(menu_bars::all());
     all.extend(flow::all());
     all.extend(data::all());
     all.extend(sortable::all());

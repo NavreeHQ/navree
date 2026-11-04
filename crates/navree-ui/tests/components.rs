@@ -300,6 +300,53 @@ fn all() -> Vec<(&'static str, Node)> {
             )
             .into(),
     ));
+    // UI-GENUI-019, UI-GENUI-020, UI-GENUI-021, UI-GENUI-024
+    out.push((
+        "markdown",
+        Markdown::new("**Sat Sri Akal** [docs](/docs)").into(),
+    ));
+    out.push((
+        "code-block",
+        CodeBlock::new("rust", "let total = 42;")
+            .copy_button()
+            .into(),
+    ));
+    out.push((
+        "context-menu",
+        ContextMenu::new("order-menu", "Order actions")
+            .content(Text::new("Right click an order"))
+            .item(MenuItem::link("Open", "/orders/1"))
+            .into(),
+    ));
+    out.push((
+        "menubar",
+        Menubar::new("app-menu", "Application")
+            .menu(MenubarMenu::new("File").item(MenuItem::link("New order", "/orders/new")))
+            .into(),
+    ));
+    out.push((
+        "navigation-menu",
+        NavigationMenu::new("main-nav", "Main")
+            .item(NavMenuItem::link("Orders", "/orders"))
+            .item(
+                NavMenuItem::panel("Reports").entry(NavMenuLink::new("Weekly", "/reports/weekly")),
+            )
+            .into(),
+    ));
+    out.push(("input-otp", InputOtp::new("code", 6).into()));
+    out.push((
+        "carousel",
+        Carousel::new("offers", "Offers from Ludhiana")
+            .slide(CarouselSlide::new(Text::new("Phulkari dupatta")))
+            .slide(CarouselSlide::new(Text::new("Basmati rice, 5 kg")))
+            .into(),
+    ));
+    out.push((
+        "upload",
+        Upload::new("photo", "Profile photo")
+            .action("/photo")
+            .into(),
+    ));
     out
 }
 

@@ -112,6 +112,11 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A hotkey | `keys`: single keys that click or focus what names them, never while someone types. |
 | A lazy list | `lazy`: pages by cursor at either end, the reader's place kept, a cap on what stays in the page; with `live` for a live one. |
 | A sortable list or board | `core`, `sortable`: drags by mouse, touch and keys, and the moves posted one at a time. |
+| Markdown or a code block | None: the `markdown` stylesheet, linked only on a page that draws one. A copy button adds `core`. |
+| An upload | `upload` and its stylesheet: the drop area, the file list, progress and chunks. A plain form works with no script. |
+| A context menu, a menu bar, the navigation menu | `menubar` and its stylesheet, with `menus` and `overlay`. The navigation menu's panels open with no script. |
+| A one-time code | `otp` and its stylesheet: digits only and a cleaned paste. The field and its boxes work with no script. |
+| A carousel | `carousel` and its stylesheet: buttons, pickers and rotation that stops for the reader. The track scrolls with no script. |
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |

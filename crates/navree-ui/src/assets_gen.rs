@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "3e3b8eeb7121";
+pub const BUILD: &str = "0eb650228713";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-f11bb7046e31.js";
@@ -51,16 +51,16 @@ pub const LAZY_URL: &str = "/_navree/ui/lazy-ba1f5afc8f4f.js";
 pub const SORTABLE_URL: &str = "/_navree/ui/sortable-93a3a8e67f6a.js";
 
 /// The URL of `upload.js`.
-pub const UPLOAD_URL: &str = "/_navree/ui/upload-cbf29ce48422.js";
+pub const UPLOAD_URL: &str = "/_navree/ui/upload-215076f0486b.js";
 
 /// The URL of `otp.js`.
-pub const OTP_URL: &str = "/_navree/ui/otp-cbf29ce48422.js";
+pub const OTP_URL: &str = "/_navree/ui/otp-523b23fe3e49.js";
 
 /// The URL of `carousel.js`.
-pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-cbf29ce48422.js";
+pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-781d59437d91.js";
 
 /// The URL of `menubar.js`.
-pub const MENUBAR_URL: &str = "/_navree/ui/menubar-cbf29ce48422.js";
+pub const MENUBAR_URL: &str = "/_navree/ui/menubar-6216c9b7b301.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
@@ -80,19 +80,19 @@ pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-19b5a39e758f.css";
 
 /// The URL of `markdown.css`.
-pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-cbf29ce48422.css";
+pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
 
 /// The URL of `upload-styles.css`.
-pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-cbf29ce48422.css";
+pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-151746b6ed76.css";
 
 /// The URL of `otp-styles.css`.
-pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-cbf29ce48422.css";
+pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-db3883e37237.css";
 
 /// The URL of `carousel-styles.css`.
-pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-cbf29ce48422.css";
+pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-7ef22b1c5a47.css";
 
 /// The URL of `menubar-styles.css`.
-pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-cbf29ce48422.css";
+pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -243,7 +243,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload",
         ext: "js",
-        hash: "cbf29ce48422",
+        hash: "215076f0486b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/upload.js"),
         gzip: Some(include_bytes!("../dist/upload.js.gz")),
@@ -252,7 +252,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "otp",
         ext: "js",
-        hash: "cbf29ce48422",
+        hash: "523b23fe3e49",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/otp.js"),
         gzip: Some(include_bytes!("../dist/otp.js.gz")),
@@ -261,7 +261,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel",
         ext: "js",
-        hash: "cbf29ce48422",
+        hash: "781d59437d91",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/carousel.js"),
         gzip: Some(include_bytes!("../dist/carousel.js.gz")),
@@ -270,7 +270,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menubar",
         ext: "js",
-        hash: "cbf29ce48422",
+        hash: "6216c9b7b301",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/menubar.js"),
         gzip: Some(include_bytes!("../dist/menubar.js.gz")),
@@ -326,7 +326,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "markdown",
         ext: "css",
-        hash: "cbf29ce48422",
+        hash: "d0ca9ef3eb37",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/markdown.css"),
         gzip: Some(include_bytes!("../dist/markdown.css.gz")),
@@ -335,7 +335,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload-styles",
         ext: "css",
-        hash: "cbf29ce48422",
+        hash: "151746b6ed76",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/upload-styles.css"),
         gzip: Some(include_bytes!("../dist/upload-styles.css.gz")),
@@ -344,7 +344,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "otp-styles",
         ext: "css",
-        hash: "cbf29ce48422",
+        hash: "db3883e37237",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/otp-styles.css"),
         gzip: Some(include_bytes!("../dist/otp-styles.css.gz")),
@@ -353,7 +353,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel-styles",
         ext: "css",
-        hash: "cbf29ce48422",
+        hash: "7ef22b1c5a47",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/carousel-styles.css"),
         gzip: Some(include_bytes!("../dist/carousel-styles.css.gz")),
@@ -362,7 +362,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menubar-styles",
         ext: "css",
-        hash: "cbf29ce48422",
+        hash: "52a4f5f79413",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/menubar-styles.css"),
         gzip: Some(include_bytes!("../dist/menubar-styles.css.gz")),

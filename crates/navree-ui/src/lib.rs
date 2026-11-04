@@ -39,6 +39,7 @@ pub mod prelude {
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
     };
     pub use crate::icons;
+    pub use crate::markdown::{CodeBlock, Markdown, MarkdownLabels, MarkdownTrust};
     pub use crate::op::{Op, Reply, ToastTone, UrlMode};
     #[cfg(feature = "phone")]
     pub use crate::phone::{PhoneInput, PhoneLabels};
@@ -54,6 +55,11 @@ pub mod prelude {
         TableHeight, TableLabels, TablePage, TableQuery,
     };
     pub use crate::theme::{Appearance, Mode, Theme, ThemeMenu, ThemeSetting};
+    #[cfg(feature = "storage")]
+    pub use crate::upload::{
+        ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads,
+    };
+    pub use crate::upload::{Upload, UploadLabels, UploadLimits, UploadedFile};
     pub use crate::{
         AppPage, AppShell, Cmd, Collapse, Element, FilterBar, Form, IntoNodes, NavGroup, NavItem,
         Node, Options, Shell, ShellLayout, TableRow, TestView, UiModule, UserMenu, Validate, View,
@@ -73,6 +79,7 @@ pub mod flow;
 pub mod form;
 pub mod html;
 pub mod icons;
+pub mod markdown;
 mod module;
 pub mod node;
 pub mod op;
@@ -87,6 +94,7 @@ pub mod table;
 pub mod test_view;
 pub mod theme;
 pub mod tokens;
+pub mod upload;
 pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
@@ -98,6 +106,7 @@ pub use flow::{
 };
 pub use form::{FormView, Money, Submit};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
+pub use markdown::{CodeBlock, Markdown, MarkdownLabels, MarkdownTrust};
 pub use module::{UiModule, UiNeed, UiOnDemand};
 pub use navree_ui_macros::{FilterBar, Form, Options, TableRow, icon_file, icon_set};
 pub use navree_validation::Validate;
@@ -126,4 +135,7 @@ pub use table::{
     TableLabels, TablePage, TableQuery,
 };
 pub use test_view::TestView;
+#[cfg(feature = "storage")]
+pub use upload::{ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads};
+pub use upload::{Upload, UploadLabels, UploadLimits, UploadedFile};
 pub use view::{PAGE_CSP, View};

@@ -15,6 +15,7 @@
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
 //! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
+//! | `/menubar` | context menus, menu bars and the navigation menu in their states |
 //! | `/phone` | a contact form with phone numbers, and the phone input in its states |
 //! | `/display` | the timeline, activity feed, fact cards and badges in every state |
 //! | `/display/live` | a live feed and a live table on one server-sent event stream |
@@ -24,6 +25,10 @@
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
 //! | `/pages` | error pages, sign-in and the states inside a page, in every case |
 //! | `/flow` | the stepper, slider, tree view and toolbar in every state, and a wizard at `/flow/wizard/start` |
+//! | `/markdown` | Markdown and code blocks: a reply, tables, links, pictures, raw HTML, code in every language, and `/markdown/render?text=` for any text |
+//! | `/upload` | file uploads: a photo, documents with chunks, a form sent by hand, a field in a form, and the states |
+//! | `/otp` | one-time code fields of every length and state, a form that posts them and one that sends itself |
+//! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -47,11 +52,15 @@ mod display;
 mod flow;
 mod gallery;
 mod icons_flags;
+mod markdown;
+mod menubar;
 mod menus;
+mod otp_carousel;
 mod pages;
 mod phone;
 mod select;
 mod themes;
+mod upload;
 
 /// The app's one shell.
 pub(crate) fn shell() -> Shell {
@@ -80,10 +89,15 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Select", "/select").icon(icons::LIST))
                 .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG))
                 .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST))
+                .item(NavItem::new("Menu bars", "/menubar").icon(icons::LIST))
                 .item(NavItem::new("States", "/pages").icon(icons::SHIELD_ALERT))
                 .item(NavItem::new("Display", "/display").icon(icons::LAYERS))
                 .item(NavItem::new("Live activity", "/display/live").icon(icons::ACTIVITY))
-                .item(NavItem::new("Flow", "/flow").icon(icons::LIST_TREE)),
+                .item(NavItem::new("Flow", "/flow").icon(icons::LIST_TREE))
+                .item(NavItem::new("One-time codes", "/otp").icon(icons::SHIELD_ALERT))
+                .item(NavItem::new("Carousels", "/carousel").icon(icons::LAYOUT_GRID))
+                .item(NavItem::new("Upload", "/upload").icon(icons::UPLOAD))
+                .item(NavItem::new("Markdown", "/markdown").icon(icons::FILE)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -114,11 +128,15 @@ impl Module for ProofModule {
             .controller::<icons_flags::IconPages>()
             .controller::<dates::DatePages>()
             .controller::<menus::MenuPages>()
+            .controller::<menubar::BarPages>()
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
             .controller::<themes::ThemePages>()
             .controller::<pages::Pages>()
-            .controller::<flow::FlowPages>();
+            .controller::<flow::FlowPages>()
+            .controller::<otp_carousel::CodePages>()
+            .controller::<upload::UploadPages>()
+            .controller::<markdown::MarkdownPages>();
     }
 }
 

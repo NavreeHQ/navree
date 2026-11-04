@@ -8,15 +8,20 @@
 
 mod actions;
 mod activity;
+mod carousel;
 mod clock;
+mod context_menu;
 mod display;
 mod dropdown;
 mod fact;
 mod flag;
+mod input_otp;
 mod inputs;
 mod layout;
 mod lazy;
 mod live;
+mod menubar;
+mod navigation_menu;
 mod overlays;
 mod split;
 mod tabs;
@@ -27,15 +32,19 @@ mod tone;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
+pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
+pub use context_menu::ContextMenu;
 pub use display::{
     Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb,
     Bubble, BubbleSide, Card, Direction, Empty, Heading, Item, ItemVariant, Kbd, Marker,
     MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
     Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
+pub(crate) use dropdown::menu_element;
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
 pub use fact::{FactCard, FactGrid};
 pub use flag::{Flag, FlagShape, FlagSize};
+pub use input_otp::{InputOtp, OtpError, OtpKind, OtpRules};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
     RadioGroup, Switch, Textarea,
@@ -48,6 +57,8 @@ pub use lazy::{
     LazyAsk, LazyEnd, LazyItem, LazyLabels, LazyList, LazyOrder, LazyPage, LazyQuery, MAX_CURSOR,
 };
 pub use live::{LIVE_STREAM_PATH, Live, LiveStream};
+pub use menubar::{Menubar, MenubarMenu};
+pub use navigation_menu::{NavMenuItem, NavMenuLink, NavigationMenu};
 pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, ScrollHeight, Sheet, SheetBackdrop, SheetSide, SheetWidth, Side, Tooltip,

@@ -15,6 +15,8 @@ pub const FILES: &[&str] = &[
     "components/mod.rs",
     "components/actions.rs",
     "components/inputs.rs",
+    "components/input_otp.rs",
+    "components/carousel.rs",
     "components/display.rs",
     "components/activity.rs",
     "components/timeline.rs",
@@ -28,6 +30,9 @@ pub const FILES: &[&str] = &[
     "components/tabs.rs",
     "components/toggle_group.rs",
     "components/dropdown.rs",
+    "components/context_menu.rs",
+    "components/menubar.rs",
+    "components/navigation_menu.rs",
     "components/toast.rs",
     "flow/stepper.rs",
     "flow/wizard.rs",
@@ -73,6 +78,11 @@ pub const FILES: &[&str] = &[
     "pages/options.rs",
     "pages/render.rs",
     "pages/return_to.rs",
+    "markdown/mod.rs",
+    "upload/component.rs",
+    "upload/labels.rs",
+    "upload/limits.rs",
+    "upload/server.rs",
 ];
 
 /// One constructor or method.

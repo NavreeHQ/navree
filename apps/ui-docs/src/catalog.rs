@@ -21,6 +21,8 @@ pub const GROUPS: &[Group] = &[
             "toggle",
             "toggle-group",
             "dropdown-menu",
+            "context-menu",
+            "menubar",
         ],
     },
     Group {
@@ -39,6 +41,8 @@ pub const GROUPS: &[Group] = &[
             "switch",
             "radio-group",
             "phone-input",
+            "input-otp",
+            "upload",
             "forms",
         ],
     },
@@ -63,6 +67,8 @@ pub const GROUPS: &[Group] = &[
             "typography",
             "kbd",
             "attachment",
+            "markdown",
+            "code-block",
             "message",
             "timeline",
             "activity-feed",
@@ -110,13 +116,21 @@ pub const GROUPS: &[Group] = &[
             "scroll-area",
             "separator",
             "aspect-ratio",
+            "carousel",
             "direction",
         ],
     },
     Group {
         id: "navigation",
         title: "Navigation",
-        components: &["app-shell", "tabs", "breadcrumb", "pagination", "command"],
+        components: &[
+            "app-shell",
+            "tabs",
+            "navigation-menu",
+            "breadcrumb",
+            "pagination",
+            "command",
+        ],
     },
     Group {
         id: "flow",
@@ -217,6 +231,8 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
+    component("context-menu", "ContextMenu", &["ContextMenu"], "thumb").parts("default"),
+    component("menubar", "Menubar", &["Menubar", "MenubarMenu"], "thumb").parts("default"),
     // Inputs
     component("field", "Field", &["Field", "Label", "FieldSet"], "thumb").parts("help"),
     component("input", "Input", &["Input", "InputKind"], "default").parts("default"),
@@ -254,7 +270,27 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("thumb"),
+    component(
+        "upload",
+        "Upload",
+        &[
+            "Upload",
+            "UploadedFile",
+            "UploadLimits",
+            "UploadLabels",
+            "Uploads",
+        ],
+        "thumb",
+    )
+    .parts("default"),
     component("forms", "Forms", &["FormView"], "thumb").page("/docs/ui/forms/"),
+    component(
+        "input-otp",
+        "InputOtp",
+        &["InputOtp", "OtpKind", "OtpRules", "OtpError"],
+        "thumb",
+    )
+    .parts("default"),
     // Date and time
     component(
         "calendar",
@@ -309,6 +345,13 @@ pub const COMPONENTS: &[Component] = &[
     ),
     component("kbd", "Kbd", &["Kbd"], "default").parts("default"),
     component("attachment", "Attachment", &["Attachment"], "default").parts("default"),
+    component(
+        "markdown",
+        "Markdown",
+        &["Markdown", "MarkdownTrust", "MarkdownLabels"],
+        "thumb",
+    ),
+    component("code-block", "CodeBlock", &["CodeBlock"], "thumb").parts("default"),
     component(
         "message",
         "Message and Bubble",
@@ -453,6 +496,18 @@ pub const COMPONENTS: &[Component] = &[
         "default",
     )
     .parts("default"),
+    component(
+        "carousel",
+        "Carousel",
+        &[
+            "Carousel",
+            "CarouselSlide",
+            "CarouselLabels",
+            "CarouselHeight",
+        ],
+        "thumb",
+    )
+    .parts("default"),
     component("direction", "Direction", &["Direction"], "default").parts("default"),
     // Navigation
     component(
@@ -469,6 +524,13 @@ pub const COMPONENTS: &[Component] = &[
         "tabs",
         "Tabs",
         &["Tabs", "Tab", "TabsVariant", "Activation", "Orientation"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "navigation-menu",
+        "NavigationMenu",
+        &["NavigationMenu", "NavMenuItem", "NavMenuLink"],
         "thumb",
     )
     .parts("default"),
