@@ -63,10 +63,14 @@ const storage = {
   },
 };
 
-/** Whether this device should get the live picture at all. */
+/** Whether the device says it can run the live picture: memory, cores, Save-Data. */
 function capable(): boolean {
   const nav = navigator as Nav;
-  if ((nav.deviceMemory ?? 8) < 4 || nav.connection?.saveData || (nav.hardwareConcurrency ?? 4) <= 2) return false;
+  return !((nav.deviceMemory ?? 8) < 4 || nav.connection?.saveData || (nav.hardwareConcurrency ?? 4) <= 2);
+}
+
+/** Whether WebGL 2 runs on a real GPU here. Creating a context is not free, so this runs only when the picture is about to load. */
+function gpu(): boolean {
   try {
     const probe = document.createElement("canvas");
     const gl = probe.getContext("webgl2", { failIfMajorPerformanceCaveat: true });
@@ -206,6 +210,11 @@ export function FamilyLive({ frameClass }: { frameClass: string }) {
       idle(async () => {
         try {
           if (dead) return;
+          if (!capture && !gpu()) {
+            dead = true;
+            setControl("none");
+            return;
+          }
           await document.fonts.ready;
           const image = wrapper.querySelector<HTMLImageElement>("img[data-about-picture]");
           if (!image) return;
