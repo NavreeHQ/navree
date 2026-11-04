@@ -233,7 +233,7 @@ impl MenuRadios {
 }
 
 #[derive(Clone, Debug)]
-enum Entry {
+pub(super) enum Entry {
     Item(MenuItem),
     Separator,
     Header(Node),
@@ -527,6 +527,23 @@ impl DropdownMenu {
     }
 }
 
+/// The nodes of `entries` for the menu whose id is `menu` (the groups and submenus inside
+/// are numbered from it), and whether any entry posts: how the context menu and the
+/// menu bar draw the same entries a dropdown menu does.
+pub(super) fn render_entries(menu: &str, entries: &[Entry], keep_open: bool) -> (Vec<Node>, bool) {
+    let mut cx = Cx {
+        menu,
+        next: 0,
+        keep_open,
+        posts: false,
+    };
+    let nodes: Vec<Node> = entries
+        .iter()
+        .map(|entry| entry_node(entry, &mut cx))
+        .collect();
+    (nodes, cx.posts)
+}
+
 /// What numbering and settings an entry needs from the menu around it.
 struct Cx<'a> {
     menu: &'a str,
@@ -542,7 +559,9 @@ impl Cx<'_> {
     }
 }
 
-fn menu_element(
+/// The popup of a menu: the element the menus module gives the keys of a menu to, placed
+/// by the overlay module under what opens it.
+pub(crate) fn menu_element(
     id: &str,
     labelled_by: &str,
     label: Option<String>,
