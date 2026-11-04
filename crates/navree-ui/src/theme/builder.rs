@@ -1192,10 +1192,7 @@ mod tests {
             .join("../../apps/ui-proof/src/acme_theme.rs");
         let theme = BuilderDraft::from_query(EXAMPLE).to_theme().unwrap();
         let text = format!(
-            "//! The \"Acme\" theme: the theme builder's Rust export, used as it comes. A
-//! test in navree-ui writes it and keeps it current.
-
-{}",
+            "//! The \"Acme\" theme: the theme builder's Rust export, used as it comes. A\n//! test in navree-ui writes it and keeps it current.\n\n{}",
             theme.to_rust("navree::ui")
         );
         (path, text)
@@ -1204,11 +1201,9 @@ mod tests {
     #[test]
     fn the_proof_apps_exported_theme_is_current() {
         let (path, text) = example();
-        let committed = std::fs::read_to_string(&path).unwrap_or_default().replace(
-            "
-", "
-",
-        );
+        let committed = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         assert_eq!(
             committed,
             text,
@@ -1249,13 +1244,12 @@ mod tests {
                 .next()
                 .unwrap_or_default()
                 .contains(" checked");
-            if let (Some(name), Some(value)) = (attr("name"), attr("value")) {
-                if (kind == "radio" && checked)
+            if let (Some(name), Some(value)) = (attr("name"), attr("value"))
+                && ((kind == "radio" && checked)
                     || kind == "color"
-                    || (kind == "text" && !value.is_empty())
-                {
-                    fields.push(format!("{name}={}", encode(&value)));
-                }
+                    || (kind == "text" && !value.is_empty()))
+            {
+                fields.push(format!("{name}={}", encode(&value)));
             }
         }
         fields.join("&")

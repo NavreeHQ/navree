@@ -120,7 +120,16 @@ for (const name of NAMES) {
     }
 
     const shot = async (page, file) => {
-      if (SHOTS) await page.screenshot({ path: join(SHOTS, `${name}-${file}.png`) });
+      if (!SHOTS) return;
+      const before = await page.evaluate(() => (window.__csp || []).length).catch(() => null);
+      await page.screenshot({ path: join(SHOTS, `${name}-${file}.png`), caret: "initial" });
+      // A screenshot in Playwright's WebKit adds a <style> of the tool's own, which the policy
+      // reports (on a page with nothing of this module too): reports raised by the screenshot
+      // itself are dropped, and only those.
+      if (before !== null) {
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0))));
+        await page.evaluate((n) => { if (window.__csp) window.__csp.length = n; }, before);
+      }
     };
 
     /** The page's look: its `<html>` attributes and the colours its tokens resolve to there. */
@@ -340,7 +349,9 @@ for (const name of NAMES) {
       await page.click("[popovertarget=ui-theme-menu]");
       await page.locator("#ui-theme-menu [data-slot=theme-card]:has(input[value=sunset])").click();
       await page.locator("#ui-theme-menu [data-slot=theme-mode]:has(input[value=light])").click();
-      await Promise.all([page.waitForURL(BASE + "/themes"), page.click("#ui-theme-menu [data-theme-apply]")]);
+      // The address stays /themes: wait for the page the redirect brings.
+      await page.click("#ui-theme-menu [data-theme-apply]");
+      await page.waitFor(() => document.documentElement.getAttribute("data-theme") === "sunset");
       const seen = await look(page);
       assert.equal(seen.theme, "sunset");
       assert.equal(seen.mode, "light");

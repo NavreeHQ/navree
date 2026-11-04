@@ -206,17 +206,15 @@ fn short_forms_and_settings_from_anything_and_from_mutations() {
             assert_eq!(theme.short_form(), text, "one spelling per theme");
             check_theme(&theme);
         }
-        if let Some(setting) = ThemeSetting::parse(&format!(
-            "{}.{text}",
-            ["light", "dark", "system", "x"][round % 4]
-        )) {
-            if let (Some(theme), Some(mode)) = (setting.theme, setting.mode) {
-                let appearance = Appearance::new(theme, mode);
-                assert_eq!(
-                    Appearance::parse(&appearance.to_value()).map(|a| *a.theme().spec()),
-                    Some(*appearance.theme().spec())
-                );
-            }
+        let value = format!("{}.{text}", ["light", "dark", "system", "x"][round % 4]);
+        if let Some(setting) = ThemeSetting::parse(&value)
+            && let (Some(theme), Some(mode)) = (setting.theme, setting.mode)
+        {
+            let appearance = Appearance::new(theme, mode);
+            assert_eq!(
+                Appearance::parse(&appearance.to_value()).map(|a| *a.theme().spec()),
+                Some(*appearance.theme().spec())
+            );
         }
     }
     assert!(kept > 0, "some mutations are still themes");

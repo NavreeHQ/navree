@@ -718,7 +718,7 @@ impl Shell {
             item.current
                 .unwrap_or(best > 0 && item.score(path, home) == best)
         };
-        let within = |item: &NavItem| here(item) || item.sub.iter().any(|sub| here(sub));
+        let within = |item: &NavItem| here(item) || item.sub.iter().any(&here);
         let link = |item: &NavItem, slot: &'static str| {
             el("a")
                 .slot(slot)
