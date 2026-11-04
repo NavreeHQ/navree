@@ -607,8 +607,8 @@ for (const name of NAMES) {
       await dialog.waitFor();
       await dialog.getByRole("button", { name: "Turn single keys off" }).click();
       await page.locator("[data-slot=toast]", { hasText: "Single-key shortcuts are off" }).waitFor();
-      // No key is drawn for them, on this page or the next, and none acts.
-      assert.equal(await page.locator("[data-ui-hotkey]").count(), 0);
+      // No key is drawn for them, on this page (once it is drawn again) or the next, and none acts.
+      await until(page, () => document.querySelectorAll("[data-ui-hotkey]").length === 0, null, "the page drawn with no keys");
       assert.equal(await page.locator("[aria-keyshortcuts]").count(), 0);
       await page.keyboard.press("j");
       assert.match(page.url(), /\/inbox$/);
@@ -625,7 +625,7 @@ for (const name of NAMES) {
       await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
       await page.locator("dialog#shortcuts[open]").getByRole("button", { name: "Turn single keys on" }).click();
       await page.locator("[data-slot=toast]", { hasText: "Single-key shortcuts are on" }).waitFor();
-      assert.ok((await page.locator("[data-ui-hotkey]").count()) > 0);
+      await until(page, () => document.querySelectorAll("[data-ui-hotkey]").length > 0, null, "the page drawn with its keys");
       await page.done();
     });
 
