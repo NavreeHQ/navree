@@ -229,7 +229,13 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
   glyphMesh.renderOrder = 1;
   scene.add(glyphMesh);
 
-  // Compile the shaders without blocking, where the browser can do it in the background.
+  // Send each texture to the GPU in its own step, then compile the shaders
+  // without blocking where the browser can do it in the background, so the
+  // first frame has nothing left to set up.
+  for (const texture of [image, atlas, mask]) {
+    await yieldToMain();
+    renderer.initTexture(texture);
+  }
   await yieldToMain();
   try {
     await renderer.compileAsync(scene, camera);
