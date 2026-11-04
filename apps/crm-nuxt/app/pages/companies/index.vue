@@ -33,15 +33,14 @@ const params = computed<CompanyListParams>(() => {
   const sort = url.get("sort") as CompanySort | undefined;
   return {
     search: url.get("search"),
-    owner_id: url.get("owner"),
-    industry: url.get("industry"),
+    filter: { owner_id: url.get("owner"), industry: url.get("industry") },
     sort: sort && SORTS.includes(sort) ? sort : "name",
     page: url.page.value,
     per_page: 25,
   };
 });
 const companies = useCompanies(params);
-const filtered = computed(() => Boolean(params.value.search || params.value.owner_id || params.value.industry));
+const filtered = computed(() => Boolean(params.value.search || params.value.filter?.owner_id || params.value.filter?.industry));
 const total = computed(() => companies.data.value?.meta.total);
 const rows = computed(() => companies.data.value?.data ?? []);
 
@@ -69,9 +68,9 @@ function openRow(event: MouseEvent, id: string) {
     <section class="surface overflow-hidden" aria-label="Companies">
       <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
         <SearchFilter :value="params.search" placeholder="Search by name or domain" @change="(search) => url.set({ search })" />
-        <OwnerFilter :value="params.owner_id" :current-user-id="me.data.value?.id" @change="(owner) => url.set({ owner })" />
+        <OwnerFilter :value="params.filter?.owner_id" :current-user-id="me.data.value?.id" @change="(owner) => url.set({ owner })" />
         <OptionFilter
-          :value="params.industry"
+          :value="params.filter?.industry"
           :options="INDUSTRIES.map((i) => ({ value: i, label: i }))"
           any-label="Any industry"
           label="Filter by industry"

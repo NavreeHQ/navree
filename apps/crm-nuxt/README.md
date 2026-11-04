@@ -4,20 +4,29 @@ The Navree CRM front end on Nuxt 4: Vue 3, TypeScript (strict), Tailwind CSS 4, 
 the navree.com tokens, Pinia, TanStack Query for Vue, VeeValidate with zod, and pusher-js. It is the same CRM as
 `apps/crm-web`, screen for screen, against the same API (`apps/crm-api`).
 
-Nitro is the backend-for-frontend. The browser calls only this app's own `/api/*` and `/broadcasting/auth`; Nitro
-keeps Navree's access token and rotating refresh token in httpOnly cookies and forwards each call with
-`Authorization: Bearer`. The browser never sees a token.
+The `@navree/nuxt` module is the backend-for-frontend. The browser calls only this app's own `/api/*` and
+`/broadcasting/auth`; Nitro keeps Navree's access token and rotating refresh token in httpOnly cookies and forwards each
+call with `Authorization: Bearer`. The browser never sees a token. The app has no BFF code of its own: the module (with
+`@navree/bff` and `@navree/client`) serves the routes and the session gate, and carries sign-in, real time and abilities.
 
 ```
-browser ── same-origin /api/*, /broadcasting/auth ──▶ Nitro BFF (server/) ── Bearer ──▶ Navree API (crm-api)
+browser ── same-origin /api/*, /broadcasting/auth ──▶ Nitro, @navree/nuxt ── Bearer ──▶ Navree API (crm-api)
    └──────────── ws://127.0.0.1:8092/app/{key} (pusher-js) ───────────────────────────▶ Navree real time
 ```
 
 ## Run
 
-```bash
-pnpm install
+The Navree packages (`packages/js`) are not on npm yet. This app installs `@navree/nuxt` and `@navree/client` from the
+checkout with `link:`, so build them once before installing:
 
+```bash
+pnpm packages     # installs and builds packages/js (again after you change a package)
+pnpm install
+```
+
+`pnpm install` only links the packages; `nuxt prepare` (its `postinstall`) waits until `pnpm packages` has built them.
+
+```bash
 # 1. The API: crm-api on http://127.0.0.1:8092, on its own SQLite file
 #    target/builds/crm-nuxt/crm.db (seeded with crm-demo the first time).
 pnpm api                # serve (seeds a new database first)
@@ -58,17 +67,17 @@ default, is in [`.env.example`](.env.example):
 | `NAVREE_COOKIE_SECURE` | on in production | `0` to serve a production build over plain http |
 | `APP_ORIGINS` | none | Extra origins allowed to send non-GET requests (a proxy that rewrites `Host`) |
 | `NAVREE_TRUSTED_PROXY_HOPS` | `0` | Reverse proxies in front of Nuxt that append the client to `X-Forwarded-For` |
-| `NUXT_PUBLIC_API_MOCKS` | `0` | `1` serves the API from MSW in the browser |
-| `NUXT_PUBLIC_REALTIME` | `1` | `0` turns the socket off |
-| `NUXT_PUBLIC_PUSHER_KEY` | `navree-crm-key` | The API's `realtime.key` |
-| `NUXT_PUBLIC_WS_HOST` / `NUXT_PUBLIC_WS_PORT` | `127.0.0.1` / `8092` | The API's WebSocket listener |
+| `NUXT_PUBLIC_API_MOCKS` | `0` | `1` serves the API from MSW in the browser (read when Nuxt starts; it also turns off the session gate and the socket) |
+| `NUXT_PUBLIC_NAVREE_REALTIME` | on | `false` turns the socket off |
+| `NUXT_PUBLIC_NAVREE_REALTIME_KEY` | `navree-crm-key` | The API's `realtime.key` |
+| `NUXT_PUBLIC_NAVREE_REALTIME_WS_HOST` / `NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT` | `127.0.0.1` / `8092` | The API's WebSocket listener |
 | `NUXT_PUBLIC_DEMO_ACCOUNTS` | `0` | Lists the demo accounts on the login page |
 
 ## Check
 
 ```bash
 pnpm typecheck     # vue-tsc, strict
-pnpm test          # Vitest: units, the BFF and its Nitro handlers, the login page in a real Nuxt app
+pnpm test          # Vitest: units, the app's module settings, the login page in a real Nuxt app
 pnpm e2e           # Playwright against the real API (below)
 pnpm screenshots   # every screen at 1440 and 390 px into ./screenshots (git-ignored)
 pnpm gen:api       # regenerate app/lib/api/schema.d.ts from openapi.json (runs `navree openapi:client`, so `navree` is on PATH)
@@ -98,31 +107,45 @@ The specs run one at a time against that shared database in a UTC browser (the A
 
 ## How it talks to the API
 
-`server/lib/bff.ts` is the BFF, framework-free (web `Request` in, `Response` out) and unit-tested;
-`server/lib/instance.ts` creates it from the environment. The Nitro routes are one line each:
+The `@navree/nuxt` module does the work; `navree.options.ts` holds the app's settings for it and `nuxt.config.ts`
+registers it (`modules: ["@navree/nuxt"]`).
 
-| Route | Does |
+| Piece | Where it comes from |
 |---|---|
-| `server/api/auth/login.post.ts` | Signs in at Navree, sets `navree_at` and `navree_rt`, returns only `{user}` (or `{two_factor_required, expires_in}`) |
-| `server/api/auth/2fa/verify.post.ts` | Completes a two-factor sign-in with `{code}` or `{recovery_code}`; the challenge waits in `navree_2fa` (`Path=/api/auth/2fa`) |
-| `server/api/auth/refresh.post.ts` | Rotates the cookies (204) or ends the session (401) |
-| `server/api/auth/logout.post.ts` | Revokes the refresh token at Navree (`{all: true}`: every device) and clears the cookies |
-| `server/api/[...path].ts` | Every other `/api/*` call, every method |
-| `server/routes/broadcasting/auth.post.ts` | Signs private-channel subscriptions for pusher-js |
-| `server/middleware/session-gate.ts` | A page request with neither cookie gets a 302 to `/login?next=...` before the app loads |
+| `POST /api/auth/login`, `/2fa/verify`, `/refresh`, `/logout` | The module's BFF: signs in at Navree, sets `navree_at` and `navree_rt`, returns only `{user}` (or `{two_factor_required, expires_in}`); the two-factor challenge waits in `navree_2fa` |
+| Every other `/api/*` call, and `POST /broadcasting/auth` | The module's BFF, forwarded with the bearer token |
+| A page request with no session | The module's session gate: 302 to `/login?next=...`, after refreshing an expired access token |
+| Sign-in, two-factor, sign-out | `useNavreeAuth()` in `pages/login.vue` and the account menu |
+| The CASL ability | `navree.abilities`: the module loads `GET /api/me/abilities` after sign-in and drops the rules on sign-out; the screens read it with `useAbility()` from `@casl/vue` |
+| The socket | `navree.realtime` and `useChannel()` from `@navree/nuxt/realtime`; `app/composables/useRealtime.ts` holds the CRM's handlers for `deal.updated` and `notification.created` |
+| The typed client | `createNavreeClient` from `@navree/client` on the `paths` that `navree openapi:client` generates (`app/lib/api/client.ts`) |
 
 - Cookies are `HttpOnly; SameSite=Lax; Path=/`, `Secure` in production. A token pair in any `/api/auth/*` response
   (a password change) replaces the cookies and is stripped from the body.
 - On a 401, or when only the refresh cookie is left, the BFF refreshes once and retries. Refresh is single-flight per
-  refresh token (Navree rotates refresh tokens and revokes the family on reuse); a finished refresh is remembered for
-  30 s for requests still carrying the old cookie. A failed refresh clears both cookies.
+  refresh token (Navree rotates refresh tokens and revokes the family on reuse). A failed refresh clears both cookies.
 - Every non-GET request whose `Origin` is not this app's host (or in `APP_ORIGINS`) gets 403 before reaching Navree.
 - The browser's `X-Forwarded-For` never reaches Navree; behind N trusted proxies set `NAVREE_TRUSTED_PROXY_HOPS=N`.
 
-In the browser, `app/lib/api/client.ts` is a typed client on `fetch.ts` (the core of `@navree/client`), typed from `openapi.json` (generated into
-`schema.d.ts` by `navree openapi:client`), same-origin, with hooks for 401 (back to `/login?next=`) and 403 (a toast).
-`unwrap()` turns Navree's error body (`{statusCode, message, error, errors?}`) into an `ApiError`; forms put 400
-`errors` next to their fields.
+In the browser, `app/lib/api/client.ts` is the app's one typed client, same-origin, with hooks for 401 (back to
+`/login?next=`) and 403 (a toast). TanStack Query runs its functions outside any component, so the app keeps one
+client instead of asking for `useNavreeClient()`. `unwrap()` turns Navree's error body
+(`{statusCode, message, error, code, errors?}`) into a `NavreeError`; forms put 400 `errors` next to their fields.
+
+With the mock API (`pnpm dev:mock`) the browser serves the API itself and the session lives in the tab, so the module's
+session gate and socket are off, and `app/lib/realtime/mock-bus.ts` stands in for the socket.
+
+### How the linked packages work
+
+The module is loaded from `packages/js/nuxt/dist`, outside this folder, so `nuxt.config.ts` tells Vite and Nitro about it:
+
+- `vite.resolve.dedupe` makes `vue`, `vue-router`, `@casl/ability`, `@casl/vue` and `pusher-js` resolve once, from this
+  app, for the packages too. The packages find their own copies in `packages/js/node_modules` otherwise, and two copies
+  of Vue break `inject`.
+- `vite.server.fs.allow` lets the dev server serve the packages' files.
+- `nitro.externals.inline` bundles `@navree/nuxt`, `@navree/bff` and `@navree/client` into the server.
+- `pnpm-workspace.yaml` overrides `deepmerge` with `@navree/deepmerge` (`packages/js/deepmerge`), the copy Nitro's
+  bundler loads, as `packages/js/pnpm-workspace.yaml` does.
 
 ## Design
 
@@ -145,12 +168,12 @@ Dark only, on the navree.com tokens (`apps/website/DESIGN.md`), following its ap
 
 ## Layout
 
-- `server/`: the BFF (above).
-- `app/lib/api/`: `schema.d.ts` (generated), `types.ts` (aliases), `client.ts`, `errors.ts`, `form-errors.ts`,
+- `navree.options.ts`: the app's settings for the `@navree/nuxt` module. There is no `server/` folder: the module is the BFF.
+- `app/lib/api/`: `schema.d.ts` (generated), `types.ts` (aliases), `client.ts` (the typed client), `form-errors.ts`,
   `keys.ts` (query keys).
-- `app/lib/casl/`: one CASL ability for the app, rules from `GET /api/me/abilities`, applied before any screen renders
-  (`app/middleware/session.global.ts`).
-- `app/lib/realtime/`: pusher-js wrapper (`pusher.ts`), the mock bus for `dev:mock`, event payloads.
+- `app/lib/casl/`: the types of the app's CASL ability (actions and subjects). The module builds the ability and loads
+  the rules from `GET /api/me/abilities` after sign-in (`app/middleware/session.global.ts` signs the visit in).
+- `app/lib/realtime/`: the mock bus for `dev:mock`, event payloads.
   `app/composables/useRealtime.ts` listens on `private-crm.deals` and `private-users.{id}`.
 - `app/lib/forms/zod-schema.ts`: zod 4 schemas as VeeValidate typed schemas.
 - `app/stores/ui.ts` (Pinia): sidebar, palette, dialogs, live status, the record in the breadcrumb.

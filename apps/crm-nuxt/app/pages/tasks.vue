@@ -45,8 +45,8 @@ const current = computed(() => TABS.find((t) => t.value === tab.value)!);
 
 function paramsFor(t: Tab): ActivityListParams {
   return t === "completed"
-    ? { kind: "task", assignee_id: assignee.value, completed: true }
-    : { kind: "task", assignee_id: assignee.value, due: t, completed: false };
+    ? { filter: { kind: "task", assignee_id: assignee.value, completed: true } }
+    : { filter: { kind: "task", assignee_id: assignee.value, due: t, completed: false } };
 }
 
 const list = useActivities(() => ({ ...paramsFor(tab.value), page: url.page.value, per_page: 25 }));

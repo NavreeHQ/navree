@@ -9,7 +9,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/te
  *    db:seed crm-demo and serve, on its own SQLite file target/builds/crm-nuxt/e2e.db and a fresh
  *    APP_KEY per run;
  * 2. this app's production build (`nuxt build`, then `node .output/server/index.mjs`) on :3102,
- *    talking to it through the BFF.
+ *    talking to it through the `@navree/nuxt` module's BFF (the Navree packages must be built first: `pnpm packages`).
  *
  * `E2E_BASE_URL=http://localhost:3102 pnpm e2e` runs the specs against servers you started yourself
  * (crm-api seeded with crm-demo, e.g. `pnpm api:fresh` and `pnpm dev`).
@@ -42,9 +42,8 @@ const servers: PlaywrightTestConfig["webServer"] = [
       // A production server over plain http: allow the token cookies without Secure.
       NAVREE_COOKIE_SECURE: "0",
       NUXT_PUBLIC_API_MOCKS: "0",
-      NUXT_PUBLIC_REALTIME: "1",
-      NUXT_PUBLIC_WS_HOST: "127.0.0.1",
-      NUXT_PUBLIC_WS_PORT: "8092",
+      NUXT_PUBLIC_NAVREE_REALTIME_WS_HOST: "127.0.0.1",
+      NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT: "8092",
     },
     timeout: 6 * 60_000,
     reuseExistingServer: false,

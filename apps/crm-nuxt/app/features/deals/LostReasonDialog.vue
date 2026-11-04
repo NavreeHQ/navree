@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { errorMessage, isNavreeError } from "@navree/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage, isApiError } from "@/lib/api/errors";
 
 /**
  * The API requires `lost_reason` when a deal moves to lost (400 otherwise), so
@@ -36,8 +36,8 @@ watch(
 );
 
 const serverError = computed(() =>
-  isApiError(props.error) && props.error.isValidation
-    ? (props.error.fieldErrors.lost_reason?.[0] ?? errorMessage(props.error))
+  isNavreeError(props.error) && props.error.isValidation
+    ? (props.error.errors.lost_reason?.[0] ?? errorMessage(props.error))
     : undefined,
 );
 const otherError = computed(() => (props.error && !serverError.value ? errorMessage(props.error) : undefined));

@@ -1,24 +1,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/vue-query";
 import { api, unwrap } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import type {
-  ActivityDueFilter,
-  ActivityInput,
-  ActivityKind,
-  ActivitySubjectType,
-  ActivityUpdateInput,
-} from "@/lib/api/types";
+import type { ActivityInput, ActivityListQuery, ActivityUpdateInput } from "@/lib/api/types";
 
-export type ActivityListParams = {
-  subject_type?: ActivitySubjectType;
-  subject_id?: string;
-  kind?: ActivityKind;
-  assignee_id?: string;
-  due?: ActivityDueFilter;
-  completed?: boolean;
-  page?: number;
-  per_page?: number;
-};
+/** `filter` (subject_type, subject_id, kind, assignee_id, due, completed), `page`, `per_page`. */
+export type ActivityListParams = ActivityListQuery;
 
 export function useActivities(
   params: MaybeRefOrGetter<ActivityListParams>,

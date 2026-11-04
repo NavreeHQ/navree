@@ -38,11 +38,11 @@ const companies = useCompanies(
   () => open.value && props.type === "company",
 );
 const contacts = useContacts(
-  () => ({ search: query.value, company_id: props.companyId, per_page: 8 }),
+  () => ({ search: query.value, filter: { company_id: props.companyId }, per_page: 8 }),
   () => open.value && props.type === "contact",
 );
 const deals = useDeals(
-  () => ({ search: query.value, company_id: props.companyId, per_page: 8 }),
+  () => ({ search: query.value, filter: { company_id: props.companyId }, per_page: 8 }),
   () => open.value && props.type === "deal",
 );
 

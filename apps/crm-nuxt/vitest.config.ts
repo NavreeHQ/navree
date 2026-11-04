@@ -4,9 +4,11 @@ import { defineConfig } from "vitest/config";
 
 /**
  * Two projects:
- * - `unit` (Node): the BFF and its Nitro handlers, the API client, forms, formatting, CASL, the board's
- *   drag maths and the mock API. Fast; no Nuxt build.
- * - `nuxt`: components mounted in a real Nuxt app (`mountSuspended`), with the app's plugins.
+ * - `unit` (Node): the app's module settings and layout, the API client, forms, formatting, CASL rules, the
+ *   board's drag maths, the mock bus and the mock API. Fast; no Nuxt build. Needs the Navree packages built
+ *   (`pnpm packages`).
+ * - `nuxt`: components mounted in a real Nuxt app (`mountSuspended`), with the `@navree/nuxt` module and the
+ *   app's plugins.
  */
 export default defineConfig({
   test: {

@@ -34,7 +34,7 @@ useRecordCrumb(() => contact.data.value?.full_name);
 
 // Deals at the contact's company where this person is the main contact.
 const companyId = computed(() => contact.data.value?.company_id ?? undefined);
-const deals = useDeals(() => ({ company_id: companyId.value, per_page: 100 }), () => Boolean(companyId.value));
+const deals = useDeals(() => ({ filter: { company_id: companyId.value }, per_page: 100 }), () => Boolean(companyId.value));
 const theirDeals = computed(() => deals.data.value?.data.filter((d) => d.contact_id === id.value) ?? []);
 
 function destroy() {

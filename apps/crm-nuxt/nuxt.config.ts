@@ -1,13 +1,21 @@
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
+import { navreeOptions } from "./navree.options";
+
+/** This app, and the Navree front-end packages (`packages/js`) that are installed into it with `link:` (see README). */
+const appRoot = fileURLToPath(new URL(".", import.meta.url));
+const navreePackages = fileURLToPath(new URL("../../packages/js", import.meta.url));
 
 /**
  * Navree CRM on Nuxt 4.
  *
  * The browser app is a single-page app (`ssr: false`): every screen sits behind
- * sign-in and loads its data with TanStack Query, like a desktop tool. Nitro is
- * the backend-for-frontend: `server/api/**` and `server/routes/broadcasting/**`
- * hold the Navree tokens in httpOnly cookies and forward calls to the API. The
- * browser never sees a token.
+ * sign-in and loads its data with TanStack Query, like a desktop tool. The
+ * `@navree/nuxt` module is the backend-for-frontend: Nitro serves `/api/**` and
+ * `/broadcasting/auth` with the Navree tokens in httpOnly cookies, a session gate
+ * keeps pages behind sign-in, and the module's composables carry sign-in, real
+ * time and abilities. The browser never sees a token. The module's settings are in
+ * `navree.options.ts`.
  */
 export default defineNuxtConfig({
   compatibilityDate: "2026-10-01",
@@ -15,7 +23,9 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   telemetry: false,
 
-  modules: ["@pinia/nuxt"],
+  modules: ["@navree/nuxt", "@pinia/nuxt"],
+
+  navree: navreeOptions(),
 
   // Components are imported explicitly: every file says where its parts come from.
   components: { dirs: [] },
@@ -37,17 +47,11 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    // Server only. Overridden at runtime by NUXT_NAVREE_API_URL, NUXT_COOKIE_SECURE, ...
-    // (server/lib/instance.ts also reads the plain NAVREE_* names, which the Next.js CRM uses too).
-    navreeApiUrl: "",
+    // The API (NAVREE_API_URL), the cookies (NAVREE_COOKIE_SECURE) and the socket
+    // (NUXT_PUBLIC_NAVREE_REALTIME_*) are the module's settings: see navree.options.ts and .env.example.
     public: {
       /** NUXT_PUBLIC_API_MOCKS=1 serves the API from MSW in the browser (demo data, no crm-api). */
       apiMocks: false,
-      /** NUXT_PUBLIC_REALTIME=0 turns the WebSocket off (queries still refetch on focus). */
-      realtime: true,
-      pusherKey: "navree-crm-key",
-      wsHost: "127.0.0.1",
-      wsPort: 8092,
       /** Shows the seeded demo accounts on the login page (always on with the mock API). */
       demoAccounts: false,
     },
@@ -60,6 +64,16 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss()],
+    resolve: {
+      // The packages are linked from the checkout, so they resolve their own copies of these from
+      // packages/js. One copy of each keeps Vue's injection, vue-router's state, CASL's ability and
+      // the socket shared between the packages and the app.
+      dedupe: ["vue", "vue-router", "@casl/ability", "@casl/vue", "pusher-js"],
+    },
+    server: {
+      // The linked packages sit outside this app's folder, and naming a folder here replaces Vite's own default.
+      fs: { allow: [appRoot, navreePackages] },
+    },
     optimizeDeps: {
       include: [
         "@tanstack/vue-query",
@@ -82,5 +96,7 @@ export default defineNuxtConfig({
   nitro: {
     // The BFF streams API responses through; nothing is pre-rendered.
     compressPublicAssets: true,
+    // Bundle the linked packages into the server instead of loading them from the checkout at run time.
+    externals: { inline: ["@navree/nuxt", "@navree/bff", "@navree/client"] },
   },
 });

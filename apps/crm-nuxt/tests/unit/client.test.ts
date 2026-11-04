@@ -1,6 +1,6 @@
+import { errorMessage, isNavreeError, NavreeError } from "@navree/client";
 import { describe, expect, it, vi } from "vitest";
 import { createApiClient, unwrap } from "@/lib/api/client";
-import { ApiError, errorMessage } from "@/lib/api/errors";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 
 const BASE = "http://crm.test";
@@ -47,10 +47,18 @@ describe("API client (browser → BFF)", () => {
 
     expect(await unwrap(client.GET("/api/notifications/unread-count"))).toEqual({ count: 3 });
   });
+
+  it("sends a request id, so a failure can be found in the API's logs", async () => {
+    const { client, requests } = recordingClient(() => json({ count: 0 }));
+
+    await unwrap(client.GET("/api/notifications/unread-count"));
+
+    expect(requests[0].headers.get("X-Request-Id")).toMatch(/^[0-9a-f-]{36}$/);
+  });
 });
 
 describe("Navree error mapping", () => {
-  it("turns a 400 validation error into an ApiError with field errors", async () => {
+  it("turns a 400 validation error into a NavreeError with field errors", async () => {
     const { client } = recordingClient(() =>
       nest(400, ["name should not be empty", "website must be a URL address"], "Bad Request", {
         errors: { name: ["name should not be empty"], website: ["website must be a URL address"] },
@@ -59,19 +67,20 @@ describe("Navree error mapping", () => {
 
     const error = await unwrap(client.POST("/api/v1/companies", { body: { name: "" } })).catch((e) => e);
 
-    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toBeInstanceOf(NavreeError);
     expect(error.status).toBe(400);
+    expect(error.code).toBe("validation_failed");
     expect(error.isValidation).toBe(true);
     expect(error.requestId).toBe("req-1");
     expect(error.messages).toEqual(["name should not be empty", "website must be a URL address"]);
-    expect(error.fieldErrors).toEqual({
+    expect(error.errors).toEqual({
       name: ["name should not be empty"],
       website: ["website must be a URL address"],
     });
   });
 
   it("maps 400 `errors` onto form fields, and unknown fields to the form root", () => {
-    const error = new ApiError({
+    const error = new NavreeError({
       statusCode: 400,
       message: ["name should not be empty", "owner_id must be a UUID"],
       error: "Bad Request",
@@ -86,7 +95,7 @@ describe("Navree error mapping", () => {
   });
 
   it("renames API fields to form fields (company_id → company)", () => {
-    const error = new ApiError({
+    const error = new NavreeError({
       statusCode: 400,
       message: ["company_id must exist"],
       error: "Bad Request",
@@ -99,7 +108,7 @@ describe("Navree error mapping", () => {
   });
 
   it("shows a 400 with only a message list at the form root", () => {
-    const error = new ApiError({ statusCode: 400, message: ["stage must be a valid stage"], error: "Bad Request" });
+    const error = new NavreeError({ statusCode: 400, message: ["stage must be a valid stage"], error: "Bad Request" });
     const setFieldError = vi.fn();
 
     expect(applyFieldErrors(error, setFieldError, [])).toBe("stage must be a valid stage");
@@ -108,8 +117,8 @@ describe("Navree error mapping", () => {
 
   it("leaves non-validation errors alone", () => {
     const setFieldError = vi.fn();
-    const forbidden = new ApiError({ statusCode: 403, message: "Forbidden resource", error: "Forbidden" });
-    const conflict = new ApiError({ statusCode: 400, message: "Bad Request", error: "Bad Request" });
+    const forbidden = new NavreeError({ statusCode: 403, message: "Forbidden resource", error: "Forbidden" });
+    const conflict = new NavreeError({ statusCode: 400, message: "Bad Request", error: "Bad Request" });
 
     expect(applyFieldErrors(forbidden, setFieldError, [])).toBeNull();
     expect(applyFieldErrors(conflict, setFieldError, [])).toBeNull();
@@ -139,7 +148,7 @@ describe("Navree error mapping", () => {
       client.POST("/api/v1/deals/{id}/move", { params: { path: { id: "d1" } }, body: { stage: "won" } }),
     ).catch((e) => e);
     expect(onForbidden).toHaveBeenCalledTimes(1);
-    expect(onForbidden.mock.calls[0][0]).toBeInstanceOf(ApiError);
+    expect(onForbidden.mock.calls[0][0]).toBeInstanceOf(NavreeError);
     expect(onForbidden.mock.calls[0][0].messages).toEqual(["Only the deal's owner can move it"]);
     expect(error.status).toBe(403);
   });
@@ -152,14 +161,30 @@ describe("Navree error mapping", () => {
 
     const error = await unwrap(client.GET("/api/v1/dashboard")).catch((e) => e);
 
-    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toBeInstanceOf(NavreeError);
     expect(error.status).toBe(504);
     expect(error.messages).toEqual(["upstream timeout"]);
   });
 
+  it("turns a request that got no answer into a network error", async () => {
+    const client = createApiClient({
+      baseUrl: BASE,
+      fetch: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+
+    const error = await unwrap(client.GET("/api/v1/dashboard")).catch((e) => e);
+
+    expect(isNavreeError(error)).toBe(true);
+    expect(error.status).toBe(0);
+    expect(error.code).toBe("network_error");
+    expect(errorMessage(error)).toBe("Can't reach the server. Check your connection.");
+  });
+
   it("gives people readable messages instead of framework defaults", () => {
     const err = (statusCode: number, message: string | string[], error: string, errors?: Record<string, string[]>) =>
-      new ApiError({ statusCode, message, error, ...(errors ? { errors } : {}) });
+      new NavreeError({ statusCode, message, error, ...(errors ? { errors } : {}) });
 
     expect(errorMessage(err(403, "Forbidden resource", "Forbidden"))).toBe("You don't have permission to do that.");
     expect(errorMessage(err(403, "Won and lost deals are kept for reporting", "Forbidden"))).toBe(

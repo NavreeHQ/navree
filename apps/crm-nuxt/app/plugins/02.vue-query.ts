@@ -1,6 +1,6 @@
+import { errorMessage, isNavreeError } from "@navree/client";
 import { MutationCache, QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
-import { errorMessage, isApiError } from "@/lib/api/errors";
 
 /**
  * TanStack Query for Vue: one client for the app. Queries don't retry what the
@@ -15,14 +15,17 @@ export default defineNuxtPlugin({
       defaultOptions: {
         queries: {
           staleTime: 20_000,
-          retry: (failureCount, error) => !(isApiError(error) && error.status < 500) && failureCount < 2,
+          retry: (failureCount, error) => {
+            const decidedByApi = isNavreeError(error) && error.status >= 400 && error.status < 500;
+            return !decidedByApi && failureCount < 2;
+          },
         },
         mutations: { retry: false },
       },
       mutationCache: new MutationCache({
         onError: (error, _variables, _context, mutation) => {
           if (mutation.meta?.silent) return;
-          if (isApiError(error) && (error.status === 401 || error.status === 403 || error.isValidation)) return;
+          if (isNavreeError(error) && (error.status === 401 || error.status === 403 || error.isValidation)) return;
           toast.error(errorMessage(error));
         },
       }),

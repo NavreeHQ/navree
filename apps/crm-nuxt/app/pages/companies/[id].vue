@@ -41,8 +41,8 @@ const tab = ref("activity");
 useHead({ title: () => company.data.value?.name ?? "Company" });
 useRecordCrumb(() => company.data.value?.name);
 
-const deals = useDeals(() => ({ company_id: id.value, per_page: 50 }), () => tab.value === "deals");
-const contacts = useContacts(() => ({ company_id: id.value, per_page: 50 }), () => tab.value === "contacts");
+const deals = useDeals(() => ({ filter: { company_id: id.value }, per_page: 50 }), () => tab.value === "deals");
+const contacts = useContacts(() => ({ filter: { company_id: id.value }, per_page: 50 }), () => tab.value === "contacts");
 const ref_ = computed(() => (company.data.value ? { id: company.data.value.id, name: company.data.value.name } : undefined));
 
 function destroy() {

@@ -8,17 +8,11 @@ import {
 } from "@tanstack/vue-query";
 import { api, unwrap } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import type { DealBoard, DealInput, DealMoveInput, DealStage, DealUpdateInput } from "@/lib/api/types";
+import type { DealBoard, DealInput, DealListQuery, DealMoveInput, DealUpdateInput } from "@/lib/api/types";
 import { stageProbability } from "@/lib/api/types";
 
-export type DealListParams = {
-  stage?: DealStage;
-  owner_id?: string;
-  company_id?: string;
-  search?: string;
-  page?: number;
-  per_page?: number;
-};
+/** `filter` (stage, owner_id, company_id), `search`, `sort`, `page`, `per_page`: sent as `filter[stage]=won`. */
+export type DealListParams = DealListQuery;
 
 export function useDeals(params: MaybeRefOrGetter<DealListParams>, enabled: MaybeRefOrGetter<boolean> = true) {
   return useQuery({

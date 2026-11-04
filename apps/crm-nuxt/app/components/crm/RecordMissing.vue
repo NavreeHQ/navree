@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { FileQuestion } from "@lucide/vue";
+import { isNavreeError } from "@navree/client";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { isApiError } from "@/lib/api/errors";
 
 const props = defineProps<{ error: unknown; noun: string; back: { href: string; label: string } }>();
-const notFound = computed(() => isApiError(props.error) && props.error.status === 404);
+const notFound = computed(() => isNavreeError(props.error) && props.error.status === 404);
 </script>
 
 <template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAbility } from "@casl/vue";
 import { Download, Plus, Users, X } from "@lucide/vue";
+import { errorMessage } from "@navree/client";
 import { toast } from "vue-sonner";
 import ContactStatusBadge from "@/components/crm/ContactStatusBadge.vue";
 import ListEmpty from "@/components/crm/ListEmpty.vue";
@@ -19,7 +20,6 @@ import { useCurrentUser } from "@/features/auth/queries";
 import { useCompany } from "@/features/companies/queries";
 import { type ContactListParams, exportContactsCsv, useContacts } from "@/features/contacts/queries";
 import { STATUS_LABEL } from "@/features/contacts/status";
-import { errorMessage } from "@/lib/api/errors";
 import type { ContactStatus } from "@/lib/api/types";
 import { CONTACT_STATUSES } from "@/lib/api/types";
 import type { AppAbility } from "@/lib/casl/ability";
@@ -39,16 +39,24 @@ const params = computed<ContactListParams>(() => {
   const status = url.get("status") as ContactStatus | undefined;
   return {
     search: url.get("search"),
-    status: status && CONTACT_STATUSES.includes(status) ? status : undefined,
-    owner_id: url.get("owner"),
-    company_id: url.get("company"),
+    filter: {
+      status: status && CONTACT_STATUSES.includes(status) ? status : undefined,
+      owner_id: url.get("owner"),
+      company_id: url.get("company"),
+    },
     page: url.page.value,
     per_page: 25,
   };
 });
 const contacts = useContacts(params);
-const companyFilter = useCompany(() => params.value.company_id ?? "", () => Boolean(params.value.company_id));
-const filtered = computed(() => Boolean(params.value.search || params.value.status || params.value.owner_id || params.value.company_id));
+const companyFilter = useCompany(
+  () => params.value.filter?.company_id ?? "",
+  () => Boolean(params.value.filter?.company_id),
+);
+const filtered = computed(() => {
+  const { search, filter } = params.value;
+  return Boolean(search || filter?.status || filter?.owner_id || filter?.company_id);
+});
 const total = computed(() => contacts.data.value?.meta.total);
 const rows = computed(() => contacts.data.value?.data ?? []);
 
@@ -56,8 +64,8 @@ const exporting = ref(false);
 async function exportCsv() {
   exporting.value = true;
   try {
-    const { search, company_id, status, owner_id } = params.value;
-    await exportContactsCsv({ search, company_id, status, owner_id });
+    const { filter, search } = params.value;
+    await exportContactsCsv({ filter, search });
     toast.success("Contacts exported");
   } catch (error) {
     toast.error(errorMessage(error, "The export failed. Try again."));
@@ -93,15 +101,15 @@ function openRow(event: MouseEvent, id: string) {
       <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
         <SearchFilter :value="params.search" placeholder="Search by name, email or title" @change="(search) => url.set({ search })" />
         <OptionFilter
-          :value="params.status"
+          :value="params.filter?.status"
           :options="STATUS_OPTIONS"
           any-label="Any status"
           label="Filter by status"
           @change="(status) => url.set({ status })"
         />
-        <OwnerFilter :value="params.owner_id" :current-user-id="me.data.value?.id" @change="(owner) => url.set({ owner })" />
+        <OwnerFilter :value="params.filter?.owner_id" :current-user-id="me.data.value?.id" @change="(owner) => url.set({ owner })" />
         <span
-          v-if="params.company_id"
+          v-if="params.filter?.company_id"
           class="inline-flex h-8 items-center gap-1 rounded-md border border-fg-3/60 bg-ink-2 pr-1 pl-2.5 text-[13px]"
         >
           <span class="text-fg-3">Company:</span>

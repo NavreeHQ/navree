@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useAbility } from "@casl/vue";
 import { ChevronsUpDown, Keyboard, LogOut, MonitorSmartphone, Settings } from "@lucide/vue";
 import UserAvatar from "@/components/crm/UserAvatar.vue";
 import {
@@ -13,9 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useLogout } from "@/features/auth/queries";
+import { useSignOut } from "@/features/auth/queries";
 import type { User } from "@/lib/api/types";
-import type { AppAbility } from "@/lib/casl/ability";
 import { roleLabel } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui";
@@ -34,8 +32,8 @@ const emit = defineEmits<{ navigate: [] }>();
  */
 const trigger = useTemplateRef<HTMLButtonElement>("trigger");
 const ui = useUiStore();
-const ability = useAbility<AppAbility>();
-const logout = useLogout();
+const signOutOf = useSignOut();
+const signingOut = ref(false);
 
 function goToSettings() {
   emit("navigate");
@@ -46,13 +44,16 @@ function showShortcuts() {
   ui.shortcutsOpen = true;
 }
 
-function signOut(all = false) {
-  logout.mutate(all ? { all: true } : {}, {
-    onSettled: () => {
-      ability.update([]);
-      void navigateTo("/login", { replace: true });
-    },
-  });
+async function signOut(all = false) {
+  signingOut.value = true;
+  try {
+    await signOutOf(all ? { all: true } : {});
+  } catch {
+    // The API could not be reached: this browser is signed out anyway.
+  } finally {
+    signingOut.value = false;
+  }
+  void navigateTo("/login", { replace: true });
 }
 </script>
 
@@ -109,11 +110,11 @@ function signOut(all = false) {
       </DropdownMenuGroup>
       <DropdownMenuSeparator />
       <DropdownMenuGroup>
-        <DropdownMenuItem :disabled="logout.isPending.value" @select="signOut(false)">
+        <DropdownMenuItem :disabled="signingOut" @select="signOut(false)">
           <LogOut />
           Sign out
         </DropdownMenuItem>
-        <DropdownMenuItem :disabled="logout.isPending.value" @select="signOut(true)">
+        <DropdownMenuItem :disabled="signingOut" @select="signOut(true)">
           <MonitorSmartphone />
           Sign out on every device
         </DropdownMenuItem>

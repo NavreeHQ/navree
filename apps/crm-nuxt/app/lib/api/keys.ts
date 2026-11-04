@@ -2,7 +2,6 @@
 export const keys = {
   auth: {
     user: ["auth", "user"] as const,
-    abilities: ["auth", "abilities"] as const,
   },
   users: {
     all: ["users"] as const,

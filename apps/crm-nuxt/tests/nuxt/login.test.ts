@@ -1,6 +1,7 @@
 /**
- * The login page mounted in a real Nuxt app (the app's plugins: TanStack Query, CASL, the API
- * events), talking to a stubbed BFF through `fetch`. Navigation is recorded, not performed.
+ * The login page mounted in a real Nuxt app (the @navree/nuxt module with its sign-in state and
+ * abilities, plus the app's plugins: TanStack Query and the API events), talking to a stubbed BFF
+ * through `fetch`. Navigation is recorded, not performed.
  */
 import { mockNuxtImport, mountSuspended } from "@nuxt/test-utils/runtime";
 import { flushPromises } from "@vue/test-utils";
@@ -13,8 +14,12 @@ mockNuxtImport("navigateTo", () => navigateTo);
 const user = { __type: "User", id: "u9", name: "Dana Whitfield", email: "admin@navree.test", roles: ["admin"] };
 type Call = { route: string; body: Record<string, unknown> };
 
-/** The BFF as the browser sees it. Anything not scripted is a 401 (no session yet). */
-function stubBff(routes: Record<string, (body: Record<string, unknown>) => Response>): Call[] {
+/**
+ * The BFF as the browser sees it. Anything not scripted is a 401 (no session yet), except the
+ * abilities the module loads after a sign-in, which are empty.
+ */
+function stubBff(scripted: Record<string, (body: Record<string, unknown>) => Response>): Call[] {
+  const routes = { "GET /api/me/abilities": () => Response.json([]), ...scripted };
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
@@ -47,9 +52,13 @@ async function signIn(wrapper: Awaited<ReturnType<typeof mountSuspended>>, email
 }
 
 describe("login page", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // One Nuxt app serves every test in the file: forget the user an earlier test signed in, in the
+    // module's sign-in state (signing out is a call to the BFF) and in the cache.
+    stubBff({ "POST /api/auth/logout": () => new Response(null, { status: 204 }) });
+    await useNavreeAuth().signOut();
+    vi.unstubAllGlobals();
     navigateTo.mockReset();
-    // One Nuxt app serves every test in the file: forget the user an earlier test signed in.
     useNuxtApp().$queryClient.clear();
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -78,6 +87,8 @@ describe("login page", () => {
       email: "admin@navree.test",
       password: "password123",
     });
+    // The module's sign-in state is now signed in, so the module loads the user's abilities.
+    await vi.waitFor(() => expect(calls.some((c) => c.route === "GET /api/me/abilities")).toBe(true));
   });
 
   it("never follows a `next` that leaves the site", async () => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAbility } from "@casl/vue";
 import { Keyboard } from "@lucide/vue";
+import { errorMessage, isNavreeError } from "@navree/client";
 import { useForm } from "vee-validate";
 import { toast } from "vue-sonner";
 import { z } from "zod";
@@ -12,7 +13,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useChangePassword, useCurrentUser } from "@/features/auth/queries";
-import { errorMessage, isApiError } from "@/lib/api/errors";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import type { SubjectName } from "@/lib/api/types";
 import type { AppAbility, AppAction } from "@/lib/casl/ability";
@@ -84,7 +84,7 @@ const savePassword = passwordForm.handleSubmit((values) => {
           return;
         }
         passwordError.value =
-          isApiError(error) && (error.status === 401 || error.status === 403)
+          isNavreeError(error) && (error.status === 401 || error.status === 403)
             ? "Your current password isn't right."
             : errorMessage(error);
       },
@@ -142,7 +142,7 @@ const savePassword = passwordForm.handleSubmit((values) => {
           {{ config.mocks ? "Mock API (demo data in this browser tab)" : "Navree CRM API, through this app's server" }}
         </DetailRow>
         <DetailRow label="Live updates">
-          {{ config.mocks ? "Simulated in this tab" : config.realtime ? `WebSocket ${config.wsHost}:${config.wsPort}` : "Off" }}
+          {{ config.mocks ? "Simulated in this tab" : config.realtime ? `WebSocket ${config.realtime.wsHost}:${config.realtime.wsPort}` : "Off" }}
           <span class="ml-1.5 text-fg-3">({{ ui.realtime === "live" ? "connected" : ui.realtime }})</span>
         </DetailRow>
         <DetailRow label="Tokens">Kept in httpOnly cookies on the server; this page never sees them.</DetailRow>

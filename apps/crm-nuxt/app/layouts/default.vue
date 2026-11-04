@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAbility } from "@casl/vue";
+import { isNavreeError } from "@navree/client";
 import ApiUnavailable from "@/components/shell/ApiUnavailable.vue";
 import AppHeader from "@/components/shell/AppHeader.vue";
 import AppSidebar from "@/components/shell/AppSidebar.vue";
@@ -9,43 +9,23 @@ import LiveConnection from "@/components/shell/LiveConnection.vue";
 import MobileNav from "@/components/shell/MobileNav.vue";
 import ShellSkeleton from "@/components/shell/ShellSkeleton.vue";
 import ShortcutsDialog from "@/components/shell/ShortcutsDialog.vue";
-import { useAbilityRules, useCurrentUser } from "@/features/auth/queries";
-import { isApiError } from "@/lib/api/errors";
-import type { AppAbility } from "@/lib/casl/ability";
+import { useCurrentUser } from "@/features/auth/queries";
 
 /**
  * Everything behind sign-in: loads the user (a 401 goes to /login through the
- * API client), applies their CASL rules to the app-wide ability before any
- * screen renders, connects real time and renders the shell.
+ * API client), connects real time and renders the shell. The user's CASL rules
+ * come from the `@navree/nuxt` module, which loads them once the user is signed
+ * in; everything that asks `can(...)` re-renders when they arrive.
  */
 const user = useCurrentUser();
-const rules = useAbilityRules(() => Boolean(user.data.value));
-const ability = useAbility<AppAbility>();
-const applied = ref<unknown>(null);
 
-watch(
-  () => rules.data.value,
-  (next) => {
-    if (!next || applied.value === next) return;
-    ability.update(next as Parameters<AppAbility["update"]>[0]);
-    applied.value = next;
-  },
-  { immediate: true },
-);
-
-const unauthenticated = computed(() => isApiError(user.error.value) && user.error.value.status === 401);
-const ready = computed(() => Boolean(user.data.value) && rules.data.value !== undefined && applied.value === rules.data.value);
+const unauthenticated = computed(() => isNavreeError(user.error.value) && user.error.value.status === 401);
 </script>
 
 <template>
   <a href="#content" class="skip-link">Skip to content</a>
   <ApiUnavailable v-if="user.isError.value && !unauthenticated" @retry="user.refetch()" />
-  <ApiUnavailable
-    v-else-if="rules.isError.value"
-    detail="Your permissions couldn't be loaded."
-    @retry="rules.refetch()"
-  />
-  <ShellSkeleton v-else-if="!ready || !user.data.value" />
+  <ShellSkeleton v-else-if="!user.data.value" />
   <div v-else class="flex min-h-dvh">
     <AppSidebar :user="user.data.value" />
     <div class="flex min-w-0 flex-1 flex-col">

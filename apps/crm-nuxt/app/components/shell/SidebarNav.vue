@@ -29,10 +29,7 @@ const subItems = computed(() =>
 
 // The overdue count on Tasks: one row per page is enough, the total is in `meta`.
 const overdue = useActivities(() => ({
-  kind: "task",
-  assignee_id: props.user.id,
-  due: "overdue",
-  completed: false,
+  filter: { kind: "task", assignee_id: props.user.id, due: "overdue", completed: false },
   per_page: 1,
 }));
 const overdueCount = computed(() => overdue.data.value?.meta.total ?? 0);

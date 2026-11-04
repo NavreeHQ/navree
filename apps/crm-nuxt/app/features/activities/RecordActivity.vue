@@ -6,7 +6,10 @@ import { useActivities } from "./queries";
 
 /** A record's activity: the composer on top, the history below. */
 const props = defineProps<{ subjectType: ActivitySubjectType; subjectId: string }>();
-const activities = useActivities(() => ({ subject_type: props.subjectType, subject_id: props.subjectId, per_page: 50 }));
+const activities = useActivities(() => ({
+  filter: { subject_type: props.subjectType, subject_id: props.subjectId },
+  per_page: 50,
+}));
 </script>
 
 <template>

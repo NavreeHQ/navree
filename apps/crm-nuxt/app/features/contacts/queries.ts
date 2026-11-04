@@ -1,9 +1,10 @@
+import { NavreeError } from "@navree/client";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { api, unwrap } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/errors";
 import { keys } from "@/lib/api/keys";
 import type { ContactExportQuery, ContactInput, ContactListQuery, ContactUpdateInput } from "@/lib/api/types";
 
+/** `filter` (company_id, status, owner_id), `search`, `page`, `per_page`: sent as `filter[status]=lead`. */
 export type ContactListParams = ContactListQuery;
 
 export function useContacts(params: MaybeRefOrGetter<ContactListParams>, enabled: MaybeRefOrGetter<boolean> = true) {
@@ -57,18 +58,24 @@ export function useDeleteContact() {
   });
 }
 
+/** The path of `GET /api/v1/contacts/export` for a query: `?filter[status]=lead&search=nair`, blank values left out. */
+export function contactsExportPath({ filter, search }: ContactExportQuery): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(filter ?? {})) {
+    if (typeof value === "string" && value !== "") params.append(`filter[${name}]`, value);
+  }
+  if (search) params.set("search", search);
+  const query = params.toString();
+  return `/api/v1/contacts/export${query ? `?${query}` : ""}`;
+}
+
 /** Downloads `GET /api/v1/contacts/export` (text/csv) with the current filters. */
-export async function exportContactsCsv(filters: ContactExportQuery): Promise<void> {
-  const query = new URLSearchParams(
-    Object.entries(filters).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
-    ),
-  ).toString();
-  const response = await api.rawFetch(`/api/v1/contacts/export${query ? `?${query}` : ""}`, {
+export async function exportContactsCsv(query: ContactExportQuery): Promise<void> {
+  const response = await api.raw(contactsExportPath(query), {
     headers: { Accept: "text/csv" },
   });
   if (!response.ok) {
-    throw ApiError.fromResponse(response, await response.json().catch(() => null));
+    throw NavreeError.fromResponse(response, await response.json().catch(() => null));
   }
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";

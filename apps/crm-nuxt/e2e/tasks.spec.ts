@@ -33,7 +33,11 @@ test("a rep adds a task due today, finds it under Today and completes it", async
   const row = todayList.getByTestId("task-row").filter({ hasText: subject });
   await expect(row).toBeVisible();
   await expect(row).toContainText("Fleet telematics rollout");
-  const due = await callApi<{ data: Activity[] }>(page, "GET", "/api/v1/activities?due=today&kind=task&per_page=100");
+  const due = await callApi<{ data: Activity[] }>(
+    page,
+    "GET",
+    "/api/v1/activities?filter[due]=today&filter[kind]=task&per_page=100",
+  );
   expect(due.body.data.map((a) => a.id)).toContain(task.id);
 
   // Complete it: it leaves Today and shows under Completed.
@@ -54,7 +58,7 @@ test("a rep adds a task due today, finds it under Today and completes it", async
   const stored = await callApi<{ data: Activity[] }>(
     page,
     "GET",
-    "/api/v1/activities?completed=true&kind=task&per_page=100",
+    "/api/v1/activities?filter[completed]=true&filter[kind]=task&per_page=100",
   );
   expect(stored.body.data.find((a) => a.id === task.id)?.completed_at).toBeTruthy();
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage, isNavreeError } from "@navree/client";
 import { useField, useForm } from "vee-validate";
 import { z } from "zod";
 import NavreeMark from "@/components/brand/NavreeMark.vue";
@@ -8,10 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { needsTwoFactor, useCurrentUser, useLogin, useVerifyTwoFactor } from "@/features/auth/queries";
-import { errorMessage, isApiError } from "@/lib/api/errors";
+import { useCurrentUser, useStartSession } from "@/features/auth/queries";
 import { applyFieldErrors } from "@/lib/api/form-errors";
-import { DEAL_STAGES } from "@/lib/api/types";
+import { DEAL_STAGES, type User } from "@/lib/api/types";
 import { toTypedSchema } from "@/lib/forms/zod-schema";
 import { stageColor } from "@/lib/stages";
 
@@ -27,6 +27,9 @@ const DEMO_ACCOUNTS = [
 
 const route = useRoute();
 const config = useCrmConfig();
+// Sign-in, two-factor and the session cookies are the @navree/nuxt module's.
+const auth = useNavreeAuth<User>();
+const startSession = useStartSession();
 
 /** Only same-site paths are allowed as a destination after signing in. */
 const next = computed(() => {
@@ -48,7 +51,7 @@ const twoFactor = ref(false);
 const recovery = ref(false);
 
 // ---- Password step ----
-const login = useLogin();
+const signingIn = ref(false);
 const rootError = ref<string | null>(null);
 const passwordForm = useForm({
   validationSchema: toTypedSchema(
@@ -62,32 +65,34 @@ const passwordForm = useForm({
 const { value: email, errorMessage: emailError } = useField<string>("email");
 const { value: password, errorMessage: passwordError } = useField<string>("password");
 
-const signIn = passwordForm.handleSubmit((values) => {
+const signIn = passwordForm.handleSubmit(async (values) => {
   rootError.value = null;
-  login.mutate(values, {
-    onSuccess: (result) => {
-      password.value = "";
-      if (needsTwoFactor(result)) {
-        twoFactor.value = true;
-        return;
-      }
-      void navigateTo(next.value, { replace: true });
-    },
-    onError: (error) => {
-      const root = applyFieldErrors(error, passwordForm.setFieldError, ["email", "password"]);
-      if (root !== null) {
-        if (root) rootError.value = root;
-        return;
-      }
-      password.value = "";
-      rootError.value =
-        isApiError(error) && error.status === 401
-          ? "That email and password don't match an account. Check them and try again."
-          : isApiError(error) && error.status === 429
-            ? "Too many sign-in attempts. Wait a minute, then try again."
-            : errorMessage(error);
-    },
-  });
+  signingIn.value = true;
+  try {
+    const result = await auth.signIn(values);
+    password.value = "";
+    if (result.twoFactor) {
+      twoFactor.value = true;
+      return;
+    }
+    startSession(result.user);
+    void navigateTo(next.value, { replace: true });
+  } catch (error) {
+    const root = applyFieldErrors(error, passwordForm.setFieldError, ["email", "password"]);
+    if (root !== null) {
+      if (root) rootError.value = root;
+      return;
+    }
+    password.value = "";
+    rootError.value =
+      isNavreeError(error) && error.status === 401
+        ? "That email and password don't match an account. Check them and try again."
+        : isNavreeError(error) && error.status === 429
+          ? "Too many sign-in attempts. Wait a minute, then try again."
+          : errorMessage(error);
+  } finally {
+    signingIn.value = false;
+  }
 });
 
 function fillDemo(address: string) {
@@ -96,39 +101,44 @@ function fillDemo(address: string) {
 }
 
 // ---- Two-factor step ----
-const verify = useVerifyTwoFactor();
+const verifying = ref(false);
 const codeError = ref<string | null>(null);
 const code = ref("");
 
-function submitCode() {
+async function submitCode() {
   const value = code.value.trim();
   if (!value) {
     codeError.value = "Enter the code.";
     return;
   }
   codeError.value = null;
-  verify.mutate(recovery.value ? { recovery_code: value } : { code: value.replace(/\s+/g, "") }, {
-    onSuccess: () => void navigateTo(next.value, { replace: true }),
-    onError: (error) => {
-      code.value = "";
-      if (isApiError(error) && error.status === 401 && error.messages[0] !== "Invalid two-factor code") {
-        // The challenge expired: start over from the password.
-        twoFactor.value = false;
-        rootError.value = "Your sign-in attempt expired. Sign in again.";
-        return;
-      }
-      codeError.value =
-        isApiError(error) && error.status === 401
-          ? recovery.value
-            ? "That recovery code isn't valid or was already used."
-            : "That code isn't right. Check your authenticator app and try again."
-          : isApiError(error) && error.status === 429
-            ? "Too many attempts. Wait a minute, then try again."
-            : isApiError(error) && error.isValidation
-              ? (Object.values(error.fieldErrors)[0]?.[0] ?? errorMessage(error))
-              : errorMessage(error);
-    },
-  });
+  verifying.value = true;
+  try {
+    // The challenge token waits in the BFF's httpOnly cookie; the page sends only the proof.
+    const user = await auth.verifyTwoFactor(recovery.value ? { recovery_code: value } : { code: value.replace(/\s+/g, "") });
+    startSession(user);
+    void navigateTo(next.value, { replace: true });
+  } catch (error) {
+    code.value = "";
+    if (isNavreeError(error) && error.status === 401 && error.messages[0] !== "Invalid two-factor code") {
+      // The challenge expired: start over from the password.
+      twoFactor.value = false;
+      rootError.value = "Your sign-in attempt expired. Sign in again.";
+      return;
+    }
+    codeError.value =
+      isNavreeError(error) && error.status === 401
+        ? recovery.value
+          ? "That recovery code isn't valid or was already used."
+          : "That code isn't right. Check your authenticator app and try again."
+        : isNavreeError(error) && error.status === 429
+          ? "Too many attempts. Wait a minute, then try again."
+          : isNavreeError(error) && error.isValidation
+            ? (Object.values(error.errors)[0]?.[0] ?? errorMessage(error))
+            : errorMessage(error);
+  } finally {
+    verifying.value = false;
+  }
 }
 
 const soundings = DEAL_STAGES.filter((s) => s.stage !== "lost");
@@ -209,8 +219,8 @@ const soundings = DEAL_STAGES.filter((s) => s.stage !== "lost");
               <FieldError v-if="passwordError">{{ passwordError }}</FieldError>
             </Field>
           </div>
-          <Button type="submit" size="lg" :disabled="login.isPending.value">
-            <Spinner v-if="login.isPending.value" />
+          <Button type="submit" size="lg" :disabled="signingIn">
+            <Spinner v-if="signingIn" />
             Sign in
           </Button>
         </form>
@@ -263,8 +273,8 @@ const soundings = DEAL_STAGES.filter((s) => s.stage !== "lost");
             <FieldError v-if="codeError">{{ codeError }}</FieldError>
           </Field>
           <div class="flex flex-col gap-2">
-            <Button type="submit" size="lg" :disabled="verify.isPending.value">
-              <Spinner v-if="verify.isPending.value" />
+            <Button type="submit" size="lg" :disabled="verifying">
+              <Spinner v-if="verifying" />
               Verify
             </Button>
             <Button

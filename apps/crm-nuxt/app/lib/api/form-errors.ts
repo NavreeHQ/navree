@@ -1,4 +1,4 @@
-import { isApiError } from "./errors";
+import { isNavreeError } from "@navree/client";
 
 function isFieldList<F extends string>(fields: Readonly<Record<string, F>> | readonly F[]): fields is readonly F[] {
   return Array.isArray(fields);
@@ -20,11 +20,11 @@ export function applyFieldErrors<const F extends string>(
   setFieldError: (field: NoInfer<F>, message: string) => void,
   fields: Readonly<Record<string, F>> | readonly F[],
 ): string | null {
-  if (!isApiError(error) || !error.isValidation) return null;
+  if (!isNavreeError(error) || !error.isValidation) return null;
   const map: Readonly<Record<string, F>> = isFieldList(fields)
     ? (Object.fromEntries(fields.map((f) => [f, f])) as Record<string, F>)
     : fields;
-  const entries = Object.entries(error.fieldErrors);
+  const entries = Object.entries(error.errors);
   const unknown: string[] = [];
   for (const [field, messages] of entries) {
     const message = messages[0] ?? "Invalid value.";

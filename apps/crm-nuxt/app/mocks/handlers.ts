@@ -8,8 +8,9 @@
  * throttling + 429, pagination, and `deal.updated` / `notification.created`
  * broadcasts on a window event bus.
  */
+import { createAbility } from "@navree/client/abilities";
 import { delay, http, HttpResponse, type HttpResponseResolver, type PathParams } from "msw";
-import { createAppAbility, type AppAbility, type AppAction } from "@/lib/casl/ability";
+import type { AppAbility, AppAction } from "@/lib/casl/ability";
 import type {
   Activity,
   ActivityKind,
@@ -137,7 +138,7 @@ function route(handler: Handler, { auth = true } = {}): HttpResponseResolver {
         params,
         url: new URL(request.url),
         user: user as UserRow,
-        ability: createAppAbility(user ? rulesFor(user) : []),
+        ability: createAbility<AppAbility>(user ? rulesFor(user) : []),
         body,
       });
       if (!response.headers.has("X-Request-Id")) response.headers.set("X-Request-Id", requestId());
@@ -179,6 +180,110 @@ function paginate<T>(items: T[], url: URL): Page<T> {
     data: items.slice((page - 1) * perPage, page * perPage),
     meta: { current_page: page, per_page: perPage, total, last_page: lastPage },
   };
+}
+
+// ---- The list grammar -----------------------------------------------------------
+
+/** What one list endpoint takes, like the allow-list of the real one. */
+interface ListSpec {
+  /** The names that may follow `filter[`. */
+  filters: readonly string[];
+  /** The fields `sort` may name (a leading `-` sorts descending). None by default. */
+  sorts?: readonly string[];
+  /** Whether `search` is read. */
+  search?: boolean;
+}
+
+interface SortKey {
+  field: string;
+  desc: boolean;
+}
+
+interface ListParams {
+  /** The value of `filter[name]`, when one was sent. */
+  filter(name: string): string | undefined;
+  search: string | undefined;
+  /** The sort the request asked for; empty when it asked for none. */
+  sort: SortKey[];
+}
+
+const FILTER_KEY = /^filter\[([^\]]+)\](?:\[([a-z_]+)\])?$/;
+const MAX_PER_PAGE = 100;
+
+/**
+ * Reads the one list grammar of a URL the way crm-api does: `filter[name]=value`, `search`,
+ * `sort=-created_at,name` and `per_page` (at most 100). A name outside the spec is a 400 that
+ * names the parameter. A flat `?stage=won` is not part of the grammar and is ignored.
+ */
+function readList(url: URL, spec: ListSpec): ListParams {
+  const errors: Errors = {};
+  const filters = new Map<string, string>();
+  for (const [key, value] of url.searchParams) {
+    const match = FILTER_KEY.exec(key);
+    if (!match) continue;
+    const field = match[1] ?? "";
+    const op = match[2];
+    if (!spec.filters.includes(field)) add(errors, key, `\`${field}\` is not a filter of this list`);
+    else if (op !== undefined && op !== "eq") add(errors, key, `\`${field}\` takes only equality here`);
+    else if (value !== "") filters.set(field, value);
+  }
+
+  const sort: SortKey[] = [];
+  for (const term of url.searchParams.getAll("sort").join(",").split(",")) {
+    const name = term.trim();
+    if (name === "") continue;
+    const desc = name.startsWith("-");
+    const field = desc ? name.slice(1) : name;
+    if (spec.sorts?.includes(field)) sort.push({ field, desc });
+    else add(errors, "sort", `\`${field}\` is not a sort of this list`);
+  }
+
+  const search = url.searchParams.get("search")?.trim() || undefined;
+  if (search !== undefined && !spec.search) add(errors, "search", "this list has no search");
+
+  const perPage = url.searchParams.get("per_page");
+  if (perPage !== null && Number(perPage) > MAX_PER_PAGE) {
+    add(errors, "per_page", `per_page must not exceed ${MAX_PER_PAGE} (got ${perPage})`);
+  }
+
+  invalid(errors);
+  return { filter: (name) => filters.get(name), search, sort };
+}
+
+/** Nulls sort last when ascending and first when descending, like the database. */
+function compareValues(a: unknown, b: unknown): number {
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
+}
+
+const BY_NAME: SortKey[] = [{ field: "name", desc: false }];
+const NEWEST_FIRST: SortKey[] = [{ field: "created_at", desc: true }];
+
+// What each list of crm-api takes.
+const USER_LIST: ListSpec = { filters: [], sorts: ["name", "email", "created_at"], search: true };
+const COMPANY_LIST: ListSpec = { filters: ["owner_id", "industry"], sorts: ["name", "created_at"], search: true };
+const CONTACT_LIST: ListSpec = { filters: ["company_id", "status", "owner_id"], search: true };
+const DEAL_LIST: ListSpec = {
+  filters: ["stage", "owner_id", "company_id"],
+  sorts: ["created_at", "title", "amount_cents", "expected_close_date"],
+  search: true,
+};
+const ACTIVITY_LIST: ListSpec = {
+  filters: ["subject_type", "subject_id", "kind", "assignee_id", "due", "completed"],
+};
+
+/** `rows` in the order of `keys`; ties keep their order. */
+function sortRows<T extends object>(rows: T[], keys: SortKey[]): T[] {
+  return [...rows].sort((a, b) => {
+    for (const { field, desc } of keys) {
+      const order = compareValues((a as Record<string, unknown>)[field], (b as Record<string, unknown>)[field]);
+      if (order !== 0) return desc ? -order : order;
+    }
+    return 0;
+  });
 }
 
 function nowIso(): string {
@@ -667,10 +772,11 @@ function csvCell(value: unknown): string {
 }
 
 function filterContacts(url: URL): ContactRow[] {
-  const search = url.searchParams.get("search");
-  const companyId = url.searchParams.get("company_id");
-  const status = url.searchParams.get("status");
-  const ownerId = url.searchParams.get("owner_id");
+  const list = readList(url, CONTACT_LIST);
+  const search = list.search;
+  const companyId = list.filter("company_id");
+  const status = list.filter("status");
+  const ownerId = list.filter("owner_id");
   return db.contacts
     .filter((p) => !p.deleted_at)
     .filter((p) => !search || contains([fullName(p), p.email, p.title], search))
@@ -758,11 +864,10 @@ export const handlers = [
   http.get(
     "/api/v1/users",
     route((ctx) => {
-      const search = ctx.url.searchParams.get("search");
-      const rows = db.users
-        .filter((u) => !search || contains([u.name, u.email], search))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(toUser);
+      const list = readList(ctx.url, USER_LIST);
+      const search = list.search;
+      const found = db.users.filter((u) => !search || contains([u.name, u.email], search));
+      const rows = sortRows(found, list.sort.length > 0 ? list.sort : BY_NAME).map(toUser);
       return HttpResponse.json(paginate(rows, ctx.url));
     }),
   ),
@@ -834,22 +939,16 @@ export const handlers = [
   http.get(
     "/api/v1/companies",
     route((ctx) => {
-      const q = ctx.url.searchParams;
-      const search = q.get("search");
-      const ownerId = q.get("owner_id");
-      const industry = q.get("industry");
-      const sort = q.get("sort") ?? "name";
-      const desc = sort.startsWith("-");
-      const key = (desc ? sort.slice(1) : sort) as "name" | "created_at";
-      if (!["name", "created_at"].includes(key))
-        invalid({ sort: ["sort must be one of the following values: name, -name, created_at, -created_at"] });
-      const rows = db.companies
+      const list = readList(ctx.url, COMPANY_LIST);
+      const search = list.search;
+      const ownerId = list.filter("owner_id");
+      const industry = list.filter("industry");
+      const found = db.companies
         .filter((c) => !c.deleted_at)
         .filter((c) => !search || contains([c.name, c.domain], search))
         .filter((c) => !ownerId || c.owner_id === ownerId)
-        .filter((c) => !industry || c.industry === industry)
-        .sort((a, b) => (desc ? -1 : 1) * a[key].localeCompare(b[key]))
-        .map(toCompany);
+        .filter((c) => !industry || c.industry === industry);
+      const rows = sortRows(found, list.sort.length > 0 ? list.sort : BY_NAME).map(toCompany);
       return HttpResponse.json(paginate(rows, ctx.url));
     }),
   ),
@@ -1031,16 +1130,18 @@ export const handlers = [
   http.get(
     "/api/v1/deals",
     route((ctx) => {
-      const q = ctx.url.searchParams;
-      const search = q.get("search");
-      const rows = db.deals
+      const list = readList(ctx.url, DEAL_LIST);
+      const search = list.search;
+      const stage = list.filter("stage");
+      const ownerId = list.filter("owner_id");
+      const companyId = list.filter("company_id");
+      const found = db.deals
         .filter((d) => !d.deleted_at)
-        .filter((d) => !q.get("stage") || d.stage === q.get("stage"))
-        .filter((d) => !q.get("owner_id") || d.owner_id === q.get("owner_id"))
-        .filter((d) => !q.get("company_id") || d.company_id === q.get("company_id"))
-        .filter((d) => !search || contains([d.title], search))
-        .sort((a, b) => b.created_at.localeCompare(a.created_at))
-        .map(toDeal);
+        .filter((d) => !stage || d.stage === stage)
+        .filter((d) => !ownerId || d.owner_id === ownerId)
+        .filter((d) => !companyId || d.company_id === companyId)
+        .filter((d) => !search || contains([d.title], search));
+      const rows = sortRows(found, list.sort.length > 0 ? list.sort : NEWEST_FIRST).map(toDeal);
       return HttpResponse.json(paginate(rows, ctx.url));
     }),
   ),
@@ -1192,18 +1293,22 @@ export const handlers = [
   http.get(
     "/api/v1/activities",
     route((ctx) => {
-      const q = ctx.url.searchParams;
+      const list = readList(ctx.url, ACTIVITY_LIST);
       const now = new Date();
       const startToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      const due = q.get("due");
-      const completed = q.get("completed");
+      const subjectType = list.filter("subject_type");
+      const subjectId = list.filter("subject_id");
+      const kind = list.filter("kind");
+      const assigneeId = list.filter("assignee_id");
+      const due = list.filter("due");
+      const completed = list.filter("completed");
       let rows = db.activities
         .filter((a) => subjectLabel(a.subject_type, a.subject_id) !== null)
-        .filter((a) => !q.get("subject_type") || a.subject_type === q.get("subject_type"))
-        .filter((a) => !q.get("subject_id") || a.subject_id === q.get("subject_id"))
-        .filter((a) => !q.get("kind") || a.kind === q.get("kind"))
-        .filter((a) => !q.get("assignee_id") || a.assignee_id === q.get("assignee_id"))
-        .filter((a) => completed === null || (completed === "true") === (a.completed_at !== null))
+        .filter((a) => !subjectType || a.subject_type === subjectType)
+        .filter((a) => !subjectId || a.subject_id === subjectId)
+        .filter((a) => !kind || a.kind === kind)
+        .filter((a) => !assigneeId || a.assignee_id === assigneeId)
+        .filter((a) => completed === undefined || (completed === "true") === (a.completed_at !== null))
         .filter((a) => {
           if (!due) return true;
           // Due filters apply to open tasks, in UTC days.
@@ -1215,7 +1320,7 @@ export const handlers = [
           return true;
         });
       if (completed === "true") rows = rows.sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
-      else if (due || q.get("kind") === "task")
+      else if (due || kind === "task")
         rows = rows.sort((a, b) => (a.due_at ?? "9").localeCompare(b.due_at ?? "9"));
       else rows = rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
       return HttpResponse.json(paginate(rows.map(toActivity), ctx.url));

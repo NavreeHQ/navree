@@ -1,5 +1,5 @@
-import { createMongoAbility, type ExtractSubjectType, type MongoAbility, type RawRuleOf } from "@casl/ability";
-import type { AppSubject, CaslRule, SubjectName } from "@/lib/api/types";
+import type { MongoAbility } from "@casl/ability";
+import type { AppSubject, SubjectName } from "@/lib/api/types";
 
 /**
  * Actions the API grants: CRUD + `manage` (any), plus `move` on Deal, `export`
@@ -10,16 +10,10 @@ export type AppAction = "read" | "create" | "update" | "delete" | "manage" | "mo
 /** Subjects are type names (`"Deal"`) or API records carrying `__type`. */
 export type AppSubjects = SubjectName | AppSubject | "all";
 
-export type AppAbility = MongoAbility<[AppAction, AppSubjects]>;
-
 /**
- * Creates the app ability from the CASL rule array served by `GET /api/me/abilities`.
- * Every API resource carries a constant `__type`, so CASL needs no `subject()`
- * helper (which would not survive JSON serialisation).
+ * The app's ability, as `useAbility<AppAbility>()` returns it. The `@navree/nuxt` module builds
+ * the one app-wide ability from the rules `GET /api/me/abilities` serves (`navree.abilities`),
+ * loads them after sign-in and drops them on sign-out; this type narrows its actions and subjects.
+ * Every API resource carries a constant `__type`, so records are subjects as they come from JSON.
  */
-export function createAppAbility(rules: readonly CaslRule[] = []): AppAbility {
-  return createMongoAbility<AppAbility>(rules as RawRuleOf<AppAbility>[], {
-    // `__type` is typed `string` for some resources in the OpenAPI document; the API always sends the subject name.
-    detectSubjectType: (o) => (typeof o === "string" ? o : o.__type) as ExtractSubjectType<AppSubjects>,
-  });
-}
+export type AppAbility = MongoAbility<[AppAction, AppSubjects]>;

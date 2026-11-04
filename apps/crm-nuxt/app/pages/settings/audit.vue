@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Lock, ScrollText } from "@lucide/vue";
+import { isNavreeError } from "@navree/client";
 import AuditChanges from "@/components/crm/AuditChanges.vue";
 import OptionFilter from "@/components/crm/OptionFilter.vue";
 import OwnerFilter from "@/components/crm/OwnerFilter.vue";
@@ -11,7 +12,6 @@ import { ACTION_OPTIONS, entryLabel } from "@/features/audit/actions";
 import { useAuditLog } from "@/features/audit/queries";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useUsers } from "@/features/users/queries";
-import { isApiError } from "@/lib/api/errors";
 import { formatDateTime } from "@/lib/format";
 
 useHead({ title: "Audit log" });
@@ -31,7 +31,7 @@ const params = computed(() => ({
 }));
 const audit = useAuditLog(params, isAdmin);
 const names = computed(() => new Map(users.data.value?.data.map((u) => [u.id, u.name])));
-const forbidden = computed(() => !isAdmin.value || (isApiError(audit.error.value) && audit.error.value.status === 403));
+const forbidden = computed(() => !isAdmin.value || (isNavreeError(audit.error.value) && audit.error.value.status === 403));
 
 function recordHref(type: string | null, id: string | null): string | null {
   if (!type || !id) return null;

@@ -26,11 +26,17 @@ const me = useCurrentUser();
 const userId = computed(() => me.data.value?.id ?? "");
 
 const overdue = useActivities(
-  () => ({ kind: "task", assignee_id: userId.value, due: "overdue", completed: false, per_page: 10 }),
+  () => ({
+    filter: { kind: "task", assignee_id: userId.value, due: "overdue", completed: false },
+    per_page: 10,
+  }),
   () => Boolean(userId.value),
 );
 const today = useActivities(
-  () => ({ kind: "task", assignee_id: userId.value, due: "today", completed: false, per_page: 10 }),
+  () => ({
+    filter: { kind: "task", assignee_id: userId.value, due: "today", completed: false },
+    per_page: 10,
+  }),
   () => Boolean(userId.value),
 );
 const myTasks = computed(() => [...(overdue.data.value?.data ?? []), ...(today.data.value?.data ?? [])]);

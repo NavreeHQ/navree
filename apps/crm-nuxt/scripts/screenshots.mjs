@@ -93,9 +93,9 @@ try {
 
     await signIn(page, USER);
     const firstOf = async (url) => (await api(page, "GET", url)).data?.[0];
-    const deal = await firstOf("/api/v1/deals?stage=negotiation&per_page=1");
+    const deal = await firstOf("/api/v1/deals?filter[stage]=negotiation&per_page=1");
     const company = await firstOf("/api/v1/companies?per_page=1&sort=name");
-    const contact = await firstOf("/api/v1/contacts?per_page=1&sort=last_name");
+    const contact = await firstOf("/api/v1/contacts?per_page=1");
 
     const screens = [
       ["dashboard", "/"],
