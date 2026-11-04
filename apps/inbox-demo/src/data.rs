@@ -872,7 +872,7 @@ pub const TOPICS: [Topic; 16] = [
                 "Since Monday every reminder SMS reaches clients five and a half hours before it should. Two clients called at 5 in the morning about their 10:30 appointment. What changed?",
             ),
             n(
-                "Location zone is UTC, not Asia/Kolkata: it was reset when they merged accounts on Monday. Fix is to set the zone in Settings > Locations.",
+                "Location zone is UTC instead of India Standard Time: it was reset when they merged accounts on Monday. Fix is to set the zone in Settings > Locations.",
             ),
             a(
                 "I'm sorry about the early messages. Your location's time zone was reset to UTC when the accounts were merged, so reminders went out on UTC time. I've set it to India Standard Time; reminders from now on go at the right time.",
