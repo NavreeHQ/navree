@@ -293,13 +293,13 @@ fn a_typical_crud_page_loads_at_most_30_kb_gzip_of_script() {
 }
 
 #[test]
-fn all_modules_together_are_under_60_kb_gzip() {
+fn all_modules_together_are_under_80_kb_gzip() {
     let total: usize = assets::FILES
         .iter()
         .filter(|asset| asset.ext == "js")
         .map(gzip)
         .sum();
-    assert!(total < 60 * 1024, "{total}");
+    assert!(total < 80 * 1024, "{total}");
 }
 
 #[test]

@@ -72,7 +72,7 @@ The files are embedded in your binary with their brotli and gzip forms, and serv
 | The numbering plans the `phone` module loads on first use | 20 KB (brotli) |
 | The stylesheet | 25 KB |
 | A typical CRUD page's script (`core`, `sidebar`, `overlay`, `table`) | 30 KB |
-| Every module together | under 60 KB |
+| Every module together | under 80 KB |
 | A page with nothing interactive | no `<script>` at all |
 
 In a release build the same file also checks that a 1,000-row data table renders in under 3 ms, as the median of 50 runs, and that a combobox of 10,000 options renders in under 40 ms, as the median of 20. That is a ceiling to catch a change of scale, not a measurement of your pages.
