@@ -150,6 +150,7 @@ fn flags_with_icons() -> Stack {
         "NP", "BT", "BD", "LK", // neighbours
         "AE", "SG", "JP", "GB", "US", // partners
     ];
+    let flags = region.map(Flag::country);
     let tags = [
         Badge::new("Store").icon(icons::STORE),
         Badge::new("Shipped").icon(icons::TRUCK),
@@ -158,7 +159,7 @@ fn flags_with_icons() -> Stack {
     ];
     Stack::gap(4).children((
         flag!("IN").size(FlagSize::Xl),
-        Row::gap(2).children(region.map(Flag::country)),
+        Row::gap(2).children(flags),
         Row::gap(2).children(tags),
     ))
 }
