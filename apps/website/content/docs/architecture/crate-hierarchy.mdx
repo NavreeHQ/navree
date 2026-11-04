@@ -12,7 +12,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ## The layers
 
 ```text
-L9+ crm-api (L12)  crm-users  crm-companies  crm-deals  crm-activities (L11)  crm-testkit (L10)  crm-core  evidence-app  ui-docs  ui-proof  ui-table-proof  skill-snippets (L9)
+L9+ crm-api (L12)  crm-users  crm-companies  crm-deals  crm-activities (L11)  crm-testkit  ui-docs (L10)  crm-core  evidence-app  campaign-demo  ui-proof  ui-table-proof  skill-snippets (L9)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses the tool crates navree-dock, navree-harbor and navree-navigator, and navree-template)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
 L6  navree-social  navree-sso  navree-oauth  navree-webhooks  navree-integrations  navree-sheets  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-micro  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
@@ -267,7 +267,7 @@ crate hierarchy violations:
   navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-openapi, navree-kernel, navree-contracts, navree-config, navree-telemetry]
 ```
 
-The applications are in the table too. The CRM has `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them. The `evidence-app` binary, which the Docker evidence harness in `e2e/` runs under load, and the Navree UI binaries `ui-docs`, `ui-proof` and `ui-table-proof` are at L9, as is `skill-snippets`, which compiles the Rust blocks of the agent skills. Each depends only on the facade.
+The applications are in the table too. The CRM has `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them. The `evidence-app` binary, which the Docker evidence harness in `e2e/` runs under load, the Navree UI binaries `ui-proof` and `ui-table-proof`, and `campaign-demo`, an example app on Navree UI, are at L9, as is `skill-snippets`, which compiles the Rust blocks of the agent skills. Each depends only on the facade. `ui-docs`, which writes the website's UI docs, is at L10: it draws the example app's views for the website, so it depends on `campaign-demo` as well as the facade.
 
 The tests in `crates/navree/tests/facade.rs` keep the facade's [features](/docs/architecture/facade-and-features/) in step with the hierarchy.
 
