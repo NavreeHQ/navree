@@ -2,7 +2,7 @@
 //!
 //! | Route | Answers |
 //! |---|---|
-//! | `GET /` | the dashboard: figures, the live order activity, low stock, top sellers |
+//! | `GET /` | the dashboard: figures, the last 30 days of sales, the live order activity, low stock, top sellers |
 //! | `GET /orders` | the orders table; sort, filters, search and page in the URL |
 //! | `GET /orders/{id}` | one order, as a page |
 //! | `GET /orders/{id}/peek` | the same in the drawer, as ops; a redirect to the page with JavaScript off |
@@ -23,6 +23,7 @@ use navree::http::response::{IntoResponse, Response};
 use navree::http::{AppError, Controller, RouteDef};
 use navree::orm::Model as _;
 use navree::prelude::*;
+use navree::ui::charts::{Metric, Report, TimeColumn};
 use navree::ui::form::Rejected;
 use navree::ui::*;
 use serde::Deserialize;
@@ -34,8 +35,8 @@ use crate::data::{
 use crate::live::{Hub, now};
 use crate::shop::{self, Done, Refusal};
 use crate::views::dashboard::{
-    Cursor, FeedEntry, Figures, Seller, activity_item, dashboard_body, figures, low_stock, shelves,
-    top_sellers,
+    Cursor, FeedEntry, Figures, METHODS, Sales, Seller, activity_item, dashboard_body, figures,
+    low_stock, sales_charts, sales_report, shelves, top_sellers,
 };
 use crate::views::inventory::{ProductRow, RestockForm, inventory_table};
 use crate::views::order::{
@@ -105,6 +106,51 @@ async fn count_figures(uow: &Uow) -> Result<Figures> {
         low: i64::try_from(level(Level::Low).count(uow).await?).unwrap_or(0),
         out: i64::try_from(level(Level::Out).count(uow).await?).unwrap_or(0),
     })
+}
+
+/// The last 30 days of sales, counted in the database: three grouped queries over
+/// the days' orders, each read through the index on `placed_at`.
+async fn sales(uow: &Uow, report: &Report) -> Result<Sales> {
+    let placed = TimeColumn::UnixSeconds("placed_at");
+    // Orders a day by how they are paid, in one query: a series per way to pay, and
+    // one more for anything else.
+    let by_method = report
+        .measure_by(
+            Order::query(),
+            placed,
+            "method",
+            &METHODS,
+            Metric::Count,
+            uow,
+        )
+        .await?;
+    let kept = || Order::query().where_(Order::STATUS.ne(Status::Cancelled.key()));
+    let total = report
+        .measure(kept(), placed, Metric::Sum("total"), uow)
+        .await?;
+    let refunded = report
+        .measure(kept(), placed, Metric::Sum("refunded"), uow)
+        .await?;
+    let whole = |value: Option<f64>| value.unwrap_or(0.0).round() as i64;
+    let mut out = Sales::empty(report);
+    for (day, orders) in out.orders.iter_mut().enumerate() {
+        let counted: i64 = by_method
+            .iter()
+            .map(|series| whole(series.get(day).copied().flatten()))
+            .sum();
+        *orders = u64::try_from(counted).unwrap_or(0);
+    }
+    for (day, revenue) in out.revenue.iter_mut().enumerate() {
+        *revenue =
+            whole(total.get(day).copied().flatten()) - whole(refunded.get(day).copied().flatten());
+    }
+    for (at, method) in out.methods.iter_mut().enumerate() {
+        let counted: i64 = by_method
+            .get(at)
+            .map_or(0, |series| series.iter().map(|value| whole(*value)).sum());
+        *method = u64::try_from(counted).unwrap_or(0);
+    }
+    Ok(out)
 }
 
 /// The shelves running low, emptiest first, and today's top sellers.
@@ -281,9 +327,11 @@ impl Pages {
     /// `GET /`.
     async fn dashboard(&self, shell: AppShell, uow: Uow) -> Result<AppPage> {
         let counts = count_figures(&uow).await?;
+        let today = today();
+        let report = sales_report(today);
+        let sold = sales(&uow, &report).await?;
         let (entries, total) = feed(&uow, None, 30).await?;
         let (low, sellers) = shelf_lists(&uow).await?;
-        let today = today();
         Ok(shell
             .page("Dashboard")
             .actions(
@@ -292,7 +340,7 @@ impl Pages {
                     .href("/orders"),
             )
             .body(dashboard_body(
-                &counts, &entries, total, &low, &sellers, today,
+                &counts, &report, &sold, &entries, total, &low, &sellers, today,
             )))
     }
 
@@ -577,6 +625,12 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::GET, "!/fragments/figures", |uow: Uow| async move {
                 Ok::<_, AppError>(fragment("Figures", figures(&count_figures(&uow).await?)))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/fragments/sales", |uow: Uow| async move {
+                let report = sales_report(today());
+                let sold = sales(&uow, &report).await?;
+                Ok::<_, AppError>(fragment("Sales", sales_charts(&report, &sold)))
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/shelves", |uow: Uow| async move {

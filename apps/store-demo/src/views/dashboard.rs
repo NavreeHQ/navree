@@ -1,10 +1,12 @@
-//! The dashboard: today's figures, the order activity as it happens, the shelves
-//! running low and today's top sellers. Every part is a region that a
-//! server-sent event stream keeps current.
+//! The dashboard: today's figures, the last 30 days of sales in charts, the order
+//! activity as it happens, the shelves running low and today's top sellers. Every
+//! part is a region that a server-sent event stream keeps current.
 
+use navree::ui::charts::{Chart, Donut, Grain, NumberFormat, Report, Series};
+use navree::ui::dates::DateRange;
 use navree::ui::*;
 
-use chrono::NaiveDate;
+use chrono::{DateTime, Days, FixedOffset, NaiveDate};
 
 use crate::data::{
     Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, ZONE, day_of, warehouse,
@@ -109,10 +111,136 @@ pub fn live_figures(counts: &Figures) -> Region {
         .children(figures(counts))
 }
 
-/// Where the sales charts go. The charts module draws them on the server; until
-/// it is in the toolkit this slot draws nothing, and the page closes up around it.
-pub fn charts(_figures: &Figures) -> Option<Node> {
-    None
+/// How many days the sales charts cover, today the last of them.
+pub const SALES_DAYS: u64 = 30;
+
+/// The ways to pay, in the order the charts name them.
+pub const METHODS: [&str; 3] = ["upi", "card", "cod"];
+
+/// The days the sales charts cover: the last 30, a day at a time on India's clock,
+/// today the last and still counting.
+pub fn sales_report(today: NaiveDate) -> Report {
+    let first = today
+        .checked_sub_days(Days::new(SALES_DAYS - 1))
+        .unwrap_or(today);
+    // India keeps one offset all year, so a fixed one cuts the same days as the zone.
+    match FixedOffset::east_opt(OFFSET) {
+        Some(zone) => Report::new(DateRange::new(first, today), Grain::Day, &zone),
+        None => Report::new(DateRange::new(first, today), Grain::Day, &chrono::Utc),
+    }
+}
+
+/// The last 30 days of sales, a value for each day of the report.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Sales {
+    /// Orders placed each day, the ones cancelled since too.
+    pub orders: Vec<u64>,
+    /// What each day's orders brought in, in paise: cancelled orders left out and
+    /// refunds taken off, as today's revenue figure counts it.
+    pub revenue: Vec<i64>,
+    /// The orders of all 30 days by how they are paid, in [`METHODS`]' order.
+    pub methods: [u64; 3],
+}
+
+impl Sales {
+    /// Nothing yet, for the days of `report`.
+    pub fn empty(report: &Report) -> Self {
+        let days = report.buckets().len();
+        Self {
+            orders: vec![0; days],
+            revenue: vec![0; days],
+            methods: [0; 3],
+        }
+    }
+
+    /// Counts one order, when it was placed in the report's days.
+    pub fn add(&mut self, report: &Report, order: &Order) {
+        let Some(day) =
+            DateTime::from_timestamp(order.placed_at, 0).and_then(|at| report.bucket_of(at))
+        else {
+            return;
+        };
+        let (Some(orders), Some(revenue)) = (self.orders.get_mut(day), self.revenue.get_mut(day))
+        else {
+            return;
+        };
+        *orders += 1;
+        if order.status != Status::Cancelled.key() {
+            *revenue += order.total - order.refunded;
+        }
+        if let Some(at) = METHODS.iter().position(|method| *method == order.method) {
+            self.methods[at] += 1;
+        }
+    }
+
+    /// The sales of `orders` over `report`'s days.
+    pub fn of<'a>(report: &Report, orders: impl IntoIterator<Item = &'a Order>) -> Self {
+        let mut sales = Self::empty(report);
+        for order in orders {
+            sales.add(report, order);
+        }
+        sales
+    }
+}
+
+/// The sales charts: revenue and orders by day, and how customers pay. Each is
+/// drawn on the server as SVG, in rupees with Indian digit groups (lakh and crore),
+/// with its numbers as a table behind a switch.
+pub fn sales_charts(report: &Report, sales: &Sales) -> Grid {
+    let rupees = NumberFormat::currency("₹").max_decimals(0);
+    let revenue = report
+        .chart(Chart::area("Revenue by day"))
+        .id("sales-revenue")
+        .hide_title()
+        .locale("en-IN")
+        .height(176)
+        .format(rupees)
+        .series(Series::new(
+            "Revenue",
+            sales.revenue.iter().map(|paise| *paise as f64 / 100.0),
+        ));
+    let orders = report
+        .chart(Chart::bar("Orders by day"))
+        .id("sales-orders")
+        .hide_title()
+        .locale("en-IN")
+        .height(176)
+        .format(NumberFormat::integer())
+        .series(Series::new("Orders", sales.orders.iter().copied()));
+    let total: u64 = sales.methods.iter().sum();
+    let mut methods = Donut::new("How customers paid")
+        .id("sales-methods")
+        .hide_title()
+        .locale("en-IN")
+        .size(152)
+        .format(NumberFormat::integer())
+        .center(
+            thousands(i64::try_from(total).unwrap_or(i64::MAX)),
+            "orders",
+        );
+    for (method, count) in METHODS.iter().zip(sales.methods) {
+        methods = methods.part(method_words(method), count);
+    }
+    let days = format!("Last {SALES_DAYS} days, today so far");
+    Grid::cols(3).gap(4).children((
+        Card::titled("Revenue")
+            .description(days.clone())
+            .body(revenue),
+        Card::titled("Orders").description(days).body(orders),
+        Card::titled("How customers pay")
+            .description(format!("Orders of the last {SALES_DAYS} days"))
+            .body(methods),
+    ))
+}
+
+/// The sales charts, live: they refetch when the stream says the shop moved, so
+/// today's bar grows as orders come in.
+pub fn live_sales(report: &Report, sales: &Sales) -> Region {
+    Region::new("sales")
+        .src("/fragments/sales")
+        .live_from("/events")
+        .live_event("stats")
+        .children(sales_charts(report, sales))
 }
 
 /// A row of the feed: an event, and the order it belongs to when it has one.
@@ -356,10 +484,13 @@ pub fn top_sellers(products: &[Product], lines: &[Line]) -> Vec<Seller> {
     sellers
 }
 
-/// The whole dashboard under its title: the date, the figures, the charts when
-/// there are any, and the feed beside the shelves.
+/// The whole dashboard under its title: the date, the figures, the sales charts,
+/// and the feed beside the shelves.
+#[allow(clippy::too_many_arguments)]
 pub fn dashboard_body(
     counts: &Figures,
+    report: &Report,
+    sales: &Sales,
     entries: &[FeedEntry],
     total: u64,
     low: &[Product],
@@ -372,7 +503,7 @@ pub fn dashboard_body(
             today.format("%A %-d %B")
         )),
         live_figures(counts),
-        charts(counts),
+        live_sales(report, sales),
         Grid::cols(3).gap(4).children((
             el("div")
                 .attr("data-span", "2")
@@ -449,4 +580,87 @@ pub fn live_shelves(low: &[Product], sellers: &[Seller]) -> Region {
 fn level(key: &str) -> Badge {
     let level = Level::parse(key);
     Badge::new(level.label()).tone(level.tone()).dot()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data;
+
+    /// 4 November 2026, 12:00 in India.
+    const NOON: i64 = 1_793_773_800;
+
+    #[test]
+    fn the_charts_cover_the_last_30_days_on_indias_clock() {
+        let report = sales_report(data::day_of(NOON));
+        let days = report.buckets();
+        assert_eq!(days.len(), 30);
+        let first = days.first().map(|day| day.local.to_string());
+        let last = days.last().map(|day| day.local.to_string());
+        assert_eq!(first.as_deref(), Some("2026-10-06 00:00:00"));
+        assert_eq!(last.as_deref(), Some("2026-11-04 00:00:00"));
+        // Midnight in India is 18:30 the day before in UTC.
+        assert_eq!(days[0].start.to_rfc3339(), "2026-10-05T18:30:00+00:00");
+        assert_eq!(days[29].end.to_rfc3339(), "2026-11-04T18:30:00+00:00");
+    }
+
+    #[test]
+    fn todays_bar_and_point_are_todays_figures() {
+        let products = data::products();
+        let customers = data::customers(NOON);
+        let (orders, _, _) = data::orders(
+            data::ORDERS - 3_000 + 1,
+            data::ORDERS,
+            NOON,
+            &products,
+            &customers,
+        );
+        let report = sales_report(data::day_of(NOON));
+        let sales = Sales::of(&report, &orders);
+        let figures = Figures::of(&orders, &products, NOON);
+        assert!(figures.orders > 0);
+        assert_eq!(
+            sales.orders.last().copied(),
+            u64::try_from(figures.orders).ok()
+        );
+        assert_eq!(sales.revenue.last().copied(), Some(figures.revenue));
+        // Each order of the window is paid one way.
+        assert_eq!(
+            sales.methods.iter().sum::<u64>(),
+            sales.orders.iter().sum::<u64>()
+        );
+        // An order outside the window counts nowhere.
+        let mut old = orders[0].clone();
+        old.placed_at = NOON - 40 * 86_400;
+        let mut again = sales.clone();
+        again.add(&report, &old);
+        assert_eq!(again, sales);
+    }
+
+    #[test]
+    fn the_charts_write_rupees_in_lakh_and_crore() {
+        let report = sales_report(data::day_of(NOON));
+        let mut sales = Sales::empty(&report);
+        sales.revenue[29] = 213_456_789;
+        sales.revenue[28] = 1_250_000_000;
+        sales.orders[29] = 1_204;
+        sales.methods = [65_000, 35_000, 20_000];
+        let html = render(&sales_charts(&report, &sales).into());
+        assert!(html.contains("₹21,34,568"), "a day's revenue in full");
+        assert!(
+            html.contains("₹1,25,00,000"),
+            "a crore and a quarter in full"
+        );
+        assert!(html.contains("₹1Cr"), "the axis in crore: {html}");
+        assert!(html.contains("₹50L"), "and in lakh");
+        assert!(html.contains("1,204"), "a day's orders");
+        assert!(
+            html.contains("1,20,000"),
+            "the orders in the middle of the ring"
+        );
+        for name in ["UPI", "Card", "Cash on delivery"] {
+            assert!(html.contains(name), "{name}");
+        }
+        assert!(!html.contains("style="), "no style attribute");
+    }
 }

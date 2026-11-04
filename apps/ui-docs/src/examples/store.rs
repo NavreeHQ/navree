@@ -6,7 +6,7 @@
 use navree::ui::*;
 use store_demo::data::{self, Customer, Event, Line, Order, Product, Status};
 use store_demo::views::dashboard::{
-    FeedEntry, Figures, activity_item, dashboard_body, low_stock, top_sellers,
+    FeedEntry, Figures, Sales, activity_item, dashboard_body, low_stock, sales_report, top_sellers,
 };
 use store_demo::views::inventory::{ProductRow, inventory_table};
 use store_demo::views::order::{OrderView, Parts, order_drawer};
@@ -63,7 +63,11 @@ pub fn all() -> Vec<Example> {
             catalog::Kind::Single(dashboard_page),
             items(
                 DASHBOARD_RS,
-                &["pub fn activity_feed", "pub fn activity_item"],
+                &[
+                    "pub fn sales_charts",
+                    "pub fn activity_feed",
+                    "pub fn activity_item",
+                ],
             ),
         )
         .fill()
@@ -275,11 +279,41 @@ fn orders_page() -> Node {
         .clone()
 }
 
+/// The last 30 days of sales from the seed, as the app counts them in its
+/// database: the orders of those days, made a chunk at a time and added up, so
+/// they are never all in memory.
+fn sales(shop: &Shop) -> (navree::ui::charts::Report, Sales) {
+    let report = sales_report(today());
+    let (start, _) = report.bounds();
+    // Orders come in order of time, so the first of the window is found by halving.
+    let (mut low, mut high) = (1, data::ORDERS);
+    while low < high {
+        let middle = low + (high - low) / 2;
+        if data::placed_at(middle, NOW) < start.timestamp() {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    let mut sales = Sales::empty(&report);
+    let mut from = low;
+    while from <= data::ORDERS {
+        let to = (from + data::CHUNK - 1).min(data::ORDERS);
+        let (orders, _, _) = data::orders(from, to, NOW, &shop.products, &shop.customers);
+        for order in &orders {
+            sales.add(&report, order);
+        }
+        from = to + 1;
+    }
+    (report, sales)
+}
+
 /// The dashboard as it first draws, and after it the rows a stream would bring,
 /// which the site's own script adds one by one: the preview has no server to
 /// stream from.
 fn dashboard_page() -> Node {
     let shop = shop();
+    let (report, sold) = sales(&shop);
     let counts = Figures::of(&shop.orders, &shop.products, NOW);
     let mut recent: Vec<Event> = shop
         .events
@@ -325,6 +359,8 @@ fn dashboard_page() -> Node {
         )
         .body(dashboard_body(
             &counts,
+            &report,
+            &sold,
             &shown,
             total,
             &low_stock(&shop.products),

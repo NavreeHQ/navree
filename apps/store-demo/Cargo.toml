@@ -1,6 +1,6 @@
 [package]
 name = "store-demo"
-description = "An example app on Navree UI: a shop's orders, an order in a drawer with refunds and cancels checked on the server, inventory with restocks, and the store's activity live over server-sent events, on SQLite."
+description = "An example app on Navree UI: a shop's orders, an order in a drawer with refunds and cancels checked on the server, inventory with restocks, sales charts, and the store's activity live over server-sent events, on SQLite."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

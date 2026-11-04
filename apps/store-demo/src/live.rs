@@ -113,8 +113,10 @@ impl Hub {
     /// ends in the key, as keyset pages need; an order's lines and events, a
     /// customer's orders and the feed by time each have their own. Open orders
     /// by fulfilment and state share one, since a third of the orders ship
-    /// within Punjab and a search there would otherwise read all of them.
-    pub const INDEXES: [&'static str; 15] = [
+    /// within Punjab and a search there would otherwise read all of them. The
+    /// sales charts read the last 30 days by `placed_at` from an index that holds
+    /// all they add up, so they never touch the rows.
+    pub const INDEXES: [&'static str; 16] = [
         "CREATE INDEX orders_placed ON orders (placed_on, id)",
         "CREATE INDEX orders_status ON orders (status, placed_on, id)",
         "CREATE INDEX orders_fulfilment ON orders (fulfilment, placed_on, id)",
@@ -124,6 +126,7 @@ impl Hub {
         "CREATE INDEX orders_total ON orders (total, id)",
         "CREATE INDEX orders_number ON orders (number, id)",
         "CREATE INDEX orders_customer ON orders (customer_id, placed_at)",
+        "CREATE INDEX orders_sales ON orders (placed_at, status, method, total, refunded)",
         "CREATE INDEX order_lines_order ON order_lines (order_id, id)",
         "CREATE INDEX events_order ON events (order_id, at)",
         "CREATE INDEX events_at ON events (at, id)",
