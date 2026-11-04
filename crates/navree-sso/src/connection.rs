@@ -118,8 +118,9 @@ pub struct SamlSettings {
     pub require_signed_assertion: bool,
 }
 
-/// An OpenID Connect connection's settings.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// An OpenID Connect connection's settings. `Debug` never shows the client
+/// secret.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OidcSettings {
     /// The issuer; discovery reads `{issuer}/.well-known/openid-configuration`.
     pub issuer: String,
@@ -132,6 +133,20 @@ pub struct OidcSettings {
     /// The scopes to ask for (`sso.oidc.scopes` when empty).
     #[serde(default)]
     pub scopes: Vec<String>,
+}
+
+impl std::fmt::Debug for OidcSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OidcSettings")
+            .field("issuer", &self.issuer)
+            .field("client_id", &self.client_id)
+            .field(
+                "client_secret",
+                &self.client_secret.as_ref().map(|_| "[redacted]"),
+            )
+            .field("scopes", &self.scopes)
+            .finish()
+    }
 }
 
 /// How people who sign in become users and members.
@@ -509,6 +524,9 @@ mod tests {
         assert_eq!(settings.protocol(), Protocol::Oidc);
         let shown = serde_json::to_value(&settings).unwrap();
         assert!(shown.get("client_secret").is_none(), "{shown}");
+        let printed = format!("{settings:?}");
+        assert!(!printed.contains("s3cret"), "{printed}");
+        assert!(printed.contains("[redacted]"), "{printed}");
         let saml: ConnectionSettings = serde_json::from_value(json!({
             "protocol": "saml",
             "metadata_url": "https://idp.acme.test/metadata",
