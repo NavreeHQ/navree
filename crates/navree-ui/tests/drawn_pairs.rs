@@ -493,7 +493,7 @@ fn walk(
                 // A state of the same element: the same beneath, this rule's background.
                 walk(
                     child,
-                    &format!("{path} {}", rule.selector).trim().to_owned(),
+                    &here,
                     colour.clone(),
                     element_bg.clone(),
                     beneath,
