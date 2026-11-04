@@ -686,7 +686,7 @@ for (const name of NAMES) {
       assert.ok(ids.length >= 250, String(ids.length));
       assert.equal(new Set(ids).size, ids.length, "no row twice");
       for (const params of asked.filter((p) => p.get("dir") === "end")) {
-        assert.match(params.get("cursor"), /^\d{24}$/, "a cursor, not an offset");
+        assert.match(params.get("cursor"), /^\d{36}$/, "a cursor, not an offset");
         assert.equal(params.get("page"), null);
         assert.equal(params.get("offset"), null);
       }
@@ -735,7 +735,7 @@ for (const name of NAMES) {
     test("with JavaScript off the list and a long conversation page by links", async () => {
       const page = await open("/inbox?view=closed", { javaScriptEnabled: false });
       const more = page.locator("#conversation-list > [data-slot=lazy-more][data-dir=end]");
-      assert.match(await more.getAttribute("href"), /rows_after=\d{24}/);
+      assert.match(await more.getAttribute("href"), /rows_after=\d{36}/);
       const last = (await rowIds(page)).at(-1);
       await more.click();
       await page.waitForURL(/rows_after=/);

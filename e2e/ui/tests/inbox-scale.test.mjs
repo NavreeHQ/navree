@@ -201,7 +201,7 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
     const html = await (await fetch(`${BASE}/inbox`)).text();
     const list = html.slice(html.indexOf('id="conversation-list"'));
     const since = /data-slot="lazy-items"[^>]*data-ui-since="([^"]+)"/.exec(list)[1];
-    const cursors = [...list.matchAll(/data-cursor="(\d{24})"/g)].map((m) => m[1]);
+    const cursors = [...list.matchAll(/data-cursor="(\d{36})"/g)].map((m) => m[1]);
     const keys = [...list.matchAll(/<li data-key="(\d+)"/g)].map((m) => m[1]);
     const ask = async (from) => {
       const r = await fetch(`${BASE}/inbox/rows?dir=live&since=${encodeURIComponent(from)}&from=${cursors[0]}&to=${cursors.at(-1)}`, { headers: UA });
@@ -220,15 +220,15 @@ describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX
   });
 
   test("server times at full size, 200 requests each, four at a time", async () => {
-    const page = (await (await fetch(`${BASE}/inbox/rows?view=closed`)).text()).match(/data-cursor="(\d{24})"/g) || [];
-    const cursors = page.map((m) => m.slice(13, 37));
+    const page = (await (await fetch(`${BASE}/inbox/rows?view=closed`)).text()).match(/data-cursor="(\d{36})"/g) || [];
+    const cursors = page.map((m) => m.slice(13, 49));
     const deep = [];
     // Cursors spread across the closed list: one page after another, 40 deep.
     let cursor = cursors.at(-1);
     for (let i = 0; i < 40 && cursor; i++) {
       const html = await (await fetch(`${BASE}/inbox/rows?view=closed&dir=end&cursor=${cursor}`)).text();
-      const found = html.match(/data-cursor="(\d{24})"/g) || [];
-      cursor = found.at(-1)?.slice(13, 37);
+      const found = html.match(/data-cursor="(\d{36})"/g) || [];
+      cursor = found.at(-1)?.slice(13, 49);
       if (cursor) deep.push(cursor);
     }
     const kinds = {
