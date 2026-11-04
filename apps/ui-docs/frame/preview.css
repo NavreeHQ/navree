@@ -33,6 +33,9 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
 /* The room of a picture drawn in place while the real one is open: nothing under the pointer moves. */
 [data-preview-kept]{flex:none;max-width:100%;visibility:hidden}
+/* What a link or form would do in an app, said in place of doing it: over anything open. */
+[data-preview-note]{position:fixed;inset:auto 8px 8px;width:fit-content;max-width:min(32rem,calc(100% - 16px));height:auto;margin:0 auto;padding:.5rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font:12px/1.5 var(--font-sans);text-align:start;overflow-wrap:anywhere;box-shadow:0 8px 24px rgb(0 0 0/.35)}
+[data-preview-note] code{color:var(--fg-1);font:11.5px/1.5 var(--font-mono)}
 /* A toaster drawn in place, with its toasts staying: a preview is a picture, not a page that fades them. */
 [data-preview] [data-slot=toaster]{position:static;translate:none;width:100%;max-width:24rem}
 [data-preview] [data-slot=toast]{animation:none}
