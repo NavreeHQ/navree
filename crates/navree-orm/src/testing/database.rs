@@ -119,7 +119,17 @@ impl TestServer {
 /// Whether `NAVREE_TEST_REQUIRE_SERVICES=1`: a test that needs a server (or
 /// Chrome, Node.js, FFmpeg) fails when it is missing instead of skipping.
 pub fn services_required() -> bool {
-    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() == Ok("1")
+    requires(
+        std::env::var("NAVREE_TEST_REQUIRE_SERVICES")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// Whether the value of `NAVREE_TEST_REQUIRE_SERVICES` asks for the servers:
+/// exactly `1`.
+fn requires(value: Option<&str>) -> bool {
+    value == Some("1")
 }
 
 /// What a test calls where it would skip because a server is missing: prints
@@ -131,10 +141,11 @@ pub fn services_required() -> bool {
 ///
 /// When `NAVREE_TEST_REQUIRE_SERVICES=1`.
 pub fn skip(reason: &str) {
-    assert!(
-        !services_required(),
-        "{reason} (NAVREE_TEST_REQUIRE_SERVICES=1)"
-    );
+    skip_unless(services_required(), reason);
+}
+
+fn skip_unless(required: bool, reason: &str) {
+    assert!(!required, "{reason} (NAVREE_TEST_REQUIRE_SERVICES=1)");
     eprintln!("skipped: {reason}");
 }
 
@@ -1055,6 +1066,30 @@ mod tests {
         );
         assert_eq!(env_file_value(text, "EMPTY"), None);
         assert_eq!(env_file_value(text, "NAVREE_TEST_MONGODB_URL"), None);
+    }
+
+    // CONN-100
+    #[test]
+    fn only_a_one_requires_the_servers() {
+        assert!(requires(Some("1")));
+        for other in [None, Some(""), Some("0"), Some("true"), Some("yes")] {
+            assert!(!requires(other), "{other:?}");
+        }
+    }
+
+    // CONN-100
+    #[test]
+    #[should_panic(
+        expected = "NAVREE_TEST_POSTGRES_URL is not set (NAVREE_TEST_REQUIRE_SERVICES=1)"
+    )]
+    fn a_test_that_would_skip_fails_when_the_servers_are_required() {
+        skip_unless(true, "NAVREE_TEST_POSTGRES_URL is not set");
+    }
+
+    // CONN-100
+    #[test]
+    fn a_test_that_would_skip_skips_when_they_are_not() {
+        skip_unless(false, "NAVREE_TEST_POSTGRES_URL is not set");
     }
 
     #[test]
