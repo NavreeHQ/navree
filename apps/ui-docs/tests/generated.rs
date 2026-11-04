@@ -87,6 +87,40 @@ fn the_theme_builder_preview_is_drawn_in_its_draft() {
     }
 }
 
+/// A list in a preview has no server to ask for its next page: the pages it would get are
+/// drawn into the preview, for a source the preview's own list names.
+#[test]
+fn a_previews_lists_are_answered_from_the_preview() {
+    let files = ui_docs::generate();
+    let mut answered = 0;
+    for (name, html) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
+    {
+        for template in html.split("<template data-preview-answer").skip(1) {
+            answered += 1;
+            let src = template
+                .split("data-src=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .expect("an answer names its source");
+            assert!(
+                html.contains(&format!("data-ui-src=\"{src}\"")),
+                "{name} answers {src}, which none of its lists asks"
+            );
+            assert!(
+                template.contains("data-key="),
+                "{name}: an answer for {src} holds no items"
+            );
+        }
+    }
+    for list in ["lazy-list/default", "lazy-list/conversation"] {
+        let html = &files[&format!("previews/{list}.html")];
+        assert!(html.contains("<template data-preview-answer"), "{list}");
+    }
+    assert!(answered >= 2, "{answered} answers");
+}
+
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.

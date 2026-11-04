@@ -2,7 +2,7 @@
 
 use navree::ui::*;
 
-use crate::catalog::{Example, single};
+use crate::catalog::{Answer, Example, single};
 
 const SOURCE: &str = include_str!("panes.rs");
 
@@ -45,6 +45,7 @@ pub fn all() -> Vec<Example> {
         .width(390)
         .height(420),
         single!("lazy-list", "thumb", "A long list", lazy_list_thumb).start(),
+        // The lists' next pages come from `answers`: a preview has no server to ask.
         single!(
             "lazy-list",
             "default",
@@ -52,7 +53,8 @@ pub fn all() -> Vec<Example> {
             lazy_list_default
         )
         .start()
-        .height(520),
+        .answers(lazy_rows_next)
+        .height(740),
         single!(
             "lazy-list",
             "conversation",
@@ -60,8 +62,71 @@ pub fn all() -> Vec<Example> {
             lazy_list_conversation
         )
         .start()
-        .height(460),
+        .answers(lazy_messages_earlier)
+        .height(600),
     ]
+}
+
+/// What `/desk/rows` answers after the last row of the first page: the last four
+/// conversations, and no more.
+fn lazy_rows_next() -> Vec<Answer> {
+    let older = [
+        ("Invoice shows the wrong GSTIN", "Rajinder Sandhu · 6 h"),
+        ("Can't add a second branch", "Simranjit Dhillon · 8 h"),
+        ("Refund went to the old card", "Amandeep Grewal · 1 d"),
+        ("Import stopped at row 402", "Taranjit Sidhu · 1 d"),
+    ];
+    vec![Answer {
+        src: "/desk/rows",
+        dir: "end",
+        items: older
+            .into_iter()
+            .enumerate()
+            .map(|(at, (title, line))| {
+                LazyItem::new(
+                    (6 + at).to_string(),
+                    format!("{:012}", 994 - at),
+                    Node::from(Item::new(title).description(line)),
+                )
+            })
+            .collect(),
+        more: false,
+    }]
+}
+
+/// What `/desk/7/messages` answers before the first message shown: how the
+/// conversation began, and no more.
+fn lazy_messages_earlier() -> Vec<Answer> {
+    let said = [
+        (
+            BubbleSide::Start,
+            "Jasleen Kaur",
+            "Hello, our upgrade to Growth isn't going through.",
+        ),
+        (
+            BubbleSide::End,
+            "Priya Verma",
+            "Sorry about that. Let me look at your account.",
+        ),
+    ];
+    vec![Answer {
+        src: "/desk/7/messages",
+        dir: "start",
+        items: said
+            .into_iter()
+            .enumerate()
+            .map(|(at, (side, who, text))| {
+                LazyItem::new(
+                    (68 + at).to_string(),
+                    format!("{:012}", 68 + at),
+                    Message::new(side)
+                        .header(who)
+                        .content(Bubble::new(side, text)),
+                )
+            })
+            .collect(),
+        more: false,
+    }]
 }
 
 /// What the panes hold in these examples.
