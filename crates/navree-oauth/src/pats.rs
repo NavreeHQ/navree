@@ -45,8 +45,8 @@ impl fmt::Debug for CreatedPersonalAccessToken {
 }
 
 /// A personal access token as the API returns it (`token` only right
-/// after creation).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+/// after creation). `Debug` never shows the token.
+#[derive(Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct PersonalAccessTokenResource {
     /// The id.
     pub id: Uuid,
@@ -76,6 +76,20 @@ impl From<&PersonalAccessToken> for PersonalAccessTokenResource {
             last_used_at: record.last_used_at,
             created_at: record.created_at,
         }
+    }
+}
+
+impl fmt::Debug for PersonalAccessTokenResource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PersonalAccessTokenResource")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("scopes", &self.scopes)
+            .field("token", &self.token.as_ref().map(|_| "[redacted]"))
+            .field("expires_at", &self.expires_at)
+            .field("last_used_at", &self.last_used_at)
+            .field("created_at", &self.created_at)
+            .finish()
     }
 }
 
@@ -252,5 +266,29 @@ impl fmt::Debug for PersonalAccessTokens {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PersonalAccessTokens")
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_token_never_shows_in_debug_output() {
+        let resource = PersonalAccessTokenResource {
+            id: Uuid::now_v7(),
+            name: "CI deploys".to_owned(),
+            scopes: vec!["deals:read".to_owned()],
+            token: Some("nvpat_a1b2c3d4e5".to_owned()),
+            expires_at: None,
+            last_used_at: None,
+            created_at: Utc::now(),
+        };
+        let printed = format!("{resource:?}");
+        assert!(!printed.contains("a1b2c3d4e5"), "{printed}");
+        assert!(
+            printed.contains("CI deploys") && printed.contains("[redacted]"),
+            "{printed}"
+        );
     }
 }

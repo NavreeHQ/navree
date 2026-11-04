@@ -196,13 +196,27 @@ impl fmt::Debug for CreatedClient {
     }
 }
 
-/// How a client presented itself at a protocol endpoint.
-#[derive(Clone, Debug, Default)]
+/// How a client presented itself at a protocol endpoint. `Debug` never
+/// shows the secret.
+#[derive(Clone, Default)]
 pub(crate) struct ClientCredentials {
     pub(crate) client_id: Option<String>,
     pub(crate) client_secret: Option<String>,
     /// Whether they came in an `Authorization: Basic` header.
     pub(crate) basic: bool,
+}
+
+impl fmt::Debug for ClientCredentials {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClientCredentials")
+            .field("client_id", &self.client_id)
+            .field(
+                "client_secret",
+                &self.client_secret.as_ref().map(|_| "[redacted]"),
+            )
+            .field("basic", &self.basic)
+            .finish()
+    }
 }
 
 /// Registers and manages OAuth clients. Provided and exported by
@@ -510,4 +524,21 @@ fn dedup(scopes: &[String]) -> Vec<String> {
 /// Whether `scopes` ask for a refresh token.
 pub(crate) fn wants_refresh(scopes: &[String]) -> bool {
     scopes.iter().any(|s| s == OFFLINE_ACCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn presented_credentials_never_show_the_secret_in_debug_output() {
+        let credentials = ClientCredentials {
+            client_id: Some("crm-web".to_owned()),
+            client_secret: Some("nvcs_f00dfeed".to_owned()),
+            basic: true,
+        };
+        let printed = format!("{credentials:?}");
+        assert!(!printed.contains("f00dfeed"), "{printed}");
+        assert!(printed.contains("crm-web"), "{printed}");
+    }
 }
