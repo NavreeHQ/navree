@@ -53,3 +53,24 @@ export function uiBudgets(): Budget[] {
     { label: "Every module together", files: "js", ceilingKb: ceiling(/total < (\d+) \* 1024/, "all modules") },
   ];
 }
+
+/**
+ * The render-time ceilings, in milliseconds, that the release tests in
+ * `crates/navree-ui/tests/budgets.rs` assert: each test's
+ * `Duration::from_millis(n)`, read from the test with that name.
+ */
+export function uiRenderCeilings() {
+  const source = fs.readFileSync(path.join(WEBSITE, "../../crates/navree-ui/tests/budgets.rs"), "utf8");
+  const ms = (test: string) => {
+    const m = new RegExp(`fn ${test}\\(\\)[\\s\\S]*?Duration::from_millis\\((\\d+)\\)`).exec(source);
+    if (!m) throw new Error(`ui-page: no render-time test ${test} in crates/navree-ui/tests/budgets.rs`);
+    return Number(m[1]);
+  };
+  return {
+    thousandRows: ms("a_thousand_rows_render_in_under_3_ms"),
+    hundredRowFeed: ms("a_hundred_row_feed_renders_in_under_1_ms"),
+    hundredEventTimeline: ms("a_hundred_event_timeline_renders_in_under_1_ms"),
+    phoneInput: ms("a_page_with_a_phone_input_renders_in_under_1_ms"),
+    tenThousandOptions: ms("ten_thousand_options_render_in_under_40_ms"),
+  };
+}

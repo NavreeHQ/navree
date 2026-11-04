@@ -11,7 +11,7 @@ import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 import { repoTree } from "@site";
 
-import { Preview } from "../../ui/build";
+import { Preview } from "@/components/showcase/preview";
 import { showcases } from "../../ui/showcases";
 
 export const metadata: Metadata = pageMetadata({

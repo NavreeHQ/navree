@@ -47,7 +47,7 @@ export function UiHero() {
             page gets one stylesheet, a small runtime that loads only what it uses, and a strict content security policy.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-3">
-            <PrimaryCta href="#components">Browse the components</PrimaryCta>
+            <PrimaryCta href="#build-anything">See what you can build</PrimaryCta>
             <SecondaryCta href="/docs/ui/overview/">Get started</SecondaryCta>
           </div>
         </div>

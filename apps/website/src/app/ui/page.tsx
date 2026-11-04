@@ -16,25 +16,33 @@ import { ComponentGallery } from "./gallery";
 import { UiHero } from "./hero";
 import { HowItWorks } from "./how";
 import { UiRoadmap } from "./roadmap";
+import { appCards } from "./showcases";
 
 export const metadata: Metadata = pageMetadata({
   title: "Navree UI: your app's screens in Rust",
   description:
-    "Typed Rust components rendered to HTML on the server, with one stylesheet and a strict content security policy. A live preview of every component.",
+    "Typed Rust components rendered on the server: a store's back office built with them, the code of its hardest parts, and a live preview of every component.",
   path: "/ui/",
 });
 
 /**
- * `/ui/`, the page about Navree UI, top to bottom: what it is, the choice of
- * front end, how it works, a live example, every component, an example app
- * built from them, what every page can do, what comes next, bringing a design, and the way to start. The
- * components, the sizes and the roadmap are read from the files that own
- * them, so the page follows the toolkit without edits.
+ * `/ui/`, the page about Navree UI, top to bottom: what it is, what you can
+ * build with it (whole apps and their hardest parts, with their code), every
+ * component, the choice of front end, how it works, a live example, what every
+ * page can do, what comes next, bringing a design, and the way to start. The
+ * apps, the components, the sizes and the roadmap are read from the files that
+ * own them, so the page follows the toolkit without edits.
  */
 export default function UiPage() {
   return (
     <>
       <UiHero />
+      <Part>
+        <BuildAnything />
+      </Part>
+      <Part>
+        <ComponentGallery />
+      </Part>
       <Part>
         <ChooseFrontEnd />
       </Part>
@@ -59,12 +67,6 @@ export default function UiPage() {
         </HomeSection>
       </Part>
       <Part>
-        <ComponentGallery />
-      </Part>
-      <Part>
-        <BuildAnything />
-      </Part>
-      <Part>
         <UiFeatures />
       </Part>
       <Part>
@@ -77,7 +79,15 @@ export default function UiPage() {
         <UiClosing />
       </Part>
       <Faq name="ui" />
-      <PageSchema path="/ui/" metadata={metadata} />
+      <PageSchema
+        path="/ui/"
+        metadata={metadata}
+        list={{
+          id: "apps",
+          name: "Apps built on Navree",
+          items: appCards.map((card) => ({ name: `${card.name}, ${card.kind.charAt(0).toLowerCase()}${card.kind.slice(1)}`, description: card.hardest, path: `/showcase/${card.slug}/` })),
+        }}
+      />
     </>
   );
 }

@@ -209,12 +209,43 @@ function plainTitle(title: Metadata["title"]): string {
  *
  *     <PageSchema path="/ui/" metadata={metadata} />
  */
-export function PageSchema({ path, metadata, kind, mainEntity }: { path: string; metadata: Metadata; kind?: PageKind; mainEntity?: string }) {
+export function PageSchema({
+  path,
+  metadata,
+  kind,
+  mainEntity,
+  list,
+}: {
+  path: string;
+  metadata: Metadata;
+  kind?: PageKind;
+  mainEntity?: string;
+  /** Pages this page shows a card for, as an `ItemList` (`/ui/`: the example apps). */
+  list?: { id: string; name: string; items: { name: string; description: string; path: string }[] };
+}) {
   const info = infoFor(path);
   const url = abs(path);
   const og = metadata.openGraph?.title;
   const name = typeof og === "string" ? og : plainTitle(metadata.title);
   const home = path === "/";
+  const itemList: Json[] = list
+    ? [
+        {
+          "@type": "ItemList",
+          "@id": `${url}#${list.id}`,
+          name: list.name,
+          numberOfItems: list.items.length,
+          itemListOrder: "https://schema.org/ItemListOrderAscending",
+          itemListElement: list.items.map((item, i) => ({
+            "@type": "ListItem",
+            position: i + 1,
+            name: item.name,
+            description: item.description,
+            item: abs(item.path),
+          })),
+        },
+      ]
+    : [];
   const data: Json = {
     "@context": "https://schema.org",
     "@graph": [
@@ -238,6 +269,7 @@ export function PageSchema({ path, metadata, kind, mainEntity }: { path: string;
         breadcrumb: { "@id": `${url}#breadcrumb` },
       },
       breadcrumb(`${url}#breadcrumb`, trailFor(path, home ? undefined : info.name)),
+      ...itemList,
     ],
   };
   return <JsonLd data={data} />;

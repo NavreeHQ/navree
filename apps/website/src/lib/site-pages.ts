@@ -47,7 +47,15 @@ export const pageInfo: Record<string, PageInfo> = {
   "/ai/": { name: "AI", sources: ["src/components/ai"] },
   "/ui/": {
     name: "UI",
-    sources: ["src/components/ui-docs", "src/lib/ui-page-data.ts", "content/ui", "content/docs/ui/coming-next.mdx"],
+    sources: [
+      "src/components/ui-docs",
+      "src/components/showcase",
+      "src/lib/ui-page-data.ts",
+      "content/ui",
+      "content/docs/ui/coming-next.mdx",
+      "content/showcase/store.json",
+      "public/images/showcase",
+    ],
   },
   "/performance/": { name: "Performance", sources: ["src/components/bench", "src/lib/bench.ts"] },
   "/showcase/": { name: "Showcase", kind: "CollectionPage" },

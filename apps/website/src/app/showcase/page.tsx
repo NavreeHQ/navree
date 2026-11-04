@@ -6,13 +6,12 @@ import { ArrowLink, HomeSection, PrimaryCta, SecondaryCta, SectionHeading } from
 import { CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
-import { example } from "@/components/ui-docs/data";
-import { PreviewFrame } from "@/components/ui-docs/preview-frame";
+import { ShowcaseImage } from "@/components/showcase/showcase-image";
 import { entry } from "@/content/ecosystem";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
-import { apps } from "./apps";
+import { showcases } from "../ui/showcases";
 
 export const metadata: Metadata = pageMetadata({
   title: "Showcase: apps and tools built on Navree",
@@ -156,24 +155,20 @@ export default function ShowcasePage() {
           action={<ArrowLink href="/ui/#build-anything">See them on the UI page</ArrowLink>}
         />
         <ul className="mt-12 grid grid-cols-1 gap-3 lg:mt-14 lg:grid-cols-2">
-          {apps.map((app) => {
-            const preview = example(app.preview);
+          {showcases.map((app) => {
             return (
               <li key={app.slug} className="min-w-0">
                 <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-ink-1 shadow-bezel transition-colors duration-200 hover:border-line-2">
-                  <div className="border-b border-line" inert>
-                    <PreviewFrame
-                      src={preview.src}
-                      title={app.previewTitle}
-                      height={preview.height}
-                      width={preview.width}
-                      defer
+                  <div className="border-b border-line">
+                    <ShowcaseImage
+                      name={app.screenshot.image}
+                      sizes="(min-width: 1440px) 680px, (min-width: 1024px) 48vw, calc(100vw - 32px)"
                     />
                   </div>
                   <div className="flex flex-1 flex-col p-6 sm:p-8">
                     <h3 className="font-display text-display-sm font-semibold text-fg transition-colors group-hover:text-accent">
                       <Link href={`/showcase/${app.slug}/`} className="after:absolute after:inset-0 after:content-['']">
-                        {app.name}
+                        {app.kind}
                       </Link>
                     </h3>
                     <p className="mt-3 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{app.summary}</p>

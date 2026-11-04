@@ -15,6 +15,7 @@ export async function CodePanel({
   source,
   className,
   wrap = false,
+  size = "md",
 }: {
   file: string;
   lang: "rust" | "ts" | "sh" | "toml";
@@ -22,6 +23,8 @@ export async function CodePanel({
   className?: string;
   /** Wrap long lines with a hanging indent instead of scrolling them. */
   wrap?: boolean;
+  /** `sm` for a narrow card: smaller type at every width. */
+  size?: "sm" | "md";
 }) {
   const shiki = await getHighlighter();
   const html = shiki.codeToHtml(source.trimEnd(), {
@@ -38,7 +41,10 @@ export async function CodePanel({
       </figcaption>
       {/* Shiki's own output, highlighted at build time. */}
       <div
-        className="scroll-thin [&_pre]:text-[0.75rem] [&_pre]:leading-[1.7] sm:[&_pre]:text-[0.8125rem]"
+        className={cn(
+          "scroll-thin [&_pre]:text-[0.75rem] [&_pre]:leading-[1.7]",
+          size === "sm" ? "[&_.line]:px-4 [&_pre]:py-3" : "sm:[&_pre]:text-[0.8125rem]",
+        )}
         // Shiki's output for a string that lives in this repository, highlighted at build time
         // (Shiki escapes the code it highlights).
         // nosemgrep: navree-raw-html
