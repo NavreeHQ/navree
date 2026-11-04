@@ -542,3 +542,10 @@
     scrollbar-color: var(--color-line-2) transparent;
   }
 }
+
+/* A preview frame that loads as it nears the screen has no page without a script: its <noscript> twin shows instead. */
+@media (scripting: none) {
+  [data-deferred] {
+    display: none;
+  }
+}

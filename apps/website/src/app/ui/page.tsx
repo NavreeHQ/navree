@@ -7,6 +7,7 @@ import { TableShowcase } from "@/components/ui-docs/table-showcase";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
+import { BuildAnything } from "./build";
 import { ChooseFrontEnd } from "./choose";
 import { UiClosing } from "./closing";
 import { BringYourDesign } from "./design";
@@ -59,6 +60,9 @@ export default function UiPage() {
       </Part>
       <Part>
         <ComponentGallery />
+      </Part>
+      <Part>
+        <BuildAnything />
       </Part>
       <Part>
         <UiFeatures />
