@@ -146,7 +146,7 @@ pub(crate) async fn list(
     RawQuery(query): RawQuery,
 ) -> Result<Json<Value>, AppError> {
     let resource = resource(&cx, &slug)?;
-    let q = ListQuery::parse(query.as_deref().unwrap_or(""))?;
+    let q = ListQuery::parse_api(query.as_deref().unwrap_or(""))?;
     let page = resource.list(&cx, &q).await?;
     let items = present(&cx, resource.as_ref(), &page.records, Screen::Index).await?;
     Ok(Json(json!({
@@ -303,7 +303,7 @@ pub(crate) async fn options(
         return Err(AppError::forbidden());
     }
     let search = form_urlencoded::parse(query.as_deref().unwrap_or("").as_bytes())
-        .find(|(k, _)| k == "search" || k == "q")
+        .find(|(k, _)| k == "search")
         .map(|(_, v)| v.into_owned());
     let found = resource.lookup(&cx, search.as_deref(), None, 20).await?;
     Ok(Json(json!({

@@ -1047,13 +1047,13 @@ impl<R: Resource> Handle<R> {
                 Some(filter) => match self.apply_filter(cx, query.clone(), filter, values).await {
                     Ok(filtered) => query = filtered,
                     Err(message) => {
-                        errors.insert(format!("filters.{name}"), vec![message]);
+                        errors.insert(format!("filter[{name}]"), vec![message]);
                     }
                 },
                 None => {
                     errors.insert(
-                        format!("filters.{name}"),
-                        vec![format!("filters.{name} is not a filter of this resource")],
+                        format!("filter[{name}]"),
+                        vec![format!("filter[{name}] is not a filter of this resource")],
                     );
                 }
             }
@@ -1243,7 +1243,7 @@ impl<R: Resource> Handle<R> {
                         filter.options.iter().map(|(v, _)| v.as_str()).collect();
                     if values.iter().any(|v| !allowed.contains(&v.as_str())) {
                         return Err(cx.core.messages.render(
-                            &format!("filters.{name}"),
+                            &format!("filter[{name}]"),
                             "in",
                             &[("values", allowed.join(", "))],
                         ));
@@ -1256,7 +1256,7 @@ impl<R: Resource> Handle<R> {
                     .map_err(|Invalid(rule)| {
                         cx.core
                             .messages
-                            .render(&format!("filters.{name}"), rule, &[])
+                            .render(&format!("filter[{name}]"), rule, &[])
                     })?;
                 Ok(query.where_(self.col(name).is_in(keys)))
             }
@@ -1278,7 +1278,7 @@ impl<R: Resource> Handle<R> {
                 let on = values::boolean(&value).ok_or_else(|| {
                     cx.core
                         .messages
-                        .render(&format!("filters.{name}"), "boolean", &[])
+                        .render(&format!("filter[{name}]"), "boolean", &[])
                 })?;
                 Ok(f(query, on))
             }
@@ -1286,7 +1286,7 @@ impl<R: Resource> Handle<R> {
                 let today = save::now(&cx.app).await.date_naive();
                 let text = values.last().cloned().unwrap_or_default();
                 let (from, to) = date_range(&text, today).ok_or_else(|| {
-                    format!("filters.{name} must be a range of dates (YYYY-MM-DD..YYYY-MM-DD) or today, week, month or quarter")
+                    format!("filter[{name}] must be a range of dates (YYYY-MM-DD..YYYY-MM-DD) or today, week, month or quarter")
                 })?;
                 let mut query = query;
                 if let Some(from) = from {

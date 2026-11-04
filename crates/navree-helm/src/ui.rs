@@ -1309,6 +1309,11 @@ async fn relation_panels(
         let items = present(cx, target.as_ref(), &page.records, Screen::Index).await?;
         let list_url = format!("{base}/resources/{}", target_info.slug);
         let mut columns = columns(cx, target_info, &q, &list_url);
+        // The link to the whole list keeps the relationship and the default page size.
+        let all = ListQuery {
+            per_page: None,
+            ..q.clone()
+        };
         let hidden: Vec<usize> = columns
             .iter()
             .enumerate()
@@ -1327,7 +1332,7 @@ async fn relation_panels(
         panels.push(json!({
             "label": field.label.clone().unwrap_or_else(|| target_info.label.to_owned()),
             "total": page.meta.total,
-            "url": format!("{list_url}?{}", q.to_query(None, None).replace("&per_page=10", "")),
+            "url": format!("{list_url}?{}", all.to_query(None, None)),
             "actions_url": format!("{list_url}/actions"),
             "columns": columns,
             "rows": table_rows,

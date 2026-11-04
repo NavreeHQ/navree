@@ -181,7 +181,7 @@ without a `query`), then `query`, then the user's access filter.
   `boolean(name, label, f)`, `date_range(col)` (`a..b` or presets),
   `custom(name, label, f)`, `.label(..)`. Each is a chip in the list's toolbar
   (a panel of checkboxes, radios or a text box; Apply, Clear, Reset). URL form:
-  `?search=..&filters[stage]=won,lost&sort=-amount_cents&page=2`.
+  `?search=..&filter[stage][in]=won,lost&sort=-amount_cents&page=2`.
 - **The list toolbar:** search, filter chips, then the bulk-action menu with
   **Run** (offers only actions the user may run and the workspace role takes),
   **Export** (`GET .../export.csv`, the list's rows as CSV with a UTF-8 byte order

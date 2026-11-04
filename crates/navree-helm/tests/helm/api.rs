@@ -197,6 +197,44 @@ async fn lists_search_sort_and_paginate() {
         .send()
         .await
         .assert_validation_error("per_page");
+    rep.get("/admin/api/resources/deals")
+        .query(&[("page", "0")])
+        .send()
+        .await
+        .assert_validation_error("page");
+
+    // Helm sorts by one field: the first term of the sort.
+    let body = rep
+        .get("/admin/api/resources/deals")
+        .query(&[("sort", "-amount_cents,title")])
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(
+        titles(&body),
+        ["GLOBEX expansion", "Globex renewal", "Initech upgrade", "Hooli pilot"]
+    );
+    // The search is `search`; `q` is not the list query's and searches nothing.
+    let body = rep
+        .get("/admin/api/resources/deals")
+        .query(&[("q", "globex")])
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(body["meta"]["total"], 4, "{body}");
+    // Helm lists page by number, so a cursor is refused by name.
+    rep.get("/admin/api/resources/deals")
+        .query(&[("cursor", "abc")])
+        .send()
+        .await
+        .assert_validation_error("cursor");
+    rep.get("/admin/api/resources/deals")
+        .query(&[("limit", "2")])
+        .send()
+        .await
+        .assert_validation_error("limit");
 }
 
 #[tokio::test]
@@ -267,76 +305,127 @@ async fn filters_narrow_the_list() {
             titles(&response.assert_status(200).json_value())
         }
     };
+    // `filter[stage]=won` is equal, `filter[stage][in]=a,b` is one of a list, and
+    // the key of a list may repeat.
+    assert_eq!(list(vec![("filter[stage]", "won".into())]).await, ["B"]);
+    assert_eq!(list(vec![("filter[stage][eq]", "won".into())]).await, ["B"]);
     assert_eq!(
         list(vec![
-            ("filters[stage]", "lead".into()),
-            ("filters[stage]", "won".into())
+            ("filter[stage][in]", "lead".into()),
+            ("filter[stage][in]", "won".into())
         ])
         .await,
         ["A", "B"]
     );
     assert_eq!(
-        list(vec![("filters[stage]", "lead,lost".into())]).await,
+        list(vec![("filter[stage][in]", "lead,lost".into())]).await,
         ["A", "C"]
     );
     assert_eq!(
-        list(vec![("filters[company_id]", globex.id.to_string())]).await,
+        list(vec![("filter[company_id]", globex.id.to_string())]).await,
         ["A", "B"]
     );
-    assert_eq!(list(vec![("filters[open]", "1".into())]).await, ["A", "D"]);
     assert_eq!(
-        list(vec![("filters[open]", "0".into())]).await,
+        list(vec![(
+            "filter[company_id][in]",
+            format!("{},{}", globex.id, initech.id)
+        )])
+        .await,
+        ["A", "B", "C"]
+    );
+    assert_eq!(list(vec![("filter[open]", "1".into())]).await, ["A", "D"]);
+    assert_eq!(
+        list(vec![("filter[open]", "0".into())]).await,
         ["A", "B", "C", "D"]
     );
     assert_eq!(
         list(vec![(
-            "filters[expected_close_date]",
+            "filter[expected_close_date]",
             "2026-10-10..2026-10-27".into()
         )])
         .await,
         ["B", "C"]
     );
     assert_eq!(
-        list(vec![(
-            "filters[expected_close_date]",
-            "..2026-10-20".into()
-        )])
-        .await,
+        list(vec![("filter[expected_close_date]", "..2026-10-20".into())]).await,
         ["A", "B"]
     );
     // `week` is the week of the app's clock (Monday 26 October 2026).
     assert_eq!(
-        list(vec![("filters[expected_close_date]", "week".into())]).await,
+        list(vec![("filter[expected_close_date]", "week".into())]).await,
         ["C"]
     );
     assert_eq!(
-        list(vec![("filters[min_amount]", "900".into())]).await,
+        list(vec![("filter[min_amount]", "900".into())]).await,
         ["B", "C", "D"]
     );
     assert_eq!(
         list(vec![
-            ("filters[stage]", "won".into()),
-            ("filters[company_id]", globex.id.to_string())
+            ("filter[stage]", "won".into()),
+            ("filter[company_id]", globex.id.to_string())
         ])
         .await,
         ["B"]
     );
+    // `filters[..]` is not the list query's: it is left alone and nothing is
+    // filtered.
+    assert_eq!(
+        list(vec![("filters[stage]", "won".into())]).await,
+        ["A", "B", "C", "D"]
+    );
+    assert_eq!(
+        list(vec![("filters[stage]", "lead,lost".into())]).await,
+        ["A", "B", "C", "D"]
+    );
 
     rep.get("/admin/api/resources/deals")
-        .query(&[("filters[stage]", "archived")])
+        .query(&[("filter[stage]", "archived")])
         .send()
         .await
-        .assert_validation_error("filters.stage");
+        .assert_validation_error("filter[stage]");
     rep.get("/admin/api/resources/deals")
-        .query(&[("filters[color]", "red")])
+        .query(&[("filter[stage][in]", "won,archived")])
         .send()
         .await
-        .assert_validation_error("filters.color");
+        .assert_validation_error("filter[stage]");
+    // A comma makes a list only with `in`: this is one value, and no stage.
     rep.get("/admin/api/resources/deals")
-        .query(&[("filters[expected_close_date]", "soon")])
+        .query(&[("filter[stage]", "lead,lost")])
         .send()
         .await
-        .assert_validation_error("filters.expected_close_date");
+        .assert_validation_error("filter[stage]");
+    rep.get("/admin/api/resources/deals")
+        .query(&[("filter[color]", "red")])
+        .send()
+        .await
+        .assert_validation_error("filter[color]");
+    rep.get("/admin/api/resources/deals")
+        .query(&[("filter[expected_close_date]", "soon")])
+        .send()
+        .await
+        .assert_validation_error("filter[expected_close_date]");
+    // A Helm filter is equal or one of a list. Any other operator is refused by
+    // name: some the list query has and one it does not.
+    for param in [
+        "filter[stage][regex]",
+        "filter[stage][gte]",
+        "filter[stage][ne]",
+        "filter[stage][not_in]",
+        "filter[stage][contains]",
+        "filter[stage][null]",
+    ] {
+        rep.get("/admin/api/resources/deals")
+            .query(&[(param, "won")])
+            .send()
+            .await
+            .assert_validation_error(param);
+    }
+    // A second equal filter on one field is a problem the API names.
+    rep.get("/admin/api/resources/deals")
+        .query(&[("filter[stage]", "lead"), ("filter[stage]", "won")])
+        .send()
+        .await
+        .assert_validation_error("filter[stage]");
 }
 
 #[tokio::test]

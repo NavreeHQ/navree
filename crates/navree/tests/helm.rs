@@ -582,11 +582,17 @@ async fn the_docs_resource_serves_its_screens() {
         .assert_status(200)
         .assert_json_path("groups.0.label", json!("Lost"));
     rep.get("/admin/api/resources/deals")
-        .query(&[("filters[stage]", "lost")])
+        .query(&[("filter[stage]", "lost")])
         .send()
         .await
         .assert_status(200)
         .assert_json_path("meta.total", 1.into());
+    rep.get("/admin/api/resources/deals")
+        .query(&[("filter[stage][in]", "lead,won")])
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", 0.into());
     rep.get("/admin/api/resources/companies")
         .send()
         .await

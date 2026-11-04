@@ -129,22 +129,22 @@
   <div class="chip-panel" role="group" aria-label="{{ f.label }}">
     {% if f.kind == "select" or f.kind == "belongs_to" %}
     <div class="chip-options">
-      {% for o in f.options %}<label class="chip-option"><input type="checkbox" name="filters[{{ f.name }}]" value="{{ o.value }}"{% if o.selected %} checked{% endif %}><span>{{ o.label }}</span></label>{% else %}<p class="muted chip-none">Nothing to pick yet.</p>{% endfor %}
+      {% for o in f.options %}<label class="chip-option"><input type="checkbox" name="filter[{{ f.name }}][in]" value="{{ o.value }}"{% if o.selected %} checked{% endif %}><span>{{ o.label }}</span></label>{% else %}<p class="muted chip-none">Nothing to pick yet.</p>{% endfor %}
     </div>
     {% elif f.kind == "boolean" %}
     <div class="chip-options">
-      <label class="chip-option"><input type="radio" name="filters[{{ f.name }}]" value=""{% if not f.value %} checked{% endif %}><span>Any</span></label>
-      <label class="chip-option"><input type="radio" name="filters[{{ f.name }}]" value="1"{% if f.value == "1" %} checked{% endif %}><span>Yes</span></label>
-      <label class="chip-option"><input type="radio" name="filters[{{ f.name }}]" value="0"{% if f.value == "0" %} checked{% endif %}><span>No</span></label>
+      <label class="chip-option"><input type="radio" name="filter[{{ f.name }}]" value=""{% if not f.value %} checked{% endif %}><span>Any</span></label>
+      <label class="chip-option"><input type="radio" name="filter[{{ f.name }}]" value="1"{% if f.value == "1" %} checked{% endif %}><span>Yes</span></label>
+      <label class="chip-option"><input type="radio" name="filter[{{ f.name }}]" value="0"{% if f.value == "0" %} checked{% endif %}><span>No</span></label>
     </div>
     {% elif f.kind == "date_range" %}
     <div class="chip-options">
-      <label class="chip-option"><input type="radio" name="filters[{{ f.name }}]" value=""{% if not f.active %} checked{% endif %}><span>Any time</span></label>
-      {% for o in f.options %}<label class="chip-option"><input type="radio" name="filters[{{ f.name }}]" value="{{ o.value }}"{% if o.selected %} checked{% endif %}><span>{{ o.label }}</span></label>{% endfor %}
+      <label class="chip-option"><input type="radio" name="filter[{{ f.name }}]" value=""{% if not f.active %} checked{% endif %}><span>Any time</span></label>
+      {% for o in f.options %}<label class="chip-option"><input type="radio" name="filter[{{ f.name }}]" value="{{ o.value }}"{% if o.selected %} checked{% endif %}><span>{{ o.label }}</span></label>{% endfor %}
     </div>
-    <input type="text" name="filters[{{ f.name }}]" value="{{ f.custom }}" placeholder="2026-10-01..2026-10-31" aria-label="{{ f.label }}: custom range" class="range-input">
+    <input type="text" name="filter[{{ f.name }}]" value="{{ f.custom }}" placeholder="2026-10-01..2026-10-31" aria-label="{{ f.label }}: custom range" class="range-input">
     {% else %}
-    <input type="text" name="filters[{{ f.name }}]" value="{{ f.value }}" aria-label="{{ f.label }}">
+    <input type="text" name="filter[{{ f.name }}]" value="{{ f.value }}" aria-label="{{ f.label }}">
     {% endif %}
     <div class="chip-actions">
       <button type="submit" class="btn btn-secondary btn-sm">Apply</button>

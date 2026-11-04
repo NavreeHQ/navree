@@ -246,8 +246,8 @@
       });
     });
     chips.forEach(function (chip) {
-      // A range typed in and a preset chosen would both be sent, and the last
-      // counts: choosing one clears the other.
+      // A range typed in and a preset chosen would both be sent, and only one
+      // can count: choosing one clears the other.
       var range = chip.querySelector("input.range-input");
       if (range) {
         var presets = chip.querySelectorAll("input[type=radio]");

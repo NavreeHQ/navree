@@ -122,7 +122,7 @@ async fn export_is_the_list_as_csv_for_its_filters() {
     assert!(lines[3].contains("2026-10-26T12:00:00Z"), "{}", lines[3]);
 
     // Only what the filters and the search show.
-    let body = csv(&manager, "?filters%5Bstage%5D=won&sort=-amount_cents")
+    let body = csv(&manager, "?filter%5Bstage%5D=won&sort=-amount_cents")
         .await
         .assert_status(200)
         .text();
@@ -139,7 +139,7 @@ async fn export_is_the_list_as_csv_for_its_filters() {
     assert_eq!(lines_of(&body), 2, "{body}");
     assert!(body.contains("Alpha"));
     // A filter the list would refuse is refused, as a page.
-    csv(&manager, "?filters%5Bnope%5D=1")
+    csv(&manager, "?filter%5Bnope%5D=1")
         .await
         .assert_status(400);
     csv(&manager, "?sort=nothing").await.assert_status(400);
@@ -495,7 +495,7 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     let html = plain(
         page(
             &manager,
-            "/admin/resources/deals?filters%5Bstage%5D=won&filters%5Bstage%5D=lost&filters%5Bopen%5D=1&search=Deal&sort=title",
+            "/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=won%2Clost&filter%5Bopen%5D=1&search=Deal&sort=title",
         )
         .await
         .assert_status(200),
@@ -516,16 +516,16 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     );
     // The options are checkboxes (a boolean's are radios), checked as the query says.
     assert!(
-        html.contains("<input type=\"checkbox\" name=\"filters[stage]\" value=\"won\" checked>"),
+        html.contains("<input type=\"checkbox\" name=\"filter[stage][in]\" value=\"won\" checked>"),
         "{html}"
     );
     assert!(
-        html.contains("<input type=\"radio\" name=\"filters[open]\" value=\"1\" checked>"),
+        html.contains("<input type=\"radio\" name=\"filter[open]\" value=\"1\" checked>"),
         "{html}"
     );
-    assert!(html.contains("name=\"filters[min_amount]\""), "{html}");
+    assert!(html.contains("name=\"filter[min_amount]\""), "{html}");
     assert!(
-        html.contains("name=\"filters[expected_close_date]\""),
+        html.contains("name=\"filter[expected_close_date]\""),
         "{html}"
     );
     // The search, the sort and the way back.
@@ -543,13 +543,161 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     // Strict pages: no inline style, no inline script.
     assert!(!html.contains("style=\""), "{html}");
     assert!(!html.contains("<script>"), "{html}");
-    // The filters of a list work as they did: the form is a GET of the same names.
+    // The form is a GET of the names every Navree list uses.
+    assert!(!html.contains("filters["), "{html}");
+    assert!(!html.contains("name=\"q\""), "{html}");
+    // A chip's Clear link is the list without that filter, written the same way.
+    assert!(
+        html.contains("href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;sort=title&amp;search=Deal\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("href=\"/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=won%2Clost&amp;sort=title&amp;search=Deal\""),
+        "{html}"
+    );
+    // So is a column header's sort link.
+    assert!(
+        html.contains("href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;filter%5Bstage%5D%5Bin%5D=won%2Clost&amp;sort=-title&amp;search=Deal\""),
+        "{html}"
+    );
     let rows = plain(
-        page(&manager, "/admin/resources/deals?filters%5Bstage%5D=won")
+        page(&manager, "/admin/resources/deals?filter%5Bstage%5D=won")
             .await
             .assert_status(200),
     );
     assert!(rows.contains("No deals match these filters"), "{rows}");
+}
+
+#[tokio::test]
+async fn the_pages_read_the_list_query_and_leave_the_rest() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    deal(
+        &app,
+        DealSeed {
+            title: "Alpha",
+            stage: "lead",
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    let shows = |html: &str| html.contains("Alpha") && !html.contains("match these filters");
+    // `filter[stage][in]=a,b` and `filter[stage]=a` filter.
+    for (query, shown) in [
+        ("filter%5Bstage%5D%5Bin%5D=lead%2Cwon", true),
+        ("filter%5Bstage%5D%5Bin%5D=lead&filter%5Bstage%5D%5Bin%5D=won", true),
+        ("filter%5Bstage%5D=lead", true),
+        ("filter%5Bstage%5D%5Bin%5D=won%2Clost", false),
+        ("filter%5Bstage%5D=won", false),
+    ] {
+        let html = plain(
+            page(&manager, &format!("/admin/resources/deals?{query}"))
+                .await
+                .assert_status(200),
+        );
+        assert_eq!(shows(&html), shown, "{query}: {html}");
+    }
+    // What is not the list query's, and what Helm does not read, changes nothing.
+    for query in [
+        "filters%5Bstage%5D=won",
+        "filters%5Bstage%5D=won%2Clost",
+        "q=nothing-matches-this",
+        "filter%5Bstage%5D%5Bregex%5D=x",
+        "filter%5Bstage%5D%5Bgte%5D=won",
+        "filter%5Bstage%5D%5Bnull%5D=true",
+        "cursor=abc",
+        "sort=-",
+    ] {
+        let html = plain(
+            page(&manager, &format!("/admin/resources/deals?{query}"))
+                .await
+                .assert_status(200),
+        );
+        assert!(shows(&html), "{query}: {html}");
+        assert!(!html.contains("Reset"), "{query}: {html}");
+    }
+    // `search` searches.
+    let html = plain(
+        page(&manager, "/admin/resources/deals?search=nothing-matches-this")
+            .await
+            .assert_status(200),
+    );
+    assert!(html.contains("No deals match these filters"), "{html}");
+    // A page that is not a number is a 400 on a page too.
+    page(&manager, "/admin/resources/deals?page=0")
+        .await
+        .assert_status(400);
+    page(&manager, "/admin/resources/deals?per_page=101")
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
+async fn a_link_of_the_list_opens_the_same_list() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    for (title, stage) in [("Alpha", "lead"), ("Beta", "won"), ("Gamma", "lost")] {
+        deal(
+            &app,
+            DealSeed {
+                title,
+                stage,
+                ..DealSeed::default()
+            },
+        )
+        .await;
+    }
+    let html = plain(
+        page(
+            &manager,
+            "/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=lead%2Cwon&sort=title&search=a",
+        )
+        .await
+        .assert_status(200),
+    );
+    // The export link carries the filter as the page read it.
+    let start = html
+        .find("href=\"/admin/resources/deals/export.csv?")
+        .expect("an export link")
+        + "href=\"".len();
+    let end = html[start..].find('"').unwrap() + start;
+    let href = html[start..end].replace("&amp;", "&");
+    assert_eq!(
+        href,
+        "/admin/resources/deals/export.csv?filter%5Bstage%5D%5Bin%5D=lead%2Cwon&sort=title&search=a"
+    );
+    let body = manager
+        .get(&href)
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(body.contains("Alpha"), "{body}");
+    assert!(body.contains("Beta"), "{body}");
+    assert!(!body.contains("Gamma"), "{body}");
+
+    // The page links keep the filter, the sort and the page size.
+    let html = plain(
+        page(
+            &manager,
+            "/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=lead%2Cwon&sort=title&per_page=1",
+        )
+        .await
+        .assert_status(200),
+    );
+    let next = "/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=lead%2Cwon&amp;sort=title&amp;page=2&amp;per_page=1";
+    assert!(
+        html.contains(&format!("href=\"{next}\" rel=\"next\"")),
+        "{html}"
+    );
+    assert!(html.contains("Alpha") && !html.contains("Beta"), "{html}");
+    let second = plain(
+        page(&manager, &next.replace("&amp;", "&"))
+            .await
+            .assert_status(200),
+    );
+    assert!(second.contains("Beta") && !second.contains("Alpha"), "{second}");
 }
 
 #[tokio::test]
@@ -640,14 +788,14 @@ async fn the_page_offers_export_for_what_it_shows() {
     let html = plain(
         page(
             &manager,
-            "/admin/resources/deals?filters%5Bstage%5D=won&sort=title&page=3",
+            "/admin/resources/deals?filter%5Bstage%5D=won&sort=title&page=3",
         )
         .await
         .assert_status(200),
     );
     assert!(
         html.contains(
-            "href=\"/admin/resources/deals/export.csv?filters%5Bstage%5D=won&amp;sort=title\""
+            "href=\"/admin/resources/deals/export.csv?filter%5Bstage%5D=won&amp;sort=title\""
         ),
         "{html}"
     );

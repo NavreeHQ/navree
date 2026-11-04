@@ -505,15 +505,17 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
     )
     .await;
     let cases = [
-        ("no-stage", "filters%5Bstage%5D=won"),
-        ("no-company", "filters%5Bcompany_id%5D=ID"),
+        ("no-stage", "filter%5Bstage%5D=won"),
+        ("no-stage", "filter%5Bstage%5D%5Bin%5D=won%2Clost"),
+        ("no-company", "filter%5Bcompany_id%5D=ID"),
+        ("no-company", "filter%5Bcompany_id%5D%5Bin%5D=ID"),
         ("no-company", "via%5Bcompany_id%5D=ID"),
         (
             "no-close-date",
-            "filters%5Bexpected_close_date%5D=2026-11-01..2026-11-02",
+            "filter%5Bexpected_close_date%5D=2026-11-01..2026-11-02",
         ),
         // A filter of the app's own names no column: it can't be vouched for.
-        ("no-amount", "filters%5Bmin_amount%5D=1000"),
+        ("no-amount", "filter%5Bmin_amount%5D=1000"),
     ];
     for (role, query) in cases {
         let (_, client) = user(&app, role).await;
@@ -543,7 +545,7 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
             .await
             .assert_status(200),
     );
-    assert!(!html.contains("filters[stage]"), "{html}");
+    assert!(!html.contains("filter[stage]"), "{html}");
     let index = no_stage
         .get("/admin/api/resources")
         .send()
@@ -681,19 +683,19 @@ async fn a_filter_of_the_apps_own_runs_for_who_may_read_what_it_says_it_reads() 
     // It says it reads the amount, which this user may read.
     let (_, no_title) = user(&app, "no-title").await;
     no_title
-        .get("/admin/api/resources/deals?filters%5Bmin_amount%5D=1000")
+        .get("/admin/api/resources/deals?filter%5Bmin_amount%5D=1000")
         .send()
         .await
         .assert_status(200);
     // This one doesn't say: for someone with a column hidden, it could read that.
     no_title
-        .get("/admin/api/resources/deals?filters%5Bopen%5D=1")
+        .get("/admin/api/resources/deals?filter%5Bopen%5D=1")
         .send()
         .await
         .assert_status(400);
     // With nothing hidden it runs.
     let (_, rep) = user(&app, "rep").await;
-    rep.get("/admin/api/resources/deals?filters%5Bopen%5D=1")
+    rep.get("/admin/api/resources/deals?filter%5Bopen%5D=1")
         .send()
         .await
         .assert_status(200);

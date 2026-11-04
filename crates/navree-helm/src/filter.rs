@@ -47,8 +47,9 @@ impl<M: Model> FilterKind<M> {
     }
 }
 
-/// One filter of a resource's list, in the side panel and the API's
-/// `filters[name]` parameters.
+/// One filter of a resource's list, in the toolbar and the API's
+/// `filter[name]` parameters (`filter[name]=a`, or `filter[name][in]=a,b` for
+/// several values).
 ///
 /// ```ignore
 /// Filter::select("stage").options([("lead", "Lead"), ("won", "Won")])
@@ -103,7 +104,7 @@ impl<M: Model> Filter<M> {
         Self::new(column, FilterKind::BelongsTo(Related::of::<R>()))
     }
 
-    /// On or off: `f(query, on)` changes the model query (`filters[name]=1` or
+    /// On or off: `f(query, on)` changes the model query (`filter[name]=1` or
     /// `0`).
     pub fn boolean<F>(name: &str, label: &str, f: F) -> Self
     where
@@ -147,7 +148,7 @@ impl<M: Model> Filter<M> {
     }
 
     /// The filter's name: its column, or the name given to `boolean` and
-    /// `custom` filters (the key in `filters[name]`).
+    /// `custom` filters (the key in `filter[name]`).
     pub fn name(&self) -> &str {
         &self.name
     }

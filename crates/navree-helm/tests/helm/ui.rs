@@ -134,7 +134,7 @@ async fn the_list_page_shows_rows_filters_actions_and_metrics() {
         "Globex renewal",
         "$12,500.00",
         "aria-sort=\"descending\"",
-        "name=\"filters[stage]\"",
+        "name=\"filter[stage][in]\"",
         "Open deals only",
         "value=\"mark-won\"",
         "data-confirm=\"Mark the selected deals as won?\"",
