@@ -79,20 +79,29 @@ fn app_shell_default() -> AppPage {
         )))
 }
 
-/// A deal still open, as the pages' tables show it.
+/// A deal still open, as the pages' tables show it. The deal, its stage and its
+/// amount come first and keep their widths, so a drawer over the right of the
+/// page leaves them in view.
 #[derive(Clone, TableRow)]
 #[table(sort = "-amount", per = 8, per_pages(8, 25, 100))]
 pub struct OpenDeal {
     #[col(skip)]
     pub id: i64,
-    #[col(sortable, search, sticky, link = "/deals/{id}", label = "Deal")]
+    #[col(
+        sortable,
+        search,
+        sticky,
+        link = "/deals/{id}",
+        label = "Deal",
+        width = 220
+    )]
     pub title: String,
+    #[col(sortable, filter = multi, options = STAGES, badge = stage_tone, width = 130)]
+    pub stage: &'static str,
+    #[col(sortable, numeric, filter = range, label = "Amount", width = 140)]
+    pub amount: i64,
     #[col(filter = multi, options = OWNERS, hide_on_mobile)]
     pub owner: &'static str,
-    #[col(sortable, filter = multi, options = STAGES, badge = stage_tone)]
-    pub stage: &'static str,
-    #[col(sortable, numeric, filter = range, label = "Amount")]
-    pub amount: i64,
     #[col(hide_on_mobile)]
     pub city: &'static str,
     #[col(sortable, filter = date, label = "Closes")]
@@ -278,8 +287,10 @@ fn crm_shell() -> Shell {
 /// The same CRM, filled: the figures, the open deals, and one deal open in a
 /// drawer over them with its history.
 fn app_shell_full() -> AppPage {
+    // A light backdrop: the deals stay readable beside the one open.
     let drawer = Sheet::new("deal", "Sutlej Supply renewal")
         .width(SheetWidth::Lg)
+        .backdrop(SheetBackdrop::Light)
         .description("Sutlej Supply Co., Ludhiana, Punjab")
         .body(
             Stack::gap(4).children((

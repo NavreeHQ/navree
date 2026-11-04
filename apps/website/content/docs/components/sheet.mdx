@@ -48,6 +48,19 @@ let order = Sheet::new("order", "Order 4821")
     .body(order_and_lines);
 ```
 
+## Backdrop
+
+A sheet dims the page behind it well back, so the sheet is all a reader looks at. When the sheet is a record read beside the list it came from, such as a deal opened from its table, `.backdrop(SheetBackdrop::Light)` dims the page only a little, so its rows stay readable. The sheet is modal either way: the page behind is inert and the focus stays in the sheet.
+
+```rust
+let deal = Sheet::new("deal", "Sutlej Supply renewal")
+    .width(SheetWidth::Lg)
+    .backdrop(SheetBackdrop::Light)
+    .body(details);
+```
+
+The [app shell's whole page](/docs/ui/app-shell/#a-whole-page) opens a deal this way over its table.
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -75,3 +88,7 @@ let order = Sheet::new("order", "Order 4821")
 ### SheetWidth
 
 <UiProps type="SheetWidth" />
+
+### SheetBackdrop
+
+<UiProps type="SheetBackdrop" />

@@ -35,3 +35,31 @@ fn no_preview_follows_a_stream() {
     }
     assert!(seen > 100, "{seen} previews");
 }
+
+/// A preview draws a drawer open with CSS, so its scrim stands in for the
+/// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
+/// own light value, and the default one the toolkit's default.
+#[test]
+fn a_previews_scrim_is_the_toolkits_backdrop() {
+    let preview = include_str!("../frame/preview.css");
+    let toolkit = include_str!("../../../crates/navree-ui/styles/30-overlays.css");
+    for (selector, toolkit_rule) in [
+        (
+            "dialog:not([open]))::after{content:\"\";position:fixed;inset:0;z-index:40;background:rgb(1 3 2/.72)}",
+            "&::backdrop{background:rgb(1 3 2/.72)}",
+        ),
+        (
+            "dialog[data-backdrop=light]:not([open]))::after{background:rgb(1 3 2/.4)}",
+            "&[data-backdrop=light]::backdrop{background:rgb(1 3 2/.4)}",
+        ),
+    ] {
+        assert!(
+            preview.contains(selector),
+            "the preview's scrim: {selector}"
+        );
+        assert!(
+            toolkit.contains(toolkit_rule),
+            "the toolkit's backdrop: {toolkit_rule}"
+        );
+    }
+}

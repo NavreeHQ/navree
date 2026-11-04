@@ -390,7 +390,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "sheet",
         "Sheet",
-        &["Sheet", "SheetSide", "SheetWidth"],
+        &["Sheet", "SheetSide", "SheetWidth", "SheetBackdrop"],
         "thumb",
     )
     .parts("thumb"),

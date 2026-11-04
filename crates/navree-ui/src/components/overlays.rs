@@ -242,13 +242,39 @@ impl SheetWidth {
     }
 }
 
+/// How much a [`Sheet`] darkens the page behind it. The sheet is modal either
+/// way: the focus stays inside it and the page behind is inert.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SheetBackdrop {
+    /// The page behind is dimmed well back. The default.
+    #[default]
+    Dim,
+    /// The page behind is dimmed a little and stays readable: for a record read
+    /// beside the list it came from, such as a deal opened from its table.
+    Light,
+}
+
+impl SheetBackdrop {
+    const fn value(self) -> Option<&'static str> {
+        match self {
+            Self::Dim => None,
+            Self::Light => Some("light"),
+        }
+    }
+}
+
 /// A dialog that slides in from an edge.
 ///
 /// ```
-/// use navree_ui::{Sheet, SheetWidth, render};
+/// use navree_ui::{Sheet, SheetBackdrop, SheetWidth, render};
 ///
 /// let sheet = Sheet::new("ticket", "Ticket 2041").width(SheetWidth::Lg);
 /// assert!(render(&sheet.into()).contains(r#"data-width="lg""#));
+///
+/// // A deal read beside its table: the table stays readable behind it.
+/// let deal = Sheet::new("deal", "Sutlej Supply renewal").backdrop(SheetBackdrop::Light);
+/// assert!(render(&deal.into()).contains(r#"data-backdrop="light""#));
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -256,6 +282,7 @@ pub struct Sheet {
     inner: Dialog,
     side: SheetSide,
     width: SheetWidth,
+    backdrop: SheetBackdrop,
 }
 
 impl Sheet {
@@ -265,7 +292,16 @@ impl Sheet {
             inner: Dialog::with_slot("sheet", id.into(), title.into()),
             side: SheetSide::Right,
             width: SheetWidth::Md,
+            backdrop: SheetBackdrop::Dim,
         }
+    }
+
+    /// Sets how much the page behind is darkened. [`SheetBackdrop::Light`] keeps
+    /// it readable, so a record can be read beside its list; the page is inert
+    /// either way.
+    pub fn backdrop(mut self, backdrop: SheetBackdrop) -> Self {
+        self.backdrop = backdrop;
+        self
     }
 
     /// Sets the edge.
@@ -304,7 +340,8 @@ impl Sheet {
             .inner
             .el
             .attr("data-side", self.side.as_str())
-            .attr_opt("data-width", self.width.value());
+            .attr_opt("data-width", self.width.value())
+            .attr_opt("data-backdrop", self.backdrop.value());
         self.inner.into_node()
     }
 }

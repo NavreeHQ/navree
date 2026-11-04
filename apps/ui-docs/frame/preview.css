@@ -22,6 +22,8 @@ body[data-preview-show] [data-preview-stage]{flex-direction:column}
    behind it: what the page looks like after a click. CSS only, so the page behind
    is drawn and nothing takes the focus or scrolls the site around the frame. */
 body[data-preview-open]:has([data-preview-open] > dialog:not([open]))::after{content:"";position:fixed;inset:0;z-index:40;background:rgb(1 3 2/.72)}
+/* The scrim of a sheet asked for a light backdrop, as navree-ui draws its ::backdrop. */
+body[data-preview-open]:has([data-preview-open] > dialog[data-backdrop=light]:not([open]))::after{background:rgb(1 3 2/.4)}
 body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;flex-direction:column;z-index:50}
 [data-preview-show] [data-slot=select-popup]:not(:popover-open){display:flex;flex-direction:column;position:relative;inset:auto;margin:6px 0 0;width:100%;max-width:none;height:auto}
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}

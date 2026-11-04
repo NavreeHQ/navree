@@ -8029,6 +8029,12 @@
     ],
     "methods": [
       {
+        "name": "backdrop",
+        "generics": "",
+        "args": "backdrop: SheetBackdrop",
+        "doc": "Sets how much the page behind is darkened. `SheetBackdrop::Light` keeps it readable, so a record can be read beside its list; the page is inert either way."
+      },
+      {
         "name": "side",
         "generics": "",
         "args": "side: SheetSide",
@@ -8060,6 +8066,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "SheetBackdrop": {
+    "name": "SheetBackdrop",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "How much a `Sheet` darkens the page behind it. The sheet is modal either way: the focus stays inside it and the page behind is inert.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Dim",
+        "doc": "The page behind is dimmed well back. The default.",
+        "default": true
+      },
+      {
+        "name": "Light",
+        "doc": "The page behind is dimmed a little and stays readable: for a record read beside the list it came from, such as a deal opened from its table.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "SheetSide": {
