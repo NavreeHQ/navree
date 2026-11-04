@@ -469,7 +469,9 @@ impl NumberFormat {
             }
         }
         let Some(mut at) = chosen else {
-            return self.format(value, locale);
+            // Below the first step a short number is the number itself. Never `format`:
+            // with `Compact::Always` that would come straight back here.
+            return self.format_with(value, locale, None);
         };
         // Past a thousand of the largest step, an exponent says more than more digits.
         if size >= 10f64.powi(i32::from(steps[steps.len() - 1].power) + 3) {
@@ -674,6 +676,24 @@ mod tests {
         );
         assert_eq!(NumberFormat::decimals(200).format(1.5, &en), "1.5");
         assert_eq!(n.format(1e20, &en), "100,000,000,000,000,000,000");
+    }
+
+    #[test]
+    fn always_compact_writes_values_below_its_first_step_in_full() {
+        let en = NumberLocale::english();
+        let short = NumberFormat::number().compact(Compact::Always);
+        assert_eq!(short.format(5.0, &en), "5");
+        assert_eq!(short.format(-999.0, &en), "-999");
+        assert_eq!(short.format(1_200.0, &en), "1.2K");
+        assert_eq!(short.format_places(0.5, &en, 1), "0.5");
+        assert_eq!(short.format_compact(0.0, &en), "0");
+        let none = NumberLocale {
+            compact: Cow::Borrowed(&[]),
+            ..NumberLocale::english()
+        };
+        assert_eq!(short.format(12_000.0, &none), "12,000");
+        let percent = NumberFormat::percent().compact(Compact::Always);
+        assert_eq!(percent.format(0.125, &en), "12.5%");
     }
 
     #[test]
