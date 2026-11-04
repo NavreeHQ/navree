@@ -256,7 +256,8 @@ impl TreeState {
     }
 
     fn read(&mut self, query: &str) {
-        for (name, value) in navree_http::extract::urlencoded::parse(query.as_bytes()).take(10_000) {
+        for (name, value) in navree_http::extract::urlencoded::parse(query.as_bytes()).take(10_000)
+        {
             if name == self.param.as_str() {
                 if self.open.len() < MAX_OPEN && !value.is_empty() && value.len() <= MAX_ID_BYTES {
                     self.open.insert(value.into_owned());
@@ -367,7 +368,10 @@ impl TreeSelection {
     }
 
     /// The one node a single-choice tree posted, or none.
-    pub fn one(pairs: &[(String, String)], name: &str) -> Result<Option<String>, TreeSelectionError> {
+    pub fn one(
+        pairs: &[(String, String)],
+        name: &str,
+    ) -> Result<Option<String>, TreeSelectionError> {
         let chosen = Self::parse(pairs, name)?;
         match chosen.ids.as_slice() {
             [] => Ok(None),
@@ -562,7 +566,16 @@ impl Tree {
         let cx = Cx { tree: self };
         let total = total.unwrap_or(offset + nodes.len());
         let (items, _) = self.items(&cx, &nodes, level.max(1), offset, total, false);
-        let more = more.map(|(href, remaining)| self.more_row(&More { href, label: None, remaining }, level.max(1)));
+        let more = more.map(|(href, remaining)| {
+            self.more_row(
+                &More {
+                    href,
+                    label: None,
+                    remaining,
+                },
+                level.max(1),
+            )
+        });
         TreeChildren {
             items: items.into_iter().chain(more).collect(),
         }
@@ -574,7 +587,11 @@ impl Tree {
     }
 
     fn state_of(&self, node: &TreeNode, inherited: bool) -> Check {
-        if node.selected || inherited { Check::On } else { Check::Off }
+        if node.selected || inherited {
+            Check::On
+        } else {
+            Check::Off
+        }
     }
 
     fn items(
@@ -592,7 +609,10 @@ impl Tree {
             .enumerate()
             .map(|(at, node)| {
                 let (item, check) = self.item(cx, node, level, offset + at + 1, total, inherited);
-                checks.push(check);
+                // A choice that is disabled is not the person's to make: it doesn't count.
+                if !node.disabled {
+                    checks.push(check);
+                }
                 item
             })
             .collect();
@@ -616,10 +636,13 @@ impl Tree {
             .slot("tree-more")
             .attr("data-level", i64::from(level))
             .child(
-                el("a")
-                    .slot("tree-more-link")
-                    .href(more.href.clone())
-                    .child(text),
+                el("div").slot("tree-row").child(
+                    el("a")
+                        .slot("tree-more-link")
+                        .attr("data-ui-noboost", "")
+                        .href(more.href.clone())
+                        .child(text),
+                ),
             )
     }
 
@@ -648,7 +671,10 @@ impl Tree {
             Kids::Loaded(children) => {
                 let total = node.total.unwrap_or(children.len());
                 let (items, overall) = self.items(cx, children, level + 1, 0, total, passes);
-                let more = node.more.as_ref().map(|more| self.more_row(more, level + 1));
+                let more = node
+                    .more
+                    .as_ref()
+                    .map(|more| self.more_row(more, level + 1));
                 let check = if self.cascades() && !children.is_empty() {
                     overall
                 } else if own {
@@ -662,20 +688,23 @@ impl Tree {
                 )
             }
             Kids::Lazy(src) => (
-                Some(
-                    el("ul")
-                        .slot("tree-group")
-                        .attr("data-src", src.clone()),
-                ),
+                Some(el("ul").slot("tree-group").attr("data-src", src.clone())),
                 if own { Check::On } else { Check::Off },
             ),
         };
         let text = node.label.text_content();
         let toggle = is_branch.then(|| {
-            let words = if open { &self.labels.collapse } else { &self.labels.expand };
+            let words = if open {
+                &self.labels.collapse
+            } else {
+                &self.labels.expand
+            };
             match &cx.tree.state {
+                // The module opens it in place; the address is for a page with no script, so the
+                // core runtime's link boosting must leave it alone.
                 Some(state) => el("a")
                     .slot("tree-toggle")
+                    .attr("data-ui-noboost", "")
                     .href(state.toggled(&node.id))
                     .attr("aria-label", words.replace("{label}", &text))
                     .child(icon(icons::CHEVRON_RIGHT)),
@@ -699,7 +728,11 @@ impl Tree {
                 None => el("span").slot("tree-label").children(label_body),
             },
             select => {
-                let kind = if select == TreeSelect::Single { "radio" } else { "checkbox" };
+                let kind = if select == TreeSelect::Single {
+                    "radio"
+                } else {
+                    "checkbox"
+                };
                 el("label").slot("tree-label").children((
                     el("input")
                         .slot(kind)
@@ -779,7 +812,13 @@ into_node!(Tree);
 /// The letters, digits, `-` and `_` of `text`; the rest becomes `_`.
 fn clean(text: &str) -> String {
     text.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -812,7 +851,10 @@ mod tests {
                 TreeNode::branch(
                     "docs",
                     "Documents",
-                    [TreeNode::leaf("docs/a", "Plans"), TreeNode::leaf("docs/b", "Notes")],
+                    [
+                        TreeNode::leaf("docs/a", "Plans"),
+                        TreeNode::leaf("docs/b", "Notes"),
+                    ],
                 )
                 .open(true),
             )
@@ -836,24 +878,45 @@ mod tests {
     #[test]
     fn sizes_and_positions_are_counted_including_pages_not_drawn() {
         let out = html(folders());
-        assert!(out.contains(r#"data-level="2" data-setsize="2" data-posinset="2""#), "{out}");
-        let paged = html(
-            Tree::new("t", "T").total(500).node(TreeNode::leaf("a", "A")).node(TreeNode::leaf("b", "B")),
+        assert!(
+            out.contains(r#"data-level="2" data-setsize="2" data-posinset="2""#),
+            "{out}"
         );
-        assert!(paged.contains(r#"data-setsize="500" data-posinset="2""#), "{paged}");
+        let paged = html(
+            Tree::new("t", "T")
+                .total(500)
+                .node(TreeNode::leaf("a", "A"))
+                .node(TreeNode::leaf("b", "B")),
+        );
+        assert!(
+            paged.contains(r#"data-setsize="500" data-posinset="2""#),
+            "{paged}"
+        );
     }
 
     #[test]
     fn carets_are_links_only_when_the_address_holds_the_open_set() {
         let plain = html(folders());
         assert!(!plain.contains("tree-toggle\" href"), "{plain}");
-        assert!(plain.contains(r#"<span data-slot="tree-toggle" aria-hidden="true">"#), "{plain}");
+        assert!(
+            plain.contains(r#"<span data-slot="tree-toggle" aria-hidden="true">"#),
+            "{plain}"
+        );
         let state = TreeState::from_query("/files", "q=1&open=docs");
         let linked = html(folders().state(state));
-        assert!(linked.contains(r#"<a data-slot="tree-toggle" href="/files?q=1""#), "{linked}");
-        assert!(linked.contains(r#"aria-label="Collapse Documents""#), "{linked}");
+        assert!(
+            linked.contains(r#"<a data-slot="tree-toggle" data-ui-noboost="" href="/files?q=1""#),
+            "{linked}"
+        );
+        assert!(
+            linked.contains(r#"aria-label="Collapse Documents""#),
+            "{linked}"
+        );
         assert!(linked.contains(r#"aria-label="Expand Music""#), "{linked}");
-        assert!(linked.contains("href=\"/files?q=1&amp;open=docs&amp;open=music\""), "{linked}");
+        assert!(
+            linked.contains("href=\"/files?q=1&amp;open=docs&amp;open=music\""),
+            "{linked}"
+        );
     }
 
     #[test]
@@ -862,7 +925,10 @@ mod tests {
         assert_eq!(state.open_ids().collect::<Vec<_>>(), ["one", "two/x"]);
         assert_eq!(state.toggled("one"), "/f?a=1&open=two%2Fx");
         let many: String = (0..500).map(|n| format!("open=n{n}&")).collect();
-        assert_eq!(TreeState::from_query("/f", &many).open_ids().count(), MAX_OPEN);
+        assert_eq!(
+            TreeState::from_query("/f", &many).open_ids().count(),
+            MAX_OPEN
+        );
         let long = format!("open={}", "x".repeat(300));
         assert_eq!(TreeState::from_query("/f", &long).open_ids().count(), 0);
         // Hostile ids are encoded in the links.
@@ -880,10 +946,18 @@ mod tests {
         assert_eq!(out.matches(r#"type="checkbox""#).count(), 5, "{out}");
         assert!(out.contains(r#"name="access" value="docs/a""#), "{out}");
         assert!(out.contains(r#"data-select="multiple""#), "{out}");
-        let one = html(folders().select(TreeSelect::Single).node(TreeNode::leaf("x", "X").selected(true)));
+        let one = html(
+            folders()
+                .select(TreeSelect::Single)
+                .node(TreeNode::leaf("x", "X").selected(true)),
+        );
         assert_eq!(one.matches(r#"type="radio""#).count(), 6, "{one}");
         assert!(one.contains(r#"value="x" checked"#), "{one}");
-        let off = html(Tree::new("t", "T").select(TreeSelect::Multiple).node(TreeNode::leaf("a", "A").disabled(true)));
+        let off = html(
+            Tree::new("t", "T")
+                .select(TreeSelect::Multiple)
+                .node(TreeNode::leaf("a", "A").disabled(true)),
+        );
         assert!(off.contains("disabled"), "{off}");
     }
 
@@ -892,9 +966,33 @@ mod tests {
         let tree = Tree::new("t", "T")
             .select(TreeSelect::Multiple)
             .cascade()
-            .node(TreeNode::branch("p", "P", [TreeNode::leaf("p1", "1").selected(true), TreeNode::leaf("p2", "2")]).open(true))
-            .node(TreeNode::branch("q", "Q", [TreeNode::leaf("q1", "1"), TreeNode::leaf("q2", "2")]).selected(true))
-            .node(TreeNode::branch("r", "R", [TreeNode::leaf("r1", "1").selected(true), TreeNode::leaf("r2", "2").selected(true)]));
+            .node(
+                TreeNode::branch(
+                    "p",
+                    "P",
+                    [
+                        TreeNode::leaf("p1", "1").selected(true),
+                        TreeNode::leaf("p2", "2"),
+                    ],
+                )
+                .open(true),
+            )
+            .node(
+                TreeNode::branch(
+                    "q",
+                    "Q",
+                    [TreeNode::leaf("q1", "1"), TreeNode::leaf("q2", "2")],
+                )
+                .selected(true),
+            )
+            .node(TreeNode::branch(
+                "r",
+                "R",
+                [
+                    TreeNode::leaf("r1", "1").selected(true),
+                    TreeNode::leaf("r2", "2").selected(true),
+                ],
+            ));
         let out = html(tree);
         assert!(out.contains(r#"data-checked="mixed""#), "{out}");
         // q is chosen, so q1 and q2 are too; r is chosen because both its children are.
@@ -917,10 +1015,19 @@ mod tests {
     #[test]
     fn show_more_is_a_link_in_the_list() {
         let out = html(
-            Tree::new("t", "T").node(TreeNode::branch("a", "A", [TreeNode::leaf("a1", "1")]).children_total(300).more("/a?after=1", Some(299))).more("/top?after=1", None),
+            Tree::new("t", "T")
+                .node(
+                    TreeNode::branch("a", "A", [TreeNode::leaf("a1", "1")])
+                        .children_total(300)
+                        .more("/a?after=1", Some(299)),
+                )
+                .more("/top?after=1", None),
         );
-        assert!(out.contains(r#"<a data-slot="tree-more-link" href="/a?after=1">Show more (299)</a>"#), "{out}");
-        assert!(out.contains(r#"href="/top?after=1">Show more</a>"#), "{out}");
+        assert!(out.contains(r#"data-slot="tree-more-link" data-ui-noboost="" href="/a?after=1">Show more (299)</a>"#), "{out}");
+        assert!(
+            out.contains(r#"href="/top?after=1">Show more</a>"#),
+            "{out}"
+        );
         assert!(out.contains(r#"data-setsize="300""#), "{out}");
     }
 
@@ -928,11 +1035,20 @@ mod tests {
     fn a_children_answer_is_list_items_with_the_right_positions() {
         let tree = Tree::new("t", "T").select(TreeSelect::Multiple);
         let answer: Node = tree
-            .children(2, 50, Some(120), [TreeNode::leaf("n51", "51"), TreeNode::leaf("n52", "52")], Some((Href::from("/p?after=52"), Some(68))))
+            .children(
+                2,
+                50,
+                Some(120),
+                [TreeNode::leaf("n51", "51"), TreeNode::leaf("n52", "52")],
+                Some((Href::from("/p?after=52"), Some(68))),
+            )
             .into();
         let out = render(&answer);
         assert!(out.starts_with("<li "), "{out}");
-        assert!(out.contains(r#"data-level="2" data-setsize="120" data-posinset="51""#), "{out}");
+        assert!(
+            out.contains(r#"data-level="2" data-setsize="120" data-posinset="51""#),
+            "{out}"
+        );
         assert!(out.contains(r#"data-posinset="52""#), "{out}");
         assert!(out.contains("Show more (68)"), "{out}");
         assert!(!out.contains("<ul data-slot=\"tree-root\""), "{out}");
@@ -946,14 +1062,21 @@ mod tests {
         }
         let out = html(Tree::new("deep", "Deep").node(node));
         assert_eq!(out.matches("<li ").count(), 51);
-        let wide = Tree::new("w", "W").nodes((0..10_000).map(|n| TreeNode::leaf(format!("n{n}"), format!("Node {n}"))));
+        let wide = Tree::new("w", "W")
+            .nodes((0..10_000).map(|n| TreeNode::leaf(format!("n{n}"), format!("Node {n}"))));
         assert_eq!(html(wide).matches("<li ").count(), 10_000);
         let hostile = html(
-            Tree::new("a\"><script>", "<b>").select(TreeSelect::Multiple).node(
-                TreeNode::lazy("\"><img src=x>", "<i>x</i>", "javascript:alert(1)").link("data:text/html,x"),
-            ),
+            Tree::new("a\"><script>", "<b>")
+                .select(TreeSelect::Multiple)
+                .node(
+                    TreeNode::lazy("\"><img src=x>", "<i>x</i>", "javascript:alert(1)")
+                        .link("data:text/html,x"),
+                ),
         );
-        assert!(!hostile.contains("<script>") && !hostile.contains("<img") && !hostile.contains("<i>"), "{hostile}");
+        assert!(
+            !hostile.contains("<script>") && !hostile.contains("<img") && !hostile.contains("<i>"),
+            "{hostile}"
+        );
         assert!(!hostile.contains("javascript:"), "{hostile}");
         // An id of a million bytes is cut.
         let big = html(Tree::new("t", "T").node(TreeNode::leaf("é".repeat(500_000), "x")));
@@ -969,24 +1092,47 @@ mod tests {
     #[test]
     fn the_selection_read_back_is_bounded_and_clean() {
         let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
-            list.iter().map(|(a, b)| ((*a).to_owned(), (*b).to_owned())).collect()
+            list.iter()
+                .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+                .collect()
         };
-        let chosen = TreeSelection::parse(&pairs(&[("t", "a"), ("t", ""), ("u", "x"), ("t", "b"), ("t", "a")]), "t").unwrap();
+        let chosen = TreeSelection::parse(
+            &pairs(&[("t", "a"), ("t", ""), ("u", "x"), ("t", "b"), ("t", "a")]),
+            "t",
+        )
+        .unwrap();
         assert_eq!(chosen.ids(), ["a", "b"]);
         assert!(chosen.contains("b") && !chosen.contains("x"));
         assert_eq!(chosen.first_unknown(|id| id == "a"), Some("b"));
         let long = "x".repeat(300);
-        assert_eq!(TreeSelection::parse(&pairs(&[("t", &long)]), "t"), Err(TreeSelectionError::TooLong));
-        let many: Vec<(String, String)> = (0..=MAX_IDS).map(|n| ("t".to_owned(), n.to_string())).collect();
-        assert_eq!(TreeSelection::parse(&many, "t"), Err(TreeSelectionError::TooMany));
-        assert_eq!(TreeSelection::one(&pairs(&[("t", "a")]), "t"), Ok(Some("a".to_owned())));
+        assert_eq!(
+            TreeSelection::parse(&pairs(&[("t", &long)]), "t"),
+            Err(TreeSelectionError::TooLong)
+        );
+        let many: Vec<(String, String)> = (0..=MAX_IDS)
+            .map(|n| ("t".to_owned(), n.to_string()))
+            .collect();
+        assert_eq!(
+            TreeSelection::parse(&many, "t"),
+            Err(TreeSelectionError::TooMany)
+        );
+        assert_eq!(
+            TreeSelection::one(&pairs(&[("t", "a")]), "t"),
+            Ok(Some("a".to_owned()))
+        );
         assert_eq!(TreeSelection::one(&pairs(&[]), "t"), Ok(None));
-        assert_eq!(TreeSelection::one(&pairs(&[("t", "a"), ("t", "b")]), "t"), Err(TreeSelectionError::NotOne));
+        assert_eq!(
+            TreeSelection::one(&pairs(&[("t", "a"), ("t", "b")]), "t"),
+            Err(TreeSelectionError::NotOne)
+        );
     }
 
     #[test]
     fn roots_drop_what_a_chosen_ancestor_already_covers_and_survive_a_cycle() {
-        let pairs: Vec<(String, String)> = ["a", "a/b", "a/b/c", "z"].iter().map(|id| ("t".to_owned(), (*id).to_owned())).collect();
+        let pairs: Vec<(String, String)> = ["a", "a/b", "a/b/c", "z"]
+            .iter()
+            .map(|id| ("t".to_owned(), (*id).to_owned()))
+            .collect();
         let chosen = TreeSelection::parse(&pairs, "t").unwrap();
         let parent = |id: &str| id.rsplit_once('/').map(|(up, _)| up.to_owned());
         assert_eq!(chosen.roots(parent), ["a", "z"]);

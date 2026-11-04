@@ -31,7 +31,9 @@ pub struct ToolbarLabels {
 
 impl Default for ToolbarLabels {
     fn default() -> Self {
-        Self { more: "More".into() }
+        Self {
+            more: "More".into(),
+        }
     }
 }
 
@@ -78,7 +80,7 @@ enum Kind {
     },
     Menu {
         label: Node,
-        menu: DropdownMenu,
+        menu: Box<DropdownMenu>,
     },
     Separator,
     Group {
@@ -217,7 +219,7 @@ impl ToolbarItem {
     pub fn menu(label: impl Into<Node>, menu: DropdownMenu) -> Self {
         Self::of(Kind::Menu {
             label: label.into(),
-            menu,
+            menu: Box::new(menu),
         })
     }
 
@@ -506,7 +508,10 @@ impl Toolbar {
                     twin = twin.opens_dialog(dialog.clone());
                 }
                 (
-                    self.button(&item.kind).map(Node::from).into_iter().collect(),
+                    self.button(&item.kind)
+                        .map(Node::from)
+                        .into_iter()
+                        .collect(),
                     vec![Twin::Item(twin)],
                 )
             }
@@ -522,7 +527,10 @@ impl Toolbar {
                     twin = twin.icon(*glyph);
                 }
                 (
-                    self.button(&item.kind).map(Node::from).into_iter().collect(),
+                    self.button(&item.kind)
+                        .map(Node::from)
+                        .into_iter()
+                        .collect(),
                     vec![Twin::Item(twin)],
                 )
             }
@@ -537,7 +545,10 @@ impl Toolbar {
                     twin = twin.icon(*glyph);
                 }
                 (
-                    self.button(&item.kind).map(Node::from).into_iter().collect(),
+                    self.button(&item.kind)
+                        .map(Node::from)
+                        .into_iter()
+                        .collect(),
                     vec![Twin::Item(twin)],
                 )
             }
@@ -564,11 +575,7 @@ impl Toolbar {
                     .slot("toolbar-toggle")
                     .flag("data-icon-only", *icon_only)
                     .flag("data-size-sm", self.size == Size::Sm)
-                    .children((
-                        input,
-                        glyph.map(icon),
-                        (!icon_only).then(|| label.clone()),
-                    ));
+                    .children((input, glyph.map(icon), (!icon_only).then(|| label.clone())));
                 let twin = MenuCheckbox::new("", label.clone())
                     .checked(*pressed)
                     .disabled(*disabled);
@@ -616,7 +623,7 @@ impl Toolbar {
                 (vec![group.into()], vec![Twin::Radios(twin)])
             }
             Kind::Menu { label, menu } => (
-                vec![menu.clone().into()],
+                vec![(**menu).clone().into()],
                 vec![Twin::Menu(menu.as_submenu(label.clone()))],
             ),
             Kind::Separator => (Vec::new(), Vec::new()),
@@ -645,7 +652,10 @@ impl Toolbar {
                         el("div")
                             .slot("toolbar-separator")
                             .attr("role", "separator")
-                            .attr("aria-orientation", if vertical { "horizontal" } else { "vertical" })
+                            .attr(
+                                "aria-orientation",
+                                if vertical { "horizontal" } else { "vertical" },
+                            )
                             .into(),
                     ],
                     Vec::new(),
@@ -701,7 +711,8 @@ impl Toolbar {
                 first_twin = false;
             }
         }
-        let more = (!owners.is_empty()).then(|| {
+        // A vertical bar doesn't give up tools: it has no overflow.
+        let more = (!owners.is_empty() && !vertical).then(|| {
             let mut node: Node = menu.into();
             tag_overflow(&mut node, &owners);
             el("div").slot("toolbar-more").child(node)
@@ -747,7 +758,11 @@ fn tag_overflow(node: &mut Node, owners: &[usize]) {
 fn tag_twin(node: &mut Node, owner: usize, counts: &mut std::collections::HashMap<usize, u32>) {
     match node {
         Node::Element(element) => {
-            set_attr(element, "data-twin", AttrValue::Int(i64::try_from(owner).unwrap_or(0)));
+            set_attr(
+                element,
+                "data-twin",
+                AttrValue::Int(i64::try_from(owner).unwrap_or(0)),
+            );
             set_attr(element, "hidden", AttrValue::Flag);
             // A twin of a toggle or a choice shares a key with the real input.
             number_inputs(node, owner, counts);
@@ -763,13 +778,21 @@ fn tag_twin(node: &mut Node, owner: usize, counts: &mut std::collections::HashMa
 }
 
 /// Gives the inputs inside `node` the keys of the real inputs they follow, in order.
-fn number_inputs(node: &mut Node, owner: usize, counts: &mut std::collections::HashMap<usize, u32>) {
+fn number_inputs(
+    node: &mut Node,
+    owner: usize,
+    counts: &mut std::collections::HashMap<usize, u32>,
+) {
     fn walk(node: &mut Node, owner: usize, n: &mut u32) {
         match node {
             Node::Element(element) => {
                 if element.tag == "input" {
                     *n += 1;
-                    set_attr(element, "data-twin-key", AttrValue::Text(format!("{owner}.{n}").into()));
+                    set_attr(
+                        element,
+                        "data-twin-key",
+                        AttrValue::Text(format!("{owner}.{n}").into()),
+                    );
                 }
                 for child in &mut element.children {
                     walk(child, owner, n);
@@ -811,30 +834,56 @@ mod tests {
                     .value("left")],
             ))
             .item(ToolbarItem::link("Help", "/help"))
-            .item(ToolbarItem::button("Copy").icon(icons::COPY).on_click(crate::Cmd::copy("x")))
+            .item(
+                ToolbarItem::button("Copy")
+                    .icon(icons::COPY)
+                    .on_click(crate::Cmd::copy("x")),
+            )
     }
 
     #[test]
     fn it_is_a_labelled_group_of_tools_until_the_module_runs() {
         let out = html(format_bar());
-        assert!(out.contains(r#"role="group" aria-label="Text formatting""#), "{out}");
+        assert!(
+            out.contains(r#"role="group" aria-label="Text formatting""#),
+            "{out}"
+        );
         assert!(!out.contains(r#"role="toolbar""#), "{out}");
         assert!(out.contains("data-ui-toolbar"), "{out}");
         assert!(out.contains(r#"data-orientation="horizontal""#), "{out}");
         assert!(out.contains("data-loop"), "{out}");
-        assert_eq!(out.matches(r#"data-slot="toolbar-tool""#).count(), 6, "{out}");
+        assert_eq!(
+            out.matches(r#"data-slot="toolbar-tool""#).count(),
+            6,
+            "{out}"
+        );
     }
 
     #[test]
     fn toggles_and_choices_are_native_inputs_that_post() {
         let out = html(format_bar());
-        assert!(out.contains(r#"type="checkbox" name="bold" value="on""#), "{out}");
+        assert!(
+            out.contains(r#"type="checkbox" name="bold" value="on""#),
+            "{out}"
+        );
         assert!(out.contains(r#"name="italic" value="on" checked"#), "{out}");
         assert!(out.contains(r#"aria-label="Bold""#), "{out}");
-        assert!(out.contains(r#"role="radiogroup" aria-label="Alignment""#), "{out}");
-        assert!(out.contains(r#"type="radio" name="align" value="left" checked"#), "{out}");
-        assert!(out.contains(r#"role="group" aria-label="Alignment""#), "a group of its own: {out}");
-        assert!(out.contains(r#"role="separator" aria-orientation="vertical""#), "{out}");
+        assert!(
+            out.contains(r#"role="radiogroup" aria-label="Alignment""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"type="radio" name="align" value="left" checked"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"role="group" aria-label="Alignment""#),
+            "a group of its own: {out}"
+        );
+        assert!(
+            out.contains(r#"role="separator" aria-orientation="vertical""#),
+            "{out}"
+        );
     }
 
     #[test]
@@ -846,9 +895,15 @@ mod tests {
         assert!(out.contains("hidden data-slot-more"), "{out}");
         assert_eq!(out.matches("data-twin=").count(), 7, "{out}");
         for owner in [0, 1, 3, 4, 5] {
-            assert!(out.contains(&format!(r#"data-twin="{owner}""#)), "tool {owner}: {out}");
+            assert!(
+                out.contains(&format!(r#"data-twin="{owner}""#)),
+                "tool {owner}: {out}"
+            );
         }
-        assert!(!out.contains(r#"data-twin="2""#), "a separator has no twin: {out}");
+        assert!(
+            !out.contains(r#"data-twin="2""#),
+            "a separator has no twin: {out}"
+        );
     }
 
     #[test]
@@ -875,7 +930,10 @@ mod tests {
         );
         assert!(out.contains(r#"id="share""#), "the real menu: {out}");
         assert!(out.contains(r#"href="/mail""#), "{out}");
-        assert!(out.matches(r#"href="/mail""#).count() == 2, "in the menu and in its twin: {out}");
+        assert!(
+            out.matches(r#"href="/mail""#).count() == 2,
+            "in the menu and in its twin: {out}"
+        );
         assert!(out.contains(r#"data-twin="1""#), "{out}");
     }
 
@@ -883,7 +941,10 @@ mod tests {
     fn a_post_tool_posts_through_the_page_form_and_the_page_gets_one() {
         let bar = Toolbar::new("t", "T").item(ToolbarItem::post("Archive", "/archive"));
         let out = html(bar.clone());
-        assert!(out.contains(r#"form="ui-post" formaction="/archive" formmethod="post""#), "{out}");
+        assert!(
+            out.contains(r#"form="ui-post" formaction="/archive" formmethod="post""#),
+            "{out}"
+        );
         let node: Node = bar.into();
         assert!(measure(&node).posts);
         assert!(measure(&node).uses.has(Uses::CORE) || measure(&node).posts);
@@ -905,9 +966,16 @@ mod tests {
     #[test]
     fn vertical_and_no_loop() {
         let out = html(format_bar().vertical().no_loop());
+        assert!(
+            !out.contains("toolbar-more") && !out.contains("data-twin="),
+            "a vertical bar has no overflow: {out}"
+        );
         assert!(out.contains(r#"data-orientation="vertical""#), "{out}");
         assert!(!out.contains("data-loop"), "{out}");
-        assert!(out.contains(r#"role="separator" aria-orientation="horizontal""#), "{out}");
+        assert!(
+            out.contains(r#"role="separator" aria-orientation="horizontal""#),
+            "{out}"
+        );
     }
 
     #[test]
@@ -917,7 +985,10 @@ mod tests {
         assert!(!empty.contains("toolbar-more"), "{empty}");
         let only_separator = html(Toolbar::new("s", "S").item(ToolbarItem::separator()));
         assert!(!only_separator.contains("toolbar-more"), "{only_separator}");
-        let many = html(Toolbar::new("m", "Many").items((0..200).map(|n| ToolbarItem::button(format!("Tool {n}")))));
+        let many = html(
+            Toolbar::new("m", "Many")
+                .items((0..200).map(|n| ToolbarItem::button(format!("Tool {n}")))),
+        );
         assert_eq!(many.matches(r#"data-slot="toolbar-tool""#).count(), 200);
         assert_eq!(many.matches("data-twin=").count(), 200);
     }
@@ -929,9 +1000,19 @@ mod tests {
                 .item(ToolbarItem::button("<img src=x onerror=y>"))
                 .item(ToolbarItem::link("l", "javascript:alert(1)"))
                 .item(ToolbarItem::toggle("n\"><i>", "<u>"))
-                .item(ToolbarItem::group("</div><script>", [ToolbarItem::radios("r", "<i>").option("\"><script>", "<s>")])),
+                .item(ToolbarItem::group(
+                    "</div><script>",
+                    [ToolbarItem::radios("r", "<i>").option("\"><script>", "<s>")],
+                )),
         );
-        assert!(!out.contains("<script>") && !out.contains("<img") && !out.contains("<b>") && !out.contains("<u>") && !out.contains("<s>"), "{out}");
+        assert!(
+            !out.contains("<script>")
+                && !out.contains("<img")
+                && !out.contains("<b>")
+                && !out.contains("<u>")
+                && !out.contains("<s>"),
+            "{out}"
+        );
         assert!(!out.contains("javascript:"), "{out}");
     }
 
@@ -939,7 +1020,10 @@ mod tests {
     fn it_asks_for_the_toolbar_module_and_the_menus_it_holds() {
         let node: Node = format_bar().into();
         let uses = measure(&node).uses;
-        assert!(uses.has(Uses::TOOLBAR) && uses.has(Uses::MENUS) && uses.has(Uses::OVERLAY), "{uses:?}");
+        assert!(
+            uses.has(Uses::TOOLBAR) && uses.has(Uses::MENUS) && uses.has(Uses::OVERLAY),
+            "{uses:?}"
+        );
         assert!(!uses.has(Uses::SLIDER) && !uses.has(Uses::TREE));
     }
 }
