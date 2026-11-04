@@ -6,6 +6,8 @@
  * - `/changelog/` exists, lists changes newest first and day by day, links
  *   each one to its commit, and has no date in the future;
  * - the Atom feed parses as a feed and its newest entry is the page's newest day;
+ * - every scope the changelog leaves out as retired is really gone from the
+ *   repository, and neither the page nor the feed shows it;
  * - the sitemap's `lastmod` of `/changelog/` is the date of the newest commit;
  * - every docs page's `dateModified` is the `lastmod` the sitemap gives it,
  *   and so is every other page's: one date per page, from git;
@@ -16,7 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { OUT, SITE, WEBSITE, finish, nodes, pages, requireOut, typesOf } from "./lib/site-html.ts";
-import { changelog } from "../src/lib/changelog.ts";
+import { RETIRED_SCOPES, changelog } from "../src/lib/changelog.ts";
 import { latestCommit } from "../src/lib/last-modified.ts";
 
 requireOut("check-fresh");
@@ -63,6 +65,21 @@ else {
   }
 }
 
+// --------------------------------------------------------- retired scopes
+
+const root = path.join(WEBSITE, "..", "..");
+const workspace = fs.readFileSync(path.join(root, "Cargo.toml"), "utf8");
+const feedText = fs.existsSync(feedFile) ? fs.readFileSync(feedFile, "utf8") : "";
+for (const scope of RETIRED_SCOPES) {
+  for (const dir of ["apps", "crates"]) {
+    if (fs.existsSync(path.join(root, dir, scope))) problems.push(`changelog.ts lists "${scope}" as retired, but ${dir}/${scope} is still in the repository`);
+    if (workspace.includes(`"${dir}/${scope}"`)) problems.push(`changelog.ts lists "${scope}" as retired, but Cargo.toml still has ${dir}/${scope} as a member`);
+  }
+  if (days.some((day) => day.changes.some((change) => change.scope === scope))) problems.push(`the changelog still lists a change in the retired scope "${scope}"`);
+  if (page?.body.includes(`>${scope}</span>`)) problems.push(`/changelog/ shows a change in the retired scope "${scope}"`);
+  if (feedText.includes(` (${scope}):`)) problems.push(`/changelog/feed.xml shows a change in the retired scope "${scope}"`);
+}
+
 // ------------------------------------------------------- one date per page
 
 const sitemap = fs.readFileSync(path.join(OUT, "sitemap.xml"), "utf8");
@@ -107,5 +124,5 @@ else {
 finish(
   "check-fresh",
   problems,
-  `changelog with ${days.length} days (newest ${days[0]?.day ?? "none"}), its feed, ${dated} pages with one git date in the sitemap and the structured data, the IndexNow key in place`,
+  `changelog with ${days.length} days (newest ${days[0]?.day ?? "none"}), its feed, ${RETIRED_SCOPES.length} retired scope${RETIRED_SCOPES.length === 1 ? "" : "s"} left out, ${dated} pages with one git date in the sitemap and the structured data, the IndexNow key in place`,
 );

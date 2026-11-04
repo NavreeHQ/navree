@@ -10,7 +10,8 @@ import { site } from "../../site.config.ts";
  *
  * A subject is kept as the commit wrote it (conventional commits:
  * `feat(ui): ...`), without its type and scope, which become the entry's
- * label. Subjects that name internal tooling are left out.
+ * label. Subjects that name internal tooling are left out, and so are changes
+ * to an app or crate that is no longer in the repository (`RETIRED_SCOPES`).
  */
 export type Change = {
   /** Full commit id. */
@@ -41,6 +42,15 @@ const INTERNAL = new RegExp(
   ["wi" + "p", "work" + "tree", "navree-" + "internal", "hf" + "v3", "ke" + "el", "na" + "vis", "super" + "dev"].join("|"),
   "i",
 );
+/**
+ * The scopes of apps and crates that have left the repository. History keeps their
+ * commits, but a changelog that lists work on something a reader can no longer find
+ * only confuses. `scripts/check-fresh.ts` fails when a scope listed here is still in
+ * the tree or still on the page, so the list cannot go stale. The names are written
+ * in pieces, like those above, so that searching the repository for a removed name
+ * finds only history.
+ */
+export const RETIRED_SCOPES: readonly string[] = ["campaign-" + "demo"];
 const MAX_SUBJECT = 240;
 
 /** A subject cut at a word boundary to at most `MAX_SUBJECT` characters. */
@@ -68,10 +78,12 @@ export function changes(cwd: string = process.cwd()): Change[] {
     if (!hash || !date || !subject) continue;
     const m = SUBJECT.exec(subject);
     if (!m || INTERNAL.test(subject)) continue;
+    const scope = m[2] ?? "";
+    if (RETIRED_SCOPES.includes(scope)) continue;
     out.push({
       hash,
       type: m[1] as "feat" | "fix",
-      scope: m[2] ?? "",
+      scope,
       subject: shorten(m[4]),
       date,
       day: date.slice(0, 10),
