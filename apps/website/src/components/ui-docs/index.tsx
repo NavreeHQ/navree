@@ -42,6 +42,7 @@ import {
   type Slot,
   type TypeDoc,
 } from "./data";
+import { LiveDemo } from "./live-demo";
 import { PreviewCard } from "./preview-card";
 import { PreviewFrame } from "./preview-frame";
 import { flagWeightsText } from "./weights";
@@ -58,27 +59,40 @@ const PHONE_HEIGHT = 640;
 /**
  * `<UiPreview example="button/variants" />`. With `defer`, the frame loads only
  * after the page has, as it nears the screen: for a whole page drawn below the fold.
+ * With `live`, an address under `/demo/ui/`, the frame shows that page of the live
+ * demo app when the demo answers, and the example's picture when it doesn't.
  */
-export async function UiPreview({ example: id, defer = false }: { example: string; defer?: boolean }) {
+export async function UiPreview({
+  example: id,
+  defer = false,
+  live,
+}: {
+  example: string;
+  defer?: boolean;
+  live?: string;
+}) {
   const example = findExample(id);
   const html = await highlight(example.code, "rust");
   const owner = findComponent(example.component);
+  if (live && !live.startsWith("/demo/ui/")) throw new Error(`UI docs: ${id}: a live preview is a page under /demo/ui/, not ${live}`);
+  const title = `${owner.name}: ${example.title}, rendered by navree-ui`;
+  const picture = (
+    <PreviewFrame
+      src={example.src}
+      title={title}
+      height={startHeight(example)}
+      width={example.width}
+      fit={example.fit}
+      phoneHeight={example.fit ? undefined : PHONE_HEIGHT}
+      defer={defer}
+    />
+  );
   return (
     <PreviewCard
       label={`${owner.name}: ${example.title}`}
       src={example.src}
       codeText={example.code}
-      preview={
-        <PreviewFrame
-          src={example.src}
-          title={`${owner.name}: ${example.title}, rendered by navree-ui`}
-          height={startHeight(example)}
-          width={example.width}
-          fit={example.fit}
-          phoneHeight={example.fit ? undefined : PHONE_HEIGHT}
-          defer={defer}
-        />
-      }
+      preview={live ? <LiveDemo live={live} title={title} picture={picture} /> : picture}
       code={<div dangerouslySetInnerHTML={{ __html: html }} />}
     />
   );

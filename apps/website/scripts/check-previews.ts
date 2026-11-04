@@ -26,6 +26,14 @@
  *                                                         src/components/ui-docs/heights.json
  *
  * After `--measure`, build again: the frames then start at the height they settle at.
+ *
+ * The theme builder's docs show the live demo (`apps/theme-demo`, at `/demo/ui/`)
+ * when it answers, and a picture when it doesn't. `DEMO=live` requires the live
+ * demo and works every control of it against the demo's server; `DEMO=down`
+ * requires the picture. With the demo running (`cargo run -p theme-demo`):
+ *
+ *   DEMO_UI=http://127.0.0.1:8095 DEMO=live PAGES=/docs/ui/theme-builder/ pnpm check:previews
+ *   DEMO=down PAGES=/docs/ui/theme-builder/ pnpm check:previews      with the demo stopped
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -38,6 +46,10 @@ import { OUT, WEBSITE, htmlFiles, requireOut } from "./lib/site-html.ts";
 
 const MEASURE = process.argv.includes("--measure");
 const HEIGHTS = path.join(WEBSITE, "src/components/ui-docs/heights.json");
+/** What the theme builder's docs must show: the live demo, the picture, or either. */
+const DEMO = process.env.DEMO === "live" || process.env.DEMO === "down" ? process.env.DEMO : null;
+/** Where the live demo's pages are. */
+const LIVE = "/demo/ui/";
 
 /** What opens something: a popover's button, a dialog's, a select, a combobox, a multi-select. */
 const OPENERS = [
@@ -54,8 +66,14 @@ const MOST_SUBMITS = 6;
 const JUMP = 4;
 /** The fewest rows a list must show, unless it has fewer. */
 const ROWS = 5;
-/** Errors that are not the previews': the CDN's analytics beacon, which only the live site adds. */
-const ALLOWED = [/cloudflareinsights/];
+/**
+ * Errors that are not the previews': the CDN's analytics beacon, which only the live
+ * site adds, the theme builder's question whether the live demo is up, which a
+ * site without it answers with an error, as it should, and the live demo's 422 for
+ * an import that isn't a theme, which its own check asks for.
+ */
+const ALLOWED = [/cloudflareinsights/, /\/demo\/ui\/health/, /\/demo\/ui\/themes\/builder\/import/];
+const allowed = (...said: string[]) => ALLOWED.some((pattern) => said.some((text) => pattern.test(text)));
 
 const viewports = (process.env.VIEWPORTS ?? "1440x900,390x844")
   .split(",")
@@ -171,6 +189,35 @@ const own: Record<string, (page: Page, frame: Frame, iframe: Locator, fail: (wha
     if (!said.includes("/settings/theme?")) fail(`choosing an accent says nothing about the server it needs ("${said}")`);
     if (frame.url() !== at) fail(`choosing an accent sent the frame to ${frame.url()}`);
   },
+  // The live demo: every control, end to end against the demo's server.
+  "theme-builder/live": async (_page, frame, _iframe, fail) => {
+    const html = () => frame.evaluate(() => [document.documentElement.dataset.theme ?? "", location.pathname + location.search]);
+    // A choice redraws the page in the new draft, and the address carries it.
+    await frame.locator("label[data-slot=theme-choice]", { hasText: "Violet" }).first().click();
+    await frame.waitForFunction(() => location.search.includes("accent=violet"), undefined, { timeout: 5000 }).catch(() => {});
+    const [theme, at] = await html();
+    if (!at.includes("accent=violet")) fail(`choosing Violet leaves the address at ${at}`);
+    if (!theme.startsWith("c")) fail(`choosing Violet leaves the page in "${theme}", not the draft`);
+    if (!(await frame.locator("input[name=accent][value=violet]").isChecked())) fail("Violet is not chosen after the page is redrawn");
+    // Save checks the theme on the server and says so; nothing is kept.
+    await frame.locator("form[data-slot=theme-save] button[type=submit]").first().click();
+    await frame.waitForSelector("[data-slot=toast]", { timeout: 5000 }).catch(() => {});
+    const toast = await frame.locator("[data-slot=toast]").first().textContent().catch(() => "");
+    if (!toast?.includes("passes every check")) fail(`Save says "${toast ?? ""}"`);
+    // Import reads a stored theme, and says why one isn't.
+    await frame.locator("form[data-slot=theme-import] textarea[name=json]").fill("not a theme");
+    await frame.locator("form[data-slot=theme-import] button[type=submit]").first().click();
+    await frame.waitForSelector("form[data-slot=theme-import] [data-slot=field-error]", { timeout: 5000 }).catch(() => {});
+    if (!(await frame.locator("form[data-slot=theme-import] [data-slot=field-error]").count())) fail("Import of a text that isn't a theme says nothing");
+    // The theme menu keeps the reader's choice in their cookie, and the next page is drawn in it.
+    await frame.goto(new URL(`${LIVE}themes`, frame.url()).href);
+    await frame.locator("[popovertarget][aria-label=Appearance]").first().click();
+    await frame.locator(":popover-open label[data-slot=theme-card]", { hasText: "Violet" }).first().click();
+    await frame.waitForFunction(() => document.documentElement.dataset.theme === "violet", undefined, { timeout: 5000 }).catch(() => {});
+    const [chosen] = await html();
+    if (chosen !== "violet") fail(`choosing Violet in the theme menu leaves the theme "${chosen}"`);
+    if (!new URL(frame.url()).pathname.startsWith(LIVE)) fail(`the live demo left /demo/ui/ for ${frame.url()}`);
+  },
   "themes/menu": async (_page, frame, _iframe, fail) => {
     await frame.locator("[popovertarget][aria-label=Appearance]").first().click();
     await wait(300);
@@ -228,15 +275,24 @@ async function main() {
       page.on("pageerror", (error) => fail(`uncaught: ${error.message.split("\n")[0]}`));
       page.on("console", (message) => {
         const text = message.text();
-        if (message.type() === "error" && !ALLOWED.some((allowed) => allowed.test(text))) fail(`console: ${text.split("\n")[0]}`);
+        if (message.type() === "error" && !allowed(text, message.location().url)) fail(`console: ${text.split("\n")[0]}`);
       });
       page.on("response", (response) => {
         const url = response.url();
-        if (response.status() >= 400 && !ALLOWED.some((allowed) => allowed.test(url))) fail(`${response.status()} for ${url}`);
+        if (response.status() >= 400 && !allowed(url)) fail(`${response.status()} for ${url}`);
       });
       for (const url of pages) {
         where = url;
         await page.goto(`${base}${url}`, { waitUntil: "load" });
+        // The theme builder's docs ask the live demo whether it is up, then show it or the picture.
+        const demo = page.locator("[data-live-demo]");
+        if (await demo.count()) {
+          await page.waitForFunction(() => document.querySelector("[data-live-demo]")?.getAttribute("data-live-demo") !== "asking", undefined, { timeout: 5000 }).catch(() => {});
+          const shown = await demo.first().getAttribute("data-live-demo");
+          if (DEMO === "live" && shown !== "live") fail(`the live demo is not shown (${shown})`);
+          if (DEMO === "down" && shown !== "picture") fail(`the picture is not shown while the demo is down (${shown})`);
+          if (shown === "picture" && !(await demo.first().textContent())?.includes("isn't answering")) fail("the picture doesn't say the demo isn't answering");
+        }
         const iframes = page.locator(".ui-preview iframe");
         const count = await iframes.count();
         for (let i = 0; i < count; i++) {
@@ -245,7 +301,8 @@ async function main() {
           // A deferred frame asks for its page as it nears the screen.
           await page.waitForFunction((el) => !!el?.getAttribute("src"), await iframe.elementHandle(), { timeout: 8000 }).catch(() => {});
           const src = (await iframe.getAttribute("src")) ?? "";
-          const id = src.replace(/^.*\/ui-preview\//, "").replace(/\.html$/, "");
+          const live = src.startsWith(LIVE);
+          const id = live ? "theme-builder/live" : src.replace(/^.*\/ui-preview\//, "").replace(/\.html$/, "");
           where = `${url} ${id}`;
           const frame = await (await iframe.elementHandle())?.contentFrame();
           if (!frame || !src) {
@@ -253,7 +310,7 @@ async function main() {
             continue;
           }
           try {
-            await frame.waitForSelector("[data-preview-stage]", { timeout: 8000 });
+            await frame.waitForSelector(live ? "[data-slot=theme-builder]" : "[data-preview-stage]", { timeout: 8000 });
           } catch {
             fail("the preview did not load");
             continue;
@@ -262,7 +319,7 @@ async function main() {
           await wait(400);
           frames++;
           const home = frame.url();
-          if (MEASURE && viewport === viewports[0] && !(id in heights)) heights[id] = await heightOf(frame);
+          if (MEASURE && !live && viewport === viewports[0] && !(id in heights)) heights[id] = await heightOf(frame);
 
           // Every opener, one at a time.
           const openers = frame.locator(OPENERS);
@@ -324,9 +381,10 @@ async function main() {
             await closeAll(page, frame);
           }
 
-          // A submit says what it would send; nothing is posted and the frame stays.
+          // A submit says what it would send; nothing is posted and the frame stays. The
+          // live demo's forms post to its server, which its own check works through.
           const submits = frame.locator("button[type=submit], input[type=submit]");
-          const sent = Math.min(await submits.count(), MOST_SUBMITS);
+          const sent = live ? 0 : Math.min(await submits.count(), MOST_SUBMITS);
           for (let k = 0; k < sent; k++) {
             const submit = submits.nth(k);
             if (!(await submit.isVisible()) || !(await submit.isEnabled())) continue;
@@ -344,7 +402,8 @@ async function main() {
             }
             await closeAll(page, frame);
           }
-          if (frame.url() !== home) fail(`the frame was sent to ${frame.url()}`);
+          const stayed = live ? new URL(frame.url()).pathname.startsWith(LIVE) : frame.url() === home;
+          if (!stayed) fail(`the frame was sent to ${frame.url()}`);
           where = url;
         }
       }

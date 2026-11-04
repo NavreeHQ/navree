@@ -11,6 +11,7 @@
  *
  *   pnpm build && pnpm serve            # http://127.0.0.1:3211
  *   PORT=4000 pnpm serve
+ *   DEMO_UI=http://127.0.0.1:8095 pnpm serve    # with the live theme demo (`cargo run -p theme-demo`)
  */
 import fs from "node:fs";
 import http from "node:http";
@@ -79,10 +80,43 @@ if (!fs.existsSync(OUT)) {
   process.exit(1);
 }
 
+/**
+ * With `DEMO_UI` (the live theme demo's address, `http://127.0.0.1:8095`), the
+ * demo's pages and the toolkit's files and routes are passed to it, as the live
+ * site's reverse proxy passes them: `/demo/ui/` and `/_navree/ui/`.
+ */
+const DEMO_UI = process.env.DEMO_UI ? new URL(process.env.DEMO_UI) : null;
+const DEMO_PATHS = ["/demo/ui/", "/demo/ui", "/_navree/ui/"];
+
+function toDemo(req: http.IncomingMessage, res: http.ServerResponse, demo: URL) {
+  const upstream = http.request(
+    {
+      hostname: demo.hostname,
+      port: demo.port,
+      method: req.method,
+      path: req.url,
+      headers: { ...req.headers, "x-forwarded-for": req.socket.remoteAddress ?? "127.0.0.1", "x-forwarded-proto": "http" },
+    },
+    (answer) => {
+      res.writeHead(answer.statusCode ?? 502, answer.headers);
+      answer.pipe(res);
+    },
+  );
+  upstream.on("error", () => {
+    if (!res.headersSent) res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("The theme demo isn't answering.");
+  });
+  req.pipe(upstream);
+}
+
 http
   .createServer((req, res) => {
     const url = req.url ?? "/";
     const pathname = url.split("?")[0];
+    if (DEMO_UI && DEMO_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) {
+      toDemo(req, res, DEMO_UI);
+      return;
+    }
     // Directory URLs without the trailing slash redirect, like most hosts.
     if (!pathname.endsWith("/") && !path.extname(pathname) && fs.existsSync(path.join(OUT, pathname, "index.html"))) {
       res.writeHead(308, { Location: `${pathname}/` });

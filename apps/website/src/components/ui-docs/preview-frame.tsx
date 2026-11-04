@@ -199,6 +199,8 @@ export function PreviewFrame({
   thumb = false,
   phoneHeight,
   defer = false,
+  forms = false,
+  onLoad,
   className,
 }: {
   src: string;
@@ -213,6 +215,13 @@ export function PreviewFrame({
   phoneHeight?: number;
   /** Load only after the page has loaded, as the frame nears the screen. */
   defer?: boolean;
+  /**
+   * Let the page's forms post: only for a page with a server behind it (the live
+   * theme demo). A preview has none, so its forms never post, whatever its script does.
+   */
+  forms?: boolean;
+  /** Called each time a page has loaded in the frame. */
+  onLoad?: (frame: HTMLIFrameElement) => void;
   className?: string;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
@@ -220,6 +229,10 @@ export function PreviewFrame({
   const remeasure = useRef<() => void>(() => {});
   const overlays = useRef<Watch>(IDLE);
   const grown = useRef(false);
+  const loaded = useRef(onLoad);
+  useEffect(() => {
+    loaded.current = onLoad;
+  });
   const [size, setSize] = useState(height);
   const [room, setRoom] = useState(0);
   const [scale, setScale] = useState(1);
@@ -316,6 +329,14 @@ export function PreviewFrame({
     };
   }, [thumb]);
 
+  useEffect(() => {
+    const frame = ref.current;
+    if (!frame) return;
+    const tell = () => loaded.current?.(frame);
+    frame.addEventListener("load", tell);
+    return () => frame.removeEventListener("load", tell);
+  }, []);
+
   // The frame is back at its height, drawn: the preview's body may follow it again,
   // and what it shows is measured afresh.
   useEffect(() => {
@@ -349,7 +370,7 @@ export function PreviewFrame({
       data-deferred={defer || undefined}
       title={title}
       loading="lazy"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox={forms ? "allow-scripts allow-same-origin allow-forms" : "allow-scripts allow-same-origin"}
       {...(thumb ? { "aria-hidden": true, tabIndex: -1 } : {})}
       style={
         phoneMode

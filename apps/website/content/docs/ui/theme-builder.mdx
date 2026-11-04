@@ -3,9 +3,9 @@ title: "Theme builder"
 description: "A page your developers or an app's admins use to build a theme: colours, corners, density and font, real components in light and dark, a contrast check, and Rust or JSON to take away."
 ---
 
-<UiPreview example="theme-builder/default" />
+<UiPreview example="theme-builder/default" live="/demo/ui/themes/builder?base=ocean&mode=dark" />
 
-The preview above is the builder as navree-ui draws it for one draft, Ocean in dark mode, with the whole page in that draft. This site has no server behind it, so here a choice, Save or Import tells you what your app would ask its server for, rather than drawing a new draft. In your app, each change redraws the page.
+The builder above runs live: a small Navree app behind this site serves it, so every choice redraws the page, Save checks the theme and Import reads one. The demo keeps nothing; a draft lives in its address. When the demo doesn't answer, you see a picture of the builder for one draft, Ocean in dark mode, and each control tells you what your app would ask its server for.
 
 The theme builder is a page you add to your app. Start from a built-in theme, pick an accent, the greys, the corners, the density and a font, or set any colour by hand. The page shows the result as you go: the whole page takes the draft, and real components are drawn in it in light and dark side by side. A contrast check lists every pair, and a theme whose text fails WCAG AA can't be saved or exported.
 
