@@ -18,9 +18,10 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
+import net from "node:net";
 import path from "node:path";
 
-import { chromium, type Page } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 
 import { WEBSITE, requireOut } from "./lib/site-html.ts";
 
@@ -54,28 +55,62 @@ function rewriteAddresses(html: string): string {
 
 const ready = (url: string) =>
   new Promise<boolean>((resolve) => {
-    http
+    const request = http
       .get(url, (res) => {
         res.resume();
         resolve((res.statusCode ?? 500) < 500);
       })
       .on("error", () => resolve(false));
+    // A server that takes the connection and never answers is not ready; ask again.
+    request.setTimeout(2000, () => request.destroy());
   });
+
+/** A port nothing listens on: the system picks it. */
+const freePort = () =>
+  new Promise<number>((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as net.AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
+
+/**
+ * How long a server that was started may take to answer. A cold machine is slow, so this
+ * ends a hang and is not a deadline: the script waits for the server to answer, however
+ * long that takes within it, and stops at once if the server exits.
+ */
+const SERVER_START_LIMIT_MS = 120_000;
+
+async function waitUntilServing(base: string, server: ChildProcess) {
+  const exit: { reason: string | null } = { reason: null };
+  server.once("exit", (code, signal) => {
+    exit.reason = `code ${code}, signal ${signal}`;
+  });
+  const deadline = Date.now() + SERVER_START_LIMIT_MS;
+  while (!(await ready(`${base}/`))) {
+    if (exit.reason) throw new Error(`check-console: the server stopped before it answered (${exit.reason})`);
+    if (Date.now() > deadline) throw new Error(`check-console: the server at ${base} did not answer within ${SERVER_START_LIMIT_MS / 1000} s`);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 async function main() {
   let server: ChildProcess | null = null;
   let base = process.env.BASE_URL ?? "";
   if (!base) {
     requireOut("check-console");
-    const port = String(30000 + Math.floor(Math.random() * 20000));
+    const port = String(await freePort());
     base = `http://127.0.0.1:${port}`;
-    server = spawn(process.execPath, [path.join(WEBSITE, "scripts", "serve.ts")], { env: { ...process.env, PORT: port }, stdio: "ignore" });
-    for (let i = 0; i < 50 && !(await ready(`${base}/`)); i++) await new Promise((r) => setTimeout(r, 200));
+    server = spawn(process.execPath, [path.join(WEBSITE, "scripts", "serve.ts")], { env: { ...process.env, PORT: port }, stdio: ["ignore", "ignore", "inherit"] });
   }
 
   const problems: string[] = [];
-  const browser = await chromium.launch();
+  let browser: Browser | null = null;
   try {
+    if (server) await waitUntilServing(base, server);
+    browser = await chromium.launch();
     for (const rewritten of [false, true]) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       if (rewritten) {
@@ -101,7 +136,7 @@ async function main() {
       await context.close();
     }
   } finally {
-    await browser.close();
+    await browser?.close();
     server?.kill();
   }
 

@@ -65,8 +65,9 @@ for (const name of NAMES) {
       await page.goto(BASE + path);
       if (light) {
         await page.addStyleTag({ content: LIGHT });
-        // The page's colours ease from dark to light; axe reads them once they have.
-        await page.waitForTimeout(300);
+        // The page's colours ease from dark to light; axe reads them once they have: the page
+        // is light and no transition is still running. (Not a time: a busy machine eases slowly.)
+        await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(255, 255, 255)" && !document.getAnimations().some((a) => a instanceof CSSTransition && a.playState === "running"));
       }
       page.done = async () => {
         const csp = rest.javaScriptEnabled === false ? [] : await page.evaluate(() => window.__csp || []);

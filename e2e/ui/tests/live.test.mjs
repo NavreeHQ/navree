@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
-import { page as shell, sleep, start } from "./support/stream.mjs";
+import { gaps, page as shell, sleep, start, until } from "./support/stream.mjs";
 
 const ENGINES = { chromium, firefox, webkit };
 const NAMES = (process.env.UI_BROWSERS || "chromium,firefox").split(",").filter((n) => ENGINES[n]);
@@ -16,6 +16,22 @@ const NAMES = (process.env.UI_BROWSERS || "chromium,firefox").split(",").filter(
 const region = (extra = "") => `<div id="r" data-ui-region data-ui-src="/frag" data-ui-live-src="/sse"${extra}>v0</div>`;
 const live = (page, id = "r") => page.evaluate((i) => document.getElementById(i)?.getAttribute("data-live"), id);
 const waitLive = (page, state, id = "r", timeout = 8000) => page.waitForFunction(([i, s]) => document.getElementById(i)?.getAttribute("data-live") === s, [id, state], { timeout });
+
+/**
+ * The runtime reopens a failed stream after 1 s, then 2 s, 4 s, ... (each plus up to a
+ * quarter). `times` are the moments the connections arrived: the n-th gap is at least the n-th
+ * delay, whatever else the page does meanwhile, and no more than that delay plus the quarter
+ * plus a margin for a slow machine (the timers of a page in a busy browser run late).
+ */
+function followsTheBackoff(times, gapsExpected) {
+  const seen = gaps(times);
+  assert.ok(seen.length >= gapsExpected, `${times.length} connections, ${seen.length} gaps`);
+  for (let i = 0; i < gapsExpected; i++) {
+    const delay = 1000 * 2 ** i;
+    assert.ok(seen[i] >= delay * 0.9, `connection ${i + 2} came ${seen[i]} ms after connection ${i + 1}: the backoff is ${delay} ms`);
+    assert.ok(seen[i] <= delay * 1.25 + 5000, `connection ${i + 2} came ${seen[i]} ms after connection ${i + 1}: the backoff is ${delay} ms`);
+  }
+}
 
 const feed = (max = 5, extra = "") => `<div id="feed" data-ui-region data-ui-src="/rows" data-ui-live-src="/sse" data-ui-feed="list" data-ui-after="0" data-ui-feed-max="${max}" data-ui-feed-say="{n} new items" data-ui-feed-say-one="1 new item"${extra}><ol id="list"><li id="row-1"><a href="#a1">one</a></li></ol></div>
 <div id="later" data-ui-region data-ui-src="/later"><button type="button" data-ui-refresh>refresh later</button><span id="later-text">original</span></div>`;
@@ -58,14 +74,19 @@ for (const name of NAMES) {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
         srv.routes.set("/frag", (req, res) => setTimeout(() => srv.html(res, "v1"), 40));
         srv.routes.set("/sse", (req, res) => {
-          if (!("x-ui-probe" in req.headers)) srv.sse.attempts++;
+          if (!("x-ui-probe" in req.headers)) {
+            srv.sse.attempts++;
+            srv.sse.times.push(Date.now());
+          }
           res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store" });
           res.end(": ready\n\ndata: x\n\n");
         });
         await page.goto(srv.origin + "/p");
-        await sleep(5000);
-        // At 0 s, about 1 s, about 3 s, about 7 s: three or four in five seconds, not a hundred.
-        assert.ok(srv.sse.attempts >= 2 && srv.sse.attempts <= 4, `attempts ${srv.sse.attempts}`);
+        // The third connection comes at about 3 s (1 s, then 2 s). Wait for it, not for a time.
+        await until(() => srv.sse.attempts >= 3, "the third connection");
+        // Bypassed, the backoff would have opened a hundred by now.
+        assert.equal(srv.sse.attempts, 3, `attempts when the third came: ${srv.sse.attempts}`);
+        followsTheBackoff(srv.sse.times, 2);
         // Each connection owes one catch-up, and the event it says may land while that is out: two a connection.
         assert.ok(srv.count("/frag") <= 2 * srv.sse.attempts, `fetches ${srv.count("/frag")}`);
       });
@@ -78,19 +99,26 @@ for (const name of NAMES) {
         srv.routes.set("/clock", (req, res) => srv.html(res, "c" + ++c));
         srv.routes.set("/search", (req, res, url) => srv.html(res, shell(region() + `<div id="clock" data-ui-region data-ui-src="/clock" data-ui-poll="500">c0</div><form id="f" action="/search" method="get" data-ui-target="results"><input name="q" aria-label="q"></form><div id="results" data-ui-region data-ui-src="/search">r ${url.searchParams.get("q")}</div>`)));
         srv.routes.set("/sse", (req, res) => {
-          if (!("x-ui-probe" in req.headers)) srv.sse.attempts++;
+          if (!("x-ui-probe" in req.headers)) {
+            srv.sse.attempts++;
+            srv.sse.times.push(Date.now());
+          }
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("down");
         });
         await page.goto(srv.origin + "/p");
-        await sleep(2000);
-        const before = srv.sse.attempts;
+        await until(() => srv.sse.attempts >= 1, "the first connection");
+        // Type while the stream waits for its next try (the other region polls meanwhile).
+        const typingFrom = Date.now();
         await page.locator("#f input").pressSequentially("navree reconnects", { delay: 200 });
-        await sleep(3000);
-        assert.ok(srv.count("/clock") >= 8, "the other region polled meanwhile");
-        // 0 s, about 1 s, about 3 s, about 7 s: at most five in the eight seconds this took.
+        const typingTo = Date.now();
+        // Connections come at 0 s, about 1 s, about 3 s, about 7 s: wait for the fourth.
+        await until(() => srv.sse.attempts >= 4, "the fourth connection");
+        await until(() => srv.count("/clock") >= 8, "eight polls of the other region");
         assert.ok(srv.sse.attempts <= 5, `attempts ${srv.sse.attempts}`);
-        assert.ok(srv.sse.attempts - before <= 2, `attempts while typing ${srv.sse.attempts - before}`);
+        followsTheBackoff(srv.sse.times, 3);
+        const whileTyping = srv.sse.times.filter((t) => t >= typingFrom && t <= typingTo).length;
+        assert.ok(whileTyping <= 2, `attempts while typing ${whileTyping}`);
         assert.equal(await live(page), "retry");
       });
     });
@@ -390,15 +418,20 @@ for (const name of NAMES) {
     test("L7 a 503 keeps being retried, on the backoff schedule", async () => {
       await scenario(async ({ srv, page }) => {
         let attempts = 0;
+        const times = [];
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
         srv.routes.set("/sse", (req, res) => {
-          if (!("x-ui-probe" in req.headers)) attempts++;
+          if (!("x-ui-probe" in req.headers)) {
+            attempts++;
+            times.push(Date.now());
+          }
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("down");
         });
         await page.goto(srv.origin + "/p");
-        await sleep(5000);
-        assert.ok(attempts >= 3 && attempts <= 4, `attempts ${attempts}`);
+        await until(() => attempts >= 3, "the third connection");
+        assert.equal(attempts, 3, `attempts when the third came: ${attempts}`);
+        followsTheBackoff(times, 2);
         assert.equal(await live(page), "retry");
       });
     });
@@ -502,21 +535,24 @@ for (const name of NAMES) {
       await scenario(async ({ srv, page }) => {
         let probed = 0;
         let gaveUp = 0;
-        const t0 = Date.now();
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
         srv.routes.set("/sse", (req, res) => {
           if ("x-ui-probe" in req.headers) {
             probed++;
-            res.on("close", () => (gaveUp ||= Date.now() - t0)); // never answers
+            // The time is counted from the question, not from the page: loading it takes
+            // as long as the engine takes.
+            const asked = Date.now();
+            res.on("close", () => (gaveUp ||= Date.now() - asked)); // never answers
             return;
           }
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("down");
         });
         await page.goto(srv.origin + "/p");
-        await sleep(13500);
+        // The runtime lets go of the question after ten seconds.
+        await until(() => gaveUp > 0, "the probe to be let go of");
         assert.equal(probed, 1, "one probe");
-        assert.ok(gaveUp >= 8000 && gaveUp <= 13000, `the probe was let go of after ${gaveUp} ms`);
+        assert.ok(gaveUp >= 9000 && gaveUp <= 13000, `the probe was let go of after ${gaveUp} ms`);
         assert.equal(await live(page), "retry");
       });
     });

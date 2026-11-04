@@ -24,14 +24,30 @@ export function page(body, { css = false } = {}) {
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Resolves when `check()` is true. A test waits for what it expects to happen, not for a
+ * time: `limit` only ends a hang, so it is long, and a slow machine takes as long as it takes.
+ */
+export async function until(check, what, limit = 60000) {
+  const end = Date.now() + limit;
+  while (!(await check())) {
+    if (Date.now() > end) throw new Error(`gave up waiting for ${what} after ${limit} ms`);
+    await sleep(25);
+  }
+}
+
+/** The times between one moment and the next. */
+export const gaps = (times) => times.slice(1).map((t, i) => t - times[i]);
+
+/**
  * Starts a server. `log` has every request; `routes` maps a path to `(req, res, url) => void`;
  * `stream(talk)` makes a route that opens an event stream; `say(text)` writes to every open one.
  * A probe the runtime makes (`x-ui-probe`) is logged but not counted as a stream attempt.
+ * `sse.times` has the moment each attempt arrived.
  */
 export async function start() {
   const log = [];
   const routes = new Map();
-  const sse = { attempts: 0, open: 0, cookies: [], clients: new Set() };
+  const sse = { attempts: 0, times: [], open: 0, cookies: [], clients: new Set() };
   const server = createServer((req, res) => {
     const url = new URL(req.url, "http://x");
     log.push({ t: Date.now(), method: req.method, path: url.pathname + url.search, cookie: req.headers.cookie || "", probe: "x-ui-probe" in req.headers });
@@ -53,7 +69,10 @@ export async function start() {
     res.end(text);
   };
   const stream = (talk) => (req, res) => {
-    if (!("x-ui-probe" in req.headers)) sse.attempts++;
+    if (!("x-ui-probe" in req.headers)) {
+      sse.attempts++;
+      sse.times.push(Date.now());
+    }
     sse.cookies.push(req.headers.cookie || "");
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store" });
     res.write(": ready\n\n");
