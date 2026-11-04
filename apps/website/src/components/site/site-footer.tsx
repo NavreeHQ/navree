@@ -16,12 +16,12 @@ const tools = ["lighthouse", "logbook", "fleet", "helm", "harbor", "dock", "navi
 /**
  * One column per journey: what Navree is (the header's pages), how to start
  * (and bring what you have), the docs people open most, the tools, and the
- * project itself.
+ * project itself (with About, which the header also shows).
  */
 const columns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Product",
-    links: site.nav.filter((item) => item.href !== "/docs/").map((item) => ({ label: item.label, href: item.href })),
+    links: site.nav.filter((item) => item.href !== "/docs/" && item.href !== "/about/").map((item) => ({ label: item.label, href: item.href })),
   },
   {
     title: "Start",
@@ -51,6 +51,7 @@ const columns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Project",
     links: [
+      { label: "About", href: "/about/" },
       { label: "Release notes", href: "/docs/prologue/release-notes/" },
       { label: "Roadmap", href: "/docs/prologue/roadmap/" },
       { label: "Contributing", href: "/docs/prologue/contributing/" },
