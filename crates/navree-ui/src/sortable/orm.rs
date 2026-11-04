@@ -215,7 +215,9 @@ where
     lists.dedup();
     for list in lists {
         let list: T = list.into_value_for();
-        let named = key.encode(&list).map_or_else(|error| error, |value| value.to_string());
+        let named = key
+            .encode(&list)
+            .map_or_else(|error| error, |value| value.to_string());
         let mut query = table(name).select([key.name()]).where_(key.eq(list));
         if dialect != Dialect::Sqlite {
             query = query.lock_for_update();
@@ -233,13 +235,19 @@ async fn read_committed(uow: &Uow, dialect: Dialect) -> Result<()> {
         (Some(level), _) => level.as_sql().to_owned(),
         (None, Dialect::Postgres) => scalar::<String, _>(
             uow,
-            raw("SELECT current_setting('transaction_isolation')", Vec::<i64>::new()),
+            raw(
+                "SELECT current_setting('transaction_isolation')",
+                Vec::<i64>::new(),
+            ),
         )
         .await?
         .unwrap_or_default(),
-        (None, _) => scalar::<String, _>(uow, raw("SELECT @@transaction_isolation", Vec::<i64>::new()))
-            .await?
-            .unwrap_or_default(),
+        (None, _) => scalar::<String, _>(
+            uow,
+            raw("SELECT @@transaction_isolation", Vec::<i64>::new()),
+        )
+        .await?
+        .unwrap_or_default(),
     };
     let level = level.to_uppercase().replace(['-', '_'], " ");
     if level == "READ COMMITTED" {

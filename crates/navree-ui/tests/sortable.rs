@@ -862,7 +862,10 @@ impl RankedLists for Ranks {
             .map(|(at, (k, r))| (*r, at, k.as_str()))
             .collect();
         order.sort_unstable();
-        let Some(here) = order.iter().position(|(r, _, k)| *k == anchor && *r == rank) else {
+        let Some(here) = order
+            .iter()
+            .position(|(r, _, k)| *k == anchor && *r == rank)
+        else {
             return Ok(None);
         };
         Ok(if lower {

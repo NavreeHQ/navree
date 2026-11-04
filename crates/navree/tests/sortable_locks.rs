@@ -139,7 +139,6 @@ async fn order(db: &Db, lane: &str) -> Vec<(i64, i64)> {
         .collect()
 }
 
-
 fn id_of(key: &str) -> i64 {
     key.parse().unwrap_or(0)
 }
@@ -637,7 +636,11 @@ async fn moves_at_once(server: &str) {
             };
             let race = one_free_place(&db, TOOLKIT, by_rank).await;
             eprintln!("{server} at {level:?}, by rank {by_rank}: {race:?}");
-            assert_eq!(race, exactly_one(), "{server} at {level:?}, by rank {by_rank}");
+            assert_eq!(
+                race,
+                exactly_one(),
+                "{server} at {level:?}, by rank {by_rank}"
+            );
             done(test, db).await;
         }
     }
@@ -645,7 +648,10 @@ async fn moves_at_once(server: &str) {
         return;
     };
     let (a, b, todo) = one_gap(&db, TOOLKIT).await;
-    assert_ne!(a, b, "{server}: two moves into one gap get ranks of their own");
+    assert_ne!(
+        a, b,
+        "{server}: two moves into one gap get ranks of their own"
+    );
     let ranks: Vec<i64> = todo.iter().map(|(_, rank)| *rank).collect();
     assert!(ranks.windows(2).all(|w| w[0] < w[1]), "{server}: {todo:?}");
     // Both land between the first task and the one they were dropped before.
@@ -661,7 +667,10 @@ async fn moves_at_once_without_the_lock(server: &str) {
         return;
     };
     let race = one_free_place(&db, UNLOCKED, true).await;
-    assert!(race.taken > 1 && race.held > 3, "{server}: by rank, unlocked: {race:?}");
+    assert!(
+        race.taken > 1 && race.held > 3,
+        "{server}: by rank, unlocked: {race:?}"
+    );
     eprintln!(
         "{server}: without the lock, {} of 20 moves took the one free place; the lane holds {}, at most 3",
         race.taken, race.held
@@ -672,14 +681,20 @@ async fn moves_at_once_without_the_lock(server: &str) {
         return;
     };
     let race = one_free_place(&db, UNLOCKED, false).await;
-    assert!(race.taken > 1 && race.held > 3, "{server}: read whole, unlocked: {race:?}");
+    assert!(
+        race.taken > 1 && race.held > 3,
+        "{server}: read whole, unlocked: {race:?}"
+    );
     done(test, db).await;
 
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
     let (a, b, _) = one_gap(&db, UNLOCKED).await;
-    assert_eq!(a, b, "{server}: without the lock both moves take the same rank");
+    assert_eq!(
+        a, b,
+        "{server}: without the lock both moves take the same rank"
+    );
     eprintln!("{server}: without the lock, two moves into one gap both took rank {a}");
     done(test, db).await;
 }
@@ -724,7 +739,11 @@ async fn a_lock_outside_read_committed_is_refused(server: &str) {
         read_first: false,
         ..BY_HAND
     };
-    assert_eq!(one_free_place(&db, lock_first, true).await, exactly_one(), "{server}");
+    assert_eq!(
+        one_free_place(&db, lock_first, true).await,
+        exactly_one(),
+        "{server}"
+    );
     // Outside a unit of work a lock would end with its statement: refused too.
     let outside = sortable::lock_lists(&db, &Lane::KEY, ["doing"])
         .await
@@ -800,7 +819,10 @@ async fn a_list_with_no_row_is_not_locked_silently() {
             .await
             .expect_err("no row for nowhere");
         assert!(missing.is_not_found(), "{server}: {missing}");
-        assert!(missing.to_string().contains("nowhere"), "{server}: {missing}");
+        assert!(
+            missing.to_string().contains("nowhere"),
+            "{server}: {missing}"
+        );
         // The one that is there is locked, and the work runs.
         let ran = Move::new("1", "todo", "todo")
             .transaction(&db, &Lane::KEY, |_uow| async { Ok(7) })
@@ -903,7 +925,11 @@ async fn a_move_between_tied_ranks_lands_between_them() {
                 .await
                 .expect("no error")
                 .expect("taken");
-            let ids: Vec<i64> = order(&db, "a").await.into_iter().map(|(id, _)| id).collect();
+            let ids: Vec<i64> = order(&db, "a")
+                .await
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
             assert_eq!(ids, [1, 2, 5, 3, 4], "{server}: {label}");
             done(test, db).await;
         }
@@ -1049,10 +1075,15 @@ async fn a_tight_gap_renews_the_lane_and_the_move_lands() {
             .await
             .unwrap();
         let gate = Arc::new(Barrier::new(1));
-        let placement = placed(&db, Move::new("3", "todo", "todo").before("2"), TOOLKIT, gate)
-            .await
-            .expect("no error")
-            .expect("taken");
+        let placement = placed(
+            &db,
+            Move::new("3", "todo", "todo").before("2"),
+            TOOLKIT,
+            gate,
+        )
+        .await
+        .expect("no error")
+        .expect("taken");
         assert!(placement.moved);
         let ids: Vec<i64> = order(&db, "todo")
             .await

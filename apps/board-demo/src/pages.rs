@@ -678,10 +678,14 @@ impl Controller for Pages {
                 }
             })
             .public(),
-            RouteDef::on(Method::POST, "!/sign-out", |Submit(_): Submit<ViewAs>| async {
-                Reply::redirect("/")
-                    .toast(ToastTone::Info, "This demo has no accounts to sign out of.")
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/sign-out",
+                |Submit(_): Submit<ViewAs>| async {
+                    Reply::redirect("/")
+                        .toast(ToastTone::Info, "This demo has no accounts to sign out of.")
+                },
+            )
             .public(),
         ];
         if self.settings.test_hooks {

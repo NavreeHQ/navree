@@ -45,7 +45,12 @@ async fn a_uows_isolation_level_is_chosen_before_its_transaction_begins() {
     assert!(late.to_string().contains("before"), "{late}");
     assert_eq!(uow.isolation(), Some(IsolationLevel::ReadCommitted));
     uow.commit().await.expect("commit");
-    assert!(uow.set_isolation(IsolationLevel::ReadCommitted).await.is_err(), "finished");
+    assert!(
+        uow.set_isolation(IsolationLevel::ReadCommitted)
+            .await
+            .is_err(),
+        "finished"
+    );
 }
 
 #[tokio::test]
