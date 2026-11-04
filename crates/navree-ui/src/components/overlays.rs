@@ -694,11 +694,58 @@ impl Collapsible {
     }
 }
 
+/// How tall a [`ScrollArea`] is, as a closed choice: inline styles aren't allowed.
+/// The sizes are for lists, logs and feeds; a taller or shorter area is a
+/// container of its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ScrollHeight {
+    /// No limit: as tall as its content.
+    #[default]
+    Auto,
+    /// 12 rem.
+    Sm,
+    /// 20 rem.
+    Md,
+    /// 32 rem.
+    Lg,
+    /// 48 rem.
+    Xl,
+    /// What is left of the window, never less than 12 rem.
+    Fill,
+}
+
+impl ScrollHeight {
+    const fn value(self) -> Option<&'static str> {
+        match self {
+            Self::Auto => None,
+            Self::Sm => Some("sm"),
+            Self::Md => Some("md"),
+            Self::Lg => Some("lg"),
+            Self::Xl => Some("xl"),
+            Self::Fill => Some("fill"),
+        }
+    }
+}
+
 /// A scrolling region with thin scrollbars, reachable by keyboard.
+///
+/// It scrolls only when its height is limited. [`max_height`](Self::max_height) lets it
+/// grow with its content up to a size and scroll beyond; [`height`](Self::height) makes
+/// it that tall whatever it holds.
+///
+/// ```
+/// use navree_ui::{ScrollArea, ScrollHeight, render};
+///
+/// let log = ScrollArea::new("Activity").max_height(ScrollHeight::Md).children("Ada moved a deal");
+/// assert!(render(&log.into()).contains(r#"data-max-height="md""#));
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct ScrollArea {
     el: Element,
+    height: ScrollHeight,
+    capped: bool,
 }
 
 impl ScrollArea {
@@ -710,6 +757,8 @@ impl ScrollArea {
                 .attr("role", "region")
                 .attr("aria-label", label.into())
                 .attr("tabindex", 0_i64),
+            height: ScrollHeight::Auto,
+            capped: false,
         }
     }
 
@@ -719,8 +768,29 @@ impl ScrollArea {
         self
     }
 
+    /// Makes the area `height` tall, whatever it holds; it scrolls when its content is
+    /// taller. This replaces [`max_height`](Self::max_height).
+    pub fn height(mut self, height: ScrollHeight) -> Self {
+        self.height = height;
+        self.capped = false;
+        self
+    }
+
+    /// Lets the area grow with its content up to `height`, then scrolls. This replaces
+    /// [`height`](Self::height).
+    pub fn max_height(mut self, height: ScrollHeight) -> Self {
+        self.height = height;
+        self.capped = true;
+        self
+    }
+
     fn into_node(self) -> Node {
-        self.el.into()
+        let name = if self.capped {
+            "data-max-height"
+        } else {
+            "data-height"
+        };
+        self.el.attr_opt(name, self.height.value()).into()
     }
 }
 

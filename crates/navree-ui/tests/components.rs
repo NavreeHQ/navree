@@ -326,6 +326,62 @@ fn an_extra_wide_sheet_takes_sixty_percent_and_never_less_than_a_large_one() {
 }
 
 #[test]
+fn a_scroll_area_can_be_given_a_height_or_a_largest_height() {
+    let plain = render(&ScrollArea::new("Log").into());
+    assert!(!plain.contains("data-height"), "{plain}");
+    assert!(!plain.contains("data-max-height"), "{plain}");
+    let css = include_str!("../styles/30-overlays.css");
+    for (height, value) in [
+        (ScrollHeight::Sm, "sm"),
+        (ScrollHeight::Md, "md"),
+        (ScrollHeight::Lg, "lg"),
+        (ScrollHeight::Xl, "xl"),
+        (ScrollHeight::Fill, "fill"),
+    ] {
+        let fixed = render(&ScrollArea::new("Log").height(height).into());
+        assert!(
+            fixed.contains(&format!(r#"data-height="{value}""#)),
+            "{fixed}"
+        );
+        assert!(!fixed.contains("data-max-height"), "{fixed}");
+        let capped = render(&ScrollArea::new("Log").max_height(height).into());
+        assert!(
+            capped.contains(&format!(r#"data-max-height="{value}""#)),
+            "{capped}"
+        );
+        assert!(!capped.contains(" data-height"), "{capped}");
+        // The stylesheet knows both, and no style attribute is needed.
+        assert!(css.contains(&format!("&[data-height={value}]")), "{value}");
+        assert!(
+            css.contains(&format!("&[data-max-height={value}]")),
+            "{value}"
+        );
+        assert!(!fixed.contains("style="), "{fixed}");
+    }
+    // The last of the two wins, so a content security policy with no `style` attribute
+    // never meets two heights at once.
+    let last = render(
+        &ScrollArea::new("Log")
+            .height(ScrollHeight::Lg)
+            .max_height(ScrollHeight::Sm)
+            .into(),
+    );
+    assert!(last.contains(r#"data-max-height="sm""#), "{last}");
+    assert!(!last.contains(" data-height"), "{last}");
+    let last = render(
+        &ScrollArea::new("Log")
+            .max_height(ScrollHeight::Sm)
+            .height(ScrollHeight::Lg)
+            .into(),
+    );
+    assert!(last.contains(r#"data-height="lg""#), "{last}");
+    assert!(!last.contains("data-max-height"), "{last}");
+    // Auto is no choice: the area is as tall as its content.
+    let auto = render(&ScrollArea::new("Log").max_height(ScrollHeight::Auto).into());
+    assert!(!auto.contains("data-max-height"), "{auto}");
+}
+
+#[test]
 fn overlays_that_need_placing_ask_for_the_module_and_dialogs_ask_for_nothing() {
     assert!(
         View::new("x")

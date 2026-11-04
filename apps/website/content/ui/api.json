@@ -7155,6 +7155,18 @@
         "generics": "",
         "args": "children: impl IntoNodes",
         "doc": "Adds content."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "height: ScrollHeight",
+        "doc": "Makes the area `height` tall, whatever it holds; it scrolls when its content is taller. This replaces `max_height`."
+      },
+      {
+        "name": "max_height",
+        "generics": "",
+        "args": "height: ScrollHeight",
+        "doc": "Lets the area grow with its content up to `height`, then scrolls. This replaces `height`."
       }
     ],
     "variants": [],
@@ -7184,6 +7196,47 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "ScrollHeight": {
+    "name": "ScrollHeight",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "How tall a `ScrollArea` is, as a closed choice: inline styles aren't allowed. The sizes are for lists, logs and feeds; a taller or shorter area is a container of its own.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Auto",
+        "doc": "No limit: as tall as its content.",
+        "default": true
+      },
+      {
+        "name": "Sm",
+        "doc": "12 rem.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "20 rem.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "32 rem.",
+        "default": false
+      },
+      {
+        "name": "Xl",
+        "doc": "48 rem.",
+        "default": false
+      },
+      {
+        "name": "Fill",
+        "doc": "What is left of the window, never less than 12 rem.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Select": {
     "name": "Select",

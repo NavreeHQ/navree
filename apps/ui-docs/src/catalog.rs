@@ -383,7 +383,13 @@ pub const COMPONENTS: &[Component] = &[
     .parts("stack"),
     component("accordion", "Accordion", &["Accordion"], "default").parts("default"),
     component("collapsible", "Collapsible", &["Collapsible"], "default").parts("default"),
-    component("scroll-area", "ScrollArea", &["ScrollArea"], "default").parts("default"),
+    component(
+        "scroll-area",
+        "ScrollArea",
+        &["ScrollArea", "ScrollHeight"],
+        "default",
+    )
+    .parts("default"),
     component("separator", "Separator", &["Separator"], "default").parts("default"),
     component(
         "aspect-ratio",

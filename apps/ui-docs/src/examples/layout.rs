@@ -45,6 +45,7 @@ pub fn all() -> Vec<Example> {
             scroll_area_default
         )
         .start(),
+        single!("scroll-area", "fixed", "A fixed height", scroll_area_fixed).start(),
         single!("separator", "default", "Separators", separator_default).start(),
         single!("aspect-ratio", "default", "16:9", aspect_ratio_default).start(),
         gallery!("aspect-ratio", "ratios", "Ratios", aspect_ratio_ratios).medium(),
@@ -167,21 +168,38 @@ fn collapsible_default() -> Collapsible {
 }
 
 fn scroll_area_default() -> ScrollArea {
-    ScrollArea::new("Activity").children(
-        Stack::gap(2).children(
-            [
-                "Gurpreet moved Sutlej Supply renewal to Proposal",
-                "Harleen created Haveli Home renewal",
-                "Manpreet closed Doaba Traders expansion",
-                "Gurpreet added a note to Phulkari Textiles pilot",
-                "Harleen changed the owner of Pind Pantry deal",
-                "Manpreet archived Majha Mills trial",
-                "Gurpreet uploaded contract-sutlej.pdf",
-                "Harleen invited Ravneet to the workspace",
-            ]
-            .map(Text::muted),
-        ),
-    )
+    ScrollArea::new("Activity")
+        .max_height(ScrollHeight::Sm)
+        .children(
+            Stack::gap(2).children(
+                [
+                    "Gurpreet moved Sutlej Supply renewal to Proposal",
+                    "Harleen created Haveli Home renewal",
+                    "Manpreet closed Doaba Traders expansion",
+                    "Gurpreet added a note to Phulkari Textiles pilot",
+                    "Harleen changed the owner of Pind Pantry deal",
+                    "Manpreet archived Majha Mills trial",
+                    "Gurpreet uploaded contract-sutlej.pdf",
+                    "Harleen invited Ravneet to the workspace",
+                ]
+                .map(Text::muted),
+            ),
+        )
+}
+
+fn scroll_area_fixed() -> ScrollArea {
+    ScrollArea::new("Activity")
+        .height(ScrollHeight::Sm)
+        .children(
+            Stack::gap(2).children(
+                [
+                    "Gurpreet moved Sutlej Supply renewal to Proposal",
+                    "Harleen created Haveli Home renewal",
+                    "Manpreet closed Doaba Traders expansion",
+                ]
+                .map(Text::muted),
+            ),
+        )
 }
 
 fn separator_default() -> Stack {

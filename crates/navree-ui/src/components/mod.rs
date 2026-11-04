@@ -40,7 +40,7 @@ pub use inputs::{
 pub use layout::{Align, Container, ContainerSize, Grid, Justify, Row, Stack};
 pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
-    ScrollArea, Sheet, SheetSide, SheetWidth, Side, Tooltip,
+    ScrollArea, ScrollHeight, Sheet, SheetSide, SheetWidth, Side, Tooltip,
 };
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
 pub use timeline::{Timeline, TimelineEvent, TimelineState};

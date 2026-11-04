@@ -45,4 +45,11 @@
 [data-slot=accordion-trigger],[data-slot=collapsible-trigger]{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.625rem 0;color:var(--fg);font-weight:500;cursor:pointer;list-style:none;&::-webkit-details-marker{display:none}& [data-slot=icon]{color:var(--fg-3);transition:rotate .1s}}
 details[open] > summary > [data-slot=icon]{rotate:180deg}
 [data-slot=accordion-content],[data-slot=collapsible-content]{padding-bottom:.75rem;color:var(--fg-2)}
-[data-slot=scroll-area]{overflow:auto;scrollbar-width:thin}
+[data-slot=scroll-area]{overflow:auto;scrollbar-width:thin;
+  &[data-height=sm],&[data-max-height=sm]{--area-h:12rem}
+  &[data-height=md],&[data-max-height=md]{--area-h:20rem}
+  &[data-height=lg],&[data-max-height=lg]{--area-h:32rem}
+  &[data-height=xl],&[data-max-height=xl]{--area-h:48rem}
+  &[data-height=fill],&[data-max-height=fill]{--area-h:max(12rem,calc(100dvh - 12rem))}
+  &[data-height]{height:var(--area-h)}
+  &[data-max-height]{max-height:var(--area-h)}}
