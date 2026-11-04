@@ -313,6 +313,19 @@ fn a_sheet_is_24_rem_unless_asked_wider() {
 }
 
 #[test]
+fn an_extra_wide_sheet_takes_sixty_percent_and_never_less_than_a_large_one() {
+    let xl = render(&Sheet::new("order", "T").width(SheetWidth::Xl).into());
+    assert!(xl.contains(r#"data-side="right" data-width="xl""#), "{xl}");
+    // 60% of the screen, at least 40 rem, and never past the screen less 3 rem: on a
+    // phone it is as wide as every other sheet.
+    let css = include_str!("../styles/30-overlays.css");
+    assert!(
+        css.contains("&[data-width=xl]{width:min(max(40rem,60%),calc(100% - 3rem))}"),
+        "the rule for an extra-wide sheet"
+    );
+}
+
+#[test]
 fn overlays_that_need_placing_ask_for_the_module_and_dialogs_ask_for_nothing() {
     assert!(
         View::new("x")

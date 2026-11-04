@@ -227,6 +227,9 @@ pub enum SheetWidth {
     Md,
     /// 40 rem: a record's details, with room for cards side by side and tabs.
     Lg,
+    /// 60% of the screen and never less than `Lg`: a record with a table in it,
+    /// such as an order and its lines, while the page behind stays in view.
+    Xl,
 }
 
 impl SheetWidth {
@@ -234,6 +237,7 @@ impl SheetWidth {
         match self {
             Self::Md => None,
             Self::Lg => Some("lg"),
+            Self::Xl => Some("xl"),
         }
     }
 }
