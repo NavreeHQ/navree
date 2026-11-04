@@ -74,6 +74,11 @@ export const pageInfo: Record<string, PageInfo> = {
     parent: "/showcase/",
     sources: ["src/app/showcase/inbox", "src/components/showcase/inbox-numbers.ts", "content/ui/catalog.json"],
   },
+  "/showcase/board/": {
+    name: "Board",
+    parent: "/showcase/",
+    sources: ["src/app/showcase/board", "content/ui/previews/build-anything"],
+  },
   "/changelog/": { name: "Changelog", kind: "CollectionPage", sources: ["src/lib/changelog.ts"] },
   "/about/": { name: "About", kind: "AboutPage", sources: ["src/components/about", "src/content/about.ts", "src/content/faq.ts"] },
 };
