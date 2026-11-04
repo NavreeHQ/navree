@@ -5,19 +5,20 @@ description: "A small label, a value and the details under it, in a card, with a
 
 <UiPreview example="fact-card/default" />
 
-`FactCard` shows one fact about something: what it is called, what it is, and the lines that explain it. A recipient's device, a deal's owner, a delivery's outcome. `FactGrid` sets cards side by side.
+`FactCard` shows one fact about something: what it is called, what it is, and the lines that explain it. A ticket's status, a customer's plan, a shipment's progress. `FactGrid` sets cards side by side.
 
 ```rust
 use navree::ui::*;
 
 FactGrid::new().cards([
-    FactCard::new("Device", "MacBook Air")
-        .icon(icons::MONITOR)
+    FactCard::new("Customer", "Fernwood Supply")
+        .icon(icons::BUILDING_COMPLEX)
         .tone(Tone::Info)
-        .detail("Safari 18 on macOS"),
-    FactCard::new("Place", "Mumbai, India")
-        .icon(icons::MAP_PIN)
-        .detail("Jio Fiber"),
+        .detail("Business plan")
+        .detail("14 users"),
+    FactCard::new("Assigned to", "Dev Mehta")
+        .icon(icons::USER_ROUND)
+        .detail("Billing team"),
 ])
 ```
 
@@ -43,10 +44,10 @@ The label is small and uppercase. The value is large and may be any node: text, 
 
 <UiA11y>
 
-- Each card is a description list: the label is the term, and the value and details are its descriptions. A screen reader reads "Device, iPhone 15, Safari 18 on iOS 19".
+- Each card is a description list: the label is the term, and the value and details are its descriptions. A screen reader reads "Customer, Fernwood Supply, Business plan since March 2024".
 - The icon is hidden from assistive technology.
 - A card is not interactive. Put a link in the value or a detail when it should lead somewhere.
-- Long values and details wrap, and each sits in a `<bdi>`, so right-to-left text keeps its direction.
+- Long values and details wrap between words, and a word breaks only when it is wider than the card. Each sits in a `<bdi>`, so right-to-left text keeps its direction.
 
 </UiA11y>
 

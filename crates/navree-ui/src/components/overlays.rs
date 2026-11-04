@@ -247,7 +247,7 @@ impl SheetWidth {
 /// ```
 /// use navree_ui::{Sheet, SheetWidth, render};
 ///
-/// let sheet = Sheet::new("person", "Maya Patel").width(SheetWidth::Lg);
+/// let sheet = Sheet::new("ticket", "Ticket 2041").width(SheetWidth::Lg);
 /// assert!(render(&sheet.into()).contains(r#"data-width="lg""#));
 /// ```
 #[derive(Clone, Debug)]

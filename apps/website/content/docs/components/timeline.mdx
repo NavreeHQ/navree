@@ -5,19 +5,19 @@ description: "Events down a rail, grouped by day, each with a time, a coloured d
 
 <UiPreview example="timeline/default" />
 
-`Timeline` shows what happened to one thing, in order: a message that was sent, opened and clicked; an order that was paid, packed and shipped. Each event has a time, a dot in a colour, a title, an optional line of detail and small facts under it. Give each event a time in unix seconds and the timeline does the rest: it groups events by day, prints the clock time, and works out how long each event came after the one before.
+`Timeline` shows what happened to one thing, in order: an order that was placed, paid, packed and shipped; a release that was reviewed, merged and deployed. Each event has a time, a dot in a colour, a title, an optional line of detail and small facts under it. Give each event a time in unix seconds and the timeline does the rest: it groups events by day, prints the clock time, and works out how long each event came after the one before.
 
 ```rust
 use navree::ui::*;
 
-Timeline::new("message", "Autumn launch email to Maya Patel")
+Timeline::new("order", "Order 4821 for Lena Fischer")
     .time_zone("Asia/Kolkata", 19_800)
-    .event(TimelineEvent::new("Delivered").at(1_793_592_668).tone(Tone::Success))
+    .event(TimelineEvent::new("Payment accepted").at(1_793_592_668).tone(Tone::Success))
     .event(
-        TimelineEvent::new("Opened")
-            .at(1_793_592_788)
+        TimelineEvent::new("Packed")
+            .at(1_793_594_468)
             .tone(Tone::Info)
-            .meta(Meta::icon(icons::MONITOR, "Safari on macOS")),
+            .meta(Meta::icon(icons::PACKAGE, "2 boxes")),
     )
 ```
 
@@ -65,14 +65,14 @@ Your own colours belong in your own stylesheet. Name one and give it a colour:
 ```
 
 ```rust
-TimelineEvent::new("Joined a webinar").tone(Tone::named("brand"))
+TimelineEvent::new("Gift wrapped").tone(Tone::named("brand"))
 ```
 
 A name that is not lowercase letters, digits and hyphens, at most 32 long, is read as neutral, so a name that came from a request can't write anything odd into the page.
 
 ## Where an event stands
 
-`.current()` marks the step happening now: a ring for a dot, and `aria-current="step"` on the event. `.upcoming()` is a step that has not happened: an empty ring, and a screen reader hears "Upcoming:" before it. `.muted()` is an event set aside, such as work a machine did: a dashed ring and quieter text. `.icon(icons::USERS)` replaces the dot with a larger round indicator holding the glyph.
+`.current()` marks the step happening now: a ring for a dot, and `aria-current="step"` on the event. `.upcoming()` is a step that has not happened: an empty ring, and a screen reader hears "Upcoming:" before it. `.muted()` is an event set aside, such as work a machine did: a dashed ring and quieter text. `.icon(icons::GIT_MERGE)` replaces the dot with a larger round indicator holding the glyph.
 
 <UiPreview example="timeline/states" />
 
@@ -82,7 +82,7 @@ A name that is not lowercase letters, digits and hyphens, at most 32 long, is re
 
 <UiPreview example="timeline/meta" />
 
-`Meta::icon(icon, text)` takes an icon. `Meta::flag(node, text)` takes **any node** in front of the text: a flag from an icon set, a small SVG you drew, or a character. The start slot is hidden from assistive technology, because what it shows is in the text beside it. `.ltr()` reads the text left to right on a right-to-left page, for an email or an IP address.
+`Meta::icon(icon, text)` takes an icon. `Meta::flag(node, text)` takes **any node** in front of the text: a flag from an icon set, a small SVG you drew, or a character. The start slot is hidden from assistive technology, because what it shows is in the text beside it. `.ltr()` reads the text left to right on a right-to-left page, for a tracking number, an email address or an IP address.
 
 ## Events set aside
 
@@ -90,7 +90,7 @@ Mark an event `.filtered()` and it stays in the page but out of sight. The timel
 
 <UiPreview example="timeline/hidden" />
 
-Use it for what most readers don't need, such as a mail scanner's visits, and let one tick bring it back.
+Use it for what most readers don't need, such as the checks a build bot runs, and let one tick bring it back.
 
 ## Empty and loading
 
@@ -114,7 +114,7 @@ The words the timeline prints (the zone note, the empty message, the gap units, 
 
 - A timeline is a group named by the label you give it. Each day is a group named by its heading, and the events in it are an ordered list, so a screen reader reads the count and the order.
 - The time is a `<time>` element with a machine-readable `datetime`. It is read before the title.
-- The dot, the icon indicator and the connecting line are hidden from assistive technology. Colour does not carry the meaning alone: write what happened in the title ("Bounced", not "Failed" in red).
+- The dot, the icon indicator and the connecting line are hidden from assistive technology. Colour does not carry the meaning alone: write what happened in the title ("Payment declined", not "Failed" in red).
 - The hidden-items checkbox is a real checkbox with the notice as its description. It is reached by Tab and toggled with Space. Its focus ring shows.
 - Long titles, details and meta text wrap, and a right-to-left title keeps its own direction.
 

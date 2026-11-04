@@ -316,10 +316,10 @@ impl Badge {
     /// ```
     /// use navree_ui::{Badge, Tone, render};
     ///
-    /// let opened = render(&Badge::outcome("Opened", true).tone(Tone::Info).into());
-    /// let clicked = render(&Badge::outcome("Clicked", false).into());
-    /// assert!(opened.contains("yes"));
-    /// assert!(clicked.contains("no"));
+    /// let paid = render(&Badge::outcome("Paid", true).tone(Tone::Success).into());
+    /// let shipped = render(&Badge::outcome("Shipped", false).into());
+    /// assert!(paid.contains("yes"));
+    /// assert!(shipped.contains("no"));
     /// ```
     pub fn outcome(text: impl Into<Node>, reached: bool) -> Self {
         let mut badge = Self::new(text);

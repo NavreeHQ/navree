@@ -77,52 +77,52 @@ fn flag(code: &str) -> Node {
 }
 
 fn timeline_thumb() -> Timeline {
-    Timeline::new("thumb", "Message")
+    Timeline::new("thumb", "Order")
         .event(
-            TimelineEvent::new("Sent")
+            TimelineEvent::new("Placed")
                 .at(1_793_592_667)
                 .tone(Tone::Success),
         )
         .event(
-            TimelineEvent::new("Opened")
+            TimelineEvent::new("Paid")
                 .at(1_793_592_727)
                 .tone(Tone::Info),
         )
-        .event(TimelineEvent::new("Clicked a link").at(1_793_592_787))
+        .event(TimelineEvent::new("Packed").at(1_793_592_787))
 }
 
 fn timeline_default() -> Timeline {
-    Timeline::new("message", "Autumn launch email to Maya Patel")
+    Timeline::new("order", "Order 4821 for Lena Fischer")
         .time_zone("Asia/Kolkata", 19_800)
         .event(
-            TimelineEvent::new("Queued")
+            TimelineEvent::new("Order placed")
                 .at(1_793_592_667)
                 .tone(Tone::Neutral),
         )
         .event(
-            TimelineEvent::new("Delivered")
+            TimelineEvent::new("Payment accepted")
                 .at(1_793_592_668)
                 .tone(Tone::Success)
-                .detail("Accepted by the recipient's mail server"),
+                .detail("Card ending 4242"),
         )
         .event(
-            TimelineEvent::new("Opened")
-                .at(1_793_592_788)
+            TimelineEvent::new("Packed")
+                .at(1_793_594_468)
                 .tone(Tone::Info)
-                .meta(Meta::icon(icons::MONITOR, "Safari on macOS"))
-                .meta(Meta::flag(flag("IN"), "Mumbai")),
+                .meta(Meta::icon(icons::PACKAGE, "2 boxes"))
+                .meta(Meta::flag(flag("IN"), "Pune warehouse")),
         )
         .event(
-            TimelineEvent::new("Clicked the pricing link")
-                .at(1_793_593_100)
+            TimelineEvent::new("Handed to the courier")
+                .at(1_793_598_068)
                 .tone(Tone::Success)
-                .meta(Meta::icon(icons::LINK, "autumn.example.com/pricing")),
+                .meta(Meta::icon(icons::TRUCK, "Swiftline Express")),
         )
         .event(
-            TimelineEvent::new("Unsubscribed")
+            TimelineEvent::new("Refund requested")
                 .at(1_793_679_700)
                 .tone(Tone::Warning)
-                .detail("From the footer link")
+                .detail("Ordered the wrong size")
                 .meta(Meta::flag(flag("DE"), "Berlin")),
         )
 }
@@ -148,61 +148,65 @@ fn timeline_tones() -> impl IntoIterator<Item = (&'static str, Timeline)> {
 fn timeline_states() -> Timeline {
     Timeline::new("states", "Where each step stands")
         .event(
-            TimelineEvent::new("Brief approved")
+            TimelineEvent::new("Pull request approved")
                 .time_text("Mon")
                 .tone(Tone::Success),
         )
         .event(
-            TimelineEvent::new("Audience built")
+            TimelineEvent::new("Merged to main")
                 .time_text("Tue")
                 .tone(Tone::Success)
-                .icon(icons::USERS),
+                .icon(icons::GIT_MERGE),
         )
-        .event(TimelineEvent::new("Sending").time_text("Now").current())
         .event(
-            TimelineEvent::new("Reminder to openers")
+            TimelineEvent::new("Deploying to staging")
+                .time_text("Now")
+                .current(),
+        )
+        .event(
+            TimelineEvent::new("Release to production")
                 .time_text("Thu")
                 .upcoming(),
         )
         .event(
-            TimelineEvent::new("Link check by a mail scanner")
-                .time_text("Mon")
+            TimelineEvent::new("Checked by the build bot")
+                .time_text("Tue")
                 .muted()
                 .icon(icons::BOT),
         )
 }
 
 fn timeline_meta() -> Timeline {
-    Timeline::new("meta", "A click")
+    Timeline::new("meta", "A parcel scan")
         .time_zone("Europe/Berlin", 3600)
         .event(
-            TimelineEvent::new("Clicked the pricing link")
-                .at(1_793_592_667)
-                .tone(Tone::Success)
-                .meta(Meta::icon(icons::MONITOR, "Firefox on Windows"))
-                .meta(Meta::flag(flag("DE"), "Berlin, Germany"))
-                .meta(Meta::icon(icons::GLOBE, "Telekom"))
-                .meta(Meta::icon(icons::MAIL, "anna@example.com").ltr()),
+            TimelineEvent::new("Scanned at the sorting hub")
+                .at(1_793_620_000)
+                .tone(Tone::Info)
+                .meta(Meta::icon(icons::TRUCK, "Swiftline Express"))
+                .meta(Meta::flag(flag("DE"), "Leipzig, Germany"))
+                .meta(Meta::icon(icons::PACKAGE, "2 of 2 boxes"))
+                .meta(Meta::icon(icons::TAG, "SL-90417-DE").ltr()),
         )
 }
 
 fn timeline_hidden() -> Timeline {
     Timeline::new("hidden", "Recent steps")
-        .event(TimelineEvent::new("Sent").at(1_793_592_667))
+        .event(TimelineEvent::new("Pull request merged").at(1_793_592_667))
         .event(
-            TimelineEvent::new("Opened by a mail scanner")
+            TimelineEvent::new("Checked by the build bot")
                 .at(1_793_592_668)
                 .muted()
                 .filtered(),
         )
         .event(
-            TimelineEvent::new("Link checked by a mail scanner")
+            TimelineEvent::new("Labelled by the build bot")
                 .at(1_793_592_669)
                 .muted()
                 .filtered(),
         )
         .event(
-            TimelineEvent::new("Opened")
+            TimelineEvent::new("Deployed to staging")
                 .at(1_793_592_900)
                 .tone(Tone::Info),
         )
@@ -233,32 +237,32 @@ fn timeline_text() -> Timeline {
 
 fn feed_rows() -> Vec<ActivityItem> {
     vec![
-        ActivityItem::new("Maya Patel", "clicked the pricing link in")
-            .object("Autumn launch")
+        ActivityItem::new("Dev Mehta", "replied to")
+            .object("Ticket 2041")
             .tone(Tone::Success)
-            .icon(icons::LINK)
+            .icon(icons::MESSAGE_SQUARE_REPLY)
             .at(1_793_592_667)
-            .tag("Newsletter")
-            .meta(Meta::icon(icons::MONITOR, "Safari on macOS"))
-            .meta(Meta::flag(flag("IN"), "Mumbai"))
-            .href("#maya"),
-        ActivityItem::new("Tomás García", "opened")
-            .object("Autumn launch")
+            .tag("Billing")
+            .meta(Meta::icon(icons::TIMER, "First reply in 12 min"))
+            .meta(Meta::icon(icons::BUILDING_COMPLEX, "Fernwood Supply"))
+            .href("#ticket-2041"),
+        ActivityItem::new("Tomás García", "assigned")
+            .object("Ticket 2038 to Dev Mehta")
             .tone(Tone::Info)
-            .icon(icons::MAIL)
+            .icon(icons::USER_PLUS)
             .at(1_793_592_600)
-            .meta(Meta::icon(icons::MONITOR, "Chrome on Android"))
-            .meta(Meta::flag(flag("DE"), "Berlin"))
-            .href("#tomas"),
-        ActivityItem::new("Aiko Tanaka", "unsubscribed from")
-            .object("Autumn launch")
+            .meta(Meta::icon(icons::FLAG, "High priority"))
+            .href("#ticket-2038"),
+        ActivityItem::new("Aiko Tanaka", "escalated")
+            .object("Ticket 2031")
             .tone(Tone::Warning)
-            .icon(icons::BAN)
+            .icon(icons::TRIANGLE_ALERT)
             .at(1_793_592_540)
-            .meta(Meta::icon(icons::MAIL, "aiko@example.com").ltr())
-            .href("#aiko"),
-        ActivityItem::new("A mail scanner", "checked a link in")
-            .object("Autumn launch")
+            .meta(Meta::icon(icons::CLOCK, "Misses the SLA in 20 min"))
+            .meta(Meta::icon(icons::USER_ROUND, "mira@example.com").ltr())
+            .href("#ticket-2031"),
+        ActivityItem::new("The routing bot", "tagged")
+            .object("Ticket 2041")
             .icon(icons::BOT)
             .at(1_793_592_500)
             .muted(),
@@ -268,15 +272,15 @@ fn feed_rows() -> Vec<ActivityItem> {
 fn feed_thumb() -> ActivityFeed {
     ActivityFeed::new("thumb", "Recent activity")
         .item(
-            ActivityItem::new("Maya Patel", "opened")
-                .tone(Tone::Info)
-                .icon(icons::MAIL)
+            ActivityItem::new("Dev Mehta", "replied to a ticket")
+                .tone(Tone::Success)
+                .icon(icons::MESSAGE_SQUARE_REPLY)
                 .time_text("2 min ago"),
         )
         .item(
-            ActivityItem::new("Tomás García", "clicked")
-                .tone(Tone::Success)
-                .icon(icons::LINK)
+            ActivityItem::new("Tomás García", "assigned a ticket")
+                .tone(Tone::Info)
+                .icon(icons::USER_PLUS)
                 .time_text("5 min ago"),
         )
 }
@@ -293,7 +297,7 @@ fn feed_default() -> ActivityFeed {
                 .attr("aria-label", "Period")
                 .option("15", "Last 15 minutes")
                 .option("60", "Last hour")
-                .option("all", "Since launch")
+                .option("day", "Today")
                 .selected("60"),
         )
         .height(FeedHeight::Md)
@@ -304,22 +308,22 @@ fn feed_hidden() -> ActivityFeed {
     ActivityFeed::new("hidden", "Recent activity")
         .summary("3 events")
         .item(
-            ActivityItem::new("Maya Patel", "opened")
-                .tone(Tone::Info)
-                .icon(icons::MAIL)
+            ActivityItem::new("Dev Mehta", "replied to a ticket")
+                .tone(Tone::Success)
+                .icon(icons::MESSAGE_SQUARE_REPLY)
                 .time_text("2 min ago"),
         )
         .item(
-            ActivityItem::new("A mail scanner", "checked a link in")
-                .object("Autumn launch")
+            ActivityItem::new("The routing bot", "tagged")
+                .object("Ticket 2041")
                 .icon(icons::BOT)
                 .time_text("3 min ago")
                 .muted()
                 .filtered(),
         )
         .item(
-            ActivityItem::new("A mail scanner", "opened")
-                .object("Autumn launch")
+            ActivityItem::new("The help desk", "sent an auto-reply on")
+                .object("Ticket 2041")
                 .icon(icons::BOT)
                 .time_text("4 min ago")
                 .muted()
@@ -351,69 +355,69 @@ fn feed_states() -> impl IntoIterator<Item = (&'static str, ActivityFeed)> {
 }
 
 fn fact_thumb() -> FactCard {
-    FactCard::new("Device", "iPhone 15")
-        .icon(icons::MONITOR)
-        .detail("Safari 18 on iOS 19")
+    FactCard::new("Customer", "Fernwood Supply")
+        .icon(icons::BUILDING_COMPLEX)
+        .detail("Business plan since March 2024")
 }
 
 fn fact_default() -> FactGrid {
     FactGrid::new().cols(2).cards([
-        FactCard::new("Outcome", Badge::new("Clicked").tone(Tone::Success).dot())
+        FactCard::new("Status", Badge::new("Resolved").tone(Tone::Success).dot())
             .icon(icons::CHECK_CHECK)
             .tone(Tone::Success)
-            .detail("After 5 min 33 s"),
-        FactCard::new("Device", "MacBook Air")
-            .icon(icons::MONITOR)
+            .detail("After 5 h 33 min"),
+        FactCard::new("Customer", "Fernwood Supply")
+            .icon(icons::BUILDING_COMPLEX)
             .tone(Tone::Info)
-            .detail("Safari 18 on macOS")
-            .detail("1440 x 900"),
-        FactCard::new("Place", "Mumbai, India")
-            .icon(icons::MAP_PIN)
+            .detail("Business plan")
+            .detail("14 users"),
+        FactCard::new("Assigned to", "Dev Mehta")
+            .icon(icons::USER_ROUND)
             .tone(Tone::named("violet"))
-            .detail("Jio Fiber"),
-        FactCard::new("Speed", "5 min 33 s")
+            .detail("Billing team"),
+        FactCard::new("First reply", "12 min")
             .icon(icons::GAUGE)
             .tone(Tone::Warning)
-            .detail("Faster than 72% of recipients"),
+            .detail("2 min over the 10 min target"),
     ])
 }
 
 fn fact_single() -> FactCard {
-    FactCard::new("Delivery", "Delivered")
-        .icon(icons::SEND)
+    FactCard::new("Shipment", "Out for delivery")
+        .icon(icons::TRUCK)
         .tone(Tone::Success)
-        .detail("Sent 09:41:07")
-        .detail("Accepted 09:41:08")
+        .detail("Left the depot 07:15")
+        .detail("Due today by 18:00")
 }
 
 fn badge_dot() -> Row {
     Row::gap(2).wrap().children((
-        Badge::new("Delivered").tone(Tone::Success).dot(),
-        Badge::new("Opened").tone(Tone::Info).dot(),
-        Badge::new("Bounced").tone(Tone::Danger).dot(),
-        Badge::new("Queued").dot(),
+        Badge::new("Paid").tone(Tone::Success).dot(),
+        Badge::new("Packed").tone(Tone::Info).dot(),
+        Badge::new("Payment failed").tone(Tone::Danger).dot(),
+        Badge::new("Pending").dot(),
     ))
 }
 
 fn badge_tones() -> impl IntoIterator<Item = (&'static str, Badge)> {
     [
-        ("Neutral", Badge::new("Queued")),
-        ("Info", Badge::new("Opened").tone(Tone::Info)),
-        ("Success", Badge::new("Clicked").tone(Tone::Success)),
-        ("Warning", Badge::new("Delayed").tone(Tone::Warning)),
-        ("Danger", Badge::new("Bounced").tone(Tone::Danger)),
-        ("Violet", Badge::new("Replied").tone(Tone::named("violet"))),
-        ("Cyan", Badge::new("Forwarded").tone(Tone::named("cyan"))),
-        ("Rose", Badge::new("Complained").tone(Tone::named("rose"))),
+        ("Neutral", Badge::new("Pending")),
+        ("Info", Badge::new("Packed").tone(Tone::Info)),
+        ("Success", Badge::new("Paid").tone(Tone::Success)),
+        ("Warning", Badge::new("Low stock").tone(Tone::Warning)),
+        ("Danger", Badge::new("Out of stock").tone(Tone::Danger)),
+        ("Violet", Badge::new("Preorder").tone(Tone::named("violet"))),
+        ("Cyan", Badge::new("In transit").tone(Tone::named("cyan"))),
+        ("Rose", Badge::new("Refunded").tone(Tone::named("rose"))),
     ]
 }
 
 fn badge_outcome() -> Row {
     Row::gap(2).wrap().children((
-        Badge::outcome("Delivered", true).tone(Tone::Success),
-        Badge::outcome("Opened", true).tone(Tone::Info),
-        Badge::outcome("Clicked", false),
-        Badge::outcome("Replied", false),
+        Badge::outcome("Paid", true).tone(Tone::Success),
+        Badge::outcome("Packed", true).tone(Tone::Info),
+        Badge::outcome("Shipped", false),
+        Badge::outcome("Refunded", false),
     ))
 }
 
@@ -421,9 +425,10 @@ fn regions_live() -> Region {
     ActivityFeed::new("live-activity", "Live activity")
         .summary("New rows arrive as the stream speaks")
         .item(
-            ActivityItem::new("Maya Patel", "opened")
-                .tone(Tone::Info)
-                .icon(icons::MAIL)
+            ActivityItem::new("Priya Nair", "replied to")
+                .object("Ticket 2044")
+                .tone(Tone::Success)
+                .icon(icons::MESSAGE_SQUARE_REPLY)
                 .time_text("just now")
                 .id("event-41"),
         )
