@@ -874,6 +874,8 @@ For a check that needs more than one column and one value, `AsyncRule::check(fie
 
 </Callout>
 
+The same rules run for a Navree UI form: see [database rules in forms](/docs/ui/forms/#database-rules). A form's messages come from the same tables and translator as the extractors'.
+
 ## Validating nested data
 
 Mark a field holding another struct, or a list, map or `Option` of structs, with `nested`. Use `each(...)` to apply rules to each item of a list, set or map of plain values (`each(length(min = 1, max = 30))` on a `Vec<String>`); `each(nested)` and `each(each(...))` work too:

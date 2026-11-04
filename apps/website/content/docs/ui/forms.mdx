@@ -103,6 +103,61 @@ async fn store(shell: AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal
 
 With the runtime, a rejected form answers `422` with an `errors` op, and the errors appear under the fields without reloading the page. With JavaScript off, it answers `422` with the page.
 
+## Messages in the reader's language
+
+A form says what your API says. `Submit` reads its messages where the [validated extractors](/docs/basics/validation/#custom-messages) do: your `validation.messages` and `validation.attributes`, and, with [localization](/docs/packages/localization/) in the app, the reader's language. A French reader gets French errors under the fields, from the messages Navree ships or from your own.
+
+The field's label names it in the message: `Work email must be a valid email address`. A label wins over `validation.attributes`, and a translated name (a `field-email` message in your locale files) wins over both. A field's `#[form(error = "...")]` replaces every message of that field.
+
+A form has a few messages of its own, for a value of the wrong type and the like. Each has a key, so you can change it or translate it like any rule's message:
+
+| Key | When | Default |
+|---|---|---|
+| `form.number` | a number field holds something else | `Seats: enter a number.` |
+| `form.amount` | a money field holds something else | `Amount: enter an amount, like 12,500.50.` |
+| `form.date`, `form.time`, `form.moment` | a date, a time, or a date and time that doesn't read | `Due: enter a date.` |
+| `form.choice` | a value that isn't one of the options | `Stage: choose one of the options.` |
+| `form.phone`, `form.phone_extension` | a phone number that doesn't read in its country, or a text number with an extension | `Phone: enter a phone number, with its country.` |
+| `form.decimal_places` | a decimal with more than 28 places | `Rate: use at most 28 decimal places.` |
+| `form.max_choices` | a list with more values than it takes (`:max`) | `Choose at most 3.` |
+| `form.invalid` | any other value of the wrong type | `Field is not valid.` |
+| `form.unreadable` | a post the form can't read at all | `This form could not be read.` |
+
+```toml title="config/app.toml"
+[validation.messages]
+"form.number" = ":attribute takes digits only"
+"seats.form.number" = "How many seats?"
+```
+
+With localization, a `validation-form-number` message in a locale file says it in that language.
+
+## Database rules
+
+The [database rules](/docs/basics/validation/#database-rules) your API runs with `ValidAsync` run for a form too. Implement `AsyncRules` on the struct and `Submit` runs them once the form's own rules pass, in the request's unit of work:
+
+```rust title="src/people/forms.rs"
+#[derive(Deserialize, Validate, Form)]
+pub struct SignUp {
+    /// Work email
+    #[validate(email)]
+    pub email: String,
+    /// Team
+    #[validate(skip)]
+    pub team_id: Option<i64>,
+}
+
+impl AsyncRules for SignUp {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        vec![
+            AsyncRule::unique("email", "people", "email", self.email.clone(), None),
+            AsyncRule::exists("team_id", "teams", "id", self.team_id),
+        ]
+    }
+}
+```
+
+A taken address is a field error, `Work email has already been taken`, with the same message and in the same language as the API's, and the form comes back with what was posted. An empty optional field has no value, so its rule needs no query. A rule that can't run, because the app has no database or the database fails, is a server error, not a field error. A generic struct's rules are not picked up.
+
 ## What was posted
 
 A `Rejected<T>` holds what was posted. `value("owner_id")` is the first text sent under a field, `values_of("tags")` every text sent under a list field, and `values()` all of them, as `(field, text)` pairs of the form's own fields: never what a password input holds, and never a field marked `#[form(skip)]`.
