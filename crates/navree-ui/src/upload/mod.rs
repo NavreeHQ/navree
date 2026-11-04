@@ -27,6 +27,4 @@ pub use component::{Upload, UploadedFile};
 pub use labels::UploadLabels;
 pub use limits::UploadLimits;
 #[cfg(feature = "storage")]
-pub use server::{
-    ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads,
-};
+pub use server::{ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads};

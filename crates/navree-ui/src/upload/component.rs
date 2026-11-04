@@ -108,7 +108,9 @@ fn row_button(label: &str, file: &str, kind: &'static str) -> Element {
         .attr("data-size", "sm")
         .children((
             label.to_owned(),
-            el("span").flag("data-ui-sr", true).child(format!(" {file}")),
+            el("span")
+                .flag("data-ui-sr", true)
+                .child(format!(" {file}")),
         ))
 }
 

@@ -1335,16 +1335,23 @@ fn assert_markdown_is_inert(text: &str, html: &str) {
             .collect();
         let after = &lower[at + 1 + name.len()..];
         assert!(
-            !(name.len() > 2 && after.starts_with('=') && html[..at].rfind('<') > html[..at].rfind('>')),
+            !(name.len() > 2
+                && after.starts_with('=')
+                && html[..at].rfind('<') > html[..at].rfind('>')),
             "an event attribute from {text:?}: {html}"
         );
     }
     for href in hrefs(html) {
-        let ok = ["http://", "https://", "mailto:", "tel:", "/", "#", "?", ".", "//"]
-            .iter()
-            .any(|start| href.starts_with(start));
+        let ok = [
+            "http://", "https://", "mailto:", "tel:", "/", "#", "?", ".", "//",
+        ]
+        .iter()
+        .any(|start| href.starts_with(start));
         assert!(ok, "href {href:?} from {text:?}: {html}");
-        assert!(!href.to_ascii_lowercase().contains("javascript:"), "{href:?}");
+        assert!(
+            !href.to_ascii_lowercase().contains("javascript:"),
+            "{href:?}"
+        );
     }
 }
 
@@ -1394,7 +1401,9 @@ fn markdown_turns_no_hostile_text_into_markup() {
     for text in corpus {
         for markdown in [
             navree_ui::Markdown::new(text),
-            navree_ui::Markdown::new(text).links_in_new_tab().copy_code(),
+            navree_ui::Markdown::new(text)
+                .links_in_new_tab()
+                .copy_code(),
             navree_ui::Markdown::trusted(text),
         ] {
             assert_markdown_is_inert(text, &markdown.to_html());
@@ -1420,11 +1429,15 @@ fn markdown_in_untrusted_text_draws_no_image_whatever_the_syntax() {
 
 #[test]
 fn a_link_that_says_one_site_and_goes_to_another_shows_where_it_goes() {
-    let html = navree_ui::Markdown::new("[https://yourbank.example/login](https://attacker.example/login)").to_html();
+    let html = navree_ui::Markdown::new(
+        "[https://yourbank.example/login](https://attacker.example/login)",
+    )
+    .to_html();
     assert!(html.contains(r#"data-host="attacker.example""#), "{html}");
     assert!(html.contains("nofollow"), "{html}");
     // The user name trick shows the host after the `@`.
-    let html = navree_ui::Markdown::new("[x](https://yourbank.example@attacker.example/login)").to_html();
+    let html =
+        navree_ui::Markdown::new("[x](https://yourbank.example@attacker.example/login)").to_html();
     assert!(html.contains(r#"data-host="attacker.example""#), "{html}");
 }
 
@@ -1435,12 +1448,19 @@ fn markdown_cannot_grow_without_a_bound() {
     assert!(big.len() > navree_ui::markdown::MAX_BYTES);
     let html = navree_ui::Markdown::new(big).to_html();
     assert!(html.contains("markdown-cut"), "the cut is said");
-    assert!(html.len() < navree_ui::markdown::MAX_BYTES * 6, "{}", html.len());
+    assert!(
+        html.len() < navree_ui::markdown::MAX_BYTES * 6,
+        "{}",
+        html.len()
+    );
     // Nesting is flattened, so the tree stays shallow, and the renderer writes all of it.
     let nested = format!("{}end", "> ".repeat(5000));
     let html = navree_ui::Markdown::new(nested).to_html();
     assert!(html.contains("end"));
-    assert_eq!(html.matches("<blockquote>").count(), html.matches("</blockquote>").count());
+    assert_eq!(
+        html.matches("<blockquote>").count(),
+        html.matches("</blockquote>").count()
+    );
     let lists = format!("{}end", "- ".repeat(5000));
     let html = navree_ui::Markdown::new(lists).to_html();
     assert!(html.contains("end"));
@@ -1448,7 +1468,8 @@ fn markdown_cannot_grow_without_a_bound() {
 
 #[test]
 fn a_code_block_escapes_its_code_and_cannot_close_its_own_element() {
-    let html = render(&navree_ui::CodeBlock::new("html", "</code></pre><script>alert(1)</script>").into());
+    let html =
+        render(&navree_ui::CodeBlock::new("html", "</code></pre><script>alert(1)</script>").into());
     assert!(!html.contains("<script"), "{html}");
     assert_eq!(html.matches("<pre").count(), 1, "{html}");
     assert_eq!(html.matches("</pre>").count(), 1, "{html}");

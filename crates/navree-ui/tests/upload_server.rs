@@ -15,9 +15,7 @@ use navree_http::extract::Multipart;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::routing::Router;
 use navree_storage::{Disk, DiskConfig, Storage, StorageOptions};
-use navree_ui::{
-    ChunkStart, Received, Refused, UploadCode, UploadLabels, UploadLimits, Uploads,
-};
+use navree_ui::{ChunkStart, Received, Refused, UploadCode, UploadLabels, UploadLimits, Uploads};
 use serde_json::Value;
 use tower::ServiceExt;
 use tower::util::MapRequestLayer;
@@ -60,10 +58,7 @@ fn images(max: u64, files: usize) -> UploadLimits {
 
 fn uploads(limits: UploadLimits) -> (Arc<Uploads>, Disk) {
     let disk = memory_disk();
-    (
-        Arc::new(Uploads::new(disk.clone(), "photos", limits)),
-        disk,
-    )
+    (Arc::new(Uploads::new(disk.clone(), "photos", limits)), disk)
 }
 
 // ---- A router around `receive` ---------------------------------------------------------------
@@ -100,9 +95,13 @@ const BOUNDARY: &str = "navree-upload-boundary";
 fn form(parts: &[(&str, Option<&str>, &str, &[u8])]) -> Request<Body> {
     let mut body = Vec::new();
     for (field, file, content_type, contents) in parts {
-        body.extend_from_slice(format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{field}\"").as_bytes());
+        body.extend_from_slice(
+            format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{field}\"").as_bytes(),
+        );
         if let Some(file) = file {
-            body.extend_from_slice(format!("; filename=\"{file}\"\r\nContent-Type: {content_type}").as_bytes());
+            body.extend_from_slice(
+                format!("; filename=\"{file}\"\r\nContent-Type: {content_type}").as_bytes(),
+            );
         }
         body.extend_from_slice(b"\r\n\r\n");
         body.extend_from_slice(contents);
@@ -120,7 +119,10 @@ fn form(parts: &[(&str, Option<&str>, &str, &[u8])]) -> Request<Body> {
             Ok::<_, std::io::Error>(chunk)
         });
     Request::post("/upload")
-        .header("content-type", format!("multipart/form-data; boundary={BOUNDARY}"))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
         .body(Body::from_stream(slow))
         .unwrap()
 }
@@ -149,7 +151,12 @@ async fn a_good_file_is_stored_under_a_random_name_with_the_type_it_has() {
     // The client claims a JPEG; the content is a PNG.
     let (status, body) = send(
         &router,
-        form(&[("photo", Some("C:\\fakepath\\Harleen Kaur.jpg"), "image/jpeg", &contents)]),
+        form(&[(
+            "photo",
+            Some("C:\\fakepath\\Harleen Kaur.jpg"),
+            "image/jpeg",
+            &contents,
+        )]),
     )
     .await;
     assert_eq!(status, 200, "{body}");
@@ -159,9 +166,18 @@ async fn a_good_file_is_stored_under_a_random_name_with_the_type_it_has() {
     assert_eq!(body["stored"][0]["size"], 300 * KB);
     let files = stored_files(&disk).await;
     assert_eq!(files.len(), 1, "{files:?}");
-    assert!(files[0].starts_with("photos/") && files[0].ends_with(".png"), "{files:?}");
-    assert!(!files[0].contains("Harleen"), "the client's name is not the file's: {files:?}");
-    assert_eq!(disk.get(&files[0]).await.unwrap().as_ref(), contents.as_slice());
+    assert!(
+        files[0].starts_with("photos/") && files[0].ends_with(".png"),
+        "{files:?}"
+    );
+    assert!(
+        !files[0].contains("Harleen"),
+        "the client's name is not the file's: {files:?}"
+    );
+    assert_eq!(
+        disk.get(&files[0]).await.unwrap().as_ref(),
+        contents.as_slice()
+    );
 }
 
 // UI-GENUI-021: the type is read from the bytes, never from the name or the header.
@@ -172,8 +188,18 @@ async fn a_renamed_program_and_a_script_dressed_as_an_image_are_refused() {
     let (status, body) = send(
         &router,
         form(&[
-            ("photo", Some("photo.png"), "image/png", &with_head(EXE, 4 * KB)),
-            ("photo", Some("logo.png"), "image/png", b"<svg onload=alert(1)></svg>"),
+            (
+                "photo",
+                Some("photo.png"),
+                "image/png",
+                &with_head(EXE, 4 * KB),
+            ),
+            (
+                "photo",
+                Some("logo.png"),
+                "image/png",
+                b"<svg onload=alert(1)></svg>",
+            ),
         ]),
     )
     .await;
@@ -185,7 +211,10 @@ async fn a_renamed_program_and_a_script_dressed_as_an_image_are_refused() {
         assert_eq!(item["code"], "wrong_type", "{body}");
         assert_eq!(item["name"], name);
         let message = item["message"].as_str().unwrap();
-        assert!(message.contains(name) && message.contains("PNG or JPG"), "{message}");
+        assert!(
+            message.contains(name) && message.contains("PNG or JPG"),
+            "{message}"
+        );
     }
     assert!(stored_files(&disk).await.is_empty(), "nothing was written");
 }
@@ -197,12 +226,20 @@ async fn a_file_over_the_limit_is_refused_and_leaves_nothing_behind() {
     let router = router(uploads, 4 * MB as usize);
     let (status, body) = send(
         &router,
-        form(&[("photo", Some("huge.png"), "image/png", &png(2 * MB as usize))]),
+        form(&[(
+            "photo",
+            Some("huge.png"),
+            "image/png",
+            &png(2 * MB as usize),
+        )]),
     )
     .await;
     assert_eq!(status, 413, "{body}");
     assert_eq!(body["refused"][0]["code"], "too_large");
-    assert_eq!(body["refused"][0]["message"], "huge.png is larger than 1 MB.");
+    assert_eq!(
+        body["refused"][0]["message"],
+        "huge.png is larger than 1 MB."
+    );
     assert!(stored_files(&disk).await.is_empty());
 }
 
@@ -211,7 +248,11 @@ async fn a_file_over_the_limit_is_refused_and_leaves_nothing_behind() {
 async fn an_empty_file_is_refused_in_words() {
     let (uploads, disk) = uploads(images(MB, 1));
     let router = router(uploads, MB as usize);
-    let (status, body) = send(&router, form(&[("photo", Some("blank.png"), "image/png", b"")])).await;
+    let (status, body) = send(
+        &router,
+        form(&[("photo", Some("blank.png"), "image/png", b"")]),
+    )
+    .await;
     assert_eq!(status, 422, "{body}");
     assert_eq!(body["refused"][0]["code"], "empty");
     assert_eq!(body["refused"][0]["message"], "blank.png is empty.");
@@ -280,7 +321,10 @@ async fn hostile_file_names_are_cut_to_a_plain_name_and_never_become_a_path() {
     for path in stored_files(&disk).await {
         let file = path.strip_prefix("photos/").expect("under the directory");
         assert!(!file.contains('/') && file.len() <= 60, "{path}");
-        assert!(file.chars().all(|c| c.is_ascii_alphanumeric() || c == '.'), "{path}");
+        assert!(
+            file.chars().all(|c| c.is_ascii_alphanumeric() || c == '.'),
+            "{path}"
+        );
     }
 }
 
@@ -336,7 +380,11 @@ async fn a_body_over_the_route_limit_removes_what_the_request_stored() {
     )
     .await;
     assert_eq!(status, 413);
-    assert!(stored_files(&disk).await.is_empty(), "{:?}", stored_files(&disk).await);
+    assert!(
+        stored_files(&disk).await.is_empty(),
+        "{:?}",
+        stored_files(&disk).await
+    );
 }
 
 // UI-GENUI-021: the route's own limit follows the upload's.
@@ -359,8 +407,15 @@ async fn refusals_use_the_apps_labels() {
     };
     let uploads = Arc::new(Uploads::new(disk, "photos", images(KB as u64, 1)).labels(labels));
     let router = router(uploads, MB as usize);
-    let (_, body) = send(&router, form(&[("photo", Some("फोटो.png"), "image/png", &png(4 * KB))])).await;
-    assert_eq!(body["refused"][0]["message"], "फोटो.png बहुत बड़ी है (सीमा 1 KB).");
+    let (_, body) = send(
+        &router,
+        form(&[("photo", Some("फोटो.png"), "image/png", &png(4 * KB))]),
+    )
+    .await;
+    assert_eq!(
+        body["refused"][0]["message"],
+        "फोटो.png बहुत बड़ी है (सीमा 1 KB)."
+    );
 }
 
 // ---- What the page gets back ---------------------------------------------------------------------
@@ -381,12 +436,20 @@ fn the_answer_is_json_for_the_module_and_a_redirect_for_a_plain_post() {
     json.insert("accept", "application/json".parse().unwrap());
     let response = received.clone().respond(&json, "/profile");
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(response.headers()["content-type"].to_str().unwrap().starts_with("application/json"));
+    assert!(
+        response.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("application/json")
+    );
 
     let plain = received.respond(&HeaderMap::new(), "/profile");
     assert_eq!(plain.status(), StatusCode::SEE_OTHER);
     assert_eq!(plain.headers()["location"], "/profile");
-    assert!(plain.headers().get("set-cookie").is_some(), "the refusal is carried to the next page as a toast");
+    assert!(
+        plain.headers().get("set-cookie").is_some(),
+        "the refusal is carried to the next page as a toast"
+    );
 }
 
 // UI-GENUI-021: a toast says what happened.
@@ -417,7 +480,14 @@ fn start(name: &str, size: usize) -> ChunkStart {
     }
 }
 
-async fn put_all(uploads: &Uploads, owner: &str, id: &str, data: &[u8], order: &[u32], step: usize) {
+async fn put_all(
+    uploads: &Uploads,
+    owner: &str,
+    id: &str,
+    data: &[u8],
+    order: &[u32],
+    step: usize,
+) {
     for index in order {
         let from = *index as usize * step;
         let to = (from + step).min(data.len());
@@ -432,11 +502,25 @@ async fn put_all(uploads: &Uploads, owner: &str, id: &str, data: &[u8], order: &
 #[tokio::test]
 async fn a_session_names_the_part_size_and_an_id_that_cannot_be_guessed() {
     let (uploads, _) = uploads(UploadLimits::new(20 * MB));
-    let ticket = uploads.begin("user-7", start("report.pdf", 10 * MB as usize)).await.unwrap();
+    let ticket = uploads
+        .begin("user-7", start("report.pdf", 10 * MB as usize))
+        .await
+        .unwrap();
     assert_eq!(ticket.chunks, 3);
     assert_eq!(ticket.chunk_bytes, 4 * MB, "the default part");
-    assert!(ticket.id.len() == 32 && ticket.id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')), "{}", ticket.id);
-    let other = uploads.begin("user-7", start("report.pdf", 10 * MB as usize)).await.unwrap();
+    assert!(
+        ticket.id.len() == 32
+            && ticket
+                .id
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')),
+        "{}",
+        ticket.id
+    );
+    let other = uploads
+        .begin("user-7", start("report.pdf", 10 * MB as usize))
+        .await
+        .unwrap();
     assert_ne!(ticket.id, other.id);
 }
 
@@ -446,17 +530,31 @@ async fn a_file_sent_in_parts_is_put_together_and_the_parts_are_removed() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = png(2 * PART + 1000);
-    let ticket = uploads.begin("user-7", start("मेरी फोटो.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("user-7", start("मेरी फोटो.png", data.len()))
+        .await
+        .unwrap();
     assert_eq!((ticket.chunks, ticket.chunk_bytes), (3, PART as u64));
     put_all(&uploads, "user-7", &ticket.id, &data, &[2, 0, 1, 1], PART).await;
     let stored = uploads.finish("user-7", &ticket.id).await.unwrap();
     assert_eq!(stored.mime, "image/png");
     assert_eq!(stored.size, data.len() as u64);
     assert_eq!(stored.original_name.as_deref(), Some("मेरी फोटो.png"));
-    assert!(stored.path.starts_with("photos/") && stored.path.ends_with(".png"), "{}", stored.path);
-    assert_eq!(disk.get(&stored.path).await.unwrap().as_ref(), data.as_slice());
+    assert!(
+        stored.path.starts_with("photos/") && stored.path.ends_with(".png"),
+        "{}",
+        stored.path
+    );
+    assert_eq!(
+        disk.get(&stored.path).await.unwrap().as_ref(),
+        data.as_slice()
+    );
     let left = disk.list("photos").await.unwrap();
-    assert_eq!(left, vec![stored.path.clone()], "the parts and the note about them are gone");
+    assert_eq!(
+        left,
+        vec![stored.path.clone()],
+        "the parts and the note about them are gone"
+    );
     // The same session cannot be finished twice.
     let again = uploads.finish("user-7", &ticket.id).await.unwrap_err();
     assert_eq!(again.code, UploadCode::Unknown);
@@ -468,19 +566,48 @@ async fn another_users_session_and_made_up_ids_are_not_found() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk, "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = png(PART + 10);
-    let ticket = uploads.begin("user-7", start("a.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("user-7", start("a.png", data.len()))
+        .await
+        .unwrap();
     let body = Bytes::copy_from_slice(&data[..PART]);
-    assert_eq!(uploads.put_chunk("user-8", &ticket.id, 0, body.clone()).await.unwrap_err().code, UploadCode::Unknown);
-    assert_eq!(uploads.finish("user-8", &ticket.id).await.unwrap_err().code, UploadCode::Unknown);
-    assert_eq!(uploads.abort("user-8", &ticket.id).await.unwrap_err().code, UploadCode::Unknown);
+    assert_eq!(
+        uploads
+            .put_chunk("user-8", &ticket.id, 0, body.clone())
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::Unknown
+    );
+    assert_eq!(
+        uploads.finish("user-8", &ticket.id).await.unwrap_err().code,
+        UploadCode::Unknown
+    );
+    assert_eq!(
+        uploads.abort("user-8", &ticket.id).await.unwrap_err().code,
+        UploadCode::Unknown
+    );
     let long = "a".repeat(33);
-    for id in ["", "../../etc", "ABCDEF0123456789ABCDEF0123456789", "short", long.as_str(), "0123456789abcdef0123456789abcdef"] {
-        let err = uploads.put_chunk("user-7", id, 0, body.clone()).await.unwrap_err();
+    for id in [
+        "",
+        "../../etc",
+        "ABCDEF0123456789ABCDEF0123456789",
+        "short",
+        long.as_str(),
+        "0123456789abcdef0123456789abcdef",
+    ] {
+        let err = uploads
+            .put_chunk("user-7", id, 0, body.clone())
+            .await
+            .unwrap_err();
         assert_eq!(err.code, UploadCode::Unknown, "{id:?}");
         assert_eq!(err.code.status(), StatusCode::NOT_FOUND);
     }
     // The owner's session is untouched by any of it.
-    uploads.put_chunk("user-7", &ticket.id, 0, body).await.unwrap();
+    uploads
+        .put_chunk("user-7", &ticket.id, 0, body)
+        .await
+        .unwrap();
 }
 
 // UI-GENUI-021: the size of every part is the one the server named.
@@ -489,15 +616,56 @@ async fn parts_of_the_wrong_size_or_number_are_refused() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk, "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = png(2 * PART + 5);
-    let ticket = uploads.begin("u", start("a.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
     let part = |n: usize| Bytes::copy_from_slice(&data[..n]);
     // Too short for a middle part, too long for any, and the last one has its own size.
-    assert_eq!(uploads.put_chunk("u", &ticket.id, 0, part(PART - 1)).await.unwrap_err().code, UploadCode::BadChunk);
-    assert_eq!(uploads.put_chunk("u", &ticket.id, 0, part(PART + 1)).await.unwrap_err().code, UploadCode::TooLarge);
-    assert_eq!(uploads.put_chunk("u", &ticket.id, 2, part(PART)).await.unwrap_err().code, UploadCode::BadChunk);
-    assert_eq!(uploads.put_chunk("u", &ticket.id, 3, part(5)).await.unwrap_err().code, UploadCode::BadChunk);
-    assert_eq!(uploads.put_chunk("u", &ticket.id, u32::MAX, part(5)).await.unwrap_err().code, UploadCode::BadChunk);
-    uploads.put_chunk("u", &ticket.id, 2, part(5)).await.unwrap();
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, 0, part(PART - 1))
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::BadChunk
+    );
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, 0, part(PART + 1))
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::TooLarge
+    );
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, 2, part(PART))
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::BadChunk
+    );
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, 3, part(5))
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::BadChunk
+    );
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, u32::MAX, part(5))
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::BadChunk
+    );
+    uploads
+        .put_chunk("u", &ticket.id, 2, part(5))
+        .await
+        .unwrap();
 }
 
 // UI-GENUI-021: a file with a part missing is not finished, and can still be.
@@ -506,7 +674,10 @@ async fn a_missing_part_stops_the_finish_and_a_retry_completes_it() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = png(2 * PART);
-    let ticket = uploads.begin("u", start("a.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
     put_all(&uploads, "u", &ticket.id, &data, &[0], PART).await;
     let err = uploads.finish("u", &ticket.id).await.unwrap_err();
     assert_eq!(err.code, UploadCode::BadChunk);
@@ -520,13 +691,19 @@ async fn a_missing_part_stops_the_finish_and_a_retry_completes_it() {
 async fn a_file_over_the_limit_or_empty_is_refused_when_it_begins() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
-    let big = uploads.begin("u", start("big.png", MB as usize + 1)).await.unwrap_err();
+    let big = uploads
+        .begin("u", start("big.png", MB as usize + 1))
+        .await
+        .unwrap_err();
     assert_eq!(big.code, UploadCode::TooLarge);
     assert_eq!(big.message, "big.png is larger than 1 MB.");
     assert_eq!(big.code.status(), StatusCode::PAYLOAD_TOO_LARGE);
     let empty = uploads.begin("u", start("none.png", 0)).await.unwrap_err();
     assert_eq!(empty.code, UploadCode::Empty);
-    assert!(disk.list("photos").await.unwrap().is_empty(), "a refusal writes nothing");
+    assert!(
+        disk.list("photos").await.unwrap().is_empty(),
+        "a refusal writes nothing"
+    );
 }
 
 // UI-GENUI-021: the type is checked on the assembled bytes, with the plain post's sniffer.
@@ -535,12 +712,22 @@ async fn parts_that_make_a_program_are_refused_and_removed() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = with_head(EXE, PART + 20);
-    let ticket = uploads.begin("u", start("photo.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("photo.png", data.len()))
+        .await
+        .unwrap();
     put_all(&uploads, "u", &ticket.id, &data, &[0, 1], PART).await;
     let err = uploads.finish("u", &ticket.id).await.unwrap_err();
     assert_eq!(err.code, UploadCode::WrongType);
-    assert!(err.message.contains("photo.png") && err.message.contains("PNG or JPG"), "{}", err.message);
-    assert!(disk.list("photos").await.unwrap().is_empty(), "nothing is left");
+    assert!(
+        err.message.contains("photo.png") && err.message.contains("PNG or JPG"),
+        "{}",
+        err.message
+    );
+    assert!(
+        disk.list("photos").await.unwrap().is_empty(),
+        "nothing is left"
+    );
 }
 
 // UI-GENUI-021: a person can take back a file they were sending.
@@ -549,7 +736,10 @@ async fn aborting_removes_the_parts() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
     let data = png(PART + 1);
-    let ticket = uploads.begin("u", start("a.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
     put_all(&uploads, "u", &ticket.id, &data, &[0], PART).await;
     assert!(!disk.list("photos").await.unwrap().is_empty());
     uploads.abort("u", &ticket.id).await.unwrap();
@@ -564,9 +754,19 @@ async fn an_old_session_expires_and_a_sweep_removes_it() {
         .chunk_bytes(PART as u64)
         .chunk_ttl(Duration::ZERO);
     let data = png(PART + 1);
-    let ticket = uploads.begin("u", start("a.png", data.len())).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
     let body = Bytes::copy_from_slice(&data[..PART]);
-    assert_eq!(uploads.put_chunk("u", &ticket.id, 0, body).await.unwrap_err().code, UploadCode::Unknown);
+    assert_eq!(
+        uploads
+            .put_chunk("u", &ticket.id, 0, body)
+            .await
+            .unwrap_err()
+            .code,
+        UploadCode::Unknown
+    );
     assert!(uploads.sweep().await >= 1);
     assert!(disk.list("photos").await.unwrap().is_empty());
 }
@@ -577,11 +777,20 @@ async fn the_name_of_a_chunked_file_is_a_plain_name() {
     let disk = memory_disk();
     let uploads = Uploads::new(disk, "photos", UploadLimits::new(MB)).chunk_bytes(PART as u64);
     let data = b"plain text\n".to_vec();
-    let ticket = uploads.begin("u", start("..\\..\\etc\\notes\0.txt", data.len())).await.unwrap();
-    uploads.put_chunk("u", &ticket.id, 0, Bytes::from(data)).await.unwrap();
+    let ticket = uploads
+        .begin("u", start("..\\..\\etc\\notes\0.txt", data.len()))
+        .await
+        .unwrap();
+    uploads
+        .put_chunk("u", &ticket.id, 0, Bytes::from(data))
+        .await
+        .unwrap();
     let stored = uploads.finish("u", &ticket.id).await.unwrap();
     let name = stored.original_name.unwrap();
-    assert!(!name.contains('\\') && !name.contains('/') && !name.contains('\0'), "{name:?}");
+    assert!(
+        !name.contains('\\') && !name.contains('/') && !name.contains('\0'),
+        "{name:?}"
+    );
 }
 
 // UI-GENUI-021: the two ways in cannot disagree: the same name and bytes get the same answer.
@@ -590,8 +799,16 @@ async fn a_plain_post_and_a_chunked_one_accept_and_refuse_the_same_files() {
     let cases: Vec<(&str, Vec<u8>, bool)> = vec![
         ("photo.png", png(5 * KB), true),
         ("photo.png", with_head(EXE, 5 * KB), false),
-        ("logo.png", b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(), false),
-        ("table.csv", b"naam,sheher\nSimran Kaur,Ludhiana\n".to_vec(), true),
+        (
+            "logo.png",
+            b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
+            false,
+        ),
+        (
+            "table.csv",
+            b"naam,sheher\nSimran Kaur,Ludhiana\n".to_vec(),
+            true,
+        ),
         ("table.csv", with_head(EXE, 100), false),
         ("note.txt", b"just words".to_vec(), false),
     ];
@@ -600,14 +817,21 @@ async fn a_plain_post_and_a_chunked_one_accept_and_refuse_the_same_files() {
         // The plain post.
         let (uploads_plain, disk_plain) = uploads(limits.clone());
         let router = router(uploads_plain, 2 * MB as usize);
-        let (_, body) = send(&router, form(&[("f", Some(name), "application/octet-stream", &bytes)])).await;
+        let (_, body) = send(
+            &router,
+            form(&[("f", Some(name), "application/octet-stream", &bytes)]),
+        )
+        .await;
         let by_post = body["stored"].as_array().unwrap().len() == 1;
         // The chunked one.
         let disk = memory_disk();
         let chunked = Uploads::new(disk.clone(), "photos", limits).chunk_bytes(PART as u64);
         let ticket = chunked.begin("u", start(name, bytes.len())).await.unwrap();
         for (index, part) in bytes.chunks(PART).enumerate() {
-            chunked.put_chunk("u", &ticket.id, index as u32, Bytes::copy_from_slice(part)).await.unwrap();
+            chunked
+                .put_chunk("u", &ticket.id, index as u32, Bytes::copy_from_slice(part))
+                .await
+                .unwrap();
         }
         let by_chunks = chunked.finish("u", &ticket.id).await;
         assert_eq!(by_post, allowed, "{name}: post {body}");
@@ -623,11 +847,17 @@ async fn a_plain_post_and_a_chunked_one_accept_and_refuse_the_same_files() {
 #[tokio::test]
 async fn an_error_is_json_with_a_message() {
     let (uploads, _) = uploads(images(MB, 1));
-    let err = uploads.finish("u", "0123456789abcdef0123456789abcdef").await.unwrap_err();
+    let err = uploads
+        .finish("u", "0123456789abcdef0123456789abcdef")
+        .await
+        .unwrap_err();
     let response = err.into_response();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["refused"][0]["code"], "unknown");
-    assert!(json["message"].as_str().unwrap().contains("expired"), "{json}");
+    assert!(
+        json["message"].as_str().unwrap().contains("expired"),
+        "{json}"
+    );
 }

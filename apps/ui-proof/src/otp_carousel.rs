@@ -34,19 +34,20 @@ fn otp_page(shell: &AppShell) -> AppPage {
         .attr("id", "otp-form")
         .attr("method", "post")
         .attr("action", "/otp/echo")
-        .child(Stack::gap(6).children((
-            Field::new("otp-six", "Verification code")
-                .help("Six digits, sent to +91 98765 43210.")
-                .control(InputOtp::new("code", 6)),
-            Field::new("otp-grouped", "Transaction PIN")
-                .control(InputOtp::new("pin", 6).group(3)),
-            Field::new("otp-voucher", "Voucher")
-                .control(InputOtp::new("voucher", 8).kind(OtpKind::Alphanumeric)),
-            Field::new("otp-four", "Four-digit PIN").control(InputOtp::new("pin4", 4)),
-            Field::new("otp-twelve", "Twelve characters")
-                .control(InputOtp::new("long12", 12)),
-            Row::gap(2).children(Button::primary("Verify").submit().attr("id", "otp-send")),
-        )));
+        .child(
+            Stack::gap(6).children((
+                Field::new("otp-six", "Verification code")
+                    .help("Six digits, sent to +91 98765 43210.")
+                    .control(InputOtp::new("code", 6)),
+                Field::new("otp-grouped", "Transaction PIN")
+                    .control(InputOtp::new("pin", 6).group(3)),
+                Field::new("otp-voucher", "Voucher")
+                    .control(InputOtp::new("voucher", 8).kind(OtpKind::Alphanumeric)),
+                Field::new("otp-four", "Four-digit PIN").control(InputOtp::new("pin4", 4)),
+                Field::new("otp-twelve", "Twelve characters").control(InputOtp::new("long12", 12)),
+                Row::gap(2).children(Button::primary("Verify").submit().attr("id", "otp-send")),
+            )),
+        );
     let sends_itself = el("form")
         .attr("id", "otp-auto-form")
         .attr("method", "post")
@@ -65,14 +66,13 @@ fn otp_page(shell: &AppShell) -> AppPage {
             .error("That code has expired. Ask for a new one.")
             .control(InputOtp::new("expired", 6).value("123456")),
     ));
-    let rtl = el("div").attr("dir", "rtl").attr("lang", "ur").child(
-        Field::new("otp-rtl", "تصدیقی کوڈ").control(InputOtp::new("rtl", 6)),
-    );
-    shell.page("One-time codes").body(section(
-        "codes",
-        "Codes",
-        (form, sends_itself, states, rtl),
-    ))
+    let rtl = el("div")
+        .attr("dir", "rtl")
+        .attr("lang", "ur")
+        .child(Field::new("otp-rtl", "تصدیقی کوڈ").control(InputOtp::new("rtl", 6)));
+    shell
+        .page("One-time codes")
+        .body(section("codes", "Codes", (form, sends_itself, states, rtl)))
 }
 
 /// What the form posted, and what the server made of each code under the field's rules.
@@ -135,14 +135,15 @@ fn offers(order_link: bool) -> Vec<CarouselSlide> {
         CarouselSlide::new(Card::new().body(Stack::gap(2).children((
             Heading::h4("Desi ghee, 1 kg"),
             Text::muted("Churned in Amritsar. ₹750."),
-            order_link.then(|| Button::outline("Order now").href("/carousel#ordered").attr("id", "c-basic-order")),
+            order_link.then(|| {
+                Button::outline("Order now")
+                    .href("/carousel#ordered")
+                    .attr("id", "c-basic-order")
+            }),
         ))))
         .title("Desi ghee, 1 kg"),
-        CarouselSlide::new(offer(
-            "Pashmina shawl",
-            "Woven in Jammu. ₹12,500.",
-        ))
-        .title("Pashmina shawl"),
+        CarouselSlide::new(offer("Pashmina shawl", "Woven in Jammu. ₹12,500."))
+            .title("Pashmina shawl"),
     ]
 }
 
@@ -164,7 +165,11 @@ fn shops() -> Vec<CarouselSlide> {
         ("Malwa Metals", "Bathinda"),
     ]
     .into_iter()
-    .map(|(name, city)| CarouselSlide::new(Card::new().body(Stack::gap(2).children((Heading::h4(name), Text::muted(city))))))
+    .map(|(name, city)| {
+        CarouselSlide::new(
+            Card::new().body(Stack::gap(2).children((Heading::h4(name), Text::muted(city)))),
+        )
+    })
     .collect()
 }
 
@@ -225,7 +230,9 @@ fn carousel_page(shell: &AppShell) -> AppPage {
             ),
             labelled(
                 "Two in view",
-                Carousel::new("c-two", "Six shops").slides(shops()).per_view(2),
+                Carousel::new("c-two", "Six shops")
+                    .slides(shops())
+                    .per_view(2),
             ),
             labelled(
                 "Vertical",
@@ -240,12 +247,15 @@ fn carousel_page(shell: &AppShell) -> AppPage {
                     "Every shop reopens the next morning.",
                 ))),
             ),
-            el("div").attr("dir", "rtl").attr("lang", "ur").child(labelled(
-                "Right to left",
-                Carousel::new("c-rtl", "لدھیانہ کی پیشکشیں")
-                    .slides(urdu())
-                    .pickers(),
-            )),
+            el("div")
+                .attr("dir", "rtl")
+                .attr("lang", "ur")
+                .child(labelled(
+                    "Right to left",
+                    Carousel::new("c-rtl", "لدھیانہ کی پیشکشیں")
+                        .slides(urdu())
+                        .pickers(),
+                )),
             labelled(
                 "Hostile text",
                 Carousel::new("c-hostile", "<img src=x onerror=window.__pwned=1>")
@@ -285,9 +295,11 @@ impl Controller for CodePages {
                 otp_page(&shell)
             })
             .public(),
-            RouteDef::on(Method::POST, "!/otp/echo", |shell: AppShell, body: String| async move {
-                echo(&shell, &body)
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/otp/echo",
+                |shell: AppShell, body: String| async move { echo(&shell, &body) },
+            )
             .public(),
             RouteDef::on(Method::GET, "!/carousel", |shell: AppShell| async move {
                 carousel_page(&shell)

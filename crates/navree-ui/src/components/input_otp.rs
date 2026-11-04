@@ -129,7 +129,10 @@ impl OtpRules {
             return Err(OtpError::WrongLength);
         }
         let mut code = String::with_capacity(usize::from(self.length));
-        for ch in posted.trim_matches(|c: char| c.is_ascii_whitespace()).chars() {
+        for ch in posted
+            .trim_matches(|c: char| c.is_ascii_whitespace())
+            .chars()
+        {
             match ch {
                 ' ' | '-' => {}
                 '0'..='9' => code.push(ch),
@@ -286,7 +289,9 @@ impl InputOtp {
 
     /// Takes `columns` columns of a [`Grid`](crate::Grid).
     pub fn span(mut self, columns: u8) -> Self {
-        self.wrap = self.wrap.attr("data-span", super::layout::span_name(columns));
+        self.wrap = self
+            .wrap
+            .attr("data-span", super::layout::span_name(columns));
         self
     }
 

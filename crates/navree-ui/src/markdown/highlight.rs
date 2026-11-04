@@ -132,13 +132,63 @@ const SCRIPT: Lang = Lang {
     block_comment: Some(("/*", "*/")),
     quotes: b"\"'`",
     keywords: &[
-        "abstract", "as", "async", "await", "break", "case", "catch", "class", "const",
-        "continue", "debugger", "declare", "default", "delete", "do", "else", "enum", "export",
-        "extends", "false", "finally", "for", "from", "function", "if", "implements", "import",
-        "in", "instanceof", "interface", "keyof", "let", "namespace", "new", "null", "of",
-        "private", "protected", "public", "readonly", "return", "satisfies", "static", "super",
-        "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var", "void",
-        "while", "with", "yield",
+        "abstract",
+        "as",
+        "async",
+        "await",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "declare",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "from",
+        "function",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "interface",
+        "keyof",
+        "let",
+        "namespace",
+        "new",
+        "null",
+        "of",
+        "private",
+        "protected",
+        "public",
+        "readonly",
+        "return",
+        "satisfies",
+        "static",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "type",
+        "typeof",
+        "undefined",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
     ],
     types: &[
         "string", "number", "boolean", "any", "unknown", "never", "object", "symbol", "bigint",
@@ -156,8 +206,8 @@ const PYTHON: Lang = Lang {
     keywords: &[
         "and", "as", "assert", "async", "await", "break", "case", "class", "continue", "def",
         "del", "elif", "else", "except", "False", "finally", "for", "from", "global", "if",
-        "import", "in", "is", "lambda", "match", "None", "nonlocal", "not", "or", "pass",
-        "raise", "return", "True", "try", "while", "with", "yield",
+        "import", "in", "is", "lambda", "match", "None", "nonlocal", "not", "or", "pass", "raise",
+        "return", "True", "try", "while", "with", "yield",
     ],
     types: &[
         "int", "float", "str", "bool", "list", "dict", "tuple", "set", "bytes", "object",
@@ -173,9 +223,34 @@ const GO: Lang = Lang {
     block_comment: Some(("/*", "*/")),
     quotes: b"\"'`",
     keywords: &[
-        "break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough",
-        "false", "for", "func", "go", "goto", "if", "import", "interface", "map", "nil",
-        "package", "range", "return", "select", "struct", "switch", "true", "type", "var",
+        "break",
+        "case",
+        "chan",
+        "const",
+        "continue",
+        "default",
+        "defer",
+        "else",
+        "fallthrough",
+        "false",
+        "for",
+        "func",
+        "go",
+        "goto",
+        "if",
+        "import",
+        "interface",
+        "map",
+        "nil",
+        "package",
+        "range",
+        "return",
+        "select",
+        "struct",
+        "switch",
+        "true",
+        "type",
+        "var",
     ],
     types: &[
         "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64",
@@ -190,10 +265,9 @@ const SHELL: Lang = Lang {
     line_comments: &["#"],
     quotes: b"\"'",
     keywords: &[
-        "alias", "break", "case", "continue", "do", "done", "elif", "else", "esac", "eval",
-        "exec", "exit", "export", "false", "fi", "for", "function", "if", "in", "local",
-        "readonly", "return", "set", "shift", "source", "then", "trap", "true", "unset",
-        "until", "while",
+        "alias", "break", "case", "continue", "do", "done", "elif", "else", "esac", "eval", "exec",
+        "exit", "export", "false", "fi", "for", "function", "if", "in", "local", "readonly",
+        "return", "set", "shift", "source", "then", "trap", "true", "unset", "until", "while",
     ],
     dollar: true,
     dashes: true,
@@ -206,18 +280,95 @@ const SQL: Lang = Lang {
     quotes: b"\"'`",
     insensitive: true,
     keywords: &[
-        "all", "alter", "and", "as", "asc", "begin", "between", "by", "case", "check", "commit",
-        "constraint", "create", "cross", "default", "delete", "desc", "distinct", "drop",
-        "else", "end", "exists", "false", "foreign", "from", "full", "group", "having", "if",
-        "in", "index", "inner", "insert", "into", "is", "join", "key", "left", "like", "limit",
-        "not", "null", "offset", "on", "or", "order", "outer", "primary", "references",
-        "returning", "right", "rollback", "select", "set", "table", "then", "true", "union",
-        "unique", "update", "values", "view", "when", "where", "with",
+        "all",
+        "alter",
+        "and",
+        "as",
+        "asc",
+        "begin",
+        "between",
+        "by",
+        "case",
+        "check",
+        "commit",
+        "constraint",
+        "create",
+        "cross",
+        "default",
+        "delete",
+        "desc",
+        "distinct",
+        "drop",
+        "else",
+        "end",
+        "exists",
+        "false",
+        "foreign",
+        "from",
+        "full",
+        "group",
+        "having",
+        "if",
+        "in",
+        "index",
+        "inner",
+        "insert",
+        "into",
+        "is",
+        "join",
+        "key",
+        "left",
+        "like",
+        "limit",
+        "not",
+        "null",
+        "offset",
+        "on",
+        "or",
+        "order",
+        "outer",
+        "primary",
+        "references",
+        "returning",
+        "right",
+        "rollback",
+        "select",
+        "set",
+        "table",
+        "then",
+        "true",
+        "union",
+        "unique",
+        "update",
+        "values",
+        "view",
+        "when",
+        "where",
+        "with",
     ],
     types: &[
-        "bigint", "bigserial", "boolean", "bool", "char", "date", "decimal", "double", "float",
-        "int", "integer", "json", "jsonb", "numeric", "serial", "smallint", "text", "time",
-        "timestamp", "timestamptz", "uuid", "varchar",
+        "bigint",
+        "bigserial",
+        "boolean",
+        "bool",
+        "char",
+        "date",
+        "decimal",
+        "double",
+        "float",
+        "int",
+        "integer",
+        "json",
+        "jsonb",
+        "numeric",
+        "serial",
+        "smallint",
+        "text",
+        "time",
+        "timestamp",
+        "timestamptz",
+        "uuid",
+        "varchar",
     ],
     calls: true,
     ..NONE
@@ -470,7 +621,11 @@ fn lifetime_end(code: &str, at: usize) -> Option<usize> {
         i += 1;
     }
     // `'a'` is a character.
-    if bytes.get(i) == Some(&b'\'') { None } else { Some(i) }
+    if bytes.get(i) == Some(&b'\'') {
+        None
+    } else {
+        Some(i)
+    }
 }
 
 fn lex(lang: &Lang, code: &str) -> Vec<Token> {
@@ -641,7 +796,11 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
         // Decorators, annotations and at-rules.
         if lang.decorators && byte == b'@' && bytes.get(i + 1).is_some_and(|b| is_word_start(*b)) {
             let mut end = i + 1;
-            while end < bytes.len() && (is_word(bytes[end]) || bytes[end] == b'.' || (lang.dashes && bytes[end] == b'-')) {
+            while end < bytes.len()
+                && (is_word(bytes[end])
+                    || bytes[end] == b'.'
+                    || (lang.dashes && bytes[end] == b'-'))
+            {
                 end += 1;
             }
             out.push(Kind::Attr, i, end);
@@ -657,7 +816,12 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
                     && bytes.get(i + 2).is_some_and(|b| is_word_start(*b))));
         if is_word_start(byte) || flag {
             let mut end = i + 1;
-            while end < bytes.len() && (is_word(bytes[end]) || (lang.dashes && bytes[end] == b'-' && bytes.get(end + 1).is_some_and(|b| is_word(*b)))) {
+            while end < bytes.len()
+                && (is_word(bytes[end])
+                    || (lang.dashes
+                        && bytes[end] == b'-'
+                        && bytes.get(end + 1).is_some_and(|b| is_word(*b))))
+            {
                 end += 1;
             }
             let word = &code[i..end];
@@ -665,9 +829,19 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
             let kind = if byte == b'-' {
                 // A flag: `-v`, `--release`.
                 Kind::Type
-            } else if lang.keys && at_line_start(code, line_begin, i) && next_on_line(code, end).is_some_and(|(at, b)| (b == b':' || b == b'=') && bytes.get(at + 1) != Some(&b'=') && bytes.get(at + 1) != Some(&b':')) {
+            } else if lang.keys
+                && at_line_start(code, line_begin, i)
+                && next_on_line(code, end).is_some_and(|(at, b)| {
+                    (b == b':' || b == b'=')
+                        && bytes.get(at + 1) != Some(&b'=')
+                        && bytes.get(at + 1) != Some(&b':')
+                })
+            {
                 Kind::Type
-            } else if lang.css && depth > 0 && next_on_line(code, end).is_some_and(|(_, b)| b == b':') {
+            } else if lang.css
+                && depth > 0
+                && next_on_line(code, end).is_some_and(|(_, b)| b == b':')
+            {
                 Kind::Type
             } else if contains(lang.keywords, word, lang.insensitive) {
                 Kind::Keyword
@@ -677,7 +851,11 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
                 Kind::Attr
             } else if lang.calls && next == Some(b'(') {
                 Kind::Func
-            } else if lang.capital_types && byte.is_ascii_uppercase() && word.len() > 1 && word.bytes().any(|b| b.is_ascii_lowercase()) {
+            } else if lang.capital_types
+                && byte.is_ascii_uppercase()
+                && word.len() > 1
+                && word.bytes().any(|b| b.is_ascii_lowercase())
+            {
                 Kind::Type
             } else {
                 Kind::Plain
@@ -706,9 +884,19 @@ fn html(code: &str) -> Vec<Token> {
             out.push(Kind::Comment, i, end);
             i = end;
         } else if rest.starts_with("{%") || rest.starts_with("{{") || rest.starts_with("{#") {
-            let close = if rest.starts_with("{%") { "%}" } else if rest.starts_with("{{") { "}}" } else { "#}" };
+            let close = if rest.starts_with("{%") {
+                "%}"
+            } else if rest.starts_with("{{") {
+                "}}"
+            } else {
+                "#}"
+            };
             let end = rest[2..].find(close).map_or(code.len(), |n| i + 2 + n + 2);
-            let kind = if rest.starts_with("{#") { Kind::Comment } else { Kind::Attr };
+            let kind = if rest.starts_with("{#") {
+                Kind::Comment
+            } else {
+                Kind::Attr
+            };
             out.push(kind, i, end);
             i = end;
         } else if bytes[i] == b'<'
@@ -722,7 +910,9 @@ fn html(code: &str) -> Vec<Token> {
                 at += 1;
             }
             let name_start = at;
-            while at < bytes.len() && (is_word(bytes[at]) || matches!(bytes[at], b'-' | b':' | b'.')) {
+            while at < bytes.len()
+                && (is_word(bytes[at]) || matches!(bytes[at], b'-' | b':' | b'.'))
+            {
                 at += 1;
             }
             out.push(Kind::Plain, i, name_start);
@@ -738,13 +928,21 @@ fn html(code: &str) -> Vec<Token> {
                 } else if is_word_start(b) || b == b'@' || b == b':' {
                     let start = i;
                     i += 1;
-                    while i < bytes.len() && (is_word(bytes[i]) || matches!(bytes[i], b'-' | b':' | b'.' | b'@')) {
+                    while i < bytes.len()
+                        && (is_word(bytes[i]) || matches!(bytes[i], b'-' | b':' | b'.' | b'@'))
+                    {
                         i += 1;
                     }
                     out.push(Kind::Type, start, i);
                 } else if rest_starts(code, i, "{{") || rest_starts(code, i, "{%") {
-                    let close = if rest_starts(code, i, "{{") { "}}" } else { "%}" };
-                    let end = code[i + 2..].find(close).map_or(code.len(), |n| i + 2 + n + 2);
+                    let close = if rest_starts(code, i, "{{") {
+                        "}}"
+                    } else {
+                        "%}"
+                    };
+                    let end = code[i + 2..]
+                        .find(close)
+                        .map_or(code.len(), |n| i + 2 + n + 2);
                     out.push(Kind::Attr, i, end);
                     i = end;
                 } else {
@@ -782,7 +980,11 @@ fn diff(code: &str) -> Vec<Token> {
     while at < code.len() {
         let end = line_end(code, at);
         let line = &code[at..end];
-        let kind = if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff ") || line.starts_with("index ") {
+        let kind = if line.starts_with("+++")
+            || line.starts_with("---")
+            || line.starts_with("diff ")
+            || line.starts_with("index ")
+        {
             Kind::Comment
         } else if line.starts_with("@@") {
             Kind::Keyword
@@ -821,13 +1023,21 @@ fn http(code: &str) -> Vec<Token> {
             out.push(Kind::Keyword, at, at + one.len());
             if let Some(two) = parts.next() {
                 let start = at + one.len() + 1;
-                let kind = if one.starts_with("HTTP/") { Kind::Number } else { Kind::Str };
+                let kind = if one.starts_with("HTTP/") {
+                    Kind::Number
+                } else {
+                    Kind::Str
+                };
                 out.push(Kind::Plain, at + one.len(), start);
                 out.push(kind, start, start + two.len());
                 if let Some(three) = parts.next() {
                     let from = start + two.len() + 1;
                     out.push(Kind::Plain, start + two.len(), from);
-                    let kind = if one.starts_with("HTTP/") { Kind::Plain } else { Kind::Keyword };
+                    let kind = if one.starts_with("HTTP/") {
+                        Kind::Plain
+                    } else {
+                        Kind::Keyword
+                    };
                     out.push(kind, from, from + three.len());
                 }
             }
@@ -885,7 +1095,10 @@ mod tests {
 
     #[test]
     fn rust_lifetimes_chars_and_raw_strings() {
-        let tokens = kinds("rust", "fn f<'a>(x: &'a str) -> char { 'z' } let r = r#\"a \"quoted\" b\"#;");
+        let tokens = kinds(
+            "rust",
+            "fn f<'a>(x: &'a str) -> char { 'z' } let r = r#\"a \"quoted\" b\"#;",
+        );
         assert!(has(&tokens, Kind::Type, "'a"));
         assert!(has(&tokens, Kind::Str, "'z'"));
         assert!(has(&tokens, Kind::Str, "r#\"a \"quoted\" b\"#"));
@@ -896,7 +1109,11 @@ mod tests {
         let tokens = kinds("typescript", "const a = it's;\nconst b = 1;\n");
         assert!(has(&tokens, Kind::Keyword, "const"));
         assert!(has(&tokens, Kind::Number, "1"));
-        assert!(!tokens.iter().any(|(k, t)| *k == Kind::Str && t.contains("const b")));
+        assert!(
+            !tokens
+                .iter()
+                .any(|(k, t)| *k == Kind::Str && t.contains("const b"))
+        );
     }
 
     #[test]
@@ -910,7 +1127,10 @@ mod tests {
 
     #[test]
     fn json_keys_are_not_values() {
-        let tokens = kinds("json", "{\"city\": \"Ludhiana\", \"pin\": 141001, \"ok\": true, \"x\": null}");
+        let tokens = kinds(
+            "json",
+            "{\"city\": \"Ludhiana\", \"pin\": 141001, \"ok\": true, \"x\": null}",
+        );
         assert!(has(&tokens, Kind::Type, "\"city\""));
         assert!(has(&tokens, Kind::Str, "\"Ludhiana\""));
         assert!(has(&tokens, Kind::Number, "141001"));
@@ -920,7 +1140,10 @@ mod tests {
 
     #[test]
     fn toml_tables_and_keys() {
-        let tokens = kinds("toml", "# a comment\n[server]\nhost = \"0.0.0.0\"\nport = 8080\ndebug = false\n");
+        let tokens = kinds(
+            "toml",
+            "# a comment\n[server]\nhost = \"0.0.0.0\"\nport = 8080\ndebug = false\n",
+        );
         assert!(has(&tokens, Kind::Comment, "# a comment"));
         assert!(has(&tokens, Kind::Keyword, "[server]"));
         assert!(has(&tokens, Kind::Type, "host"));
@@ -942,7 +1165,10 @@ mod tests {
 
     #[test]
     fn shell_comments_variables_flags_and_strings() {
-        let tokens = kinds("bash", "# build\ncargo build --release -p navree \"$HOME/x\" $PATH\n");
+        let tokens = kinds(
+            "bash",
+            "# build\ncargo build --release -p navree \"$HOME/x\" $PATH\n",
+        );
         assert!(has(&tokens, Kind::Comment, "# build"));
         assert!(has(&tokens, Kind::Type, "--release"));
         assert!(has(&tokens, Kind::Type, "-p"));
@@ -954,7 +1180,10 @@ mod tests {
 
     #[test]
     fn sql_keywords_ignore_case() {
-        let tokens = kinds("sql", "select id, count(*) FROM orders where total > 1000 -- lakh\n");
+        let tokens = kinds(
+            "sql",
+            "select id, count(*) FROM orders where total > 1000 -- lakh\n",
+        );
         assert!(has(&tokens, Kind::Keyword, "select"));
         assert!(has(&tokens, Kind::Keyword, "FROM"));
         assert!(has(&tokens, Kind::Func, "count"));
@@ -964,7 +1193,10 @@ mod tests {
 
     #[test]
     fn css_properties_colours_and_at_rules() {
-        let tokens = kinds("css", "@media (min-width: 40rem) { .a { color: #0b7a3e; margin: 0 4px !important; } }");
+        let tokens = kinds(
+            "css",
+            "@media (min-width: 40rem) { .a { color: #0b7a3e; margin: 0 4px !important; } }",
+        );
         assert!(has(&tokens, Kind::Attr, "@media"));
         assert!(has(&tokens, Kind::Type, "color"));
         assert!(has(&tokens, Kind::Number, "#0b7a3e"));
@@ -995,14 +1227,20 @@ mod tests {
 
     #[test]
     fn http_request_lines_and_headers() {
-        let tokens = kinds("http", "GET /deals HTTP/1.1\nHost: example.com\n\n{\"a\":1}");
+        let tokens = kinds(
+            "http",
+            "GET /deals HTTP/1.1\nHost: example.com\n\n{\"a\":1}",
+        );
         assert!(has(&tokens, Kind::Keyword, "GET"));
         assert!(has(&tokens, Kind::Type, "Host"));
     }
 
     #[test]
     fn python_triple_quoted_strings_and_decorators() {
-        let tokens = kinds("py", "@cache\ndef f():\n    \"\"\"doc\nmore\"\"\"\n    return None\n");
+        let tokens = kinds(
+            "py",
+            "@cache\ndef f():\n    \"\"\"doc\nmore\"\"\"\n    return None\n",
+        );
         assert!(has(&tokens, Kind::Attr, "@cache"));
         assert!(has(&tokens, Kind::Keyword, "def"));
         assert!(has(&tokens, Kind::Str, "\"\"\"doc\nmore\"\"\""));
@@ -1027,7 +1265,10 @@ mod tests {
         let code = "let s = \"<script>alert(1)</script>\"; // <b>& more";
         let spans = highlight("rust", code).unwrap();
         let html = render(&Node::list(spans));
-        assert!(!html.contains("<script>") && !html.contains("<b>"), "{html}");
+        assert!(
+            !html.contains("<script>") && !html.contains("<b>"),
+            "{html}"
+        );
         // Strip the spans and the entities: the code comes back whole.
         let mut plain = String::new();
         let mut in_tag = false;
@@ -1039,7 +1280,12 @@ mod tests {
                 _ => {}
             }
         }
-        let plain = plain.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&").replace("&#39;", "'");
+        let plain = plain
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&#39;", "'");
         assert_eq!(plain, code);
     }
 
@@ -1059,7 +1305,10 @@ mod tests {
             "{{".repeat(2000),
             "[".repeat(3000),
         ];
-        for language in ["rust", "ts", "py", "go", "sh", "sql", "json", "toml", "yaml", "env", "css", "html", "diff", "http"] {
+        for language in [
+            "rust", "ts", "py", "go", "sh", "sql", "json", "toml", "yaml", "env", "css", "html",
+            "diff", "http",
+        ] {
             for code in &nasty {
                 let nodes = highlight(language, code);
                 assert!(nodes.is_some(), "{language}");

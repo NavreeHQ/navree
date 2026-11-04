@@ -52,7 +52,9 @@ mod tests {
         assert!(!html.contains(r##"href="#""##), "{html}");
         assert!(html.contains("x"), "{html}");
         assert!(
-            html.contains(r#"<a href="https://navree.com" rel="noopener noreferrer" data-external>y</a>"#),
+            html.contains(
+                r#"<a href="https://navree.com" rel="noopener noreferrer" data-external>y</a>"#
+            ),
             "{html}"
         );
     }

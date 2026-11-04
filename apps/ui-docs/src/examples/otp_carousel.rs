@@ -123,9 +123,9 @@ fn otp_send() -> Element {
 
 fn otp_rtl() -> Element {
     // A code reads left to right in every language.
-    el("div").attr("dir", "rtl").child(
-        Field::new("otp-rtl", "تصدیقی کوڈ").control(InputOtp::new("code", 6)),
-    )
+    el("div")
+        .attr("dir", "rtl")
+        .child(Field::new("otp-rtl", "تصدیقی کوڈ").control(InputOtp::new("code", 6)))
 }
 
 fn otp_check() -> Text {
@@ -171,13 +171,15 @@ fn carousel_pickers() -> Carousel {
     Carousel::new("c-pickers", "Offers from Ludhiana")
         .slide(
             CarouselSlide::new(
-                Card::titled("Phulkari dupatta").description("Hand-embroidered in Patiala. ₹2,499."),
+                Card::titled("Phulkari dupatta")
+                    .description("Hand-embroidered in Patiala. ₹2,499."),
             )
             .title("Phulkari dupatta"),
         )
         .slide(
             CarouselSlide::new(
-                Card::titled("Basmati rice, 5 kg").description("Aged for a year, from Karnal. ₹1,150."),
+                Card::titled("Basmati rice, 5 kg")
+                    .description("Aged for a year, from Karnal. ₹1,150."),
             )
             .title("Basmati rice, 5 kg"),
         )

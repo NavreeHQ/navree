@@ -169,7 +169,10 @@ mod tests {
     #[test]
     fn values_are_put_in_once_and_never_read_again() {
         assert_eq!(
-            fill("{name} is larger than {max}.", &[("name", "{max}"), ("max", "1 MB")]),
+            fill(
+                "{name} is larger than {max}.",
+                &[("name", "{max}"), ("max", "1 MB")]
+            ),
             "{max} is larger than 1 MB."
         );
         assert_eq!(fill("no keys", &[("a", "b")]), "no keys");

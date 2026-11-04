@@ -43,22 +43,46 @@ fn a_copy_button_adds_the_core_runtime_and_nothing_else() {
 #[test]
 fn a_models_answer_reads_as_a_document() {
     let html = Markdown::new(REPLY).heading_level(2).to_html();
-    assert!(html.starts_with(r#"<div data-slot="markdown" data-untrusted>"#), "{html}");
+    assert!(
+        html.starts_with(r#"<div data-slot="markdown" data-untrusted>"#),
+        "{html}"
+    );
     assert!(html.contains("<h3>Weekly summary</h3>"), "{html}");
     assert!(html.contains("<strong>Amritsar</strong>"), "{html}");
     // The table scrolls in its own labelled box and its numbers line up at the end.
     assert!(html.contains(r#"data-slot="markdown-table""#), "{html}");
-    assert!(html.contains(r#"<td data-cell-align="end">₹18,40,000</td>"#), "{html}");
+    assert!(
+        html.contains(r#"<td data-cell-align="end">₹18,40,000</td>"#),
+        "{html}"
+    );
     // A mail link, a link on this site and a link to another site, each as it should be.
-    assert!(html.contains(r#"href="mailto:harleen.kaur@example.com""#), "{html}");
-    assert!(html.contains(r#"<a href="/reports/weekly">full report</a>"#), "{html}");
-    assert!(html.contains(r#"href="https://www.incometax.gov.in/""#), "{html}");
-    assert!(html.contains(r#"data-host="www.incometax.gov.in""#), "{html}");
+    assert!(
+        html.contains(r#"href="mailto:harleen.kaur@example.com""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"<a href="/reports/weekly">full report</a>"#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"href="https://www.incometax.gov.in/""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"data-host="www.incometax.gov.in""#),
+        "{html}"
+    );
     // Task items, a coloured code block and inline code.
-    assert!(html.contains(r#"aria-label="Done" checked disabled"#), "{html}");
+    assert!(
+        html.contains(r#"aria-label="Done" checked disabled"#),
+        "{html}"
+    );
     assert!(html.contains(r#"<span data-t="k">SELECT</span>"#), "{html}");
     assert!(html.contains(r#"<span data-t="f">SUM</span>"#), "{html}");
-    assert!(html.contains(r#"<code data-slot="code">ORDER BY</code>"#), "{html}");
+    assert!(
+        html.contains(r#"<code data-slot="code">ORDER BY</code>"#),
+        "{html}"
+    );
 }
 
 #[test]
@@ -73,7 +97,10 @@ fn the_fragment_has_no_wrapper_and_the_page_element_has_one() {
     let fragment = Markdown::new("hi").to_fragment_html();
     assert_eq!(fragment, "<p>hi</p>");
     let wrapped = Markdown::new("hi").to_html();
-    assert_eq!(wrapped, r#"<div data-slot="markdown" data-untrusted><p>hi</p></div>"#);
+    assert_eq!(
+        wrapped,
+        r#"<div data-slot="markdown" data-untrusted><p>hi</p></div>"#
+    );
 }
 
 #[test]
@@ -88,17 +115,49 @@ fn an_empty_text_is_an_empty_element() {
 fn each_language_the_docs_use_is_coloured() {
     for (language, code, expect) in [
         ("rust", "let x = 1;", r#"<span data-t="k">let</span>"#),
-        ("toml", "[server]\nport = 8080", r#"<span data-t="k">[server]</span>"#),
-        ("sh", "cargo build --release", r#"<span data-t="t">--release</span>"#),
-        ("ts", "const a: string = \"x\";", r#"<span data-t="k">const</span>"#),
+        (
+            "toml",
+            "[server]\nport = 8080",
+            r#"<span data-t="k">[server]</span>"#,
+        ),
+        (
+            "sh",
+            "cargo build --release",
+            r#"<span data-t="t">--release</span>"#,
+        ),
+        (
+            "ts",
+            "const a: string = \"x\";",
+            r#"<span data-t="k">const</span>"#,
+        ),
         ("tsx", "<A b=\"c\" />", r#"data-t=""#),
-        ("json", "{\"city\": \"Ludhiana\"}", r#"<span data-t="t">&quot;city&quot;</span>"#),
+        (
+            "json",
+            "{\"city\": \"Ludhiana\"}",
+            r#"<span data-t="t">&quot;city&quot;</span>"#,
+        ),
         ("sql", "SELECT 1", r#"<span data-t="k">SELECT</span>"#),
-        ("http", "GET /deals HTTP/1.1", r#"<span data-t="k">GET</span>"#),
-        ("html", "<a href=\"/x\">go</a>", r#"<span data-t="t">href</span>"#),
-        ("css", "a { color: red; }", r#"<span data-t="t">color</span>"#),
+        (
+            "http",
+            "GET /deals HTTP/1.1",
+            r#"<span data-t="k">GET</span>"#,
+        ),
+        (
+            "html",
+            "<a href=\"/x\">go</a>",
+            r#"<span data-t="t">href</span>"#,
+        ),
+        (
+            "css",
+            "a { color: red; }",
+            r#"<span data-t="t">color</span>"#,
+        ),
         ("yaml", "name: web", r#"<span data-t="t">name</span>"#),
-        ("env", "DATABASE_URL=x", r#"<span data-t="t">DATABASE_URL</span>"#),
+        (
+            "env",
+            "DATABASE_URL=x",
+            r#"<span data-t="t">DATABASE_URL</span>"#,
+        ),
     ] {
         let html = render(&CodeBlock::new(language, code).into());
         assert!(html.contains(expect), "{language}: {html}");
@@ -111,6 +170,11 @@ fn the_words_are_a_translation_away() {
         copy_code: "ਕੋਡ ਕਾਪੀ ਕਰੋ".into(),
         ..MarkdownLabels::default()
     };
-    let html = render(&CodeBlock::new("sh", "ls").copy_button().labels(labels).into());
+    let html = render(
+        &CodeBlock::new("sh", "ls")
+            .copy_button()
+            .labels(labels)
+            .into(),
+    );
     assert!(html.contains("ਕੋਡ ਕਾਪੀ ਕਰੋ"), "{html}");
 }

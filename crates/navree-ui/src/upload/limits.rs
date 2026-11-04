@@ -135,7 +135,12 @@ impl UploadLimits {
         match names.len() {
             0 => String::new(),
             1 => names.remove(0),
-            count => format!("{} {} {}", names[..count - 1].join(", "), labels.or, names[count - 1]),
+            count => format!(
+                "{} {} {}",
+                names[..count - 1].join(", "),
+                labels.or,
+                names[count - 1]
+            ),
         }
     }
 
@@ -170,9 +175,11 @@ fn clean_type(raw: &str) -> Option<String> {
     let (kind, sub) = lower.split_once('/')?;
     let word = |part: &str| {
         !part.is_empty()
-            && part
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'+' | b'-' | b'_'))
+            && part.bytes().all(|b| {
+                b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || matches!(b, b'.' | b'+' | b'-' | b'_')
+            })
     };
     (word(kind) && (word(sub) || sub == "*")).then_some(lower)
 }
@@ -219,18 +226,29 @@ mod tests {
     #[test]
     fn kinds_are_named_once_and_joined_with_or() {
         let labels = UploadLabels::default();
-        let named = |types: &[&str]| UploadLimits::new(1).accept(types.iter().copied()).types_text(&labels);
+        let named = |types: &[&str]| {
+            UploadLimits::new(1)
+                .accept(types.iter().copied())
+                .types_text(&labels)
+        };
         assert_eq!(named(&["image/png"]), "PNG");
         assert_eq!(named(&["image/png", "image/jpeg"]), "PNG or JPG");
-        assert_eq!(named(&["image/jpeg", "image/jpg", "image/webp"]), "JPG or WebP");
-        assert_eq!(named(&["application/pdf", "image/*", "text/csv"]), "PDF, images or CSV");
+        assert_eq!(
+            named(&["image/jpeg", "image/jpg", "image/webp"]),
+            "JPG or WebP"
+        );
+        assert_eq!(
+            named(&["application/pdf", "image/*", "text/csv"]),
+            "PDF, images or CSV"
+        );
         assert_eq!(named(&["application/x-tar"]), "TAR");
         assert_eq!(named(&[]), "");
     }
 
     #[test]
     fn a_hostile_kind_is_dropped() {
-        let limits = UploadLimits::new(1).accept(["image/png\"><script>", "*/*", "image/ *", "<b>/x"]);
+        let limits =
+            UploadLimits::new(1).accept(["image/png\"><script>", "*/*", "image/ *", "<b>/x"]);
         assert!(limits.types().is_empty());
     }
 }

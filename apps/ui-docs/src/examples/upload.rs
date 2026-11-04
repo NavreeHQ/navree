@@ -20,9 +20,14 @@ pub fn all() -> Vec<Example> {
             .start()
             .height(210),
         gallery!("upload", "limits", "Limits, in words", upload_limits).medium(),
-        single!("upload", "files", "Files the server already has", upload_files)
-            .start()
-            .height(300),
+        single!(
+            "upload",
+            "files",
+            "Files the server already has",
+            upload_files
+        )
+        .start()
+        .height(300),
         single!("upload", "chunks", "Large files in chunks", upload_chunks)
             .start()
             .height(230),
@@ -69,13 +74,13 @@ fn upload_limits() -> Vec<(&'static str, Upload)> {
         ),
         (
             "A few kinds, and a count",
-            Upload::new("b", "GST invoices")
-                .id("limits-b")
-                .limits(
-                    UploadLimits::new(10 * MB)
-                        .max_files(5)
-                        .accept(["application/pdf", "image/*", "text/csv"]),
-                ),
+            Upload::new("b", "GST invoices").id("limits-b").limits(
+                UploadLimits::new(10 * MB).max_files(5).accept([
+                    "application/pdf",
+                    "image/*",
+                    "text/csv",
+                ]),
+            ),
         ),
         (
             "Any kind, a small size",
@@ -89,7 +94,11 @@ fn upload_limits() -> Vec<(&'static str, Upload)> {
 fn upload_files() -> Upload {
     Upload::new("documents", "Documents")
         .action("/applications/ludhiana-4471/documents")
-        .limits(UploadLimits::new(10 * MB).max_files(5).accept(["application/pdf"]))
+        .limits(
+            UploadLimits::new(10 * MB)
+                .max_files(5)
+                .accept(["application/pdf"]),
+        )
         .file(
             UploadedFile::new("Aadhaar-Gurpreet-Singh.pdf")
                 .size(240 * 1024)
@@ -102,7 +111,11 @@ fn upload_files() -> Upload {
                 .href("/files/18")
                 .remove("/files/18/remove"),
         )
-        .file(UploadedFile::new("PAN-card.pdf").size(96 * 1024).href("/files/19"))
+        .file(
+            UploadedFile::new("PAN-card.pdf")
+                .size(96 * 1024)
+                .href("/files/19"),
+        )
 }
 
 fn upload_chunks() -> Upload {
@@ -121,9 +134,13 @@ fn upload_field() -> Element {
         .attr("enctype", "multipart/form-data")
         .child(
             Stack::gap(4).children((
-                Field::new("applicant", "Applicant").control(Input::text("applicant").value("Harleen Kaur")),
-                Upload::new("papers", "Papers")
-                    .limits(UploadLimits::new(5 * MB).max_files(3).accept(["application/pdf"])),
+                Field::new("applicant", "Applicant")
+                    .control(Input::text("applicant").value("Harleen Kaur")),
+                Upload::new("papers", "Papers").limits(
+                    UploadLimits::new(5 * MB)
+                        .max_files(3)
+                        .accept(["application/pdf"]),
+                ),
                 Button::primary("Apply").submit(),
             )),
         )

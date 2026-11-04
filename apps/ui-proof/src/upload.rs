@@ -123,7 +123,14 @@ fn stored_list() -> Node {
         .children(
             files
                 .iter()
-                .map(|file| el("li").child(format!("{} ({}, {})", file.name, file.mime, UploadLimits::size_text(file.size))))
+                .map(|file| {
+                    el("li").child(format!(
+                        "{} ({}, {})",
+                        file.name,
+                        file.mime,
+                        UploadLimits::size_text(file.size)
+                    ))
+                })
                 .collect::<Vec<Element>>(),
         )
         .into()
@@ -180,7 +187,11 @@ fn page(shell: &AppShell) -> AppPage {
             .limits(UploadLimits::new(MB).accept(["image/*"])),
         Upload::new("d", "Hostile names")
             .id("up-hostile")
-            .file(UploadedFile::new("<img src=x onerror=alert(1)>.pdf").size(1536).href("/ok"))
+            .file(
+                UploadedFile::new("<img src=x onerror=alert(1)>.pdf")
+                    .size(1536)
+                    .href("/ok"),
+            )
             .file(UploadedFile::new("ਗੁਰਪ੍ਰੀਤ-ਸਿੰਘ-ਆਧਾਰ.pdf").size(240 * 1024)),
     );
     let right_to_left = el("div").attr("dir", "rtl").attr("id", "up-rtl").child(
@@ -189,19 +200,26 @@ fn page(shell: &AppShell) -> AppPage {
             .action("/upload/photo")
             .limits(UploadLimits::new(MB).accept(["image/png"])),
     );
-    shell.page("Upload").body(Stack::gap(10).children((
-        section("photo", "A photo", photo),
-        section(
-            "documents",
-            "Documents, with large files in chunks",
-            (docs, Region::new("up-stored").src("/upload/stored").children(stored_list())),
-        ),
-        section("manual", "Sent by hand", manual),
-        section("field", "A field in a form", field),
-        section("slow", "A slow upload", slow),
-        section("states", "States", states),
-        section("rtl", "Right to left", right_to_left),
-    )))
+    shell.page("Upload").body(
+        Stack::gap(10).children((
+            section("photo", "A photo", photo),
+            section(
+                "documents",
+                "Documents, with large files in chunks",
+                (
+                    docs,
+                    Region::new("up-stored")
+                        .src("/upload/stored")
+                        .children(stored_list()),
+                ),
+            ),
+            section("manual", "Sent by hand", manual),
+            section("field", "A field in a form", field),
+            section("slow", "A slow upload", slow),
+            section("states", "States", states),
+            section("rtl", "Right to left", right_to_left),
+        )),
+    )
 }
 
 // ---- The posts -------------------------------------------------------------------------------
@@ -216,7 +234,13 @@ fn failing() -> Option<Response> {
     None
 }
 
-async fn receive(uploads: &Uploads, headers: &HeaderMap, mut form: Multipart, back: &str, room: usize) -> Response {
+async fn receive(
+    uploads: &Uploads,
+    headers: &HeaderMap,
+    mut form: Multipart,
+    back: &str,
+    room: usize,
+) -> Response {
     match uploads.receive_into(&mut form, room).await {
         Ok(received) => {
             keep(&received.stored);
@@ -305,7 +329,9 @@ fn stored_json() -> Response {
 async fn remove(id: u32) -> Response {
     let gone = {
         let mut all = STATE.kept.lock().unwrap_or_else(PoisonError::into_inner);
-        all.iter().position(|file| file.id == id).map(|at| all.remove(at))
+        all.iter()
+            .position(|file| file.id == id)
+            .map(|at| all.remove(at))
     };
     if let Some(file) = gone {
         let _ = STATE.disk.delete(&file.path).await;
@@ -316,7 +342,8 @@ async fn remove(id: u32) -> Response {
 }
 
 async fn reset() -> Response {
-    let all: Vec<Kept> = std::mem::take(&mut *STATE.kept.lock().unwrap_or_else(PoisonError::into_inner));
+    let all: Vec<Kept> =
+        std::mem::take(&mut *STATE.kept.lock().unwrap_or_else(PoisonError::into_inner));
     for file in all {
         let _ = STATE.disk.delete(&file.path).await;
     }
@@ -351,27 +378,43 @@ impl Controller for UploadPages {
         let files = STATE.docs.body_limit();
         let parts = STATE.docs.chunk_body_limit();
         vec![
-            RouteDef::on(Method::GET, "!/upload", |shell: AppShell| async move { page(&shell) }).public(),
-            RouteDef::on(Method::POST, "!/upload/photo", |headers: HeaderMap, form: Multipart| async move {
-                photo(headers, form).await
+            RouteDef::on(Method::GET, "!/upload", |shell: AppShell| async move {
+                page(&shell)
             })
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/upload/photo",
+                |headers: HeaderMap, form: Multipart| async move { photo(headers, form).await },
+            )
             .public()
             .body_limit(STATE.photo.body_limit()),
-            RouteDef::on(Method::POST, "!/upload/docs", |headers: HeaderMap, form: Multipart| async move {
-                docs(headers, form).await
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/upload/docs",
+                |headers: HeaderMap, form: Multipart| async move { docs(headers, form).await },
+            )
             .public()
             .body_limit(files),
-            RouteDef::on(Method::POST, "!/upload/slow", |headers: HeaderMap, form: Multipart| async move {
-                slow(headers, form).await
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/upload/slow",
+                |headers: HeaderMap, form: Multipart| async move { slow(headers, form).await },
+            )
             .public()
             .body_limit(files),
-            RouteDef::on(Method::POST, "!/upload/chunks", |body: Json<ChunkStart>| async move { begin(body).await }).public(),
+            RouteDef::on(
+                Method::POST,
+                "!/upload/chunks",
+                |body: Json<ChunkStart>| async move { begin(body).await },
+            )
+            .public(),
             RouteDef::on(
                 Method::PUT,
                 "!/upload/chunks/{id}/{index}",
-                |Path((id, index)): Path<(String, u32)>, body: Bytes| async move { chunk(id, index, body).await },
+                |Path((id, index)): Path<(String, u32)>, body: Bytes| async move {
+                    chunk(id, index, body).await
+                },
             )
             .public()
             .body_limit(parts),
@@ -391,7 +434,10 @@ impl Controller for UploadPages {
                 View::new("Stored").body(stored_list())
             })
             .public(),
-            RouteDef::on(Method::GET, "!/upload/stored.json", || async { stored_json() }).public(),
+            RouteDef::on(Method::GET, "!/upload/stored.json", || async {
+                stored_json()
+            })
+            .public(),
             RouteDef::on(
                 Method::POST,
                 "!/upload/remove/{id}",

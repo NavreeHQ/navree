@@ -224,7 +224,11 @@ impl Carousel {
                 .replace("{n}", &n.to_string())
                 .replace("{total}", &total.to_string())
         };
-        let titles: Vec<Option<String>> = self.slides.iter().map(|slide| slide.title.clone()).collect();
+        let titles: Vec<Option<String>> = self
+            .slides
+            .iter()
+            .map(|slide| slide.title.clone())
+            .collect();
 
         let slides: Vec<Node> = self
             .slides
@@ -299,9 +303,7 @@ impl Carousel {
                 .enumerate()
                 .map(|(at, title)| {
                     let n = at + 1;
-                    let name = title
-                        .clone()
-                        .unwrap_or_else(|| say(&labels.picker, n));
+                    let name = title.clone().unwrap_or_else(|| say(&labels.picker, n));
                     Node::from(
                         el("a")
                             .slot("carousel-picker")
@@ -330,10 +332,7 @@ impl Carousel {
             .flag("data-ui-carousel", true)
             // A rotating carousel goes round at the end, so its buttons do too.
             .flag("data-loop", self.looped || self.autoplay.is_some())
-            .attr_opt(
-                "data-orientation",
-                self.vertical.then_some("vertical"),
-            )
+            .attr_opt("data-orientation", self.vertical.then_some("vertical"))
             .attr_opt(
                 "data-height",
                 if self.vertical {
@@ -342,10 +341,7 @@ impl Carousel {
                     None
                 },
             )
-            .attr_opt(
-                "data-per-view",
-                (per_view > 1).then(|| i64::from(per_view)),
-            )
+            .attr_opt("data-per-view", (per_view > 1).then(|| i64::from(per_view)))
             .attr_opt(
                 "data-autoplay",
                 self.autoplay

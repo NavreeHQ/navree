@@ -35,29 +35,62 @@ fn section(id: &'static str, title: &'static str, content: impl IntoNodes) -> El
 /// A code block for each language the readers know, in short samples.
 fn languages() -> Vec<Node> {
     let samples: [(&str, &str); 14] = [
-        ("rust", "#[derive(Debug)]\nfn total(orders: &[u32]) -> u32 {\n    let sum: u32 = orders.iter().sum(); // paise\n    println!(\"{}\", sum);\n    sum\n}"),
-        ("ts", "@Component()\nclass Orders {\n  city: string = `Amritsar`;\n  async load() { return await fetch(\"/orders\"); }\n}"),
-        ("json", "{ \"city\": \"Ludhiana\", \"pin\": 141001, \"open\": true, \"owner\": null }"),
-        ("toml", "# server\n[server]\nhost = \"0.0.0.0\"\nport = 8080\ndebug = false"),
-        ("yaml", "services:\n  web:\n    port: 8080 # open\n    image: \"orders:1\""),
-        ("sh", "# build and run\ncargo run --release -p orders -- serve --port 8080 \"$HOME/x\""),
-        ("sql", "select city, count(*) from orders where total > 100000 group by city; -- lakh"),
-        ("html", "<!-- nav --><a href=\"/orders\" class='b'>Orders</a>"),
-        ("css", "@media (min-width: 40rem) { .a { color: #0b7a3e; margin: 0 4px !important; } }"),
+        (
+            "rust",
+            "#[derive(Debug)]\nfn total(orders: &[u32]) -> u32 {\n    let sum: u32 = orders.iter().sum(); // paise\n    println!(\"{}\", sum);\n    sum\n}",
+        ),
+        (
+            "ts",
+            "@Component()\nclass Orders {\n  city: string = `Amritsar`;\n  async load() { return await fetch(\"/orders\"); }\n}",
+        ),
+        (
+            "json",
+            "{ \"city\": \"Ludhiana\", \"pin\": 141001, \"open\": true, \"owner\": null }",
+        ),
+        (
+            "toml",
+            "# server\n[server]\nhost = \"0.0.0.0\"\nport = 8080\ndebug = false",
+        ),
+        (
+            "yaml",
+            "services:\n  web:\n    port: 8080 # open\n    image: \"orders:1\"",
+        ),
+        (
+            "sh",
+            "# build and run\ncargo run --release -p orders -- serve --port 8080 \"$HOME/x\"",
+        ),
+        (
+            "sql",
+            "select city, count(*) from orders where total > 100000 group by city; -- lakh",
+        ),
+        (
+            "html",
+            "<!-- nav --><a href=\"/orders\" class='b'>Orders</a>",
+        ),
+        (
+            "css",
+            "@media (min-width: 40rem) { .a { color: #0b7a3e; margin: 0 4px !important; } }",
+        ),
         ("diff", "@@ -1 +1 @@\n-city: Delhi\n+city: Patiala"),
-        ("http", "GET /orders HTTP/1.1\nHost: example.com\nAccept: application/json"),
-        ("python", "@cache\ndef total(orders):\n    \"\"\"Sum.\"\"\"\n    return sum(orders)  # paise"),
+        (
+            "http",
+            "GET /orders HTTP/1.1\nHost: example.com\nAccept: application/json",
+        ),
+        (
+            "python",
+            "@cache\ndef total(orders):\n    \"\"\"Sum.\"\"\"\n    return sum(orders)  # paise",
+        ),
         ("go", "func main() {\n\tfmt.Println(\"Sat Sri Akal\")\n}"),
-        ("env", "DATABASE_URL=postgres://localhost/orders\n# a comment"),
+        (
+            "env",
+            "DATABASE_URL=postgres://localhost/orders\n# a comment",
+        ),
     ];
     samples
         .iter()
         .map(|(language, code)| {
             Stack::gap(1)
-                .children((
-                    Text::muted(*language),
-                    CodeBlock::new(language, *code),
-                ))
+                .children((Text::muted(*language), CodeBlock::new(language, *code)))
                 .into()
         })
         .collect()

@@ -15,7 +15,9 @@ use http::{HeaderMap, HeaderValue, StatusCode, header};
 use navree_http::AppError;
 use navree_http::extract::Multipart;
 use navree_http::response::{IntoResponse, Response};
-use navree_storage::{Disk, SNIFF_BYTES, StorageError, StoredFile, sniff_type, store_upload, upload_path};
+use navree_storage::{
+    Disk, SNIFF_BYTES, StorageError, StoredFile, sniff_type, store_upload, upload_path,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -419,7 +421,9 @@ impl Uploads {
             }
             seen += 1;
             if seen > room {
-                received.refused.push(self.refuse(UploadCode::TooMany, &name));
+                received
+                    .refused
+                    .push(self.refuse(UploadCode::TooMany, &name));
                 continue;
             }
             match store_upload(field, &self.disk, &self.dir, self.limits.rules()).await {
@@ -791,7 +795,10 @@ mod tests {
 
     #[test]
     fn names_are_cut_to_a_plain_name() {
-        assert_eq!(clean_name("C:\\fakepath\\Meera Joshi.pdf"), "Meera Joshi.pdf");
+        assert_eq!(
+            clean_name("C:\\fakepath\\Meera Joshi.pdf"),
+            "Meera Joshi.pdf"
+        );
         assert_eq!(clean_name("../../etc/passwd"), "passwd");
         assert_eq!(clean_name("a\u{0}b\n.txt"), "ab.txt");
         assert_eq!(clean_name("dir/"), "");
@@ -805,7 +812,12 @@ mod tests {
     #[test]
     fn ids_are_32_lower_case_hex_digits() {
         assert!(valid_id("0123456789abcdef0123456789abcdef"));
-        for bad in ["", "0123456789ABCDEF0123456789ABCDEF", "../../x", "0123456789abcdef0123456789abcde"] {
+        for bad in [
+            "",
+            "0123456789ABCDEF0123456789ABCDEF",
+            "../../x",
+            "0123456789abcdef0123456789abcde",
+        ] {
             assert!(!valid_id(bad), "{bad}");
         }
     }
@@ -823,7 +835,10 @@ mod tests {
             [0, 1, 2].map(|index| part_size(&session, index)),
             [100, 100, 5]
         );
-        let exact = Session { size: 200, ..session };
+        let exact = Session {
+            size: 200,
+            ..session
+        };
         assert_eq!([0, 1].map(|index| part_size(&exact, index)), [100, 100]);
     }
 

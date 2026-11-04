@@ -25,15 +25,10 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(620)
             .height(210),
-        single!(
-            "markdown",
-            "links",
-            "Links to other sites",
-            markdown_links
-        )
-        .start()
-        .width(620)
-        .height(150),
+        single!("markdown", "links", "Links to other sites", markdown_links)
+            .start()
+            .width(620)
+            .height(150),
         single!(
             "markdown",
             "images",
@@ -68,21 +63,20 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(520)
             .height(150),
-        single!("code-block", "default", "Code with colours", code_block_default)
-            .start()
-            .width(620)
-            .height(210),
+        single!(
+            "code-block",
+            "default",
+            "Code with colours",
+            code_block_default
+        )
+        .start()
+        .width(620)
+        .height(210),
         single!("code-block", "copy", "A copy button", code_block_copy)
             .start()
             .width(620)
             .height(150),
-        gallery!(
-            "code-block",
-            "languages",
-            "Languages",
-            code_block_languages
-        )
-        .medium(),
+        gallery!("code-block", "languages", "Languages", code_block_languages).medium(),
     ]
 }
 
@@ -139,8 +133,10 @@ fn markdown_raw() -> Markdown {
 
 fn markdown_headings() -> Markdown {
     // A chat message in a page that has its own `h1` and `h2` starts at `h3`.
-    Markdown::new("# The answer\n\nIt starts at an `h3`.\n\n## The detail\n\nAnd goes on from there.")
-        .heading_level(3)
+    Markdown::new(
+        "# The answer\n\nIt starts at an `h3`.\n\n## The detail\n\nAnd goes on from there.",
+    )
+    .heading_level(3)
 }
 
 fn markdown_code() -> Markdown {
@@ -192,14 +188,23 @@ fn code_block_copy() -> CodeBlock {
 
 fn code_block_languages() -> Vec<(&'static str, CodeBlock)> {
     vec![
-        ("Rust", CodeBlock::new("rust", "fn main() {\n    println!(\"Sat Sri Akal\");\n}")),
+        (
+            "Rust",
+            CodeBlock::new("rust", "fn main() {\n    println!(\"Sat Sri Akal\");\n}"),
+        ),
         (
             "TypeScript",
-            CodeBlock::new("ts", "const city: string = \"Amritsar\";\nawait load(city);"),
+            CodeBlock::new(
+                "ts",
+                "const city: string = \"Amritsar\";\nawait load(city);",
+            ),
         ),
         (
             "JSON",
-            CodeBlock::new("json", "{ \"city\": \"Ludhiana\", \"pin\": 141001, \"open\": true }"),
+            CodeBlock::new(
+                "json",
+                "{ \"city\": \"Ludhiana\", \"pin\": 141001, \"open\": true }",
+            ),
         ),
         (
             "TOML",
@@ -207,16 +212,34 @@ fn code_block_languages() -> Vec<(&'static str, CodeBlock)> {
         ),
         (
             "SQL",
-            CodeBlock::new("sql", "select city, count(*) from orders where total > 100000 group by city;"),
+            CodeBlock::new(
+                "sql",
+                "select city, count(*) from orders where total > 100000 group by city;",
+            ),
         ),
         (
             "Shell",
             CodeBlock::new("sh", "# build and run\ncargo run --release -- serve"),
         ),
-        ("HTML", CodeBlock::new("html", "<a href=\"/orders\">Orders</a>")),
-        ("CSS", CodeBlock::new("css", "a { color: #0b7a3e; margin: 0 4px; }")),
-        ("YAML", CodeBlock::new("yaml", "services:\n  web:\n    port: 8080")),
-        ("Diff", CodeBlock::new("diff", "@@ -1 +1 @@\n-city: Delhi\n+city: Patiala")),
-        ("HTTP", CodeBlock::new("http", "GET /orders HTTP/1.1\nHost: example.com")),
+        (
+            "HTML",
+            CodeBlock::new("html", "<a href=\"/orders\">Orders</a>"),
+        ),
+        (
+            "CSS",
+            CodeBlock::new("css", "a { color: #0b7a3e; margin: 0 4px; }"),
+        ),
+        (
+            "YAML",
+            CodeBlock::new("yaml", "services:\n  web:\n    port: 8080"),
+        ),
+        (
+            "Diff",
+            CodeBlock::new("diff", "@@ -1 +1 @@\n-city: Delhi\n+city: Patiala"),
+        ),
+        (
+            "HTTP",
+            CodeBlock::new("http", "GET /orders HTTP/1.1\nHost: example.com"),
+        ),
     ]
 }
