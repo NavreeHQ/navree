@@ -254,8 +254,8 @@ impl<T> WizardStepOf<T> {
         self
     }
 
-    /// Lets the step be skipped: it needn't be visited, but if it was, it must be
-    /// valid.
+    /// Lets the step be skipped: it needn't be visited, but if it holds an answer, however
+    /// the person left it (Next, Back, the stepper or Save), the answer must be valid.
     pub fn optional(mut self) -> Self {
         self.optional = true;
         self
@@ -393,6 +393,26 @@ impl WizardStep {
             secret_given,
         })
     }
+}
+
+/// What a step's passwords and files were in a post: the values that must never be kept,
+/// longest first so that one that holds another is hidden whole.
+fn hidden_values<'a>(step: &WizardStep, all: &'a Pairs) -> Vec<&'a str> {
+    let mut hidden: Vec<&str> = all
+        .iter()
+        .filter(|(name, value)| step.secret.contains(name) && !value.is_empty())
+        .map(|(_, value)| value.as_str())
+        .collect();
+    hidden.sort_by_key(|value| std::cmp::Reverse(value.len()));
+    hidden.dedup();
+    hidden
+}
+
+/// `words` with every hidden value in it replaced by dots.
+fn masked(words: &str, hidden: &[&str]) -> String {
+    hidden.iter().fold(words.to_owned(), |text, value| {
+        text.replace(value, "\u{2022}\u{2022}\u{2022}\u{2022}")
+    })
 }
 
 /// A form in steps.
@@ -544,12 +564,31 @@ impl Wizard {
             .is_some_and(|record| record.visited)
     }
 
-    /// Whether the step has been moved on from and its rules hold. A step with a
+    /// Whether an optional step holds something the person typed or chose, whichever way
+    /// they left it. (A box left unchecked posts nothing, so it is never an answer.)
+    fn answered(&self, draft: &Draft, at: usize) -> bool {
+        self.steps.get(at).is_some_and(|step| {
+            step.optional
+                && self
+                    .values(draft, at)
+                    .iter()
+                    .any(|(_, value)| !value.trim().is_empty())
+        })
+    }
+
+    /// Whether the step counts as tried: it was moved on from with Next, or it is optional
+    /// and holds an answer, which must not slip through unchecked because the person left
+    /// by Back, the stepper or Save.
+    fn tried(&self, draft: &Draft, at: usize) -> bool {
+        self.visited(draft, at) || self.answered(draft, at)
+    }
+
+    /// Whether the step counts as tried and its rules hold. A step with a
     /// password in it can't be checked again, since the password isn't kept: it
     /// holds if it held when it was tried.
     fn complete(&self, draft: &Draft, at: usize) -> bool {
         self.steps.get(at).is_some_and(|step| {
-            if !self.visited(draft, at) {
+            if !self.tried(draft, at) {
                 return false;
             }
             if step.has_secrets() {
@@ -563,7 +602,7 @@ impl Wizard {
     /// Whether the steps before `at` allow moving past them.
     fn satisfied(&self, draft: &Draft, at: usize) -> bool {
         match self.steps.get(at) {
-            Some(step) => self.complete(draft, at) || (step.optional && !self.visited(draft, at)),
+            Some(step) => self.complete(draft, at) || (step.optional && !self.tried(draft, at)),
             None => true,
         }
     }
@@ -595,7 +634,7 @@ impl Wizard {
             .map(|at| {
                 let state = if Some(at) == now {
                     StepState::Current
-                } else if self.steps.get(at).is_some_and(|_| self.visited(draft, at)) {
+                } else if self.steps.get(at).is_some_and(|_| self.tried(draft, at)) {
                     if self.complete(draft, at) {
                         StepState::Done
                     } else {
@@ -671,11 +710,18 @@ impl Wizard {
                 None => unchanged && before.as_ref().is_some_and(|record| record.valid),
             };
             // What a password or a file got wrong is kept as words, since its value is not.
+            // A rule's words can say the value back, so the value is masked in them first.
+            let hidden = hidden_values(&self.steps[at], &picked.all);
             let secret_errors = match &result {
                 Some(Err(errors)) => errors
                     .iter()
                     .filter(|(name, _)| self.steps[at].secret.contains(name))
-                    .map(|(name, words)| (name.clone(), words.clone()))
+                    .map(|(name, words)| {
+                        (
+                            name.clone(),
+                            words.iter().map(|text| masked(text, &hidden)).collect(),
+                        )
+                    })
                     .collect(),
                 Some(Ok(())) => std::collections::BTreeMap::new(),
                 None if unchanged => before
@@ -739,14 +785,14 @@ impl Wizard {
             }
             WizardAction::Finish => {
                 for each in 0..self.steps.len() {
-                    // A skipped optional step has nothing to check.
-                    if self.steps[each].optional && !self.visited(draft, each) {
+                    // A skipped optional step has nothing to check; one with an answer does.
+                    if self.steps[each].optional && !self.tried(draft, each) {
                         continue;
                     }
                     self.mark_visited(draft, each);
                 }
                 match (0..self.steps.len()).find(|each| {
-                    let skipped = self.steps[*each].optional && !self.visited(draft, *each);
+                    let skipped = self.steps[*each].optional && !self.tried(draft, *each);
                     !skipped && !self.complete(draft, *each)
                 }) {
                     Some(bad) => {
@@ -877,7 +923,7 @@ impl WizardPage {
             Some(step) => {
                 let values = wizard.values(&self.draft, self.at);
                 // A step the person has moved on from shows what is wrong with it.
-                let errors = if wizard.visited(&self.draft, self.at) {
+                let errors = if wizard.tried(&self.draft, self.at) {
                     // The password was not kept to be checked again: what it got wrong was.
                     let mut errors = (step.check)(values).err().unwrap_or_default();
                     for name in &step.secret {
@@ -908,8 +954,8 @@ impl WizardPage {
                 let rows = (step.rows)(values, &words.yes, &words.no);
                 // The same word as the stepper's: a step with a password can't be checked
                 // again here, so it holds if it held when it was tried.
-                let broken = wizard.visited(&self.draft, at) && !wizard.complete(&self.draft, at)
-                    || (!wizard.visited(&self.draft, at) && !step.optional);
+                let broken = wizard.tried(&self.draft, at) && !wizard.complete(&self.draft, at)
+                    || (!wizard.tried(&self.draft, at) && !step.optional);
                 let id = format!("{}-review-{}", wizard.id, step.id);
                 el("section")
                     .slot("wizard-review-step")
