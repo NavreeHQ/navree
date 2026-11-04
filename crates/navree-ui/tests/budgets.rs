@@ -136,6 +136,85 @@ fn the_phone_plans_are_at_most_20_kb_brotli() {
 }
 
 #[test]
+fn the_slider_module_is_at_most_3_kb_gzip() {
+    assert!(size("slider") <= 3 * 1024, "{}", size("slider"));
+}
+
+#[test]
+fn the_tree_module_is_at_most_5_kb_gzip() {
+    assert!(size("tree") <= 5 * 1024, "{}", size("tree"));
+}
+
+#[test]
+fn the_toolbar_module_is_at_most_3_kb_gzip() {
+    assert!(size("toolbar") <= 3 * 1024, "{}", size("toolbar"));
+}
+
+/// Each flow part loads its own module and what it stands on, and the stepper none.
+#[test]
+fn a_page_with_a_slider_a_tree_or_a_toolbar_loads_its_module_and_nothing_else() {
+    use navree_ui::{
+        DropdownMenu, MenuItem, Slider, Step, Stepper, Toolbar, ToolbarItem, Tree, TreeNode,
+    };
+
+    let slider = View::new("x").body(Slider::range("r").label("Range"));
+    assert_eq!(slider.uses(), Uses::SLIDER);
+    let html = slider.to_html();
+    assert!(html.contains(assets::SLIDER_URL), "{html}");
+    assert!(!html.contains(assets::CORE_URL) && !html.contains(assets::TREE_URL));
+
+    let tree = View::new("x").body(Tree::new("t", "T").node(TreeNode::leaf("a", "A")));
+    assert_eq!(tree.uses(), Uses::TREE);
+    let html = tree.to_html();
+    assert!(html.contains(assets::TREE_URL), "{html}");
+    assert!(!html.contains(assets::CORE_URL) && !html.contains(assets::SLIDER_URL));
+
+    // A toolbar is its module and the menu it moves tools into.
+    let bar = View::new("x").body(Toolbar::new("b", "B").item(ToolbarItem::button("A")).item(
+        ToolbarItem::menu(
+            "M",
+            DropdownMenu::new("m", "M").item(MenuItem::link("L", "/l")),
+        ),
+    ));
+    assert_eq!(
+        bar.uses(),
+        Uses::TOOLBAR.with(Uses::MENUS).with(Uses::OVERLAY)
+    );
+    assert!(!bar.to_html().contains(assets::CORE_URL));
+
+    // The stepper is markup.
+    let stepper = View::new("x").body(Stepper::new("S").step(Step::new("A")).current(0));
+    assert_eq!(stepper.uses(), Uses::NONE);
+    assert!(!stepper.to_html().contains("<script"));
+}
+
+/// The bits are one each, so a page asks for exactly what it names.
+#[test]
+fn no_two_modules_share_a_bit() {
+    let all = [
+        Uses::CORE,
+        Uses::SIDEBAR,
+        Uses::OVERLAY,
+        Uses::TABLE,
+        Uses::SELECT,
+        Uses::MENUS,
+        Uses::LIVE,
+        Uses::DATES,
+        Uses::SLIDER,
+        Uses::TREE,
+        Uses::TOOLBAR,
+    ];
+    for (at, one) in all.iter().enumerate() {
+        for other in &all[at + 1..] {
+            assert!(
+                !one.has(*other) && !other.has(*one),
+                "{one:?} and {other:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn the_stylesheet_is_at_most_25_kb_gzip() {
     assert!(size("navree-ui") <= 25 * 1024, "{}", size("navree-ui"));
 }
@@ -448,6 +527,93 @@ mod times {
                 }));
             View::new("Steps").body(timeline).to_html()
         });
+        assert!(time < Duration::from_millis(1), "{time:?}");
+    }
+
+    #[test]
+    fn a_tree_of_ten_thousand_nodes_renders_in_under_30_ms() {
+        use navree_ui::{Tree, TreeNode};
+        let time = best(10, || {
+            let tree = Tree::new("t", "People")
+                .nodes((0..10_000).map(|n| TreeNode::leaf(format!("n{n}"), format!("Person {n}"))));
+            View::new("Tree").body(tree).to_html()
+        });
+        println!("a tree of ten thousand nodes renders in {time:?}");
+        assert!(time < Duration::from_millis(30), "{time:?}");
+    }
+
+    #[test]
+    fn a_choosing_tree_of_a_thousand_nodes_renders_in_under_5_ms() {
+        use navree_ui::{Tree, TreeNode, TreeSelect};
+        let time = best(30, || {
+            let tree = Tree::new("t", "People")
+                .select(TreeSelect::Multiple)
+                .cascade()
+                .nodes((0..10).map(|group| {
+                    TreeNode::branch(
+                        format!("g{group}"),
+                        format!("Group {group}"),
+                        (0..99).map(move |n| {
+                            TreeNode::leaf(format!("g{group}-{n}"), format!("Person {n}"))
+                        }),
+                    )
+                    .open(true)
+                }));
+            View::new("Tree").body(tree).to_html()
+        });
+        println!("a choosing tree of a thousand nodes renders in {time:?}");
+        assert!(time < Duration::from_millis(5), "{time:?}");
+    }
+
+    #[test]
+    fn a_wizard_step_renders_in_under_1_ms() {
+        use navree_ui::{Form, Validate, Wizard, WizardStep};
+        #[derive(serde::Deserialize, Validate, Form)]
+        struct One {
+            /// Name
+            #[validate(length(min = 1))]
+            name: String,
+        }
+        #[derive(serde::Deserialize, Validate, Form)]
+        struct Two {
+            /// Email
+            #[validate(email)]
+            email: String,
+        }
+        let wizard = Wizard::new("w")
+            .base("/w")
+            .step(WizardStep::of::<One>("one", "One"))
+            .step(WizardStep::of::<Two>("two", "Two"))
+            .review();
+        let draft = wizard.draft("a-draft-id-1");
+        let time = best(50, || {
+            View::new("W")
+                .body(wizard.page(&draft, "one").expect("the first step opens"))
+                .to_html()
+        });
+        println!("a wizard step renders in {time:?}");
+        assert!(time < Duration::from_millis(1), "{time:?}");
+    }
+
+    #[test]
+    fn sliders_and_a_toolbar_of_many_tools_render_in_under_1_ms() {
+        use navree_ui::{Slider, Toolbar, ToolbarItem};
+        let time = best(50, || {
+            let sliders = navree_ui::Stack::gap(3).children((
+                Slider::new("a").max(100).step(5).ticks_every(1).value(40),
+                Slider::range("b")
+                    .max(1000)
+                    .step(10)
+                    .values(200, 800)
+                    .mark(0, "0")
+                    .mark(1000, "1000"),
+                Slider::new("c").max(2).names(["Low", "Mid", "High"]),
+            ));
+            let bar = Toolbar::new("t", "Tools")
+                .items((0..40).map(|n| ToolbarItem::button(format!("Tool {n}"))));
+            View::new("S").body((sliders, bar)).to_html()
+        });
+        println!("sliders and a toolbar render in {time:?}");
         assert!(time < Duration::from_millis(1), "{time:?}");
     }
 
