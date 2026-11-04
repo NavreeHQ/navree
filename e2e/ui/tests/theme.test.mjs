@@ -258,7 +258,7 @@ for (const name of NAMES) {
         const final = (await look(page)).accent;
         assert.deepEqual([...new Set(frames)], [final], `${value}: every frame from the first is in the chosen theme`);
         if (expectTheme) assert.equal((await look(page)).theme, expectTheme);
-        else assert.match((await look(page)).theme, /^c[0-9a-f]{12}$/);
+        else assert.match((await look(page)).theme, /^c[0-9a-f]{24}$/);
         await page.done();
       }
     });
@@ -283,7 +283,7 @@ for (const name of NAMES) {
       await page.context().addCookies([{ name: "navree_ui_theme", value: `light.${form}`, url: BASE }]);
       await page.goto(BASE + "/themes/layouts/inset", { waitUntil: "load" });
       const seen = await look(page);
-      assert.match(seen.theme, /^c[0-9a-f]{12}$/);
+      assert.match(seen.theme, /^c[0-9a-f]{24}$/);
       assert.equal(seen.mode, "light");
       assert.equal(seen.accent, "rgb(124, 92, 255)", "the app's own violet accent");
       await shot(page, "nojs-acme-light");
@@ -309,7 +309,7 @@ for (const name of NAMES) {
       });
       // The app's own theme is the last card.
       await page.locator("#ui-theme-menu [data-slot=theme-card]").last().click();
-      await page.waitFor(() => /^c[0-9a-f]{12}$/.test(document.documentElement.getAttribute("data-theme") || ""));
+      await page.waitFor(() => /^c[0-9a-f]{24}$/.test(document.documentElement.getAttribute("data-theme") || ""));
       await page.waitFor(() => window.__frames.length > 10);
       const after = (await look(page)).accent;
       await page.evaluate(() => { window.__stop = true; });
@@ -414,7 +414,7 @@ for (const name of NAMES) {
       const sheet = await fetch(`${BASE}/_navree/ui/theme/${form}.css`);
       assert.equal(sheet.status, 200);
       assert.match(sheet.headers.get("cache-control"), /immutable/);
-      assert.match(await sheet.text(), /^:where\(\[data-theme=c[0-9a-f]{12}\]\)\{--ink-0:/);
+      assert.match(await sheet.text(), /^:where\(\[data-theme=c[0-9a-f]{24}\]\)\{--ink-0:/);
       for (const bad of ["navree.css", `${form.toUpperCase()}.css`, `${form.slice(0, -1)}g.css`, "v1-0406-d-g-%3B%7D.css"]) {
         assert.equal((await fetch(`${BASE}/_navree/ui/theme/${bad}`)).status, 404, bad);
       }
@@ -515,7 +515,7 @@ for (const name of NAMES) {
       // The address changes first; the page follows once the new theme's stylesheet is in.
       await page.waitFor(() => new URL(location.href).searchParams.get("accent") === "blue");
       await page.waitFor(() => window.__frames.at(-1) === "rgb(90, 162, 255)");
-      assert.match((await look(page)).theme, /^c[0-9a-f]{12}$/);
+      assert.match((await look(page)).theme, /^c[0-9a-f]{24}$/);
       await page.evaluate(() => { window.__stop = true; });
       const after = (await look(page)).accent;
       assert.notEqual(after, before);
@@ -568,7 +568,7 @@ for (const name of NAMES) {
       await Promise.all([page.waitForURL(/\/themes\/builder\?/), page.click("[data-slot=theme-import] [data-slot=button]")]);
       await page.waitFor(() => document.querySelector("input[name=id]")?.value === "acme-four");
       const imported = await look(page);
-      assert.match(imported.theme, /^c[0-9a-f]{12}$/);
+      assert.match(imported.theme, /^c[0-9a-f]{24}$/);
       // A hostile file: refused with what is wrong, and nothing of it in the page as markup or style.
       const hostile = JSON.stringify({ schema: "navree-theme/1", id: "x", name: "<img src=x onerror=alert(1)>", radius: { control: "4px;}", surface: "6px" }, density: "default", font: "geist", dark: { "ink-0": "red;}body{display:none" }, light: {} });
       await page.fill("textarea[name=json]", hostile);
@@ -604,7 +604,7 @@ for (const name of NAMES) {
       await page.locator("[data-slot=theme-choice]:has(input[name=accent][value=rose])").click();
       await Promise.all([page.waitForURL(/accent=rose/), page.click("#theme-builder-form [data-theme-apply]")]);
       const seen = await look(page);
-      assert.match(seen.theme, /^c[0-9a-f]{12}$/);
+      assert.match(seen.theme, /^c[0-9a-f]{24}$/);
       assert.equal(seen.mode, "light");
       await page.done();
     });

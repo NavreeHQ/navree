@@ -747,7 +747,7 @@ impl Theme {
     /// A theme whose contrast isn't checked: the builder's draft.
     pub(crate) fn unchecked(id: ThemeId, name: String, spec: ThemeSpec) -> Self {
         let form = codec::to_form(&spec);
-        let key = format!("c{}", crate::assets::content_hash(form.as_bytes()));
+        let key = key_of(&form);
         let name: String = name.chars().filter(|c| !c.is_control()).take(64).collect();
         Self(Repr::Custom(Arc::new(Custom {
             id,
@@ -800,8 +800,8 @@ impl Theme {
         matches!(self.0, Repr::Builtin(_))
     }
 
-    /// The `data-theme` value: a built-in's id, or `c` and twelve hex digits of
-    /// the theme's hash. Never text you gave.
+    /// The `data-theme` value: a built-in's id, or `c` and 24 hex digits of the
+    /// SHA-256 of the theme's short form. Never text you gave.
     pub fn key(&self) -> &str {
         match &self.0 {
             Repr::Builtin(builtin) => builtin.id(),
@@ -1309,6 +1309,20 @@ fn contrast(spec: &mut ThemeSpec) {
     );
 }
 
+/// `c` and the first 24 hex digits (96 bits) of the SHA-256 of a short form:
+/// two themes share a key only by sharing their values.
+fn key_of(form: &str) -> String {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
+    let digest = Sha256::digest(form.as_bytes());
+    let mut key = String::with_capacity(25);
+    key.push('c');
+    for byte in &digest[..12] {
+        let _ = write!(key, "{byte:02x}");
+    }
+    key
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1473,7 +1487,7 @@ mod tests {
         .unwrap();
         assert_eq!(fine.id(), "acme");
         assert!(
-            fine.key().starts_with('c') && fine.key().len() == 13,
+            fine.key().starts_with('c') && fine.key().len() == 25,
             "{}",
             fine.key()
         );

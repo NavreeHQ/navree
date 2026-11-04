@@ -556,3 +556,35 @@ fn under_a_locked_workspace_the_menu_offers_only_the_mode() {
         .to_html();
     assert!(chosen.contains(r#"name="theme""#));
 }
+
+#[test]
+fn a_theme_is_offered_by_its_values_not_by_its_key() {
+    // Two themes whose keys matched would still differ in their short forms: the
+    // shell compares those, and the key is a long hash of them.
+    let mine = Theme::custom(
+        ThemeId::parse("acme").unwrap(),
+        "Acme",
+        *Theme::VIOLET.spec(),
+    )
+    .unwrap();
+    assert!(mine.key().len() >= 25, "{}", mine.key());
+    assert!(mine.key().starts_with('c') && mine.key()[1..].bytes().all(|b| b.is_ascii_hexdigit()));
+    let mut other = *Theme::VIOLET.spec();
+    other.radius = navree_ui::theme::Radius::SHARP;
+    let other = Theme::custom(ThemeId::parse("other").unwrap(), "Other", other).unwrap();
+    let offered = shell().themes([Theme::NAVREE, mine.clone()]);
+    let address = format!("/?theme={}", other.short_form());
+    let look = offered
+        .for_request(&address, &HeaderMap::new())
+        .appearance();
+    assert_eq!(
+        look.theme().key(),
+        Theme::NAVREE.key(),
+        "a theme not offered is ignored"
+    );
+    let address = format!("/?theme={}", mine.short_form());
+    let look = offered
+        .for_request(&address, &HeaderMap::new())
+        .appearance();
+    assert_eq!(look.theme().short_form(), mine.short_form());
+}

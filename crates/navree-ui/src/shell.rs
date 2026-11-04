@@ -553,7 +553,7 @@ impl Shell {
             !self
                 .themes
                 .iter()
-                .any(|offered| offered.key() == theme.key())
+                .any(|offered| offered.short_form() == theme.short_form())
         }) {
             setting.theme = None;
         }

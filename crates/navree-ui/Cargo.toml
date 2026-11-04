@@ -39,12 +39,12 @@ navree-validation = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
+sha2 = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 chrono-tz = { workspace = true }
 serde_urlencoded = { workspace = true }
-sha2 = { workspace = true }
 http-body-util = { workspace = true }
 # Its own `phone` feature, for the tests of the phone input.
 navree-ui = { workspace = true, features = ["phone"] }
