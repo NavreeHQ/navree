@@ -507,8 +507,7 @@ for (const name of NAMES) {
       await card.locator("summary").click();
       await card.locator("select[name=to_list]").selectOption("ready");
       await card.locator("input[name=position]").fill("2");
-      await card.getByRole("button", { name: "Move" }).click();
-      await page.waitForLoadState();
+      await Promise.all([page.waitForEvent("load"), card.getByRole("button", { name: "Move" }).click()]);
       assert.deepEqual((await where(4))["4"], ["ready", 1]);
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 3), ["6", "4", "7"]);
       assert.equal(await page.locator("[data-slot=sortable-handle]:visible").count(), 0);
@@ -516,8 +515,7 @@ for (const name of NAMES) {
       const other = page.locator("#columns-item-1");
       await other.locator("summary").click();
       await other.locator("select[name=to_list]").selectOption({ value: "doing" }, { force: true }).catch(() => {});
-      await page.locator("#columns-list-backlog-more button").click();
-      await page.waitForURL(/show\.backlog=40/);
+      await Promise.all([page.waitForURL(/show\.backlog=40/), page.locator("#columns-list-backlog-more button").click()]);
       await page.waitForLoadState();
       assert.equal((await keysIn(page, "backlog")).length, 40);
       await page.done();
