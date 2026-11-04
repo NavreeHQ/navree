@@ -1,12 +1,14 @@
 ---
 name: navree-errors-and-responses
-description: "Returns errors and responses the Navree way: `AppError` constructors, the `{statusCode, message, error, code, errors}` JSON shape, machine-readable error codes (`with_code`, `navree::http::codes`, `http.errors.code`) that front ends translate, `?` and 500s, `map_error` for your own error types, database error mapping, status codes, headers, downloads, streaming and API resources with `__type`. Use when a handler must return a specific status, message or code, an error type needs an HTTP status, a front end must show a refusal in the user's language, a response needs headers or a file, or an error response doesn't have the expected shape."
+description: "Returns errors and responses the Navree way: `AppError` constructors, the `{statusCode, message, error, code, errors}` JSON shape, machine-readable error codes (`with_code`, `navree::http::codes`, `http.errors.code`) that front ends translate, `?` and 500s, `map_error` for your own error types, database error mapping, status codes, headers, downloads, streaming and API resources with `__type`, and errors on page routes: `#[page]` and `#[json_only]` (`RouteDef::page()`, `RouteDef::json_only()`), the `ErrorPages` hook of navree-http and the HTML error pages `UiModule` registers. Use when a handler must return a specific status, message or code, an error type needs an HTTP status, a front end must show a refusal in the user's language, a response needs headers or a file, an error response doesn't have the expected shape, or a page route answers JSON (or an API route answers HTML) when it should not."
 ---
 
 # Errors and responses
 
-Every error a Navree app sends has one JSON body, whatever produced it (a
-handler, validation, the rate limiter, a panic):
+Every error an API route of a Navree app sends has one JSON body, whatever
+produced it (a handler, validation, the rate limiter, a panic). A request for
+a page in an app with Navree UI gets a page instead (see "Errors on a page
+route" below):
 
 ```json
 { "statusCode": 404, "message": "Deal not found", "error": "Not Found", "code": "not_found" }
@@ -17,8 +19,10 @@ handler, validation, the rate limiter, a panic):
 front end maps to a translation key, and validation errors add
 `"errors": { "field": ["..."] }` (with `"code": "validation_failed"`). The
 request id is in the `X-Request-Id` header, never in the body. Internal
-details go to the log, never to the client. Navree never answers 422 or
-419: input errors are 400, CSRF 403.
+details go to the log, never to the client. The router, the extractors and
+the validated extractors never answer 422 or 419: input errors are 400 and
+CSRF failures are 403. Navree UI forms answer a rejected form with 422, and
+`AppError::page_expired()` is a 419 you can return yourself.
 
 ## Return an error from a handler
 
@@ -170,6 +174,122 @@ call site: `.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailab
 A response status of 400 or above rolls the request's unit of work back,
 so a failed request leaves no partial writes.
 
+## Errors on a page route
+
+An app that names `UiModule` (Navree UI) answers a request for a **page** with
+a page: a 401, 403, 404, 405, 409, 410, 413, 419, 422, 429, a 5xx, a refused
+CSRF token or a panic. A signed-in user gets it inside the shell, with the
+next step and a reference (the request id) to quote. An API route keeps the
+JSON body above. `UiModule` does this by contributing an `ErrorPages` with
+`m.error_pages(..)`; you add nothing. The mark on the route decides, and the
+`Accept` header decides for a route with no mark:
+
+| The request | The answer |
+|---|---|
+| A route marked `json_only()` (`#[json_only]`) | the JSON body, for every client |
+| A client that asks for JSON alone | the JSON body |
+| A route under `http.api_prefix` (`/api`) with no `page()` mark | the JSON body, even for a browser |
+| A route marked `page()` (`#[page]`) | a page, unless the client asks for JSON alone |
+| Any other route, asked by a browser (`text/html`) | a page |
+| Any other route, asked with `*/*` or no `Accept` header | the JSON body |
+
+A route's mark covers every error it is the route of, including one raised
+before the route runs: a refused CSRF token, a rate limit, a method the route
+does not take, a panic. Put the mark on a route, or on the whole `impl` of a
+controller:
+
+```rust
+use navree::ui::{AppPage, AppShell, Text};
+use uuid::Uuid;
+
+#[injectable]
+pub struct InvoicePages;
+
+#[controller]
+impl InvoicePages {
+    /// A page: a missing invoice is a 404 page in the shell.
+    #[get("!/invoices/{id}")]
+    #[authenticated]
+    #[page]
+    async fn show(&self, shell: AppShell, Path(id): Path<Uuid>) -> Result<AppPage> {
+        if id.is_nil() {
+            return Err(AppError::not_found().with_detail("Invoice not found"));
+        }
+        Ok(shell.page("Invoice").body(Text::new("Invoice")))
+    }
+
+    /// A download beside it: its errors stay JSON for everyone.
+    #[get("!/invoices/{id}/file")]
+    #[authenticated]
+    #[json_only]
+    async fn file(&self, Path(id): Path<Uuid>) -> Result<String> {
+        Ok(format!("invoice {id}"))
+    }
+}
+```
+
+For a route written by hand, the same marks are `RouteDef::on(..).page()` and
+`.json_only()`.
+
+- **Details.** A 5xx shows fixed words: its source, message, SQL, paths and
+  panic text never reach the page. A 4xx or a 503 shows the error's own
+  `detail`, as the JSON `message` does. In `production` (the app's `env`) the
+  development block is never shown.
+- **Sign-in.** A 401 offers a button to the sign-in page with the page the user
+  was on as `next`: set `[ui] sign_in = "/sign-in"` (and `sign_in_redirect =
+  true` to send a guest straight there). Read `next` with `navree::ui::ReturnTo`,
+  which accepts only a path on your site.
+- **Another form of error.** The trait is `ErrorPages` in navree-http. Its
+  `render` gets an `ErrorContext` (the method, the URI, the headers a page
+  may depend on, the request id, the route's `RouteMeta`, the signed-in user
+  and the API prefix) and the `AppError`, and answers `Some(response)` or
+  `None` to keep the JSON body. It must not panic. A `json_only` route is never
+  asked, and the app uses the first `ErrorPages` contributed. With `UiModule`
+  in the app you do not write one.
+
+```rust
+use navree::http::response::Response;
+use navree::http::{AppError, ErrorContext, ErrorPages, IntoResponse, ModuleBuilderHttpExt, Preference};
+use navree::kernel::BoxFuture;
+
+/// A one-line page for a browser's 404. Every other error keeps the JSON body.
+pub struct PlainNotFound;
+
+impl ErrorPages for PlainNotFound {
+    fn render<'a>(
+        &'a self,
+        request: &'a ErrorContext,
+        error: &'a AppError,
+    ) -> BoxFuture<'a, Option<Response>> {
+        Box::pin(async move {
+            if error.status != http::StatusCode::NOT_FOUND || request.accepts() != Preference::Html {
+                return None;
+            }
+            Some(
+                (
+                    error.status,
+                    [("content-type", "text/html; charset=utf-8")],
+                    String::from("<h1>Not found</h1>"),
+                )
+                    .into_response(),
+            )
+        })
+    }
+}
+
+#[module(register = Self::wire)]
+pub struct NotFoundPagesModule;
+
+impl NotFoundPagesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.error_pages(PlainNotFound);
+    }
+}
+```
+
+The words of the pages, the sign-in address and the states inside a page
+(`Forbidden`, `NotFound`, `SignInRequired`, `EmptyState`) are in `navree-ui`.
+
 ## Responses
 
 | Return | Response |
@@ -246,6 +366,11 @@ response.assert_validation_error("email");        // 400 with errors.email
 - Returning a JSON body with an error status built by hand: it's sent as
   is, not in the standard shape. Return `AppError`.
 - Putting the request id or internal details in `message`.
+- A page controller whose file download or data route is not marked
+  `#[json_only]`: a failed download answers an HTML page.
+- An API route marked `#[page]`, or a page route (`!/..`) with no mark that
+  scripts call without asking for JSON: they get a page. Mark the route.
+- `UiOnDemand` standing in for `UiModule`: it keeps the JSON errors.
 - Catching a unique violation (`error.is_unique_violation()`) to return 400: let it become the 409,
   or check first with an `AsyncRule::unique` validation rule.
 
@@ -253,3 +378,4 @@ response.assert_validation_error("email");        // 400 with errors.email
 
 - https://navree.com/docs/basics/errors/
 - https://navree.com/docs/basics/responses/
+- https://navree.com/docs/ui/errors-and-states/
