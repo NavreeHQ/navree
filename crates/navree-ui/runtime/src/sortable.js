@@ -926,12 +926,13 @@ on(document, "click", (e) => {
   else if (!drag) lift(root, /** @type {HTMLElement} */ (item));
 });
 
-// Focus that goes elsewhere while a move with the keys is under way puts the item back. Focus
-// that goes nowhere is not leaving: WebKit takes it from a button it clicks, and the click that
-// follows drops the item. (A press elsewhere and Tab put it back on their own.)
+// Leaving the handle while a move with the keys is under way puts the item back.
 on(document, "focusout", (e) => {
-  const to = /** @type {FocusEvent} */ (e).relatedTarget;
-  if (drag?.mode === "keys" && !moving && to && holds(drag.item, /** @type {Node} */ (e.target)) && !holds(drag.item, /** @type {Node} */ (to))) cancel();
+  if (drag?.mode !== "keys" || moving || !holds(drag.item, /** @type {Node} */ (e.target))) return;
+  const lifted = drag.item;
+  setTimeout(() => {
+    if (drag?.item === lifted && !holds(lifted, active())) cancel();
+  });
 });
 
 /* The server's answer */
