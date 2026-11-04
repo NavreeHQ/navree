@@ -819,8 +819,8 @@ mod tests {
             "/health/live"
         );
         assert_eq!(
-            full_path("/api", Some("1"), "!/sanctum", "/csrf-cookie"),
-            "/sanctum/csrf-cookie"
+            full_path("/api", Some("1"), "!/session", "/csrf-cookie"),
+            "/session/csrf-cookie"
         );
     }
 

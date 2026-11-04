@@ -18,6 +18,19 @@ pub(crate) const ID_LEN: usize = 40;
 /// The session key holding the CSRF token.
 pub(crate) const TOKEN_KEY: &str = "_token";
 
+/// The session key holding this session's own idle lifetime in minutes
+/// ([`Session::set_lifetime`]); absent for the configured one.
+pub(crate) const LIFETIME_KEY: &str = "_lifetime";
+
+/// The longest lifetime a session may set itself (about a year, as
+/// `session.lifetime_minutes` allows).
+pub(crate) const MAX_LIFETIME_MINUTES: u64 = 366 * 24 * 60;
+
+/// Whether `key` is kept for the session's own use.
+fn is_reserved(key: &str) -> bool {
+    key == TOKEN_KEY || key == LIFETIME_KEY
+}
+
 /// The length of CSRF tokens (base62 characters).
 pub(crate) const TOKEN_LEN: usize = 40;
 
@@ -80,6 +93,15 @@ impl State {
             .and_then(Value::as_str)
             .filter(|token| !token.is_empty())
     }
+
+    /// The lifetime this session set itself, in minutes
+    /// ([`Session::set_lifetime`]), if any.
+    pub(crate) fn lifetime_minutes(&self) -> Option<u64> {
+        self.data
+            .get(LIFETIME_KEY)
+            .and_then(Value::as_u64)
+            .filter(|minutes| (1..=MAX_LIFETIME_MINUTES).contains(minutes))
+    }
 }
 
 impl Session {
@@ -134,10 +156,11 @@ impl Session {
 
     /// Stores `value` under `key`, replacing any previous value.
     ///
-    /// Fails when `value` cannot be represented as JSON, and for the key
-    /// `_token`, which holds the CSRF token.
+    /// Fails when `value` cannot be represented as JSON, and for the keys
+    /// the session keeps for itself: `_token` (the CSRF token) and
+    /// `_lifetime` (see [`set_lifetime`](Session::set_lifetime)).
     pub fn insert<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<(), SessionError> {
-        if key == TOKEN_KEY {
+        if is_reserved(key) {
             return Err(SessionError::ReservedKey {
                 key: key.to_owned(),
             });
@@ -153,9 +176,10 @@ impl Session {
     }
 
     /// Removes the value under `key`, returning it. The CSRF token
-    /// (`_token`) cannot be removed.
+    /// (`_token`) and the lifetime (`_lifetime`) cannot be removed this
+    /// way.
     pub fn remove(&self, key: &str) -> Option<Value> {
-        if key == TOKEN_KEY {
+        if is_reserved(key) {
             return None;
         }
         let mut state = self.lock();
@@ -195,6 +219,51 @@ impl Session {
             .data
             .insert(TOKEN_KEY.to_owned(), Value::String(new_token()));
         state.dirty = true;
+    }
+
+    /// Makes this session live `lifetime` when idle, in place of
+    /// `session.lifetime_minutes`, and its cookies last as long: what
+    /// "remember me" sets at sign-in. Rounded up to whole minutes, at
+    /// least one and at most about a year. It is stored with the session, so
+    /// it holds on every later request; [`invalidate`](Session::invalidate)
+    /// and [`flush`](Session::flush) drop it, and [`clear_lifetime`](Session::clear_lifetime)
+    /// goes back to the configured one.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use navree_session::Session;
+    ///
+    /// let session = Session::detached();
+    /// session.set_lifetime(Duration::from_secs(30 * 24 * 3600));
+    /// assert_eq!(session.lifetime(), Some(Duration::from_secs(30 * 24 * 3600)));
+    /// ```
+    pub fn set_lifetime(&self, lifetime: std::time::Duration) {
+        let minutes = lifetime
+            .as_secs()
+            .div_ceil(60)
+            .clamp(1, MAX_LIFETIME_MINUTES);
+        let mut state = self.lock();
+        state
+            .data
+            .insert(LIFETIME_KEY.to_owned(), Value::from(minutes));
+        state.dirty = true;
+    }
+
+    /// The lifetime set with [`set_lifetime`](Session::set_lifetime), if
+    /// any (`None`: the configured `session.lifetime_minutes`).
+    pub fn lifetime(&self) -> Option<std::time::Duration> {
+        self.lock()
+            .lifetime_minutes()
+            .map(|minutes| std::time::Duration::from_secs(minutes * 60))
+    }
+
+    /// Goes back to the configured lifetime (`session.lifetime_minutes`).
+    pub fn clear_lifetime(&self) {
+        let mut state = self.lock();
+        if state.data.remove(LIFETIME_KEY).is_some() {
+            state.dirty = true;
+        }
     }
 
     /// Removes every value except the CSRF token, keeping the id.
@@ -271,7 +340,9 @@ pub enum SessionError {
         reason: String,
     },
     /// The key is reserved for the session's own use.
-    #[error("the session key `{key}` is reserved (it holds the CSRF token)")]
+    #[error(
+        "the session key `{key}` is reserved (it holds the CSRF token or the session's lifetime)"
+    )]
     ReservedKey {
         /// The key.
         key: String,
@@ -382,6 +453,46 @@ mod tests {
             .expect("a fresh token");
         assert_ne!(fresh, token);
         assert_eq!(session.lock().data.len(), 1, "only the token");
+    }
+
+    // MOD-001: "remember me" is a lifetime the session keeps for itself.
+    #[test]
+    fn a_session_keeps_its_own_lifetime_until_it_is_cleared() {
+        use std::time::Duration;
+
+        let session = Session::detached();
+        assert_eq!(session.lifetime(), None);
+        session.set_lifetime(Duration::from_secs(30 * 24 * 3600));
+        assert_eq!(
+            session.lifetime(),
+            Some(Duration::from_secs(30 * 24 * 3600))
+        );
+        assert!(session.lock().dirty);
+        // Rounded up to whole minutes, at least one, at most about a year.
+        session.set_lifetime(Duration::from_secs(61));
+        assert_eq!(session.lifetime(), Some(Duration::from_secs(120)));
+        session.set_lifetime(Duration::ZERO);
+        assert_eq!(session.lifetime(), Some(Duration::from_secs(60)));
+        session.set_lifetime(Duration::from_secs(u64::MAX));
+        assert_eq!(
+            session.lifetime(),
+            Some(Duration::from_secs(MAX_LIFETIME_MINUTES * 60))
+        );
+        // The key is the session's own: not written, not removed, by hand.
+        assert!(matches!(
+            session.insert(LIFETIME_KEY, &5),
+            Err(SessionError::ReservedKey { .. })
+        ));
+        assert_eq!(session.remove(LIFETIME_KEY), None);
+        assert!(session.lifetime().is_some());
+        // Regenerating keeps it (signing in); invalidating drops it (signing out).
+        session.regenerate();
+        assert!(session.lifetime().is_some());
+        session.clear_lifetime();
+        assert_eq!(session.lifetime(), None);
+        session.set_lifetime(Duration::from_secs(3600));
+        session.invalidate();
+        assert_eq!(session.lifetime(), None);
     }
 
     #[test]

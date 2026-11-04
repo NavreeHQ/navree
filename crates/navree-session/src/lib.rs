@@ -13,15 +13,21 @@
 //!   record, puts the [`Session`] into the request (an extractor, and what
 //!   an `Authenticator` reads), enforces CSRF, and after the response saves
 //!   the session when it changed and sets the cookies (`HttpOnly`,
-//!   `SameSite` and `Secure` per the options). Idle sessions expire after
-//!   `lifetime_minutes`; activity extends them.
+//!   `SameSite` and `Secure` per the options). The session cookie is named
+//!   `__Host-navree_session` whenever browsers allow the prefix
+//!   ([`SessionOptions::cookie_name`]). Idle sessions expire after
+//!   `lifetime_minutes`, or the lifetime a session set itself
+//!   ([`Session::set_lifetime`], "remember me"); activity extends them.
+//! - navree-auth signs browsers in on this session (its `session` feature):
+//!   the sign-in regenerates the session, and its strategy reads the user
+//!   back on every request.
 //! - Stores implement `navree_contracts::SessionStore`: [`MemoryStore`] and
 //!   [`DatabaseStore`] (table [`SESSIONS_TABLE`], created by the `session`
 //!   migration set the module contributes); `store = "redis"` uses the
 //!   `dyn SessionStore` provider named `redis` (navree-redis's
 //!   `RedisModule`). Override the store with
 //!   `AppBuilder::override_value::<dyn SessionStore>(..)`.
-//! - `GET /sanctum/csrf-cookie` (public) answers 204 and sets the
+//! - `GET /csrf-cookie` (public; [`CSRF_COOKIE_PATH`]) answers 204 and sets the
 //!   [`XSRF_COOKIE`] cookie (readable by JavaScript).
 //!
 //! **CSRF rule.** A request with a state-changing method (anything but
@@ -108,6 +114,7 @@ mod module;
 mod options;
 mod session;
 
+pub use controller::{CSRF_COOKIE_PATH, CSRF_COOKIE_ROUTE};
 pub use database::{DatabaseStore, SESSIONS_TABLE};
 pub use layer::CSRF_FIELD;
 pub use memory::MemoryStore;

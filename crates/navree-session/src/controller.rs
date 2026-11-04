@@ -1,4 +1,4 @@
-//! [`CsrfCookieController`]: `GET /sanctum/csrf-cookie`.
+//! [`CsrfCookieController`]: `GET /csrf-cookie`.
 
 use std::sync::Arc;
 
@@ -8,9 +8,15 @@ use navree_kernel::{BoxFuture, Injectable, KernelError, Resolver};
 
 use crate::Session;
 
-/// Serves `GET /sanctum/csrf-cookie` (absolute: no API prefix), the
-/// CSRF handshake of single-page apps: 204 with the `XSRF-TOKEN`
-/// cookie (and the session cookie when the session is new).
+/// The path of the CSRF handshake (absolute: no API prefix).
+pub const CSRF_COOKIE_PATH: &str = "/csrf-cookie";
+
+/// The name of the CSRF handshake route.
+pub const CSRF_COOKIE_ROUTE: &str = "session.csrf-cookie";
+
+/// Serves `GET /csrf-cookie` (absolute: no API prefix), the CSRF
+/// handshake of single-page apps: 204 with the `XSRF-TOKEN` cookie (and
+/// the session cookie when the session is new).
 pub(crate) struct CsrfCookieController;
 
 impl Injectable for CsrfCookieController {
@@ -21,14 +27,14 @@ impl Injectable for CsrfCookieController {
 
 impl Controller for CsrfCookieController {
     fn prefix(&self) -> &'static str {
-        "!/sanctum"
+        ""
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
-            RouteDef::on(Method::GET, "/csrf-cookie", csrf_cookie)
+            RouteDef::on(Method::GET, format!("!{CSRF_COOKIE_PATH}"), csrf_cookie)
                 .public()
-                .name("sanctum.csrf-cookie")
+                .name(CSRF_COOKIE_ROUTE)
                 .api(ApiMeta {
                     summary: Some("Set the XSRF-TOKEN cookie".to_owned()),
                     description: Some(

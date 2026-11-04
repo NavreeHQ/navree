@@ -99,8 +99,8 @@ mod tests {
         assert_eq!(route_template("deals/", "notes"), "/deals/notes");
         assert_eq!(route_template("/deals", "!/health"), "!/health");
         assert_eq!(
-            route_template("!/sanctum", "/csrf-cookie"),
-            "!/sanctum/csrf-cookie"
+            route_template("!/session", "/csrf-cookie"),
+            "!/session/csrf-cookie"
         );
         assert_eq!(route_template("!/", "/"), "!/");
     }

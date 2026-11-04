@@ -246,7 +246,7 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```text
 /// #[controller("/deals")]                      // routes under {api_prefix}/deals
 /// #[controller("/deals", version = "1")]       // under {api_prefix}/v1/deals
-/// #[controller("!/sanctum")]                   // absolute: no API prefix, no version
+/// #[controller("!/health")]                    // absolute: no API prefix, no version
 /// ```
 ///
 /// Each method with `#[get("/p")]`, `#[post]`, `#[put]`, `#[patch]` or

@@ -18,7 +18,7 @@ use crate::{DatabaseStore, MemoryStore, SessionOptions, SessionStoreKind};
 /// [`DatabaseStore`], or for `store = "redis"` the provider named `redis`
 /// that navree-redis's `RedisModule` registers); contributes the session and CSRF layer
 /// ([`LayerSlot::Session`](navree_http::LayerSlot::Session)), the public route
-/// `GET /sanctum/csrf-cookie` and the `session` migration set (the
+/// `GET /csrf-cookie` and the `session` migration set (the
 /// `sessions` table, used by the database store).
 ///
 /// The app must include `CryptoModule` (the cookie holds the session id

@@ -45,6 +45,8 @@ static X_XSRF_TOKEN: HeaderName = HeaderName::from_static("x-xsrf-token");
 /// What the session layer needs, resolved once at boot.
 pub(crate) struct SessionManager {
     options: Arc<SessionOptions>,
+    /// The session cookie's name ([`SessionOptions::cookie_name`]).
+    cookie_name: String,
     store: Arc<dyn SessionStore>,
     encrypter: Arc<Encrypter>,
     /// The app's `dyn Clock`, else the system clock.
@@ -100,6 +102,7 @@ impl Injectable for SessionManager {
                 })
                 .unwrap_or_default();
             Ok(SessionManager {
+                cookie_name: options.cookie_name(),
                 options,
                 store: r.get::<dyn SessionStore>().await?,
                 encrypter,
@@ -117,6 +120,11 @@ pub(crate) async fn clock_of(r: &Resolver) -> Arc<dyn Clock> {
         Some(clock) => clock,
         None => Arc::new(SystemClock),
     }
+}
+
+/// `minutes` as a duration.
+fn minutes(minutes: u64) -> TimeDelta {
+    TimeDelta::minutes(i64::try_from(minutes).unwrap_or(i64::MAX))
 }
 
 /// How long after a write a request extends the session again: a minute,
@@ -154,7 +162,7 @@ async fn handle(
 
 impl SessionManager {
     async fn run(&self, mut request: Request, next: Next) -> Response {
-        let cookies = session_cookies(request.headers(), &self.options.cookie);
+        let cookies = session_cookies(request.headers(), &self.cookie_name);
         let session = match self.start(&cookies).await {
             Ok(session) => session,
             Err(error) => return AppError::internal(error).into_response(),
@@ -218,12 +226,17 @@ impl SessionManager {
     }
 
     /// Saves the session when it changed (or, at most once a minute, to
-    /// extend it), deletes the record it replaced and sets the cookies.
+    /// extend it), deletes the record it replaced and sets the cookies. A
+    /// session that set its own lifetime ([`Session::set_lifetime`], what
+    /// "remember me" does) lives and keeps its cookies that long instead of
+    /// `session.lifetime_minutes`.
     async fn finish(&self, session: &Session, headers: &mut HeaderMap) -> Result<(), BoxError> {
         let now = self.clock.now();
-        let lifetime = self.options.lifetime();
-        let (save, replaced, xsrf) = {
+        let (save, replaced, xsrf, lifetime) = {
             let state = session.lock();
+            let lifetime = state
+                .lifetime_minutes()
+                .map_or_else(|| self.options.lifetime(), minutes);
             let touch = state.stored_id.as_deref() == Some(state.id.as_str())
                 && state
                     .expires_at
@@ -240,12 +253,12 @@ impl SessionManager {
                 .token()
                 .filter(|_| save.is_some() || state.token_requested)
                 .map(str::to_owned);
-            (save, replaced, xsrf)
+            (save, replaced, xsrf, lifetime)
         };
         if let Some((id, record)) = save {
             // Encrypt first: without an app key nothing is stored.
             let value = self.encrypter.encrypt_string(&id)?;
-            let cookie = self.cookie(&self.options.cookie, value, true);
+            let cookie = self.cookie(&self.cookie_name, value, true, lifetime);
             self.store.save(&id, record).await?;
             headers.append(SET_COOKIE, HeaderValue::from_str(&cookie.to_string())?);
         }
@@ -253,7 +266,7 @@ impl SessionManager {
             self.store.delete(&old).await?;
         }
         if let Some(token) = xsrf {
-            let cookie = self.cookie(XSRF_COOKIE, token, false);
+            let cookie = self.cookie(XSRF_COOKIE, token, false, lifetime);
             headers.append(SET_COOKIE, HeaderValue::from_str(&cookie.to_string())?);
         }
         Ok(())
@@ -296,8 +309,14 @@ impl SessionManager {
         !self.except.iter().any(|pattern| pattern.matches(path))
     }
 
-    /// A cookie with the configured attributes.
-    fn cookie(&self, name: &str, value: String, http_only: bool) -> Cookie<'static> {
+    /// A cookie with the configured attributes, kept for `lifetime`.
+    fn cookie(
+        &self,
+        name: &str,
+        value: String,
+        http_only: bool,
+        lifetime: TimeDelta,
+    ) -> Cookie<'static> {
         let options = &self.options;
         let mut cookie = Cookie::build((name.to_owned(), value))
             .path("/")
@@ -308,9 +327,7 @@ impl SessionManager {
                 SameSite::Lax => cookie::SameSite::Lax,
                 SameSite::None => cookie::SameSite::None,
             })
-            .max_age(cookie::time::Duration::minutes(
-                i64::try_from(options.lifetime_minutes).unwrap_or(i64::MAX),
-            ));
+            .max_age(cookie::time::Duration::seconds(lifetime.num_seconds()));
         if let Some(domain) = &options.domain {
             cookie = cookie.domain(domain.clone());
         }

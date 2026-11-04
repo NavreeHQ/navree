@@ -43,6 +43,7 @@ pub enum SameSite {
 /// secure = true               # send the cookies over HTTPS only
 /// same_site = "lax"           # strict | lax | none
 /// domain = ".example.com"     # share the cookies with sibling hosts
+/// host_prefix = true          # `__Host-navree_session` whenever the cookie may carry it
 /// csrf_except = ["/webhooks/*"]
 /// ```
 ///
@@ -69,6 +70,12 @@ pub struct SessionOptions {
     /// the shared parent domain when the SPA and the API are sibling hosts,
     /// so the SPA can read `XSRF-TOKEN`.
     pub domain: Option<String>,
+    /// Whether the session cookie's name starts with `__Host-` when it can
+    /// (default `true`): with `secure` on and no `domain`, browsers then
+    /// accept the cookie only from this host, over HTTPS, for the whole
+    /// site, so a sibling subdomain can't plant a session cookie of its
+    /// own. See [`cookie_name`](SessionOptions::cookie_name).
+    pub host_prefix: bool,
     /// Request paths exempt from the CSRF check, as globs (`*` matches any
     /// characters, `?` one), e.g. `/webhooks/*`. A pattern without a
     /// leading `/` gets one.
@@ -85,6 +92,7 @@ impl Default for SessionOptions {
             secure: true,
             same_site: SameSite::default(),
             domain: None,
+            host_prefix: true,
             csrf_except: Vec::new(),
         }
     }
@@ -111,6 +119,14 @@ impl SessionOptions {
             errors.push(format!(
                 "session.cookie must not be `{}`, the CSRF cookie",
                 crate::XSRF_COOKIE
+            ));
+        } else if starts_with_ignore_case(&self.cookie, HOST_PREFIX)
+            || starts_with_ignore_case(&self.cookie, SECURE_PREFIX)
+        {
+            errors.push(format!(
+                "session.cookie must be a plain name such as `navree_session` (got `{}`): \
+                 the `__Host-` prefix is added when the cookie can carry it (session.host_prefix)",
+                self.cookie
             ));
         }
         if self.lifetime_minutes == 0 {
@@ -144,11 +160,46 @@ impl SessionOptions {
     pub(crate) fn lifetime(&self) -> chrono::TimeDelta {
         chrono::TimeDelta::minutes(i64::try_from(self.lifetime_minutes).unwrap_or(i64::MAX))
     }
+
+    /// The name the session cookie is set and read under: `__Host-` and
+    /// [`cookie`](SessionOptions::cookie) when [`host_prefix`](SessionOptions::host_prefix)
+    /// is on, the cookie is `secure` and has no `domain` (what browsers
+    /// require of the prefix), else `cookie` as it is.
+    ///
+    /// ```
+    /// use navree_session::SessionOptions;
+    ///
+    /// assert_eq!(SessionOptions::default().cookie_name(), "__Host-navree_session");
+    /// let plain_http = SessionOptions { secure: false, ..SessionOptions::default() };
+    /// assert_eq!(plain_http.cookie_name(), "navree_session");
+    /// let shared = SessionOptions { domain: Some(".example.com".into()), ..SessionOptions::default() };
+    /// assert_eq!(shared.cookie_name(), "navree_session");
+    /// ```
+    pub fn cookie_name(&self) -> String {
+        if self.host_prefix && self.secure && self.domain.is_none() {
+            format!("{HOST_PREFIX}{}", self.cookie)
+        } else {
+            self.cookie.clone()
+        }
+    }
 }
 
-/// About a year: longer lifetimes are almost certainly a unit mistake
-/// (seconds for minutes).
-const MAX_LIFETIME_MINUTES: u64 = 366 * 24 * 60;
+/// The cookie name prefix browsers bind to one host (RFC 6265bis 4.1.3.2).
+const HOST_PREFIX: &str = "__Host-";
+
+/// The cookie name prefix browsers accept over HTTPS only.
+const SECURE_PREFIX: &str = "__Secure-";
+
+/// Whether `name` starts with `prefix`, ignoring ASCII case (as browsers
+/// compare cookie prefixes).
+fn starts_with_ignore_case(name: &str, prefix: &str) -> bool {
+    name.len() >= prefix.len()
+        && name.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+}
+
+// About a year: longer lifetimes are almost certainly a unit mistake
+// (seconds for minutes).
+use crate::session::MAX_LIFETIME_MINUTES;
 
 /// The cookie name characters accepted (a safe subset of RFC 6265 tokens).
 fn is_cookie_name_byte(b: u8) -> bool {
@@ -201,9 +252,41 @@ mod tests {
         assert!(options.secure);
         assert_eq!(options.same_site, SameSite::Lax);
         assert_eq!(options.domain, None);
+        assert!(options.host_prefix);
         assert!(options.csrf_except.is_empty());
         assert!(options.check().is_ok());
         assert_eq!(options.lifetime(), chrono::TimeDelta::minutes(120));
+    }
+
+    // MOD-001: the session cookie carries the `__Host-` prefix whenever
+    // browsers allow it (Secure, no Domain), so no sibling host can plant one.
+    #[test]
+    fn the_cookie_name_carries_the_host_prefix_when_it_can() {
+        assert_eq!(
+            SessionOptions::default().cookie_name(),
+            "__Host-navree_session"
+        );
+        let renamed = SessionOptions {
+            cookie: "crm_session".into(),
+            ..SessionOptions::default()
+        };
+        assert_eq!(renamed.cookie_name(), "__Host-crm_session");
+        for options in [
+            SessionOptions {
+                secure: false,
+                ..SessionOptions::default()
+            },
+            SessionOptions {
+                domain: Some(".example.com".into()),
+                ..SessionOptions::default()
+            },
+            SessionOptions {
+                host_prefix: false,
+                ..SessionOptions::default()
+            },
+        ] {
+            assert_eq!(options.cookie_name(), "navree_session", "{options:?}");
+        }
     }
 
     #[test]
@@ -238,6 +321,7 @@ mod tests {
                 secure: false,
                 same_site: SameSite::Strict,
                 domain: Some(".example.com".into()),
+                host_prefix: true,
                 csrf_except: vec!["/webhooks/*".into(), "stripe/*".into()],
             }
         );
@@ -299,6 +383,20 @@ mod tests {
             (
                 SessionOptions {
                     cookie: "XSRF-TOKEN".into(),
+                    ..SessionOptions::default()
+                },
+                "session.cookie",
+            ),
+            (
+                SessionOptions {
+                    cookie: "__Host-navree_session".into(),
+                    ..SessionOptions::default()
+                },
+                "session.cookie",
+            ),
+            (
+                SessionOptions {
+                    cookie: "__secure-navree_session".into(),
                     ..SessionOptions::default()
                 },
                 "session.cookie",

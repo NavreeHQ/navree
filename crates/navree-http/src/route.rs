@@ -18,7 +18,7 @@ use crate::handler::{Endpoint, Handler};
 /// The path is relative to the controller (`/{id}`), with `{param}` and
 /// `{*rest}` captures (see [`routing`](crate::routing)). A path starting with
 /// `!` is absolute: it is mounted as written, without the API prefix,
-/// version or controller prefix (`!/sanctum/csrf-cookie`, `!/health/live`).
+/// version or controller prefix (`!/csrf-cookie`, `!/health/live`).
 ///
 /// Every route must declare its access ([`public`](RouteDef::public),
 /// [`authenticated`](RouteDef::authenticated), [`roles`](RouteDef::roles),

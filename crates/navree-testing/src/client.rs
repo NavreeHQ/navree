@@ -22,7 +22,7 @@ use crate::cookies::CookieJar;
 const PEER: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 49152);
 
 /// The route that hands out the XSRF cookie.
-const CSRF_COOKIE_PATH: &str = "/sanctum/csrf-cookie";
+const CSRF_COOKIE_PATH: &str = "/csrf-cookie";
 
 /// The cookie holding the CSRF token for JavaScript clients.
 const XSRF_COOKIE: &str = "XSRF-TOKEN";
@@ -154,7 +154,7 @@ impl TestClient {
         self.request(Method::DELETE, path)
     }
 
-    /// `GET /sanctum/csrf-cookie` (served by navree-session's `SessionModule`,
+    /// `GET /csrf-cookie` (served by navree-session's `SessionModule`,
     /// for cookie-session apps; JWT apps with navree-auth do not need it),
     /// which sets the `XSRF-TOKEN` cookie (see [`TestRequest::xsrf`]).
     ///
