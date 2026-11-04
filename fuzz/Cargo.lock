@@ -3157,6 +3157,7 @@ dependencies = [
  "navree-kernel",
  "navree-ui-macros",
  "navree-validation",
+ "rust_decimal",
  "serde",
  "serde_json",
  "serde_path_to_error",
