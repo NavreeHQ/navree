@@ -29,6 +29,7 @@
 pub mod prelude {
     pub use crate::components::*;
     pub use crate::dates::{Calendar, DatePicker, DateRangePicker, TimePicker};
+    pub use crate::flow::{Step, StepState, Stepper, StepperLabels};
     pub use crate::form::{
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
     };
@@ -60,6 +61,7 @@ pub mod components;
 pub mod compress;
 pub mod dates;
 pub mod flags;
+pub mod flow;
 pub mod form;
 pub mod html;
 pub mod icons;
@@ -80,6 +82,7 @@ pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
+pub use flow::{Step, StepState, Stepper, StepperLabels};
 pub use form::{FormView, Money, Submit};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use module::{UiModule, UiNeed, UiOnDemand};
