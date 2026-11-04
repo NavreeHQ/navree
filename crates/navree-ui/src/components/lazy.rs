@@ -153,6 +153,8 @@ pub struct LazyList {
     empty: Option<Node>,
     labels: LazyLabels,
     gap: u8,
+    view: Option<String>,
+    current: Option<String>,
 }
 
 impl LazyList {
@@ -175,7 +177,25 @@ impl LazyList {
             empty: None,
             labels: LazyLabels::default(),
             gap: 1,
+            view: None,
+            current: None,
         }
+    }
+
+    /// Names what the list shows: its filters, its search. A page drawn again for the
+    /// same view keeps the items the reader loaded and where they scrolled, so opening an
+    /// item deep in the list doesn't take the reader back to the top; a page for another
+    /// view draws its own first page. The source by default.
+    pub fn view(mut self, view: impl Into<String>) -> Self {
+        self.view = Some(view.into());
+        self
+    }
+
+    /// The item the page is about: its first link says `aria-current="page"` and is
+    /// drawn so, and the mark moves when a page for another item keeps the list.
+    pub fn current(mut self, key: impl AsRef<str>) -> Self {
+        self.current = Some(clip(key.as_ref()));
+        self
     }
 
     /// Sets the space between items, as [`Stack::gap`](crate::Stack::gap) does: 1 by default.
@@ -257,6 +277,11 @@ impl LazyList {
     }
 
     fn into_node(self) -> Node {
+        let view = self
+            .view
+            .clone()
+            .unwrap_or_else(|| self.src.as_str().to_owned());
+        let items_id = format!("{}-{}", self.id, crate::assets::content_hash(view.as_bytes()));
         let mut root = el("div")
             .slot("lazy-list")
             .attr("id", self.id.clone())
@@ -264,17 +289,10 @@ impl LazyList {
             .attr("data-ui-src", self.src)
             .attr("data-ui-order", self.order.as_str())
             .attr("data-ui-max", self.max)
-            .flag("data-ui-start-done", self.before.is_none())
-            .flag("data-ui-end-done", self.after.is_none())
-            .attr_opt("data-ui-since", self.since)
+            .attr_opt("data-ui-current", self.current)
             .attr("data-l-loaded", self.labels.loaded.clone())
             .attr("data-l-loading", self.labels.loading.clone())
             .attr("data-l-failed", self.labels.failed.clone())
-            // What the person scrolled to stays through a morph of the page around it.
-            .attr(
-                "data-ui-keep-attrs",
-                "data-ui-start-done data-ui-end-done data-ui-since",
-            )
             .uses(Uses::LAZY);
         if let Some((url, event, new_at)) = self.live {
             root = root
@@ -287,10 +305,18 @@ impl LazyList {
                 .uses(Uses::LIVE);
         }
         let empty = self.items.is_empty();
+        let (start_done, end_done) = (self.before.is_none(), self.after.is_none());
         root.children((
             Self::end_link("start", self.before, &self.labels.start),
+            // The items of one view are the reader's: a page drawn again for that view
+            // leaves them as they are, and the module keeps them.
             el("ul")
                 .slot("lazy-items")
+                .attr("id", items_id)
+                .flag("data-ui-keep", true)
+                .flag("data-ui-start-done", start_done)
+                .flag("data-ui-end-done", end_done)
+                .attr_opt("data-ui-since", self.since)
                 .attr("data-gap", crate::components::layout::gap_name(self.gap))
                 .attr("role", "list")
                 .attr("aria-label", self.label)
@@ -465,11 +491,11 @@ mod tests {
     #[test]
     fn the_first_page_is_drawn_with_a_link_to_the_next() {
         let html = render(&list().into());
-        assert!(html.contains(r#"<div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/things/rows" data-ui-order="desc" data-ui-max="300" data-ui-start-done"#), "{html}");
-        assert!(html.contains(r#"data-ui-max="300" data-ui-start-done data-l-loaded"#), "the end is not done: {html}");
+        assert!(html.contains(r#"<div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/things/rows" data-ui-order="desc" data-ui-max="300" data-l-loaded"#), "{html}");
+        assert!(html.contains(r#"data-ui-keep data-ui-start-done data-gap="1""#), "the start is done and the end is not: {html}");
         assert!(html.contains(r##"<a data-slot="lazy-more" data-dir="start" href="#" hidden>Load newer</a>"##), "{html}");
         assert!(html.contains(r#"<a data-slot="lazy-more" data-dir="end" href="/things?before=0001">Load more</a>"#), "{html}");
-        assert!(html.contains(r#"<ul data-slot="lazy-items" data-gap="1" role="list" aria-label="Things"><li data-key="1" data-cursor="0001">Thing 1</li>"#), "{html}");
+        assert!(html.contains(r#"role="list" aria-label="Things"><li data-key="1" data-cursor="0001">Thing 1</li>"#), "{html}");
         assert!(html.contains(r#"<p data-slot="lazy-status" role="status" aria-live="polite"></p>"#));
         assert!(crate::render::measure(&list().into()).uses.has(Uses::LAZY));
         assert!(!crate::render::measure(&list().into()).uses.has(Uses::LIVE));
@@ -501,7 +527,7 @@ mod tests {
                 .into(),
         );
         assert!(html.contains("lazy-empty"));
-        assert!(html.contains("data-ui-start-done data-ui-end-done"));
+        assert!(html.contains("data-ui-keep data-ui-start-done data-ui-end-done"));
         assert_eq!(html.matches(" hidden>").count(), 2);
     }
 
@@ -541,6 +567,22 @@ mod tests {
         assert_eq!(response.headers()["x-ui-since"], "99");
         assert_eq!(response.headers()["x-ui-gone"], "5,7\"");
         assert_eq!(response.headers()["x-ui-more"], "0");
+    }
+
+    #[test]
+    fn one_view_keeps_its_items_and_another_draws_its_own() {
+        let id = |list: LazyList| {
+            let html = render(&list.into());
+            let marker = "data-slot=\"lazy-items\" id=\"";
+            let at = html.find(marker).unwrap() + marker.len();
+            let end = at + html[at..].find('"').unwrap();
+            html[at..end].to_owned()
+        };
+        let mine = id(list().view("mine"));
+        assert_eq!(mine, id(list().view("mine").current("2")), "the same view, another item open");
+        assert_ne!(mine, id(list().view("all")));
+        let html = render(&list().view("mine").current("2").into());
+        assert!(html.contains(r#"data-ui-current="2""#));
     }
 
     #[test]

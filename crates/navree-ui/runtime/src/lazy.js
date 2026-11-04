@@ -22,7 +22,7 @@ const NEAR = 800;
 const CHAIN = 6;
 
 /** @typedef {"start" | "end" | "live"} Dir */
-/** @typedef {{gen: number, src: string, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number}} State */
+/** @typedef {{gen: number, src: string, box: Element | null, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number}} State */
 /** @type {WeakMap<Element, State>} */
 const states = new WeakMap();
 
@@ -64,6 +64,12 @@ function anchored(list, change) {
     if (Math.abs(moved) >= 1) scroll.scrollTop += moved;
   }
 }
+
+/** Whether an end of the list is reached. @param {Element} list @param {"start" | "end"} dir */
+const done = (list, dir) => {
+  const parent = box(list);
+  return !parent || has(parent, `data-ui-${dir}-done`);
+};
 
 /** Whether `a` comes before `b` in the list. @param {Element} list @param {string} a @param {string} b */
 const precedes = (list, a, b) => (attr(list, "data-ui-order") === "asc" ? a < b : a > b);
@@ -110,7 +116,8 @@ function trim(list, grew) {
   if (!gone.length) return;
   anchored(list, () => gone.forEach((el) => el.remove()));
   const other = grew === "end" ? "start" : "end";
-  unset(list, `data-ui-${other}-done`);
+  const parent2 = box(list);
+  if (parent2) unset(parent2, `data-ui-${other}-done`);
   const end = link(list, other);
   if (end) unset(end, "hidden");
 }
@@ -119,7 +126,7 @@ function trim(list, grew) {
 async function load(list, dir) {
   const state = stateOf(list);
   const parent = box(list);
-  if (!parent || state.busy[dir] || has(list, `data-ui-${dir}-done`)) return;
+  if (!parent || state.busy[dir] || done(list, dir)) return;
   const all = items(parent);
   const edge = dir === "end" ? all[all.length - 1] : all[0];
   if (!edge) return;
@@ -146,7 +153,7 @@ async function load(list, dir) {
       else parent.prepend(...found);
     });
     const more = response.headers.get("x-ui-more") === "1";
-    toggle(list, `data-ui-${dir}-done`, !more);
+    toggle(parent, `data-ui-${dir}-done`, !more);
     if (end) toggle(end, "hidden", !more);
     if (found.length) {
       say(list, (attr(list, "data-l-loaded") || "{n} more").replace("{n}", String(found.length)));
@@ -172,7 +179,7 @@ async function load(list, dir) {
 /** Whether the reader is near an end. @param {Element} list @param {"start" | "end"} dir */
 function near(list, dir) {
   const end = link(list, dir);
-  if (!end || has(list, `data-ui-${dir}-done`)) return false;
+  if (!end || done(list, dir)) return false;
   const { top, bottom } = view(scroller(list));
   const parent = box(list);
   const all = parent ? items(parent) : [];
@@ -185,7 +192,7 @@ function near(list, dir) {
 async function live(list) {
   const state = stateOf(list);
   const parent = box(list);
-  const since = attr(list, "data-ui-since");
+  const since = parent && attr(parent, "data-ui-since");
   if (!parent || since === null) return;
   if (state.busy.live) {
     state.dirty = true;
@@ -211,15 +218,15 @@ async function live(list) {
         const cursor = cursorOf(li);
         const first = all[0], last = all[all.length - 1];
         // Beyond what is loaded at an end that isn't: it arrives when the reader gets there.
-        if (last && !has(list, "data-ui-end-done") && precedes(list, cursorOf(last), cursor)) continue;
-        if (first && !has(list, "data-ui-start-done") && precedes(list, cursor, cursorOf(first))) continue;
+        if (last && !done(list, "end") && precedes(list, cursorOf(last), cursor)) continue;
+        if (first && !done(list, "start") && precedes(list, cursor, cursorOf(first))) continue;
         const before = all.find((el) => precedes(list, cursor, cursorOf(el)));
         if (before) parent.insertBefore(li, before);
         else parent.append(li);
       }
     });
     const next = response.headers.get("x-ui-since");
-    if (next) set(list, "data-ui-since", next);
+    if (next) set(parent, "data-ui-since", next);
     const empty = list.querySelector(":scope > [data-slot=lazy-empty]");
     if (empty && items(parent).length) empty.remove();
     if (changed.length || gone.length) document.dispatchEvent(new Event("ui:swap"));
@@ -236,8 +243,23 @@ async function live(list) {
 /** @param {Element} list @returns {State} */
 function stateOf(list) {
   let state = states.get(list);
-  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0 }));
+  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", box: box(list), busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0 }));
   return state;
+}
+
+/** Marks the item the page is about: its first link says it is the current page. @param {Element} list */
+function mark(list) {
+  const parent = box(list);
+  if (!parent) return;
+  const current = attr(list, "data-ui-current");
+  for (const li of items(parent)) {
+    const a = li.querySelector("a[href]");
+    if (!a) continue;
+    const on = current !== null && attr(li, "data-key") === current;
+    if (on) set(a, "aria-current", "page");
+    else unset(a, "aria-current");
+    toggle(a, "data-current", on);
+  }
 }
 
 /** Watches each list's ends, and notices a list whose source changed under it. */
@@ -245,12 +267,21 @@ function scan() {
   for (const list of every("[data-ui-lazy-list]")) {
     const state = stateOf(list);
     const src = attr(list, "data-ui-src") || "";
-    if (src !== state.src) {
-      // New filters or a new page: answers on their way are for the old list.
+    const parent = box(list);
+    if (src !== state.src || parent !== state.box) {
+      // Another view: answers on their way are for the list that was.
       state.gen++;
       state.src = src;
+      state.box = parent;
       state.dirty = false;
+      state.busy = { start: false, end: false, live: false };
     }
+    // The page drew the ends for its first page; the list the reader kept may differ.
+    for (const dir of /** @type {const} */ (["start", "end"])) {
+      const end = link(list, dir);
+      if (end) toggle(end, "hidden", done(list, dir));
+    }
+    mark(list);
     const ends = [link(list, "start"), link(list, "end")].filter((el) => !!el);
     if (state.io && ends.length === state.watched.length && ends.every((el, i) => el === state.watched[i])) continue;
     state.io?.disconnect();
