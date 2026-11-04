@@ -42,7 +42,7 @@ export const showcases: Showcase[] = [
     id: "store",
     app: "store-demo",
     title: "A store's back office, at 200,000 orders",
-    lead: "Orders, refunds, stock and a live feed for an invented shop on SQLite. The table pages by cursor on the server, an order opens in a drawer over its page, and the server checks every refund and cancel again.",
+    lead: "Orders, refunds, stock and a live feed for an invented shop in Punjab, in rupees and IST. The table pages by cursor on the server, an order opens in a drawer over its page, and the server checks every refund and cancel again.",
     points: [
       "A [DataTable](/docs/ui/data-table/) over 200,000 orders: filters, search and keyset pages, all on the server",
       "A [Sheet](/docs/components/sheet/) 60% wide over the table, whose history loads after it opens",

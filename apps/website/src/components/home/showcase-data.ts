@@ -161,7 +161,7 @@ impl Deal {
       lang: "rust",
       code: `#[controller("/deals", version = "1")]
 impl DealsController {
-    /// Won deals over $1,000, newest first, with their companies:
+    /// Won deals over ₹1,000, newest first, with their companies:
     /// one query for the page's companies, however long the page.
     #[get("/won")]
     #[authenticated]
@@ -322,9 +322,9 @@ impl DealsController {
       lang: "toml",
       code: `[workspace]
 resolvers = ["subdomain", "header", "path", "claim"]  # first match wins
-base_domain = "app.example.com"   # acme.app.example.com -> acme
-header = "X-Workspace"            # X-Workspace: acme
-path_prefix = "/w"                # /api/w/acme/deals -> acme
+base_domain = "app.example.com"   # sutlej.app.example.com -> sutlej
+header = "X-Workspace"            # X-Workspace: sutlej
+path_prefix = "/w"                # /api/w/sutlej/deals -> sutlej
 isolation = "row"                 # row | schema | database`,
     },
   },
@@ -358,7 +358,7 @@ async fn deals_are_closed_by_default() {
     // A guest is refused before any handler runs.
     app.client()
         .post("/api/v1/deals")
-        .json(&json!({ "title": "Acme renewal" }))
+        .json(&json!({ "title": "Haveli renewal" }))
         .send()
         .await
         .assert_error(401, "Unauthorized");
@@ -366,7 +366,7 @@ async fn deals_are_closed_by_default() {
     // Signed in, but holding no permission on deals.
     app.acting_as(principal(Uuid::now_v7()))
         .post("/api/v1/deals")
-        .json(&json!({ "title": "Acme renewal" }))
+        .json(&json!({ "title": "Haveli renewal" }))
         .send()
         .await
         .assert_error(403, "Forbidden");

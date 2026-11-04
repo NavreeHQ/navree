@@ -65,7 +65,7 @@ export function BootError() {
         <>
           <span className="inline-flex items-center gap-2">
             <TerminalIcon aria-hidden className="size-3.5" />
-            ~/acme
+            ~/cloudworks
           </span>
           <span>navree check</span>
         </>
@@ -215,9 +215,9 @@ export function SecureList() {
 
 /* 06: a workspace switcher, open (the shadcn/ui team switcher, in ink). */
 const workspaces = [
-  { logo: GalleryVerticalEndIcon, name: "Acme Inc", role: "Owner", active: true },
-  { logo: AudioWaveformIcon, name: "Globex", role: "Admin", active: false },
-  { logo: CommandIcon, name: "Initech", role: "Viewer", active: false },
+  { logo: GalleryVerticalEndIcon, name: "Sutlej Supply", role: "Owner", active: true },
+  { logo: AudioWaveformIcon, name: "Haveli Goods", role: "Admin", active: false },
+  { logo: CommandIcon, name: "Doaba Traders", role: "Viewer", active: false },
 ];
 
 export function SwitcherMock() {
@@ -228,7 +228,7 @@ export function SwitcherMock() {
           <GalleryVerticalEndIcon aria-hidden className="size-4" strokeWidth={2} />
         </span>
         <span className="grid min-w-0 flex-1 leading-tight">
-          <span className="truncate text-sm font-medium text-fg">Acme Inc</span>
+          <span className="truncate text-sm font-medium text-fg">Sutlej Supply</span>
           <span className="truncate text-xs text-fg-3">Pro plan</span>
         </span>
         <ChevronsUpDownIcon aria-hidden className="size-4 text-fg-3" strokeWidth={1.75} />

@@ -110,7 +110,7 @@ const sidebar: SidebarSpec = {
       ],
     },
   ],
-  user: { initials: "PS", name: "Priya Shah", email: "priya@acme.test" },
+  user: { initials: "PV", name: "Priya Verma", email: "priya@example.com" },
 };
 
 const tabs = ["Request", "Response", "Queries 6", "Events 2", "Jobs 1", "Mail 1", "Timeline"];
@@ -164,10 +164,10 @@ export function LogbookMock({ className }: { className?: string }) {
             <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[0.8125rem] text-fg-3">
               <span className="font-mono text-xs text-fg-2">DealsController::store</span>
               <span>
-                User <span className="text-fg-1">Priya Shah</span>
+                User <span className="text-fg-1">Priya Verma</span>
               </span>
               <span>
-                Workspace <span className="text-fg-1">acme</span>
+                Workspace <span className="text-fg-1">sutlej</span>
               </span>
               <span className="hidden font-mono text-xs @xl:inline">01a17749…</span>
             </div>

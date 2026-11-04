@@ -297,12 +297,12 @@ function Grow() {
 
 const kits = [
   {
-    command: "navree new acme --kit saas",
+    command: "navree new cloudworks --kit saas",
     title: "Multi-tenant SaaS",
     text: "Workspaces, billing and an admin panel, with a Next.js BFF that keeps tokens in httpOnly cookies.",
   },
   {
-    command: "navree new acme --kit api",
+    command: "navree new cloudworks --kit api",
     title: "API-first monolith",
     text: "Versioned routes, an OpenAPI 3.1 document and a module per feature, ready for any client.",
   },

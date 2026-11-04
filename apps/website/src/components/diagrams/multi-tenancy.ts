@@ -8,13 +8,13 @@ import type { DiagramSpec } from "./figure";
  */
 export const multiTenancy: DiagramSpec = {
   title: "Multi-tenancy by workspace",
-  desc: "A request names its workspace, for example with the header X-Workspace: acme. Navree resolves the workspace from the header, the path, the subdomain or a token claim, and answers 400 or 404 when it can't. It then checks that the user is a member, and answers 403 to anyone else; the member's role adds its permissions. The request's unit of work is scoped to the workspace by setting navree.workspace on its transaction. The configured isolation decides where the data lives: rows with a workspace_id column guarded by PostgreSQL row-level security, a schema per workspace, or a database per workspace.",
+  desc: "A request names its workspace, for example with the header X-Workspace: sutlej. Navree resolves the workspace from the header, the path, the subdomain or a token claim, and answers 400 or 404 when it can't. It then checks that the user is a member, and answers 403 to anyone else; the member's role adds its permissions. The request's unit of work is scoped to the workspace by setting navree.workspace on its transaction. The configured isolation decides where the data lives: rows with a workspace_id column guarded by PostgreSQL row-level security, a schema per workspace, or a database per workspace.",
   legend: [{ kind: "flow", label: "request" }],
   wide: {
     width: 592,
     height: 504,
     nodes: [
-      { id: "req", x: 0, y: 0, w: 352, title: "Request", sub: "X-Workspace: acme", subMono: true, icon: "request" },
+      { id: "req", x: 0, y: 0, w: 352, title: "Request", sub: "X-Workspace: sutlej", subMono: true, icon: "request" },
       { id: "resolve", x: 0, y: 104, w: 352, title: "Resolve the workspace", sub: "header · path · subdomain · token claim", icon: "funnel" },
       { id: "member", x: 0, y: 208, w: 352, title: "Check membership", sub: "the member's role adds its permissions", icon: "users" },
       {
@@ -49,7 +49,7 @@ export const multiTenancy: DiagramSpec = {
     width: 272,
     height: 640,
     nodes: [
-      { id: "req", x: 24, y: 0, w: 248, title: "Request", sub: "X-Workspace: acme", subMono: true, icon: "request" },
+      { id: "req", x: 24, y: 0, w: 248, title: "Request", sub: "X-Workspace: sutlej", subMono: true, icon: "request" },
       { id: "resolve", x: 24, y: 96, w: 248, title: "Resolve the workspace", sub: "400 or 404 if it can't", icon: "funnel" },
       { id: "member", x: 24, y: 192, w: 248, title: "Check membership", sub: "403 for anyone else", icon: "users" },
       {

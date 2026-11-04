@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
 /** Workspaces: how a request finds its workspace, its members and roles, and the isolation modes. */
 export function WorkspacesVisual() {
   const members = [
-    { name: "Dana Whitfield", role: "Owner" },
-    { name: "Marcus Reyes", role: "Admin" },
-    { name: "Priya Shah", role: "Member" },
-    { name: "tom@acme.test", role: "Invited" },
+    { name: "Simran Kaur", role: "Owner" },
+    { name: "Gurpreet Singh", role: "Admin" },
+    { name: "Priya Verma", role: "Member" },
+    { name: "arjun@example.com", role: "Invited" },
   ];
   return (
     <div aria-hidden className="grid gap-3 sm:grid-cols-2">
@@ -21,12 +21,12 @@ export function WorkspacesVisual() {
         <div className="rounded-md border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
           <div className="text-fg-3">GET /api/v1/deals</div>
           <div className="text-fg-1">
-            X-Workspace: <span className="text-accent">acme</span>
+            X-Workspace: <span className="text-accent">sutlej</span>
           </div>
         </div>
         <div className="rounded-md border border-line bg-ink-0/60 px-3 py-2 font-mono text-xs leading-5">
           <div className="text-fg-3">CurrentWorkspace</div>
-          <div className="truncate text-fg-1">acme · you are Admin</div>
+          <div className="truncate text-fg-1">sutlej · you are Admin</div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="mr-0.5 text-xs text-fg-3">Isolation</span>
@@ -45,7 +45,7 @@ export function WorkspacesVisual() {
       </div>
       <div className="overflow-hidden rounded-md border border-line bg-ink-0/60">
         <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-xs leading-5">
-          <span className="text-fg-1">acme · members</span>
+          <span className="text-fg-1">sutlej · members</span>
           <span className="text-fg-3">4</span>
         </div>
         {members.map((m) => (

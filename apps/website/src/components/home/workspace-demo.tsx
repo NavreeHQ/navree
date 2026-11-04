@@ -30,54 +30,54 @@ type Space = { slug: string; name: string; logo: LucideIcon; plan: string; role:
 /** Three workspaces of one app. Each sees only its own deals (four each, so switching never changes the height). */
 const spaces: Space[] = [
   {
-    slug: "acme",
-    name: "Acme Inc",
+    slug: "sutlej",
+    name: "Sutlej Supply",
     logo: GalleryVerticalEndIcon,
     plan: "Pro plan",
     role: "Owner",
-    members: ["DW", "MK", "JS", "RT", "PN"],
+    members: ["SK", "GS", "HK", "RB", "PV"],
     deals: [
-      { title: "Fleet renewal", company: "Bluefin Labs", amount: "$48,000", stage: "Won" },
-      { title: "Second warehouse", company: "Keystone Freight", amount: "$22,500", stage: "Proposal" },
-      { title: "Pilot, three clinics", company: "Lumen Dental", amount: "$9,800", stage: "Qualified" },
-      { title: "Support renewal", company: "Corvid Analytics", amount: "$14,200", stage: "Lead" },
+      { title: "Fleet renewal", company: "Majha Motors", amount: "₹24,00,000", stage: "Won" },
+      { title: "Second warehouse", company: "Ravi Freight Lines", amount: "₹13,50,000", stage: "Proposal" },
+      { title: "Pilot, three clinics", company: "Shivalik Dental Care", amount: "₹5,90,000", stage: "Qualified" },
+      { title: "Support renewal", company: "Chenab Analytics", amount: "₹8,50,000", stage: "Lead" },
     ],
   },
   {
-    slug: "globex",
-    name: "Globex",
+    slug: "haveli",
+    name: "Haveli Goods",
     logo: AudioWaveformIcon,
     plan: "Business plan",
     role: "Admin",
-    members: ["HB", "DW", "SV"],
+    members: ["JD", "SK", "KB"],
     deals: [
-      { title: "Rail sensors, phase 2", company: "Meridian Rail", amount: "$131,000", stage: "Negotiation" },
-      { title: "Cold-chain audit", company: "Northgate Foods", amount: "$16,400", stage: "Won" },
-      { title: "Depot telemetry", company: "Harrow Transit", amount: "$27,300", stage: "Won" },
-      { title: "Fleet tracking pilot", company: "Saltmarsh Logistics", amount: "$9,600", stage: "Proposal" },
+      { title: "Rail sensors, phase 2", company: "Doaba Rail Components", amount: "₹72,00,000", stage: "Negotiation" },
+      { title: "Cold-chain audit", company: "Pind Pantry", amount: "₹9,80,000", stage: "Won" },
+      { title: "Depot telemetry", company: "Grand Trunk Transit", amount: "₹16,40,000", stage: "Won" },
+      { title: "Fleet tracking pilot", company: "Kesar Logistics", amount: "₹5,75,000", stage: "Proposal" },
     ],
   },
   {
-    slug: "initech",
-    name: "Initech",
+    slug: "doaba",
+    name: "Doaba Traders",
     logo: CommandIcon,
     plan: "Free plan",
     role: "Viewer",
-    members: ["MW", "BL", "PG", "TS", "CS", "DW", "EN", "FJ"],
+    members: ["MG", "NG", "RM", "AS", "AA", "SK", "IG", "MJ"],
     deals: [
-      { title: "Print fleet lease", company: "Orbit Print", amount: "$7,200", stage: "Lead" },
-      { title: "Guest Wi-Fi rollout", company: "Pinecrest Hotels", amount: "$38,900", stage: "Proposal" },
-      { title: "Data migration", company: "Driftwood Supply", amount: "$12,750", stage: "Qualified" },
-      { title: "Kiosk refresh", company: "Brightline Cinemas", amount: "$6,300", stage: "Won" },
+      { title: "Print fleet lease", company: "Rangla Print House", amount: "₹4,30,000", stage: "Lead" },
+      { title: "Guest Wi-Fi rollout", company: "Deodar Hospitality", amount: "₹22,50,000", stage: "Proposal" },
+      { title: "Data migration", company: "Phulkari Textiles", amount: "₹7,60,000", stage: "Qualified" },
+      { title: "Kiosk refresh", company: "Roshni Cinemas", amount: "₹3,80,000", stage: "Won" },
     ],
   },
 ];
 
 const DOMAIN = "app.example.com";
-const USER = { initials: "DW", name: "Dana Whitfield", email: "dana@whitfield.dev" };
+const USER = { initials: "SK", name: "Simran Kaur", email: "simran@example.com" };
 
-const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const sum = (deals: Deal[]) => dollars.format(deals.reduce((total, d) => total + Number(d.amount.replace(/[$,]/g, "")), 0));
+const rupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+const sum = (deals: Deal[]) => rupees.format(deals.reduce((total, d) => total + Number(d.amount.replace(/[₹,]/g, "")), 0));
 
 function nav(space: Space): NavGroup[] {
   return [

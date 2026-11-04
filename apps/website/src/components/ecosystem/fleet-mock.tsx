@@ -103,7 +103,7 @@ const sidebar: SidebarSpec = {
     },
     { items: [{ icon: SettingsIcon, label: "Settings" }] },
   ],
-  user: { initials: "MR", name: "Marcus Reyes", email: "marcus@acme.test" },
+  user: { initials: "GS", name: "Gurpreet Singh", email: "gurpreet@example.com" },
 };
 
 /** The Fleet dashboard at /_fleet: figures, the workload table, mail throughput and failed jobs. */

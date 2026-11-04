@@ -14,7 +14,7 @@ const steps: [string, string, string?][] = [
 
 const session: TermLine[] = [
   { cmd: "navree deploy" },
-  { out: "Deploying acme to production (1 server)", className: "text-fg-2" },
+  { out: "Deploying cloudworks to production (1 server)", className: "text-fg-2" },
   ...steps.map(([step, detail, time]) => ({
     out: (
       <span className="flex gap-x-4">
@@ -61,7 +61,7 @@ export function Ship() {
 
         <div className="min-w-0 lg:col-span-7">
           <div className="bezel">
-            <ScriptedTerminal title="~/code/acme" lines={session} className="rounded-[calc(1.25rem-0.375rem)] border-line-2" />
+            <ScriptedTerminal title="~/code/cloudworks" lines={session} className="rounded-[calc(1.25rem-0.375rem)] border-line-2" />
           </div>
         </div>
       </div>

@@ -87,7 +87,7 @@ function StageBar() {
 }
 
 const sidebar: SidebarSpec = {
-  app: { logo: <GalleryVerticalEndIcon strokeWidth={2} />, name: "Acme CRM", context: "Admin" },
+  app: { logo: <GalleryVerticalEndIcon strokeWidth={2} />, name: "Sutlej CRM", context: "Admin" },
   groups: [
     { items: [{ icon: LayoutDashboardIcon, label: "Dashboard" }] },
     {
@@ -107,7 +107,7 @@ const sidebar: SidebarSpec = {
       ],
     },
   ],
-  user: { initials: "MR", name: "Marcus Reyes", email: "marcus@acme.test" },
+  user: { initials: "GS", name: "Gurpreet Singh", email: "gurpreet@example.com" },
 };
 
 /** Column templates by frame width: what fits, in order of importance. */
@@ -185,7 +185,7 @@ export function HelmMock({ className }: { className?: string }) {
       <div ref={ref} className="h-full">
         <AppShell sidebar={sidebar} overlay={overlay}>
           <TopBar crumbs={["Sales", "Deals"]}>
-            <SearchField className="hidden w-64 @3xl:flex" placeholder="Search Acme CRM…" />
+            <SearchField className="hidden w-64 @3xl:flex" placeholder="Search Sutlej CRM…" />
             <Button tone="ghost" icon={BellIcon} />
           </TopBar>
 
@@ -210,7 +210,7 @@ export function HelmMock({ className }: { className?: string }) {
               <Card className="p-4">
                 <Stat
                   label="Open pipeline"
-                  value="$1,284,500"
+                  value="₹9.84 Cr"
                   aside={
                     <Badge tone="positive">
                       <TrendingUpIcon className="size-3" strokeWidth={2} />

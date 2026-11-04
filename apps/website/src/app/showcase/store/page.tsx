@@ -99,9 +99,10 @@ function Hero() {
             A store&apos;s back office, built on Navree.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
-            Fernhill Supply is an invented shop with {number(data.rows.orders)} orders on SQLite. Every screen on this page is
-            the app&apos;s own Rust, rendered by navree-ui: orders paged by cursor on the server, an order in a drawer over its
-            page, refunds and cancels the server checks again, and a feed that streams only what is new.
+            Charkha Supply Co. is an invented shop in Punjab that sells kitchen, pantry, clothing and festive goods across
+            India, with {number(data.rows.orders)} orders on SQLite. Every screen on this page is the app&apos;s own Rust,
+            rendered by navree-ui: orders paged by cursor on the server, an order in a drawer over its page, refunds and
+            cancels the server checks again, and a feed that streams only what is new.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <PrimaryCta href="#run">Run it locally</PrimaryCta>

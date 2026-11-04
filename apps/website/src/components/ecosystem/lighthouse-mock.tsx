@@ -115,7 +115,7 @@ const sidebar: SidebarSpec = {
       ],
     },
   ],
-  user: { initials: "PS", name: "Priya Shah", email: "priya@acme.test" },
+  user: { initials: "PV", name: "Priya Verma", email: "priya@example.com" },
 };
 
 /** The Lighthouse dashboard at /_lighthouse: figures, a timeline, issues and the live feed. */

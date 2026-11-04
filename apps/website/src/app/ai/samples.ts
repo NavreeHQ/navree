@@ -143,7 +143,7 @@ async fn summary_stream(
       file: "text/event-stream",
       lang: "text",
       code: `event: text
-data: {"text":"Acme moved to negotiation"}
+data: {"text":"Haveli Goods moved to negotiation"}
 
 event: text
 data: {"text":" after Tuesday's pricing call."}

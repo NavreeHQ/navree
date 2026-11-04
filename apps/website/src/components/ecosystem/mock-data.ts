@@ -259,12 +259,12 @@ export const helmDeals: {
   /** Ticked in the bulk-action demo. */
   pick?: boolean;
 }[] = [
-  { title: "Migration from legacy CRM", amount: "$84,000", stage: "Negotiation", company: "Northwind Logistics", owner: "Priya Shah", close: "Nov 14", probability: "75%", pick: true },
-  { title: "Three-year enterprise agreement", amount: "$212,500", stage: "Negotiation", company: "Atlas Ridge Capital", owner: "Priya Shah", close: "Nov 21", probability: "75%", pick: true },
-  { title: "Executive dashboard suite", amount: "$36,200", stage: "Proposal", company: "Brightwater Analytics", owner: "Tom Becker", close: "Nov 28", probability: "50%" },
-  { title: "Forecasting add-on", amount: "$18,900", stage: "Negotiation", company: "Halcyon Health", owner: "Priya Shah", close: "Dec 2", probability: "75%", pick: true },
-  { title: "Compliance module", amount: "$47,000", stage: "Proposal", company: "Quillstone Legal", owner: "Tom Becker", close: "Dec 9", probability: "50%" },
-  { title: "Multi-site deployment", amount: "$126,000", stage: "Qualified", company: "Meridian Freight", owner: "Marcus Reyes", close: "Jan 6", probability: "25%" },
+  { title: "Migration from legacy CRM", amount: "₹68,40,000", stage: "Negotiation", company: "Doaba Logistics", owner: "Priya Verma", close: "Nov 14", probability: "75%", pick: true },
+  { title: "Three-year enterprise agreement", amount: "₹92,50,000", stage: "Negotiation", company: "Majha Capital Partners", owner: "Priya Verma", close: "Nov 21", probability: "75%", pick: true },
+  { title: "Executive dashboard suite", amount: "₹29,75,000", stage: "Proposal", company: "Beas Analytics", owner: "Manpreet Gill", close: "Nov 28", probability: "50%" },
+  { title: "Forecasting add-on", amount: "₹15,60,000", stage: "Negotiation", company: "Shivalik Health", owner: "Priya Verma", close: "Dec 2", probability: "75%", pick: true },
+  { title: "Compliance module", amount: "₹38,50,000", stage: "Proposal", company: "Sirhind Legal Associates", owner: "Manpreet Gill", close: "Dec 9", probability: "50%" },
+  { title: "Multi-site deployment", amount: "₹84,00,000", stage: "Qualified", company: "Jhelum Freight Lines", owner: "Gurpreet Singh", close: "Jan 6", probability: "25%" },
 ];
 
 export const helmStages: { stage: Stage; deals: number }[] = [
@@ -298,7 +298,7 @@ export const logbookBatches: {
   { label: "GET /api/v1/deals/board", status: "200", duration: "31 ms", counts: "4 q · 1 cache" },
   { label: "POST /api/auth/refresh", status: "200", duration: "9 ms", counts: "2 q" },
   { label: "GET /api/v1/companies/{id}", status: "404", duration: "6 ms", counts: "1 q" },
-  { label: "GET /api/v1/contacts?q=ada", status: "200", duration: "18 ms", counts: "2 q · 1 cache" },
+  { label: "GET /api/v1/contacts?q=kaur", status: "200", duration: "18 ms", counts: "2 q · 1 cache" },
   { label: "crm:task-reminders", status: "done", duration: "240 ms", counts: "5 q · 3 mail", prefix: "task" },
   { label: "PATCH /api/v1/deals/{id}", status: "200", duration: "21 ms", counts: "4 q · 1 ev" },
 ];
@@ -316,7 +316,7 @@ export const logbookTimeline: { kind: LogKind; text: string; start: number; dura
   { kind: "job", text: "deals.notify-owner queued on default", start: 11.2, duration: 0.9 },
   { kind: "mail", text: "“New deal: Migration from legacy CRM” queued", start: 12.3, duration: 0.8 },
   { kind: "query", text: "COMMIT", start: 13.3, duration: 2.4 },
-  { kind: "cache", text: "forget dashboard:pipeline:acme", start: 15.9, duration: 0.3 },
+  { kind: "cache", text: "forget dashboard:pipeline:sutlej", start: 15.9, duration: 0.3 },
   { kind: "log", text: "INFO deal created deal_id=0199c1d2…", start: 16.4, duration: 0.2 },
   { kind: "response", text: "201 Created · 1.3 KB", start: 17.1, duration: 6.9 },
 ];

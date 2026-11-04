@@ -48,19 +48,19 @@ export function SearchVisual() {
     <Panel className="overflow-hidden">
       <div className="flex items-center gap-2 border-b border-line px-3 py-1.5 font-mono text-xs leading-5 text-fg">
         <span className="text-fg-3">q</span>
-        lovlace
+        dhilon
         <span className="ml-auto text-fg-3">2 hits · 4 ms</span>
       </div>
       <div className="px-3 py-1.5 text-xs leading-6">
         <div className="flex justify-between gap-3">
           <span className="truncate text-fg-1">
-            Ada <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Lovelace</mark>
+            Jaspreet <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Dhillon</mark>
           </span>
           <span className="shrink-0 text-fg-3">Contact</span>
         </div>
         <div className="flex justify-between gap-3">
           <span className="truncate text-fg-1">
-            <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Lovelace</mark> renewal
+            <mark className="rounded-[2px] bg-accent/15 px-0.5 text-fg">Dhillon</mark> renewal
           </span>
           <span className="shrink-0 text-fg-3">Deal</span>
         </div>
@@ -75,7 +75,7 @@ export function BillingVisual() {
     <Panel className="px-3 py-2">
       <div className="flex items-center justify-between gap-3 text-xs leading-6">
         <span className="text-fg-1">
-          acme <span className="text-fg-3">on</span> Pro
+          sutlej <span className="text-fg-3">on</span> Pro
         </span>
         <Chip tone="positive">active</Chip>
       </div>
@@ -112,7 +112,7 @@ export function OAuthVisual() {
   return (
     <Panel className="px-3 py-2.5">
       <div className="text-xs leading-5 text-fg-2">
-        <span className="text-fg-1">Zapier</span> asks to
+        <span className="text-fg-1">Doaba Sync</span> asks to
       </div>
       <div className="mt-2">
         <Chips items={["deals:read", "deals:write", "contacts:read"]} />
@@ -135,7 +135,7 @@ export function WebhooksVisual() {
   ];
   return (
     <Panel className="px-3 py-2 font-mono text-xs leading-6">
-      <div className="truncate text-fg-1">deal.won → hooks.acme.test</div>
+      <div className="truncate text-fg-1">deal.won → hooks.sutlej.example</div>
       {attempts.map((a) => (
         <div key={a.n} className="grid grid-cols-[4.75rem_minmax(0,1fr)_auto] gap-2">
           <span className="text-fg-3">attempt {a.n}</span>
@@ -151,8 +151,8 @@ export function WebhooksVisual() {
 export function I18nVisual() {
   const lines = [
     { locale: "en", text: "3 deals created" },
-    { locale: "fr", text: "3 affaires créées" },
-    { locale: "de", text: "3 Deals erstellt" },
+    { locale: "hi", text: "3 सौदे बनाए गए" },
+    { locale: "pa", text: "3 ਸੌਦੇ ਬਣਾਏ ਗਏ" },
   ];
   return (
     <Panel className="px-3 py-2">
@@ -208,7 +208,7 @@ export function RealtimeVisual() {
     <Panel className="px-3 py-2 font-mono text-xs leading-6">
       {[
         { ch: "deals", who: "public" },
-        { ch: "private-workspace.acme", who: "private" },
+        { ch: "private-workspace.sutlej", who: "private" },
         { ch: "presence-deal.0199c1d2", who: "3 here" },
       ].map((c) => (
         <div key={c.ch} className="flex justify-between gap-3">

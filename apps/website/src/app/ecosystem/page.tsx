@@ -95,7 +95,7 @@ const gridFor: Record<EcosystemCategory, string> = {
 
 const promises = [
   { figure: String(ecosystem.length), label: "first-party packages and tools", text: "Documented here, built to the framework's conventions." },
-  { figure: "$0", label: "paid add-ons", text: "No tiers, no seats, no hosted plan. MIT OR Apache-2.0." },
+  { figure: "₹0", label: "paid add-ons", text: "No tiers, no seats, no hosted plan. MIT OR Apache-2.0." },
   { figure: "1", label: "version number", text: "Tested, documented and released together." },
   { figure: "100%", label: "self-hosted", text: "Dashboards run in your app; the data stays on your servers." },
 ];
@@ -218,7 +218,7 @@ function CategorySection({ index, id }: { index: number; id: EcosystemCategory }
 }
 
 function Closing() {
-  const commands = [site.install.cli, "navree new acme --kit saas"];
+  const commands = [site.install.cli, "navree new cloudworks --kit saas"];
   return (
     <section aria-labelledby="ecosystem-start" className="cv-auto relative isolate overflow-hidden">
       <FlickeringGrid

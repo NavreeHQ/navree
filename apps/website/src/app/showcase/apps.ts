@@ -28,7 +28,7 @@ export const apps: ShowcaseApp[] = [
     app: "store-demo",
     name: "A store's back office",
     summary:
-      "Orders, refunds, stock and a live feed for an invented shop: 200,000 orders paged by cursor, an order in a drawer over its page, and every refund and cancel checked again on the server.",
+      "Orders, refunds, stock and a live feed for an invented shop in Punjab: 200,000 orders paged by cursor, an order in a drawer over its page, and every refund and cancel checked again on the server.",
     facts: [
       { label: "UI", value: "Navree UI" },
       { label: "Data", value: "SQLite, 200,000 orders" },
