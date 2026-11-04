@@ -352,16 +352,20 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                     ),
                 )),
             )),
-            Text::muted(format!(
-                "{} at {} · #{} · {} message{}",
-                open.customer.name,
-                open.customer.company,
-                conversation.id,
-                thousands(u64::try_from(conversation.messages).unwrap_or(0)),
-                if conversation.messages == 1 { "" } else { "s" }
-            )),
-            Row::gap(2).wrap().children(badges),
+            // Who and where from, then the channel and the clock, on one line where they fit.
             Row::gap(2).wrap().children((
+                Text::muted(format!(
+                    "{} at {} · #{} · {} message{}",
+                    open.customer.name,
+                    open.customer.company,
+                    conversation.id,
+                    thousands(u64::try_from(conversation.messages).unwrap_or(0)),
+                    if conversation.messages == 1 { "" } else { "s" }
+                )),
+                badges,
+            )),
+            // On a phone, one line that scrolls sideways: the messages get the room.
+            Row::gap(2).scroll_on_phones().children((
                 assign(open),
                 status_menu(conversation),
                 priority_menu(conversation),
