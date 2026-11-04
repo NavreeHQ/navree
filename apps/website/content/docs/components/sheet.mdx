@@ -34,6 +34,16 @@ Each button below opens a real sheet from its side.
 
 <UiPreview example="sheet/sides" />
 
+## Widths
+
+A sheet on the left or right is 24 rem wide. `.width(SheetWidth::Lg)` makes it 40 rem, for a record's details: cards side by side, tabs, a timeline. On a screen narrower than the width and 3 rem, either is the screen less 3 rem.
+
+```rust
+Sheet::new("recipient", "Maya Patel")
+    .width(SheetWidth::Lg)
+    .body(details)
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -44,7 +54,7 @@ Each button below opens a real sheet from its side.
 | `Esc` | Closes it. |
 
 - The title names the sheet, as for a dialog.
-- A side sheet is 24 rem wide, and never more than the screen less 3 rem.
+- A side sheet is 24 rem wide, or 40 rem with `SheetWidth::Lg`, and never more than the screen less 3 rem.
 
 </UiA11y>
 
@@ -57,3 +67,7 @@ Each button below opens a real sheet from its side.
 ### SheetSide
 
 <UiProps type="SheetSide" />
+
+### SheetWidth
+
+<UiProps type="SheetWidth" />

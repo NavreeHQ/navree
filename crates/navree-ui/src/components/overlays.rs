@@ -217,12 +217,41 @@ impl SheetSide {
     }
 }
 
+/// How wide a [`Sheet`] on the left or right is. A sheet is never wider than the
+/// screen less 3 rem, so on a phone every width is the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SheetWidth {
+    /// 24 rem: a form or a list of filters. The default.
+    #[default]
+    Md,
+    /// 40 rem: a record's details, with room for cards side by side and tabs.
+    Lg,
+}
+
+impl SheetWidth {
+    const fn value(self) -> Option<&'static str> {
+        match self {
+            Self::Md => None,
+            Self::Lg => Some("lg"),
+        }
+    }
+}
+
 /// A dialog that slides in from an edge.
+///
+/// ```
+/// use navree_ui::{Sheet, SheetWidth, render};
+///
+/// let sheet = Sheet::new("person", "Maya Patel").width(SheetWidth::Lg);
+/// assert!(render(&sheet.into()).contains(r#"data-width="lg""#));
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Sheet {
     inner: Dialog,
     side: SheetSide,
+    width: SheetWidth,
 }
 
 impl Sheet {
@@ -231,12 +260,20 @@ impl Sheet {
         Self {
             inner: Dialog::with_slot("sheet", id.into(), title.into()),
             side: SheetSide::Right,
+            width: SheetWidth::Md,
         }
     }
 
     /// Sets the edge.
     pub fn side(mut self, side: SheetSide) -> Self {
         self.side = side;
+        self
+    }
+
+    /// Sets the width of a sheet on the left or right. A sheet at the top or
+    /// bottom is as wide as the screen.
+    pub fn width(mut self, width: SheetWidth) -> Self {
+        self.width = width;
         self
     }
 
@@ -259,7 +296,11 @@ impl Sheet {
     }
 
     fn into_node(mut self) -> Node {
-        self.inner.el = self.inner.el.attr("data-side", self.side.as_str());
+        self.inner.el = self
+            .inner
+            .el
+            .attr("data-side", self.side.as_str())
+            .attr_opt("data-width", self.width.value());
         self.inner.into_node()
     }
 }

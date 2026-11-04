@@ -191,6 +191,10 @@ fn all() -> Vec<(&'static str, Node)> {
         "sheet",
         Sheet::new("s", "T").side(SheetSide::Left).body("B").into(),
     ));
+    out.push((
+        "sheet",
+        Sheet::new("w", "T").width(SheetWidth::Lg).body("B").into(),
+    ));
     out.push(("drawer", Drawer::new("dr", "T").body("B").into()));
     out.push((
         "accordion",
@@ -293,6 +297,19 @@ fn overlays_use_the_browser() {
         html.contains(r#"<details data-slot="accordion-item" name="g">"#),
         "{html}"
     );
+}
+
+#[test]
+fn a_sheet_is_24_rem_unless_asked_wider() {
+    let narrow = render(&Sheet::new("s", "T").into());
+    assert!(!narrow.contains("data-width"), "{narrow}");
+    let wide = render(&Sheet::new("s", "T").width(SheetWidth::Lg).into());
+    assert!(
+        wide.contains(r#"data-side="right" data-width="lg""#),
+        "{wide}"
+    );
+    let css = include_str!("../styles/30-overlays.css");
+    assert!(css.contains("&[data-width=lg]{width:min(40rem,calc(100% - 3rem))}"));
 }
 
 #[test]

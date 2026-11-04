@@ -12,7 +12,7 @@
 [data-slot=dialog],[data-slot=alert-dialog]{width:calc(100% - 2rem);max-width:32rem;max-height:calc(100dvh - 2rem);margin:auto;border-radius:var(--radius-lg)}
 [data-slot=alert-dialog]{max-width:26rem}
 [data-slot=sheet]{position:fixed;margin:0;max-width:none;max-height:none;
-  &[data-side=right],&[data-side=left]{top:0;bottom:0;width:min(24rem,calc(100% - 3rem));height:100dvh}
+  &[data-side=right],&[data-side=left]{top:0;bottom:0;width:min(24rem,calc(100% - 3rem));height:100dvh;&[data-width=lg]{width:min(40rem,calc(100% - 3rem))}}
   &[data-side=right]{left:auto;right:0;border-width:0 0 0 1px}
   &[data-side=left]{right:auto;left:0;border-width:0 1px 0 0}
   &[data-side=top],&[data-side=bottom]{left:0;right:0;width:100%;max-height:80dvh}
