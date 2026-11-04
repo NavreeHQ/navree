@@ -177,7 +177,8 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       const { context, page, errors } = await fresh(`/${path}`);
       const q = (s) => page.evaluate((s) => Document.prototype.querySelector.call(document, s) && Element.prototype.getAttribute.call(Document.prototype.querySelector.call(document, s), "aria-valuenow"), s);
       await until(() => true, 50);
-      await page.focus("#h");
+      // Focused through the prototype: Playwright's own selector reads querySelectorAll, which an image here names.
+      await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.getElementById.call(document, "h")));
       await page.keyboard.press("ArrowRight");
       assert.equal(await q("#h"), "32", "the separator moves by its keys");
       // Within the save's own time limit.
@@ -233,7 +234,8 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.querySelector.call(document, "#f input[name=closest]")));
       await page.keyboard.press("j");
       assert.equal(page.url(), f.origin + `/${path}`, "no hotkey while a field has focus");
-      await page.focus("#h");
+      // Focused through the prototype: Playwright's own selector reads querySelectorAll, which an image here names.
+      await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.getElementById.call(document, "h")));
       await page.keyboard.press("j");
       await page.waitForURL(`**/${path}-hot`);
       assert.deepEqual(errors, []);
