@@ -180,9 +180,10 @@ function watchOverlays(frame: HTMLIFrameElement, grow: (height: number) => void,
  * never shrinks, so nothing moves under the pointer.
  *
  * With `width`, the page is drawn that wide and scaled down to the column,
- * so a whole page keeps its wide layout. With `phoneHeight` too, a column
- * narrower than half of `width` gets the page at its own width and that tall,
- * as a phone shows it, rather than a picture too small to read.
+ * so a whole page keeps its wide layout; a page drawn narrower than its column
+ * sits in the middle of it. With `phoneHeight` too, a column narrower than
+ * half of `width` gets the page at its own width and that tall, as a phone
+ * shows it, rather than a picture too small to read.
  *
  * With `defer`, the frame asks for its page only once the page around it has
  * loaded and the frame is about to scroll into view, so the frames of a long
@@ -360,6 +361,8 @@ export function PreviewFrame({
       className={cn(
         "block border-0 bg-ink-0",
         (!width || phoneMode) && "w-full",
+        // A page drawn narrower than its column sits in the middle of it.
+        width && !phoneMode && "mx-auto",
         thumb && "pointer-events-none",
         className,
       )}
@@ -380,7 +383,8 @@ export function PreviewFrame({
       <div
         ref={box}
         data-deferred={defer || undefined}
-        className="w-full overflow-hidden"
+        // The page's own colour on either side of a page narrower than its column.
+        className="w-full overflow-hidden bg-ink-0"
         style={{ height: phoneMode ? phoneTall : thumb ? "100%" : Math.ceil(tall * scale) }}
       >
         {frame}

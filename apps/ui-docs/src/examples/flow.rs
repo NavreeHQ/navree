@@ -109,9 +109,10 @@ pub fn all() -> Vec<Example> {
         single!("toolbar", "default", "A toolbar", toolbar_default)
             .start()
             .height(100),
+        // Narrow enough that the last tools move into More.
         single!("toolbar", "overflow", "At a narrow width", toolbar_overflow)
             .start()
-            .width(390)
+            .width(300)
             .height(100),
         single!("toolbar", "vertical", "Vertical", toolbar_vertical)
             .start()
