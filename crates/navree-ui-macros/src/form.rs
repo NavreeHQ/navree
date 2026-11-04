@@ -25,6 +25,7 @@ struct FieldHints {
     widget: Option<Ident>,
     date_rules: Option<syn::Path>,
     time_rules: Option<syn::Path>,
+    slider: Option<syn::Path>,
     autofocus: bool,
     wide: bool,
     skip: bool,
@@ -47,12 +48,13 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "widget" => out.widget = Some(meta.value()?.parse()?),
                 "date_rules" => out.date_rules = Some(meta.value()?.parse()?),
                 "time_rules" => out.time_rules = Some(meta.value()?.parse()?),
+                "slider" => out.slider = Some(meta.value()?.parse()?),
                 "autofocus" => out.autofocus = true,
                 "wide" => out.wide = true,
                 "skip" => out.skip = true,
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, date_rules, time_rules, autofocus, wide or skip"
+                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, date_rules, time_rules, slider, autofocus, wide or skip"
                     )));
                 }
             }
@@ -92,11 +94,12 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         "switch" => quote!(#ui::form::Widget::Switch),
         "money" => quote!(#ui::form::Widget::Money),
         "phone" => quote!(#ui::form::Widget::Phone),
+        "slider" => quote!(#ui::form::Widget::Slider),
         other => {
             return Err(syn::Error::new(
                 widget.span(),
                 format!(
-                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch, money or phone"
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch, money, phone or slider"
                 ),
             ));
         }
@@ -245,6 +248,12 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         };
         let date_rules = rules_of(&hint.date_rules, "DateRules");
         let time_rules = rules_of(&hint.time_rules, "TimeRules");
+        let slider = match &hint.slider {
+            Some(path) => {
+                quote!(::core::option::Option::Some(#path as fn() -> #ui::flow::SliderSpec))
+            }
+            None => quote!(::core::option::Option::None),
+        };
         // `FormField` is non-exhaustive, so it is built with its constructor.
         specs.push(quote! {
             #ui::form::FormField::new(#name, #label, #widget)
@@ -261,7 +270,8 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 .instant(#instant)
                 .decimal(#decimal)
                 .date_rules(#date_rules)
-                .time_rules(#time_rules),
+                .time_rules(#time_rules)
+                .slider(#slider),
         });
         values.push(quote! {
             for value in #ui::form::FieldValue::field_values(&self.#ident) {

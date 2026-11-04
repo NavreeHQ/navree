@@ -79,6 +79,10 @@ pub enum Widget {
     /// `String`): the field gets the number in E.164, and a number that isn't
     /// valid, or has an extension (which E.164 has no room for), is refused.
     PhoneText,
+    /// A [`Slider`](crate::Slider) on a number (`#[form(widget = slider)]`). Its grid
+    /// is the field's `slider` function, or the field's `range` rule (0 to 100 without
+    /// one) in steps of 1, and [`decode`] refuses a value off the grid.
+    Slider,
 }
 
 impl Widget {
@@ -134,6 +138,10 @@ pub struct FormField {
     pub date_rules: Option<fn() -> crate::dates::DateRules>,
     /// A time picker's rules, from `#[form(time_rules = path)]`, used the same way.
     pub time_rules: Option<fn() -> crate::dates::TimeRules>,
+    /// A slider's grid, from `#[form(slider = path)]`: the function that gives its
+    /// minimum, maximum and step. The slider draws it for the browser, and [`decode`]
+    /// holds the posted value to it.
+    pub slider: Option<fn() -> crate::flow::SliderSpec>,
 }
 
 impl FormField {
@@ -158,6 +166,7 @@ impl FormField {
             decimal: false,
             date_rules: None,
             time_rules: None,
+            slider: None,
         }
     }
 
@@ -242,6 +251,12 @@ impl FormField {
     /// Sets a time picker's rules.
     pub const fn time_rules(mut self, rules: Option<fn() -> crate::dates::TimeRules>) -> Self {
         self.time_rules = rules;
+        self
+    }
+
+    /// Sets a slider's grid.
+    pub const fn slider(mut self, grid: Option<fn() -> crate::flow::SliderSpec>) -> Self {
+        self.slider = grid;
         self
     }
 }
@@ -1007,6 +1022,17 @@ impl<T: Form> FormView<T> {
                 .label(field.label)
                 .into(),
             Widget::Phone | Widget::PhoneText => self.phone(field, &rules, value, invalid),
+            Widget::Slider => {
+                let spec = slider_spec::<T>(field);
+                let shown = value
+                    .and_then(|text| text.trim().parse::<crate::flow::Decimal>().ok())
+                    .unwrap_or_else(|| spec.minimum());
+                crate::flow::Slider::new(field.name)
+                    .spec(spec)
+                    .value(shown)
+                    .invalid(invalid)
+                    .into()
+            }
         }
     }
 
@@ -1242,7 +1268,10 @@ impl<T: Form> FormView<T> {
                                 choices
                                     .iter()
                                     .find(|choice| choice.value() == value)
-                                    .map_or_else(|| value.clone(), |choice| choice.label().to_owned())
+                                    .map_or_else(
+                                        || value.clone(),
+                                        |choice| choice.label().to_owned(),
+                                    )
                             })
                             .collect::<Vec<_>>()
                             .join(", ")
@@ -1530,6 +1559,19 @@ fn moments(field: &FormField, text: &str) -> Vec<chrono::NaiveDateTime> {
     }
 }
 
+/// The grid of a slider field: its own function, or its `range` rule in steps of 1.
+fn slider_spec<T: Form>(field: &FormField) -> crate::flow::SliderSpec {
+    if let Some(grid) = field.slider {
+        return grid();
+    }
+    let rules = native::<T>(field);
+    let number = |text: Option<&str>, otherwise: i64| {
+        text.and_then(|text| text.parse::<crate::flow::Decimal>().ok())
+            .unwrap_or_else(|| crate::flow::Decimal::from(otherwise))
+    };
+    crate::flow::SliderSpec::new(number(rules.min, 0), number(rules.max, 100))
+}
+
 /// What the date and time fields say of the posted text, which the typed value can't: a
 /// year the calendar doesn't draw (outside 1 to 9999) and a time that is not a time of day
 /// (a leap second, a fraction of a second) are always refused, and the rules a field was
@@ -1580,6 +1622,16 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
                 };
                 let rules = field.time_rules.map(|rules| rules()).unwrap_or_default();
                 rules.check(time).err().map(|error| error.message(&english))
+            }
+            Widget::Slider => {
+                // An optional field left empty is no value, and the rules say if it may be.
+                if value.is_empty() && field.optional {
+                    continue;
+                }
+                let spec = slider_spec::<T>(field);
+                spec.check(value.trim())
+                    .err()
+                    .map(|error| spec.message(error, &crate::flow::SliderLabels::default()))
             }
             _ => None,
         };
@@ -1751,7 +1803,8 @@ where
             | Widget::TimePicker
             | Widget::Money
             | Widget::Phone
-            | Widget::PhoneText => kept.push((field.name, "")),
+            | Widget::PhoneText
+            | Widget::Slider => kept.push((field.name, "")),
             // Read above, with the values it has.
             Widget::Multi => {}
         }
