@@ -147,8 +147,10 @@ async fn export(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 /// The app's OpenAPI document, built once from the route table (when the
 /// app boots) and cached with its JSON form.
 ///
-/// The security scheme `cookie` names the session cookie from
-/// `session.cookie` in the configuration, else
+/// The security scheme `cookie` names the session cookie as navree-session
+/// sets it: `session.cookie` (default `navree_session`) with the `__Host-`
+/// prefix when `session.host_prefix` and `session.secure` are on (the
+/// default) and `session.domain` is unset, so by default
 /// [`DEFAULT_SESSION_COOKIE`]; module registrations made with
 /// [`api_schema`](crate::ModuleBuilderApiExt::api_schema) are component
 /// schemas.
@@ -236,12 +238,10 @@ impl ApiDocs {
                     .into_iter()
                     .map(|c| (c.value.0, format!("module `{}`", c.module.name)))
                     .collect();
-                let cookie = ctx
-                    .try_get::<Config>()
-                    .await
-                    .and_then(|config| config.get_string("session.cookie"))
-                    .filter(|name| !name.trim().is_empty())
-                    .unwrap_or_else(|| DEFAULT_SESSION_COOKIE.to_owned());
+                let cookie = match ctx.try_get::<Config>().await {
+                    Some(config) => session_cookie(&config),
+                    None => DEFAULT_SESSION_COOKIE.to_owned(),
+                };
                 let document = build(&routes, &extra, &self.options, &cookie)?;
                 let value = serde_json::to_value(&document)?;
                 let mut json = serde_json::to_vec_pretty(&value)?;
@@ -275,6 +275,27 @@ impl Injectable for ApiDocs {
                 built: OnceCell::new(),
             })
         })
+    }
+}
+
+/// The session cookie's name as navree-session sets it, from the `session`
+/// section (what navree-session's `SessionOptions::cookie_name` gives, read
+/// from the configuration because this crate sits below navree-session).
+fn session_cookie(config: &Config) -> String {
+    let name = config
+        .get_string("session.cookie")
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "navree_session".to_owned());
+    let prefixed = config.get_bool("session.host_prefix").unwrap_or(true)
+        && config.get_bool("session.secure").unwrap_or(true)
+        && config
+            .get_string("session.domain")
+            .is_none_or(|domain| domain.trim().is_empty());
+    if prefixed {
+        format!("__Host-{name}")
+    } else {
+        name
     }
 }
 

@@ -60,10 +60,30 @@ async fn security_scheme_uses_the_configured_session_cookie() {
     let sources = ConfigSources::new().set("session", json!({"cookie": "crm_session"}));
     let app = configured(sources).boot().await.unwrap();
     let doc = document(&app).await;
+    // MOD-001: named as navree-session sets it, with the `__Host-` prefix.
     assert_eq!(
         doc["components"]["securitySchemes"]["cookie"]["name"],
-        "crm_session"
+        "__Host-crm_session"
     );
+    for (session, name) in [
+        (
+            json!({"cookie": "crm_session", "secure": false}),
+            "crm_session",
+        ),
+        (
+            json!({"cookie": "crm_session", "domain": ".example.com"}),
+            "crm_session",
+        ),
+        (
+            json!({"cookie": "crm_session", "host_prefix": false}),
+            "crm_session",
+        ),
+    ] {
+        let sources = ConfigSources::new().set("session", session);
+        let app = configured(sources).boot().await.unwrap();
+        let doc = document(&app).await;
+        assert_eq!(doc["components"]["securitySchemes"]["cookie"]["name"], name);
+    }
 }
 
 #[tokio::test]

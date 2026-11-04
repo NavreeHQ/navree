@@ -25,8 +25,10 @@ const REFERENCED: &str = navree_openapi::__private::COMPONENTS;
 const COMPONENT_TYPES: &str = navree_openapi::__private::COMPONENT_TYPES;
 const COMPONENT_CONFLICTS: &str = navree_openapi::__private::COMPONENT_CONFLICTS;
 
-/// The session cookie navree-session sets by default (`session.cookie`).
-pub const DEFAULT_SESSION_COOKIE: &str = "navree_session";
+/// The session cookie navree-session sets by default: `session.cookie`
+/// (`navree_session`) with the `__Host-` prefix the default options
+/// (`secure`, no `domain`) give it.
+pub const DEFAULT_SESSION_COOKIE: &str = "__Host-navree_session";
 
 /// Why a document cannot be built.
 #[derive(Debug, thiserror::Error)]

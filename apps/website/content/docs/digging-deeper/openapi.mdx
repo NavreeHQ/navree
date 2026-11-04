@@ -151,7 +151,7 @@ Give a route a name with `#[name("deals.index")]` to set its `operationId`; rout
 - **Errors**: every documented error status uses the `HttpError` schema, Navree's [JSON error shape](/docs/basics/errors/) (`statusCode`, `message`, `error`, the optional `code`, and `errors` for validation failures).
 - **Tags** are listed in the order routes first use them.
 
-The `cookie` scheme names the session cookie from `session.cookie` (default `navree_session`). It is listed even in apps that only use bearer tokens, such as the CRM.
+The `cookie` scheme names the session cookie as the browser sees it: `session.cookie` (default `navree_session`) with the `__Host-` prefix whenever the cookie is `Secure` and has no `Domain` (the default), so `__Host-navree_session`. It is listed even in apps that only use bearer tokens, such as the CRM.
 
 ## Schemas
 

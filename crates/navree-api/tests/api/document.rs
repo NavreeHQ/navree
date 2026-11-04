@@ -167,7 +167,8 @@ async fn non_public_routes_have_security() {
     let schemes = &doc["components"]["securitySchemes"];
     assert_eq!(schemes["cookie"]["type"], "apiKey");
     assert_eq!(schemes["cookie"]["in"], "cookie");
-    assert_eq!(schemes["cookie"]["name"], "navree_session");
+    // MOD-001: the cookie navree-session sets by default, `__Host-` prefix and all.
+    assert_eq!(schemes["cookie"]["name"], "__Host-navree_session");
     assert_eq!(schemes["bearer"]["type"], "http");
     assert_eq!(schemes["bearer"]["scheme"], "bearer");
     assert_eq!(

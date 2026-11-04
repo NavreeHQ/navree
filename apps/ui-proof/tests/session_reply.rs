@@ -100,7 +100,7 @@ async fn signing_in_and_out_through_the_runtime_works_in_either_order() {
             "ui_first={ui_first}"
         );
         assert!(
-            response.set_cookie("navree_session").is_some(),
+            response.set_cookie("__Host-navree_session").is_some(),
             "the rotated id reaches the browser, ui_first={ui_first}"
         );
         assert_ne!(
