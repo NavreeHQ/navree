@@ -3,6 +3,82 @@
   "note": "Written by scripts/showcase-images.ts from the apps running (cargo run --release) and the site's preview pages. Each width is an AVIF (4:4:4) and a WebP.",
   "images": [
     {
+      "key": "hero-desktop",
+      "alt": "Cloudworks CRM's deals page: a sidebar with counts, four figures in crore and lakh, a table of eight open deals with their owners and stages, and the Sutlej Supply renewal open in a drawer with its amount, its contact and a timeline of seven events in IST",
+      "width": 2000,
+      "height": 1167,
+      "avif": [
+        {
+          "src": "/images/showcase/hero-desktop-800.avif",
+          "width": 800
+        },
+        {
+          "src": "/images/showcase/hero-desktop-1200.avif",
+          "width": 1200
+        },
+        {
+          "src": "/images/showcase/hero-desktop-1600.avif",
+          "width": 1600
+        },
+        {
+          "src": "/images/showcase/hero-desktop-2000.avif",
+          "width": 2000
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/hero-desktop-800.webp",
+          "width": 800
+        },
+        {
+          "src": "/images/showcase/hero-desktop-1200.webp",
+          "width": 1200
+        },
+        {
+          "src": "/images/showcase/hero-desktop-1600.webp",
+          "width": 1600
+        },
+        {
+          "src": "/images/showcase/hero-desktop-2000.webp",
+          "width": 2000
+        }
+      ]
+    },
+    {
+      "key": "hero-phone",
+      "alt": "The same deal on a phone: the drawer over the deals table, with its stage, amount, contact and the first events of its timeline",
+      "width": 1074,
+      "height": 1800,
+      "avif": [
+        {
+          "src": "/images/showcase/hero-phone-400.avif",
+          "width": 400
+        },
+        {
+          "src": "/images/showcase/hero-phone-716.avif",
+          "width": 716
+        },
+        {
+          "src": "/images/showcase/hero-phone-1074.avif",
+          "width": 1074
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/hero-phone-400.webp",
+          "width": 400
+        },
+        {
+          "src": "/images/showcase/hero-phone-716.webp",
+          "width": 716
+        },
+        {
+          "src": "/images/showcase/hero-phone-1074.webp",
+          "width": 1074
+        }
+      ]
+    },
+    {
       "key": "store-drawer",
       "alt": "Charkha Supply Co.'s orders, filtered to two days, with one order open in a drawer over the table: its badges and actions, the customer, the payment, the warehouse and the address with their flags, and its items in rupees",
       "width": 2880,

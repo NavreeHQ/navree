@@ -258,8 +258,16 @@ function HardParts() {
                   </Link>
                 </h4>
                 <p className="mt-2 text-[0.9375rem] leading-relaxed text-pretty text-fg-2 max-sm:hidden">{part.hard}</p>
-                <div className="mt-4 max-sm:hidden">
-                  <CodePanel file={part.code.file} lang="rust" source={hardPartCode(part)} size="sm" wrap />
+                {/* Edge to edge across the card, so a line of code has the card's whole width. */}
+                <div className="mt-4 max-sm:hidden sm:-mx-5">
+                  <CodePanel
+                    file={part.code.file}
+                    lang="rust"
+                    source={hardPartCode(part)}
+                    size="sm"
+                    wrap
+                    className="rounded-none border-x-0 shadow-none"
+                  />
                 </div>
                 <p className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-4 text-[0.8125rem] text-fg-3">
                   {part.seenIn ? (

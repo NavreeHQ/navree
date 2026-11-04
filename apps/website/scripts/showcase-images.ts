@@ -125,6 +125,22 @@ async function around(page: Page, selectors: string[]): Promise<Box> {
 
 const captures: Capture[] = [
   {
+    key: "hero-desktop",
+    alt: "Cloudworks CRM's deals page: a sidebar with counts, four figures in crore and lakh, a table of eight open deals with their owners and stages, and the Sutlej Supply renewal open in a drawer with its amount, its contact and a timeline of seven events in IST",
+    url: () => `${SITE}/ui-preview/app-shell/full.html`,
+    viewport: { width: 1440, height: 840 },
+    scale: 2,
+    widths: [800, 1200, 1600, 2000],
+  },
+  {
+    key: "hero-phone",
+    alt: "The same deal on a phone: the drawer over the deals table, with its stage, amount, contact and the first events of its timeline",
+    url: () => `${SITE}/ui-preview/app-shell/full.html`,
+    viewport: { width: 358, height: 600 },
+    scale: 3,
+    widths: [400, 716, 1074],
+  },
+  {
     key: "store-drawer",
     alt: "Charkha Supply Co.'s orders, filtered to two days, with one order open in a drawer over the table: its badges and actions, the customer, the payment, the warehouse and the address with their flags, and its items in rupees",
     url: twoDays,

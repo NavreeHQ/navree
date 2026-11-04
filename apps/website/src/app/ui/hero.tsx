@@ -1,7 +1,9 @@
+import Link from "next/link";
+
 import { PrimaryCta, SecondaryCta } from "@/components/home/parts";
 import { GridPattern } from "@/components/magicui/grid-pattern";
-import { asset, example, groups, kb, toolkitInfo } from "@/components/ui-docs/data";
-import { PreviewFrame } from "@/components/ui-docs/preview-frame";
+import { showcaseImage } from "@/components/showcase/showcase-image";
+import { asset, groups, kb, toolkitInfo } from "@/components/ui-docs/data";
 
 /** The toolkit's own facts, counted from the UI catalogue and the toolkit's build. */
 function facts() {
@@ -15,9 +17,21 @@ function facts() {
   ];
 }
 
-/** The top of `/ui/`: what Navree UI is, the way in, and a live app shell drawn by the toolkit. */
+const srcSet = (list: { src: string; width: number }[]) => list.map((v) => `${v.src} ${v.width}w`).join(", ");
+
+/**
+ * The top of `/ui/`: what Navree UI is, the way in, and a whole app page drawn
+ * by the toolkit: the shell, figures, a DataTable and a deal open in a drawer
+ * with its history (the UI docs' `app-shell/full`). The picture is that page as
+ * navree-ui draws it, captured by `scripts/showcase-images.ts`: 1440 px wide
+ * from `md`, and at a phone's width below it, where the drawer covers the table.
+ * A still rather than a live frame, so the first screen loads one picture and
+ * nothing in it moves.
+ */
 export function UiHero() {
-  const shell = example("app-shell/default");
+  const desktop = showcaseImage("hero-desktop");
+  const phone = showcaseImage("hero-phone");
+  const wide = "(min-width: 1280px) 784px, (min-width: 1024px) calc(100vw - 64px), calc(100vw - 48px)";
   return (
     <section aria-labelledby="ui-title" className="relative overflow-hidden">
       <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -54,14 +68,48 @@ export function UiHero() {
 
         <figure className="min-w-0 xl:col-span-7">
           <div className="bezel shadow-glow-lg">
-            {/* A picture of the real thing: the docs' preview page, scaled, with nothing to click. */}
-            <div className="bezel-core overflow-hidden" style={{ aspectRatio: `${shell.width ?? 1100} / ${shell.height}` }} inert>
-              <PreviewFrame src={shell.src} title="" height={shell.height} width={shell.width} fit={false} thumb />
+            {/* A picture of the real thing: the page navree-ui draws, at a laptop's width or a phone's. */}
+            <div className="bezel-core overflow-hidden">
+              <picture>
+                <source
+                  media="(min-width: 768px)"
+                  type="image/avif"
+                  srcSet={srcSet(desktop.avif)}
+                  sizes={wide}
+                  width={desktop.width}
+                  height={desktop.height}
+                />
+                <source
+                  media="(min-width: 768px)"
+                  type="image/webp"
+                  srcSet={srcSet(desktop.webp)}
+                  sizes={wide}
+                  width={desktop.width}
+                  height={desktop.height}
+                />
+                <source type="image/avif" srcSet={srcSet(phone.avif)} sizes="calc(100vw - 48px)" width={phone.width} height={phone.height} />
+                <source type="image/webp" srcSet={srcSet(phone.webp)} sizes="calc(100vw - 48px)" width={phone.width} height={phone.height} />
+                {/* oxlint-disable-next-line next/no-img-element -- static export: art-directed sources by hand */}
+                <img
+                  src={(phone.webp[1] ?? phone.webp[0]).src}
+                  width={phone.width}
+                  height={phone.height}
+                  alt={desktop.alt}
+                  loading="eager"
+                  fetchPriority="high"
+                  className="block h-auto w-full"
+                />
+              </picture>
             </div>
           </div>
           <figcaption className="mt-3 px-1 text-sm leading-relaxed text-pretty text-fg-3">
-            An app shell with a sidebar, a page header and stat cards, rendered by{" "}
-            <span className="font-mono text-[0.8125rem] text-fg-2">navree-ui</span> from the Rust on its docs page.
+            A sales team&apos;s deals: the app shell, four figures, a DataTable on the server and a deal open in a drawer with
+            its history, rendered by <span className="font-mono text-[0.8125rem] text-fg-2">navree-ui</span> from the Rust
+            in the UI docs.{" "}
+            <Link href="/docs/ui/app-shell/#a-whole-page" prefetch={false} className="link">
+              See it live
+            </Link>
+            .
           </figcaption>
         </figure>
       </div>
