@@ -112,7 +112,7 @@ impl Parse for Args {
 }
 
 /// The route attributes that mean nothing for gRPC.
-const HTTP_ONLY: [&str; 12] = [
+const HTTP_ONLY: [&str; 14] = [
     "get",
     "post",
     "put",
@@ -122,6 +122,8 @@ const HTTP_ONLY: [&str; 12] = [
     "timeout",
     "transactional",
     "no_compression",
+    "page",
+    "json_only",
     "audit",
     "name",
     "api",

@@ -641,6 +641,7 @@ mod options {
 
     #[controller("/invoices")]
     #[throttle(limit = 60, per = "1m")]
+    #[page]
     impl InvoiceController {
         #[post("/{id}/send")]
         #[permissions("invoices.send")]
@@ -649,6 +650,7 @@ mod options {
         #[timeout("500ms")]
         #[transactional]
         #[no_compression]
+        #[json_only]
         #[audit(action = "invoice.sent")]
         async fn send(&self) -> &'static str {
             "sent"
@@ -682,6 +684,7 @@ async fn route_options_fill_meta() {
     assert_eq!(send_meta.timeout, Some(Duration::from_millis(500)));
     assert!(send_meta.transactional);
     assert!(send_meta.no_compression);
+    assert_eq!(send_meta.kind, navree_http::RouteKind::Json);
     assert_eq!(send_meta.audit_action.as_deref(), Some("invoice.sent"));
     assert_eq!(
         send_meta.handler.as_deref(),
@@ -699,6 +702,11 @@ async fn route_options_fill_meta() {
     assert_eq!(index.timeout, Some(Duration::from_secs(5)));
     assert!(!index.transactional);
     assert!(!index.no_compression);
+    assert_eq!(
+        index.kind,
+        navree_http::RouteKind::Page,
+        "the impl block's #[page] reaches a route with no mark of its own"
+    );
     assert_eq!(index.name, None);
     assert_eq!(index.audit_action, None);
 

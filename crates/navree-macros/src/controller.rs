@@ -544,6 +544,11 @@ fn options(attrs: &RouteAttrs) -> TokenStream {
     if attrs.no_compression {
         out.extend(quote!(.no_compression()));
     }
+    match attrs.page {
+        Some(true) => out.extend(quote!(.page())),
+        Some(false) => out.extend(quote!(.json_only())),
+        None => {}
+    }
     if let Some(action) = &attrs.audit {
         out.extend(quote!(.audit(#action)));
     }

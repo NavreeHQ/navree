@@ -34,6 +34,8 @@ enum Kind {
     Timeout,
     Transactional,
     NoCompression,
+    Page,
+    JsonOnly,
     Audit,
     Name,
     Api,
@@ -74,6 +76,8 @@ impl Kind {
             "timeout" => Kind::Timeout,
             "transactional" => Kind::Transactional,
             "no_compression" => Kind::NoCompression,
+            "page" => Kind::Page,
+            "json_only" => Kind::JsonOnly,
             "audit" => Kind::Audit,
             "name" => Kind::Name,
             "api" => Kind::Api,
@@ -96,6 +100,8 @@ impl Kind {
                 | Kind::Can
                 | Kind::Guard
                 | Kind::Throttle
+                | Kind::Page
+                | Kind::JsonOnly
                 | Kind::NotWhileImpersonating
                 | Kind::RecentAuth
         )
@@ -118,7 +124,13 @@ impl Kind {
     /// Whether `self` and `other` fill the same slot (any two route
     /// attributes do).
     fn same_slot(self, other: Kind) -> bool {
-        self == other || matches!((self, other), (Kind::Route(_), Kind::Route(_)))
+        self == other
+            || matches!(
+                (self, other),
+                (Kind::Route(_), Kind::Route(_))
+                    | (Kind::Page, Kind::JsonOnly)
+                    | (Kind::JsonOnly, Kind::Page)
+            )
     }
 }
 
@@ -522,6 +534,8 @@ pub(crate) struct RouteAttrs {
     pub(crate) transactional: bool,
     /// `#[no_compression]`.
     pub(crate) no_compression: bool,
+    /// `#[page]` (`Some(true)`) or `#[json_only]` (`Some(false)`).
+    pub(crate) page: Option<bool>,
     /// `#[audit(action = "x")]`.
     pub(crate) audit: Option<LitStr>,
     /// `#[name("deals.show")]`.
@@ -551,7 +565,7 @@ pub(crate) enum Site<'a> {
 
 /// What may sit on the impl block, for error messages.
 const IMPL_ATTRIBUTES: &str = "#[public], #[authenticated], #[roles], #[permissions], #[can], \
-     #[guard], #[throttle], #[not_while_impersonating] and #[recent_auth]";
+     #[guard], #[throttle], #[page], #[json_only], #[not_while_impersonating] and #[recent_auth]";
 
 impl RouteAttrs {
     /// Removes our attributes from `attrs` and parses them. Other attributes
@@ -639,6 +653,14 @@ impl RouteAttrs {
                 flag(attr)?;
                 self.no_compression = true;
             }
+            Kind::Page => {
+                flag(attr)?;
+                self.page = Some(true);
+            }
+            Kind::JsonOnly => {
+                flag(attr)?;
+                self.page = Some(false);
+            }
             Kind::Audit => {
                 let expected = || at.error("expected #[audit(action = \"invoice.sent\")]");
                 if !matches!(attr.meta, Meta::List(_)) {
@@ -718,6 +740,7 @@ impl RouteAttrs {
         }
         self.guards.splice(0..0, shared.guards.iter().cloned());
         self.throttle = self.throttle.or(shared.throttle);
+        self.page = self.page.or(shared.page);
         if self.not_while_impersonating.is_none() {
             self.not_while_impersonating
                 .clone_from(&shared.not_while_impersonating);

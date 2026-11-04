@@ -275,6 +275,8 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `#[timeout("5s")]` | fn | `.timeout(5s)` |
 /// | `#[transactional]` | fn | `.transactional()` |
 /// | `#[no_compression]` | fn | `.no_compression()`: responses go out uncompressed |
+/// | `#[page]` | fn, impl | `.page()`: the route's errors are pages for any client that does not ask for JSON alone (navree-ui's `UiModule` draws them) |
+/// | `#[json_only]` | fn, impl | `.json_only()`: the route's errors are always the JSON error body |
 /// | `#[audit(action = "deal.won")]` | fn | `.audit("deal.won")` |
 /// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
 /// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(400, 404), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `navree_http::schema_fn::<T>` |

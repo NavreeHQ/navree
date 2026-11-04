@@ -32,7 +32,7 @@ enum Kind {
 }
 
 /// Route attributes that do not apply to message handlers.
-const ROUTE_ONLY: [&str; 11] = [
+const ROUTE_ONLY: [&str; 13] = [
     "get",
     "post",
     "put",
@@ -41,6 +41,8 @@ const ROUTE_ONLY: [&str; 11] = [
     "throttle",
     "transactional",
     "no_compression",
+    "page",
+    "json_only",
     "audit",
     "name",
     "api",

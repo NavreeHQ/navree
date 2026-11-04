@@ -1,4 +1,4 @@
-error: #[timeout] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard], #[throttle], #[not_while_impersonating] and #[recent_auth] apply to every route
+error: #[timeout] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard], #[throttle], #[page], #[json_only], #[not_while_impersonating] and #[recent_auth] apply to every route
  --> tests/ui/controller/misplaced_attributes.rs:8:1
   |
 8 | #[timeout("5s")]
