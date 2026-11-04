@@ -260,7 +260,7 @@ fn skills_install_writes_every_skill_into_both_folders() {
         "{stdout}"
     );
     for folder in [".claude/skills", ".agents/skills"] {
-        for skill in ["navree", "navree-database", "navree-navigator"] {
+        for skill in ["navree", "navree-database", "navree-navigator", "navree-ui"] {
             let file = dir.path().join(folder).join(skill).join("SKILL.md");
             let text = std::fs::read_to_string(&file).unwrap();
             assert!(text.starts_with("---\nname: "), "{}", file.display());

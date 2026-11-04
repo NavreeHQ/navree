@@ -187,6 +187,12 @@ mod tests {
             "the umbrella skill"
         );
         assert!(skills.iter().any(|s| s.name == "navree-navigator"));
+        // MOD-021: the skill for building Navree UI pages is installed with its references.
+        assert!(skills.iter().any(|s| s.name == "navree-ui"), "the UI skill");
+        assert!(
+            files().any(|(path, _)| path == "navree-ui/references/pickers-and-dates.md"),
+            "the UI skill's references are embedded with it"
+        );
         for (path, contents) in files() {
             let Some((folder, "SKILL.md")) = path.split_once('/') else {
                 continue;
