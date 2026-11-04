@@ -44,6 +44,8 @@ pub fn all() -> Vec<Example> {
             .fill()
             .width(1100)
             .height(620),
+        // Drawn at the column's own width, as the app draws it on a screen that wide, and
+        // whole: a page scaled down to fit would be too small to read.
         page!(
             "theme-builder",
             "default",
@@ -51,8 +53,8 @@ pub fn all() -> Vec<Example> {
             builder_default
         )
         .fill()
-        .width(1280)
-        .height(1400),
+        .fit()
+        .height(1600),
     ]
 }
 

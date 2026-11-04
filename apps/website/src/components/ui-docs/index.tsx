@@ -48,6 +48,13 @@ import { flagWeightsText } from "./weights";
 // ------------------------------------------------------------------ preview
 
 /**
+ * The height a whole page that fills its frame gets on a phone, where it is drawn at
+ * the phone's own width and scrolls inside, rather than scaled to a picture too small
+ * to read.
+ */
+const PHONE_HEIGHT = 640;
+
+/**
  * `<UiPreview example="button/variants" />`. With `defer`, the frame loads only
  * after the page has, as it nears the screen: for a whole page drawn below the fold.
  */
@@ -66,7 +73,8 @@ export async function UiPreview({ example: id, defer = false }: { example: strin
           title={`${owner.name}: ${example.title}, rendered by navree-ui`}
           height={example.height}
           width={example.width}
-          fit={example.layout !== "fill"}
+          fit={example.fit}
+          phoneHeight={example.fit ? undefined : PHONE_HEIGHT}
           defer={defer}
         />
       }

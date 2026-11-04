@@ -29,6 +29,8 @@ export type UiExample = {
   show: boolean;
   live: boolean;
   width: number | null;
+  /** The frame grows to what it shows; off for a page drawn edge to edge that fills its frame. */
+  fit: boolean;
   scripts: string[];
   captions: string[];
   slots: Slot[];
