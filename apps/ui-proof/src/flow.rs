@@ -99,17 +99,39 @@ fn field(id: &'static str, label: &'static str, control: impl Into<Node>) -> Nod
 }
 
 fn sliders() -> Element {
-    let many_marks = (0..=12).fold(Slider::new("many").id("sl-many").label("Twelve marks").max(12), |slider, n| {
-        slider.mark(n, n.to_string())
-    });
+    let many_marks = (0..=12).fold(
+        Slider::new("many")
+            .id("sl-many")
+            .label("Twelve marks")
+            .max(12),
+        |slider, n| slider.mark(n, n.to_string()),
+    );
     let form = el("form")
         .attr("id", "sl-form")
         .attr("method", "post")
         .attr("action", "/flow/echo")
         .children((
             Stack::gap(5).children((
-                field("sl-volume", "Volume", Slider::new("volume").id("sl-volume").max(100).step(5).value(40).suffix("%").ticks_every(5)),
-                field("sl-tenths", "Tenths", Slider::new("tenths").id("sl-tenths").max(1).step(0.1_f64).value(0.3_f64)),
+                field(
+                    "sl-volume",
+                    "Volume",
+                    Slider::new("volume")
+                        .id("sl-volume")
+                        .max(100)
+                        .step(5)
+                        .value(40)
+                        .suffix("%")
+                        .ticks_every(5),
+                ),
+                field(
+                    "sl-tenths",
+                    "Tenths",
+                    Slider::new("tenths")
+                        .id("sl-tenths")
+                        .max(1)
+                        .step(0.1_f64)
+                        .value(0.3_f64),
+                ),
                 el("div").children((
                     el("p").attr("id", "sl-price-label").child("Price"),
                     Slider::range("price")
@@ -124,30 +146,93 @@ fn sliders() -> Element {
                         .mark(500, "$500")
                         .mark(1000, "$1000"),
                 )),
-                field("sl-level", "Level", Slider::new("level").id("sl-level").max(2).names(["Low", "Medium", "High"]).value(1)),
+                field(
+                    "sl-level",
+                    "Level",
+                    Slider::new("level")
+                        .id("sl-level")
+                        .max(2)
+                        .names(["Low", "Medium", "High"])
+                        .value(1),
+                ),
                 field("sl-many", "Many marks", many_marks),
-                field("sl-wide", "A wide track", Slider::new("wide").id("sl-wide").min(-1_000_000).max(1_000_000).step(1000).value(0)),
-                field("sl-off", "Disabled", Slider::new("off").id("sl-off").value(30).disabled(true)),
-                field("sl-still", "Read only", Slider::range("still").id("sl-still").values(10, 60).readonly()),
-                field("sl-big", "Big step of 25", Slider::new("big").id("sl-big").max(200).big_step(25).value(100)),
-                field("sl-invalid", "Marked invalid", Slider::new("bad").id("sl-invalid").value(90).invalid(true)),
+                field(
+                    "sl-wide",
+                    "A wide track",
+                    Slider::new("wide")
+                        .id("sl-wide")
+                        .min(-1_000_000)
+                        .max(1_000_000)
+                        .step(1000)
+                        .value(0),
+                ),
+                field(
+                    "sl-off",
+                    "Disabled",
+                    Slider::new("off").id("sl-off").value(30).disabled(true),
+                ),
+                field(
+                    "sl-still",
+                    "Read only",
+                    Slider::range("still")
+                        .id("sl-still")
+                        .values(10, 60)
+                        .readonly(),
+                ),
+                field(
+                    "sl-big",
+                    "Big step of 25",
+                    Slider::new("big")
+                        .id("sl-big")
+                        .max(200)
+                        .big_step(25)
+                        .value(100),
+                ),
+                field(
+                    "sl-invalid",
+                    "Marked invalid",
+                    Slider::new("bad").id("sl-invalid").value(90).invalid(true),
+                ),
             )),
-            Button::primary("Post the sliders").attr("id", "sl-post").submit(),
+            Button::primary("Post the sliders")
+                .attr("id", "sl-post")
+                .submit(),
         ));
-    let rtl = el("div")
-        .attr("dir", "rtl")
-        .attr("id", "sl-rtl")
-        .child(Stack::gap(5).children((
-            field("sl-rtl-one", "حجم", Slider::new("rvolume").id("sl-rtl-one").max(100).step(10).value(30).ticks_every(10)),
-            field("sl-rtl-range", "السعر", Slider::range("rprice").id("sl-rtl-range").max(100).values(20, 70).mark(0, "0").mark(100, "100")),
-        )));
+    let rtl = el("div").attr("dir", "rtl").attr("id", "sl-rtl").child(
+        Stack::gap(5).children((
+            field(
+                "sl-rtl-one",
+                "حجم",
+                Slider::new("rvolume")
+                    .id("sl-rtl-one")
+                    .max(100)
+                    .step(10)
+                    .value(30)
+                    .ticks_every(10),
+            ),
+            field(
+                "sl-rtl-range",
+                "السعر",
+                Slider::range("rprice")
+                    .id("sl-rtl-range")
+                    .max(100)
+                    .values(20, 70)
+                    .mark(0, "0")
+                    .mark(100, "100"),
+            ),
+        )),
+    );
     section(
         "sliders",
         "Slider",
         (
             form,
             rtl,
-            Slider::new("lonely").id("sl-lonely").label("Not in a form").max(10).value(4),
+            Slider::new("lonely")
+                .id("sl-lonely")
+                .label("Not in a form")
+                .max(10)
+                .value(4),
         ),
     )
 }
@@ -186,8 +271,17 @@ fn links_tree(state: &TreeState) -> Tree {
         .state(state.clone())
         .node(docs)
         .node(TreeNode::lazy("music", "Music", src("lazy-docs")).icon(icons::FOLDER))
-        .node(TreeNode::leaf("readme", "README").link("/flow?file=readme").icon(icons::FILE).current(true))
-        .node(TreeNode::leaf("license", "LICENSE").link("/flow?file=license").icon(icons::FILE))
+        .node(
+            TreeNode::leaf("readme", "README")
+                .link("/flow?file=readme")
+                .icon(icons::FILE)
+                .current(true),
+        )
+        .node(
+            TreeNode::leaf("license", "LICENSE")
+                .link("/flow?file=license")
+                .icon(icons::FILE),
+        )
 }
 
 fn multi_tree() -> Tree {
@@ -220,10 +314,21 @@ fn single_tree() -> Tree {
         .id("t-single")
         .select(TreeSelect::Single)
         .node(
-            TreeNode::branch("sales", "Sales", [TreeNode::leaf("sales/ada", "Ada"), TreeNode::leaf("sales/grace", "Grace").selected(true)])
-                .open(true),
+            TreeNode::branch(
+                "sales",
+                "Sales",
+                [
+                    TreeNode::leaf("sales/ada", "Ada"),
+                    TreeNode::leaf("sales/grace", "Grace").selected(true),
+                ],
+            )
+            .open(true),
         )
-        .node(TreeNode::branch("support", "Support", [TreeNode::leaf("support/alan", "Alan")]))
+        .node(TreeNode::branch(
+            "support",
+            "Support",
+            [TreeNode::leaf("support/alan", "Alan")],
+        ))
 }
 
 const PAGE: usize = 50;
@@ -237,7 +342,10 @@ fn big_tree() -> Tree {
             TreeNode::branch("everyone", "Everyone (10,000)", big_page(0).0)
                 .open(true)
                 .children_total(BIG)
-                .more(format!("/flow/tree/children?parent=big&after={PAGE}"), Some(BIG - PAGE)),
+                .more(
+                    format!("/flow/tree/children?parent=big&after={PAGE}"),
+                    Some(BIG - PAGE),
+                ),
         )
 }
 
@@ -280,7 +388,9 @@ fn trees(query: &str) -> Element {
         .attr("action", "/flow/echo")
         .children((
             Stack::gap(4).children((multi_tree(), single_tree(), big_tree(), hostile_tree())),
-            Button::primary("Post the choices").attr("id", "t-post").submit(),
+            Button::primary("Post the choices")
+                .attr("id", "t-post")
+                .submit(),
         ));
     section(
         "trees",
@@ -295,7 +405,17 @@ fn trees(query: &str) -> Element {
                     .id("t-rtl-tree")
                     .select(TreeSelect::Multiple)
                     .cascade()
-                    .node(TreeNode::branch("r1", "الجذر", [TreeNode::leaf("r1a", "ورقة"), TreeNode::leaf("r1b", "ورقة ثانية")]).open(true)),
+                    .node(
+                        TreeNode::branch(
+                            "r1",
+                            "الجذر",
+                            [
+                                TreeNode::leaf("r1a", "ورقة"),
+                                TreeNode::leaf("r1b", "ورقة ثانية"),
+                            ],
+                        )
+                        .open(true),
+                    ),
             ),
         ),
     )
@@ -307,7 +427,11 @@ fn format_bar(id: &'static str) -> Toolbar {
     Toolbar::new(id, "Text formatting")
         .item(ToolbarItem::icon_toggle("bold", icons::LETTER_B, "Bold"))
         .item(ToolbarItem::icon_toggle("italic", icons::ITALIC, "Italic").pressed(true))
-        .item(ToolbarItem::icon_toggle("underline", icons::UNDERLINE, "Underline"))
+        .item(ToolbarItem::icon_toggle(
+            "underline",
+            icons::UNDERLINE,
+            "Underline",
+        ))
         .item(ToolbarItem::separator())
         .item(ToolbarItem::group(
             "Alignment",
@@ -318,7 +442,11 @@ fn format_bar(id: &'static str) -> Toolbar {
                 .value("left")],
         ))
         .item(ToolbarItem::separator())
-        .item(ToolbarItem::button("Copy").icon(icons::COPY).on_click(Cmd::toast(ToastTone::Success, "Copied.")))
+        .item(
+            ToolbarItem::button("Copy")
+                .icon(icons::COPY)
+                .on_click(Cmd::toast(ToastTone::Success, "Copied.")),
+        )
         .item(ToolbarItem::button("Disabled").disabled(true))
         .item(ToolbarItem::link("Help", "/flow?help=1"))
         .item(ToolbarItem::post("Archive", "/flow/archive"))
@@ -329,7 +457,10 @@ fn format_bar(id: &'static str) -> Toolbar {
                 .size(Size::Sm)
                 .caret()
                 .item(MenuItem::link("By email", "/flow?share=email"))
-                .item(MenuItem::action("Copy the link").on_click(Cmd::toast(ToastTone::Info, "Link copied."))),
+                .item(
+                    MenuItem::action("Copy the link")
+                        .on_click(Cmd::toast(ToastTone::Info, "Link copied.")),
+                ),
         ))
         .item(ToolbarItem::button("Always shown").keep())
 }
@@ -339,13 +470,49 @@ fn toolbars() -> Element {
         .attr("id", "tb-form")
         .attr("method", "post")
         .attr("action", "/flow/echo")
-        .children((format_bar("tb-main"), Button::primary("Post the toolbar").attr("id", "tb-post").submit()));
+        .children((
+            format_bar("tb-main"),
+            Button::primary("Post the toolbar")
+                .attr("id", "tb-post")
+                .submit(),
+        ));
     section(
         "toolbars",
         "Toolbar",
         (
             form,
-            Toolbar::new("tb-many", "Many tools").items((1..=24).map(|n| ToolbarItem::button(format!("Tool {n}")).on_click(Cmd::toast(ToastTone::Info, format!("Tool {n}"))))),
+            el("form")
+                .attr("id", "tb-late-form")
+                .attr("method", "post")
+                .attr("action", "/flow/echo")
+                .children((
+                    Toolbar::new("tb-late", "Late toggles")
+                        .item(ToolbarItem::button("Always here").keep())
+                        .item(ToolbarItem::button("Another wide tool"))
+                        .item(ToolbarItem::button("And one more wide tool"))
+                        .item(ToolbarItem::icon_toggle(
+                            "late_bold",
+                            icons::LETTER_B,
+                            "Late bold",
+                        ))
+                        .item(
+                            ToolbarItem::icon_toggle("late_italic", icons::ITALIC, "Late italic")
+                                .pressed(true),
+                        )
+                        .item(
+                            ToolbarItem::radios("late_size", "Size")
+                                .option("s", "S")
+                                .option("m", "M")
+                                .value("s"),
+                        ),
+                    Button::primary("Post the late toggles")
+                        .attr("id", "tb-late-post")
+                        .submit(),
+                )),
+            Toolbar::new("tb-many", "Many tools").items((1..=24).map(|n| {
+                ToolbarItem::button(format!("Tool {n}"))
+                    .on_click(Cmd::toast(ToastTone::Info, format!("Tool {n}")))
+            })),
             Toolbar::new("tb-vertical", "Vertical tools")
                 .vertical()
                 .item(ToolbarItem::button("One"))
@@ -365,15 +532,19 @@ fn toolbars() -> Element {
 }
 
 fn page(shell: &AppShell, query: &str) -> AppPage {
-    shell.page("Flow").body(Stack::gap(10).children((
-        Row::gap(3).wrap().children((
-            Button::outline("Start the wizard").href("/flow/wizard/start").attr("id", "start-wizard"),
+    shell.page("Flow").body(
+        Stack::gap(10).children((
+            Row::gap(3)
+                .wrap()
+                .children((Button::outline("Start the wizard")
+                    .href("/flow/wizard/start")
+                    .attr("id", "start-wizard"),)),
+            steppers(),
+            sliders(),
+            trees(query),
+            toolbars(),
         )),
-        steppers(),
-        sliders(),
-        trees(query),
-        toolbars(),
-    )))
+    )
 }
 
 // ---- The echo --------------------------------------------------------------
@@ -396,21 +567,51 @@ fn echo(shell: &AppShell, body: &str) -> AppPage {
     };
     if all.iter().any(|(name, _)| name == "volume") {
         let spec = SliderSpec::new(0, 100).step(5);
-        judge("volume", spec.read(&all, "volume").map(|v| v.to_string()).map_err(|e| (spec, e)));
+        judge(
+            "volume",
+            spec.read(&all, "volume")
+                .map(|v| v.to_string())
+                .map_err(|e| (spec, e)),
+        );
         let spec = SliderSpec::new(0, 1).step(0.1_f64);
-        judge("tenths", spec.read(&all, "tenths").map(|v| v.to_string()).map_err(|e| (spec, e)));
+        judge(
+            "tenths",
+            spec.read(&all, "tenths")
+                .map(|v| v.to_string())
+                .map_err(|e| (spec, e)),
+        );
         let spec = SliderSpec::new(0, 1000).step(10).min_gap(2);
         judge(
             "price",
-            spec.read_range(&all, "price").map(|(a, b)| format!("{a}-{b}")).map_err(|e| (spec, e)),
+            spec.read_range(&all, "price")
+                .map(|(a, b)| format!("{a}-{b}"))
+                .map_err(|e| (spec, e)),
         );
         let spec = SliderSpec::new(0, 2);
-        judge("level", spec.read(&all, "level").map(|v| v.to_string()).map_err(|e| (spec, e)));
+        judge(
+            "level",
+            spec.read(&all, "level")
+                .map(|v| v.to_string())
+                .map_err(|e| (spec, e)),
+        );
     }
-    if ["access", "owner", "big", "hostile"].iter().any(|name| all.iter().any(|(field, _)| field == *name)) {
+    if ["access", "owner", "big", "hostile"]
+        .iter()
+        .any(|name| all.iter().any(|(field, _)| field == *name))
+    {
         for field in ["access", "owner", "big", "hostile"] {
             match TreeSelection::parse(&all, field) {
-                Ok(chosen) if !chosen.is_empty() => checks.push(format!("{field}: {} chosen: {}", chosen.len(), chosen.ids().iter().take(5).cloned().collect::<Vec<_>>().join(" | "))),
+                Ok(chosen) if !chosen.is_empty() => checks.push(format!(
+                    "{field}: {} chosen: {}",
+                    chosen.len(),
+                    chosen
+                        .ids()
+                        .iter()
+                        .take(5)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                )),
                 Ok(_) => {}
                 Err(error) => checks.push(format!("{field}: {error}")),
             }
@@ -423,7 +624,6 @@ fn echo(shell: &AppShell, body: &str) -> AppPage {
         Button::outline("Back").href("/flow"),
     )))
 }
-
 
 // ---- Tree children -----------------------------------------------------------
 
@@ -448,7 +648,16 @@ async fn children(query: ChildrenQuery) -> Response {
         "slow" => {
             tokio::time::sleep(Duration::from_millis(2500)).await;
             template
-                .children(2, 0, None, [TreeNode::leaf("slow/a", "Slow A"), TreeNode::leaf("slow/b", "Slow B")], None)
+                .children(
+                    2,
+                    0,
+                    None,
+                    [
+                        TreeNode::leaf("slow/a", "Slow A"),
+                        TreeNode::leaf("slow/b", "Slow B"),
+                    ],
+                    None,
+                )
                 .into_response_html()
         }
         "big" => {
@@ -459,11 +668,22 @@ async fn children(query: ChildrenQuery) -> Response {
                 .into_response_html()
         }
         "hostile" => template
-            .children(2, 0, None, [TreeNode::leaf("\"><script>x</script>", "<script>window.__pwned=1</script>")], None)
+            .children(
+                2,
+                0,
+                None,
+                [TreeNode::leaf(
+                    "\"><script>x</script>",
+                    "<script>window.__pwned=1</script>",
+                )],
+                None,
+            )
             .into_response_html(),
         other => {
             let nodes = sample(other);
-            template.children(2, 0, None, nodes, None).into_response_html()
+            template
+                .children(2, 0, None, nodes, None)
+                .into_response_html()
         }
     }
 }
@@ -476,7 +696,10 @@ trait Fragment {
 impl<T: Into<Node>> Fragment for T {
     fn into_response_html(self) -> Response {
         (
-            [(http::header::CONTENT_TYPE, "text/html; charset=utf-8"), (http::header::CACHE_CONTROL, "no-store")],
+            [
+                (http::header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (http::header::CACHE_CONTROL, "no-store"),
+            ],
             render(&self.into()),
         )
             .into_response()
@@ -490,7 +713,11 @@ fn hits() -> Response {
         .map(|(name, count)| format!("\"{name}\":{count}"))
         .collect::<Vec<_>>()
         .join(",");
-    ([(http::header::CONTENT_TYPE, "application/json")], format!("{{{body}}}")).into_response()
+    (
+        [(http::header::CONTENT_TYPE, "application/json")],
+        format!("{{{body}}}"),
+    )
+        .into_response()
 }
 
 // ---- The wizard --------------------------------------------------------------
@@ -512,7 +739,7 @@ pub struct Basics {
     pub title: String,
     /// Who is it for
     #[validate(skip)]
-    #[form(widget = select)]
+    #[form(widget = radio)]
     pub kind: Kind,
 }
 
@@ -557,14 +784,23 @@ fn accepted(value: &bool) -> Result<(), String> {
 fn deal_wizard() -> Wizard {
     Wizard::new("deal")
         .base("/flow/wizard")
-        .step(WizardStep::of::<Basics>("basics", "Basics").description("What the deal is, and who it is for"))
+        .step(
+            WizardStep::of::<Basics>("basics", "Basics")
+                .description("What the deal is, and who it is for"),
+        )
         .step(WizardStep::of::<Contact>("contact", "Contact"))
         .step(WizardStep::of::<Extras>("extras", "Extras").optional())
         .step(WizardStep::of::<Terms>("terms", "Terms"))
         .review()
 }
 
-fn wizard_page(shell: &AppShell, wizard: &Wizard, draft: &Draft, step: &str, stale: bool) -> Response {
+fn wizard_page(
+    shell: &AppShell,
+    wizard: &Wizard,
+    draft: &Draft,
+    step: &str,
+    stale: bool,
+) -> Response {
     match wizard.page(draft, step) {
         Ok(page) => {
             let page = if stale { page.stale() } else { page };
@@ -597,7 +833,9 @@ async fn wizard_start() -> Response {
 async fn wizard_get(shell: AppShell, id: String, step: String) -> Response {
     let wizard = deal_wizard();
     match drafts().load(OWNER, &id).await {
-        Ok(Some(draft)) if draft.submitted => Reply::redirect(format!("/flow/wizard/done/{id}")).into_response(),
+        Ok(Some(draft)) if draft.submitted => {
+            Reply::redirect(format!("/flow/wizard/done/{id}")).into_response()
+        }
         Ok(Some(draft)) => wizard_page(&shell, &wizard, &draft, &step, false),
         _ => StatusCode::NOT_FOUND.into_response(),
     }
@@ -619,13 +857,28 @@ async fn wizard_post(shell: AppShell, id: String, step: String, body: String) ->
         };
     }
     match outcome {
-        WizardOutcome::Go(to) | WizardOutcome::Invalid(to) => Reply::redirect(wizard.url(&id, &to)).into_response(),
-        WizardOutcome::Left => Reply::redirect("/flow?saved=1").toast(ToastTone::Success, "Draft saved. Come back any time.").into_response(),
+        WizardOutcome::Go(to) | WizardOutcome::Invalid(to) => {
+            Reply::redirect(wizard.url(&id, &to)).into_response()
+        }
+        WizardOutcome::Left => Reply::redirect("/flow?saved=1")
+            .toast(ToastTone::Success, "Draft saved. Come back any time.")
+            .into_response(),
         WizardOutcome::Done => {
             // The record is made, and the draft goes.
-            let made = draft.read::<Basics>("basics").map(|b| b.title).unwrap_or_default();
+            let made = draft
+                .read::<Basics>("basics")
+                .map(|b| b.title)
+                .unwrap_or_default();
             let _ = drafts().discard(OWNER, &id).await;
-            DONE.lock().unwrap_or_else(PoisonError::into_inner).insert(id.clone(), made);
+            DONE.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(id.clone(), made);
+            // How many times this draft made a deal: a second post of Finish must not make a second.
+            *HITS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(format!("made-{id}"))
+                .or_insert(0) += 1;
             Reply::redirect(format!("/flow/wizard/done/{id}")).into_response()
         }
         WizardOutcome::Stale => match drafts().load(OWNER, &id).await {
@@ -637,10 +890,15 @@ async fn wizard_post(shell: AppShell, id: String, step: String, body: String) ->
 }
 
 /// The deals the wizard made, by draft id: how many times each was made shows a double post.
-static DONE: LazyLock<Mutex<BTreeMap<String, String>>> = LazyLock::new(|| Mutex::new(BTreeMap::new()));
+static DONE: LazyLock<Mutex<BTreeMap<String, String>>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
 fn wizard_done(shell: &AppShell, id: &str) -> Response {
-    let made = DONE.lock().unwrap_or_else(PoisonError::into_inner).get(id).cloned();
+    let made = DONE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(id)
+        .cloned();
     match made {
         Some(title) => shell
             .page("Deal created")

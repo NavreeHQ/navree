@@ -316,7 +316,8 @@ inBrowsers(({ open, browserName }) => {
       );
       assert.deepEqual(past, [], "nothing past the right edge");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll");
-      await shot(page, `${browserName}-sliders-${label.replaceAll(" ", "-")}`);
+      await shot(page, `${browserName}-sliders-${label.replaceAll(" ", "-")}`, "#sliders");
+      await shot(page, `${browserName}-steppers-${label.replaceAll(" ", "-")}`, "#steppers");
       await close();
     });
   }
