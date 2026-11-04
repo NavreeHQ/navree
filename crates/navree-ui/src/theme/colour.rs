@@ -196,6 +196,22 @@ impl Rgb {
         })
     }
 
+    /// The colour at an OKLab point, each channel held to sRGB's range.
+    fn from_oklab_clamped([lightness, a, b]: [f64; 3]) -> Self {
+        let l = (lightness + 0.396_337_777_4 * a + 0.215_803_757_3 * b).powi(3);
+        let m = (lightness - 0.105_561_345_8 * a - 0.063_854_172_8 * b).powi(3);
+        let s = (lightness - 0.089_484_177_5 * a - 1.291_485_548_0 * b).powi(3);
+        let r = 4.076_741_662_1 * l - 3.307_711_591_3 * m + 0.230_969_929_2 * s;
+        let g = -1.268_438_004_6 * l + 2.609_757_401_1 * m - 0.341_319_396_5 * s;
+        let b = -0.004_196_086_3 * l - 0.703_418_614_7 * m + 1.707_614_701_0 * s;
+        let fix = |c: f64| if c.is_finite() { c } else { 0.0 };
+        Self {
+            r: encode(fix(r)),
+            g: encode(fix(g)),
+            b: encode(fix(b)),
+        }
+    }
+
     /// The colour at lightness `l`, chroma `c` and hue `h` (degrees) in OKLCH,
     /// with the chroma lowered until it fits in sRGB.
     pub fn from_oklch(l: f64, c: f64, h: f64) -> Self {
@@ -237,8 +253,30 @@ impl Rgb {
             a[1] + (b[1] - a[1]) * amount,
             a[2] + (b[2] - a[2]) * amount,
         ];
-        // A mix of two sRGB colours stays inside sRGB but for rounding.
-        Self::from_oklab(point).unwrap_or_else(|| grey(point[0]))
+        // A mix of two sRGB colours can land a hair outside sRGB (a bright green
+        // toward white): each channel is held to its range, as a browser does.
+        Self::from_oklab(point).unwrap_or_else(|| Self::from_oklab_clamped(point))
+    }
+
+    /// `self` at `alpha` (0 to 1) laid over `under`, as a browser composites: in sRGB.
+    pub fn over(self, under: Self, alpha: f64) -> Self {
+        let alpha = if alpha.is_nan() {
+            0.0
+        } else {
+            alpha.clamp(0.0, 1.0)
+        };
+        let channel = |top: u8, bottom: u8| {
+            let value = f64::from(top) * alpha + f64::from(bottom) * (1.0 - alpha);
+            // In 0..=255: a weighted mean of two channels.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let byte = value.round().clamp(0.0, 255.0) as u8;
+            byte
+        };
+        Self {
+            r: channel(self.r, under.r),
+            g: channel(self.g, under.g),
+            b: channel(self.b, under.b),
+        }
     }
 
     /// `self` moved toward `toward` in OKLab, in steps of 2 %, until it reaches
