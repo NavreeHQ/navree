@@ -23,7 +23,7 @@ use super::scale::Grain;
 /// What a report adds up in each period.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Measure {
+pub enum Metric {
     /// How many rows. A period with none is 0.
     Count,
     /// How many distinct values of a column (SQL databases).
@@ -215,7 +215,7 @@ fn halve(
     sql.push_str(" END");
 }
 
-impl Measure {
+impl Metric {
     fn expr<M: Model>(self) -> Expr {
         let qualified = |c: &str| {
             if c.contains('.') {
@@ -268,9 +268,9 @@ impl Report {
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
     /// # async fn demo(db: Db, report: navree_ui::charts::Report) -> navree_orm::Result<()> {
-    /// use navree_ui::charts::{Chart, Measure, Series};
+    /// use navree_ui::charts::{Chart, Metric, Series};
     ///
-    /// let deals = report.measure(Deal::query(), "created_at", Measure::Count, &db).await?;
+    /// let deals = report.measure(Deal::query(), "created_at", Metric::Count, &db).await?;
     /// let chart = report.chart(Chart::bar("Deals created")).series(Series::new("Deals", deals));
     /// # Ok(()) }
     /// ```
@@ -278,7 +278,7 @@ impl Report {
         &self,
         query: Builder<M>,
         time: impl Into<TimeColumn>,
-        measure: Measure,
+        measure: Metric,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
     where
@@ -294,7 +294,7 @@ impl Report {
         &self,
         query: Builder<M>,
         time: impl Into<TimeColumn>,
-        measure: Measure,
+        measure: Metric,
         bucketing: Bucketing,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
@@ -392,7 +392,7 @@ impl Report {
         time: impl Into<TimeColumn>,
         group: &'static str,
         groups: &[&str],
-        measure: Measure,
+        measure: Metric,
         exec: &E,
     ) -> Result<Vec<Vec<Option<f64>>>>
     where
@@ -488,7 +488,7 @@ impl Report {
         &self,
         window: Builder<M>,
         time: TimeColumn,
-        measure: Measure,
+        measure: Metric,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
     where
@@ -499,7 +499,7 @@ impl Report {
         if !matches!(time, TimeColumn::Timestamp(_)) {
             return Err(invalid("a report over MongoDB reads a date column"));
         }
-        if matches!(measure, Measure::CountDistinct(_)) {
+        if matches!(measure, Metric::CountDistinct(_)) {
             return Err(invalid(
                 "counting distinct values per period needs an SQL database",
             ));
@@ -527,14 +527,14 @@ impl Report {
             }
             out
         };
-        let pick = |m: Measure| pick_documents(&window, exec, m, fine, &qualified);
+        let pick = |m: Metric| pick_documents(&window, exec, m, fine, &qualified);
         let mut out = match measure {
-            Measure::Count | Measure::Sum(_) => fold(pick(measure).await?, |a, b| a + b),
-            Measure::Min(_) => fold(pick(measure).await?, f64::min),
-            Measure::Max(_) => fold(pick(measure).await?, f64::max),
-            Measure::Average(c) => {
-                let sums = fold(pick(Measure::Sum(c)).await?, |a, b| a + b);
-                let counts = fold(pick(Measure::Count).await?, |a, b| a + b);
+            Metric::Count | Metric::Sum(_) => fold(pick(measure).await?, |a, b| a + b),
+            Metric::Min(_) => fold(pick(measure).await?, f64::min),
+            Metric::Max(_) => fold(pick(measure).await?, f64::max),
+            Metric::Average(c) => {
+                let sums = fold(pick(Metric::Sum(c)).await?, |a, b| a + b);
+                let counts = fold(pick(Metric::Count).await?, |a, b| a + b);
                 sums.into_iter()
                     .zip(counts)
                     .map(|(s, n)| match (s, n) {
@@ -543,7 +543,7 @@ impl Report {
                     })
                     .collect()
             }
-            Measure::CountDistinct(_) => unreachable!("refused above"),
+            Metric::CountDistinct(_) => unreachable!("refused above"),
         };
         if measure.zero_when_empty() {
             for value in &mut out {
@@ -558,7 +558,7 @@ impl Report {
 async fn pick_documents<M, E>(
     window: &Builder<M>,
     exec: &E,
-    m: Measure,
+    m: Metric,
     fine: &'static str,
     qualified: &str,
 ) -> Result<Vec<(i64, Option<f64>)>>

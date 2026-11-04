@@ -59,7 +59,7 @@ pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, Stage};
 pub use report::{Bucket, Report, ReportQuery};
 #[cfg(feature = "orm")]
-pub use report_orm::{Bucketing, Measure, TimeColumn};
+pub use report_orm::{Bucketing, Metric, TimeColumn};
 pub use scale::Grain;
 pub use sparkline::Sparkline;
 pub use value::IntoValue;
