@@ -1,0 +1,31 @@
+[package]
+name = "inbox-demo"
+description = "An example app on Navree UI: a software company's support inbox in three resizable panes, with conversations, replies and customers live over server-sent events, on SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "inbox-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite"] }
+serde = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "testing"] }
+serde_json = { workspace = true }

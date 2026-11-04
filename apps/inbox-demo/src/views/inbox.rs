@@ -1,0 +1,398 @@
+//! The inbox as one page: three panes, the command palette and the keys.
+
+use chrono::NaiveDate;
+use navree::ui::*;
+
+use crate::data::{
+    Agent, Attachment, Conversation, Customer, CustomerEvent, Message, Priority, SAVED, Status,
+};
+use crate::views::customer::{CUSTOMER, customer_body, customer_head};
+use crate::views::list::{ListRow, list_header, list_region};
+use crate::views::thread::{
+    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, MESSAGES, Open, composer, thread_head,
+    thread_messages,
+};
+use crate::views::{Filters, View};
+
+/// The split's id: what a save says it is for.
+pub const SPLIT: &str = "inbox";
+
+/// The three panes and their rules, with nothing in them: the page draws it, and a
+/// save is read against it.
+pub fn layout() -> SplitPane {
+    SplitPane::new(SPLIT)
+        .height(SplitHeight::Screen)
+        .stack_below(SplitWidth::Md)
+        .save_to("/inbox/panes")
+        .pane(
+            Pane::new("conversations", "Conversations")
+                .size(30)
+                .min(22)
+                .max(45),
+        )
+        .pane(Pane::fill("thread", "Conversation").min(30))
+        .pane(
+            Pane::new("customer", "Customer")
+                .size(26)
+                .min(18)
+                .max(40)
+                .collapsible()
+                .collapse_below(SplitWidth::Lg),
+        )
+}
+
+/// A conversation that is open, with all it shows.
+pub struct OpenThread {
+    pub conversation: Conversation,
+    pub customer: Customer,
+    pub assignee: Option<(i64, String)>,
+    pub messages: Vec<Message>,
+    pub files: Vec<Attachment>,
+    pub history: Vec<CustomerEvent>,
+    /// The customer's conversations, this one too, newest first.
+    pub theirs: Vec<Conversation>,
+}
+
+/// The page's state.
+pub struct Inbox<'a> {
+    pub filters: &'a Filters,
+    pub rows: &'a [ListRow],
+    pub open: Option<&'a OpenThread>,
+    /// Which pane the page is about: the one shown when the panes stack.
+    pub pane: &'a str,
+    pub now: i64,
+    pub today: NaiveDate,
+    /// What the composer starts with.
+    pub draft: &'a str,
+    pub kind: &'a str,
+    pub error: Option<&'a str>,
+}
+
+/// The stream a page listens to.
+pub fn stream_url(open: Option<&OpenThread>) -> String {
+    match open {
+        Some(thread) => format!(
+            "/inbox/events?open={}&customer={}",
+            thread.conversation.id, thread.customer.id
+        ),
+        None => "/inbox/events".to_owned(),
+    }
+}
+
+/// The address of the page, without the pane.
+fn page_path(open: Option<&OpenThread>) -> String {
+    open.map_or_else(
+        || "/inbox".to_owned(),
+        |thread| format!("/inbox/{}", thread.conversation.id),
+    )
+}
+
+/// The heading region of the open conversation.
+pub fn head_region(open: &Open<'_>) -> Region {
+    Region::new(HEAD)
+        .src(format!(
+            "/inbox/{}/fragments/head{}",
+            open.conversation.id,
+            query_of(open.filters)
+        ))
+        .live_from(format!(
+            "/inbox/events?open={}&customer={}",
+            open.conversation.id, open.customer.id
+        ))
+        .live_event("thread")
+        .children(thread_head(open))
+}
+
+fn query_of(filters: &Filters) -> String {
+    let query = filters.query();
+    if query.is_empty() {
+        String::new()
+    } else {
+        format!("?{query}")
+    }
+}
+
+/// The messages region of the open conversation.
+pub fn messages_region(thread: &OpenThread, today: NaiveDate) -> Region {
+    Region::new(MESSAGES)
+        .src(format!("/inbox/{}/fragments/messages", thread.conversation.id))
+        .live_from(stream_url(Some(thread)))
+        .live_event("thread")
+        .children(thread_messages(&thread.messages, &thread.files, today))
+}
+
+/// The customer region of the open conversation.
+pub fn customer_region(thread: &OpenThread, filters: &Filters, now: i64) -> Region {
+    Region::new(CUSTOMER)
+        .src(format!(
+            "/inbox/{}/fragments/customer{}",
+            thread.conversation.id,
+            query_of(filters)
+        ))
+        .live_from(stream_url(Some(thread)))
+        .live_event("customer")
+        .children(customer_body(
+            &thread.customer,
+            &thread.theirs,
+            &thread.history,
+            thread.conversation.id,
+            filters,
+            now,
+        ))
+}
+
+/// The panes, drawn with the agent's sizes.
+pub fn inbox_split(page: &Inbox<'_>, sizes: Option<&SplitSizes>) -> SplitPane {
+    let path = page_path(page.open);
+    let stream = stream_url(page.open);
+    let mut split = layout();
+    if let Some(sizes) = sizes {
+        split = split.sizes(sizes);
+    }
+    let split = split.current(page.pane).pane_with("conversations", |pane| {
+        pane.header(list_header(page.filters, &path)).body(list_region(
+            page.rows,
+            page.filters,
+            page.open.map(|thread| thread.conversation.id),
+            page.now,
+            &stream,
+        ))
+    });
+    match page.open {
+        Some(thread) => {
+            let open = Open {
+                conversation: &thread.conversation,
+                customer: &thread.customer,
+                assignee: thread.assignee.clone(),
+                filters: page.filters,
+                now: page.now,
+                today: page.today,
+            };
+            let back = page.filters.href(&path);
+            split
+                .pane_with("thread", |pane| {
+                    pane.header(head_region(&open))
+                        .body(messages_region(thread, page.today))
+                        .from_end()
+                        .body_label("Messages")
+                        .footer(composer(
+                            &thread.conversation,
+                            page.draft,
+                            page.kind,
+                            page.error,
+                        ))
+                })
+                .pane_with("customer", |pane| {
+                    pane.header(customer_head(&thread.customer, &back))
+                        .body(customer_region(thread, page.filters, page.now))
+                })
+        }
+        None => split
+            .pane_with("thread", |pane| {
+                pane.body(
+                    Empty::new("Choose a conversation")
+                        .icon(icons::MESSAGES_SQUARE)
+                        .description("Pick one from the list, or press j to open the first. Press ? for every key."),
+                )
+            })
+            .pane_with("customer", |pane| {
+                pane.body(
+                    Empty::new("No customer yet")
+                        .icon(icons::USER_ROUND)
+                        .description("Their plan, history and tags show here with a conversation."),
+                )
+            }),
+    }
+}
+
+/// The command palette: the open conversation's actions, saved replies, and places.
+pub fn palette(page: &Inbox<'_>) -> Command {
+    let mut command = Command::new("palette")
+        .title("Command palette")
+        .placeholder("Type an action or a saved reply")
+        .shortcut(true);
+    if let Some(thread) = page.open {
+        let id = thread.conversation.id;
+        let status = Status::parse(&thread.conversation.status).unwrap_or(Status::Open);
+        let mut actions = CommandGroup::new("This conversation")
+            .item(
+                CommandItem::run("Reply", Cmd::focus(COMPOSER_BODY))
+                    .icon(icons::SEND)
+                    .description("Write to the customer")
+                    .not_recent(),
+            )
+            .item(
+                CommandItem::post("Assign to me", format!("/inbox/{id}/assign/me"))
+                    .icon(icons::USER_CHECK)
+                    .keywords(["take", "mine"]),
+            );
+        actions = if status == Status::Closed {
+            actions.item(
+                CommandItem::post("Reopen", format!("/inbox/{id}/status/open"))
+                    .icon(icons::ROTATE_CCW)
+                    .not_recent(),
+            )
+        } else {
+            actions
+                .item(
+                    CommandItem::post("Close", format!("/inbox/{id}/status/closed"))
+                        .icon(icons::CIRCLE_CHECK)
+                        .keywords(["resolve", "done"])
+                        .not_recent(),
+                )
+                .item(
+                    CommandItem::post("Mark pending", format!("/inbox/{id}/status/pending"))
+                        .icon(icons::HOURGLASS)
+                        .keywords(["waiting"])
+                        .not_recent(),
+                )
+                .item(
+                    CommandItem::post("Snooze until tomorrow", format!("/inbox/{id}/snooze/tomorrow"))
+                        .icon(icons::ALARM_CLOCK)
+                        .not_recent(),
+                )
+        };
+        for priority in [Priority::Urgent, Priority::High, Priority::Normal, Priority::Low] {
+            if priority.key() != thread.conversation.priority {
+                actions = actions.item(
+                    CommandItem::post(
+                        format!("Set priority to {}", priority.label().to_lowercase()),
+                        format!("/inbox/{id}/priority/{}", priority.key()),
+                    )
+                    .icon(priority.icon())
+                    .not_recent(),
+                );
+            }
+        }
+        command = command.group(actions);
+        let mut replies = CommandGroup::new("Saved replies");
+        for reply in &SAVED {
+            replies = replies.item(
+                CommandItem::run(
+                    reply.title,
+                    vec![
+                        Cmd::value(COMPOSER_SAVED, reply.key),
+                        Cmd::submit(COMPOSER),
+                    ],
+                )
+                .id(format!("saved-{}", reply.key))
+                .icon(icons::MESSAGE_SQUARE_TEXT)
+                .description(crate::data::preview_of(reply.body))
+                .keywords(["saved", "reply", "template"]),
+            );
+        }
+        command = command.group(replies);
+    }
+    let mut places = CommandGroup::new("Go to");
+    for view in View::ALL {
+        places = places.item(
+            CommandItem::link(view.label(), Filters::with_view(view).href("/inbox"))
+                .icon(view.icon()),
+        );
+    }
+    places = places.item(
+        CommandItem::run("Keyboard shortcuts", Cmd::open("shortcuts"))
+            .icon(icons::KEYBOARD)
+            .not_recent(),
+    );
+    command.group(places)
+}
+
+/// The keys, in a dialog `?` opens.
+pub fn shortcuts() -> Dialog {
+    let row = |keys: &[&'static str], what: &'static str| {
+        TableRowEl::new((
+            TableCell::new(Row::gap(1).children(
+                keys.iter().map(|key| Kbd::new(*key).into()).collect::<Vec<Node>>(),
+            )),
+            TableCell::new(what),
+        ))
+    };
+    Dialog::new("shortcuts", "Keyboard shortcuts")
+        .description("Keys work anywhere on the page, except while you type in a field.")
+        .body(
+            Table::new()
+                .caption("Keyboard shortcuts")
+                .head((TableHead::new("Key"), TableHead::new("Does")))
+                .rows([
+                    row(&["j"], "Open the next conversation in the list"),
+                    row(&["k"], "Open the previous conversation"),
+                    row(&["r"], "Write a reply"),
+                    row(&["e"], "Close the conversation, or reopen it"),
+                    row(&["/"], "Search the conversations"),
+                    row(&["Ctrl", "K"], "Open the command palette"),
+                    row(&["?"], "Show these keys"),
+                    row(&["Esc"], "Close a dialog or a menu"),
+                ]),
+        )
+        .footer(Button::new("Close").closes_dialog("shortcuts"))
+}
+
+/// The buttons beside the page's heading: the palette and the keys.
+pub fn page_actions() -> Node {
+    Row::gap(2)
+        .children((
+            Command::trigger("palette", "Actions"),
+            Button::icon_only(icons::KEYBOARD, "Keyboard shortcuts")
+                .variant(ButtonVariant::Ghost)
+                .size(Size::Sm)
+                .opens_dialog("shortcuts")
+                .hotkey("?"),
+        ))
+        .into()
+}
+
+/// The page with JavaScript off that assigns a conversation: the team, searched by a
+/// form, each with a button.
+pub fn assign_page(conversation: &Conversation, team: &[Agent], q: &str, back: &str) -> Node {
+    let rows: Vec<Node> = team
+        .iter()
+        .map(|agent| {
+            el("li")
+                .child(
+                    el("form")
+                        .attr("method", "post")
+                        .attr("action", format!("/inbox/{}/assign", conversation.id))
+                        .flag("data-ui-form", true)
+                        .uses(Uses::CORE)
+                        .child(
+                            Item::new(agent.name.clone())
+                                .description(agent.team.clone())
+                                .media(Avatar::placeholder(agent.name.clone()).size(Size::Sm))
+                                .actions(
+                                    Button::outline("Assign")
+                                        .submit()
+                                        .size(Size::Sm)
+                                        .named("agent", agent.id.to_string())
+                                        .attr("aria-label", format!("Assign to {}", agent.name)),
+                                ),
+                        ),
+                )
+                .into()
+        })
+        .collect();
+    Stack::gap(4)
+        .children((
+            Text::muted(format!("Who should answer “{}”?", conversation.subject)),
+            el("form")
+                .attr("method", "get")
+                .attr("role", "search")
+                .attr("aria-label", "Search the team")
+                .child(
+                    Row::gap(2).children((
+                        Input::search("q")
+                            .value(q.to_owned())
+                            .placeholder("Search the team")
+                            .attr("aria-label", "Search the team"),
+                        Button::outline("Search").submit(),
+                    )),
+                ),
+            if rows.is_empty() {
+                Node::from(Empty::new("Nobody matches").description("Try part of a name or a team."))
+            } else {
+                el("ul").slot("stack").attr("data-gap", "1").child(rows).into()
+            },
+            Button::ghost("Back to the conversation").icon(icons::ARROW_LEFT).href(back.to_owned()),
+        ))
+        .into()
+}
