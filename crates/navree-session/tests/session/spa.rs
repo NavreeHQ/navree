@@ -1,6 +1,6 @@
 //! The single-page-app flow at the session level: an authenticator that
-//! reads the session (as navree-auth's does), login with session
-//! regeneration, authenticated requests and logout.
+//! reads the session key `auth.user_id` (which the test's login writes),
+//! login with session regeneration, authenticated requests and logout.
 
 use std::sync::Arc;
 

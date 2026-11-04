@@ -207,7 +207,7 @@ pub enum OrmError {
     /// A polymorphic type column holds a name no model is registered
     /// under.
     #[error(
-        "no model is registered under the morph name `{name}`: register the model with MorphMap::register, or list it on the morph_to relation with `.types::<..>()`"
+        "no model is registered under the morph name `{name}`: register the model with MorphMap::register, or list it on the morph_to relation with `.target::<M>()` or `.targets::<(A, B)>()`"
     )]
     UnknownMorph {
         /// The stored type name.
@@ -737,5 +737,19 @@ mod tests {
             response.body()["message"],
             "A record with the same unique value already exists."
         );
+    }
+
+    /// The hint names methods the relation has: `target` and `targets`.
+    #[test]
+    fn an_unknown_morph_name_points_at_the_methods_that_exist() {
+        let text = OrmError::UnknownMorph {
+            name: "opportunity".into(),
+        }
+        .to_string();
+        assert!(text.contains("`opportunity`"), "{text}");
+        assert!(text.contains("MorphMap::register"), "{text}");
+        assert!(text.contains(".target::<M>()"), "{text}");
+        assert!(text.contains(".targets::<(A, B)>()"), "{text}");
+        assert!(!text.contains(".types::<"), "{text}");
     }
 }

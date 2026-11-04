@@ -15,7 +15,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(modules::settings::SettingsModule)
         // The example feature: a workspace-scoped resource.
         .module(modules::projects::ProjectsModule)
-        // Helm resources for users, workspaces, subscriptions and projects.
+        // Helm resources for users, workspaces and subscriptions.
         .module(modules::admin::AdminModule)
         // `db:seed` / `migrate:fresh --seed`: the demo workspace.
         .module(seed::SeedModule)

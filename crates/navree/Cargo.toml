@@ -489,7 +489,7 @@ logbook = [
     "auth",
 ]
 ## L7 (in `full`)
-## Fleet:supervised queue workers with auto-balancing, recycling and
+## Fleet: supervised queue workers with auto-balancing, recycling and
 ## graceful restarts, metrics, failed jobs, pause and continue, long-wait
 ## alerts and a dashboard at `/_fleet` (pure Rust; no system dependency).
 fleet = [

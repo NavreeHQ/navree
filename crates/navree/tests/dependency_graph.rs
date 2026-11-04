@@ -1038,8 +1038,8 @@ fn hierarchy_table_lists_exactly_the_workspace_crates() {
     );
 }
 
-/// The table allows one same-layer edge (navree-config -> navree-contracts, both
-/// L1), so the invariant is "never upwards" plus "no cycles".
+/// The table allows same-layer edges (navree-queue -> navree-schedule, both in
+/// the same layer), so the invariant is "never upwards" plus "no cycles".
 #[test]
 fn hierarchy_table_never_points_up_and_has_no_cycles() {
     for rule in HIERARCHY {

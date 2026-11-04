@@ -2,8 +2,8 @@
 //! health checks and metrics over HTTP and handles its messages and events;
 //! `micro:listen` handles messages without HTTP. Every other command runs
 //! against the same app: `migrate`, `micro:patterns`, `micro:send`,
-//! `micro:failed`, `routes`, `check`, `help`, ... (`navree <command>`
-//! forwards to it).
+//! `micro:failed`, `routes`, `list`, ... (`navree <command>` forwards to it,
+//! and `navree list` shows them all).
 
 use navree::config::ConfigSources;
 

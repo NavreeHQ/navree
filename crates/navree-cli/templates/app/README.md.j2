@@ -45,9 +45,12 @@ The app connects to MySQL (or MariaDB) at `{{ database_url }}`: point
 | `navree routes` | Lists every route with its access rule |
 | `navree check --graph` | Validates the module graph |
 | `navree queue:work` | Runs queued jobs |
-| `navree help` | Lists every command of the app |
+| `navree list` | Lists every command of the app (`navree help` prints the CLI's own help) |
 
-Every command other than `new`, `make:*` and `dev` runs in the app binary
+The CLI keeps a few commands for itself: `new`, `make:*`, `dev`, `check`, `gate`,
+`dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`,
+`deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`,
+`browser:install` and `openapi:client`. Every other command runs in the app binary
 (`cargo run -- <command>`), so production servers only need that binary.
 
 ## Layout

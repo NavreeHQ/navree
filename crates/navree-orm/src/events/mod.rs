@@ -6,7 +6,7 @@
 //! - **Observers** ([`Observer`]): one async method per event, declared on
 //!   the model (`#[model(observers(DealObserver))]`) or registered by a
 //!   module (`m.observe::<Deal>(DealObserver)`).
-//! - **Closure listeners**: `m.on_model::<Deal>(ModelEvent::Creating, f)`.
+//! - **Closure listeners**: `m.on_model::<Deal, _>(ModelEvent::Creating, f)`.
 //! - **Typed application events** through navree-events:
 //!   `#[model(dispatches(created = DealCreated))]` (see [`Dispatch`]).
 //! - **Custom events** the application fires itself:

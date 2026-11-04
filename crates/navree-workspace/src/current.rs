@@ -605,8 +605,8 @@ async fn check_scoped_record(
 ///   opened on first use and committed with the request (when the status
 ///   is below 400; rolled back otherwise).
 ///
-/// It derefs to [`Uow`], so the model API and `WorkspaceRepo` take it as
-/// they take the request's.
+/// It derefs to [`Uow`]. A function that takes `&Uow` accepts `&uow`; a model
+/// call that is generic over its executor needs `&*uow`.
 #[derive(Clone, Debug)]
 pub struct WorkspaceUow(Uow);
 

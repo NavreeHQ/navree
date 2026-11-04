@@ -784,3 +784,32 @@ fn kit_rust_is_rustfmt_clean() {
         unformatted.join("\n")
     );
 }
+
+#[test]
+fn the_comment_on_the_admin_module_names_the_resources_it_registers() {
+    for kit in [Kit::Api, Kit::Saas] {
+        let (_dir, root) = generate("acme", kit);
+        let admin = read(&root, "src/modules/admin/mod.rs");
+        let wire = admin.split("fn wire").nth(1).expect("the wire function");
+        let registered: Vec<&str> = wire
+            .split("resource::<")
+            .skip(1)
+            .filter_map(|rest| rest.split('>').next())
+            .collect();
+        assert_eq!(
+            registered,
+            ["UserAdmin", "WorkspaceAdmin", "SubscriptionAdmin"],
+            "{kit}"
+        );
+        let app = read(&root, "src/app.rs");
+        let comment = app
+            .lines()
+            .map(str::trim)
+            .find(|line| line.starts_with("// Helm resources for"))
+            .unwrap_or_else(|| panic!("{kit}: no comment on the admin module in {app}"));
+        assert_eq!(
+            comment, "// Helm resources for users, workspaces and subscriptions.",
+            "{kit}"
+        );
+    }
+}

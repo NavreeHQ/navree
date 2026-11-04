@@ -4,8 +4,9 @@
 //!
 //! This is the auth module's small verification seam. It verifies only
 //! (no signing), refuses `alg: none`, HMAC algorithms and critical header
-//! extensions, and checks that the key fits the algorithm. Moves onto
-//! `navree_crypto::jose` once that lands.
+//! extensions, and checks that the key fits the algorithm. `navree_crypto::jose`
+//! also verifies, and signs, with more algorithms; this seam is the exchange's
+//! own, smaller check.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};

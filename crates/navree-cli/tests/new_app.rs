@@ -684,3 +684,42 @@ fn generated_files_are_free_of_template_syntax() {
         assert!(!contents.contains('\r'), "{file} uses LF line endings");
     }
 }
+
+#[test]
+fn the_readme_says_how_to_list_the_apps_commands_and_names_those_the_cli_keeps() {
+    use clap::CommandFactory;
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let root = create_app(dir.path(), &app("lister", Ui::None), now()).unwrap();
+    let readme = read(&root, "README.md");
+    // `navree help` prints the CLI's own help; `navree list` is the app's commands.
+    assert!(
+        readme.contains("| `navree list` | Lists every command of the app"),
+        "{readme}"
+    );
+    assert!(!readme.contains("| `navree help` |"), "{readme}");
+    // Every command the CLI runs itself is named, so nobody looks for it in the app.
+    let cli = navree_cli::cli::Cli::command();
+    let mut checked = 0;
+    for command in cli.get_subcommands() {
+        let name = command.get_name();
+        if name == "help" || name == "new" || name.starts_with("make:") {
+            continue;
+        }
+        let group = name.split(':').next().unwrap_or(name);
+        assert!(
+            readme.contains(&format!("`{name}`")) || readme.contains(&format!("`{group}:*`")),
+            "the README does not say that `{name}` is the CLI's own:\n{readme}"
+        );
+        checked += 1;
+    }
+    assert!(checked >= 8, "{checked}");
+    // The commands the generated binary says it runs are the app's, not the CLI's.
+    let main = read(&root, "src/main.rs");
+    assert!(
+        !main.contains("`help`") && !main.contains("`check`"),
+        "{main}"
+    );
+}
