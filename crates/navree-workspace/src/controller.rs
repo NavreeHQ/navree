@@ -457,7 +457,7 @@ impl Injectable for WorkspaceController {
 /// The caller's workspaces with their role in each, by name: their
 /// memberships, plus the demo workspaces they enter as guests when
 /// `workspace.demo.guest_role` is set.
-async fn visible_workspaces(
+pub(crate) async fn visible_workspaces(
     workspaces: &Workspaces,
     demos: &DemoWorkspaces,
     guest_role: Option<&WorkspaceRole>,
@@ -1106,7 +1106,7 @@ impl Controller for InvitationController {
     }
 }
 
-fn api(
+pub(crate) fn api(
     summary: &str,
     responses: &[u16],
     request: Option<navree_http::SchemaFn>,

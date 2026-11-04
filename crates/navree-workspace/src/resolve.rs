@@ -70,25 +70,95 @@ impl<'a> Lookup<'a> {
     /// resolver that found it: the resolvers run in order and the first
     /// that finds one wins.
     pub(crate) fn find(&self, parts: &Parts) -> Option<(ResolverKind, String)> {
-        self.resolvers.iter().find_map(|kind| {
-            let found = match kind {
-                ResolverKind::Header => from_header(parts, self.header),
-                ResolverKind::Subdomain => self
-                    .base_domain
-                    .and_then(|base| from_subdomain(host(parts)?, base)),
-                ResolverKind::Path => from_path(parts.uri.path(), &self.path),
-                ResolverKind::Claim => from_claim(parts, self.claim),
-                // Custom domains name workspaces only (the configuration
-                // check keeps `domain` out of the other levels' lists).
-                ResolverKind::Domain => parts
-                    .extensions
-                    .get::<DomainWorkspace>()
-                    .map(|domain| domain.workspace_id.to_string()),
-            };
-            found.map(|identifier| (*kind, identifier))
-        })
+        self.find_skipping(parts, None)
+    }
+
+    /// [`find`](Self::find) without resolver `skip` (the `session` one,
+    /// after its choice turned out stale).
+    pub(crate) fn find_skipping(
+        &self,
+        parts: &Parts,
+        skip: Option<ResolverKind>,
+    ) -> Option<(ResolverKind, String)> {
+        self.resolvers
+            .iter()
+            .filter(|kind| Some(**kind) != skip)
+            .find_map(|kind| {
+                let found = match kind {
+                    ResolverKind::Header => from_header(parts, self.header),
+                    ResolverKind::Subdomain => self
+                        .base_domain
+                        .and_then(|base| from_subdomain(host(parts)?, base)),
+                    ResolverKind::Path => from_path(parts.uri.path(), &self.path),
+                    ResolverKind::Claim => from_claim(parts, self.claim),
+                    // Custom domains name workspaces only (the configuration
+                    // check keeps `domain` out of the other levels' lists).
+                    ResolverKind::Domain => parts
+                        .extensions
+                        .get::<DomainWorkspace>()
+                        .map(|domain| domain.workspace_id.to_string()),
+                    // A browser's choice names workspaces only (the
+                    // configuration check keeps `session` out of the other
+                    // levels' lists).
+                    ResolverKind::Session => from_session(parts).map(|id| id.to_string()),
+                };
+                found.map(|identifier| (*kind, identifier))
+            })
     }
 }
+
+/// The session key holding the workspace a browser switched to: a
+/// [`SessionChoice`], written by the switch route
+/// ([`WorkspaceConfig::switch_path`]) and read by the `session` resolver.
+pub const SESSION_KEY: &str = "workspace.current";
+
+/// The workspace a signed-in user switched to in this browser, as the
+/// session keeps it under [`SESSION_KEY`]: `{"id": .., "user": ..}`. It
+/// counts only while that user is the one signed in, so a choice outlives
+/// no sign-in of somebody else on the same browser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SessionChoice {
+    /// The workspace.
+    pub id: Uuid,
+    /// The user who chose it.
+    pub user: Uuid,
+}
+
+/// The id of the workspace the request's session names for the signed-in
+/// user: `None` without the crate's `session` feature, outside navree-session,
+/// for a guest, or when the choice in the session was made by another user.
+#[cfg(feature = "session")]
+pub(crate) fn from_session(parts: &Parts) -> Option<Uuid> {
+    let user = parts
+        .extensions
+        .get::<AuthState>()
+        .and_then(|state| state.0.as_ref())
+        .map(|principal| principal.user_id)?;
+    let choice: SessionChoice = parts
+        .extensions
+        .get::<navree_session::Session>()?
+        .get(SESSION_KEY)?;
+    (choice.user == user).then_some(choice.id)
+}
+
+/// Without the `session` feature the `session` resolver finds nothing.
+#[cfg(not(feature = "session"))]
+pub(crate) fn from_session(_parts: &Parts) -> Option<Uuid> {
+    None
+}
+
+/// Forgets the session's workspace choice (it named a workspace the user may
+/// no longer enter, or one that is gone).
+#[cfg(feature = "session")]
+pub(crate) fn forget_session_choice(parts: &Parts) {
+    if let Some(session) = parts.extensions.get::<navree_session::Session>() {
+        session.remove(SESSION_KEY);
+    }
+}
+
+/// Without the `session` feature there is no choice to forget.
+#[cfg(not(feature = "session"))]
+pub(crate) fn forget_session_choice(_parts: &Parts) {}
 
 /// The workspace identifier (a slug or an id) a request names, and the
 /// resolver that found it: the resolvers of `config.resolvers` run in
@@ -125,6 +195,14 @@ pub(crate) fn identifier(
     parts: &Parts,
 ) -> Option<(ResolverKind, String)> {
     Lookup::workspace(config).find(parts)
+}
+
+/// [`identifier`] without the `session` resolver (its choice was stale).
+pub(crate) fn identifier_without_session(
+    config: &WorkspaceConfig,
+    parts: &Parts,
+) -> Option<(ResolverKind, String)> {
+    Lookup::workspace(config).find_skipping(parts, Some(ResolverKind::Session))
 }
 
 /// The trimmed value of header `name`, if present and not empty.
@@ -363,6 +441,94 @@ mod tests {
         assert_eq!(
             identifier(&WorkspaceConfig::default(), &request).map(|(kind, _)| kind),
             Some(ResolverKind::Header)
+        );
+    }
+
+    // MOD-003: the session names the workspace a browser switched to, for
+    // the user who switched only, and can be skipped once it turns out stale.
+    #[cfg(feature = "session")]
+    #[test]
+    fn the_session_names_the_workspace_its_user_switched_to() {
+        let workspace = Uuid::now_v7();
+        let mut request = parts("/deals", &[("x-workspace", "from-header")], true);
+        let user = request
+            .extensions
+            .get::<AuthState>()
+            .and_then(|state| state.0.as_ref())
+            .map(|principal| principal.user_id)
+            .unwrap();
+        let session = navree_session::Session::detached();
+        request.extensions.insert(session.clone());
+        let config = WorkspaceConfig {
+            resolvers: vec![ResolverKind::Session, ResolverKind::Header],
+            ..WorkspaceConfig::default()
+        };
+        // Nothing chosen yet: the next resolver answers.
+        assert_eq!(
+            identifier(&config, &request),
+            Some((ResolverKind::Header, "from-header".to_owned()))
+        );
+        session
+            .insert(
+                SESSION_KEY,
+                &SessionChoice {
+                    id: workspace,
+                    user,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            identifier(&config, &request),
+            Some((ResolverKind::Session, workspace.to_string()))
+        );
+        assert_eq!(
+            identifier_without_session(&config, &request),
+            Some((ResolverKind::Header, "from-header".to_owned()))
+        );
+        // Another user's choice on the same browser counts for nothing.
+        session
+            .insert(
+                SESSION_KEY,
+                &SessionChoice {
+                    id: workspace,
+                    user: Uuid::now_v7(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            identifier(&config, &request).map(|(kind, _)| kind),
+            Some(ResolverKind::Header)
+        );
+        // A guest has no choice either.
+        let mut guest = parts("/deals", &[], false);
+        guest.extensions.insert(session.clone());
+        session
+            .insert(
+                SESSION_KEY,
+                &SessionChoice {
+                    id: workspace,
+                    user,
+                },
+            )
+            .unwrap();
+        assert_eq!(identifier(&config, &guest), None);
+        // Forgetting it clears the session.
+        forget_session_choice(&request);
+        assert!(!session.contains(SESSION_KEY));
+    }
+
+    // MOD-003: without the feature the resolver finds nothing.
+    #[cfg(not(feature = "session"))]
+    #[test]
+    fn without_the_feature_the_session_resolver_finds_nothing() {
+        let request = parts("/deals", &[("x-workspace", "acme")], true);
+        let config = WorkspaceConfig {
+            resolvers: vec![ResolverKind::Session, ResolverKind::Header],
+            ..WorkspaceConfig::default()
+        };
+        assert_eq!(
+            identifier(&config, &request),
+            Some((ResolverKind::Header, "acme".to_owned()))
         );
     }
 

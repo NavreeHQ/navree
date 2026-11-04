@@ -53,7 +53,10 @@ use crate::{
 ///   `workspace_members`, `workspace_invitations`, after `auth`);
 /// - the routes under `{http.api_prefix}` (default `/api`) unless
 ///   `workspace.routes` is false: `/workspaces...` and
-///   `POST /invitations/accept` (see [`WorkspaceController`](crate::WorkspaceController));
+///   `POST /invitations/accept` (see [`WorkspaceController`](crate::WorkspaceController)),
+///   and with the `session` feature `POST /workspace/switch`
+///   (`workspace.switch_path`, no API prefix), where a browser switches
+///   workspace for the `session` resolver;
 /// - the subjects `Workspace`, `WorkspaceMember` and `WorkspaceInvitation`
 ///   for navree-access (permissions `workspace.*`, `workspace.members.*`,
 ///   `workspace.invitations.*`);
@@ -374,6 +377,10 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
                     .without_overlapping();
             }
         });
+    // `POST {workspace.switch_path}`: a browser switches workspace (the
+    // `session` resolver reads the choice).
+    #[cfg(feature = "session")]
+    m.controller::<crate::switch::SwitchController>();
     for command in commands() {
         m.command(command);
     }

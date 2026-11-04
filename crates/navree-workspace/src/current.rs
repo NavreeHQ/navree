@@ -252,39 +252,59 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         .await
         .map_err(|_| AppError::internal("CurrentWorkspace needs WorkspaceModule in the app"))?;
     let pinned = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
-    let (resolver, identifier) = match source {
-        Source::Configured => {
-            resolve::identifier(&config, parts).map(|(kind, identifier)| (Some(kind), identifier))
-        }
-        Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
-        Source::Named(id) => Some((None, id.to_string())),
-    }
-    // A pinned credential names its workspace when the request doesn't.
-    .or_else(|| pinned.map(|id| (None, id.to_string())))
-    .ok_or(WorkspaceError::NoWorkspace)
-    .map_err(app_error)?;
     let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
-    let workspace = workspaces.resolve(&identifier).await.map_err(app_error)?;
-    if pinned.is_some_and(|pin| pin != workspace.id) {
-        return Err(PinnedWorkspace::mismatch());
-    }
-    // A member or an organization grant; else, in a demo workspace with
-    // `workspace.demo.guest_role`, a guest.
+    // The `session` resolver's choice may have gone stale (the workspace was
+    // deleted, the user left it): then it is forgotten and the resolvers
+    // after it answer, once. Every other resolver's answer stands.
+    let mut skip_session = false;
     let (
+        resolver,
+        workspace,
         Admission {
             member,
             role,
             granted_by,
         },
         guest,
-    ) = match workspaces
-        .admission(&workspace, principal.user_id)
-        .await
-        .map_err(app_error)?
-    {
-        Some(admission) => (admission, false),
-        None => guest_member(&config, &workspace, principal.user_id)
-            .map(|member| {
+    ) = loop {
+        let (resolver, identifier) = match source {
+            Source::Configured => {
+                let found = if skip_session {
+                    resolve::identifier_without_session(&config, parts)
+                } else {
+                    resolve::identifier(&config, parts)
+                };
+                found.map(|(kind, identifier)| (Some(kind), identifier))
+            }
+            Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
+            Source::Named(id) => Some((None, id.to_string())),
+        }
+        // A pinned credential names its workspace when the request doesn't.
+        .or_else(|| pinned.map(|id| (None, id.to_string())))
+        .ok_or(WorkspaceError::NoWorkspace)
+        .map_err(app_error)?;
+        let from_session = resolver == Some(ResolverKind::Session);
+        let workspace = match workspaces.resolve(&identifier).await {
+            Ok(workspace) => workspace,
+            Err(WorkspaceError::WorkspaceNotFound(_)) if from_session => {
+                resolve::forget_session_choice(parts);
+                skip_session = true;
+                continue;
+            }
+            Err(error) => return Err(app_error(error)),
+        };
+        if pinned.is_some_and(|pin| pin != workspace.id) {
+            return Err(PinnedWorkspace::mismatch());
+        }
+        // A member or an organization grant; else, in a demo workspace with
+        // `workspace.demo.guest_role`, a guest.
+        let admitted = match workspaces
+            .admission(&workspace, principal.user_id)
+            .await
+            .map_err(app_error)?
+        {
+            Some(admission) => Some((admission, false)),
+            None => guest_member(&config, &workspace, principal.user_id).map(|member| {
                 (
                     Admission {
                         role: member.role(),
@@ -293,9 +313,16 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
                     },
                     true,
                 )
-            })
-            .ok_or(WorkspaceError::NotMember)
-            .map_err(app_error)?,
+            }),
+        };
+        match admitted {
+            Some((admission, guest)) => break (resolver, workspace, admission, guest),
+            None if from_session => {
+                resolve::forget_session_choice(parts);
+                skip_session = true;
+            }
+            None => return Err(app_error(WorkspaceError::NotMember)),
+        }
     };
     let demo = workspace.is_demo().then_some(config.demo.mode);
     if let Some(mode) = demo {

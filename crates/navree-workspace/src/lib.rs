@@ -18,11 +18,21 @@
 //! - **Resolution.** [`CurrentWorkspace`] (an extractor) and [`InWorkspace`]
 //!   (a route guard) find the request's workspace from a header
 //!   (`X-Workspace`), a subdomain, a path prefix (`/w/acme/...`), a JWT
-//!   claim or the workspace's own custom domain ([`DomainWorkspace`], set
-//!   by navree-domains), in the configured order, and check that the signed-in user is a
+//!   claim, the workspace's own custom domain ([`DomainWorkspace`], set
+//!   by navree-domains) or the workspace a browser switched to (`session`,
+//!   feature `session`), in the configured order, and check that the signed-in user is a
 //!   member: 400 when none is named, 404 for an unknown workspace, 403 for a
 //!   non-member. Behind the guard, route `roles`, `permissions` and `can`
 //!   checks use the member's role in that workspace.
+//! - **Workspaces in pages** (features `session` and `ui`). The `session`
+//!   resolver reads the choice ([`SessionChoice`], under [`SESSION_KEY`]) that
+//!   `POST /workspace/switch` (`workspace.switch_path`) stores in the
+//!   signed-in user's navree-session session after checking they may enter
+//!   the workspace (403 `not_a_member` otherwise, and nothing stored). A
+//!   choice made by another user is ignored, and one the user may no longer
+//!   enter is forgotten while the next resolver answers. [`WorkspaceSwitcher`]
+//!   (feature `ui`) is the Navree UI menu that posts to it, with JavaScript
+//!   on or off.
 //! - **Isolation** ([`Isolation`]). `Row`: a `workspace_id` column, scoped
 //!   by `#[model(workspace)]` and [`WorkspaceRepo`] and, on PostgreSQL,
 //!   enforced by row-level security ([`RlsPolicy`]) through
@@ -63,7 +73,8 @@
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), plus
 //!   `/api/organizations...` ([`OrganizationController`]) and
-//!   `/api/workspaces/{workspace}/partitions` when those are on, unless
+//!   `/api/workspaces/{workspace}/partitions` when those are on, and
+//!   `POST /workspace/switch` with the `session` feature, unless
 //!   `workspace.routes` is false.
 //! - **Testing** (`testing`, feature `testing`). `TestApp::isolation_suite::<M>()`
 //!   with `testing::IsolationSuiteExt::factory` (a navree-orm factory) sends every route of module
@@ -147,6 +158,10 @@ mod resolve;
 mod role;
 mod scoped;
 mod store;
+#[cfg(feature = "session")]
+mod switch;
+#[cfg(feature = "ui")]
+mod switcher;
 mod tenant;
 mod workspaces;
 mod zone;
@@ -192,9 +207,13 @@ pub use org_members::{OrgMemberInfo, OrgMembers};
 pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
 pub use organizations::{NewOrganization, OrgMembership, OrganizationChanges, Organizations};
 pub use partitions::{NewPartition, Partitions};
-pub use resolve::{DomainWorkspace, requested_workspace};
+pub use resolve::{DomainWorkspace, SESSION_KEY, SessionChoice, requested_workspace};
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use scoped::{OrgRepo, PartitionRepo, PartitionScoped};
+#[cfg(feature = "session")]
+pub use switch::SWITCH_ROUTE;
+#[cfg(feature = "ui")]
+pub use switcher::WorkspaceSwitcher;
 pub use tenant::WorkspaceDatabases;
 pub use workspaces::{
     GrantedBy, MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify,

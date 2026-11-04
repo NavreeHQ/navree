@@ -21,6 +21,13 @@ mysql = ["navree-db/mysql"]
 ## `IsolationSuiteExt::factory`) on navree-testing's `TestApp`. The facade
 ## turns it on when both its `workspace` and `testing` features are on.
 testing = ["dep:navree-testing"]
+## The `session` workspace resolver and `POST /workspace/switch`: a browser
+## switches workspace and its navree-session session keeps the choice. The
+## facade turns it on when both its `workspace` and `session` features are on.
+session = ["dep:navree-session"]
+## `WorkspaceSwitcher`, the Navree UI menu that posts to the switch route.
+## The facade turns it on when both its `workspace` and `ui` features are on.
+ui = ["session", "dep:navree-ui"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -43,9 +50,11 @@ navree-openapi = { workspace = true }
 # seven of them access subjects (`#[model(subject)]`, feature `access`).
 navree-orm = { workspace = true, features = ["access"] }
 navree-schedule = { workspace = true }
+navree-session = { workspace = true, optional = true }
 navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-time = { workspace = true }
+navree-ui = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -56,8 +65,12 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
-# The crate's own tests run isolation suites (feature `testing`).
-navree-workspace = { workspace = true, features = ["testing"] }
+# The crate's own tests run isolation suites (feature `testing`), switch
+# workspaces in a session (`session`) and draw the switcher (`ui`).
+navree-workspace = { workspace = true, features = ["testing", "session", "ui"] }
+# The session the `session` resolver reads.
+navree-session = { workspace = true }
+navree-ui = { workspace = true }
 # ORM models under each isolation strategy; the test servers' settings.
 navree-orm = { workspace = true, features = ["testing"] }
 navree-testing = { workspace = true }

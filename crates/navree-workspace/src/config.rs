@@ -31,10 +31,18 @@ pub enum ResolverKind {
     /// that module, or for a host that is not a verified custom domain.
     /// Workspaces only: organizations and partitions can't use it.
     Domain,
+    /// The workspace the signed-in user last switched to in this browser,
+    /// kept in their navree-session session (the switch route,
+    /// [`WorkspaceConfig::switch_path`], stores it). For server-rendered
+    /// pages, whose plain links can't carry a header. A choice made by
+    /// another user, or one the user may no longer enter, is ignored and the
+    /// next resolver answers. Finds nothing without the crate's `session`
+    /// feature or outside `SessionModule`. Workspaces only.
+    Session,
 }
 
 impl ResolverKind {
-    /// `header`, `subdomain`, `path`, `claim` or `domain`.
+    /// `header`, `subdomain`, `path`, `claim`, `domain` or `session`.
     pub fn as_str(self) -> &'static str {
         match self {
             ResolverKind::Header => "header",
@@ -42,6 +50,7 @@ impl ResolverKind {
             ResolverKind::Path => "path",
             ResolverKind::Claim => "claim",
             ResolverKind::Domain => "domain",
+            ResolverKind::Session => "session",
         }
     }
 }
@@ -433,12 +442,14 @@ pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
 /// [workspace]
 /// resolvers = ["header", "path", "subdomain", "claim"]  # order; or "header,path"
 /// # "domain" (first, usually) names a workspace by its custom domain (navree-domains)
+/// # "session" names the workspace a browser switched to (Navree UI pages)
 /// header = "X-Workspace"          # X-Workspace: acme (a slug or an id)
 /// # base_domain = "app.example.com"  # acme.app.example.com -> acme
 /// path_prefix = "/w"              # /api/w/acme/deals -> acme
 /// claim = "workspace"             # a claim of the bearer JWT
 /// isolation = "row"               # row | schema | database
 /// routes = true                   # /api/workspaces and /api/invitations
+/// switch_path = "/workspace/switch"  # where a browser switches workspace (feature `session`)
 /// users_table = "users"           # names and emails of members; "" = none
 /// schema_prefix = "workspace_"    # schema isolation: workspace_<id>
 /// # database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"  # database isolation
@@ -493,6 +504,11 @@ pub struct WorkspaceConfig {
     /// Whether the module mounts its routes (`/api/workspaces/...` and
     /// `/api/invitations/accept`).
     pub routes: bool,
+    /// Where a browser switches workspace: the absolute path (no API
+    /// prefix) of the `POST` route that stores the choice the `session`
+    /// resolver reads, mounted with [`routes`](Self::routes) when the
+    /// crate's `session` feature is on (default `/workspace/switch`).
+    pub switch_path: String,
     /// The table of user accounts (`id`, `name`, `email`; navree-auth's
     /// `users`) that member lists and invitation checks read; empty when
     /// the app has none.
@@ -530,6 +546,7 @@ impl Default for WorkspaceConfig {
             claim: "workspace".to_owned(),
             isolation: Isolation::Row,
             routes: true,
+            switch_path: "/workspace/switch".to_owned(),
             users_table: "users".to_owned(),
             invitations: InvitationOptions::default(),
             roles: BTreeMap::new(),
@@ -569,6 +586,12 @@ impl WorkspaceConfig {
         }
         if self.claim.trim().is_empty() {
             errors.push("workspace.claim must not be empty".to_owned());
+        }
+        if !is_switch_path(&self.switch_path) {
+            errors.push(
+                "workspace.switch_path must be a path such as `/workspace/switch` (a `/`, then letters, digits, `-`, `_`, `.` and `/`)"
+                    .to_owned(),
+            );
         }
         let invitations = &self.invitations;
         if invitations.ttl_secs == 0 {
@@ -720,7 +743,26 @@ fn check_resolvers(
                 "{key}.resolvers can't use `domain` (custom domains name workspaces)"
             ));
         }
+        if *kind == ResolverKind::Session {
+            errors.push(format!(
+                "{key}.resolvers can't use `session` (a browser switches workspaces)"
+            ));
+        }
     }
+}
+
+/// Whether `path` can be the switch route's path: absolute, one or more
+/// segments of letters, digits, `-`, `_` and `.`, and no `//`, `..` or
+/// route captures.
+fn is_switch_path(path: &str) -> bool {
+    path.starts_with('/')
+        && path.len() <= 255
+        && !segments(path).is_empty()
+        && !path.contains("//")
+        && !path.contains("..")
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'-' | b'_' | b'.'))
 }
 
 fn check_header(key: &str, header: &str, errors: &mut Vec<String>) {
@@ -923,6 +965,47 @@ mod tests {
         }
         let unknown = load(ConfigSources::new().set("workspace.resolvers", json!(["cookie"])));
         assert!(unknown.is_err());
+    }
+
+    // MOD-003: the `session` resolver and the switch route's path.
+    #[test]
+    fn the_session_resolver_names_workspaces_only() {
+        let config = load(
+            ConfigSources::new()
+                .set("workspace.resolvers", json!(["session", "header"]))
+                .set("workspace.switch_path", "/app/workspace/switch"),
+        )
+        .unwrap();
+        assert_eq!(
+            config.resolvers,
+            [ResolverKind::Session, ResolverKind::Header]
+        );
+        assert_eq!(ResolverKind::Session.as_str(), "session");
+        assert_eq!(config.switch_path, "/app/workspace/switch");
+        assert_eq!(WorkspaceConfig::default().switch_path, "/workspace/switch");
+        let from_env = load(
+            ConfigSources::new().env_vars("APP_", [("APP_WORKSPACE__RESOLVERS", "session,path")]),
+        )
+        .unwrap();
+        assert_eq!(
+            from_env.resolvers,
+            [ResolverKind::Session, ResolverKind::Path]
+        );
+        for (key, value) in [
+            ("workspace.organizations.resolvers", json!(["session"])),
+            (
+                "workspace.partitions.resolvers",
+                json!(["session", "header"]),
+            ),
+            ("workspace.switch_path", json!("workspace/switch")),
+            ("workspace.switch_path", json!("/")),
+            ("workspace.switch_path", json!("//evil.test/switch")),
+            ("workspace.switch_path", json!("/workspace/{id}")),
+            ("workspace.switch_path", json!("/a/../b")),
+        ] {
+            let result = load(ConfigSources::new().set(key, value.clone()));
+            assert!(result.is_err(), "{key} = {value} should be rejected");
+        }
     }
 
     #[test]
