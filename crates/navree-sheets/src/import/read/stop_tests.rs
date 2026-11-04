@@ -3,11 +3,15 @@
 //! times, cells in no column, empty records) neither makes the text it
 //! describes nor keeps the reading from stopping when nobody waits for it.
 //!
-//! The times are wall-clock times with wide margins: what a reading that
-//! ignores the stop costs here is seconds, what one that heeds it costs is
+//! Whether a reading was stopped does not depend on how fast the machine is: the flag is
+//! raised by another thread, and a reading counts only if the flag was up while it ran
+//! (see [`stopped`]). The times that remain are wall-clock times with wide margins: what a
+//! reading that ignores the stop costs here is seconds, what one that heeds it costs is
 //! milliseconds.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::opening_tests::{MIB, REL, ods, ods_text_cell, opts, refused_with, text, zip_parts};
@@ -26,10 +30,23 @@ fn timed(
     (result, at.elapsed())
 }
 
-/// The first sheet of the workbook `file` read into a table, with the stop
-/// flag raised `after` the sheet starts to be read, and how long that took.
-/// Opening a workbook cannot be interrupted, so the clock starts after it:
-/// what is measured is the sheet.
+/// How many times a sheet is read to see it stopped, when the flag only went up after the
+/// reading had ended: a thread that waits its turn on a busy machine may be late.
+const TRIES: usize = 50;
+
+/// How many times in a row a reading may end with the flag up and no stop before it counts:
+/// the flag may have gone up between the last time the reading looked at it and its end.
+const ENDS_WITH_FLAG_UP: usize = 3;
+
+/// The first sheet of the workbook `file` read into a table, with the stop flag raised by
+/// another thread `after` it is running, and how long the reading took to end once the flag
+/// was up. Opening a workbook cannot be interrupted, so the clock starts after it: what is
+/// measured is the sheet.
+///
+/// A reading is only told to stop if it is still running, so one that ended before the thread
+/// raised the flag has nothing to say about stopping, whatever the load on the machine did to
+/// the thread: it is read again. What the caller sees is a reading that was stopped, or one
+/// that ended with the flag up and no stop, which is the reading ignoring it.
 fn stopped(
     file: &[u8],
     options: ReadOptions<'_>,
@@ -43,20 +60,46 @@ fn stopped(
         },
     )
     .unwrap();
-    let flag = AtomicBool::new(false);
-    std::thread::scope(|scope| {
-        scope.spawn(|| {
-            std::thread::sleep(after);
-            flag.store(true, Ordering::Relaxed);
+    let mut ended_with_the_flag_up = 0;
+    for _ in 0..TRIES {
+        let flag = AtomicBool::new(false);
+        let raised_at = OnceLock::new();
+        let (running, hears_it) = mpsc::channel();
+        let (result, ended_at, flag_up) = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                running.send(()).unwrap();
+                std::thread::sleep(after);
+                flag.store(true, Ordering::Relaxed);
+                raised_at.set(Instant::now()).unwrap();
+            });
+            // The raising thread runs before the reading starts, so the wait is the one asked
+            // for and not the time the thread took to start.
+            hears_it.recv().unwrap();
+            let options = ReadOptions {
+                stop: Some(&flag),
+                ..options.clone()
+            };
+            let result = tabulate_cells(&book, 0, &options).and_then(Tabulator::finish);
+            let ended_at = Instant::now();
+            (result, ended_at, flag.load(Ordering::Relaxed))
         });
-        let at = Instant::now();
-        let options = ReadOptions {
-            stop: Some(&flag),
-            ..options
+        // How long the reading took to end once the flag was up (nothing, if it was not).
+        let heeded_in = || {
+            raised_at.get().map_or(Duration::ZERO, |raised| {
+                ended_at.saturating_duration_since(*raised)
+            })
         };
-        let result = tabulate_cells(&book, 0, &options).and_then(Tabulator::finish);
-        (result, at.elapsed())
-    })
+        if interrupted(&result) {
+            return (result, heeded_in());
+        }
+        if flag_up {
+            ended_with_the_flag_up += 1;
+            if ended_with_the_flag_up == ENDS_WITH_FLAG_UP {
+                return (result, heeded_in());
+            }
+        }
+    }
+    panic!("the flag never went up while the sheet was being read, in {TRIES} readings");
 }
 
 fn interrupted(result: &Result<Table, SheetsError>) -> bool {
@@ -123,8 +166,11 @@ const FLOOD: usize = 24 * MIB;
 fn an_xlsx_sheet_of_cells_without_values_stops_when_told_to() {
     let file = xlsx_stored(&format!("<row>{}</row>", "<c/>".repeat(FLOOD / 4)));
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -136,8 +182,11 @@ fn an_xlsx_cell_with_a_flood_inside_it_stops_when_told_to() {
     );
     let file = xlsx_stored(&cell);
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -154,8 +203,11 @@ fn an_xlsb_sheet_of_records_without_cells_stops_when_told_to() {
     sheet.extend(xb::part(&[(0x92, vec![]), (0x82, vec![])]));
     let file = xb::workbook(&[("S", Some(sheet))], &[], &[], &[], false);
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -164,8 +216,11 @@ fn an_ods_sheet_of_rows_without_values_stops_when_told_to() {
     let row = "<table:table-row><table:table-cell/></table:table-row>";
     let file = ods_stored(&table_of(&row.repeat(FLOOD / row.len())));
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -178,8 +233,11 @@ fn the_rest_of_an_ods_sheet_after_a_limit_stops_when_told_to() {
         ..opts(1 << 28)
     };
     let (result, took) = stopped(&file, options, SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -192,8 +250,11 @@ fn the_rest_of_an_xlsx_sheet_after_a_limit_stops_when_told_to() {
         ..opts(1 << 28)
     };
     let (result, took) = stopped(&file, options, SOON);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -204,8 +265,11 @@ fn an_xls_sheet_of_records_without_cells_stops_when_told_to() {
     let records = record(0x007F, &[]).repeat(1_500_000);
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
     let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -217,8 +281,11 @@ fn an_xls_sheet_of_continue_records_stops_when_told_to() {
     records.extend(record(0x003C, &[]).repeat(1_500_000));
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
     let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
-    assert!(interrupted(&result), "{result:?} after {took:?}");
-    eprintln!("ended after {took:?}, the flag raised at the start");
+    assert!(
+        interrupted(&result),
+        "{result:?} {took:?} after the flag went up"
+    );
+    eprintln!("ended {took:?} after the flag went up");
     assert!(took < PROMPT, "{took:?}");
 }
 
