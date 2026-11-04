@@ -150,7 +150,9 @@ function PatternSection({ pattern, index }: { pattern: Pattern; index: number })
             <h2 id={`${pattern.id}-heading`} className="mt-5 text-display-lg font-semibold text-balance text-fg">
               {pattern.headline}
             </h2>
-            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">{pattern.what}</p>
+            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
+              <InlineMarkdown text={pattern.what} />
+            </p>
           </div>
 
           <div

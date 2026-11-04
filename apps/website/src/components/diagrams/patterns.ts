@@ -102,7 +102,7 @@ impl DealsHandlers {
     name: "Multi-tenant SaaS",
     short: "Multi-tenant",
     headline: "Every customer gets a workspace.",
-    what: "Workspaces, members, roles and invitations are part of the framework and on by default. Each request resolves its workspace, checks membership and scopes its unit of work, so every query sees one customer's data, with PostgreSQL row-level security underneath.",
+    what: "Workspaces, members, roles and invitations are part of the framework, in the default features; add `WorkspaceModule` to your app. Each request then resolves its workspace, checks membership and scopes its unit of work, so every query sees one customer's data, with PostgreSQL row-level security underneath.",
     teaser:
       "Workspaces are built in. Every request resolves its workspace, checks membership and scopes its queries, with isolation by row, schema or database.",
     choose: [
