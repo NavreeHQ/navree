@@ -89,19 +89,36 @@ fn inner(records: navree::orm::Collection<Conversation>) -> Vec<Conversation> {
         .collect()
 }
 
-/// After the cursor `(last_at, id)` in the list: older activity.
-pub(crate) fn after(at: i64, id: i64) -> Filter {
+/// Newest activity first, as the list shows conversations: their last activity, the
+/// revision it happened at (of two in one second, the later first), then their id.
+pub fn newest_first(query: Builder<Conversation>) -> Builder<Conversation> {
+    query
+        .order_by_desc("last_at")
+        .order_by_desc("last_rev")
+        .order_by_desc("id")
+}
+
+/// Oldest activity first: [`newest_first`] the other way round.
+pub fn oldest_first(query: Builder<Conversation>) -> Builder<Conversation> {
+    query
+        .order_by("last_at")
+        .order_by("last_rev")
+        .order_by("id")
+}
+
+/// After the cursor `(last_at, last_rev, id)` in the list: older activity.
+pub(crate) fn after((at, rev, id): (i64, i64, i64)) -> Filter {
     Filter::raw(
-        "(\"last_at\", \"id\") < (?, ?)",
-        [Value::I64(at), Value::I64(id)],
+        "(\"last_at\", \"last_rev\", \"id\") < (?, ?, ?)",
+        [Value::I64(at), Value::I64(rev), Value::I64(id)],
     )
 }
 
 /// Before the cursor in the list: newer activity.
-pub(crate) fn before(at: i64, id: i64) -> Filter {
+pub(crate) fn before((at, rev, id): (i64, i64, i64)) -> Filter {
     Filter::raw(
-        "(\"last_at\", \"id\") > (?, ?)",
-        [Value::I64(at), Value::I64(id)],
+        "(\"last_at\", \"last_rev\", \"id\") > (?, ?, ?)",
+        [Value::I64(at), Value::I64(rev), Value::I64(id)],
     )
 }
 
@@ -117,12 +134,8 @@ pub async fn list_page(
     let cursor = |text: &str| read_cursor(text);
     let (found, more_after, more_before) = match ask {
         LazyAsk::After(text) if cursor(text).is_some() => {
-            let (at, id) = cursor(text).unwrap_or_default();
             let mut found = inner(
-                query
-                    .where_(after(at, id))
-                    .order_by_desc("last_at")
-                    .order_by_desc("id")
+                newest_first(query.where_(after(cursor(text).unwrap_or_default())))
                     .limit(PAGE + 1)
                     .get(uow)
                     .await?,
@@ -132,12 +145,8 @@ pub async fn list_page(
             (found, more, true)
         }
         LazyAsk::Before(text) if cursor(text).is_some() => {
-            let (at, id) = cursor(text).unwrap_or_default();
             let mut found = inner(
-                query
-                    .where_(before(at, id))
-                    .order_by("last_at")
-                    .order_by("id")
+                oldest_first(query.where_(before(cursor(text).unwrap_or_default())))
                     .limit(PAGE + 1)
                     .get(uow)
                     .await?,
@@ -148,14 +157,7 @@ pub async fn list_page(
             (found, true, more)
         }
         _ => {
-            let mut found = inner(
-                query
-                    .order_by_desc("last_at")
-                    .order_by_desc("id")
-                    .limit(PAGE + 1)
-                    .get(uow)
-                    .await?,
-            );
+            let mut found = inner(newest_first(query).limit(PAGE + 1).get(uow).await?);
             let more = found.len() as u64 > PAGE;
             found.truncate(PAGE as usize);
             (found, more, false)
@@ -260,18 +262,12 @@ pub async fn neighbours(
     me: i64,
     conversation: &Conversation,
 ) -> Result<(Option<i64>, Option<i64>)> {
-    let (at, id) = (conversation.last_at, conversation.id);
-    let newer = in_view(filters, me)
-        .where_(before(at, id))
-        .order_by("last_at")
-        .order_by("id")
+    let here = (conversation.last_at, conversation.last_rev, conversation.id);
+    let newer = oldest_first(in_view(filters, me).where_(before(here)))
         .first(uow)
         .await?
         .map(|record| record.id);
-    let older = in_view(filters, me)
-        .where_(after(at, id))
-        .order_by_desc("last_at")
-        .order_by_desc("id")
+    let older = newest_first(in_view(filters, me).where_(after(here)))
         .first(uow)
         .await?
         .map(|record| record.id);
@@ -382,27 +378,27 @@ pub async fn window_rows(
     me: i64,
     window: (&str, &str),
 ) -> Result<Vec<Conversation>> {
-    let (Some((top_at, top_id)), Some((bottom_at, bottom_id))) =
+    let (Some((top_at, top_rev, top_id)), Some((bottom_at, bottom_rev, bottom_id))) =
         (read_cursor(window.0), read_cursor(window.1))
     else {
         return Ok(Vec::new());
     };
     Ok(inner(
-        in_view(filters, me)
-            .where_(Filter::raw(
-                "(\"last_at\", \"id\") <= (?, ?) AND (\"last_at\", \"id\") >= (?, ?)",
-                [
-                    Value::I64(top_at),
-                    Value::I64(top_id),
-                    Value::I64(bottom_at),
-                    Value::I64(bottom_id),
-                ],
-            ))
-            .order_by_desc("last_at")
-            .order_by_desc("id")
-            .limit(400)
-            .get(uow)
-            .await?,
+        newest_first(in_view(filters, me).where_(Filter::raw(
+            "(\"last_at\", \"last_rev\", \"id\") <= (?, ?, ?) \
+             AND (\"last_at\", \"last_rev\", \"id\") >= (?, ?, ?)",
+            [
+                Value::I64(top_at),
+                Value::I64(top_rev),
+                Value::I64(top_id),
+                Value::I64(bottom_at),
+                Value::I64(bottom_rev),
+                Value::I64(bottom_id),
+            ],
+        )))
+        .limit(400)
+        .get(uow)
+        .await?,
     ))
 }
 
@@ -522,10 +518,7 @@ pub async fn customer_view(
         .collect();
     history.reverse();
     let theirs = inner(
-        Conversation::query()
-            .where_(Conversation::CUSTOMER_ID.eq(customer.id))
-            .order_by_desc("last_at")
-            .order_by_desc("id")
+        newest_first(Conversation::query().where_(Conversation::CUSTOMER_ID.eq(customer.id)))
             .limit(7)
             .get(uow)
             .await?,

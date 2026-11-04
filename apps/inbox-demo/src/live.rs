@@ -242,7 +242,7 @@ impl Hub {
             "INSERT INTO desk (id, rev) VALUES (1, 1)",
             "CREATE TABLE agents (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, team TEXT NOT NULL, active BOOLEAN NOT NULL, single_keys BOOLEAN NOT NULL)",
             "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL, plan TEXT NOT NULL, lifetime_paise INTEGER NOT NULL, seats INTEGER NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE, tags TEXT NOT NULL)",
-            "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL, rev INTEGER NOT NULL, messages INTEGER NOT NULL, inbox TEXT NOT NULL)",
+            "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, last_rev INTEGER NOT NULL DEFAULT 0, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL, rev INTEGER NOT NULL, messages INTEGER NOT NULL, inbox TEXT NOT NULL)",
             "CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, kind TEXT NOT NULL, author TEXT NOT NULL, agent_id INTEGER, body TEXT NOT NULL, at INTEGER NOT NULL)",
             "CREATE TABLE attachments (id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL, conversation_id INTEGER NOT NULL, name TEXT NOT NULL, bytes INTEGER NOT NULL)",
             "CREATE TABLE customer_events (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL)",
@@ -376,6 +376,7 @@ impl Hub {
                 assignee_id: None,
                 created_at: now,
                 last_at: now,
+                last_rev: rev,
                 sla_due: Some(now + topic.priority.target()),
                 sla_from: Some(now),
                 snoozed_until: None,
@@ -458,9 +459,7 @@ impl Hub {
             return Ok(query.find(uow, id).await?.map(|record| record.into_inner()));
         }
         // Among the dozen most recent: what a teammate or a customer is in the middle of.
-        let recent: Vec<Conversation> = query
-            .order_by_desc("last_at")
-            .order_by_desc("id")
+        let recent: Vec<Conversation> = crate::queries::newest_first(query)
             .limit(12)
             .get(uow)
             .await?
@@ -524,6 +523,7 @@ impl Hub {
                     Conversation::STATUS.set(Status::Open.key().to_owned()),
                     Conversation::UNREAD.set_expr(plus_one("unread")),
                     Conversation::LAST_AT.set(now),
+                    Conversation::LAST_REV.set(rev),
                     Conversation::SLA_DUE.set(Some(due)),
                     Conversation::SLA_FROM.set(Some(from)),
                     Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
@@ -594,6 +594,7 @@ impl Hub {
             Conversation::STATUS.set(status.key().to_owned()),
             Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(now),
+            Conversation::LAST_REV.set(rev),
             Conversation::REV.set(rev),
             Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
@@ -677,6 +678,7 @@ impl Hub {
                                 Conversation::INBOX.set("open".to_owned()),
                                 Conversation::SNOOZED_UNTIL.set(None::<chrono::NaiveDate>),
                                 Conversation::LAST_AT.set(now),
+                                Conversation::LAST_REV.set(rev),
                                 Conversation::SLA_DUE.set(Some(now + target)),
                                 Conversation::SLA_FROM.set(Some(now)),
                                 Conversation::REV.set(rev),

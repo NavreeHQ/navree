@@ -67,34 +67,34 @@ fn rows(records: navree::orm::Collection<Conversation>) -> Vec<Conversation> {
         .collect()
 }
 
+/// Where a conversation sorts: its last activity, the revision it happened at, its id.
+fn key(c: &Conversation) -> (i64, i64, i64) {
+    (c.last_at, c.last_rev, c.id)
+}
+
 /// Every conversation of `filters`' view, newest first, as the database orders them.
-async fn every(db: &Db, filters: &Filters) -> Vec<(i64, i64)> {
+async fn every(db: &Db, filters: &Filters) -> Vec<(i64, i64, i64)> {
     rows(
-        queries::in_view(filters, 1)
-            .order_by_desc("last_at")
-            .order_by_desc("id")
+        queries::newest_first(queries::in_view(filters, 1))
             .get(db)
             .await
             .expect("the view"),
     )
-    .into_iter()
-    .map(|c| (c.last_at, c.id))
+    .iter()
+    .map(key)
     .collect()
 }
 
 /// The view walked page by page by the cursor of each page's last row, as the runtime
 /// asks for them.
-async fn walk(db: &Db, filters: &Filters) -> Vec<(i64, i64)> {
+async fn walk(db: &Db, filters: &Filters) -> Vec<(i64, i64, i64)> {
     let mut seen = Vec::new();
     let mut ask = LazyAsk::First;
     loop {
         let (page, more, _) = queries::list_page(db, filters, 1, &ask)
             .await
             .expect("a page");
-        seen.extend(
-            page.iter()
-                .map(|row| (row.conversation.last_at, row.conversation.id)),
-        );
+        seen.extend(page.iter().map(|row| key(&row.conversation)));
         match (more, page.last()) {
             (true, Some(last)) => ask = LazyAsk::After(last.conversation.cursor()),
             _ => return seen,
@@ -133,15 +133,15 @@ async fn pages_hold_every_conversation_once_when_times_tie_at_a_page_edge() {
         let want = every(&desk.db, &filters).await;
         let got = walk(&desk.db, &filters).await;
         assert_eq!(got, want, "{view:?}: every row once, in order");
-        // Strictly newest first: (last_at, id) never repeats or goes back.
+        // Strictly newest first: (last_at, last_rev, id) never repeats or goes back.
         assert!(got.windows(2).all(|pair| pair[0] > pair[1]), "{view:?}");
     }
     let open = every(&desk.db, &Filters::default()).await;
-    let mut by_time: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
-    for (at, id) in &open {
-        by_time.entry(*at).or_default().push(*id);
+    let mut by_time: BTreeMap<i64, Vec<(i64, i64)>> = BTreeMap::new();
+    for (at, rev, id) in &open {
+        by_time.entry(*at).or_default().push((*rev, *id));
     }
-    let ties: Vec<(i64, Vec<i64>)> = by_time
+    let ties: Vec<(i64, Vec<(i64, i64)>)> = by_time
         .into_iter()
         .filter(|(_, ids)| ids.len() > 1)
         .collect();
@@ -151,44 +151,45 @@ async fn pages_hold_every_conversation_once_when_times_tie_at_a_page_edge() {
     );
     // A page that ends inside a tie goes on with the next row of the same time, from
     // either way.
-    for (at, ids) in &ties {
-        let mut desc = ids.clone();
+    for (at, tied) in &ties {
+        let mut desc = tied.clone();
         desc.sort_unstable_by(|a, b| b.cmp(a));
-        for pair in desc.windows(2) {
-            let cursor = Conversation {
+        let cursor = |(rev, id): (i64, i64)| {
+            Conversation {
                 last_at: *at,
-                id: pair[0],
+                last_rev: rev,
+                id,
                 ..Conversation::default()
             }
-            .cursor();
+            .cursor()
+        };
+        for pair in desc.windows(2) {
             let (after, _, _) = queries::list_page(
                 &desk.db,
                 &Filters::default(),
                 1,
-                &LazyAsk::After(cursor.clone()),
+                &LazyAsk::After(cursor(pair[0])),
             )
             .await
             .expect("the page after");
             assert_eq!(
                 after.first().map(|row| row.conversation.id),
-                Some(pair[1]),
-                "after ({at}, {})",
+                Some(pair[1].1),
+                "after ({at}, {:?})",
                 pair[0]
             );
-            let back = Conversation {
-                last_at: *at,
-                id: pair[1],
-                ..Conversation::default()
-            }
-            .cursor();
-            let (before, _, _) =
-                queries::list_page(&desk.db, &Filters::default(), 1, &LazyAsk::Before(back))
-                    .await
-                    .expect("the page before");
+            let (before, _, _) = queries::list_page(
+                &desk.db,
+                &Filters::default(),
+                1,
+                &LazyAsk::Before(cursor(pair[1])),
+            )
+            .await
+            .expect("the page before");
             assert_eq!(
                 before.last().map(|row| row.conversation.id),
-                Some(pair[0]),
-                "before ({at}, {})",
+                Some(pair[0].1),
+                "before ({at}, {:?})",
                 pair[1]
             );
         }
@@ -426,6 +427,57 @@ async fn a_filter_that_matches_little_reads_only_what_it_matches() {
     let filters = Filters::read(Some("closed"), None, Some("api"), Some("urgent"));
     let want = every(&desk.db, &filters).await;
     assert_eq!(walk(&desk.db, &filters).await, want);
+}
+
+#[tokio::test]
+async fn of_two_conversations_written_to_in_one_second_the_later_comes_first() {
+    let desk = desk("second", 0).await;
+    let open = every(&desk.db, &Filters::default()).await;
+    let (low, high) = (
+        open.iter()
+            .map(|(_, _, id)| *id)
+            .min()
+            .expect("an open conversation"),
+        open.iter()
+            .map(|(_, _, id)| *id)
+            .max()
+            .expect("an open conversation"),
+    );
+    assert!(low < high);
+    // A customer writes in the newer conversation, then, in the same second, one writes
+    // in the older: the older is where the latest word is, so it goes to the top.
+    for id in [high, low] {
+        desk.hub
+            .step(&desk.db, NOW + 60, Some(Happening::CustomerReply), Some(id))
+            .await
+            .expect("a customer writes");
+    }
+    let (page, _, _) = queries::list_page(&desk.db, &Filters::default(), 1, &LazyAsk::First)
+        .await
+        .expect("the first page");
+    let top: Vec<i64> = page.iter().take(2).map(|row| row.conversation.id).collect();
+    assert_eq!(top, [low, high], "the one written to last is on top");
+    // A live list puts what changed by its cursor, as text: the same order.
+    assert!(page[0].conversation.cursor() > page[1].conversation.cursor());
+    let (changed, _, _, _) = queries::changes(
+        &desk.db,
+        &Filters::default(),
+        1,
+        Since { rev: 1, at: NOW },
+        None,
+        NOW + 60,
+    )
+    .await
+    .expect("what changed");
+    let mut cursors: Vec<(String, i64)> = changed
+        .iter()
+        .map(|row| (row.conversation.cursor(), row.conversation.id))
+        .collect();
+    cursors.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    assert_eq!(
+        cursors.iter().map(|(_, id)| *id).collect::<Vec<i64>>(),
+        [low, high]
+    );
 }
 
 #[tokio::test]

@@ -77,6 +77,10 @@ pub struct Conversation {
     pub created_at: i64,
     /// When anything last happened.
     pub last_at: i64,
+    /// The desk's revision when anything last happened, 0 for what the desk was written
+    /// with. `last_at` counts whole seconds: of two conversations written to in one
+    /// second, the one written to later has the higher revision, and comes first.
+    pub last_rev: i64,
     /// When an agent must answer by: set by the customer's latest message, cleared by
     /// an answer. Unix seconds.
     pub sla_due: Option<i64>,
@@ -96,19 +100,29 @@ pub struct Conversation {
 }
 
 impl Conversation {
-    /// Where it sorts in a list, newest activity first: its last activity and its id,
-    /// padded so the text sorts as the numbers do.
+    /// Where it sorts in a list, newest activity first: its last activity, the revision
+    /// it happened at and its id, padded so the text sorts as the numbers do.
     pub fn cursor(&self) -> String {
-        format!("{:012}{:012}", self.last_at.max(0), self.id.max(0))
+        format!(
+            "{:012}{:012}{:012}",
+            self.last_at.max(0),
+            self.last_rev.max(0),
+            self.id.max(0)
+        )
     }
 }
 
-/// A conversation's cursor read back: its last activity and its id.
-pub fn read_cursor(cursor: &str) -> Option<(i64, i64)> {
-    if cursor.len() != 24 || !cursor.bytes().all(|b| b.is_ascii_digit()) {
+/// A conversation's cursor read back: its last activity, the revision it happened at,
+/// and its id.
+pub fn read_cursor(cursor: &str) -> Option<(i64, i64, i64)> {
+    if cursor.len() != 36 || !cursor.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    Some((cursor[..12].parse().ok()?, cursor[12..].parse().ok()?))
+    Some((
+        cursor[..12].parse().ok()?,
+        cursor[12..24].parse().ok()?,
+        cursor[24..].parse().ok()?,
+    ))
 }
 
 /// A message's cursor: its id, padded.
@@ -1392,6 +1406,7 @@ pub fn seed(now: i64) -> Seed {
                 },
                 created_at: created,
                 last_at: at,
+                last_rev: 0,
                 sla_due,
                 sla_from,
                 snoozed_until: (status == Status::Snoozed)

@@ -767,9 +767,11 @@ impl Pages {
                 }],
             )
             .await?;
+        let rev = revision(&uow).await?;
         let mut sets = vec![
             Conversation::LAST_AT.set(at),
-            Conversation::REV.set(revision(&uow).await?),
+            Conversation::LAST_REV.set(rev),
+            Conversation::REV.set(rev),
             Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if author == Author::Agent {
@@ -832,6 +834,7 @@ impl Pages {
             Some(agent) => format!("{} assigned it to {}", me.name, agent.name),
             None => format!("{} unassigned it", me.name),
         };
+        let rev = revision(uow).await?;
         Conversation::query()
             .where_(Conversation::ID.eq(id))
             .update(
@@ -839,7 +842,8 @@ impl Pages {
                 [
                     Conversation::ASSIGNEE_ID.set(agent.as_ref().map(|agent| agent.id)),
                     Conversation::LAST_AT.set(at),
-                    Conversation::REV.set(revision(uow).await?),
+                    Conversation::LAST_REV.set(rev),
+                    Conversation::REV.set(rev),
                     Conversation::MESSAGES.set_expr(plus_one("messages")),
                 ],
             )
@@ -921,12 +925,14 @@ impl Pages {
         };
         let me = self.who(&uow, &headers).await?;
         let at = now();
+        let rev = revision(&uow).await?;
         let mut sets = vec![
             Conversation::STATUS.set(status.key().to_owned()),
             Conversation::INBOX.set(inbox_of(status.key()).to_owned()),
             Conversation::LAST_AT.set(at),
+            Conversation::LAST_REV.set(rev),
             Conversation::SNOOZED_UNTIL.set(None::<NaiveDate>),
-            Conversation::REV.set(revision(&uow).await?),
+            Conversation::REV.set(rev),
             Conversation::MESSAGES.set_expr(plus_one("messages")),
         ];
         if status != Status::Open {
@@ -1045,6 +1051,7 @@ impl Pages {
         };
         let me = self.who(uow, headers).await?;
         let at = now();
+        let rev = revision(uow).await?;
         Conversation::query()
             .where_(Conversation::ID.eq(id))
             .update(
@@ -1056,7 +1063,8 @@ impl Pages {
                     Conversation::SLA_DUE.set(None::<i64>),
                     Conversation::SLA_FROM.set(None::<i64>),
                     Conversation::LAST_AT.set(at),
-                    Conversation::REV.set(revision(uow).await?),
+                    Conversation::LAST_REV.set(rev),
+                    Conversation::REV.set(rev),
                     Conversation::MESSAGES.set_expr(plus_one("messages")),
                 ],
             )
@@ -1673,12 +1681,9 @@ pub async fn explain(
     let read = |view: &str, channel: Option<&str>, priority: Option<&str>| {
         Filters::read(Some(view), None, channel, priority)
     };
-    let first_page = |filters: &Filters| {
-        queries::in_view(filters, 1)
-            .order_by_desc("last_at")
-            .order_by_desc("id")
-            .limit(51)
-    };
+    let first_page =
+        |filters: &Filters| queries::newest_first(queries::in_view(filters, 1)).limit(51);
+    let cursor = (at, 0, 50_000);
     let mut conversations = vec![
         (
             "list: the first page of all open".to_owned(),
@@ -1688,29 +1693,29 @@ pub async fn explain(
         (
             "list: the page after a cursor, closed".to_owned(),
             "inbox",
-            queries::in_view(&Filters::with_view(View::Closed), 1)
-                .where_(queries::after(at, 50_000))
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            queries::newest_first(
+                queries::in_view(&Filters::with_view(View::Closed), 1)
+                    .where_(queries::after(cursor)),
+            )
+            .limit(51),
         ),
         (
             "list: the page before a cursor, closed".to_owned(),
             "inbox",
-            queries::in_view(&Filters::with_view(View::Closed), 1)
-                .where_(queries::before(at, 50_000))
-                .order_by("last_at")
-                .order_by("id")
-                .limit(51),
+            queries::oldest_first(
+                queries::in_view(&Filters::with_view(View::Closed), 1)
+                    .where_(queries::before(cursor)),
+            )
+            .limit(51),
         ),
         (
             "list: the page after a cursor, closed, api and urgent".to_owned(),
             "inbox channel priority",
-            queries::in_view(&read("closed", Some("api"), Some("urgent")), 1)
-                .where_(queries::after(at, 50_000))
-                .order_by_desc("last_at")
-                .order_by_desc("id")
-                .limit(51),
+            queries::newest_first(
+                queries::in_view(&read("closed", Some("api"), Some("urgent")), 1)
+                    .where_(queries::after(cursor)),
+            )
+            .limit(51),
         ),
         (
             "list: assigned to me".to_owned(),
