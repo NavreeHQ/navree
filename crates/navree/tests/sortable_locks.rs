@@ -106,7 +106,10 @@ async fn seed(db: &Db, lanes: &[(&str, Option<i64>, usize)]) -> Vec<Vec<i64>> {
             .collect();
         ids.push(tasks.iter().map(|task| task.id).collect());
         for chunk in tasks.chunks(1_000) {
-            Task::query().insert(db, chunk.to_vec()).await.expect("tasks");
+            Task::query()
+                .insert(db, chunk.to_vec())
+                .await
+                .expect("tasks");
         }
     }
     ids
@@ -345,7 +348,11 @@ async fn checked(db: &Db, mv: Move, way: Way, gate: Arc<Barrier>) -> Result<Land
         if way.locking {
             mv.lock(&uow, &Lane::KEY).await.map_err(db_error)?;
         }
-        let lanes = Lane::query().order_by("key").get(&uow).await.map_err(db_error)?;
+        let lanes = Lane::query()
+            .order_by("key")
+            .get(&uow)
+            .await
+            .map_err(db_error)?;
         let mut lists = Vec::new();
         for lane in lanes.into_vec() {
             let lane = lane.into_inner();
@@ -425,7 +432,10 @@ async fn one_free_place(db: &Db, way: Way, by_rank: bool) -> (usize, usize) {
         })
         .await;
         for refused in out.iter().filter_map(|r| r.as_ref().err()) {
-            assert!(matches!(refused, Refusal::Full { limit: 3, .. }), "{refused:?}");
+            assert!(
+                matches!(refused, Refusal::Full { limit: 3, .. }),
+                "{refused:?}"
+            );
         }
         out.iter().filter(|r| r.is_ok()).count()
     } else {
@@ -434,7 +444,10 @@ async fn one_free_place(db: &Db, way: Way, by_rank: bool) -> (usize, usize) {
         })
         .await;
         for refused in out.iter().filter_map(|r| r.as_ref().err()) {
-            assert!(matches!(refused, Refusal::Full { limit: 3, .. }), "{refused:?}");
+            assert!(
+                matches!(refused, Refusal::Full { limit: 3, .. }),
+                "{refused:?}"
+            );
         }
         out.iter().filter(|r| r.is_ok()).count()
     };
@@ -456,7 +469,12 @@ async fn one_gap(db: &Db, way: Way) -> (i64, i64, Vec<(i64, i64)>) {
     .await;
     let ranks: Vec<i64> = out
         .iter()
-        .map(|r| r.as_ref().expect("both moves are taken").rank.expect("a rank"))
+        .map(|r| {
+            r.as_ref()
+                .expect("both moves are taken")
+                .rank
+                .expect("a rank")
+        })
         .collect();
     (ranks[0], ranks[1], order(db, "todo").await)
 }
@@ -479,7 +497,10 @@ async fn pool(url: &str, isolation: Option<navree::db::IsolationLevel>) -> Db {
 
 /// A database of its own on `server`'s test server, its tables made, and a pool
 /// on it; `None` when the server isn't configured.
-async fn fresh(server: &str, isolation: Option<navree::db::IsolationLevel>) -> Option<(TestDb, Db)> {
+async fn fresh(
+    server: &str,
+    isolation: Option<navree::db::IsolationLevel>,
+) -> Option<(TestDb, Db)> {
     let test = match server {
         "sqlite" => TestDb::sqlite().await.expect("sqlite"),
         "postgres" => TestDb::postgres().await.expect("postgres")?,
@@ -501,20 +522,31 @@ async fn moves_at_once(server: &str) {
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
-    assert_eq!(one_free_place(&db, LOCKED, true).await, (1, 3), "{server}: by rank, locked");
+    assert_eq!(
+        one_free_place(&db, LOCKED, true).await,
+        (1, 3),
+        "{server}: by rank, locked"
+    );
     done(test, db).await;
 
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
-    assert_eq!(one_free_place(&db, LOCKED, false).await, (1, 3), "{server}: read whole, locked");
+    assert_eq!(
+        one_free_place(&db, LOCKED, false).await,
+        (1, 3),
+        "{server}: read whole, locked"
+    );
     done(test, db).await;
 
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
     let (a, b, todo) = one_gap(&db, LOCKED).await;
-    assert_ne!(a, b, "{server}: two moves into one gap get ranks of their own");
+    assert_ne!(
+        a, b,
+        "{server}: two moves into one gap get ranks of their own"
+    );
     let ranks: Vec<i64> = todo.iter().map(|(_, rank)| *rank).collect();
     assert!(ranks.windows(2).all(|w| w[0] < w[1]), "{server}: {todo:?}");
     // Both land between the first task and the one they were dropped before.
@@ -530,22 +562,33 @@ async fn moves_at_once_without_the_lock(server: &str) {
         return;
     };
     let (accepted, held) = one_free_place(&db, UNLOCKED, true).await;
-    assert!(accepted > 1 && held > 3, "{server}: by rank, unlocked: {accepted} taken, {held} held");
-    eprintln!("{server}: without the lock, {accepted} of 20 moves took the one free place; the lane holds {held}, at most 3");
+    assert!(
+        accepted > 1 && held > 3,
+        "{server}: by rank, unlocked: {accepted} taken, {held} held"
+    );
+    eprintln!(
+        "{server}: without the lock, {accepted} of 20 moves took the one free place; the lane holds {held}, at most 3"
+    );
     done(test, db).await;
 
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
     let (accepted, held) = one_free_place(&db, UNLOCKED, false).await;
-    assert!(accepted > 1 && held > 3, "{server}: read whole, unlocked: {accepted} taken, {held} held");
+    assert!(
+        accepted > 1 && held > 3,
+        "{server}: read whole, unlocked: {accepted} taken, {held} held"
+    );
     done(test, db).await;
 
     let Some((test, db)) = fresh(server, None).await else {
         return;
     };
     let (a, b, _) = one_gap(&db, UNLOCKED).await;
-    assert_eq!(a, b, "{server}: without the lock both moves take the same rank");
+    assert_eq!(
+        a, b,
+        "{server}: without the lock both moves take the same rank"
+    );
     eprintln!("{server}: without the lock, two moves into one gap both took rank {a}");
     done(test, db).await;
 }
@@ -596,13 +639,20 @@ async fn mysql_moves_that_read_before_the_lock_need_read_committed() {
         return;
     };
     let (accepted, held) = one_free_place(&db, late, true).await;
-    assert!(accepted > 1, "REPEATABLE READ: {accepted} taken, {held} held");
+    assert!(
+        accepted > 1,
+        "REPEATABLE READ: {accepted} taken, {held} held"
+    );
     eprintln!("mysql, REPEATABLE READ, a read before the lock: {accepted} of 20 taken");
     done(test, db).await;
     let Some((test, db)) = fresh("mysql", Some(IsolationLevel::ReadCommitted)).await else {
         return;
     };
-    assert_eq!(one_free_place(&db, late, true).await, (1, 3), "READ COMMITTED");
+    assert_eq!(
+        one_free_place(&db, late, true).await,
+        (1, 3),
+        "READ COMMITTED"
+    );
     done(test, db).await;
 }
 
@@ -640,10 +690,17 @@ async fn renewal(server: &str) {
             i = q("id"),
             l = q("lane")
         );
-        db.pool().execute_script(&sql).await.expect("crowds the ranks");
+        db.pool()
+            .execute_script(&sql)
+            .await
+            .expect("crowds the ranks");
     };
     crowd(db.clone()).await;
-    let expected: Vec<i64> = order(&db, "long").await.into_iter().map(|(id, _)| id).collect();
+    let expected: Vec<i64> = order(&db, "long")
+        .await
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
     let other = order(&db, "other").await;
 
     let mut one = Duration::MAX;
@@ -663,12 +720,22 @@ async fn renewal(server: &str) {
         // MySQL counts the rows whose value changed; a renewal changes every one.
         assert!(changed > 0, "{server}: {changed} rows changed");
         let now = order(&db, "long").await;
-        assert_eq!(now.iter().map(|(id, _)| *id).collect::<Vec<_>>(), expected, "{server}: the order is kept");
+        assert_eq!(
+            now.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            expected,
+            "{server}: the order is kept"
+        );
         assert!(
-            now.iter().enumerate().all(|(at, (_, rank))| *rank == at as i64 * RANK_GAP),
+            now.iter()
+                .enumerate()
+                .all(|(at, (_, rank))| *rank == at as i64 * RANK_GAP),
             "{server}: fresh ranks, RANK_GAP apart"
         );
-        assert_eq!(order(&db, "other").await, other, "{server}: other lanes are left alone");
+        assert_eq!(
+            order(&db, "other").await,
+            other,
+            "{server}: other lanes are left alone"
+        );
 
         crowd(db.clone()).await;
         let start = Instant::now();
@@ -702,7 +769,10 @@ async fn renewal(server: &str) {
         one.as_secs_f64() * 1e3,
         each.as_secs_f64() * 1e3
     );
-    assert!(one * 3 < each, "{server}: one statement {one:?}, a task at a time {each:?}");
+    assert!(
+        one * 3 < each,
+        "{server}: one statement {one:?}, a task at a time {each:?}"
+    );
     assert!(one < Duration::from_secs(2), "{server}: {one:?}");
     done(test, db).await;
 }
@@ -746,11 +816,20 @@ async fn a_tight_gap_renews_the_lane_and_the_move_lands() {
             .await
             .unwrap();
         let gate = Arc::new(Barrier::new(1));
-        let placement = placed(&db, Move::new("3", "todo", "todo").before("2"), LOCKED, gate)
-            .await
-            .expect("taken");
+        let placement = placed(
+            &db,
+            Move::new("3", "todo", "todo").before("2"),
+            LOCKED,
+            gate,
+        )
+        .await
+        .expect("taken");
         assert!(placement.moved);
-        let ids: Vec<i64> = order(&db, "todo").await.into_iter().map(|(id, _)| id).collect();
+        let ids: Vec<i64> = order(&db, "todo")
+            .await
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         assert_eq!(ids, [1, 3, 2], "{server}");
         done(test, db).await;
     }

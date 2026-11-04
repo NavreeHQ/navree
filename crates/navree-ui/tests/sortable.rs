@@ -186,8 +186,16 @@ fn the_words_reach_the_browser_as_json_in_an_attribute() {
     assert!(html.contains("Levantado {item}"));
     // The toasts the module shows itself, for a move with no answer, are words too.
     let html = html_of(board());
-    assert!(html.contains("&quot;failed&quot;:&quot;That move wasn&#39;t saved. Try again.&quot;"), "{html}");
-    assert!(html.contains("&quot;offline&quot;:&quot;No connection. That move may not have been saved.&quot;"), "{html}");
+    assert!(
+        html.contains("&quot;failed&quot;:&quot;That move wasn&#39;t saved. Try again.&quot;"),
+        "{html}"
+    );
+    assert!(
+        html.contains(
+            "&quot;offline&quot;:&quot;No connection. That move may not have been saved.&quot;"
+        ),
+        "{html}"
+    );
 }
 
 #[test]
@@ -635,10 +643,21 @@ fn under_a_filter_each_items_move_form_starts_at_its_place_in_the_whole_list() {
         .item(SortItem::new("31", "Thirty-first").position(9))
         .item(SortItem::new("2", "Second"))
         .item(SortItem::new("5", "Fifth").position(0));
-    let html = html_of(Sortable::new("b", "Board").post("/m?label=bug").list(list.clone()));
+    let html = html_of(
+        Sortable::new("b", "Board")
+            .post("/m?label=bug")
+            .list(list.clone()),
+    );
     let value = |id: &str| {
         let at = html.find(&format!(r#"id="b-item-{id}-position""#)).unwrap();
-        html[at..].split("value=\"").nth(1).unwrap().split('"').next().unwrap().to_owned()
+        html[at..]
+            .split("value=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned()
     };
     assert_eq!(value("7"), "3");
     assert_eq!(value("31"), "9");
@@ -647,7 +666,13 @@ fn under_a_filter_each_items_move_form_starts_at_its_place_in_the_whole_list() {
     // The address the forms post to keeps the page's query.
     assert!(html.contains(r#"action="/m?label=bug""#), "{html}");
     // A page of the list does the same.
-    let json = serde_json::to_string(&Sortable::new("b", "Board").post("/m").list(list).page("backlog")).unwrap();
+    let json = serde_json::to_string(
+        &Sortable::new("b", "Board")
+            .post("/m")
+            .list(list)
+            .page("backlog"),
+    )
+    .unwrap();
     assert!(json.contains(r#"id=\"b-item-31-position\" type=\"number\" name=\"position\" min=\"1\" inputmode=\"numeric\" value=\"9\""#), "{json}");
 }
 
@@ -929,10 +954,17 @@ fn a_placed_move_locks_its_lists_in_order_before_it_reads_anything() {
     ] {
         let log = asked(mv);
         assert_eq!(log[0], "lock doing,ready", "{log:?}");
-        assert_eq!(log.iter().filter(|l| l.starts_with("lock")).count(), 1, "{log:?}");
+        assert_eq!(
+            log.iter().filter(|l| l.starts_with("lock")).count(),
+            1,
+            "{log:?}"
+        );
     }
     // Within a list: that list, once.
-    assert_eq!(asked(Move::new("3", "ready", "ready").at(1))[0], "lock ready");
+    assert_eq!(
+        asked(Move::new("3", "ready", "ready").at(1))[0],
+        "lock ready"
+    );
     // A move that is refused locks first too: what refuses it is read under the lock.
     for mv in [
         Move::new("1", "ready", "doing"),

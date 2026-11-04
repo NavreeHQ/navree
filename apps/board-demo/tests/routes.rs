@@ -90,7 +90,13 @@ async fn order(db: &Db, list: &str) -> Vec<i64> {
 }
 
 async fn rank(db: &Db, id: i64) -> i64 {
-    Card::query().find(db, id).await.unwrap().unwrap().into_inner().rank
+    Card::query()
+        .find(db, id)
+        .await
+        .unwrap()
+        .unwrap()
+        .into_inner()
+        .rank
 }
 
 async fn lead(db: &Db) -> i64 {
@@ -123,7 +129,12 @@ async fn the_next_page_starts_right_after_the_last_card_drawn_even_after_fresh_r
     let client = app.client();
     let lead = lead(&db).await;
     assert_eq!(
-        client.post(&format!("/as/{lead}")).form(&[("go", "")]).send().await.status(),
+        client
+            .post(&format!("/as/{lead}"))
+            .form(&[("go", "")])
+            .send()
+            .await
+            .status(),
         303
     );
     let page = client.get("/").send().await.text();
@@ -173,7 +184,11 @@ async fn the_next_page_starts_right_after_the_last_card_drawn_even_after_fresh_r
         .collect();
     let now = order(&db, "backlog").await;
     let at = now.iter().position(|id| *id == last).unwrap();
-    assert_eq!(second, now[at + 1..at + 21], "the 20 cards right after the last one drawn");
+    assert_eq!(
+        second,
+        now[at + 1..at + 21],
+        "the 20 cards right after the last one drawn"
+    );
 }
 
 #[tokio::test]
@@ -212,7 +227,11 @@ async fn under_a_filter_a_cards_move_form_counts_in_the_whole_column_and_goes_ba
     ];
     let (status, location) = post_move(&client, &action, &fields).await;
     assert_eq!((status, location.as_str()), (303, "/?label=bug"));
-    assert_eq!(place_now(&db, card).await, to, "it lands at that place in the whole column");
+    assert_eq!(
+        place_now(&db, card).await,
+        to,
+        "it lands at that place in the whole column"
+    );
 }
 
 async fn place_now(db: &Db, id: i64) -> usize {
@@ -264,7 +283,10 @@ async fn choosing_who_to_show_the_board_as_takes_a_post_from_this_site() {
     assert_eq!(forged.status(), 403);
     assert!(forged.set_cookie("board_as").is_none());
     let page = client.get("/").send().await.text();
-    assert!(list(&page, "done").contains("data-refuse="), "still a member");
+    assert!(
+        list(&page, "done").contains("data-refuse="),
+        "still a member"
+    );
 
     let chosen = client
         .post(&format!("/as/{lead}"))
@@ -277,5 +299,8 @@ async fn choosing_who_to_show_the_board_as_takes_a_post_from_this_site() {
         Some(lead.to_string())
     );
     let page = client.get("/").send().await.text();
-    assert!(!list(&page, "done").contains("data-refuse="), "a lead closes cards");
+    assert!(
+        !list(&page, "done").contains("data-refuse="),
+        "a lead closes cards"
+    );
 }
