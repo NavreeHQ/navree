@@ -54,14 +54,6 @@ export function UiSection() {
 
       <TableShowcase className="mt-12 lg:mt-14" />
 
-      <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-2 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
-        <span>
-          Build anything from the same parts: an example app follows an email campaign, with a recipient&apos;s timeline in a
-          sheet and a feed that moves live.
-        </span>
-        <ArrowLink href="/ui/#build-anything">See the example app</ArrowLink>
-      </p>
-
       <div className="mt-12 grid gap-6 lg:mt-16 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-4">
           <h3 className="font-display text-display-sm font-semibold text-balance text-fg">Or the front end you already use.</h3>
