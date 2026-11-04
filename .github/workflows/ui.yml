@@ -8,7 +8,7 @@ on:
       - "crates/navree-ui/**"
       - "crates/navree-ui-macros/**"
       - "apps/ui-proof/**"
-      - "apps/campaign-demo/**"
+      - "apps/store-demo/**"
       - "apps/ui-docs/**"
       - "apps/website/content/ui/**"
       - "e2e/ui/**"
@@ -72,7 +72,7 @@ jobs:
       - run: cargo build --release -p ui-proof --features logbook
       - run: cp target/release/ui-proof target/release/ui-proof-dev
       - run: cargo build --release -p ui-proof
-      - run: cargo build --release -p campaign-demo
+      - run: cargo build --release -p store-demo
       - run: npm ci
         working-directory: e2e/ui
       - run: npx playwright install --with-deps chromium firefox webkit
@@ -81,8 +81,9 @@ jobs:
         run: |
           target/release/ui-proof serve &
           UI_PROOF_LOGBOOK=1 PORT=8092 target/release/ui-proof-dev serve &
-          CAMPAIGN_SIMULATOR=off CAMPAIGN_TEST_HOOKS=1 target/release/campaign-demo &
+          # The store seeds 200,000 orders when it starts, which takes a while.
+          STORE_SIMULATOR=off STORE_TEST_HOOKS=1 target/release/store-demo &
           until curl -sf http://127.0.0.1:8090/plain >/dev/null; do sleep 0.2; done
           until curl -sf http://127.0.0.1:8092/plain >/dev/null; do sleep 0.2; done
-          until curl -sf http://127.0.0.1:8095/ >/dev/null; do sleep 0.2; done
-          cd e2e/ui && UI_LOGBOOK_URL=http://127.0.0.1:8092 npm test
+          timeout 300 bash -c 'until curl -sf http://127.0.0.1:8095/ >/dev/null; do sleep 0.5; done'
+          cd e2e/ui && UI_LOGBOOK_URL=http://127.0.0.1:8092 STORE_BROWSERS=chromium,firefox,webkit npm test
