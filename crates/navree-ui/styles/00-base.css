@@ -39,6 +39,9 @@ main:focus,main:focus-visible{outline:0}
 [data-slot=container]{width:100%;max-width:80rem;margin-inline:auto;&[data-size=sm]{max-width:40rem}&[data-size=md]{max-width:64rem}&[data-size=full]{max-width:none}}
 [data-gap="0"]{gap:0}[data-gap="1"]{gap:.25rem}[data-gap="2"]{gap:.5rem}[data-gap="3"]{gap:.75rem}[data-gap="4"]{gap:1rem}[data-gap="5"]{gap:1.25rem}[data-gap="6"]{gap:1.5rem}[data-gap="8"]{gap:2rem}[data-gap="10"]{gap:2.5rem}[data-gap="12"]{gap:3rem}[data-gap="16"]{gap:4rem}
 [data-wrap]{flex-wrap:wrap}
+/* On a phone: a row of actions on one line that scrolls sideways, and no hints of keys a phone hasn't got. */
+@media (max-width:39.99rem){[data-scroll-phone]{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;&>*{flex:none}}[data-hint=keyboard][data-slot]{display:none}}
+@media (pointer:coarse){[data-hint=keyboard][data-slot]{display:none}}
 [data-align=start]{align-items:flex-start}[data-align=center]{align-items:center}[data-align=end]{align-items:flex-end}[data-align=stretch]{align-items:stretch}
 [data-justify=start]{justify-content:flex-start}[data-justify=center]{justify-content:center}[data-justify=end]{justify-content:flex-end}[data-justify=between]{justify-content:space-between}
 @media (min-width:768px){[data-cols="2"]{--cols:2}[data-cols="3"]{--cols:3}[data-cols="4"]{--cols:4}[data-cols="5"]{--cols:5}[data-cols="6"]{--cols:6}[data-span="2"]{grid-column:span 2}[data-span="3"]{grid-column:span 3}[data-span="4"]{grid-column:span 4}[data-span="5"]{grid-column:span 5}[data-span="6"]{grid-column:span 6}}

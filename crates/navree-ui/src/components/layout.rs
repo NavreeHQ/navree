@@ -154,6 +154,17 @@ impl Row {
         self
     }
 
+    /// Lets items wrap onto more lines, but on a phone (under 640 px) keeps them on one
+    /// line that scrolls sideways: for a row of actions above content that needs the
+    /// room, such as a conversation's messages.
+    pub fn scroll_on_phones(mut self) -> Self {
+        self.el = self
+            .el
+            .flag("data-wrap", true)
+            .flag("data-scroll-phone", true);
+        self
+    }
+
     /// Adds items.
     pub fn children(mut self, children: impl IntoNodes) -> Self {
         self.el = self.el.child(children);

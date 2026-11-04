@@ -314,7 +314,8 @@ impl Command {
         Button::new(Node::list((
             icon(icons::SEARCH),
             el("span").child(label.into()),
-            Kbd::new("Ctrl K"),
+            // A phone has no Ctrl key: the hint hides there.
+            Kbd::new("Ctrl K").attr("data-hint", "keyboard"),
         )))
         .variant(ButtonVariant::Outline)
         .opens_dialog(id)
