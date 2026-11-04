@@ -308,13 +308,6 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                 .into(),
         );
     }
-    if conversation.unread > 0 {
-        badges.push(
-            Badge::new(format!("{} new", conversation.unread))
-                .tone(Tone::Info)
-                .into(),
-        );
-    }
     let filters = open.filters;
     let keys = open.keys;
     let step = |id: Option<i64>, glyph, label: &str, key: &str| {

@@ -790,10 +790,7 @@ impl Pages {
             .where_(Conversation::ID.eq(id))
             .update(&uow, sets)
             .await?;
-        self.hub.tell(Change {
-            conversation: id,
-            customer: found.customer_id,
-        });
+        self.hub.tell(Change::of(id, found.customer_id));
         let customer = Customer::query()
             .find(&uow, found.customer_id)
             .await?
@@ -850,10 +847,7 @@ impl Pages {
         Message::query()
             .insert(uow, [event_line(id, &me, line, at)])
             .await?;
-        self.hub.tell(Change {
-            conversation: id,
-            customer: found.customer_id,
-        });
+        self.hub.tell(Change::of(id, found.customer_id));
         let toast = match &agent {
             Some(agent) => Toast::new(ToastTone::Success, format!("{} has it now.", agent.name))
                 .title("Assigned"),
@@ -969,10 +963,7 @@ impl Pages {
                 )
                 .await?;
         }
-        self.hub.tell(Change {
-            conversation: id,
-            customer: found.customer_id,
-        });
+        self.hub.tell(Change::of(id, found.customer_id));
         let toast = match status {
             Status::Closed => Toast::new(
                 ToastTone::Success,
@@ -1030,10 +1021,7 @@ impl Pages {
                 )],
             )
             .await?;
-        self.hub.tell(Change {
-            conversation: id,
-            customer: found.customer_id,
-        });
+        self.hub.tell(Change::of(id, found.customer_id));
         let toast = Toast::new(
             ToastTone::Info,
             format!("Priority is {} now.", priority.label().to_lowercase()),
@@ -1085,10 +1073,7 @@ impl Pages {
                 )],
             )
             .await?;
-        self.hub.tell(Change {
-            conversation: id,
-            customer: found.customer_id,
-        });
+        self.hub.tell(Change::of(id, found.customer_id));
         let toast =
             Toast::new(ToastTone::Info, format!("It comes back on {label}.")).title("Snoozed");
         let reply = self
@@ -1244,10 +1229,9 @@ impl Pages {
                     ],
                 )
                 .await?;
-            self.hub.tell(Change {
-                conversation: id,
-                customer: found.customer_id,
-            });
+            // Only the lists show what is read: the page's own heading, messages and
+            // customer stay as they are, with whatever the agent has open in them.
+            self.hub.tell(Change::read(id, found.customer_id));
         }
         if headers.contains_key("x-navree-ui") {
             return Ok(StatusCode::NO_CONTENT.into_response());
@@ -1612,7 +1596,7 @@ fn test_hooks(me: &Arc<Pages>) -> Vec<RouteDef> {
                 )
                 .await?;
             if let Some(found) = found {
-                pages.hub.tell(Change { conversation: id, customer: found.customer_id });
+                pages.hub.tell(Change::of(id, found.customer_id));
             }
             Ok::<_, AppError>(StatusCode::NO_CONTENT)
         }),

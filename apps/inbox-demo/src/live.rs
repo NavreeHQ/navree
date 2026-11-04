@@ -6,7 +6,7 @@
 //! page fetches its own fragment again, so the stream can't put anything in a page
 //! that the server didn't draw. A stream is for one page: it says `conversations` for
 //! any change, and `thread` and `customer` only when the change is to the conversation
-//! or the customer that page has open.
+//! or the customer that page has open, and more than its being read.
 //!
 //! **Every write takes its numbers where it commits.** A live list asks for what changed
 //! since the newest revision it has seen, and an open conversation for the messages after
@@ -50,6 +50,10 @@ use crate::scale;
 pub struct Change {
     pub conversation: i64,
     pub customer: i64,
+    /// Only what the lists show moved (it was read): the open conversation's heading,
+    /// messages and customer are as they were, so a page that has it open fetches none
+    /// of them again, and nothing the agent has open in them is drawn over.
+    pub lists_only: bool,
 }
 
 impl Change {
@@ -57,7 +61,26 @@ impl Change {
     pub const TICK: Change = Change {
         conversation: 0,
         customer: 0,
+        lists_only: false,
     };
+
+    /// Conversation `conversation` of customer `customer` changed.
+    pub const fn of(conversation: i64, customer: i64) -> Change {
+        Change {
+            conversation,
+            customer,
+            lists_only: false,
+        }
+    }
+
+    /// Conversation `conversation` was read: only the lists show that.
+    pub const fn read(conversation: i64, customer: i64) -> Change {
+        Change {
+            conversation,
+            customer,
+            lists_only: true,
+        }
+    }
 }
 
 /// What the simulator, or a test, makes happen.
@@ -414,10 +437,7 @@ impl Hub {
             },
         )
         .await?;
-        Ok(Some(Change {
-            conversation: id,
-            customer: customer.id,
-        }))
+        Ok(Some(Change::of(id, customer.id)))
     }
 
     /// A conversation for something to happen in: `on` if it is one of `statuses`, or
@@ -514,10 +534,7 @@ impl Hub {
                 ],
             )
             .await?;
-        Ok(Some(Change {
-            conversation: conversation.id,
-            customer: conversation.customer_id,
-        }))
+        Ok(Some(Change::of(conversation.id, conversation.customer_id)))
     }
 
     async fn teammate(
@@ -606,10 +623,7 @@ impl Hub {
             )
             .await?;
         }
-        Ok(Some(Change {
-            conversation: conversation.id,
-            customer: conversation.customer_id,
-        }))
+        Ok(Some(Change::of(conversation.id, conversation.customer_id)))
     }
 
     /// Brings back every snoozed conversation whose day has come by `now` in the desk's
@@ -670,10 +684,7 @@ impl Hub {
                             ],
                         )
                         .await?;
-                    self.tell(Change {
-                        conversation: conversation.id,
-                        customer: conversation.customer_id,
-                    });
+                    self.tell(Change::of(conversation.id, conversation.customer_id));
                 }
                 Ok(due.len())
             })
@@ -742,8 +753,8 @@ impl Hub {
                         Ok(change) if change == Change::TICK => (true, open > 0, false),
                         Ok(change) => (
                             true,
-                            open > 0 && change.conversation == open,
-                            customer > 0 && change.customer == customer,
+                            open > 0 && change.conversation == open && !change.lists_only,
+                            customer > 0 && change.customer == customer && !change.lists_only,
                         ),
                         // Missed some: everything may have changed.
                         Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -789,10 +800,7 @@ mod tests {
         .expect("an in-memory database");
         let hub = Hub::new();
         let mut heard = hub.tx.subscribe();
-        let change = Change {
-            conversation: 7,
-            customer: 3,
-        };
+        let change = Change::of(7, 3);
         let uow = db.uow(None, None).await;
         uow.scope(async { hub.tell(change) }).await;
         assert!(heard.try_recv().is_err(), "nothing before the commit");
