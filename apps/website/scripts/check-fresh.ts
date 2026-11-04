@@ -80,7 +80,7 @@ for (const p of all) {
   const expected = lastmod.get(p.url);
   if (!expected) continue;
   const modified = nodes(p)
-    .filter((n) => typesOf(n).some((t) => t === "WebPage" || t === "CollectionPage" || t === "TechArticle"))
+    .filter((n) => typesOf(n).some((t) => t === "WebPage" || t === "CollectionPage" || t === "AboutPage" || t === "TechArticle"))
     .map((n) => n.dateModified)
     .filter(Boolean);
   if (!modified.length) {

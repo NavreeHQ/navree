@@ -11,7 +11,8 @@ import { lastModifiedUnder, latestCommit } from "./last-modified.ts";
  * folder tells:
  *
  * - `name`: the short name the breadcrumb trail shows;
- * - `kind`: `CollectionPage` for a page whose job is to list others;
+ * - `kind`: `CollectionPage` for a page whose job is to list others,
+ *   `AboutPage` for the page about who built Navree;
  * - `parent`: the page above it in the trail (default: the homepage);
  * - `sources`: the files whose last change dates the page, in addition to
  *   its own folder (`lastmod` in the sitemap, `dateModified` in the data).
@@ -19,7 +20,7 @@ import { lastModifiedUnder, latestCommit } from "./last-modified.ts";
  * A page left out of the registry gets its folder name as its name, kind
  * `WebPage`, the homepage as its parent and its own folder as its source.
  */
-export type PageKind = "WebPage" | "CollectionPage";
+export type PageKind = "WebPage" | "CollectionPage" | "AboutPage";
 
 export type PageInfo = {
   name: string;
@@ -53,6 +54,7 @@ export const pageInfo: Record<string, PageInfo> = {
     sources: ["src/components/showcase", "public/images/crm"],
   },
   "/changelog/": { name: "Changelog", kind: "CollectionPage", sources: ["src/lib/changelog.ts"] },
+  "/about/": { name: "About", kind: "AboutPage", sources: ["src/components/about", "src/content/about.ts", "src/content/faq.ts"] },
 };
 
 const WEBSITE = process.cwd();

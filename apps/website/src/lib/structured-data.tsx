@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { founder } from "@/content/about";
 import { site } from "@site";
 
 import { ogImage } from "./metadata";
@@ -10,12 +11,13 @@ import { navreeVersion } from "./version.ts";
 /**
  * schema.org structured data (JSON-LD) for search engines and AI answers.
  *
- * The site graph (root layout, every page) declares the organisation, the
- * website, the software and its source code once, with stable `@id`s. Each
- * page adds its own graph that refers to those ids:
+ * The site graph (root layout, every page) declares the organisation (with
+ * its founder), the website, the software and its source code once, with
+ * stable `@id`s. Each page adds its own graph that refers to those ids:
  *
  * - every page: a `WebPage` (or `CollectionPage` for a page that lists
- *   others) and its `BreadcrumbList` (`PageSchema`);
+ *   others, `AboutPage` for `/about/`) and its `BreadcrumbList`
+ *   (`PageSchema`);
  * - docs pages: a `TechArticle` with `dateModified` from git, its
  *   breadcrumb and a link to its Markdown copy (`docData`), and a `HowTo`
  *   where the page is a list of steps (`howToData`);
@@ -30,6 +32,8 @@ export const WEBSITE_ID = `${site.url}/#website`;
 export const SOFTWARE_ID = `${site.url}/#software`;
 export const CODE_ID = `${site.url}/#source-code`;
 export const LOGO_ID = `${site.url}/#logo`;
+/** The person who built Navree, described on `/about/`. */
+export const FOUNDER_ID = `${site.url}/about/#founder`;
 
 const abs = (path: string) => new URL(path, site.url).toString();
 
@@ -91,6 +95,16 @@ export function siteGraph(): Json {
           height: 512,
         },
         sameAs: [githubOrg()],
+        founder: {
+          "@type": "Person",
+          "@id": FOUNDER_ID,
+          name: founder.name,
+          url: abs("/about/"),
+          description: `${founder.role.replace(/^a /, "A ")} in ${founder.place}, and the author of ${site.name}.`,
+          homeLocation: { "@type": "Place", name: founder.place },
+          knowsAbout: [...founder.knowsAbout],
+          sameAs: [founder.github.url],
+        },
       },
       {
         "@type": "WebSite",
@@ -190,11 +204,12 @@ function plainTitle(title: Metadata["title"]): string {
  * `CollectionPage` where the registry in `site-pages.ts` says it lists
  * others), when it last changed (from git), its image and its breadcrumb.
  * Title and description come from the page's own `metadata` export, so they
- * can't differ from the tags in the head.
+ * can't differ from the tags in the head. `mainEntity` names the node the
+ * page is mainly about (the about page: its founder).
  *
  *     <PageSchema path="/ui/" metadata={metadata} />
  */
-export function PageSchema({ path, metadata, kind }: { path: string; metadata: Metadata; kind?: PageKind }) {
+export function PageSchema({ path, metadata, kind, mainEntity }: { path: string; metadata: Metadata; kind?: PageKind; mainEntity?: string }) {
   const info = infoFor(path);
   const url = abs(path);
   const og = metadata.openGraph?.title;
@@ -213,7 +228,7 @@ export function PageSchema({ path, metadata, kind }: { path: string; metadata: M
         dateModified: pageModified(path),
         isPartOf: { "@id": WEBSITE_ID },
         about: { "@id": SOFTWARE_ID },
-        ...(home ? { mainEntity: { "@id": SOFTWARE_ID } } : {}),
+        ...(home ? { mainEntity: { "@id": SOFTWARE_ID } } : mainEntity ? { mainEntity: { "@id": mainEntity } } : {}),
         primaryImageOfPage: {
           "@type": "ImageObject",
           url: abs(ogImage.url),

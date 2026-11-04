@@ -34,6 +34,9 @@ const required: Record<string, string[]> = {
   SoftwareSourceCode: ["name", "codeRepository", "programmingLanguage", "license", "version"],
   WebPage: ["url", "name", "description", "inLanguage", "dateModified", "isPartOf", "breadcrumb"],
   CollectionPage: ["url", "name", "description", "inLanguage", "dateModified", "isPartOf", "breadcrumb"],
+  AboutPage: ["url", "name", "description", "inLanguage", "dateModified", "isPartOf", "breadcrumb", "mainEntity"],
+  Person: ["name", "url", "sameAs"],
+  Place: ["name"],
   TechArticle: ["headline", "description", "url", "dateModified", "author", "publisher", "mainEntityOfPage", "isPartOf"],
   BreadcrumbList: ["itemListElement"],
   ListItem: ["position", "name", "item"],
@@ -160,6 +163,6 @@ export function missingTypes(page: Page): string[] {
   const have = new Set(nodes(page).flatMap(typesOf));
   const need = ["Organization", "WebSite", "SoftwareApplication", "SoftwareSourceCode", "BreadcrumbList"];
   const missing = need.filter((t) => !have.has(t));
-  if (!["WebPage", "CollectionPage"].some((t) => have.has(t))) missing.push("WebPage or CollectionPage");
+  if (!["WebPage", "CollectionPage", "AboutPage"].some((t) => have.has(t))) missing.push("WebPage, CollectionPage or AboutPage");
   return missing;
 }
