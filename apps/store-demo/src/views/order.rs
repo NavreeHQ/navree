@@ -123,9 +123,16 @@ pub fn thumbnail(key: &str) -> Node {
 
 /// A product with its picture, its name and its SKU.
 pub fn product(icon: &str, name: &str, sku: &str) -> Row {
+    product_with(icon, name, Text::muted(sku.to_owned()))
+}
+
+/// A product with its picture, its name and a line of your own under it. The
+/// picture sits in a media slot that never shrinks, so a narrow column wraps the
+/// words and keeps the picture whole.
+pub fn product_with(icon: &str, name: &str, under: impl Into<Node>) -> Row {
     Row::gap(3).align(Align::Center).children((
-        thumbnail(icon),
-        Stack::gap(0).children((Text::new(name.to_owned()), Text::muted(sku.to_owned()))),
+        el("span").slot("item-media").child(thumbnail(icon)),
+        Stack::gap(0).children((Text::new(name.to_owned()), under.into())),
     ))
 }
 

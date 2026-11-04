@@ -9,7 +9,7 @@ use chrono::NaiveDate;
 use crate::data::{
     Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, ZONE, day_of, warehouse,
 };
-use crate::views::order::product;
+use crate::views::order::product_with;
 use crate::views::{money, place, thousands, units};
 
 /// Today's figures, counted in the database.
@@ -354,40 +354,34 @@ pub fn dashboard_body(
 /// The shelves running low and today's top sellers, side by side under the feed
 /// on a phone.
 pub fn shelves(low: &[Product], sellers: &[Seller]) -> Stack {
+    // Two lines a product, so a narrow column keeps every word whole.
     let low_list: Vec<Node> = low
         .iter()
         .map(|item| {
-            Row::gap(3)
-                .align(Align::Center)
-                .justify(Justify::Between)
-                .children((
-                    product(&item.icon, &item.name, &item.sku),
-                    Stack::gap(0).align(Align::End).children((
-                        level(&item.level),
-                        Text::muted(format!("{} left", thousands(item.stock))),
-                    )),
-                ))
-                .into()
+            product_with(
+                &item.icon,
+                &item.name,
+                Row::gap(2).align(Align::Center).wrap().children((
+                    level(&item.level),
+                    Text::muted(format!("{} left", thousands(item.stock))).inline(),
+                )),
+            )
+            .into()
         })
         .collect();
     let seller_list: Vec<Node> = sellers
         .iter()
         .map(|seller| {
-            Row::gap(3)
-                .align(Align::Center)
-                .justify(Justify::Between)
-                .children((
-                    product(
-                        &seller.product.icon,
-                        &seller.product.name,
-                        &seller.product.sku,
-                    ),
-                    Stack::gap(0).align(Align::End).children((
-                        Text::new(units(seller.units)).inline(),
-                        Text::muted(money(seller.revenue)),
-                    )),
-                ))
-                .into()
+            product_with(
+                &seller.product.icon,
+                &seller.product.name,
+                Text::muted(format!(
+                    "{} · {}",
+                    units(seller.units),
+                    money(seller.revenue)
+                )),
+            )
+            .into()
         })
         .collect();
     Stack::gap(4).children((
