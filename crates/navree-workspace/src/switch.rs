@@ -7,7 +7,8 @@ use std::sync::Arc;
 use http::header::{CONTENT_TYPE, LOCATION};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
-use navree_contracts::{AuditEntry, AuditKind, AuditSink, RequestId};
+use navree_contracts::{AuditEntry, AuditKind, AuditSink, Broadcaster, RequestId};
+use navree_db::Uow;
 use navree_http::body::Bytes;
 use navree_http::{
     AppError, ClientIp, Controller, CurrentPrincipal, IntoResponse, Json, Response, RouteDef,
@@ -49,7 +50,9 @@ pub const SWITCH_ROUTE: &str = "workspace.switch";
 /// - **On success** the choice is stored in the session for this user, the
 ///   session gets a new id and CSRF token (a privilege change), and
 ///   `workspace.switched` goes to the audit trail when the app has a
-///   `dyn AuditSink`. A form is answered `303 See Other` to `next` when it
+///   `dyn AuditSink`. When the workspace changed, the user's real-time
+///   subscriptions and live streams end (`dyn Broadcaster`), so every open
+///   page reconnects in the new workspace. A form is answered `303 See Other` to `next` when it
 ///   is a path on this site, else to `/`; JSON with `200 {"id", "slug",
 ///   "name"}`.
 pub(crate) struct SwitchController {
@@ -162,6 +165,9 @@ async fn switch(
     // A new role in a new workspace: a new session id and CSRF token.
     session.regenerate();
     audit(parts, user, previous, &workspace).await;
+    if previous != Some(workspace.id) {
+        end_live_subscriptions(parts, user).await;
+    }
     if json {
         return Ok(Json(json!({
             "id": workspace.id,
@@ -197,6 +203,35 @@ async fn may_enter(
         return Ok(true);
     }
     Ok(guest_member(config, workspace, user).is_some())
+}
+
+/// Ends `user`'s real-time subscriptions and live streams
+/// (`dyn Broadcaster::end_user_subscriptions`, when the app has one), once
+/// the request's unit of work commits (or now without one): every open page
+/// reconnects and its streams follow the workspace just switched to,
+/// instead of carrying the old one's updates until they expire. A failure
+/// is logged; the switch stands.
+async fn end_live_subscriptions(parts: &Parts, user: Uuid) {
+    let Some(ctx) = parts.extensions.get::<AppContext>() else {
+        return;
+    };
+    let Some(broadcaster) = ctx.try_get::<dyn Broadcaster>().await else {
+        return;
+    };
+    let end = async move {
+        if let Err(error) = broadcaster.end_user_subscriptions(user).await {
+            tracing::warn!(
+                target: "navree::workspace",
+                %error,
+                user_id = %user,
+                "could not end the user's live subscriptions after a workspace switch"
+            );
+        }
+    };
+    match Uow::current() {
+        Some(uow) if !uow.is_finished().await => uow.after_commit(move || Box::pin(end)),
+        _ => end.await,
+    }
 }
 
 /// Writes `workspace.switched` to the app's audit trail, when it has one.
