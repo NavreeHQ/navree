@@ -157,7 +157,7 @@ fn error_page_kinds() -> impl IntoIterator<Item = (&'static str, State)> {
 }
 
 fn error_page_shell() -> AppPage {
-    let shell = Shell::new("Acme CRM")
+    let shell = Shell::new("Sutlej CRM")
         .context("Production")
         .group(
             NavGroup::new("Sales")
@@ -165,7 +165,7 @@ fn error_page_shell() -> AppPage {
                 .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE))
                 .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),
         )
-        .user(UserMenu::new("Ada Lovelace", "ada@example.com").action("Sign out", "/sign-out"));
+        .user(UserMenu::new("Harleen Kaur", "harleen@example.com").action("Sign out", "/sign-out"));
     shell.page("Page not found", "/deals/42/notes").body(
         ErrorPage::not_found()
             .reference("01hx7k2m9q")
@@ -194,11 +194,14 @@ fn forbidden_row() -> Table {
         .caption("Deals")
         .head((TableHead::new("Name"), TableHead::new("Amount").numeric()))
         .rows((
-            TableRowEl::new((TableCell::new("Acme"), TableCell::new("1,200.00").numeric())),
+            TableRowEl::new((
+                TableCell::new("Doaba Traders"),
+                TableCell::new("₹1,20,000").numeric(),
+            )),
             Forbidden::new().row(2),
             TableRowEl::new((
-                TableCell::new("Globex"),
-                TableCell::new("3,400.00").numeric(),
+                TableCell::new("Malwa Foods"),
+                TableCell::new("₹3,40,000").numeric(),
             )),
         ))
 }

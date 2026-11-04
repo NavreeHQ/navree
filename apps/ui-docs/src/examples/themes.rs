@@ -115,8 +115,8 @@ fn themes_menu() -> ThemeMenu {
 }
 
 /// The docs' app, with a theme menu in the top bar.
-fn acme() -> Shell {
-    Shell::new("Acme CRM")
+fn crm() -> Shell {
+    Shell::new("Sutlej CRM")
         .context("Production")
         .theme_menu()
         .group(
@@ -135,7 +135,7 @@ fn acme() -> Shell {
                         .sub(NavItem::new("Forecast", "/reports/forecast")),
                 ),
         )
-        .user(UserMenu::new("Ada Lovelace", "ada@example.com").action("Sign out", "/sign-out"))
+        .user(UserMenu::new("Harleen Kaur", "harleen@example.com").action("Sign out", "/sign-out"))
 }
 
 fn deals(page: AppPage) -> AppPage {
@@ -146,23 +146,23 @@ fn deals(page: AppPage) -> AppPage {
     )
     .body(Grid::cols(3).gap(4).children((
         Stat::new("Open deals", "312").trend("+12 this week", true),
-        Stat::new("Pipeline value", "$4.2M").trend("+3.1%", true),
-        Stat::new("Won this month", "$640K").trend("-2.4%", false),
+        Stat::new("Pipeline value", "₹42,00,000").trend("+3.1%", true),
+        Stat::new("Won this month", "₹6,40,000").trend("-2.4%", false),
     )))
 }
 
 fn shell_inset() -> AppPage {
-    let shell = acme().layout(ShellLayout::Inset);
+    let shell = crm().layout(ShellLayout::Inset);
     deals(shell.page("Deals", "/deals"))
 }
 
 fn shell_floating() -> AppPage {
-    let shell = acme().layout(ShellLayout::Floating);
+    let shell = crm().layout(ShellLayout::Floating);
     deals(shell.page("Deals", "/deals"))
 }
 
 fn shell_header() -> AppPage {
-    let shell = acme().layout(ShellLayout::Header);
+    let shell = crm().layout(ShellLayout::Header);
     deals(shell.page("Deals", "/deals"))
 }
 
@@ -171,5 +171,5 @@ fn builder_default() -> AppPage {
     ThemeBuilder::new(&draft, "/settings/theme")
         .save("/settings/theme/save")
         .import("/settings/theme/import")
-        .page(acme().page("Theme builder", "/settings/theme"))
+        .page(crm().page("Theme builder", "/settings/theme"))
 }

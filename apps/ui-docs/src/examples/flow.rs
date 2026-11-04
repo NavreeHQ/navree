@@ -184,7 +184,7 @@ pub struct Basics {
 pub struct Contact {
     /// Email
     #[validate(email)]
-    #[form(widget = email, error = "Enter an email address like ada@example.com.")]
+    #[form(widget = email, error = "Enter an email address like harleen@example.com.")]
     pub email: String,
 }
 
@@ -246,7 +246,7 @@ fn wizard_errors() -> WizardPage {
     let first = pairs(&[("_rev", "0"), ("_wizard", "next"), ("title", "Annual plan")]);
     wizard.submit(&mut draft, "basics", &first);
     // Next with an address that is not one: the step stays and says why.
-    let second = pairs(&[("_rev", "1"), ("_wizard", "next"), ("email", "ada@")]);
+    let second = pairs(&[("_rev", "1"), ("_wizard", "next"), ("email", "harleen@")]);
     wizard.submit(&mut draft, "contact", &second);
     wizard.page(&draft, "contact").expect("the step is open")
 }
@@ -263,7 +263,7 @@ fn wizard_review() -> WizardPage {
     let second = pairs(&[
         ("_rev", "1"),
         ("_wizard", "next"),
-        ("email", "ada@example.com"),
+        ("email", "harleen@example.com"),
     ]);
     wizard.submit(&mut draft, "contact", &second);
     wizard.page(&draft, "review").expect("the review is open")
@@ -289,7 +289,7 @@ fn slider_range() -> Slider {
         .step(10)
         .min_gap(2)
         .values(200, 800)
-        .prefix("$")
+        .prefix("₹")
 }
 
 fn slider_marks() -> Slider {
@@ -432,8 +432,8 @@ fn tree_single() -> Tree {
                 "sales",
                 "Sales",
                 [
-                    TreeNode::leaf("sales/ada", "Ada"),
-                    TreeNode::leaf("sales/grace", "Grace").selected(true),
+                    TreeNode::leaf("sales/harleen", "Harleen"),
+                    TreeNode::leaf("sales/gurpreet", "Gurpreet").selected(true),
                 ],
             )
             .open(true),
@@ -441,7 +441,7 @@ fn tree_single() -> Tree {
         .node(TreeNode::branch(
             "support",
             "Support",
-            [TreeNode::leaf("support/alan", "Alan")],
+            [TreeNode::leaf("support/manpreet", "Manpreet")],
         ))
 }
 

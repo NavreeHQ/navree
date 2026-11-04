@@ -36,6 +36,35 @@ fn no_preview_follows_a_stream() {
     assert!(seen > 100, "{seen} previews");
 }
 
+/// The previews' demo data is Indian: prices in rupees, and Indian people and companies,
+/// never real people's names.
+#[test]
+fn no_preview_shows_dollars_or_western_demo_names() {
+    let files = ui_docs::generate();
+    for (name, html) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
+    {
+        for word in [
+            "Ada Lovelace",
+            "Grace Hopper",
+            "Acme",
+            "Globex",
+            ">Ada<",
+            ">Grace<",
+            ">Alan<",
+            "ada@",
+        ] {
+            assert!(!html.contains(word), "{name} shows {word}");
+        }
+        let dollars = html
+            .as_bytes()
+            .windows(2)
+            .any(|pair| pair[0] == b'$' && pair[1].is_ascii_digit());
+        assert!(!dollars, "{name} shows a price in dollars");
+    }
+}
+
 /// A preview links the stylesheets its parts use, as a page with those parts does: the
 /// theme builder's own sheet, without which its choices are plain text.
 #[test]
@@ -47,7 +76,9 @@ fn a_preview_links_every_stylesheet_its_page_uses() {
         .expect("the builder's sheet has a file name");
     let builder = &files["previews/theme-builder/default.html"];
     assert!(
-        builder.contains(&format!("<link rel=\"stylesheet\" href=\"../_toolkit/{sheet}\">")),
+        builder.contains(&format!(
+            "<link rel=\"stylesheet\" href=\"../_toolkit/{sheet}\">"
+        )),
         "{builder}"
     );
     let button = &files["previews/button/variants.html"];
@@ -61,7 +92,9 @@ fn the_theme_builder_preview_is_drawn_in_its_draft() {
     let files = ui_docs::generate();
     let builder = &files["previews/theme-builder/default.html"];
     assert!(
-        builder.starts_with("<!doctype html>\n<html lang=\"en\" data-theme=\"ocean\" data-mode=\"dark\">"),
+        builder.starts_with(
+            "<!doctype html>\n<html lang=\"en\" data-theme=\"ocean\" data-mode=\"dark\">"
+        ),
         "{builder}"
     );
     assert!(
@@ -73,7 +106,10 @@ fn the_theme_builder_preview_is_drawn_in_its_draft() {
         .iter()
         .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
     {
-        for link in html.split("<link ").filter(|link| link.contains("data-ui-theme")) {
+        for link in html
+            .split("<link ")
+            .filter(|link| link.contains("data-ui-theme"))
+        {
             let href = link
                 .split("href=\"../")
                 .nth(1)

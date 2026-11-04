@@ -848,8 +848,8 @@ impl ThemeBuilder {
                 )),
                 Card::titled("Pipeline").description("This quarter").body((
                     el("div").slot("theme-sample-stats").children((
-                        Stat::new("Won", "$84,200").trend("+12%", true),
-                        Stat::new("Lost", "$9,800").trend("-3%", false),
+                        Stat::new("Won", "₹84,200").trend("+12%", true),
+                        Stat::new("Lost", "₹9,800").trend("-3%", false),
                     )),
                     el("div")
                         .slot("theme-sample-chart")
@@ -869,7 +869,7 @@ impl ThemeBuilder {
                 el("div").slot("theme-sample-form").children((
                     Field::new(format!("theme-sample-email-{suffix}"), "Email")
                         .help("We never share it.")
-                        .control(Input::email("email").placeholder("ada@example.com")),
+                        .control(Input::email("email").placeholder("harleen@example.com")),
                     Field::new(format!("theme-sample-stage-{suffix}"), "Stage").control(
                         NativeSelect::new("stage")
                             .option("lead", "Lead")
