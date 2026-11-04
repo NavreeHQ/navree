@@ -227,20 +227,14 @@ fn build() -> Vec<Pair> {
         }
     }
     // The focus ring, a mark in the accent (a chosen option's tick), and chart
-    // series, on the page and on cards.
+    // series: on the page and on cards, and a series' key in the tooltip, which
+    // is raised.
     for surface in SURFACES {
         add(T(Token::Ring), T(surface), graphic);
         add(T(Token::Accent), T(surface), graphic);
-    }
-    for chart in [
-        Token::Chart1,
-        Token::Chart2,
-        Token::Chart3,
-        Token::Chart4,
-        Token::Chart5,
-    ] {
-        add(T(chart), T(Token::Ink0), graphic);
-        add(T(chart), T(Token::Ink1), graphic);
+        for chart in Token::CHARTS {
+            add(T(chart), T(surface), graphic);
+        }
     }
     out
 }

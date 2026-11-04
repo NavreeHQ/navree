@@ -54,11 +54,18 @@ pub const TOKENS: &[Token] = &[
     t("cyan", "#4fd6e6", "#0a6b78"),
     t("rose", "#ff8aa8", "#b3254f"),
     t("bar", "#5b6862", "#8a968f"),
-    t("chart-1", "#3dff8f", "#0b7a3e"),
-    t("chart-2", "#6cb6ff", "#0b5cad"),
-    t("chart-3", "#b79cff", "#6b46c1"),
-    t("chart-4", "#ffbf5e", "#8a5a00"),
-    t("chart-5", "#ff8aa8", "#b3254f"),
+    // The eight colours of chart series, in the order series take them. Neighbours stay
+    // apart for readers with protanopia or deuteranopia, the last next to the first too
+    // (a donut's ring closes), and each reaches 3:1 on every surface of every built-in
+    // theme, the tooltip's raised one too: `tests/chart_colours.rs`.
+    t("chart-1", "#3987e5", "#2a78d6"),
+    t("chart-2", "#d95926", "#dc5a24"),
+    t("chart-3", "#199e70", "#029566"),
+    t("chart-4", "#c98500", "#b07702"),
+    t("chart-5", "#d55181", "#ca6089"),
+    t("chart-6", "#008300", "#008300"),
+    t("chart-7", "#9085e9", "#6250d6"),
+    t("chart-8", "#e66767", "#e34948"),
     t("radius", "4px", "4px"),
     t("radius-lg", "6px", "6px"),
     t("sidebar-w", "16rem", "16rem"),

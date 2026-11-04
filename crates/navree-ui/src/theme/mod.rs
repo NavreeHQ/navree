@@ -109,10 +109,16 @@ pub enum Token {
     Chart4,
     /// The fifth series.
     Chart5,
+    /// The sixth series.
+    Chart6,
+    /// The seventh series.
+    Chart7,
+    /// The eighth series.
+    Chart8,
 }
 
 /// How many colour tokens there are.
-pub const TOKEN_COUNT: usize = 28;
+pub const TOKEN_COUNT: usize = 31;
 
 /// The groups the builder shows the tokens in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -173,6 +179,21 @@ impl Token {
         Self::Chart3,
         Self::Chart4,
         Self::Chart5,
+        Self::Chart6,
+        Self::Chart7,
+        Self::Chart8,
+    ];
+
+    /// The chart series' colours, in the order series take them.
+    pub const CHARTS: [Self; 8] = [
+        Self::Chart1,
+        Self::Chart2,
+        Self::Chart3,
+        Self::Chart4,
+        Self::Chart5,
+        Self::Chart6,
+        Self::Chart7,
+        Self::Chart8,
     ];
 
     /// The tokens that set the neutral greys.
@@ -222,6 +243,9 @@ impl Token {
             Self::Chart3 => "chart-3",
             Self::Chart4 => "chart-4",
             Self::Chart5 => "chart-5",
+            Self::Chart6 => "chart-6",
+            Self::Chart7 => "chart-7",
+            Self::Chart8 => "chart-8",
         }
     }
 
@@ -256,6 +280,9 @@ impl Token {
             Self::Chart3 => "Chart 3",
             Self::Chart4 => "Chart 4",
             Self::Chart5 => "Chart 5",
+            Self::Chart6 => "Chart 6",
+            Self::Chart7 => "Chart 7",
+            Self::Chart8 => "Chart 8",
         }
     }
 
@@ -283,7 +310,10 @@ impl Token {
             | Self::Chart2
             | Self::Chart3
             | Self::Chart4
-            | Self::Chart5 => TokenGroup::Charts,
+            | Self::Chart5
+            | Self::Chart6
+            | Self::Chart7
+            | Self::Chart8 => TokenGroup::Charts,
         }
     }
 
@@ -1138,23 +1168,10 @@ fn navree() -> ThemeSpec {
 /// The success green of every theme whose accent isn't green.
 const SUCCESS: (Rgb, Rgb) = (Rgb::hex(0x5ee08f), Rgb::hex(0x106836));
 
-/// Sets the charts to the colours of `tones`, in order.
-fn charts(spec: &mut ThemeSpec, tones: [Token; 5]) {
-    let series = [
-        Token::Chart1,
-        Token::Chart2,
-        Token::Chart3,
-        Token::Chart4,
-        Token::Chart5,
-    ];
-    for side in Side::BOTH {
-        let palette = spec.palette_mut(side);
-        for (chart, tone) in series.into_iter().zip(tones) {
-            palette.set(chart, palette.get(tone));
-        }
-    }
-}
-
+/// A built-in theme: the toolkit's own, with its greys and accent. Every built-in
+/// theme keeps the toolkit's eight chart colours, one set in one order, so a
+/// series keeps its colour from theme to theme; `tests/chart_colours.rs` checks
+/// the set on each theme's surfaces.
 fn build(builtin: Builtin) -> ThemeSpec {
     let mut spec = navree();
     let accent = |spec: &mut ThemeSpec, dark: u32, light: u32| {
@@ -1168,72 +1185,22 @@ fn build(builtin: Builtin) -> ThemeSpec {
         Builtin::Neutral => {
             Neutral::Neutral.apply(&mut spec);
             accent(&mut spec, 0xebebeb, 0x1a1a1a);
-            charts(
-                &mut spec,
-                [
-                    Token::Info,
-                    Token::Success,
-                    Token::Violet,
-                    Token::Amber,
-                    Token::Rose,
-                ],
-            );
         }
         Builtin::Ocean => {
             Neutral::Slate.apply(&mut spec);
             accent(&mut spec, 0x5aa2ff, 0x1f55d6);
-            charts(
-                &mut spec,
-                [
-                    Token::Accent,
-                    Token::Cyan,
-                    Token::Violet,
-                    Token::Amber,
-                    Token::Rose,
-                ],
-            );
         }
         Builtin::Violet => {
             Neutral::Zinc.apply(&mut spec);
             accent(&mut spec, 0xac8fff, 0x6a2fd6);
-            charts(
-                &mut spec,
-                [
-                    Token::Accent,
-                    Token::Cyan,
-                    Token::Success,
-                    Token::Amber,
-                    Token::Rose,
-                ],
-            );
         }
         Builtin::Sunset => {
             Neutral::Stone.apply(&mut spec);
             accent(&mut spec, 0xff9a4d, 0xb8460e);
-            charts(
-                &mut spec,
-                [
-                    Token::Accent,
-                    Token::Info,
-                    Token::Violet,
-                    Token::Success,
-                    Token::Rose,
-                ],
-            );
         }
         Builtin::Rose => {
             Neutral::Neutral.apply(&mut spec);
             accent(&mut spec, 0xff7a93, 0xc0234a);
-            charts(
-                &mut spec,
-                [
-                    Token::Accent,
-                    Token::Info,
-                    Token::Violet,
-                    Token::Amber,
-                    Token::Cyan,
-                ],
-            );
         }
         Builtin::Contrast => contrast(&mut spec),
     }
@@ -1302,16 +1269,6 @@ fn contrast(spec: &mut ThemeSpec) {
         spec.light.settle(token, 7.0, Rgb::BLACK, Side::Light);
         spec.dark.settle(token, 7.0, Rgb::WHITE, Side::Dark);
     }
-    charts(
-        spec,
-        [
-            Token::Accent,
-            Token::Info,
-            Token::Violet,
-            Token::Success,
-            Token::Rose,
-        ],
-    );
 }
 
 /// `c` and the first 24 hex digits (96 bits) of the SHA-256 of a short form:

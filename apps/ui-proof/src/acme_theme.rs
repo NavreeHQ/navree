@@ -31,11 +31,14 @@ pub fn acme_theme() -> Theme {
             rgb(0x4fd6e6), // cyan
             rgb(0xff8aa8), // rose
             rgb(0x64646a), // bar
-            rgb(0x7c5cff), // chart-1
-            rgb(0x6cb6ff), // chart-2
-            rgb(0xb79cff), // chart-3
-            rgb(0xffbf5e), // chart-4
-            rgb(0xff8aa8), // chart-5
+            rgb(0x3987e5), // chart-1
+            rgb(0xd95926), // chart-2
+            rgb(0x199e70), // chart-3
+            rgb(0xc98500), // chart-4
+            rgb(0xd55181), // chart-5
+            rgb(0x008300), // chart-6
+            rgb(0x9085e9), // chart-7
+            rgb(0xe66767), // chart-8
         ]),
         light: Palette::from_array([
             rgb(0xffffff), // ink-0
@@ -61,11 +64,14 @@ pub fn acme_theme() -> Theme {
             rgb(0x0a6b78), // cyan
             rgb(0xb3254f), // rose
             rgb(0x929299), // bar
-            rgb(0x7c5cff), // chart-1
-            rgb(0x0b5cad), // chart-2
-            rgb(0x6b46c1), // chart-3
-            rgb(0x8a5a00), // chart-4
-            rgb(0xb3254f), // chart-5
+            rgb(0x2a78d6), // chart-1
+            rgb(0xdc5a24), // chart-2
+            rgb(0x029566), // chart-3
+            rgb(0xb07702), // chart-4
+            rgb(0xca6089), // chart-5
+            rgb(0x008300), // chart-6
+            rgb(0x6250d6), // chart-7
+            rgb(0xe34948), // chart-8
         ]),
         radius: Radius::ROUND,
         density: Density::Default,

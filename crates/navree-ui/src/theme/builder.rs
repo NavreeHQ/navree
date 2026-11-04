@@ -269,12 +269,9 @@ impl BuilderDraft {
                 spec.light.derive_accent(colour);
             }
         }
-        if !matches!(self.accent, Accent::Base) {
-            for side in Side::BOTH {
-                let palette = spec.palette_mut(side);
-                palette.set(Token::Chart1, palette.get(Token::Accent));
-            }
-        }
+        // The chart colours stay the base's: they are one set, chosen so neighbours stay
+        // apart for colour-blind readers, and an accent laid over one of them could
+        // repeat a hue. They can still be set by hand.
         if let Some(radius) = self.radius {
             spec.radius = radius;
         }
@@ -854,14 +851,18 @@ impl ThemeBuilder {
                     el("div")
                         .slot("theme-sample-chart")
                         .attr("role", "img")
-                        .attr("aria-label", "Five series in the chart colours")
+                        .attr(
+                            "aria-label",
+                            "Eight series in the chart colours, then a neutral bar",
+                        )
                         .child(
-                            ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "bar"]
+                            Token::CHARTS
                                 .into_iter()
+                                .chain([Token::Bar])
                                 .map(|token| {
                                     el("span")
                                         .slot("theme-sample-bar")
-                                        .attr("data-token", token)
+                                        .attr("data-token", token.name())
                                 })
                                 .collect::<Vec<_>>(),
                         ),

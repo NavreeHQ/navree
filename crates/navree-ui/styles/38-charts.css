@@ -79,11 +79,11 @@
 [data-slot=chart-stage-step]{font-size:12px;color:var(--fg-3)}
 [data-slot=chart-track-bg]{fill:var(--ink-3)}
 [data-slot=chart-stages] [data-step]{--c:var(--chart-1)}
-[data-slot=chart-stages] [data-step="1"]{fill:color-mix(in oklab,var(--chart-1) 50%,var(--surface))}
-[data-slot=chart-stages] [data-step="2"]{fill:color-mix(in oklab,var(--chart-1) 60%,var(--surface))}
-[data-slot=chart-stages] [data-step="3"]{fill:color-mix(in oklab,var(--chart-1) 70%,var(--surface))}
-[data-slot=chart-stages] [data-step="4"]{fill:color-mix(in oklab,var(--chart-1) 80%,var(--surface))}
-[data-slot=chart-stages] [data-step="5"]{fill:color-mix(in oklab,var(--chart-1) 90%,var(--surface))}
+[data-slot=chart-stages] [data-step="1"]{fill:color-mix(in oklab,var(--chart-1) 60%,var(--surface))}
+[data-slot=chart-stages] [data-step="2"]{fill:color-mix(in oklab,var(--chart-1) 68%,var(--surface))}
+[data-slot=chart-stages] [data-step="3"]{fill:color-mix(in oklab,var(--chart-1) 76%,var(--surface))}
+[data-slot=chart-stages] [data-step="4"]{fill:color-mix(in oklab,var(--chart-1) 84%,var(--surface))}
+[data-slot=chart-stages] [data-step="5"]{fill:color-mix(in oklab,var(--chart-1) 92%,var(--surface))}
 [data-slot=chart-stage][data-active] [data-slot=chart-stage-name]{color:var(--fg)}
 
 /* The donut: the ring, its total in the middle, a legend with values. */
