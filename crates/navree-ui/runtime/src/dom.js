@@ -4,12 +4,12 @@
 // can hold any of these. Everything the runtime reads from a form or a document
 // goes through the prototype, so no name in a page can change what it does.
 
-const D = Document.prototype, E = Element.prototype, T = EventTarget.prototype;
+export const D = Document.prototype, E = Element.prototype, T = EventTarget.prototype;
 /** @param {object} proto @param {string} name */
 const getter = (proto, name) => /** @type {(this: any) => any} */ (Object.getOwnPropertyDescriptor(proto, name)?.get);
-const gBody = getter(D, "body"), gHead = getter(D, "head"), gRoot = getter(D, "documentElement"), gActive = getter(D, "activeElement");
-const gCookie = getter(D, "cookie"), gTitle = getter(D, "title"), gHidden = getter(D, "hidden");
-const sTitle = Object.getOwnPropertyDescriptor(D, "title")?.set, sCookie = Object.getOwnPropertyDescriptor(D, "cookie")?.set;
+const gBody = /* @__PURE__ */ getter(D, "body"), gHead = /* @__PURE__ */ getter(D, "head"), gRoot = /* @__PURE__ */ getter(D, "documentElement"), gActive = /* @__PURE__ */ getter(D, "activeElement");
+const gCookie = /* @__PURE__ */ getter(D, "cookie"), gTitle = /* @__PURE__ */ getter(D, "title"), gHidden = /* @__PURE__ */ getter(D, "hidden");
+const sTitle = /* @__PURE__ */ Object.getOwnPropertyDescriptor(D, "title")?.set, sCookie = /* @__PURE__ */ Object.getOwnPropertyDescriptor(D, "cookie")?.set;
 
 /** @param {Document} [doc] @returns {HTMLElement} */
 export const body = (doc = document) => gBody.call(doc);

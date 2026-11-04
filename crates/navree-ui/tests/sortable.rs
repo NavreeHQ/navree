@@ -196,6 +196,11 @@ fn the_words_reach_the_browser_as_json_in_an_attribute() {
         ),
         "{html}"
     );
+    // And what a refused item's redraw says when the server has it out of sight.
+    assert!(
+        html.contains("&quot;gone&quot;:&quot;{item} is no longer shown here.&quot;"),
+        "{html}"
+    );
 }
 
 #[test]

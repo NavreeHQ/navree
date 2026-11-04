@@ -77,8 +77,13 @@ pub struct SortLabels {
     /// Said once the lists are drawn again from the server after a refusal or a
     /// failure: where the item really is.
     pub settled: Cow<'static, str>,
-    /// A toast for a move that got no answer, or a failure, and didn't land: said
-    /// once the lists are drawn again from the server and show it didn't.
+    /// Said once the lists are drawn again from the server after a refusal, when
+    /// the server has the item where this page shows none of its list: further
+    /// down a long one, or under a filter. The keys go to the list it was in.
+    pub gone: Cow<'static, str>,
+    /// A toast for a move that the server failed, or that got no answer and didn't
+    /// land: said once the lists are drawn again from the server and show it
+    /// didn't, or at once with no region to draw.
     pub failed: Cow<'static, str>,
     /// A toast for a move that got no answer when the server can't be reached to
     /// ask whether it landed: the item goes back.
@@ -126,6 +131,7 @@ impl Default for SortLabels {
                 "{item} wasn't moved. It is back at position {position} of {total} in {list}.",
             ),
             settled: Cow::Borrowed("{item} is at position {position} of {total} in {list}."),
+            gone: Cow::Borrowed("{item} is no longer shown here."),
             failed: Cow::Borrowed("That move wasn't saved. Try again."),
             offline: Cow::Borrowed("No connection. That move may not have been saved."),
             full: Cow::Borrowed("{list} holds at most {limit}."),
@@ -576,6 +582,7 @@ impl Sortable {
                 "cancelled": labels.cancelled,
                 "returned": labels.returned,
                 "settled": labels.settled,
+                "gone": labels.gone,
                 "failed": labels.failed,
                 "offline": labels.offline,
                 "full": labels.full,
