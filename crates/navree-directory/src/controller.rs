@@ -88,12 +88,22 @@ impl PageMeta {
 }
 
 /// The new SCIM token of `POST /api/directory/connections/{id}/token`.
-#[derive(Clone, Debug, Serialize, ToSchema)]
+/// `Debug` never shows the token.
+#[derive(Clone, Serialize, ToSchema)]
 pub struct ScimTokenOutput {
     /// The bearer token (shown once).
     pub token: String,
     /// The SCIM base URL.
     pub scim_url: String,
+}
+
+impl std::fmt::Debug for ScimTokenOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScimTokenOutput")
+            .field("token", &"[redacted]")
+            .field("scim_url", &self.scim_url)
+            .finish()
+    }
 }
 
 /// The routes of a directory settings page, mounted under
@@ -504,5 +514,24 @@ impl Controller for DirectoryController {
                     )
                 }),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_scim_token_never_shows_in_debug_output() {
+        let output = ScimTokenOutput {
+            token: "nvscim_c0ffee42".to_owned(),
+            scim_url: "https://api.acme.test/scim/v2".to_owned(),
+        };
+        let printed = format!("{output:?}");
+        assert!(!printed.contains("c0ffee42"), "{printed}");
+        assert!(
+            printed.contains("https://api.acme.test/scim/v2"),
+            "{printed}"
+        );
     }
 }
