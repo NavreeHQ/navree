@@ -496,6 +496,7 @@ fn report_page(shell: &AppShell, query: &ReportQuery) -> AppPage {
     let form = el("form")
         .attr("method", "get")
         .attr("action", "/charts/report")
+        .attr("autocomplete", "off")
         .slot("report-filters")
         .children((
             report.picker().id("report-window").title("Window"),
@@ -505,14 +506,16 @@ fn report_page(shell: &AppShell, query: &ReportQuery) -> AppPage {
                     .attr("name", "grain")
                     .attr("value", report.grain().key())
             }),
-            Button::outline("Apply").attr("type", "submit"),
+            Button::outline("Apply").submit(),
         ));
     let refused = report.refused().map(|error| {
         Alert::new(AlertTone::Warning)
             .title("That window can't be shown")
             .body(format!(
                 "{}. Showing the last 30 days.",
-                error.message(&navree::ui::dates::DateLocale::english())
+                error
+                    .message(&navree::ui::dates::DateLocale::english())
+                    .trim_end_matches('.')
             ))
     });
     shell.page("Engagement report").body(

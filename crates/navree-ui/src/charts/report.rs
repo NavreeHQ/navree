@@ -304,7 +304,9 @@ impl Report {
     }
 
     /// The range picker for this window, named `from` and `to`, with the report's
-    /// rules and today: put it in a GET form with the grain as a hidden field.
+    /// rules and today: put it in a GET form with the grain as a hidden field, and
+    /// give the form `autocomplete="off"`, or Back brings the dates back as they were
+    /// typed rather than as the page was drawn.
     pub fn picker(&self) -> DateRangePicker {
         let mut picker = DateRangePicker::new("from", "to")
             .today(self.today)
