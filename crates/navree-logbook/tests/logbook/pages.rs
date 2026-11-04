@@ -334,7 +334,7 @@ async fn jobs_say_what_became_of_them_and_what_they_did_inside() {
 }
 
 #[tokio::test]
-async fn only_navigation_is_fetched_ahead_of_a_click() {
+async fn nothing_is_fetched_ahead_of_a_click() {
     let app = busy().await;
     let id = head_id(&app, "type:request").await;
     let mail = head_id(&app, "type:mail").await;
@@ -344,35 +344,20 @@ async fn only_navigation_is_fetched_ahead_of_a_click() {
         format!("/_logbook/entries/{mail}"),
     ] {
         let page = get(&app, &path).await;
-        let mut prefetched = 0;
-        for tag in page.split("<a ").skip(1) {
-            let tag = tag_of(tag);
-            if !tag.contains("data-ui-prefetch") {
-                continue;
-            }
-            prefetched += 1;
-            let href = tag
-                .split("href=\"")
-                .nth(1)
-                .unwrap()
-                .split('"')
-                .next()
-                .unwrap();
-            for writes in ["/clear", "/replay", "/api/", "/mail/"] {
-                assert!(
-                    !href.contains(writes),
-                    "{path}: {href} is fetched ahead of a click"
-                );
-            }
+        // A link is fetched ahead of a click only when its page asks, and Logbook asks
+        // for none: its pages show what was just recorded and are never cached.
+        for tag in page.split('<').skip(1).map(tag_of) {
+            assert!(
+                !tag.contains("data-ui-prefetch"),
+                "{path}: <{tag}> is fetched ahead of a click"
+            );
         }
-        assert!(prefetched > 0, "{path}: the shell's links are");
         // What changes anything is a form that posts, never a link.
         assert!(
             page.contains("method=\"post\" action=\"/_logbook/clear\""),
             "{path}"
         );
         assert!(!page.contains("href=\"/_logbook/clear\""), "{path}");
-        assert!(!page.contains("/replay\" data-ui-prefetch"), "{path}");
     }
 }
 
