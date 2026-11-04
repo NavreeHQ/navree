@@ -141,7 +141,7 @@ export const choices = {
   },
   state: {
     title: "Which state?",
-    question: "Why is there nothing to show?",
+    question: "Why is nothing shown?",
     options: [
       c("EmptyState", "A list has nothing in it", "/docs/components/empty-state/"),
       c("Forbidden", "The user may not see it", "/docs/components/forbidden/"),
