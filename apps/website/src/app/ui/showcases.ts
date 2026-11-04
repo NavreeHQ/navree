@@ -242,7 +242,11 @@ export const hardParts: HardPart[] = [
     hard: "A calendar, a date picker, a range picker with presets and a time picker, with locales, day rules and clock changes.",
     image: "tile-dates",
     docs: "/docs/ui/dates/",
-    code: { file: "apps/ui-docs/src/examples/dates.rs", example: "date-range-picker/presets" },
+    code: {
+      file: "apps/ui-docs/src/examples/dates.rs",
+      example: "date-range-picker/presets",
+      parts: [{ from: 'DateRangePicker::new("from", "to")' }, { from: ".presets([", to: "])" }, { from: '.title("Closed")' }],
+    },
   },
   {
     id: "phone",
@@ -259,7 +263,7 @@ export const hardParts: HardPart[] = [
     image: "tile-flags",
     docs: "/docs/ui/flags/",
     seenIn: "store",
-    code: { file: "apps/ui-docs/src/examples/icons.rs", example: "flags/usage" },
+    code: { file: "apps/ui-docs/src/examples/icons.rs", example: "flags/with-icons" },
   },
   {
     id: "command",

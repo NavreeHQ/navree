@@ -209,10 +209,12 @@ const captures: Capture[] = [
   },
   {
     key: "tile-flags",
-    alt: "The flag gallery: flags of countries and organisations, each with its code and name",
-    url: () => `${SITE}/ui-preview/flags/all.html`,
-    viewport: { width: 720, height: 450 },
-    scale: 2,
+    alt: "India's flag first and largest; under it the flags of Nepal, Bhutan, Bangladesh, Sri Lanka, the UAE, Singapore, Japan, the UK and the US; and badges with icons for a store, shipped, paid in rupees and Ludhiana",
+    url: () => `${SITE}/ui-preview/flags/with-icons.html`,
+    viewport: { width: 640, height: 400 },
+    // Close around the example and drawn at 3x, so the flags show large and sharp on the card.
+    scale: 3,
+    clip: async (page) => framed(await around(page, ['[data-slot="flag"]', '[data-slot="badge"]']), 28, 1.6, { width: 640, height: 400 }),
     widths: [480, 960],
   },
   {

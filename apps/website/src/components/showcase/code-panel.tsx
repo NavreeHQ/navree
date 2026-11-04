@@ -43,7 +43,10 @@ export async function CodePanel({
       <div
         className={cn(
           "scroll-thin [&_pre]:text-[0.75rem] [&_pre]:leading-[1.7]",
-          size === "sm" ? "[&_.line]:px-4 [&_pre]:py-3" : "sm:[&_pre]:text-[0.8125rem]",
+          size === "md" && "sm:[&_pre]:text-[0.8125rem]",
+          size === "sm" && "[&_pre]:py-3",
+          // A narrow card: 1 rem each side, and room for the hanging indent of a wrapped line.
+          size === "sm" && (wrap ? "[&_.line]:pr-4 [&_.line]:pl-[calc(1rem+2ch)]" : "[&_.line]:px-4"),
         )}
         // Shiki's output for a string that lives in this repository, highlighted at build time
         // (Shiki escapes the code it highlights).

@@ -205,15 +205,25 @@ function AppBlock({ app, n }: { app: Showcase; n: number }) {
   );
 }
 
-/** A hard part's code: its file's lines, or its ui-docs example's code, which must be in the file it names. */
+/** The most lines a hard part's card shows. */
+const TILE_LINES = 16;
+
+/**
+ * A hard part's code: its file's lines, or its ui-docs example's code, which
+ * must be in the file it names. The card wraps a line too long for it.
+ */
 function hardPartCode(part: HardPart): string {
-  if (!part.code.example) return excerpt({ file: part.code.file, parts: part.code.parts ?? [], more: part.code.more }, 14);
+  if (!part.code.example) return excerpt({ file: part.code.file, parts: part.code.parts ?? [], more: part.code.more }, TILE_LINES);
   const code = example(part.code.example).code;
   const file = fs.readFileSync(path.resolve(process.cwd(), "..", "..", part.code.file), "utf8");
   if (!file.includes(code.split("\n")[0].trim())) {
     throw new Error(`build: the example ${part.code.example} is not in ${part.code.file}`);
   }
-  return part.code.parts ? cut(code, part.code.parts, part.code.example, { more: part.code.more, max: 14 }) : code;
+  const lines = part.code.parts ? cut(code, part.code.parts, part.code.example, { more: part.code.more, max: TILE_LINES }) : code;
+  if (lines.split("\n").length > TILE_LINES) {
+    throw new Error(`build: the code of the hard part ${part.id} is longer than ${TILE_LINES} lines`);
+  }
+  return lines;
 }
 
 /** Every hard component on its own: a picture, what is hard, a few lines of its code and where it is used. */
@@ -249,7 +259,7 @@ function HardParts() {
                 </h4>
                 <p className="mt-2 text-[0.9375rem] leading-relaxed text-pretty text-fg-2 max-sm:hidden">{part.hard}</p>
                 <div className="mt-4 max-sm:hidden">
-                  <CodePanel file={part.code.file} lang="rust" source={hardPartCode(part)} size="sm" />
+                  <CodePanel file={part.code.file} lang="rust" source={hardPartCode(part)} size="sm" wrap />
                 </div>
                 <p className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-4 text-[0.8125rem] text-fg-3">
                   {part.seenIn ? (

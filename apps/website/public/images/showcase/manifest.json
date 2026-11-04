@@ -244,9 +244,9 @@
     },
     {
       "key": "tile-flags",
-      "alt": "The flag gallery: flags of countries and organisations, each with its code and name",
+      "alt": "India's flag first and largest; under it the flags of Nepal, Bhutan, Bangladesh, Sri Lanka, the UAE, Singapore, Japan, the UK and the US; and badges with icons for a store, shipped, paid in rupees and Ludhiana",
       "width": 960,
-      "height": 600,
+      "height": 598,
       "avif": [
         {
           "src": "/images/showcase/tile-flags-480.avif",
