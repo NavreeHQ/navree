@@ -150,17 +150,23 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
             "10000".to_owned(),
         ),
     ];
-    if std::env::var_os("STORE_LOG_QUERIES").is_some() {
+    let log = std::env::var_os("STORE_LOG_QUERIES").is_some();
+    if log {
         config.push(("APP_DATABASE__LOG_QUERIES".to_owned(), "true".to_owned()));
         config.push(("APP_LOG__LEVEL".to_owned(), "debug".to_owned()));
         config.push(("APP_LOG__FORMAT".to_owned(), "json".to_owned()));
     }
-    Navree::app()
+    let app = Navree::app()
         .module(ConfigModule::for_root(
             ConfigSources::new().env_vars("APP_", config),
         ))
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
         .module(UiModule::from_config())
-        .module(StoreModule { settings })
+        .module(StoreModule { settings });
+    if log {
+        app.module(LoggerModule::from_config())
+    } else {
+        app
+    }
 }

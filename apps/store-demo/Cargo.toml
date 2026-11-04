@@ -22,10 +22,10 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "testing"] }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "testing"] }
 serde_json = { workspace = true }
