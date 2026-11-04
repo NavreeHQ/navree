@@ -101,6 +101,7 @@
 
 mod api;
 mod array;
+mod attachment;
 mod commands;
 mod delivery;
 mod dkim;
@@ -127,6 +128,10 @@ pub use api::postmark::{PostmarkConfig, PostmarkTransport};
 pub use api::resend::{ResendConfig, ResendTransport};
 pub use api::ses::{SesConfig, SesTransport};
 pub use array::ArrayTransport;
+pub use attachment::{
+    Attachment, BLOCKED_EXTENSIONS, MAILGUN_MAX_MESSAGE_BYTES, POSTMARK_MAX_MESSAGE_BYTES,
+    RESEND_MAX_MESSAGE_BYTES, SES_MAX_MESSAGE_BYTES, SMTP_MAX_MESSAGE_BYTES, encoded_size,
+};
 pub use delivery::controller::{
     AddSuppressionInput, DeliveryWithEvents, INVALID_SIGNATURE_CODE, MANAGE_PERMISSION,
     MailController, ReleasedMail, UNUSABLE_TRANSPORT_CODE, UsableTransport,

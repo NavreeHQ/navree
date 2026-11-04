@@ -111,8 +111,16 @@ sends at once and logs a warning.
 The mailer inlines `<style>` rules (`mail.render.inline_css`), generates the
 text body of HTML-only mail (`mail.render.text_from_html`) and sets
 `lang`/`dir` from `Message::locale` (or a `locale` in a `TemplateMail`
-context). `Message` also takes `header(name, value)` and
-`metadata(key, value)` (provider tags). For email APIs, named transports
+context). `Message` also takes `header(name, value)`,
+`metadata(key, value)` (provider tags) and attachments:
+`.attach("INV-42.pdf", "application/pdf", bytes)` or
+`.attach_from_disk(path)?` (type from the extension). Every transport sends
+them (SMTP/SES as multipart/mixed MIME, Mailgun multipart form,
+Postmark/Resend base64 JSON); executables and scripts are refused
+(`MailError::Attachment`), and a message over the provider's limit
+(Postmark 10 MB, SMTP/Mailgun 25 MB, SES/Resend 40 MB, base64-encoded) is
+`MailError::TooLarge` before sending. Queued mail gets an idempotency key
+that Resend honours, so a retried job delivers once. For email APIs, named transports
 (`mailer.via`), tenant transports, the delivery log, suppressions, holding
 mail and tracking, see `navree-mail-delivery`.
 

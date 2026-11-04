@@ -2,10 +2,12 @@
 
 use std::collections::BTreeMap;
 
+use std::path::Path;
+
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
 
-use crate::MailError;
+use crate::{Attachment, MailError};
 
 /// A rendered email, ready for a [`MailTransport`](crate::MailTransport).
 ///
@@ -23,6 +25,7 @@ use crate::MailError;
 ///     .text("Thanks!")
 ///     .header("X-Campaign", "spring")
 ///     .metadata("invoice", "42")
+///     .attach("invoice-42.pdf", "application/pdf", b"%PDF-1.7 ...".to_vec())
 ///     .locale("en");
 /// assert_eq!(message.to, ["Ada <ada@example.com>"]);
 /// assert_eq!(message.from, None); // the Mailer fills in its default sender
@@ -66,6 +69,16 @@ pub struct Message {
     /// an admin to release or discard it, with this reason.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hold: Option<String>,
+    /// Files sent with the message ([`attach`](Message::attach)). Every
+    /// transport sends them; each refuses a message larger than its
+    /// provider takes.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+    /// Makes a repeated send deliver once where the provider honours keys
+    /// (Resend). [`Mailer::queue`](crate::Mailer::queue) gives a queued
+    /// message one, so a retried `mail.send` job sends the same key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
 }
 
 /// Headers a message may not set itself: the transports write them.
@@ -163,6 +176,38 @@ impl Message {
         self
     }
 
+    /// Attaches a file named `filename` of MIME type `content_type`
+    /// (`application/pdf`, `text/calendar; method=REQUEST`).
+    pub fn attach(
+        mut self,
+        filename: impl Into<String>,
+        content_type: impl Into<String>,
+        content: impl Into<Vec<u8>>,
+    ) -> Self {
+        self.attachments
+            .push(Attachment::new(filename, content_type, content));
+        self
+    }
+
+    /// Attaches `attachment`.
+    pub fn attachment(mut self, attachment: Attachment) -> Self {
+        self.attachments.push(attachment);
+        self
+    }
+
+    /// Attaches the file at `path`, named after it, its type guessed from
+    /// its extension. [`MailError::Attachment`] when it cannot be read.
+    pub fn attach_from_disk(mut self, path: impl AsRef<Path>) -> Result<Self, MailError> {
+        self.attachments.push(Attachment::from_path(path)?);
+        Ok(self)
+    }
+
+    /// Sets the idempotency key the transports that honour one send.
+    pub fn idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
+    }
+
     /// Every recipient: `to`, then `cc`, then `bcc`.
     pub fn recipients(&self) -> impl Iterator<Item = &str> {
         self.to
@@ -182,7 +227,8 @@ impl Message {
     /// Checks that the message can be delivered: it has a sender and at
     /// least one recipient, every address parses, the subject and header
     /// values hold no line break, header names are valid and none is a
-    /// header the transports write. The [`Mailer`](crate::Mailer) runs
+    /// header the transports write, and every attachment passes
+    /// [`Attachment::check`]. The [`Mailer`](crate::Mailer) runs
     /// this (after filling in the default sender) before handing the
     /// message to a transport.
     pub fn validate(&self) -> Result<(), MailError> {
@@ -206,6 +252,16 @@ impl Message {
         }
         for (name, value) in &self.headers {
             check_header(name, value)?;
+        }
+        for attachment in &self.attachments {
+            attachment.check()?;
+        }
+        if let Some(key) = &self.idempotency_key
+            && (key.is_empty() || key.len() > 255 || !key.bytes().all(|b| b.is_ascii_graphic()))
+        {
+            return Err(MailError::InvalidHeader {
+                field: "idempotency_key",
+            });
         }
         Ok(())
     }

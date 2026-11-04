@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::{address, addresses, client_for, endpoint, join, refusal, unreachable, unusable};
+use crate::attachment::{RESEND_MAX_MESSAGE_BYTES, check_size};
 use crate::{MailError, MailTransport, Message, Sent};
 
 /// The settings of a [`ResendTransport`] (`{ type = "resend", ... }` or
@@ -25,7 +26,11 @@ pub struct ResendConfig {
 
 /// Sends through Resend's API (`POST /emails`, a bearer token).
 ///
-/// Extra headers go as `headers`, [`Message::metadata`] as `tags`. The
+/// Extra headers go as `headers`, [`Message::metadata`] as `tags`,
+/// attachments as `attachments` (base64), up to
+/// [`RESEND_MAX_MESSAGE_BYTES`](crate::RESEND_MAX_MESSAGE_BYTES), and
+/// [`Message::idempotency_key`] as the `Idempotency-Key` header, so a
+/// retried send delivers once. The
 /// provider id is Resend's `id`. [`check`](MailTransport::check) lists the
 /// account's domains.
 pub struct ResendTransport {
@@ -95,6 +100,19 @@ impl ResendTransport {
                 .map(|(name, value)| json!({ "name": name, "value": value }))
                 .collect();
         }
+        if !message.attachments.is_empty() {
+            body["attachments"] = message
+                .attachments
+                .iter()
+                .map(|file| {
+                    json!({
+                        "filename": file.filename,
+                        "content": file.base64(),
+                        "content_type": file.content_type,
+                    })
+                })
+                .collect();
+        }
         Ok(body)
     }
 }
@@ -106,11 +124,17 @@ impl MailTransport for ResendTransport {
 
     fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
         Box::pin(async move {
+            check_size("resend", message, RESEND_MAX_MESSAGE_BYTES)?;
             let url = join(&self.base, "/emails")?;
-            let response = self
+            let mut request = self
                 .client
                 .post(url.as_str())
-                .bearer(self.config.api_key.expose())
+                .bearer(self.config.api_key.expose());
+            if let Some(key) = &message.idempotency_key {
+                // Resend answers a repeated key with the first send.
+                request = request.idempotency_key(key);
+            }
+            let response = request
                 .json(&Self::body(message)?)
                 .send()
                 .await

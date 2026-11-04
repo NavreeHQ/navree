@@ -3,13 +3,14 @@
 use std::fmt;
 use std::sync::OnceLock;
 
-use lettre::message::header::{HeaderName, HeaderValue};
-use lettre::message::{MultiPart, SinglePart};
+use lettre::message::header::{ContentType, HeaderName, HeaderValue};
+use lettre::message::{Attachment as LettreAttachment, MultiPart, SinglePart};
 use lettre::transport::smtp::AsyncSmtpTransportBuilder;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use navree_kernel::BoxFuture;
 use url::Url;
 
+use crate::attachment::{SMTP_MAX_MESSAGE_BYTES, check_size};
 use crate::message::mailbox;
 use crate::{DkimSigner, MailError, MailTransport, Message};
 
@@ -116,7 +117,7 @@ impl SmtpTransport {
     /// `DKIM-Signature` header first when the sender's domain is signed.
     /// `None` when nothing is signed (lettre then sends the message itself).
     pub fn signed_bytes(&self, message: &Message) -> Result<Option<Vec<u8>>, MailError> {
-        self.sign_email(message, &to_lettre(message)?)
+        self.sign_email(message, &to_lettre(message, "smtp")?)
     }
 
     /// `email` (built from `message`) signed, when its sender's domain is.
@@ -165,7 +166,8 @@ impl SmtpTransport {
 impl MailTransport for SmtpTransport {
     fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<(), MailError>> {
         Box::pin(async move {
-            let email = to_lettre(message)?;
+            check_size("smtp", message, SMTP_MAX_MESSAGE_BYTES)?;
+            let email = to_lettre(message, "smtp")?;
             let result = match self.sign_email(message, &email)? {
                 Some(bytes) => self.transport().send_raw(email.envelope(), &bytes).await,
                 None => self.transport().send(email).await,
@@ -211,10 +213,15 @@ impl fmt::Debug for SmtpTransport {
     }
 }
 
-/// The lettre message for `message`: `text` and `html` become a
-/// `multipart/alternative` body when both are set. Bcc recipients are in the
-/// envelope only, never in the headers.
-fn to_lettre(message: &Message) -> Result<lettre::Message, MailError> {
+/// The lettre message for `message` (built for `transport`, which errors
+/// name): `text` and `html` become a `multipart/alternative` body when both
+/// are set, and with attachments the body and the files go in a
+/// `multipart/mixed`. Bcc recipients are in the envelope only, never in the
+/// headers.
+pub(crate) fn to_lettre(
+    message: &Message,
+    transport: &'static str,
+) -> Result<lettre::Message, MailError> {
     let from = message.from.as_deref().ok_or(MailError::MissingSender)?;
     let mut builder = lettre::Message::builder()
         .from(mailbox("from", from)?)
@@ -239,17 +246,46 @@ fn to_lettre(message: &Message) -> Result<lettre::Message, MailError> {
             })?;
         builder = builder.raw_header(HeaderValue::new(header_name, value.clone()));
     }
-    let built = match (&message.html, &message.text) {
-        (Some(html), Some(text)) => builder.multipart(MultiPart::alternative_plain_html(
+    let body = match (&message.html, &message.text) {
+        (Some(html), Some(text)) => Body::Alternative(MultiPart::alternative_plain_html(
             text.clone(),
             html.clone(),
         )),
-        (Some(html), None) => builder.singlepart(SinglePart::html(html.clone())),
-        (None, Some(text)) => builder.singlepart(SinglePart::plain(text.clone())),
-        (None, None) => builder.singlepart(SinglePart::plain(String::new())),
+        (Some(html), None) => Body::Single(SinglePart::html(html.clone())),
+        (None, Some(text)) => Body::Single(SinglePart::plain(text.clone())),
+        (None, None) => Body::Single(SinglePart::plain(String::new())),
+    };
+    let built = if message.attachments.is_empty() {
+        match body {
+            Body::Alternative(part) => builder.multipart(part),
+            Body::Single(part) => builder.singlepart(part),
+        }
+    } else {
+        let mut mixed = match body {
+            Body::Alternative(part) => MultiPart::mixed().multipart(part),
+            Body::Single(part) => MultiPart::mixed().singlepart(part),
+        };
+        for file in &message.attachments {
+            let content_type =
+                ContentType::parse(&file.content_type).map_err(|_| MailError::Attachment {
+                    filename: file.filename.clone(),
+                    reason: "the content type must be a MIME type such as `application/pdf`",
+                })?;
+            mixed = mixed.singlepart(
+                LettreAttachment::new(file.filename.clone())
+                    .body(file.content.clone(), content_type),
+            );
+        }
+        builder.multipart(mixed)
     };
     built.map_err(|error| MailError::Transport {
-        transport: "smtp",
+        transport,
         source: Box::new(error),
     })
+}
+
+/// A message's body before attachments join it.
+enum Body {
+    Alternative(MultiPart),
+    Single(SinglePart),
 }

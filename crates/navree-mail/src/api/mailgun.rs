@@ -8,9 +8,11 @@ use navree_kernel::BoxFuture;
 use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
+use uuid::Uuid;
 
 use super::{address, basic, client_for, endpoint, join, refusal, unreachable, unusable};
-use crate::{MailError, MailTransport, Message, Sent};
+use crate::attachment::{MAILGUN_MAX_MESSAGE_BYTES, check_size};
+use crate::{Attachment, MailError, MailTransport, Message, Sent};
 
 /// Where a Mailgun account lives.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -124,12 +126,20 @@ impl MailTransport for MailgunTransport {
 
     fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
         Box::pin(async move {
+            check_size("mailgun", message, MAILGUN_MAX_MESSAGE_BYTES)?;
             let url = join(&self.base, &format!("/v3/{}/messages", self.config.domain))?;
-            let response = self
+            let request = self
                 .client
                 .post(url.as_str())
-                .header("authorization", basic("api", self.config.api_key.expose()))
-                .form(&Self::form(message)?)
+                .header("authorization", basic("api", self.config.api_key.expose()));
+            let fields = Self::form(message)?;
+            let request = if message.attachments.is_empty() {
+                request.form(&fields)
+            } else {
+                let (content_type, body) = multipart(&fields, &message.attachments);
+                request.header("content-type", content_type).body(body)
+            };
+            let response = request
                 .send()
                 .await
                 .map_err(|error| unreachable("mailgun", error))?;
@@ -170,6 +180,47 @@ impl MailTransport for MailgunTransport {
             }
         })
     }
+}
+
+/// A `multipart/form-data` body (RFC 7578) of `fields` and the files, each
+/// file under the field name `attachment`: its `Content-Type` (with the
+/// boundary) and its bytes.
+pub(crate) fn multipart(fields: &[(String, String)], files: &[Attachment]) -> (String, Vec<u8>) {
+    let boundary = format!("navree-form-{}", Uuid::new_v4().simple());
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n",
+                quoted(name)
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(value.as_bytes());
+        body.extend_from_slice(b"\r\n");
+    }
+    for file in files {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"attachment\"; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n",
+                quoted(&file.filename),
+                file.content_type
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(&file.content);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+/// A field or file name inside a quoted `Content-Disposition` parameter:
+/// quotes and line breaks percent-encoded, as RFC 7578 says.
+fn quoted(text: &str) -> String {
+    text.replace('"', "%22")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A")
 }
 
 impl fmt::Debug for MailgunTransport {

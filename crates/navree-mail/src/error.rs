@@ -71,6 +71,28 @@ pub enum MailError {
         /// Why it is refused.
         reason: &'static str,
     },
+    /// An attachment is refused: a file name or type that is not allowed,
+    /// or a file that cannot be read.
+    #[error("attachment `{filename}` refused: {reason}")]
+    Attachment {
+        /// The file name as given.
+        filename: String,
+        /// Why.
+        reason: &'static str,
+    },
+    /// The message, attachments encoded, is larger than the transport
+    /// takes. Nothing was sent.
+    #[error(
+        "the message is {size} bytes with its attachments encoded; the `{transport}` transport takes at most {limit}"
+    )]
+    TooLarge {
+        /// The transport (`postmark`, ...).
+        transport: &'static str,
+        /// The message's size, attachments base64-encoded.
+        size: usize,
+        /// The transport's limit.
+        limit: usize,
+    },
     /// A mail provider's API refused the request (`ses`, `mailgun`,
     /// `postmark`, `resend`). The message is the provider's own, never the
     /// request or its credentials.

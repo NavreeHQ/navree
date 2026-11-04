@@ -43,12 +43,14 @@ Percent-encode reserved characters in credentials: an SES secret's `/` is `%2F` 
 
 What each transport sends:
 
-| Transport | Request | Extra headers | `Message::metadata` | Provider id |
-|---|---|---|---|---|
-| SES | `POST /v2/email/outbound-emails`, signed with AWS Signature Version 4 | `Headers` | message tags (characters other than letters, digits, `_` and `-` become `_`) | `MessageId` |
-| Mailgun | `POST /v3/<domain>/messages`, a form with `api:<key>` | `h:<name>` | `v:<key>` variables | `id`, without its angle brackets |
-| Postmark | `POST /email` with `X-Postmark-Server-Token` | `Headers` | `Metadata` | `MessageID` |
-| Resend | `POST /emails` with a bearer token | `headers` | `tags` | `id` |
+| Transport | Request | Extra headers | `Message::metadata` | Attachments | Provider id |
+|---|---|---|---|---|---|
+| SES | `POST /v2/email/outbound-emails`, signed with AWS Signature Version 4 | `Headers` | message tags (characters other than letters, digits, `_` and `-` become `_`) | the whole message as `Raw` content (MIME, as SMTP sends it), up to 40 MB | `MessageId` |
+| Mailgun | `POST /v3/<domain>/messages`, a form with `api:<key>` | `h:<name>` | `v:<key>` variables | `attachment` files in a `multipart/form-data` form, up to 25 MB | `id`, without its angle brackets |
+| Postmark | `POST /email` with `X-Postmark-Server-Token` | `Headers` | `Metadata` | `Attachments`, base64, up to 10 MB | `MessageID` |
+| Resend | `POST /emails` with a bearer token | `headers` | `tags` | `attachments`, base64, up to 40 MB | `id` |
+
+The sizes count the attachments base64-encoded; a larger message is `MailError::TooLarge` before anything is sent (see [attachments](/docs/digging-deeper/mail/#attachments)). Resend also takes the message's idempotency key as its `Idempotency-Key` header: a queued message's retries send the same key, so Resend delivers it once. SES, Mailgun and Postmark take no key, so a retried job can deliver twice if an earlier attempt reached them.
 
 SES sends the message to the configuration set when one is configured. That set's event destination (an SNS topic) is what reports deliveries and bounces back, as described under [provider events](#provider-events). A refused request is `MailError::Provider { transport, status, message }`, with the provider's own message and never the request. Each transport also takes an `endpoint` (`?endpoint=` in the short form) to reach another base URL, such as a regional endpoint or a local mock server in tests.
 

@@ -290,6 +290,40 @@ let message = Message::new()
 - `metadata(key, value)` is for the provider: SES message tags, Mailgun variables, Postmark metadata, Resend tags. SMTP ignores it.
 - `locale(locale)` sets the HTML body's `lang` and `dir` (see [rendering](#rendering)).
 - `hold(reason)` holds the message for approval instead of sending it; see [mail delivery](/docs/digging-deeper/mail-delivery/#hold-for-approval).
+- `attach(filename, content_type, bytes)` attaches a file; see [attachments](#attachments).
+- `idempotency_key(key)` lets a transport that honours keys deliver a repeated send once (Resend does). Queued mail gets one automatically.
+
+### Attachments
+
+Attach invoices, statements, exports and calendar invites with `attach`, or read a file from disk with `attach_from_disk`:
+
+```rust
+let pdf: Vec<u8> = invoices.render_pdf(&invoice).await?;
+
+let message = Message::new()
+    .to("Harpreet Kaur <harpreet@example.in>")
+    .subject("Invoice INV-2026-0042")
+    .text("Your invoice for ₹1,499.00 is attached.")
+    .attach("INV-2026-0042.pdf", "application/pdf", pdf)
+    .attach("visit.ics", "text/calendar; method=REQUEST", invite.into_bytes())
+    .attach_from_disk("storage/exports/rates-ludhiana.csv")?; // text/csv, from the extension
+```
+
+Every transport sends them: SMTP and SES as a `multipart/mixed` MIME message (SES as raw content), Mailgun as a multipart form, Postmark and Resend as base64 in their JSON. `Attachment::content_type_for("name.ext")` is the type `attach_from_disk` guesses; an unknown extension is `application/octet-stream`.
+
+The mailer checks each attachment before sending. A file name must be 1 to 255 bytes with no line breaks, control characters or path separators; the type must be a MIME type (`type/subtype`, parameters allowed); and executable or script files (`.exe`, `.bat`, `.js`, `.vbs`, `.msi` and the rest of `BLOCKED_EXTENSIONS`, the lists SES and Postmark refuse) are refused by every transport alike, so changing transports never changes what can be sent. A refused file is `MailError::Attachment`.
+
+Each provider limits the size of a message, counted with the attachments base64-encoded (a third larger than the files). A transport refuses a larger message before sending anything, with `MailError::TooLarge`:
+
+| Transport | Largest message |
+|---|---|
+| SMTP | 25 MB (`SMTP_MAX_MESSAGE_BYTES`, what common mailbox providers accept) |
+| SES | 40 MB (`SES_MAX_MESSAGE_BYTES`) |
+| Mailgun | 25 MB (`MAILGUN_MAX_MESSAGE_BYTES`) |
+| Postmark | 10 MB (`POSTMARK_MAX_MESSAGE_BYTES`) |
+| Resend | 40 MB (`RESEND_MAX_MESSAGE_BYTES`) |
+
+For bigger files, send a link instead: a [signed, expiring URL](/docs/digging-deeper/storage/) to the file on your storage disk. A queued message carries its attachments in the job's payload (base64), so large files also make large queue rows.
 
 ### Rendering
 
@@ -308,7 +342,8 @@ Before a message reaches a transport, the mailer fills in the default sender and
 - it has a sender, and at least one recipient in `to`, `cc` or `bcc`;
 - every address parses, `reply_to` included;
 - the subject holds no line break;
-- every extra header has a valid name, no line break in its value, and is not one the transport writes.
+- every extra header has a valid name, no line break in its value, and is not one the transport writes;
+- every attachment has an allowed name and type (see [attachments](#attachments)).
 
 Every method returns `Result<_, MailError>`:
 
@@ -319,6 +354,8 @@ Every method returns `Result<_, MailError>`:
 | `InvalidAddress` | An address doesn't parse; names the field and the address. |
 | `InvalidHeader` | The subject contains a line break. |
 | `Header` | An extra header is invalid or one the transport writes; names the header. |
+| `Attachment` | An attachment's name or type is not allowed, or its file cannot be read; names the file. |
+| `TooLarge` | The message, attachments encoded, is larger than the transport takes; nothing was sent. |
 | `View` | A template is missing or failed to render. |
 | `Transport` | The transport failed, for example the SMTP server refused the message. |
 | `Provider` | An email API refused the request; carries its status and message. |
@@ -334,7 +371,8 @@ Errors and `info`-level logs never contain message bodies or credentials. The er
 
 - `MailModule` registers `mail.send`, so there is nothing else to wire. Set `mail.queue` to send mail from its own queue, and run a worker for it: `queue:work --queue mail,default`.
 - Like every dispatch, queued mail [joins the request's unit of work](/docs/digging-deeper/queues/#jobs-and-transactions): a request that fails sends no mail.
-- The payload holds the whole message, bodies included, until a worker sends it. With the database driver it sits in the `jobs` table, which matters for mail that carries reset links or other tokens.
+- The payload holds the whole message, bodies and attachments included, until a worker sends it. With the database driver it sits in the `jobs` table, which matters for mail that carries reset links or other tokens.
+- The queued message gets an idempotency key (`navree-mail-...`), kept in the payload, so every retry of the job sends the same key. A transport that honours keys (Resend) then delivers the message once, even when an earlier attempt reached the provider before it failed.
 - In an app without a queue (no `dyn Dispatcher`), `queue` sends at once and logs a warning the first time. It doesn't wait for the unit of work: inside a request that then fails, the mail has already gone.
 
 ## Previewing mail

@@ -62,12 +62,20 @@ async fn queue_dispatches_send_job_and_job_sends() {
     let envelope = &envelopes[0];
     assert_eq!(envelope.job_type, "mail.send");
     assert_eq!(envelope.options.queue, "mail");
+    // CONN-103: the queued message carries an idempotency key, so every
+    // retry of the job sends the same one.
+    let key = envelope.payload["message"]["idempotency_key"]
+        .as_str()
+        .expect("a queued message has a key")
+        .to_owned();
+    assert!(key.starts_with("navree-mail-"), "{key}");
     let expected = Message::new()
         .from(FROM)
         .to("ada@example.com")
         .subject("Welcome")
         .html("<p>Welcome, Ada!</p>")
-        .text("Welcome, Ada!");
+        .text("Welcome, Ada!")
+        .idempotency_key(key);
     assert_eq!(envelope.payload["message"], json!(expected));
 
     run_send_job(&app, envelope.payload.clone()).await;

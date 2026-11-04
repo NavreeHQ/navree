@@ -11,6 +11,7 @@ use navree_contracts::{Dispatcher, JobEnvelope};
 use navree_kernel::WeakAppContext;
 use navree_telemetry::{EventKind, MailSent, Telemetry, TelemetryEvent};
 use navree_view::Views;
+use uuid::Uuid;
 
 use crate::delivery::Pipeline;
 use crate::render::{self, RenderOptions};
@@ -310,8 +311,13 @@ impl Mailer {
         message: Message,
         mut options: SendOptions,
     ) -> Result<(), MailError> {
-        let message = self.prepare(message, !options.rendered)?;
+        let mut message = self.prepare(message, !options.rendered)?;
         options.rendered = true;
+        // The key travels in the job, so every retry of `mail.send` sends
+        // the same one and a transport that honours keys delivers once.
+        message
+            .idempotency_key
+            .get_or_insert_with(|| format!("navree-mail-{}", Uuid::now_v7().simple()));
         if message.hold.is_some() {
             return self.deliver_with(message, options).await.map(drop);
         }

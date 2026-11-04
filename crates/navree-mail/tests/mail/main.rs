@@ -2,6 +2,7 @@
 //! queued sending and the `MailModule`.
 
 mod api;
+mod attachments;
 mod commands;
 mod delivery;
 mod dkim;

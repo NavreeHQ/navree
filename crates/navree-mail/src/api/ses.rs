@@ -10,8 +10,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use url::Url;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
+
 use super::sigv4::{Credentials, Signer};
 use super::{address, addresses, client_for, endpoint, join, refusal, unreachable, unusable};
+use crate::attachment::{SES_MAX_MESSAGE_BYTES, check_size};
+use crate::smtp::to_lettre;
 use crate::{MailError, MailTransport, Message, Sent};
 
 /// The settings of an [`SesTransport`] (`{ type = "ses", ... }` or
@@ -40,7 +45,9 @@ pub struct SesConfig {
 /// each request signed with AWS Signature Version 4.
 ///
 /// The message goes as `Simple` content (subject, text, HTML, extra
-/// headers); [`Message::metadata`] becomes message tags (characters other
+/// headers), or as `Raw` content (the whole MIME message) when it has
+/// attachments, up to [`SES_MAX_MESSAGE_BYTES`](crate::SES_MAX_MESSAGE_BYTES);
+/// [`Message::metadata`] becomes message tags (characters other
 /// than letters, digits, `_` and `-` are replaced by `_`), and the
 /// configuration set is named when configured, so its event destinations
 /// report what happens to the message. The provider id is SES's
@@ -85,9 +92,25 @@ impl SesTransport {
         &self.config.region
     }
 
-    /// The request body of `message`.
+    /// The request body of `message`: `Simple` content, or `Raw` content
+    /// (the whole MIME message, built as SMTP builds it) when it has
+    /// attachments.
     fn body(&self, message: &Message) -> Result<Value, MailError> {
         let from = message.from.as_deref().ok_or(MailError::MissingSender)?;
+        if !message.attachments.is_empty() {
+            let raw = to_lettre(message, "ses")?.formatted();
+            let mut request = json!({
+                "FromEmailAddress": address("from", from)?,
+                "Destination": {
+                    "ToAddresses": addresses("to", &message.to)?,
+                    "CcAddresses": addresses("cc", &message.cc)?,
+                    "BccAddresses": addresses("bcc", &message.bcc)?,
+                },
+                "Content": { "Raw": { "Data": STANDARD.encode(raw) } },
+            });
+            self.tag(&mut request, message);
+            return Ok(request);
+        }
         let mut body = json!({});
         if let Some(text) = &message.text {
             body["Text"] = json!({ "Data": text, "Charset": "UTF-8" });
@@ -118,6 +141,12 @@ impl SesTransport {
         if let Some(reply_to) = &message.reply_to {
             request["ReplyToAddresses"] = json!([address("reply_to", reply_to)?]);
         }
+        self.tag(&mut request, message);
+        Ok(request)
+    }
+
+    /// Adds the message tags and the configuration set to `request`.
+    fn tag(&self, request: &mut Value, message: &Message) {
         if !message.metadata.is_empty() {
             request["EmailTags"] = message
                 .metadata
@@ -133,7 +162,6 @@ impl SesTransport {
         {
             request["ConfigurationSetName"] = json!(set);
         }
-        Ok(request)
     }
 
     /// The SigV4 headers for a request.
@@ -205,6 +233,7 @@ impl MailTransport for SesTransport {
 
     fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
         Box::pin(async move {
+            check_size("ses", message, SES_MAX_MESSAGE_BYTES)?;
             let url = join(&self.base, "/v2/email/outbound-emails")?;
             let body = serde_json::to_vec(&self.body(message)?)
                 .map_err(|error| MailError::Config(error.to_string()))?;

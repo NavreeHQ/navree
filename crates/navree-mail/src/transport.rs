@@ -108,6 +108,12 @@ impl MailTransport for LogTransport {
             cc = %message.cc.join(", "),
             bcc = %message.bcc.join(", "),
             subject = %message.subject,
+            attachments = %message
+                .attachments
+                .iter()
+                .map(|file| format!("{} ({}, {} bytes)", file.filename, file.content_type, file.content.len()))
+                .collect::<Vec<_>>()
+                .join(", "),
             "mail (log transport)"
         );
         tracing::debug!(

@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::{address, addresses, client_for, endpoint, join, refusal, unreachable, unusable};
+use crate::attachment::{POSTMARK_MAX_MESSAGE_BYTES, check_size};
 use crate::{MailError, MailTransport, Message, Sent};
 
 /// The settings of a [`PostmarkTransport`] (`{ type = "postmark", ... }`
@@ -29,7 +30,8 @@ pub struct PostmarkConfig {
 /// `X-Postmark-Server-Token` header).
 ///
 /// Extra headers go as `Headers`, [`Message::metadata`] as `Metadata`
-/// (which Postmark echoes in its webhooks). The provider id is Postmark's
+/// (which Postmark echoes in its webhooks), attachments as `Attachments`
+/// (base64), up to [`POSTMARK_MAX_MESSAGE_BYTES`](crate::POSTMARK_MAX_MESSAGE_BYTES). The provider id is Postmark's
 /// `MessageID`. [`check`](MailTransport::check) reads the server.
 pub struct PostmarkTransport {
     config: PostmarkConfig,
@@ -98,6 +100,19 @@ impl PostmarkTransport {
         if !message.metadata.is_empty() {
             body["Metadata"] = json!(message.metadata);
         }
+        if !message.attachments.is_empty() {
+            body["Attachments"] = message
+                .attachments
+                .iter()
+                .map(|file| {
+                    json!({
+                        "Name": file.filename,
+                        "Content": file.base64(),
+                        "ContentType": file.content_type,
+                    })
+                })
+                .collect();
+        }
         if let Some(stream) = self
             .config
             .message_stream
@@ -117,6 +132,7 @@ impl MailTransport for PostmarkTransport {
 
     fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
         Box::pin(async move {
+            check_size("postmark", message, POSTMARK_MAX_MESSAGE_BYTES)?;
             let url = join(&self.base, "/email")?;
             let response = self
                 .client

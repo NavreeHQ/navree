@@ -146,6 +146,71 @@ async fn smtp_transport_delivers_to_a_local_server() {
     assert!(!data.contains("hidden@example.com"), "Bcc leaked:\n{data}");
 }
 
+// CONN-102
+#[tokio::test]
+async fn smtp_transport_sends_attachments_as_multipart_mixed() {
+    use base64::Engine as _;
+    let (port, server) = fake_smtp_server().await;
+    let transport = SmtpTransport::from_url(&format!("smtp://127.0.0.1:{port}")).expect("url");
+    let pdf = b"%PDF-1.7 INV-2026-0042".to_vec();
+    let message = Message::new()
+        .from("Grewal Traders <billing@grewal.example.in>")
+        .to("harpreet@example.in")
+        .subject("Invoice INV-2026-0042")
+        .text("Your invoice is attached.")
+        .html("<p>Your invoice is attached.</p>")
+        .attach("INV-2026-0042.pdf", "application/pdf", pdf.clone())
+        .attach(
+            "invite.ics",
+            "text/calendar; method=REQUEST",
+            b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n".to_vec(),
+        );
+
+    transport.send(&message).await.expect("send");
+    let data = server.await.expect("server").data;
+
+    for expected in [
+        "multipart/mixed",
+        "multipart/alternative",
+        "Your invoice is attached.",
+        "Content-Disposition: attachment; filename=\"INV-2026-0042.pdf\"",
+        "Content-Type: application/pdf",
+        &base64::engine::general_purpose::STANDARD.encode(&pdf),
+        "filename=\"invite.ics\"",
+        "text/calendar; method=REQUEST",
+    ] {
+        assert!(data.contains(expected), "missing {expected} in:\n{data}");
+    }
+}
+
+// CONN-102
+#[tokio::test]
+async fn smtp_transport_refuses_a_message_over_its_limit() {
+    let transport = SmtpTransport::from_url("smtp://127.0.0.1:9").expect("url");
+    let message = Message::new()
+        .from("billing@grewal.example.in")
+        .to("harpreet@example.in")
+        .subject("Scans")
+        .attach(
+            "scan.png",
+            "image/png",
+            vec![0; navree_mail::SMTP_MAX_MESSAGE_BYTES / 4 * 3 + 3],
+        );
+
+    let error = transport.send(&message).await.expect_err("too large");
+
+    assert!(
+        matches!(
+            error,
+            MailError::TooLarge {
+                transport: "smtp",
+                ..
+            }
+        ),
+        "{error}"
+    );
+}
+
 #[tokio::test]
 async fn smtp_transport_reports_connection_failures() {
     // Bind then drop a listener: nothing listens on that port any more.

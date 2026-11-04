@@ -134,7 +134,9 @@ impl Migration for CreateMailTables {
                 t.string("status");
                 t.text("subject");
                 t.json("recipients");
-                t.text("message");
+                // The whole message, attachments included (base64): more than
+                // MySQL's TEXT holds.
+                t.long_text("message");
                 t.string("via").nullable();
                 t.string("template").nullable();
                 uuid(t, "delivery_id", mysql).nullable();
