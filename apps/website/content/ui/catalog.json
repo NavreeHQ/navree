@@ -10680,7 +10680,7 @@
       "id": "regions/live",
       "component": "regions",
       "slug": "live",
-      "title": "A feed fed by a stream",
+      "title": "A feed fed by a stream, which runs in your app",
       "kind": "single",
       "code": "ActivityFeed::new(\"live-activity\", \"Live activity\")\n    .summary(\"New rows arrive as the stream speaks\")\n    .item(\n        ActivityItem::new(\"Maya Patel\", \"opened\")\n            .tone(Tone::Info)\n            .icon(icons::MAIL)\n            .time_text(\"just now\")\n            .id(\"event-41\"),\n    )\n    .in_region(\n        \"live-region\",\n        \"/fragments/activity\",\n        \"/events/activity\",\n        \"41\",\n    )",
       "src": "/ui-preview/regions/live.html",
@@ -10690,9 +10690,7 @@
       "show": false,
       "live": false,
       "width": null,
-      "scripts": [
-        "live-ca16cf63e586.js"
-      ],
+      "scripts": [],
       "captions": [],
       "slots": [
         {
