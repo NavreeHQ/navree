@@ -227,8 +227,8 @@ impl Injectable for LighthouseDashboardController {
     }
 }
 
-/// The sign-in form.
-#[derive(Clone, Debug, Default, Deserialize)]
+/// The sign-in form. `Debug` never shows the password or the CSRF token.
+#[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct LoginForm {
     email: String,
@@ -237,14 +237,37 @@ pub(crate) struct LoginForm {
     next: String,
 }
 
-/// The two-factor form.
-#[derive(Clone, Debug, Default, Deserialize)]
+/// The two-factor form. `Debug` never shows the challenge, the code or the
+/// CSRF token.
+#[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct TwoFactorForm {
     challenge: String,
     code: String,
     csrf: String,
     next: String,
+}
+
+impl std::fmt::Debug for LoginForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoginForm")
+            .field("email", &self.email)
+            .field("password", &"[redacted]")
+            .field("csrf", &"[redacted]")
+            .field("next", &self.next)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for TwoFactorForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TwoFactorForm")
+            .field("challenge", &"[redacted]")
+            .field("code", &"[redacted]")
+            .field("csrf", &"[redacted]")
+            .field("next", &self.next)
+            .finish()
+    }
 }
 
 /// `?next=` on the sign-in screen.
@@ -1054,5 +1077,33 @@ mod tests {
     fn handlers_on_the_viewer_are_native() {
         async fn handler(_: Viewer) {}
         let _ = Endpoint::new(handler);
+    }
+
+    #[test]
+    fn sign_in_forms_never_show_credentials_in_debug_output() {
+        let login: LoginForm = serde_json::from_value(json!({
+            "email": "ops@acme.test",
+            "password": "lh-pa55word",
+            "csrf": "lh-csrf-t0ken",
+            "next": "/lighthouse",
+        }))
+        .unwrap();
+        let two_factor: TwoFactorForm = serde_json::from_value(json!({
+            "challenge": "lh-challenge-t0ken",
+            "code": "123456",
+            "csrf": "lh-csrf-t0ken",
+            "next": "/lighthouse",
+        }))
+        .unwrap();
+        let printed = format!("{login:?} {two_factor:?}");
+        for secret in [
+            "lh-pa55word",
+            "lh-csrf-t0ken",
+            "lh-challenge-t0ken",
+            "123456",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("ops@acme.test"), "{printed}");
     }
 }
