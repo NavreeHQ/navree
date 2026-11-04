@@ -65,10 +65,16 @@ pub fn flag_picture(code: &str) -> String {
     format!("/flags/{}.svg", code.to_ascii_lowercase())
 }
 
-/// A flag in a phone input's country list.
+/// A flag in a phone input's country list. Ascension and Tristan da Cunha have
+/// numbering plans of their own and fly the flags of those parts of Saint Helena.
 fn phone_flag(region: Region) -> Node {
+    let code = match region.as_str() {
+        "AC" => "SH-AC",
+        "TA" => "SH-TA",
+        other => other,
+    };
     el("img")
-        .attr("src", flag_picture(region.as_str()))
+        .attr("src", flag_picture(code))
         .attr("alt", "")
         .attr("width", 20_i64)
         .attr("height", 15_i64)
@@ -101,4 +107,23 @@ pub fn contact_form(form: FormView<ContactForm>, id: i64, today: NaiveDate) -> C
                 .submit("Save contact")
                 .cancel("Cancel", format!("/recipients/{id}")),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::ui::flags::CountryCode;
+
+    #[test]
+    fn every_country_a_phone_number_can_be_in_has_a_flag_picture() {
+        for region in navree::phone::Region::all() {
+            let html = navree::ui::render(&super::phone_flag(region));
+            let src = html.split("src=\"/flags/").nth(1).unwrap_or_default();
+            let code = src.split(".svg").next().unwrap_or_default();
+            assert!(
+                CountryCode::parse(code).is_some(),
+                "{}: no flag for {code}",
+                region.as_str()
+            );
+        }
+    }
 }
