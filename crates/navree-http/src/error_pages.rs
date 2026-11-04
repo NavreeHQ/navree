@@ -393,6 +393,48 @@ mod tests {
         assert!(!under("/api", ""));
     }
 
+    /// Every request pays this when a module renders error pages: it must stay a rounding error.
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn keeping_what_a_page_needs_costs_under_2_us() {
+        use std::hint::black_box;
+        use std::time::{Duration, Instant};
+        let mut headers = HeaderMap::new();
+        for (name, value) in [
+            ("host", "app.example"),
+            (
+                "user-agent",
+                "Mozilla/5.0 (X11; Linux x86_64) Firefox/144.0",
+            ),
+            ("accept", "text/html,application/xhtml+xml,*/*;q=0.8"),
+            ("accept-language", "en-US,en;q=0.5"),
+            ("accept-encoding", "gzip, deflate, br"),
+            ("referer", "https://app.example/deals"),
+            ("cookie", "navree_session=abcdef; XSRF-TOKEN=abcdef"),
+            ("sec-fetch-dest", "document"),
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-site", "same-origin"),
+            ("upgrade-insecure-requests", "1"),
+            ("x-request-id", "01a1a48c27697468b09935ddd4286017"),
+        ] {
+            headers.append(
+                HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                HeaderValue::from_static(value),
+            );
+        }
+        black_box(capture(&headers));
+        let best = (0..2000)
+            .map(|_| {
+                let start = Instant::now();
+                black_box(capture(black_box(&headers)));
+                start.elapsed()
+            })
+            .min()
+            .unwrap();
+        println!("keeping the headers a page needs takes {best:?}");
+        assert!(best < Duration::from_micros(2), "{best:?}");
+    }
+
     #[test]
     fn only_what_decides_a_page_is_kept() {
         let mut headers = HeaderMap::new();
