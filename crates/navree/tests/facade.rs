@@ -610,10 +610,12 @@ const ALWAYS: [&str; 7] = [
 
 /// Proc-macro crates that a module crate re-exports, as (macro crate,
 /// module crate): they come with the module crate's feature (`orm` brings
-/// navree-orm-macros through navree-orm), so the facade does not name them.
-const COMPANION_MACROS: [(&str, &str); 3] = [
+/// navree-orm-macros through navree-orm, `ui` navree-ui-macros through navree-ui),
+/// so the facade does not name them.
+const COMPANION_MACROS: [(&str, &str); 4] = [
     ("navree-orm-macros", "navree-orm"),
     ("navree-i18n-macros", "navree-i18n"),
+    ("navree-ui-macros", "navree-ui"),
     ("navree-validation-macros", "navree-validation"),
 ];
 

@@ -484,7 +484,7 @@ logbook = [
     "dep:navree-logbook",
     "telemetry",
     "http",
-    "view",
+    "ui",
     "db",
     "auth",
 ]
