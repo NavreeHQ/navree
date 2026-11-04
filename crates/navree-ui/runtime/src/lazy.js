@@ -41,7 +41,7 @@ const gFirst = getter(NP, "firstChild"), gNext = getter(NP, "nextSibling"), gTyp
 const gAttrs = getter(Element.prototype, "attributes");
 
 /** @typedef {"start" | "end" | "live"} Dir */
-/** @typedef {{gen: number, src: string, box: Element | null, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number, unseen: boolean, seeing: boolean}} State */
+/** @typedef {{gen: number, src: string, box: Element | null, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number, unseen: boolean, seeing: boolean, waited: number}} State */
 /** @type {WeakMap<Element, State>} */
 const states = new WeakMap();
 
@@ -370,6 +370,12 @@ async function seen(list) {
   const state = stateOf(list);
   const url = attr(list, "data-ui-seen");
   if (!url || !state.unseen || state.seeing || hidden() || !sameOrigin(url)) return;
+  // A live list waits for its stream (ten seconds at most): the news of what it saw
+  // then reaches this page too, and the rest of it shows the change.
+  if (has(list, "data-ui-live-src") && attr(list, "data-live") !== "on" && state.waited++ < 50) {
+    setTimeout(() => seen(list), 200);
+    return;
+  }
   state.unseen = false;
   state.seeing = true;
   // An empty form, as a form posts it: the server checks it as it checks any form.
@@ -388,7 +394,7 @@ async function seen(list) {
 /** @param {Element} list @returns {State} */
 function stateOf(list) {
   let state = states.get(list);
-  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", box: box(list), busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0, unseen: true, seeing: false }));
+  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", box: box(list), busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0, unseen: true, seeing: false, waited: 0 }));
   return state;
 }
 
