@@ -186,6 +186,28 @@ fn a_split_and_a_hotkey_load_their_own_modules_only() {
 }
 
 #[test]
+fn the_sortable_module_is_at_most_6_kb_gzip() {
+    assert!(size("sortable") <= 6 * 1024, "{}", size("sortable"));
+}
+
+/// A sortable that moves loads the core runtime, which posts its moves, and its own
+/// module; one drawn with nowhere to post loads nothing.
+#[test]
+fn a_page_with_a_sortable_loads_the_sortable_module_and_only_then() {
+    use navree_ui::{SortItem, SortList, Sortable};
+
+    let list = || SortList::new("a", "Steps").item(SortItem::new("1", "Measure"));
+    let moving = View::new("x").body(Sortable::new("s", "Steps").post("/moves").list(list()));
+    assert_eq!(moving.uses(), Uses::CORE.with(Uses::SORTABLE));
+    let html = moving.to_html();
+    assert!(html.contains(assets::SORTABLE_URL), "{html}");
+    assert!(!html.contains(assets::TABLE_URL));
+    let still = View::new("x").body(Sortable::new("s", "Steps").list(list()));
+    assert!(still.uses().is_none());
+    assert!(!still.to_html().contains(assets::SORTABLE_URL));
+}
+
+#[test]
 fn the_phone_module_is_at_most_5_kb_gzip() {
     assert!(size("phone") <= 5 * 1024, "{}", size("phone"));
 }

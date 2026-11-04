@@ -40,6 +40,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   `Draft` kept on the server), Slider (one value or a range, with `SliderSpec` to
   check a post), Tree (children from the server, choices that post) and Toolbar.
   Panes: `SplitPane` and `Pane`, with `SplitSizes` and `SplitSave` for sizes kept on the server.
+  Sortable lists and boards: Sortable, SortList, SortItem, and the Move each drop posts.
   Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
   list and the number, formatted as typed, read on the server in the country chosen.
   Components carry no outer margin: layout
@@ -110,6 +111,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A split pane | `split`: dragging, the separator's keys, collapsing and saving the sizes. |
 | A hotkey | `keys`: single keys that click or focus what names them, never while someone types. |
 | A lazy list | `lazy`: pages by cursor at either end, the reader's place kept, a cap on what stays in the page; with `live` for a live one. |
+| A sortable list or board | `core`, `sortable`: drags by mouse, touch and keys, and the moves posted one at a time. |
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
@@ -326,6 +328,35 @@ behave as for any select, and with JavaScript off the `<select>` is what shows.
 - **Palette.** Items are links, posted forms or browser commands, with icons, keywords,
   shortcuts (a chord needs a modifier), recent items kept in the browser and a server
   source. The page builds only the items the person may use.
+
+## Sortable lists and boards
+
+```rust
+Sortable::new("sprint", "Sprint board")
+    .board()
+    .post("/board/moves")
+    .list(SortList::new("ready", "Ready").limit(5).items(cards))
+
+async fn moves(uow: Uow, mv: Move) -> Result<Reply> {
+    Ok(match mv.check(&lists_now(&uow).await?) {
+        Ok(landing) => { save(&uow, &landing).await?; mv.done("/board") }
+        Err(refusal) => mv.refused("/board", refusal.message()),
+    })
+}
+```
+
+- **Mouse, touch and keys.** A press that moves 4 px drags; on touch the handle drags at once and a press
+  held still for 300 ms anywhere on the item does. Space or Enter on the handle picks an item up, the
+  arrows move it (left and right to the next list that takes it), Space or Enter drops it, Escape puts
+  it back. Every step is said in the sortable's own live region.
+- **The server decides.** A drop moves the item at once and posts a `Move` through the item's own form,
+  one at a time per sortable. A refusal, a failure or no answer in 15 s puts it back where the server
+  last had it. `Move::check` holds a move to the lists as they are now: the item is where the browser saw
+  it, the item it was dropped beside is still there, and the list has room and takes items.
+- **Long lists.** `SortList::total`, `more` and `end_note` draw a list a page at a time, and
+  `Sortable::page` answers the next page as ops. `Move::place` checks a move against lists kept by rank,
+  reading only the neighbours it needs.
+- **JavaScript off.** Each item carries a form to move it: a list and a position.
 
 ## Dates and times
 
