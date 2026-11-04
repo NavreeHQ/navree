@@ -270,6 +270,27 @@ impl TestResponse {
         }
     }
 
+    /// An older name for [`assert_error`](Self::assert_error) and
+    /// [`assert_error_code`](Self::assert_error_code), kept so a test written with it still
+    /// builds: it asserts an error response with `status` like `assert_error(status, None)`
+    /// and, when `code` is given, its `code` like `assert_error_code`.
+    ///
+    /// # Panics
+    ///
+    /// Like [`assert_error_code`](Self::assert_error_code).
+    #[deprecated(
+        since = "1.0.0",
+        note = "use `assert_error(status, message)` or `assert_error_code(status, code)`: errors use Navree's JSON error shape, not RFC 9457 problem details"
+    )]
+    #[doc(hidden)]
+    #[track_caller]
+    pub fn assert_problem<'a>(self, status: u16, code: impl Into<Option<&'a str>>) -> Self {
+        match code.into() {
+            Some(code) => self.assert_error_code(status, code),
+            None => self.assert_error(status, None),
+        }
+    }
+
     /// The status and the (possibly shortened) body, for failure messages.
     fn describe(&self) -> String {
         let text = self.text();
