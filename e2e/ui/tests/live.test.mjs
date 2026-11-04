@@ -1,6 +1,6 @@
 // The live-region runtime (`live.js` and the feed code in `nav.js`) against servers that
 // misbehave: streams that end, refuse or flood; slow answers; hostile rows; a changed
-// session. A small server per test (tests/support/stream.mjs), the committed dist/ under
+// session; and the app's live hub (several names on one region, resuming from the last id). A small server per test (tests/support/stream.mjs), the committed dist/ under
 // the crate's exact content security policy. In Chromium, Firefox and WebKit.
 //
 //   UI_BROWSERS=chromium,firefox,webkit node --test tests/live.test.mjs
@@ -642,6 +642,172 @@ for (const name of NAMES) {
         },
         { visibility: true },
       );
+    });
+
+    // ---- The app's live hub: several names, and coming back from the last id (MOD-004) --------
+
+    /** Two regions on one stream: `r` hears `r`, `s` hears `s`. */
+    const pair = (r = "r", s = "s") =>
+      `<div id="r" data-ui-region data-ui-src="/frag-r" data-ui-live-src="/sse" data-ui-live-event="${r}">r0</div>` +
+      `<div id="s" data-ui-region data-ui-src="/frag-s" data-ui-live-src="/sse" data-ui-live-event="${s}">s0</div>`;
+
+    /**
+     * A stream that answers as the live hub does: `ui:live` with an id when it starts fresh, and what
+     * `back(last)` says when the runtime comes back with `last_event_id`. Every address it was opened
+     * with is kept in `urls`.
+     */
+    function hub(srv, back) {
+      const urls = [];
+      srv.routes.set("/sse", (req, res, url) => {
+        if ("x-ui-probe" in req.headers) {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          return res.end();
+        }
+        srv.sse.attempts++;
+        urls.push(url.search);
+        res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store" });
+        const last = url.searchParams.get("last_event_id");
+        res.write(last ? back(last) : "id: 1-0\nevent: ui:live\ndata: live\n\n");
+        srv.sse.open++;
+        srv.sse.clients.add(res);
+        req.on("close", () => {
+          srv.sse.open--;
+          srv.sse.clients.delete(res);
+        });
+      });
+      return urls;
+    }
+
+    /** Ends every open stream as a dropped connection would. */
+    const drop = (srv) => {
+      for (const res of [...srv.sse.clients]) res.destroy();
+    };
+
+    test("MOD-004 a region listens for each of its names on one connection, and only those", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(pair("conversation.42 clock", "customer.7"))));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s1"));
+        hub(srv, () => "");
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        await waitLive(page, "on", "s");
+        assert.equal(srv.sse.open, 1, "one connection for both regions");
+        srv.say("id: 2-0\nevent: clock\ndata: changed\n\n");
+        await page.waitForFunction(() => document.getElementById("r").textContent === "r1");
+        await sleep(600);
+        assert.equal(srv.count("/frag-r"), 1);
+        assert.equal(srv.count("/frag-s"), 0, "the customer did not change");
+        srv.say("id: 3-0\nevent: customer.7\ndata: changed\n\n");
+        await page.waitForFunction(() => document.getElementById("s").textContent === "s1");
+        srv.say("id: 4-0\nevent: conversation.42\ndata: changed\n\n");
+        for (let i = 0; i < 30 && srv.count("/frag-r") < 2; i++) await sleep(100);
+        assert.equal(srv.count("/frag-r"), 2);
+        assert.equal(srv.count("/frag-s"), 1);
+      });
+    });
+
+    test("MOD-004 a hub stream that comes back resumes from its last id and fetches only what it missed", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r" + srv.count("/frag-r")));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s" + srv.count("/frag-s")));
+        // Coming back: the hub resumed, and says again the one thing missed (`s`).
+        const urls = hub(srv, (last) => `id: ${last}\nevent: ui:resumed\ndata: resumed\n\nid: 3-0\nevent: s\ndata: changed\n\n`);
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        assert.equal(urls[0], "", "the first connection asks for nothing in particular");
+        srv.say("id: 2-0\nevent: r\ndata: changed\n\n");
+        for (let i = 0; i < 30 && srv.count("/frag-r") < 1; i++) await sleep(100);
+        assert.equal(srv.count("/frag-r"), 1);
+
+        drop(srv);
+        for (let i = 0; i < 50 && urls.length < 2; i++) await sleep(100);
+        assert.equal(urls.length, 2, "reconnected");
+        assert.equal(new URLSearchParams(urls[1]).get("last_event_id"), "2-0", "with the last id heard");
+        // Past the 2.5 s a page waits for the hub's answer: nothing caught up beyond what was missed.
+        await sleep(3500);
+        assert.equal(srv.count("/frag-r"), 1, "r missed nothing and fetched nothing");
+        assert.equal(srv.count("/frag-s"), 1, "s fetched what it missed, once");
+        assert.equal(await live(page), "on");
+      });
+    });
+
+    test("MOD-004 a hub that cannot resume starts fresh, and every region catches up once", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s1"));
+        const urls = hub(srv, () => "id: 9-0\nevent: ui:live\ndata: live\n\n");
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        drop(srv);
+        for (let i = 0; i < 50 && urls.length < 2; i++) await sleep(100);
+        assert.equal(new URLSearchParams(urls[1]).get("last_event_id"), "1-0", "the id the hub started with");
+        for (let i = 0; i < 30 && (srv.count("/frag-r") < 1 || srv.count("/frag-s") < 1); i++) await sleep(100);
+        await sleep(800);
+        assert.equal(srv.count("/frag-r"), 1);
+        assert.equal(srv.count("/frag-s"), 1);
+      });
+    });
+
+    test("MOD-004 a hub that says nothing when it comes back is caught up with after 2.5 s", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s1"));
+        const urls = hub(srv, () => ": ready\n\n");
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        drop(srv);
+        for (let i = 0; i < 50 && urls.length < 2; i++) await sleep(100);
+        const back = Date.now();
+        await sleep(1500);
+        assert.equal(srv.count("/frag-r"), 0, "still waiting for the hub's answer");
+        for (let i = 0; i < 40 && srv.count("/frag-r") < 1; i++) await sleep(100);
+        assert.equal(srv.count("/frag-r"), 1);
+        assert.equal(srv.count("/frag-s"), 1);
+        assert.ok(Date.now() - back < 5000);
+      });
+    });
+
+    test("MOD-004 a stream that is not the hub is caught up at once, ids or not, and never asked to resume", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+        srv.routes.set("/frag", (req, res) => srv.html(res, "v" + srv.count("/frag")));
+        const urls = [];
+        srv.routes.set("/sse", (req, res, url) => {
+          if (!("x-ui-probe" in req.headers)) urls.push(url.search);
+          srv.stream()(req, res);
+        });
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        srv.say("id: 41\ndata: x\n\n");
+        for (let i = 0; i < 30 && srv.count("/frag") < 1; i++) await sleep(100);
+        drop(srv);
+        for (let i = 0; i < 50 && urls.length < 2; i++) await sleep(100);
+        assert.equal(urls[1], "", "no last_event_id for a stream that never said it was the hub");
+        for (let i = 0; i < 20 && srv.count("/frag") < 2; i++) await sleep(100);
+        assert.equal(srv.count("/frag"), 2, "caught up as soon as it was back");
+      });
+    });
+
+    test("MOD-004 a changed session reopens the hub stream fresh, never resuming the last reader's", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(pair() + `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>sign in</button></div>`), { "set-cookie": "XSRF-TOKEN=a; Path=/" }));
+        srv.routes.set("/auth", (req, res) => srv.html(res, `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>signed in</button></div>`, { "set-cookie": "XSRF-TOKEN=b; Path=/" }));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s1"));
+        const urls = hub(srv, (last) => `id: ${last}\nevent: ui:resumed\ndata: resumed\n\n`);
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        srv.say("id: 2-0\nevent: r\ndata: changed\n\n");
+        for (let i = 0; i < 30 && srv.count("/frag-r") < 1; i++) await sleep(100);
+        await page.locator("#auth button").click();
+        for (let i = 0; i < 50 && urls.length < 2; i++) await sleep(100);
+        assert.equal(urls.length, 2, "reopened for the new reader");
+        assert.equal(new URLSearchParams(urls[1]).get("last_event_id"), null);
+      });
     });
   });
 }
