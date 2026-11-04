@@ -34,4 +34,6 @@ UI_LOGBOOK_URL=http://127.0.0.1:8092 npm test
 
 `UI_PROOF_URL` points the suites at another server.
 
+`measure-store.mjs` is not a test: it starts the store's release build itself, measures its seed, its pages and the order drawer, and asks SQLite for the plan of every statement behind the orders list, a filtered search and the drawer. It writes `apps/website/content/showcase/store.json`, which the website's store page reads. Run it after `cargo build --release -p store-demo`.
+
 axe-core is MPL-2.0 and stays here: nothing in the shipped toolkit includes it.
