@@ -52,7 +52,26 @@ Cursors compare as text when a live item is placed, so make them sort: pad the n
 
 ## Live
 
-With `.since(revision)` and `.live_from(stream, event, end)`, the list asks what changed whenever the stream speaks. Answer with `LazyPage::changes(items, new_revision, gone_keys)`: an item the list has is replaced, a new one goes where its cursor sorts, and a gone one goes. No item is ever in the list twice. The ask carries the cursors of the window the page holds, `LazyQuery::window()`, so you can draw again what changes with no write of its own, such as a clock counting down.
+With `.since(revision)` and `.live_from(stream, event, end)`, the list asks what changed whenever the stream speaks. Answer with `LazyPage::changes(items, new_revision, gone_keys)`: an item the list has changes where it stands, node by node, so a focused link, a caret and the scroll stay where the reader left them; a new one goes where its cursor sorts, and a gone one goes. No item is ever in the list twice. Send only what changed. The ask carries the cursors of the window the page holds, `LazyQuery::window()`, so you can also send an item whose text moves with no write of its own, such as a clock counting down, when it reads differently than it did. An answer that holds only part of what changed says `.more(true)`, and the list asks again.
+
+### Take the revision where it commits
+
+The list moves its revision to the newest one an answer holds, so a change must never become visible after a reader has seen a later one. Take the revision inside the transaction that writes the change, from something one writer holds at a time:
+
+```rust
+// In the writing transaction: the row stays locked until it commits.
+let rev: i64 = uow
+    .fetch_scalar(&Statement::portable("UPDATE desk SET rev = rev + 1 WHERE id = 1 RETURNING rev", []))
+    .await?;
+```
+
+On SQLite, which has one writer at a time, a row id the database gives as it inserts works too. A number from a counter in memory, taken before the write, does not: a later number can commit first, and the reader moves past the earlier one for good.
+
+### Announce what arrives
+
+`.announce_new("{n} new messages", "A new message")` reads out items that arrive live, politely, once they stop coming: one announcement for a burst. An item says its own words when it arrives alone, `LazyItem::announce("New message from Harleen Kaur")`, and one the reader made themselves, `LazyItem::quiet()`, says nothing.
+
+`.seen_by(url)` tells your server, with a `POST` of an empty form, that the reader saw what the list shows: when the page shows it, and when new items arrive, only while the page is in sight. Use it to mark a conversation read, so opening its page with a `GET` changes nothing. With no script, offer a button for it.
 
 `.view(...)` names what the list shows. A page drawn again for the same view, when someone opens a row, keeps the rows the reader loaded and where they scrolled. `.current(key)` marks the row the page is about.
 
@@ -61,8 +80,8 @@ With `.since(revision)` and `.live_from(stream, event, end)`, the list asks what
 <UiA11y>
 
 - The items are a list (`role="list"`) named by the label. Each end is a link, "Show more" by default: it is what loads with the keyboard, and what a page with JavaScript off follows.
-- A status line announces each page that arrives: "50 more loaded".
-- Items added above keep the reader's place, so focus and the reading position don't jump.
+- A status line announces each page that arrives, "50 more loaded", and, with `.announce_new`, what arrives live, once a burst is over.
+- Items added above keep the reader's place, so focus and the reading position don't jump. A live change keeps the focused element itself, even when its item moves.
 - With JavaScript off each end goes to a page that holds the next part of the list.
 
 </UiA11y>
