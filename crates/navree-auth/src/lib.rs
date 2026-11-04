@@ -63,6 +63,23 @@
 //!   so clients must not send stale tokens to `login` and `refresh`; routes
 //!   stay deny-by-default and opt out with `.public()` (`#[public]`): a
 //!   global guard with a public opt-out.
+//! - **Browser sign-in** (feature `session`, with navree-session's
+//!   `SessionModule` in the app): `AuthService::sign_in_session` and
+//!   `AuthService::verify_two_factor_session` sign a browser in on its
+//!   session cookie through the same steps as a token client (sign-in
+//!   policies, the login and two-factor throttles, two-factor
+//!   authentication, the audit trail), regenerating the session against
+//!   fixation. `SessionStrategy` (`"session"`, after the JWT strategy) reads
+//!   the user back on every request once it has checked on the server that
+//!   the sign-in is live, so signing out, ending the session from another
+//!   device, changing or resetting the password and offboarding end it at
+//!   once, for a copied cookie too. It sets the same [`AccessClaims`] as a
+//!   token, so `.authenticated()`, `#[recent_auth]`,
+//!   `#[not_while_impersonating]` and the two-factor setup rule hold for
+//!   both. "Remember me" keeps a browser signed in for
+//!   `auth.session.remember_days`. `AuthPages` (feature `ui`) draws the
+//!   sign-in, two-factor, forgotten and reset password and sign-out pages
+//!   with navree-ui.
 //! - [`CurrentUser`] loads the signed-in [`User`] in handlers;
 //!   [`ClientMeta`] gives the client's IP, user agent and
 //!   request id.
@@ -191,12 +208,16 @@ mod migration;
 mod module;
 mod offboarding;
 mod options;
+#[cfg(feature = "ui")]
+mod pages;
 mod passkeys;
 mod passwordless;
 mod platform;
 mod policy;
 mod resource;
 mod service;
+#[cfg(feature = "session")]
+mod session_auth;
 mod session_controller;
 mod sessions;
 mod sign_in_policy;
@@ -229,8 +250,10 @@ pub use offboarding::CredentialsRevoked;
 pub use options::{
     AuthOptions, ImpersonationOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN,
     MagicLinkOptions, OtpOptions, PasskeyOptions, PasswordResetOptions, PlatformOptions,
-    TrustedIssuerOptions, TwoFactorOptions, VerificationOptions,
+    SessionAuthOptions, TrustedIssuerOptions, TwoFactorOptions, VerificationOptions,
 };
+#[cfg(feature = "ui")]
+pub use pages::AuthPages;
 pub use passkeys::controller::{
     PasskeyList, PasskeyLoginInput, PasskeyLoginOptionsInput, PasskeyOptionsResponse,
     PasskeyRegisterInput,
@@ -240,6 +263,11 @@ pub use platform::PlatformAdmin;
 pub use policy::TwoFactorPolicy;
 pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResourceExtension};
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
+#[cfg(feature = "session")]
+pub use session_auth::{
+    SESSION_CHALLENGE_KEY, SESSION_USER_KEY, SIGN_OUT_PATH, SessionSignIn, SessionStrategy,
+    SessionUser,
+};
 pub use session_controller::{
     ConfirmInput, ExchangeInput, ImpersonateInput, MagicLinkVerifyInput, OtpVerifyInput,
     PasswordlessInput, SessionList,

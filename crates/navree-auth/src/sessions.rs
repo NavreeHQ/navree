@@ -186,11 +186,52 @@ impl AuthService {
         proof: ConfirmProof,
         meta: &ClientMeta,
     ) -> Result<ConfirmedToken, AuthError> {
-        if claims.act.is_some() {
+        let auth_time = self
+            .confirm_identity(claims.sub, claims.sid, claims.act.is_some(), proof, meta)
+            .await?;
+        let (typ, ttl) = match claims.typ {
+            TokenType::Platform => (
+                TokenType::Platform,
+                Duration::from_secs(self.options.platform.access_ttl_secs),
+            ),
+            TokenType::TwoFactorSetup => (TokenType::TwoFactorSetup, self.jwt.access_ttl()),
+            _ => (TokenType::Access, self.jwt.access_ttl()),
+        };
+        let access_token = self.jwt.sign_session(
+            claims.sub,
+            typ,
+            ttl,
+            SessionClaims {
+                session_id: claims.sid,
+                auth_time: Some(auth_time),
+                impersonator: None,
+            },
+        )?;
+        Ok(ConfirmedToken {
+            access_token,
+            token_type: "Bearer",
+            expires_in: ttl.as_secs(),
+            auth_time,
+        })
+    }
+
+    /// The step-up check behind [`confirm`](AuthService::confirm), for
+    /// tokens and for the session cookie alike: `proof` for `user_id`, the
+    /// time recorded as the `authenticated_at` of session `session_id`, and
+    /// the `auth.confirmed` audit entry. The new `auth_time` (Unix seconds).
+    pub(crate) async fn confirm_identity(
+        &self,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        impersonating: bool,
+        proof: ConfirmProof,
+        meta: &ClientMeta,
+    ) -> Result<i64, AuthError> {
+        if impersonating {
             return Err(AuthError::ImpersonationForbidden);
         }
         let user = self
-            .find_user(claims.sub)
+            .find_user(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
         match &proof {
@@ -207,7 +248,7 @@ impl AuthService {
             }
         }
         let now = self.clock.now();
-        if let Some(session_id) = claims.sid {
+        if let Some(session_id) = session_id {
             let user_id = user.id;
             self.write(Some(user_id), |uow| async move {
                 RefreshToken::query()
@@ -220,37 +261,13 @@ impl AuthService {
             })
             .await?;
         }
-        let (typ, ttl) = match claims.typ {
-            TokenType::Platform => (
-                TokenType::Platform,
-                Duration::from_secs(self.options.platform.access_ttl_secs),
-            ),
-            TokenType::TwoFactorSetup => (TokenType::TwoFactorSetup, self.jwt.access_ttl()),
-            _ => (TokenType::Access, self.jwt.access_ttl()),
-        };
-        let auth_time = now.timestamp();
-        let access_token = self.jwt.sign_session(
-            user.id,
-            typ,
-            ttl,
-            SessionClaims {
-                session_id: claims.sid,
-                auth_time: Some(auth_time),
-                impersonator: None,
-            },
-        )?;
         self.audit(
             entry(AuditKind::Auth, "auth.confirmed", meta)
                 .actor(user.id)
-                .metadata(json!({ "method": proof.method(), "session_id": claims.sid })),
+                .metadata(json!({ "method": proof.method(), "session_id": session_id })),
         )
         .await;
-        Ok(ConfirmedToken {
-            access_token,
-            token_type: "Bearer",
-            expires_in: ttl.as_secs(),
-            auth_time,
-        })
+        Ok(now.timestamp())
     }
 }
 

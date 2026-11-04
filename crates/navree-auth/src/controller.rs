@@ -1,13 +1,15 @@
 //! The auth routes under `{api_prefix}{routes_prefix}` (default
 //! `/api/auth`): `register`, `login`, `refresh`, `logout` and `me`.
 
+use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 
 use http::header::CONTENT_TYPE;
+use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_db::Uow;
-use navree_http::extract::{FromRequest, Request};
+use navree_http::extract::{FromRequest, FromRequestParts, Request};
 use navree_http::{
     ApiMeta, AppError, Controller, CurrentPrincipal, IntoResponse, Json, NoContent, Response,
     RouteDef, schema_fn,
@@ -300,9 +302,29 @@ impl Controller for AuthController {
 
         let service = self.service.clone();
         let logout = move |CurrentPrincipal(principal): CurrentPrincipal,
+                           meta: ClientMeta,
+                           browser: BrowserSession,
                            OptionalBody(input): OptionalBody<LogoutInput>| {
             let service = service.clone();
             async move {
+                // A browser signed in on its session: that sign-in ends, and
+                // with `all` every other session of the user too.
+                #[cfg(feature = "session")]
+                if let Some(session) = browser.0 {
+                    service
+                        .sign_out_session(&session, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    if input.all {
+                        service
+                            .logout(None, principal.user_id, true)
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                    }
+                    return Ok::<_, AppError>(NoContent);
+                }
+                #[cfg(not(feature = "session"))]
+                let _ = (browser, meta);
                 service
                     .logout(input.refresh_token.as_deref(), principal.user_id, input.all)
                     .await
@@ -317,6 +339,11 @@ impl Controller for AuthController {
                 .api(ApiMeta {
                     success_status: 204,
                     request: Some(schema_fn::<LogoutInput>),
+                    description: Some(
+                        "A browser signed in on the session cookie is signed out of it (and, with \
+                         `all`, every other session ends too); it sends its CSRF token."
+                            .to_owned(),
+                    ),
                     ..api("Sign out: revoke a session, or every session", &[400, 401])
                 }),
         );
@@ -363,6 +390,39 @@ pub(crate) async fn login_response(
             expires_in: service.options().two_factor.challenge_ttl_secs,
         }))
         .into_response()),
+    }
+}
+
+/// The request's navree-session session, when the request is signed in
+/// with it (a browser, feature `session`); nothing otherwise. The routes
+/// that answer a browser differently from a token client take it.
+pub(crate) struct BrowserSession(
+    #[cfg(feature = "session")] pub(crate) Option<navree_session::Session>,
+);
+
+impl FromRequestParts for BrowserSession {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        #[cfg(feature = "session")]
+        {
+            let via_session = parts
+                .extensions
+                .get::<navree_contracts::AuthState>()
+                .and_then(|state| state.0.as_ref())
+                .is_some_and(|principal| principal.via == navree_contracts::AuthVia::Session);
+            let session = parts
+                .extensions
+                .get::<navree_session::Session>()
+                .filter(|_| via_session)
+                .cloned();
+            Ok(BrowserSession(session))
+        }
+        #[cfg(not(feature = "session"))]
+        {
+            let _ = parts;
+            Ok(BrowserSession())
+        }
     }
 }
 

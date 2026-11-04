@@ -79,6 +79,10 @@ pub const MIN_SECRET_LEN: usize = 32;
 /// # rp_id = "example.com"
 /// rp_name = "Navree"
 /// # origins = ["https://app.example.com"]
+///
+/// [auth.session]                  # browsers signed in on the session cookie
+/// lifetime_hours = 24             # the longest a sign-in lasts without "remember me"
+/// remember_days = 30              # how long "remember me" keeps a browser signed in
 /// ```
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
@@ -119,6 +123,8 @@ pub struct AuthOptions {
     pub trusted_issuers: BTreeMap<String, TrustedIssuerOptions>,
     /// Passkeys (WebAuthn, `/auth/passkeys/*`).
     pub passkeys: PasskeyOptions,
+    /// Browsers signed in on the session cookie (the `session` feature).
+    pub session: SessionAuthOptions,
 }
 
 impl Default for AuthOptions {
@@ -138,9 +144,54 @@ impl Default for AuthOptions {
             platform: PlatformOptions::default(),
             trusted_issuers: BTreeMap::new(),
             passkeys: PasskeyOptions::default(),
+            session: SessionAuthOptions::default(),
         }
     }
 }
+
+/// How long a browser signed in on the session cookie stays signed in
+/// (configuration section `auth.session`; used with navree-auth's `session`
+/// feature).
+///
+/// A sign-in also ends when the session itself ends: after
+/// `session.lifetime_minutes` without a request, unless the person ticked
+/// "remember me".
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct SessionAuthOptions {
+    /// The longest a sign-in lasts without "remember me", however busy the
+    /// browser is, in hours (default 24).
+    pub lifetime_hours: u64,
+    /// How long "remember me" keeps a browser signed in, in days (default
+    /// 30): the session lives that long without a request, and the sign-in
+    /// ends that long after it started, whatever happens.
+    pub remember_days: u64,
+}
+
+impl Default for SessionAuthOptions {
+    fn default() -> Self {
+        Self {
+            lifetime_hours: 24,
+            remember_days: 30,
+        }
+    }
+}
+
+impl SessionAuthOptions {
+    /// The longest a sign-in lasts: `remember_days` with "remember me",
+    /// else `lifetime_hours`, in seconds.
+    pub fn max_age_secs(&self, remember: bool) -> u64 {
+        if remember {
+            self.remember_days.saturating_mul(24 * 3600)
+        } else {
+            self.lifetime_hours.saturating_mul(3600)
+        }
+    }
+}
+
+/// About a year, in hours: a longer sign-in is almost certainly a unit
+/// mistake.
+const MAX_SESSION_HOURS: u64 = 366 * 24;
 
 impl AuthOptions {
     /// Every problem with the options, naming the configuration keys (never
@@ -281,6 +332,18 @@ impl AuthOptions {
                 "auth.passkeys.user_verification must be required, preferred or discouraged"
                     .to_owned(),
             );
+        }
+        let session = &self.session;
+        if !(1..=MAX_SESSION_HOURS).contains(&session.lifetime_hours) {
+            errors.push(format!(
+                "auth.session.lifetime_hours must be between 1 and {MAX_SESSION_HOURS}"
+            ));
+        }
+        if !(1..=MAX_SESSION_HOURS / 24).contains(&session.remember_days) {
+            errors.push(format!(
+                "auth.session.remember_days must be between 1 and {}",
+                MAX_SESSION_HOURS / 24
+            ));
         }
         if errors.is_empty() {
             Ok(())
@@ -870,6 +933,37 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("auth.platform.roles"), "{error}");
+    }
+
+    // MOD-001: how long a browser stays signed in, with and without
+    // "remember me".
+    #[test]
+    fn browser_sign_in_lifetimes_are_read_and_checked() {
+        let options = load(ConfigSources::new()).unwrap();
+        assert_eq!(options.session, SessionAuthOptions::default());
+        assert_eq!(options.session.lifetime_hours, 24);
+        assert_eq!(options.session.remember_days, 30);
+        assert_eq!(options.session.max_age_secs(false), 24 * 3600);
+        assert_eq!(options.session.max_age_secs(true), 30 * 24 * 3600);
+        let options = load(
+            ConfigSources::new()
+                .set("auth.session.lifetime_hours", 8)
+                .set("auth.session.remember_days", 14),
+        )
+        .unwrap();
+        assert_eq!(options.session.max_age_secs(false), 8 * 3600);
+        assert_eq!(options.session.max_age_secs(true), 14 * 24 * 3600);
+        for (key, value) in [
+            ("auth.session.lifetime_hours", json!(0)),
+            ("auth.session.lifetime_hours", json!(10_000)),
+            ("auth.session.remember_days", json!(0)),
+            ("auth.session.remember_days", json!(400)),
+        ] {
+            let error = load(ConfigSources::new().set(key, value.clone()))
+                .expect_err(key)
+                .to_string();
+            assert!(error.contains(key), "{key} = {value}: {error}");
+        }
     }
 
     #[test]

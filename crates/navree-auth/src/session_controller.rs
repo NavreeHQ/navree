@@ -21,7 +21,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::account_controller::{AuthMessage, TwoFactorVerifyInput, two_factor_proof};
-use crate::controller::{api, login_response, signed_in};
+use crate::controller::{BrowserSession, api, login_response, signed_in};
 use crate::{
     AccessClaims, AuthError, AuthOptions, AuthService, ClientMeta, ConfirmProof, ConfirmedToken,
     LoginInput, LoginResponse, SessionResource, TwoFactorChallenge, not_while_impersonating,
@@ -245,6 +245,7 @@ impl SessionController {
         let service = self.service.clone();
         let confirm = move |claims: AccessClaims,
                             meta: ClientMeta,
+                            browser: BrowserSession,
                             Valid(Json(input)): Valid<Json<ConfirmInput>>| {
             let service = service.clone();
             async move {
@@ -264,11 +265,23 @@ impl SessionController {
                         ));
                     }
                 };
+                // A browser signed in on its session: the sign-in's time
+                // moves on; it gets no token.
+                #[cfg(feature = "session")]
+                if let Some(session) = browser.0 {
+                    service
+                        .confirm_session(&session, proof, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    return Ok::<_, AppError>(NoContent.into_response());
+                }
+                #[cfg(not(feature = "session"))]
+                let _ = browser;
                 let confirmed = service
                     .confirm(&claims, proof, &meta)
                     .await
                     .map_err(AuthError::into_app_error)?;
-                Ok::<_, AppError>(Json(confirmed))
+                Ok::<_, AppError>(Json(confirmed).into_response())
             }
         };
         routes.push(
@@ -279,7 +292,9 @@ impl SessionController {
                 .api(ApiMeta {
                     description: Some(
                         "Confirms the password or a two-factor code and returns a new access \
-                         token whose `auth_time` is now, for routes that need a recent sign-in."
+                         token whose `auth_time` is now, for routes that need a recent sign-in. \
+                         A browser signed in on the session cookie gets 204 No Content: its \
+                         sign-in counts as recent from now."
                             .to_owned(),
                     ),
                     request: Some(schema_fn::<ConfirmInput>),

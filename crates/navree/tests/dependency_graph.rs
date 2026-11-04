@@ -227,18 +227,24 @@ const HIERARCHY: &[Rule] = &[
     // L5
     // Token exchange fetches trusted issuers' key sets with navree-http-client.
     // The auth tables are navree-orm models; users are navree-access's
-    // subject `User`.
-    rule("navree-auth", 5, &["navree-openapi", 
+    // subject `User`. Browsers sign in on navree-session's session (optional
+    // feature `session`), and the sign-in, two-factor and password reset
+    // pages are drawn with navree-ui (optional feature `ui`).
+    rule("navree-auth", 5, &["navree-openapi",
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
-        "navree-access", "navree-http-client", "navree-orm",
+        "navree-access", "navree-http-client", "navree-orm", "navree-ui",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5). The nightly demo
-    // reset is a navree-schedule task.
-    rule("navree-workspace", 5, &["navree-openapi", 
+    // reset is a navree-schedule task. The `session` resolver reads the
+    // workspace a browser switched to from navree-session's session
+    // (optional feature `session`), and the workspace switcher is drawn
+    // with navree-ui (optional feature `ui`).
+    rule("navree-workspace", 5, &["navree-openapi",
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
+        "navree-session", "navree-ui",
         // `navree_workspace::testing` (feature `testing`): isolation suites
         // on navree-testing's TestApp.
         "navree-testing",

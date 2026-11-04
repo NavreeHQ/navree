@@ -70,7 +70,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L4 | `navree-ui` | The UI toolkit: typed components rendered to HTML on the server, the app shell, forms and tables from one struct, one stylesheet, and an owned runtime that loads only when a page needs it |
 | L4 | `navree-orm` | The [ORM](/docs/orm/getting-started/): models, a typed query builder, records with dirty tracking, relationships, casts, events, scopes, factories and testing helpers |
 | L4 | `navree-browser` | [Browser testing](/docs/packages/browser-testing/): Chrome or Chromium driven over the DevTools Protocol from Rust tests |
-| L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
+| L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, browser sign-in on the session, strategies, accounts, 2FA |
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation, [demo workspaces](/docs/workspaces/demo-workspaces/) |
 | L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L5 | `navree-mongo` | [MongoDB](/docs/orm/mongodb/): connections, the ORM's document driver, the schema builder on collections, migrations |
@@ -137,8 +137,8 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree-ui` | kernel, contracts, config, http, validation, ui-macros; orm (a same-layer edge, behind a feature: the data table's backend) |
 | `navree-orm` | openapi, kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
 | `navree-browser` | kernel, contracts, config, http, testing, glob |
-| `navree-auth` | openapi, kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm |
-| `navree-workspace` | openapi, kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule, orm; testing behind its `testing` feature |
+| `navree-auth` | openapi, kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm; ui behind its `ui` feature (the sign-in pages) |
+| `navree-workspace` | openapi, kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule, orm; testing behind its `testing` feature, session behind `session` (the session resolver) and ui behind `ui` (the workspace switcher) |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-mongo` | kernel, contracts, config, telemetry, schema, db, orm |
 | `navree-social` | openapi, kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth, orm |
@@ -169,7 +169,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree` | Every runtime crate, the macros and the tool crates |
 | `navree-cli` | `navree-dock`, `navree-harbor`, `navree-navigator` and `navree-template` only (the tool crates behind `navree dock`, Harbor's commands and `navree mcp`, and the template engine behind the files it generates): everything else it knows about the framework is in the code it generates |
 
-The lists are what's allowed; some crates use less (`navree-access` doesn't use the cache today, and `navree-auth` doesn't use sessions). Some edges join crates of one layer, each listed on purpose, such as `navree-config` to `navree-contracts` (L1), `navree-mail` to `navree-db` (L3) and `navree-audit` to `navree-orm` (L4). The table never points upwards and has no cycles.
+The lists are what's allowed; some crates use less (`navree-access` doesn't use the cache today). Some edges join crates of one layer, each listed on purpose, such as `navree-config` to `navree-contracts` (L1), `navree-mail` to `navree-db` (L3) and `navree-audit` to `navree-orm` (L4). The table never points upwards and has no cycles.
 
 Three exceptions apply to dev-dependencies, so tests can boot what they need:
 

@@ -302,19 +302,7 @@ impl AuthService {
         proof: TwoFactorProof,
         meta: &ClientMeta,
     ) -> Result<(User, TokenPair), AuthError> {
-        let claims = self
-            .jwt
-            .verify(challenge_token, TokenType::TwoFactorChallenge)?;
-        let user = self
-            .find_user(claims.sub)
-            .await?
-            .ok_or(AuthError::InvalidToken)?;
-        let method = claims.sign_in.unwrap_or(SignInMethod::Password);
-        self.check_sign_in(&SignInAttempt::of(&user, method), meta)
-            .await?;
-        let user = self
-            .verify_challenge(challenge_token, TokenType::TwoFactorChallenge, &proof, meta)
-            .await?;
+        let user = self.two_factor_step(challenge_token, &proof, meta).await?;
         let tokens = self.issue_tokens(&user, meta.clone()).await?;
         self.audit(
             entry(AuditKind::Auth, "auth.login", meta)
@@ -326,6 +314,32 @@ impl AuthService {
     }
 
     // -- internals ----------------------------------------------------------
+
+    /// The second step of a two-factor sign-in, for tokens and for the
+    /// session cookie alike: the challenge token, the
+    /// [`SignInPolicy`](crate::SignInPolicy)s asked again about the method
+    /// of the first step, then `proof` (see
+    /// [`verify_two_factor`](AuthService::verify_two_factor)). Nothing is
+    /// issued yet.
+    pub(crate) async fn two_factor_step(
+        &self,
+        challenge_token: &str,
+        proof: &TwoFactorProof,
+        meta: &ClientMeta,
+    ) -> Result<User, AuthError> {
+        let claims = self
+            .jwt
+            .verify(challenge_token, TokenType::TwoFactorChallenge)?;
+        let user = self
+            .find_user(claims.sub)
+            .await?
+            .ok_or(AuthError::InvalidToken)?;
+        let method = claims.sign_in.unwrap_or(SignInMethod::Password);
+        self.check_sign_in(&SignInAttempt::of(&user, method), meta)
+            .await?;
+        self.verify_challenge(challenge_token, TokenType::TwoFactorChallenge, proof, meta)
+            .await
+    }
 
     /// Checks a challenge token of type `typ` (accepted once) and `proof`
     /// for its user; see [`verify_two_factor`](AuthService::verify_two_factor).

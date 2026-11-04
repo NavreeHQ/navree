@@ -120,6 +120,13 @@ pub(crate) enum SessionKind {
     },
     /// A platform administrator signed in to the platform audience.
     Platform,
+    /// The user signed a browser in on the session cookie; it ends
+    /// `max_age_secs` after the sign-in at the latest.
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    Browser {
+        /// The longest the sign-in lasts.
+        max_age_secs: u64,
+    },
 }
 
 /// The session columns of a refresh-token family, kept by every token of
@@ -375,6 +382,35 @@ impl AuthService {
         password: &str,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
+        match self.password_step(email, password, meta).await? {
+            PasswordStep::Done(user) => {
+                let tokens = self.issue_tokens(&user, meta.clone()).await?;
+                self.audit(entry(AuditKind::Auth, "auth.login", meta).actor(user.id))
+                    .await;
+                Ok(LoginOutcome::Authenticated { user, tokens })
+            }
+            PasswordStep::TwoFactor {
+                user,
+                challenge_token,
+            } => Ok(LoginOutcome::TwoFactorRequired {
+                user,
+                challenge_token,
+            }),
+        }
+    }
+
+    /// The first step of every password sign-in, for tokens and for the
+    /// session cookie alike: the [`SignInPolicy`]s for
+    /// [`SignInMethod::Password`], the per email and IP throttle, the
+    /// credentials (audited as `auth.login_failed` when wrong), and, for an
+    /// account with two-factor authentication, a challenge (audited as
+    /// `auth.two_factor_challenge`). Nothing is issued yet.
+    pub(crate) async fn password_step(
+        &self,
+        email: &str,
+        password: &str,
+        meta: &ClientMeta,
+    ) -> Result<PasswordStep, AuthError> {
         self.check_sign_in(&SignInAttempt::new(email, SignInMethod::Password), meta)
             .await?;
         let key = self.throttle.key(email, meta.ip.as_deref());
@@ -399,15 +435,12 @@ impl AuthService {
                         entry(AuditKind::Auth, "auth.two_factor_challenge", meta).actor(user.id),
                     )
                     .await;
-                    return Ok(LoginOutcome::TwoFactorRequired {
+                    return Ok(PasswordStep::TwoFactor {
                         user,
                         challenge_token,
                     });
                 }
-                let tokens = self.issue_tokens(&user, meta.clone()).await?;
-                self.audit(entry(AuditKind::Auth, "auth.login", meta).actor(user.id))
-                    .await;
-                Ok(LoginOutcome::Authenticated { user, tokens })
+                Ok(PasswordStep::Done(user))
             }
             Err(known_user) => {
                 tracing::warn!(
@@ -455,6 +488,23 @@ impl AuthService {
         meta: ClientMeta,
         kind: SessionKind,
     ) -> Result<(TokenPair, Uuid), AuthError> {
+        let (session, secret) = self.open_family(user, &meta, kind).await?;
+        let pair = self
+            .session_pair(user.id, Some(user), &session, &secret)
+            .await?;
+        Ok((pair, session.family_id))
+    }
+
+    /// Starts a session of `kind` for `user` on the server: the first row
+    /// of a new refresh-token family, which [`sessions`](AuthService::sessions)
+    /// lists and every revocation ends. The session's state and the
+    /// secret of its first refresh token.
+    pub(crate) async fn open_family(
+        &self,
+        user: &User,
+        meta: &ClientMeta,
+        kind: SessionKind,
+    ) -> Result<(SessionState, RefreshSecret), AuthError> {
         let now = self.clock.now();
         let session = match kind {
             SessionKind::App => SessionState {
@@ -478,18 +528,22 @@ impl AuthService {
                 impersonator: None,
                 audience: Some(PLATFORM_AUDIENCE.to_owned()),
             },
+            SessionKind::Browser { max_age_secs } => SessionState {
+                family_id: Uuid::now_v7(),
+                expires_at: after_secs(now, max_age_secs),
+                authenticated_at: Some(now),
+                impersonator: None,
+                audience: None,
+            },
         };
         let secret = RefreshSecret::generate();
-        let row = self.refresh_row(&secret, user.id, &session, &meta);
+        let row = self.refresh_row(&secret, user.id, &session, meta);
         self.write(Some(user.id), |uow| async move {
             RefreshToken::insert(&uow, [row]).await?;
             Ok(())
         })
         .await?;
-        let pair = self
-            .session_pair(user.id, Some(user), &session, &secret)
-            .await?;
-        Ok((pair, session.family_id))
+        Ok((session, secret))
     }
 
     /// The access token type and lifetime of `session` for `user_id`
@@ -1050,6 +1104,21 @@ impl fmt::Debug for AuthService {
             .field("options", &self.options)
             .finish_non_exhaustive()
     }
+}
+
+/// What the first step of a password sign-in found
+/// ([`AuthService::password_step`]).
+pub(crate) enum PasswordStep {
+    /// The credentials are right and no second factor is needed.
+    Done(User),
+    /// The credentials are right; the account uses two-factor
+    /// authentication.
+    TwoFactor {
+        /// The user.
+        user: User,
+        /// The challenge token ([`TokenType::TwoFactorChallenge`]).
+        challenge_token: String,
+    },
 }
 
 /// What a refresh found.

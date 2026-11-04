@@ -201,6 +201,18 @@ impl JwtService {
         self.access_ttl
     }
 
+    /// The issuer its tokens carry (`auth.jwt.issuer`).
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    pub(crate) fn issuer(&self) -> &str {
+        &self.issuer
+    }
+
+    /// The audience its tokens carry (`auth.jwt.audience`), if any.
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    pub(crate) fn audience(&self) -> Option<&str> {
+        self.audience.as_deref()
+    }
+
     /// A token for `user_id` of type `typ`, valid for `ttl`.
     pub fn sign(&self, user_id: Uuid, typ: TokenType, ttl: Duration) -> Result<String, AuthError> {
         self.sign_session(user_id, typ, ttl, SessionClaims::default())

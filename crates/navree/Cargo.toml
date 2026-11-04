@@ -115,7 +115,18 @@ storage-azure = ["storage", "navree-storage/azure"]
 ## With `validation` on too, `Valid<Query<DayRange>>` checks report windows.
 time = ["dep:navree-time", "http", "db", "navree-validation?/time"]
 ## L4
-session = ["dep:navree-session", "http", "crypto", "db"]
+## With `auth` on too, browsers sign in through `AuthModule` on the session
+## (`navree::auth::SessionStrategy`: two-factor, throttles, sign-in policies
+## and the audit trail kept); with `workspace`, the `session` workspace
+## resolver and its switch route.
+session = [
+    "dep:navree-session",
+    "http",
+    "crypto",
+    "db",
+    "navree-auth?/session",
+    "navree-workspace?/session",
+]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
 ## rules on models).
 validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
@@ -166,7 +177,16 @@ notify = [
 ]
 ## The UI toolkit: typed components rendered to HTML on the server, the app
 ## shell, forms and tables from one struct, embedded CSS, JS and fonts.
-ui = ["dep:navree-ui", "http", "validation"]
+## With `auth` on too, the sign-in, two-factor, password reset and sign-out
+## pages (`navree::auth::AuthPages`, on the session); with `workspace`, the
+## workspace switcher (`navree::workspace::WorkspaceSwitcher`).
+ui = [
+    "dep:navree-ui",
+    "http",
+    "validation",
+    "navree-auth?/ui",
+    "navree-workspace?/ui",
+]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
 ## events and observers, soft deletes, strict modes and pruning (`OrmModule`);

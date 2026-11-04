@@ -23,7 +23,10 @@ use crate::{AuthError, Claims, TokenType};
 
 /// The verified claims of the request's access token: a request extension
 /// the JWT strategy sets, and an extractor (401 for guests and for requests
-/// authenticated another way, such as a session cookie or an API token).
+/// authenticated another way, such as an API token). A browser signed in on
+/// the session cookie (feature `session`) carries them too, as its strategy
+/// read them from the server: the user, the session (`sid`) and the sign-in
+/// or confirmation time (`auth_time`), with no `jti`.
 ///
 /// ```
 /// use navree_auth::AccessClaims;

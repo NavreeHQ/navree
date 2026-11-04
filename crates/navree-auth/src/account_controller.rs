@@ -17,7 +17,7 @@ use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::controller::{api, signed_in};
+use crate::controller::{BrowserSession, api, signed_in};
 use crate::{
     AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, LoginResponse, ProfileUpdate,
     TokenPair, TwoFactorProof, TwoFactorSetup, UserResource, not_while_impersonating,
@@ -360,14 +360,32 @@ impl Controller for AccountController {
         let change_password =
             move |CurrentUser(user): CurrentUser,
                   meta: ClientMeta,
+                  browser: BrowserSession,
                   Valid(Json(input)): Valid<Json<ChangePasswordInput>>| {
                 let service = service.clone();
                 async move {
+                    // A browser signed in on its session stays signed in on a
+                    // new one; it gets no tokens.
+                    #[cfg(feature = "session")]
+                    if let Some(session) = browser.0 {
+                        service
+                            .change_password_session(
+                                &session,
+                                &input.current_password,
+                                &input.password,
+                                &meta,
+                            )
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                        return Ok::<_, AppError>(NoContent.into_response());
+                    }
+                    #[cfg(not(feature = "session"))]
+                    let _ = browser;
                     let tokens = service
                         .change_password(user.id, &input.current_password, &input.password, meta)
                         .await
                         .map_err(AuthError::into_app_error)?;
-                    Ok::<_, AppError>(Json(tokens))
+                    Ok::<_, AppError>(Json(tokens).into_response())
                 }
             };
         routes.push(
@@ -378,6 +396,11 @@ impl Controller for AccountController {
                 .api(ApiMeta {
                     request: Some(schema_fn::<ChangePasswordInput>),
                     response: Some(schema_fn::<TokenPair>),
+                    description: Some(
+                        "A browser signed in on the session cookie stays signed in on a new \
+                         session and gets 204 No Content instead of tokens."
+                            .to_owned(),
+                    ),
                     ..api(
                         "Change the password (signs out every other session; returns a new token pair)",
                         &[400, 401, 429],

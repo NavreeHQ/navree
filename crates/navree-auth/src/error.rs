@@ -194,6 +194,9 @@ pub enum AuthError {
     /// The feature is turned off in the configuration.
     #[error("{0} is not enabled")]
     Disabled(&'static str),
+    /// The browser's session could not hold the sign-in (navree-session).
+    #[error("auth session error: {0}")]
+    Session(String),
     /// The login throttle's cache failed.
     #[error("auth cache error: {0}")]
     Cache(#[from] CacheError),
@@ -327,6 +330,7 @@ impl AuthError {
             | AuthError::TwoFactor(_)
             | AuthError::Mail(_)
             | AuthError::Kernel(_)
+            | AuthError::Session(_)
             | AuthError::ShutDown => None,
         }
     }

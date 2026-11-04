@@ -264,21 +264,48 @@ impl AuthService {
         new_password: &str,
         meta: ClientMeta,
     ) -> Result<TokenPair, AuthError> {
+        let issued = meta.clone();
+        self.change_password_then(
+            user_id,
+            current_password,
+            new_password,
+            &meta,
+            |user| async move { self.issue_tokens(&user, issued).await },
+        )
+        .await
+    }
+
+    /// [`change_password`](AuthService::change_password), ending with `then`
+    /// in the same unit of work, after every other session is revoked: what
+    /// the caller's own new session is started with (a token pair, or a
+    /// browser's session).
+    pub(crate) async fn change_password_then<T, F, Fut>(
+        &self,
+        user_id: Uuid,
+        current_password: &str,
+        new_password: &str,
+        meta: &ClientMeta,
+        then: F,
+    ) -> Result<T, AuthError>
+    where
+        F: FnOnce(User) -> Fut,
+        Fut: std::future::Future<Output = Result<T, AuthError>>,
+    {
         let user = self
             .find_user(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
         self.check_sign_in(
             &crate::SignInAttempt::of(&user, crate::SignInMethod::Password),
-            &meta,
+            meta,
         )
         .await?;
-        self.confirm_password(&user, current_password, "current_password", &meta)
+        self.confirm_password(&user, current_password, "current_password", meta)
             .await?;
         self.check_password(new_password)?;
         let hash = self.hasher.hash(new_password).await?;
         let now = self.clock.now();
-        let audit = entry(AuditKind::Auth, "auth.password_changed", &meta)
+        let audit = entry(AuditKind::Auth, "auth.password_changed", meta)
             .actor(user.id)
             .subject(USER_SUBJECT, user.id.to_string());
         self.write(Some(user.id), |uow| async move {
@@ -294,9 +321,9 @@ impl AuthService {
                 user.updated_at = now;
             })
             .await?;
-            let tokens = self.issue_tokens(&user, meta).await?;
+            let started = then(user).await?;
             self.audit_after_commit(&uow, audit).await;
-            Ok(tokens)
+            Ok(started)
         })
         .await
     }

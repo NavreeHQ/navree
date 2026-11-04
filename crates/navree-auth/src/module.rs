@@ -175,6 +175,27 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .controller::<PasskeyController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
+    // Browsers signed in on the session cookie, after the JWT strategy: a
+    // request with a bearer token is the token's.
+    #[cfg(feature = "session")]
+    m.multi(
+        Factory::<dyn Strategy>::new(|r: Resolver| async move {
+            let service = r.get::<AuthService>().await?;
+            let options = r.get::<AuthOptions>().await?;
+            let api_prefix = match r.app().try_get::<HttpOptions>().await {
+                Some(http) => http.api_prefix.clone(),
+                None => String::new(),
+            };
+            let mut routes = setup_routes(&api_prefix, &options);
+            routes.push((Method::POST, crate::session_auth::SIGN_OUT_PATH.to_owned()));
+            let strategy = crate::SessionStrategy::new(service).with_setup_routes(routes);
+            Ok(Arc::new(strategy) as Arc<dyn Strategy>)
+        })
+        .deps(vec![
+            ProviderKey::of::<AuthService>(),
+            ProviderKey::of::<AuthOptions>(),
+        ]),
+    );
 }
 
 /// The routes a two-factor setup token reaches: setting two-factor

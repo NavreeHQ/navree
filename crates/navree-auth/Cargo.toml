@@ -17,6 +17,15 @@ default = []
 postgres = ["navree-db/postgres"]
 ## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
 mysql = ["navree-db/mysql"]
+## Browser sign-in on navree-session's session: `SessionStrategy` and the
+## `AuthService::sign_in_session` family (two-factor, throttles, sign-in
+## policies and the audit trail as for tokens). The facade turns it on when
+## both its `auth` and `session` features are on.
+session = ["dep:navree-session"]
+## `AuthPages`: the sign-in, two-factor, forgotten and reset password and
+## sign-out pages, drawn with navree-ui on the session. The facade turns it
+## on when both its `auth` and `ui` features are on.
+ui = ["session", "dep:navree-ui"]
 
 [dependencies]
 # base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
@@ -40,6 +49,9 @@ navree-kernel = { workspace = true }
 # navree-mail: the account flows (password reset mail).
 navree-mail = { workspace = true }
 navree-openapi = { workspace = true }
+# Browser sign-in (feature `session`) and its pages (feature `ui`).
+navree-session = { workspace = true, optional = true }
+navree-ui = { workspace = true, optional = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
 # sign-in tokens, pending resets and passkeys are written through the ORM;
 # `User` is an access subject (`#[model(subject)]`, feature `access`).
@@ -61,6 +73,8 @@ zeroize = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
+# The crate's own tests sign browsers in and draw the pages.
+navree-auth = { workspace = true, features = ["session", "ui"] }
 futures = { workspace = true }
 navree-api = { workspace = true }
 # The PostgreSQL test checks the impersonator column of the audit log.
