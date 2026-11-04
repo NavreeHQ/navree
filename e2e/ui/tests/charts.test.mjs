@@ -33,13 +33,6 @@ const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const chartsModule = readFileSync(join(crate, "dist/charts.js"));
 
-/** The light values of the tokens, read from the toolkit's one source, for a page that ships only dark. */
-const tokensRs = readFileSync(join(crate, "src/tokens.rs"), "utf8");
-const LIGHT =
-  ":root{color-scheme:light" +
-  [...tokensRs.matchAll(/t\("([a-z0-9-]+)",\s*"(#[0-9a-f]{6})",\s*"(#[0-9a-f]{6})"\)/g)].map((m) => `;--${m[1]}:${m[3]}`).join("") +
-  "}body{background:var(--ink-0)}";
-
 const reachable = await fetch(`${BASE}/charts?case=bar`).then((r) => r.ok, () => false);
 
 const NASTY = `<script>window.__pwned=1</script><img src=x onerror="window.__pwned=1"> "quotes" 'single' javascript:alert(1)`;
@@ -302,12 +295,11 @@ for (const name of NAMES) {
 
     /**
      * A page on the proof app. Console errors, page errors and content security policy reports
-     * are kept; `page.done()` asserts there are none. `light` swaps the tokens for their light
-     * values, which the page's own policy would refuse, so a light page is not checked for
-     * policy reports (the dark page of the same case is).
+     * are kept; `page.done()` asserts there are none. `light` asks for the light palette with
+     * `?mode=light`, as a reader's choice would; `theme` asks for a built-in theme by its id.
      */
-    async function open(path, { width = 1440, height = 900, light = false, js = true } = {}) {
-      const context = await browser.newContext({ viewport: { width, height }, javaScriptEnabled: js, bypassCSP: light, colorScheme: light ? "light" : "dark" });
+    async function open(path, { width = 1440, height = 900, light = false, js = true, theme = null } = {}) {
+      const context = await browser.newContext({ viewport: { width, height }, javaScriptEnabled: js, colorScheme: light ? "light" : "dark" });
       contexts.push(context);
       const page = await context.newPage();
       page.problems = [];
@@ -324,11 +316,8 @@ for (const name of NAMES) {
           });
         });
       }
-      await page.goto(BASE + path);
-      if (light) {
-        await page.addStyleTag({ content: LIGHT });
-        await settle(page);
-      }
+      const asked = [light && "mode=light", theme && `theme=${theme}`].filter(Boolean).join("&");
+      await page.goto(BASE + path + (asked ? (path.includes("?") ? "&" : "?") + asked : ""));
       page.done = async () => {
         let csp = js ? await page.evaluate(() => window.__csp || []) : [];
         // Playwright's WebKit on Windows reports inline styles refused on every page, a bare 404
