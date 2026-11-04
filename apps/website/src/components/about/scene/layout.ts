@@ -27,6 +27,7 @@ import {
   HEAD_OVER_SCREEN,
   IMAGE,
   LIGHT,
+  PATKA,
   QUIET,
   RAIN_ZONES,
   SCREEN,
@@ -200,6 +201,7 @@ export async function buildLayout(
   };
   const zones = within(RAIN_ZONES);
   const quiet = within(QUIET);
+  const patka = within([PATKA]);
 
   /** The picture's light averaged over a grid of `cw` x `ch` cells: luminance and whiteness per cell. */
   const sampleGrid = (cw: number, ch: number) => {
@@ -238,7 +240,7 @@ export async function buildLayout(
         if (l < 0.07) continue;
         const x = (col + 0.5) * cw;
         const y = (row + 0.5) * ch;
-        if (zones(x, y)) continue;
+        if (zones(x, y) || patka(x, y)) continue;
         const z = depth.at(x, y) - 3;
         const figure = depth.isFigure(x, y) && !quiet(x, y) ? 1 : 0;
         essential.push(
@@ -263,7 +265,7 @@ export async function buildLayout(
         if (l < 0.1 || next() > 0.75) continue;
         const x = (col + 0.5) * cw + (next() - 0.5) * cw * 0.6;
         const y = (row + 0.5) * ch;
-        if (zones(x, y)) continue;
+        if (zones(x, y) || patka(x, y)) continue;
         const z = depth.at(x, y) - 4;
         dust.push([...toWorld(x, y, z), 7 * scaleAt(z)], [CELL.glow, Math.min(1, l * 1.4), 0.4, 0], [next(), GROUP.dust, 0, 0], [x, y, 0, 0]);
       }

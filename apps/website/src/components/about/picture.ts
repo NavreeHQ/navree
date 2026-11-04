@@ -21,7 +21,7 @@ export const WIDTHS = [640, 1280, 1920, 2560] as const;
  * fetches the new one. `scripts/postbuild.ts` stops the build when it no
  * longer matches the files, and prints the right value.
  */
-export const PICTURE_VERSION = "720ef38e9c";
+export const PICTURE_VERSION = "2a31786990";
 
 export const imageSrc = (width: number, ext: "avif" | "webp") => `/images/about/family-${width}.${ext}?v=${PICTURE_VERSION}`;
 
@@ -231,8 +231,9 @@ export const DEPTH_LAYERS: DepthLayer[] = [
       [600, 560],
       [600, 420],
       [590, 340],
-      [570, 300],
-      [560, 268],
+      [576, 316],
+      [561, 298],
+      [559, 268],
       [568, 235],
       [585, 210],
     ],
@@ -438,6 +439,27 @@ export const QUIET: Point[][] = [
     [820, 724],
     [764, 724],
   ],
+];
+
+/**
+ * Navraj's patka, from the joora on top down to its one clean edge at the
+ * nape. The live scene puts no digits on it at all, so nothing ever runs
+ * down the cloth like strands of hair; the pulse still lights it.
+ */
+export const PATKA: Point[] = [
+  [600, 194],
+  [625, 189],
+  [650, 199],
+  [663, 224],
+  [671, 255],
+  [669, 286],
+  [652, 301],
+  [631, 309],
+  [592, 320],
+  [569, 307],
+  [559, 280],
+  [565, 240],
+  [581, 210],
 ];
 
 /** Where the family's heads are, kept clear of the out-of-focus digits near the camera. */
