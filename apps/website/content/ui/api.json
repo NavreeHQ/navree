@@ -217,7 +217,7 @@
         "name": "new",
         "generics": "",
         "args": "actor: impl Into<Node>, verb: impl Into<Node>",
-        "doc": "`actor` did `verb`: \"Maya Patel\" \"opened\"."
+        "doc": "`actor` did `verb`: \"Lena Fischer\" \"replied to\"."
       }
     ],
     "methods": [
@@ -6791,6 +6791,11 @@
       {
         "name": "Lg",
         "doc": "40 rem: a record's details, with room for cards side by side and tabs.",
+        "default": false
+      },
+      {
+        "name": "Xl",
+        "doc": "60% of the screen and never less than `Lg`: a record with a table in it, such as an order and its lines, while the page behind stays in view.",
         "default": false
       }
     ],

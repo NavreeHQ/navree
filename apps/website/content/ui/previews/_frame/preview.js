@@ -42,19 +42,30 @@ for (const form of document.querySelectorAll("form[data-preview-search]")) {
   form.addEventListener("submit", (event) => event.preventDefault());
 }
 
-// A live feed, replayed: the rows a stream would bring were drawn by the app's own
-// Rust into a template, and this adds them to the top of the list one by one. A
-// static page has no server to stream from; in an app the server sends them.
+// Live parts, replayed: what a stream would bring was drawn by the app's own Rust
+// into a template, and this plays it one piece at a time. Each piece names the
+// list it joins (`data-preview-into`, or the template's `data-preview-replay`),
+// whether it goes at the end (`data-preview-at="end"`) rather than the top, and
+// an element it takes the place of (`data-preview-replaces`), such as a card that
+// moves or a count that changes. A static page has no server to stream from; in an
+// app the server sends them.
 for (const template of document.querySelectorAll("template[data-preview-replay]")) {
-  const list = document.getElementById(template.dataset.previewReplay ?? "");
-  const rows = [...template.content.children];
-  if (!list) continue;
+  const pieces = [...template.content.children];
   let at = 0;
   const next = () => {
-    const row = rows[at++];
-    if (!row) return;
-    row.setAttribute("data-preview-new", "");
-    list.prepend(row);
+    const piece = pieces[at++];
+    if (!piece) return;
+    const into = document.getElementById(piece.dataset.previewInto || template.dataset.previewReplay || "");
+    const old = piece.dataset.previewReplaces ? document.getElementById(piece.dataset.previewReplaces) : null;
+    if (into) {
+      piece.setAttribute("data-preview-new", "");
+      if (old && old.parentElement === into && piece.dataset.previewAt !== "end") old.replaceWith(piece);
+      else {
+        old?.remove();
+        if (piece.dataset.previewAt === "end") into.append(piece);
+        else into.prepend(piece);
+      }
+    }
     setTimeout(next, 2800);
   };
   setTimeout(next, 1600);
