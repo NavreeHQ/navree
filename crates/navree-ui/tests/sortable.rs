@@ -621,6 +621,33 @@ fn html_of(sortable: Sortable) -> String {
 }
 
 #[test]
+fn under_a_filter_each_items_move_form_starts_at_its_place_in_the_whole_list() {
+    // The filter draws the 3rd and the 9th of the list: their forms say 3 and 9, as
+    // the server places by, not 1 and 2. An item with no place counts among those
+    // drawn.
+    let list = SortList::new("backlog", "Backlog")
+        .total(40)
+        .item(SortItem::new("7", "Seventh").position(3))
+        .item(SortItem::new("31", "Thirty-first").position(9))
+        .item(SortItem::new("2", "Second"))
+        .item(SortItem::new("5", "Fifth").position(0));
+    let html = html_of(Sortable::new("b", "Board").post("/m?label=bug").list(list.clone()));
+    let value = |id: &str| {
+        let at = html.find(&format!(r#"id="b-item-{id}-position""#)).unwrap();
+        html[at..].split("value=\"").nth(1).unwrap().split('"').next().unwrap().to_owned()
+    };
+    assert_eq!(value("7"), "3");
+    assert_eq!(value("31"), "9");
+    assert_eq!(value("2"), "3", "the third drawn");
+    assert_eq!(value("5"), "1", "a place is 1 at least");
+    // The address the forms post to keeps the page's query.
+    assert!(html.contains(r#"action="/m?label=bug""#), "{html}");
+    // A page of the list does the same.
+    let json = serde_json::to_string(&Sortable::new("b", "Board").post("/m").list(list).page("backlog")).unwrap();
+    assert!(json.contains(r#"id=\"b-item-31-position\" type=\"number\" name=\"position\" min=\"1\" inputmode=\"numeric\" value=\"9\""#), "{json}");
+}
+
+#[test]
 fn the_next_page_of_a_list_is_two_ops() {
     let board = Sortable::new("b", "Board")
         .post("/m")

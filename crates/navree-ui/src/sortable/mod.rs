@@ -143,6 +143,7 @@ pub struct SortItem {
     name: String,
     body: Vec<Node>,
     locked: Option<String>,
+    position: Option<usize>,
 }
 
 impl SortItem {
@@ -155,6 +156,7 @@ impl SortItem {
             name: name.into(),
             body: Vec::new(),
             locked: None,
+            position: None,
         }
     }
 
@@ -170,6 +172,15 @@ impl SortItem {
     /// server must refuse its moves too: this is only what the page shows.
     pub fn locked(mut self, reason: impl Into<String>) -> Self {
         self.locked = Some(reason.into());
+        self
+    }
+
+    /// Its place in its whole list, 1 being first, when the page draws only some of
+    /// the list (a filter): its move form starts at this number, which is what the
+    /// server reads [`Move::position`] against. Without it, the place is counted
+    /// among the items drawn, from [`SortList::from`].
+    pub fn position(mut self, position: usize) -> Self {
+        self.position = Some(position.max(1));
         self
     }
 }
@@ -465,7 +476,7 @@ impl Sortable {
                     item,
                     &item_id,
                     &list.key,
-                    list.start + at + 1,
+                    item.position.unwrap_or(list.start + at + 1),
                     &choices,
                     &help_id,
                 ));
@@ -626,7 +637,7 @@ impl Sortable {
                     item,
                     &item_id,
                     &list.key,
-                    list.start + at + 1,
+                    item.position.unwrap_or(list.start + at + 1),
                     &choices,
                     &help_id,
                 )
