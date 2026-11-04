@@ -86,8 +86,9 @@ impl Environment {
     /// document and its page are off, the ORM's strict modes are off, and
     /// error pages hide their details.
     ///
-    /// Today only `production` does. Every module asks here, so deciding that
-    /// `staging` behaves like production later is one change in this method.
+    /// Only `production` does. Every module asks here, so which environments
+    /// take the production behaviour (`staging`, say) is decided in this one
+    /// method.
     pub fn behaves_like_production(&self) -> bool {
         self.is_production()
     }

@@ -1,4 +1,4 @@
-//! D01 (CONFIG-003): a config file that ranks above `.env` hides its values,
+//! CONFIG-003: a config file that ranks above `.env` hides its values,
 //! and the boot says so, naming the key and both sources. Where the file
 //! ranks below `.env` nothing is hidden and there is nothing to say. The
 //! order of the default sources is one constant,

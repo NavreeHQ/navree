@@ -1,5 +1,5 @@
 //! CONFIG-009: the environment name, parsed once. Only `production` changes
-//! what modules do today; `staging` does not (D02 is open), and the one place
+//! what modules do today; `staging` does not (undecided), and the one place
 //! to change that is `Environment::behaves_like_production`.
 
 use navree_config::{Config, ConfigSources, Environment};
@@ -56,7 +56,8 @@ fn names_print_in_their_canonical_form() {
 
 #[test]
 fn staging_does_not_behave_like_production_yet() {
-    // D02 is undecided: the default stays as it was. Changing it is one
+    // Whether staging behaves like production is undecided: the default
+    // stays as it was. Changing it is one
     // line in `Environment::behaves_like_production`.
     assert!(Environment::Production.behaves_like_production());
     assert!(!Environment::Staging.behaves_like_production());

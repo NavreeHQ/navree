@@ -1,4 +1,4 @@
-//! CONFIG-007, D03, D01 and the production profile: `config:check` finds
+//! CONFIG-007 and the production profile: `config:check` finds
 //! every problem at once, names unknown keys and sections, lists hidden
 //! `.env` values, and fails (exit code 1) on errors and unknown keys.
 
@@ -236,7 +236,7 @@ fn without_production_there_is_no_profile() {
     .expect("load");
     assert!(
         report.profile.is_empty(),
-        "staging is not production yet (D02)"
+        "staging does not take the production profile yet"
     );
 }
 
