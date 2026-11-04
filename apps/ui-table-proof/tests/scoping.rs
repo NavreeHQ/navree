@@ -39,6 +39,10 @@ fn rows(table: &navree::ui::TablePage<Private>) -> Vec<String> {
 #[tokio::test]
 async fn workspaces_and_row_level_security_hold_on_every_path() {
     let Ok(url) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_POSTGRES_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("skipped: NAVREE_TEST_POSTGRES_URL isn't set");
         return;
     };

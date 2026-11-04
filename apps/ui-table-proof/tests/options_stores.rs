@@ -380,6 +380,10 @@ async fn connect(url: String) -> Db {
 fn env_url(name: &str) -> Option<String> {
     let url = std::env::var(name).ok();
     if url.is_none() {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "{name} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("skipped: {name} isn't set");
     }
     url

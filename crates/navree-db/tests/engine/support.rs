@@ -128,6 +128,10 @@ impl Scratch {
     /// driver is not compiled in.
     pub async fn new(server: Server, test: &str) -> Option<Scratch> {
         if !server.compiled() {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "{test} on {server:?}: its driver feature is off and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("skipped {test} on {server:?}: its driver feature is off");
             return None;
         }
@@ -150,6 +154,10 @@ impl Scratch {
             Server::Postgres | Server::MySql => {
                 let variable = server.variable().expect("a server variable");
                 let Some(url) = setting(variable) else {
+                    assert!(
+                        std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                        "{test} on {server:?}: {variable} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                    );
                     eprintln!("skipped {test} on {server:?}: set {variable}");
                     return None;
                 };

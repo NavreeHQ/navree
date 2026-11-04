@@ -283,6 +283,10 @@ async fn setup_has_nothing_to_declare_and_dead_letters_go_to_a_topic() {
 #[tokio::test]
 async fn a_real_broker_conforms() {
     let Ok(url) = std::env::var("NAVREE_TEST_MQTT_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_MQTT_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!(
             "SKIPPED: set NAVREE_TEST_MQTT_URL to run the MQTT transport against an MQTT 5 broker"
         );

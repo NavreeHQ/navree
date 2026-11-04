@@ -379,6 +379,11 @@ mod tests {
         use navree_db::DbOptions;
 
         let Ok(admin_url) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "NAVREE_TEST_POSTGRES_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
+            eprintln!("SKIPPED statements_run_on_a_server: set NAVREE_TEST_POSTGRES_URL");
             return;
         };
         let name = format!("navree_ai_pgvector_{}", uuid::Uuid::now_v7().simple());

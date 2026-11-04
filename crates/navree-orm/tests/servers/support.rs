@@ -62,10 +62,10 @@ where
     Fut: Future<Output = ()>,
 {
     let Some(url) = navree_orm::testing::database::test_setting(server.variable()) else {
-        eprintln!(
-            "skipped: set {} to run this test against a real server",
+        navree_orm::testing::database::skip(&format!(
+            "set {} to run this test against a real server",
             server.variable()
-        );
+        ));
         return;
     };
     let admin = Db::connect(&DbOptions {

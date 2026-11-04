@@ -107,13 +107,35 @@ impl TestServer {
     pub fn url(self) -> Option<String> {
         let url = test_setting(self.variable());
         if url.is_none() {
-            eprintln!(
-                "skipped: set {} (or start the test servers: pwsh -File scripts/dev-databases.ps1 start) to run this test",
+            skip(&format!(
+                "set {} (or start the test servers: scripts/ci-services.sh start, or pwsh -File scripts/dev-databases.ps1 start) to run this test",
                 self.variable()
-            );
+            ));
         }
         url
     }
+}
+
+/// Whether `NAVREE_TEST_REQUIRE_SERVICES=1`: a test that needs a server (or
+/// Chrome, Node.js, FFmpeg) fails when it is missing instead of skipping.
+pub fn services_required() -> bool {
+    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() == Ok("1")
+}
+
+/// What a test calls where it would skip because a server is missing: prints
+/// `skipped: <reason>` and returns, or panics when
+/// [`services_required`], so a run that must have its servers cannot pass by
+/// skipping.
+///
+/// # Panics
+///
+/// When `NAVREE_TEST_REQUIRE_SERVICES=1`.
+pub fn skip(reason: &str) {
+    assert!(
+        !services_required(),
+        "{reason} (NAVREE_TEST_REQUIRE_SERVICES=1)"
+    );
+    eprintln!("skipped: {reason}");
 }
 
 /// Setting `name` for tests: the environment variable, else its line in
@@ -879,10 +901,10 @@ async fn usable_server(server: TestServer) -> Result<Option<String>, BoxError> {
             Ok(Some(url))
         }
         Err(error) if error.to_string().contains("no supporting driver") => {
-            eprintln!(
-                "skipped: {} is set, but this test binary has no driver for it: {error}",
+            skip(&format!(
+                "{} is set, but this test binary has no driver for it: {error}",
                 server.variable()
-            );
+            ));
             Ok(None)
         }
         Err(error) => Err(format!(

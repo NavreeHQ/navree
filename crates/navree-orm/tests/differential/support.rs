@@ -67,10 +67,10 @@ where
         return;
     }
     let Some(url) = navree_orm::testing::database::test_setting(variable(dialect)) else {
-        eprintln!(
-            "skipped: set {} to run the differential tests on {dialect}",
+        navree_orm::testing::database::skip(&format!(
+            "set {} to run the differential tests on {dialect}",
             variable(dialect)
-        );
+        ));
         return;
     };
     let admin = Exec::connect(&url, dialect).await;

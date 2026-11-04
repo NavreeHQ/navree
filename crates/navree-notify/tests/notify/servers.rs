@@ -39,6 +39,10 @@ impl Scratch {
         let admin = match std::env::var(var) {
             Ok(url) if !url.is_empty() => url,
             _ => {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{test}: {var} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
                 println!("SKIPPED {test}: set {var}");
                 return None;
             }

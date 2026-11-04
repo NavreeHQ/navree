@@ -321,6 +321,10 @@ async fn a_server_that_is_not_there_is_a_transport_error() {
 #[tokio::test]
 async fn real_redis_streams_conform() {
     let Ok(url) = std::env::var("NAVREE_TEST_REDIS_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_REDIS_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("SKIPPED: set NAVREE_TEST_REDIS_URL to run the Redis transport against Redis");
         return;
     };

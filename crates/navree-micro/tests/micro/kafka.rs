@@ -497,6 +497,10 @@ async fn the_settings_are_checked() {
 #[tokio::test]
 async fn a_real_broker_conforms() {
     let Ok(url) = std::env::var("NAVREE_TEST_KAFKA_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_KAFKA_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!(
             "SKIPPED: set NAVREE_TEST_KAFKA_URL to run the Kafka transport against Kafka 4.0 or later"
         );

@@ -146,6 +146,10 @@ mod scratch {
         /// notice) when it is unset.
         pub async fn new(variable: &str, mysql: bool) -> Option<Scratch> {
             let Ok(admin) = std::env::var(variable) else {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{variable} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
                 eprintln!("{variable} is not set: skipping this real-server test");
                 return None;
             };
@@ -265,6 +269,10 @@ INSERT INTO "webhook_attempts" VALUES
             .timescaledb()
             .is_none()
         {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "TimescaleDB is not available on this server and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("TimescaleDB is not available on this server: skipping");
             before.shutdown().await.unwrap();
             scratch.drop().await;
@@ -362,6 +370,10 @@ INSERT INTO "webhook_attempts" VALUES
         .unwrap();
         let target = Schema::new(&lighthouse_db).target().await.unwrap();
         if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "TimescaleDB is not available on this server and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("TimescaleDB is not available on this server: skipping");
             app_db.drop().await;
             monitoring.drop().await;
@@ -428,6 +440,10 @@ INSERT INTO "webhook_attempts" VALUES
         let schema = Schema::new(&db);
         let target = schema.target().await.unwrap();
         if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "TimescaleDB is not available on this server and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("TimescaleDB is not available on this server: skipping");
             scratch.drop().await;
             return;
@@ -514,6 +530,10 @@ INSERT INTO "webhook_attempts" VALUES
         let schema = Schema::new(&db);
         let target = schema.target().await.unwrap();
         if target.timescaledb().is_none() {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "TimescaleDB is not available on this server and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("TimescaleDB is not available on this server: skipping");
             app.shutdown().await.unwrap();
             scratch.drop().await;

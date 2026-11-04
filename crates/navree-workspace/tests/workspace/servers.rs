@@ -30,7 +30,14 @@ mod real {
 
     impl Scratch {
         async fn new(variable: &str, drop_sql: fn(&str) -> String) -> Option<Scratch> {
-            let admin = std::env::var(variable).ok()?;
+            let Ok(admin) = std::env::var(variable) else {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{variable} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
+                println!("SKIPPED: set {variable}");
+                return None;
+            };
             let name = format!("navree_library_{}", Uuid::now_v7().simple());
             run(&admin, &format!("CREATE DATABASE {name}")).await;
             let (base, rest) = admin.rsplit_once('/').unwrap();

@@ -217,6 +217,10 @@ mod scratch {
         /// notice) when it is unset.
         pub async fn new(variable: &str, mysql: bool) -> Option<Scratch> {
             let Ok(admin) = std::env::var(variable) else {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{variable} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
                 eprintln!("{variable} is not set: skipping this real-server test");
                 return None;
             };

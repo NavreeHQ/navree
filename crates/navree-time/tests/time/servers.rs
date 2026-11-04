@@ -191,11 +191,19 @@ async fn the_server_knows_every_zone_name(scratch: Scratch) {
     let known: BTreeSet<String> = match db.fetch_column::<String>(&Statement::text(catalog)).await {
         Ok(names) => names.into_iter().collect(),
         Err(error) => {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "the zone names on {backend}: {error} (NAVREE_TEST_REQUIRE_SERVICES=1)"
+            );
             println!("SKIPPED the zone names on {backend}: {error}");
             return;
         }
     };
     if known.is_empty() {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "the zone names on {backend}: no time zone tables (NAVREE_TEST_REQUIRE_SERVICES=1)"
+        );
         println!("SKIPPED the zone names on {backend}: no time zone tables");
         return;
     }

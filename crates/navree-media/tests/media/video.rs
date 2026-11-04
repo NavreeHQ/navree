@@ -235,6 +235,10 @@ async fn the_process_runner_passes_only_what_the_tool_needs_to_start() {
 async fn real_ffmpeg_when_installed() {
     let ffmpeg = Ffmpeg::new(FfmpegOptions::default());
     if ffmpeg.version().await.is_err() {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "real_ffmpeg_when_installed: ffmpeg is not on the PATH and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("SKIPPED real_ffmpeg_when_installed: ffmpeg is not on the PATH");
         return;
     }

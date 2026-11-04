@@ -50,6 +50,10 @@ struct Scratch {
 impl Scratch {
     async fn new() -> Option<Scratch> {
         let Ok(admin) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "NAVREE_TEST_POSTGRES_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!("NAVREE_TEST_POSTGRES_URL is not set: skipping the PostgreSQL test");
             return None;
         };
@@ -127,6 +131,10 @@ async fn timescaledb(db: &Db) -> bool {
             .unwrap();
         return true;
     }
+    assert!(
+        std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+        "TimescaleDB is not available on this server and NAVREE_TEST_REQUIRE_SERVICES=1"
+    );
     eprintln!("TimescaleDB is not available on this server: skipping");
     false
 }

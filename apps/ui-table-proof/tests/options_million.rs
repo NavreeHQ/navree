@@ -66,6 +66,10 @@ async fn timed(
 #[ignore = "seeds 1,000,000 rows"]
 async fn a_million_rows_answer_a_search_in_time() {
     let Ok(url) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_POSTGRES_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("skipped: NAVREE_TEST_POSTGRES_URL isn't set");
         return;
     };

@@ -84,6 +84,10 @@ fn broker() -> Option<String> {
     match std::env::var("NAVREE_TEST_RABBITMQ_URL") {
         Ok(url) => Some(url),
         Err(_) => {
+            assert!(
+                std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                "NAVREE_TEST_RABBITMQ_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+            );
             eprintln!(
                 "SKIPPED: set NAVREE_TEST_RABBITMQ_URL to run the RabbitMQ transport against RabbitMQ"
             );

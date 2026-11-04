@@ -57,6 +57,10 @@ impl Scratch {
         let admin_url = match std::env::var(variable) {
             Ok(url) if compiled && !url.is_empty() => url,
             _ => {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{server:?}: {variable} is not set (or its feature is off) and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
                 eprintln!("skipped on {server:?}: set {variable} and turn its feature on");
                 return None;
             }

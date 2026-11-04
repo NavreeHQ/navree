@@ -119,6 +119,10 @@ async fn a_server_that_is_not_there_fails_the_call_as_a_transport_error() {
 #[tokio::test]
 async fn jetstream_conforms() {
     let Ok(url) = std::env::var("NAVREE_TEST_NATS_URL") else {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "NAVREE_TEST_NATS_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+        );
         eprintln!("SKIPPED: set NAVREE_TEST_NATS_URL to run the NATS transport against JetStream");
         return;
     };
