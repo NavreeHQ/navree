@@ -1,1 +1,44 @@
-/* The upload styles: filled in with its component. */
+/*
+ * navree-ui's stylesheet: Upload. It is linked only on a page that draws one. Until the upload
+ * module is ready the native file input shows, styled; once it is ready, the input is laid
+ * over the drop area, invisible, so a click or a drop anywhere on the area reaches it and the
+ * list below takes over from its text. Colours are tokens only.
+ */
+[data-slot=upload]{display:flex;flex-direction:column;gap:.5rem;min-width:0;max-width:36rem}
+[data-slot=upload-label]{color:var(--fg);font-size:14px;font-weight:500;line-height:1.25}
+[data-slot=upload-zone]{position:relative;display:flex;flex-direction:column;align-items:center;gap:.375rem;padding:1.25rem 1rem;border:1px dashed var(--line-3);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-2);font-size:14px;text-align:center;transition:border-color .1s,background-color .1s;
+  &:hover{border-color:var(--fg-2)}
+  &:has(:focus-visible){outline:2px solid var(--ring);outline-offset:2px}
+}
+[data-slot=upload][data-drag] > [data-slot=upload-zone]{border-color:var(--accent);background:var(--ink-2)}
+[data-slot=upload][data-invalid] > [data-slot=upload-zone]{border-color:var(--danger)}
+[data-slot=upload-prompt]{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.25rem .5rem;
+  & > [data-slot=icon]{width:1.25rem;height:1.25rem;color:var(--fg-2)}
+}
+[data-slot=upload-title]{color:var(--fg);font-weight:500}
+[data-slot=upload-hint]{color:var(--fg-3);font-size:12px}
+[data-slot=upload-input]{max-width:100%;color:var(--fg-1);font:inherit;
+  &::file-selector-button{margin-inline-end:.75rem;height:2rem;padding:0 .75rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font:inherit;font-weight:500;cursor:pointer}
+}
+[data-slot=upload][data-ready] > [data-slot=upload-zone] > [data-slot=upload-input]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+[data-slot=upload][data-disabled] > [data-slot=upload-zone]{border-color:var(--line);background:var(--ink-0);cursor:not-allowed;& [data-slot=upload-title]{color:var(--fg-2)}}
+[data-slot=upload][data-ready][data-disabled] > [data-slot=upload-zone] > [data-slot=upload-input]{cursor:not-allowed}
+[data-slot=upload][data-compact] > [data-slot=upload-zone]{flex-direction:row;flex-wrap:wrap;justify-content:center;padding:.5rem .75rem}
+
+[data-slot=upload-list]{display:flex;flex-direction:column;gap:.5rem;margin:0;padding:0;list-style:none;
+  &:empty{display:none}
+}
+[data-slot=upload-item]{display:flex;flex-wrap:wrap;align-items:center;gap:.375rem .5rem;
+  & > [data-slot=attachment]{display:flex;flex:1 1 14rem;min-width:0;overflow-wrap:anywhere}
+  &:not([data-state=sending]) > [data-slot=progress]{display:none}
+  & > [data-slot=progress]{order:3;flex-basis:100%}
+  &[data-state=failed] [data-slot=attachment-description]{color:var(--danger)}
+}
+[data-slot=upload-row-actions]{display:flex;gap:.25rem;
+  & > *{display:none}
+}
+[data-slot=upload-item]:is([data-state=queued],[data-state=sending]) [data-ui-cancel],[data-slot=upload-item][data-state=failed] :is([data-ui-retry],[data-ui-remove]),[data-slot=upload-item][data-state=chosen] [data-ui-remove]{display:inline-flex}
+
+[data-slot=upload-status]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+[data-slot=upload][data-ready]:not([data-manual]) > [data-slot=upload-actions]{display:none}
+@media (prefers-reduced-motion:reduce){[data-slot=upload-zone]{transition:none}}

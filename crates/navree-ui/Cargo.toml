@@ -59,8 +59,8 @@ uuid = { workspace = true }
 chrono-tz = { workspace = true }
 serde_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
-# Its own `phone` feature, for the tests of the phone input.
-navree-ui = { workspace = true, features = ["phone"] }
+# Its own `phone` and `storage` features, for the tests of the phone input and the uploads.
+navree-ui = { workspace = true, features = ["phone", "storage"] }
 navree-testing = { workspace = true }
 proptest = { workspace = true }
 # A paused clock, for a test of something that never answers.

@@ -20,7 +20,7 @@ chrono = { workspace = true }
 chrono-tz = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
+navree = { workspace = true, default-features = false, features = ["ui", "validation-phone", "storage"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

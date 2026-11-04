@@ -81,4 +81,4 @@ pub use options::{AzureConfig, DiskConfig, GcsConfig, S3Config, StorageOptions};
 pub use presign::{PresignPut, PresignedUpload, upload_path};
 pub use storage::Storage;
 pub use sync::{SyncFailure, SyncOptions, SyncReport};
-pub use upload::{StoredFile, UploadRules, store_upload};
+pub use upload::{SNIFF_BYTES, SniffedType, StoredFile, UploadRules, sniff_type, store_upload};

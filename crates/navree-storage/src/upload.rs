@@ -17,7 +17,7 @@ use crate::{Disk, StorageError};
 
 /// Bytes read before sniffing the content type (enough for every format
 /// `infer` recognises by its leading bytes).
-pub(crate) const SNIFF_BYTES: usize = 8 * 1024;
+pub const SNIFF_BYTES: usize = 8 * 1024;
 
 /// What [`store_upload`] accepts.
 ///
@@ -183,6 +183,38 @@ pub async fn store_upload(
             Err(source) => Err(AppError::internal(source)),
         },
         Err(error) => Err(AppError::internal(error)),
+    }
+}
+
+/// The type of a file read from its first bytes, and the extension it is stored with.
+///
+/// This is the answer [`store_upload`] and [`Disk::accept_upload`](crate::Disk::accept_upload)
+/// act on, for a caller that puts a file together itself (from chunks, say) and must
+/// accept and refuse exactly the files they would.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SniffedType {
+    /// The MIME type, never taken from the client.
+    pub mime: String,
+    /// The extension a file of this type is stored with.
+    pub extension: String,
+}
+
+/// Sniffs the type of a file from `head`, its first [`SNIFF_BYTES`] bytes or fewer when
+/// the file is shorter, the way [`store_upload`] does. `original_name` is the client's
+/// file name, which counts only for the extension of a `text/*` file.
+///
+/// ```
+/// let head = b"\x89PNG\r\n\x1a\n";
+/// let png = navree_storage::sniff_type(head, Some("a.exe"));
+/// assert_eq!(png.mime, "image/png");
+/// let csv = navree_storage::sniff_type(b"a,b\n", Some("data.csv"));
+/// assert_eq!(csv.mime, "text/csv");
+/// ```
+pub fn sniff_type(head: &[u8], original_name: Option<&str>) -> SniffedType {
+    let sniffed = sniff(head, original_name);
+    SniffedType {
+        mime: sniffed.mime,
+        extension: sniffed.extension,
     }
 }
 
