@@ -1,0 +1,298 @@
+{
+  "captured": "2026-11-04",
+  "note": "Written by scripts/showcase-images.ts from the apps running (cargo run --release) and the site's preview pages. Each width is an AVIF (4:4:4) and a WebP.",
+  "images": [
+    {
+      "key": "store-drawer",
+      "alt": "Charkha Supply Co.'s orders, filtered to two days, with one order open in a drawer over the table: its badges and actions, the customer, the payment, the warehouse and the address with their flags, and its items in rupees",
+      "width": 2880,
+      "height": 1800,
+      "avif": [
+        {
+          "src": "/images/showcase/store-drawer-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/store-drawer-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/store-drawer-1440.avif",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/store-drawer-2880.avif",
+          "width": 2880
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/store-drawer-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/store-drawer-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/store-drawer-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/store-drawer-2880.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "store-drawer-phone",
+      "alt": "The same order's drawer on a phone, full width, with its actions and the customer, payment and route cards stacked",
+      "width": 780,
+      "height": 1688,
+      "avif": [
+        {
+          "src": "/images/showcase/store-drawer-phone-390.avif",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/store-drawer-phone-780.avif",
+          "width": 780
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/store-drawer-phone-390.webp",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/store-drawer-phone-780.webp",
+          "width": 780
+        }
+      ]
+    },
+    {
+      "key": "store-dashboard",
+      "alt": "Charkha Supply Co.'s dashboard: today's revenue, orders, orders to fulfil and low stock, the live order activity, products running low and today's top sellers",
+      "width": 1440,
+      "height": 900,
+      "avif": [
+        {
+          "src": "/images/showcase/store-dashboard-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/store-dashboard-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/store-dashboard-1440.avif",
+          "width": 1440
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/store-dashboard-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/store-dashboard-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/store-dashboard-1440.webp",
+          "width": 1440
+        }
+      ]
+    },
+    {
+      "key": "crm-pipeline",
+      "alt": "The Navree CRM's deal pipeline in its Next.js front end: lead, qualified, proposal and negotiation columns of deal cards",
+      "width": 1440,
+      "height": 900,
+      "avif": [
+        {
+          "src": "/images/showcase/crm-pipeline-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/crm-pipeline-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/crm-pipeline-1440.avif",
+          "width": 1440
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/crm-pipeline-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/crm-pipeline-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/crm-pipeline-1440.webp",
+          "width": 1440
+        }
+      ]
+    },
+    {
+      "key": "tile-table",
+      "alt": "The store's orders table: search, five filters with a date filter applied, and rows with status, fulfilment and payment badges and totals in rupees",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-table-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-table-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-table-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-table-960.webp",
+          "width": 960
+        }
+      ]
+    },
+    {
+      "key": "tile-live",
+      "alt": "The store's live order activity: who placed, paid for or delivered which order, with amounts in rupees, cities with flags and times in IST",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-live-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-live-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-live-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-live-960.webp",
+          "width": 960
+        }
+      ]
+    },
+    {
+      "key": "tile-dates",
+      "alt": "A date range picker open: presets on the left, from today to this year, and two months side by side",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-dates-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-dates-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-dates-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-dates-960.webp",
+          "width": 960
+        }
+      ]
+    },
+    {
+      "key": "tile-phone",
+      "alt": "A phone number field showing a saved Indian number in the national format, 098140 12345, with +91 chosen and the country list open at India",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-phone-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-phone-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-phone-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-phone-960.webp",
+          "width": 960
+        }
+      ]
+    },
+    {
+      "key": "tile-flags",
+      "alt": "The flag gallery: flags of countries and organisations, each with its code and name",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-flags-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-flags-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-flags-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-flags-960.webp",
+          "width": 960
+        }
+      ]
+    },
+    {
+      "key": "tile-command",
+      "alt": "A command palette: a search field, a Go to group with icons and a keyboard shortcut, and an Account group with an item held back and the reason",
+      "width": 960,
+      "height": 600,
+      "avif": [
+        {
+          "src": "/images/showcase/tile-command-480.avif",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-command-960.avif",
+          "width": 960
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/tile-command-480.webp",
+          "width": 480
+        },
+        {
+          "src": "/images/showcase/tile-command-960.webp",
+          "width": 960
+        }
+      ]
+    }
+  ]
+}
