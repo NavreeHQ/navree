@@ -175,6 +175,7 @@ Codes are part of Navree's public contract: a code never changes once released, 
 | `limit_reached` | 409 | `AppError::limit_reached`: a plan or quota limit |
 | `payload_too_large` | 413 | `AppError::payload_too_large`, the body limit |
 | `unsupported_media_type` | 415 | a JSON or form body with another content type |
+| `page_expired` | 419 | `AppError::page_expired`: a page left open too long, or whose session changed |
 | `too_many_requests` | 429 | `AppError::too_many_requests`, the rate limits |
 | `internal_error` | 500 | `AppError::internal`, `?` on any error, panics |
 | `service_unavailable` | 503 | `AppError::service_unavailable` |
@@ -575,6 +576,10 @@ let body = AppError::not_found().with_detail("Deal not found").body();
 ```
 
 `body()` always includes the code; responses follow `http.errors.code`. Middleware you add with `http_layer` should answer errors with `AppError`, so they keep the format.
+
+## Errors as pages
+
+A module can answer errors in another form than JSON. Navree UI's `UiModule` answers a request for a page with a page, in the shell when the user can see it, and leaves an API route's JSON alone: a route marked `json_only()`, a route under `http.api_prefix`, and a client that asks for JSON alone. Mark a route `page()` to say its errors are pages. See [Errors and states](/docs/ui/errors-and-states/).
 
 ## Testing
 

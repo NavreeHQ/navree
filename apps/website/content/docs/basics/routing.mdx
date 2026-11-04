@@ -235,6 +235,8 @@ More attributes sit next to the route attribute. Those marked "impl" may also go
 | `#[api(summary = "..", tag = "..", ..)]` | route | OpenAPI documentation | [OpenAPI](/docs/digging-deeper/openapi/) |
 | `#[transactional]` | route | Marks the route as transactional in `routes --json`; informational only, since every request already runs in a unit of work | [Unit of work](/docs/database/unit-of-work/) |
 | `#[no_compression]` | route | Sends the route's responses uncompressed | [Compression and secrets](/docs/basics/responses/#compression-and-secrets-breach) |
+| `#[page]` | route, impl | Its errors are pages for any client that does not ask for JSON alone | [Errors and states](/docs/ui/errors-and-states/) |
+| `#[json_only]` | route, impl | Its errors are always the JSON error body | [Errors](/docs/basics/errors/) |
 | `#[name("..")]` | route | The route name | Above |
 | `#[requires_flag(NewPipeline)]` | route | Answers 404 (403 with `status = 403`) while the feature flag is off | [Feature flags](/docs/packages/feature-flags/#checking-flags) |
 | `#[recent_auth(minutes = 10)]` | route, impl | Answers 403 unless the user signed in or confirmed their identity within the last `minutes` | [Sessions](/docs/security/sessions/#requiring-a-recent-sign-in) |
@@ -310,7 +312,7 @@ impl Controller for ImportController {
 }
 ```
 
-`RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `no_compression()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
+`RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `no_compression()`, `page()`, `json_only()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
 
 ## Route checks at boot
 
