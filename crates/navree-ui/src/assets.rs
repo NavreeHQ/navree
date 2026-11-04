@@ -88,10 +88,14 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
 
 /// The stylesheets a page with `uses` links after the toolkit's own.
 pub fn stylesheets(uses: Uses) -> impl Iterator<Item = &'static str> {
-    [(Uses::THEME_BUILDER, THEME_BUILDER_URL)]
-        .into_iter()
+    sheet_modules()
         .filter(move |(bit, _)| uses.has(*bit))
         .map(|(_, url)| url)
+}
+
+/// Every module stylesheet, with the bit of [`Uses`] that links it.
+fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
+    [(Uses::THEME_BUILDER, THEME_BUILDER_URL)].into_iter()
 }
 
 /// Finds the file behind `core-3f9a1c07b2de.js`: the file, and whether the
@@ -181,12 +185,12 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
 mod tests {
     use super::*;
 
-    /// Two modules on one bit would each load the other's script: every module that
-    /// loads a script has a bit of its own.
+    /// Two modules on one bit would each load the other's file: every module that
+    /// loads a script or links a stylesheet has a bit of its own.
     #[test]
     fn every_module_has_a_bit_of_its_own() {
         let mut taken = 0_u32;
-        for (bit, url) in modules() {
+        for (bit, url) in modules().chain(sheet_modules()) {
             assert_eq!(bit.0.count_ones(), 1, "{url} is loaded by one bit");
             assert_eq!(taken & bit.0, 0, "{url} shares its bit with another module");
             taken |= bit.0;

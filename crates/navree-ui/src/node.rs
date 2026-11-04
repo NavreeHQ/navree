@@ -827,6 +827,10 @@ mod tests {
             Uses::LIVE,
             Uses::DATES,
             Uses::PHONE,
+            Uses::THEME_BUILDER,
+            Uses::SLIDER,
+            Uses::TREE,
+            Uses::TOOLBAR,
         ];
         for module in [Uses::SPLIT, Uses::KEYS, Uses::LAZY] {
             assert!(known.iter().all(|other| other.0 & module.0 == 0));
