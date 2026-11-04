@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 
 use navree::ui::assets::{self, Asset};
+use navree::ui::theme::Theme;
 use navree::ui::{
     Input, LazyPage, Node, PAGE_CSP, Uses, View, components, el, icons, measure, render, tokens,
 };
-use navree::ui::theme::Theme;
 use serde::Serialize;
 
 use crate::api::TypeDoc;

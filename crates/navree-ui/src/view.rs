@@ -569,11 +569,9 @@ mod tests {
             ]
         );
         assert_eq!(ocean.color_scheme(), "light");
-        assert!(
-            ocean
-                .to_html()
-                .starts_with(r#"<!doctype html><html lang="en" data-theme="ocean" data-mode="light">"#)
-        );
+        assert!(ocean.to_html().starts_with(
+            r#"<!doctype html><html lang="en" data-theme="ocean" data-mode="light">"#
+        ));
         // A built-in has no sheet of its own.
         assert!(ocean.own_themes().is_empty());
 
