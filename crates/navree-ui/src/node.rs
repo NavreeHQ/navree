@@ -254,6 +254,9 @@ impl Uses {
     /// The keys module: single-key shortcuts ([`Element::hotkey`]) that click or focus
     /// what names them, never while someone types.
     pub const KEYS: Self = Self(1 << 17);
+    /// The lazy module: lists that load pages by cursor as they are read, keep the
+    /// reader's place, drop what is far off screen, and merge live changes.
+    pub const LAZY: Self = Self(1 << 18);
 
     /// Both sets together.
     #[must_use]
@@ -776,10 +779,11 @@ mod tests {
             Uses::DATES,
             Uses::PHONE,
         ];
-        for module in [Uses::SPLIT, Uses::KEYS] {
+        for module in [Uses::SPLIT, Uses::KEYS, Uses::LAZY] {
             assert!(known.iter().all(|other| other.0 & module.0 == 0));
         }
         assert_eq!(Uses::SPLIT.0 & Uses::KEYS.0, 0);
+        assert_eq!((Uses::SPLIT.0 | Uses::KEYS.0) & Uses::LAZY.0, 0);
     }
 
     #[test]

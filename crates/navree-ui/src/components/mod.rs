@@ -14,6 +14,7 @@ mod dropdown;
 mod fact;
 mod flag;
 mod inputs;
+mod lazy;
 mod layout;
 mod overlays;
 mod split;
@@ -37,6 +38,9 @@ pub use flag::{Flag, FlagShape, FlagSize};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
     RadioGroup, Switch, Textarea,
+};
+pub use lazy::{
+    LazyAsk, LazyEnd, LazyItem, LazyLabels, LazyList, LazyOrder, LazyPage, LazyQuery, MAX_CURSOR,
 };
 pub use layout::{
     Align, Container, ContainerSize, Grid, Justify, Row, Stack, only_with_script, only_without_script,

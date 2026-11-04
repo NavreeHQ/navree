@@ -72,6 +72,7 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::TOOLBAR, TOOLBAR_URL),
         (Uses::SPLIT, SPLIT_URL),
         (Uses::KEYS, KEYS_URL),
+        (Uses::LAZY, LAZY_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]

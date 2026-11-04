@@ -1,0 +1,299 @@
+// Lazy lists: a long list that loads as it is read. Each end of a list is a link the
+// server drew (`a[data-slot=lazy-more]`); with no script it goes to a page that holds
+// the next part. Here, when the reader nears an end, the page asks the list's source
+// for what lies beyond the item at that end, by its cursor, never by an offset.
+//
+// - One fetch per end at a time, each given up on after 10 s; an answer for a list that
+//   has since changed (new filters, a new page) is dropped.
+// - Items added above what the reader looks at keep the reader's place: the first item
+//   in view is measured before and after, and the scroll moves by the difference.
+// - Past `data-ui-max` items, those far off screen at the other end are taken out and
+//   that end is opened again, so a reader can scroll through thousands with a page that
+//   stays the same size.
+// - A live list (`data-ui-live-src`, followed by the live module) asks what changed since
+//   its revision: items it has are replaced, new ones go where their cursor sorts, gone
+//   ones go. An item is never in the list twice.
+import { attr, clean, closest, every, has, on, sameOrigin, set, toggle, unset } from "./dom.js";
+
+const LIMIT = 10000;
+/** How near an end, in pixels, the reader is when its next page is asked for. */
+const NEAR = 800;
+/** Pages asked for in a row while an end stays near: a short page doesn't stop the list. */
+const CHAIN = 6;
+
+/** @typedef {"start" | "end" | "live"} Dir */
+/** @typedef {{gen: number, src: string, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number}} State */
+/** @type {WeakMap<Element, State>} */
+const states = new WeakMap();
+
+/** @param {Element} list */
+const box = (list) => /** @type {HTMLElement | null} */ (list.querySelector(":scope > [data-slot=lazy-items]"));
+/** @param {Element} list @param {"start" | "end"} dir */
+const link = (list, dir) => /** @type {HTMLAnchorElement | null} */ (list.querySelector(`:scope > [data-slot=lazy-more][data-dir=${dir}]`));
+/** @param {Element} parent */
+const items = (parent) => /** @type {HTMLElement[]} */ ([...parent.children].filter((el) => el.hasAttribute("data-key")));
+/** @param {Element} el */
+const cursorOf = (el) => attr(el, "data-cursor") || "";
+
+/** The element that scrolls the list: its nearest scrolling ancestor, or the page. @param {Element} list */
+function scroller(list) {
+  for (let el = list.parentElement; el; el = el.parentElement) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight) return el;
+  }
+  return /** @type {HTMLElement} */ (document.scrollingElement || document.documentElement);
+}
+
+/** The top and bottom of what the reader sees, in the viewport's coordinates. @param {HTMLElement} scroll */
+function view(scroll) {
+  if (scroll === document.scrollingElement || scroll === document.documentElement) return { top: 0, bottom: innerHeight };
+  const box = scroll.getBoundingClientRect();
+  return { top: box.top, bottom: box.bottom };
+}
+
+/** Runs `change` and keeps the first item in view where it was. @param {Element} list @param {() => void} change */
+function anchored(list, change) {
+  const scroll = scroller(list);
+  const { top } = view(scroll);
+  const parent = box(list);
+  const anchor = parent && items(parent).find((el) => el.getBoundingClientRect().bottom > top);
+  const before = anchor?.getBoundingClientRect().top;
+  change();
+  if (anchor?.isConnected && before !== undefined) {
+    const moved = anchor.getBoundingClientRect().top - before;
+    if (Math.abs(moved) >= 1) scroll.scrollTop += moved;
+  }
+}
+
+/** Whether `a` comes before `b` in the list. @param {Element} list @param {string} a @param {string} b */
+const precedes = (list, a, b) => (attr(list, "data-ui-order") === "asc" ? a < b : a > b);
+
+/** The list's source with a question added. @param {Element} list @param {Record<string, string>} ask */
+function sourceUrl(list, ask) {
+  const url = new URL(attr(list, "data-ui-src") || "", location.href);
+  for (const [name, value] of Object.entries(ask)) url.searchParams.set(name, value);
+  return url;
+}
+
+/** The items of an answer, out of the markup. @param {string} html */
+function parse(html) {
+  const doc = new DOMParser().parseFromString(`<ul>${html}</ul>`, "text/html");
+  clean(doc.body);
+  return /** @type {HTMLElement[]} */ ([...doc.querySelectorAll("li[data-key]")].filter((li) => !li.parentElement?.closest("li[data-key]")).map((li) => document.importNode(li, true)));
+}
+
+/** Says something to assistive technology. @param {Element} list @param {string} text */
+function say(list, text) {
+  const status = list.querySelector(":scope > [data-slot=lazy-status]");
+  if (status) status.textContent = text;
+}
+
+/** Takes items far off screen out of the other end, past the list's most. @param {Element} list @param {"start" | "end"} grew */
+function trim(list, grew) {
+  const parent = box(list);
+  if (!parent) return;
+  const most = Number(attr(list, "data-ui-max")) || 300;
+  const all = items(parent);
+  let over = all.length - most;
+  if (over <= 0) return;
+  const { top, bottom } = view(scroller(list));
+  const side = grew === "end" ? all : all.reverse();
+  const gone = [];
+  for (const el of side) {
+    if (over <= 0) break;
+    const box = el.getBoundingClientRect();
+    // Only what is out of sight, beyond a screen's length.
+    if (grew === "end" ? box.bottom > top - (bottom - top) : box.top < bottom + (bottom - top)) break;
+    gone.push(el);
+    over--;
+  }
+  if (!gone.length) return;
+  anchored(list, () => gone.forEach((el) => el.remove()));
+  const other = grew === "end" ? "start" : "end";
+  unset(list, `data-ui-${other}-done`);
+  const end = link(list, other);
+  if (end) unset(end, "hidden");
+}
+
+/** Asks for the next page at one end. @param {Element} list @param {"start" | "end"} dir */
+async function load(list, dir) {
+  const state = stateOf(list);
+  const parent = box(list);
+  if (!parent || state.busy[dir] || has(list, `data-ui-${dir}-done`)) return;
+  const all = items(parent);
+  const edge = dir === "end" ? all[all.length - 1] : all[0];
+  if (!edge) return;
+  const src = attr(list, "data-ui-src") || "";
+  if (!sameOrigin(src)) return;
+  const gen = state.gen;
+  state.busy[dir] = true;
+  const end = link(list, dir);
+  if (end) {
+    set(end, "aria-busy", "true");
+    unset(end, "data-failed");
+  }
+  const stop = new AbortController();
+  const limit = setTimeout(() => stop.abort(), LIMIT);
+  try {
+    const response = await fetch(sourceUrl(list, { dir, cursor: cursorOf(edge) }), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
+    if (!response.ok) throw new Error(String(response.status));
+    const html = await response.text();
+    // The list changed while this was on its way: the answer is for a list that's gone.
+    if (state.gen !== gen || !list.isConnected || !edge.isConnected) return;
+    const found = parse(html).filter((li) => !parent.querySelector(`:scope > [data-key="${CSS.escape(attr(li, "data-key") || "")}"]`));
+    anchored(list, () => {
+      if (dir === "end") parent.append(...found);
+      else parent.prepend(...found);
+    });
+    const more = response.headers.get("x-ui-more") === "1";
+    toggle(list, `data-ui-${dir}-done`, !more);
+    if (end) toggle(end, "hidden", !more);
+    if (found.length) {
+      say(list, (attr(list, "data-l-loaded") || "{n} more").replace("{n}", String(found.length)));
+      trim(list, dir);
+      document.dispatchEvent(new Event("ui:swap"));
+    }
+  } catch {
+    if (state.gen === gen && end) {
+      set(end, "data-failed", "");
+      say(list, attr(list, "data-l-failed") || "");
+    }
+    state.chain = CHAIN;
+    return;
+  } finally {
+    clearTimeout(limit);
+    state.busy[dir] = false;
+    if (end) unset(end, "aria-busy");
+  }
+  // A short page leaves the end in sight: ask again, a few times at most.
+  if (state.gen === gen && state.chain++ < CHAIN && near(list, dir)) load(list, dir);
+}
+
+/** Whether the reader is near an end. @param {Element} list @param {"start" | "end"} dir */
+function near(list, dir) {
+  const end = link(list, dir);
+  if (!end || has(list, `data-ui-${dir}-done`)) return false;
+  const { top, bottom } = view(scroller(list));
+  const parent = box(list);
+  const all = parent ? items(parent) : [];
+  const edge = dir === "end" ? all[all.length - 1] : all[0];
+  const rect = (edge || end).getBoundingClientRect();
+  return dir === "end" ? rect.top < bottom + NEAR : rect.bottom > top - NEAR;
+}
+
+/** Merges what changed since the list's revision. @param {Element} list */
+async function live(list) {
+  const state = stateOf(list);
+  const parent = box(list);
+  const since = attr(list, "data-ui-since");
+  if (!parent || since === null) return;
+  if (state.busy.live) {
+    state.dirty = true;
+    return;
+  }
+  const gen = state.gen;
+  state.busy.live = true;
+  const stop = new AbortController();
+  const limit = setTimeout(() => stop.abort(), LIMIT);
+  try {
+    const response = await fetch(sourceUrl(list, { dir: "live", since }), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
+    if (!response.ok || state.gen !== gen || !list.isConnected) return;
+    const html = await response.text();
+    if (state.gen !== gen) return;
+    const changed = parse(html);
+    const gone = (response.headers.get("x-ui-gone") || "").split(",").filter(Boolean);
+    anchored(list, () => {
+      for (const key of [...gone, ...changed.map((li) => attr(li, "data-key") || "")]) {
+        parent.querySelector(`:scope > [data-key="${CSS.escape(key)}"]`)?.remove();
+      }
+      for (const li of changed) {
+        const all = items(parent);
+        const cursor = cursorOf(li);
+        const first = all[0], last = all[all.length - 1];
+        // Beyond what is loaded at an end that isn't: it arrives when the reader gets there.
+        if (last && !has(list, "data-ui-end-done") && precedes(list, cursorOf(last), cursor)) continue;
+        if (first && !has(list, "data-ui-start-done") && precedes(list, cursor, cursorOf(first))) continue;
+        const before = all.find((el) => precedes(list, cursor, cursorOf(el)));
+        if (before) parent.insertBefore(li, before);
+        else parent.append(li);
+      }
+    });
+    const next = response.headers.get("x-ui-since");
+    if (next) set(list, "data-ui-since", next);
+    const empty = list.querySelector(":scope > [data-slot=lazy-empty]");
+    if (empty && items(parent).length) empty.remove();
+    if (changed.length || gone.length) document.dispatchEvent(new Event("ui:swap"));
+  } catch {} finally {
+    clearTimeout(limit);
+    state.busy.live = false;
+    if (state.dirty && state.gen === gen && list.isConnected) {
+      state.dirty = false;
+      live(list);
+    }
+  }
+}
+
+/** @param {Element} list @returns {State} */
+function stateOf(list) {
+  let state = states.get(list);
+  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0 }));
+  return state;
+}
+
+/** Watches each list's ends, and notices a list whose source changed under it. */
+function scan() {
+  for (const list of every("[data-ui-lazy-list]")) {
+    const state = stateOf(list);
+    const src = attr(list, "data-ui-src") || "";
+    if (src !== state.src) {
+      // New filters or a new page: answers on their way are for the old list.
+      state.gen++;
+      state.src = src;
+      state.dirty = false;
+    }
+    const ends = [link(list, "start"), link(list, "end")].filter((el) => !!el);
+    if (state.io && ends.length === state.watched.length && ends.every((el, i) => el === state.watched[i])) continue;
+    state.io?.disconnect();
+    state.watched = /** @type {Element[]} */ (ends);
+    const scroll = scroller(list);
+    state.io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          state.chain = 0;
+          load(list, /** @type {"start" | "end"} */ (attr(entry.target, "data-dir")));
+        }
+      },
+      { root: scroll === document.scrollingElement ? null : scroll, rootMargin: `${NEAR}px 0px` },
+    );
+    for (const dir of /** @type {const} */ (["start", "end"])) {
+      const end = link(list, dir);
+      if (end) state.io.observe(end);
+    }
+  }
+}
+
+on(document, "click", (/** @type {MouseEvent} */ e) => {
+  const end = closest(e.target, "[data-slot=lazy-more]");
+  const list = end && closest(end, "[data-ui-lazy-list]");
+  if (!end || !list || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  stateOf(list).chain = CHAIN;
+  load(list, /** @type {"start" | "end"} */ (attr(end, "data-dir")));
+});
+// The live module asks a list to refresh: a list merges what changed, and no region
+// around it fetches itself for it.
+on(
+  document,
+  "ui:refresh",
+  (/** @type {CustomEvent} */ e) => {
+    const list = /** @type {Element} */ (e.target);
+    if (!(list instanceof Element) || !has(list, "data-ui-lazy-list")) return;
+    e.stopPropagation();
+    if (e.detail && typeof e.detail === "object") e.detail.done = live(list);
+    else live(list);
+  },
+  true,
+);
+on(document, "ui:swap", scan);
+scan();

@@ -127,6 +127,31 @@ fn the_split_module_is_at_most_3_kb_gzip() {
 }
 
 #[test]
+fn the_lazy_module_is_at_most_4_kb_gzip() {
+    assert!(size("lazy") <= 4 * 1024, "{}", size("lazy"));
+}
+
+/// A lazy list loads its own module; a live one loads the live module beside it, and
+/// neither needs the core runtime.
+#[test]
+fn a_lazy_list_loads_the_lazy_module_and_live_only_when_live() {
+    use navree_ui::{LazyEnd, LazyItem, LazyList};
+
+    let plain = View::new("x").body(
+        LazyList::new("l", "Things", "/rows").items([LazyItem::new("1", "1", "One")]),
+    );
+    assert_eq!(plain.uses(), Uses::LAZY);
+    let html = plain.to_html();
+    assert!(html.contains(assets::LAZY_URL), "{html}");
+    assert!(!html.contains(assets::LIVE_URL) && !html.contains(assets::CORE_URL));
+    let live = View::new("x").body(
+        LazyList::new("l", "Things", "/rows").live_from("/events", None, LazyEnd::Start),
+    );
+    assert_eq!(live.uses(), Uses::LAZY.with(Uses::LIVE));
+    assert!(live.to_html().contains(assets::LIVE_URL));
+}
+
+#[test]
 fn the_keys_module_is_at_most_1_kb_gzip() {
     assert!(size("keys") <= 1024, "{}", size("keys"));
 }

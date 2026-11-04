@@ -109,6 +109,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A toolbar | `toolbar`, `menus`, `overlay`: one tab stop and the arrow keys, and a More menu for what does not fit. |
 | A split pane | `split`: dragging, the separator's keys, collapsing and saving the sizes. |
 | A hotkey | `keys`: single keys that click or focus what names them, never while someone types. |
+| A lazy list | `lazy`: pages by cursor at either end, the reader's place kept, a cap on what stays in the page; with `live` for a live one. |
 | The app shell | `core`, `sidebar`. |
 | The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
 | The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
@@ -116,6 +117,36 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
 `tests/budgets.rs` holds the sizes, and a regression fails the build.
+
+## Long lists: lazy by default
+
+```rust
+async fn inbox(query: LazyQuery, uow: Uow) -> Result<LazyPage> {
+    // `query.ask()`: the first page, what comes before or after a cursor, or what
+    // changed since a revision. Answer a page by keyset, never by offset.
+    let (rows, more) = page_of(&uow, query.ask(), 50).await?;
+    Ok(LazyPage::new(rows.iter().map(row_item), more))
+}
+
+LazyList::new("conversations", "Conversations", "/inbox/rows")
+    .items(first_page.iter().map(row_item))
+    .more_after("/inbox?before=0001793793600000000042")
+    .since(revision)
+    .live_from("/inbox/events", Some("conversations"), LazyEnd::Start)
+```
+
+A list that can grow without end loads as it is read. The page draws the first page; the
+`lazy` module asks for the next one when the reader nears either end, by the cursor of the
+item at that end, so a page deep in the list costs what the first does. Older items added
+above keep the reader where they are. Past `max` items (300 by default) the far end is
+dropped and fetched again on the way back, so the page holds the same few hundred nodes
+after thousands of items. A live list merges what changed since its revision: new items in
+their place, changed ones moved, gone ones out, none twice. With JavaScript off each end is a
+link to the page that holds the next part.
+
+Choose a `DataTable` instead when people compare and act on rows: sort by any column, filter
+by many, select across pages, export. Choose a `LazyList` for a stream read in one order: an
+inbox, a conversation, a feed, a log.
 
 ## Panes and hotkeys
 

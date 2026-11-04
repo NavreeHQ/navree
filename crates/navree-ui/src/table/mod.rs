@@ -47,7 +47,7 @@ mod edit;
 #[cfg(feature = "orm")]
 mod orm;
 mod query;
-mod region;
+pub(crate) mod region;
 mod saved;
 mod selection;
 mod view;

@@ -5,7 +5,7 @@ use super::root_methods;
 use crate::node::{Element, IntoNodes, Node, el, into_node};
 
 /// A gap's attribute value: the nearest step of the scale (in units of 4px).
-const fn gap_name(gap: u8) -> &'static str {
+pub(crate) const fn gap_name(gap: u8) -> &'static str {
     match gap {
         0 => "0",
         1 => "1",
