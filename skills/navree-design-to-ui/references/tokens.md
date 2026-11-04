@@ -44,8 +44,10 @@ Control heights are fixed by `Size`: 24, 28, 32 (the default) and 36
 pixels. Gaps in `Stack`, `Row` and `Grid` are steps, not pixels. There
 are no shadows on app surfaces and no glow.
 
-`navree::ui::tokens::TEXT_PAIRS` lists the text and background pairs that
-must reach WCAG AA (4.5:1); a test holds them.
+`navree::ui::theme::pairs()` lists every colour pair the stylesheet draws:
+text must reach WCAG AA (4.5:1), and the focus ring, icons and chart colours
+3:1. `ThemeSpec::shortfalls` lists the pairs a theme misses, in light and
+dark, and a test holds every built-in theme to none.
 
 ## Extracting the design's values
 
@@ -103,7 +105,8 @@ Check every text and background pair the design uses, after mapping, with
 the same function the toolkit's own test uses:
 
 ```rust
-use navree::ui::tokens::{TEXT_PAIRS, contrast, dark};
+use navree::ui::theme::Theme;
+use navree::ui::tokens::{contrast, dark};
 
 /// Every pair below 4.5:1, with its ratio: each is a finding.
 pub fn low_contrast(pairs: &[(&str, &str)]) -> Vec<(String, String, f64)> {
@@ -121,9 +124,9 @@ pub fn design_ratio(text: &str, background: &str) -> Option<f64> {
     contrast(text, background)
 }
 
-/// Navree's own pairs all pass.
+/// Navree's own pairs all pass, in light and dark.
 pub fn navree_pairs_pass() -> bool {
-    low_contrast(TEXT_PAIRS).is_empty()
+    Theme::NAVREE.spec().shortfalls().is_empty()
 }
 ```
 
