@@ -177,6 +177,27 @@ fn the_derive_draws_phone_types_as_phone_inputs() {
 }
 
 #[test]
+fn a_form_can_draw_its_phone_fields_with_its_own_flags() {
+    fn flag(region: Region) -> navree_ui::Node {
+        navree_ui::el("img")
+            .attr("src", format!("/flags/{}.svg", region.as_str()))
+            .attr("alt", "")
+            .into()
+    }
+    let plain = render(&FormView::<Contact>::new().post("/contacts").into());
+    assert!(!plain.contains("/flags/"), "emoji unless asked");
+    let html = render(
+        &FormView::<Contact>::new()
+            .post("/contacts")
+            .phone_region(gb())
+            .phone_flags(flag)
+            .into(),
+    );
+    assert!(html.contains(r#"src="/flags/GB.svg""#), "{html}");
+    assert!(html.contains(r#"src="/flags/FR.svg""#), "{html}");
+}
+
+#[test]
 fn a_posted_number_is_read_in_its_country() {
     let contact = decode::<Contact>(&pairs(&[
         ("name", "Ada"),

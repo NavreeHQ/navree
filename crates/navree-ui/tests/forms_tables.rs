@@ -5,8 +5,8 @@ use navree_ui::form::{Form, FormView, Many, Money, Widget, decode};
 use navree_ui::table::{Direction, TableRow};
 use navree_ui::test_view::Clicked;
 use navree_ui::{
-    BadgeVariant, DataTable, FilterBar, Form, InputKind, Options, TableQuery, TableRow, TestView,
-    Validate, View, render,
+    BadgeVariant, Choice, DataTable, FilterBar, Form, InputKind, Options, TableQuery, TableRow,
+    TestView, Validate, View, render,
 };
 use serde::Deserialize;
 
@@ -489,6 +489,45 @@ fn a_form_can_pick_with_a_listbox_a_combobox_and_a_multi_select() {
         "the label points at the trigger"
     );
     assert!(out.contains(r#"id="pick-stage""#));
+}
+
+#[test]
+fn a_picker_field_can_take_rich_choices_with_a_picture_and_words_to_find_it_by() {
+    let value = Pick {
+        stage: "won".to_owned(),
+        owner: Some("7".to_owned()),
+        tags: Many::default(),
+        stages: Many::default(),
+    };
+    let out = render(
+        &FormView::<Pick>::new()
+            .post("/pick")
+            .of(&value)
+            .options("owner", [("1".to_owned(), "Plain".to_owned())])
+            .choices(
+                "owner",
+                [
+                    Choice::new("7", "Grace Hopper")
+                        .avatar("/people/7.svg")
+                        .keywords(["navy"]),
+                    Choice::new("8", "Ada Lovelace").description("Analyst"),
+                ],
+            )
+            .into(),
+    );
+    assert!(
+        out.contains(r#"src="/people/7.svg""#),
+        "the picture is drawn: {out}"
+    );
+    assert!(out.contains(r#"data-keywords="navy""#), "{out}");
+    assert!(
+        out.contains(r#"value="Grace Hopper""#),
+        "the chosen label shows"
+    );
+    assert!(
+        !out.contains(">Plain<"),
+        "rich choices stand in for plain options"
+    );
 }
 
 #[test]

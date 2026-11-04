@@ -85,7 +85,7 @@ The numbering plans the module formats with load once, on the first focus of a p
 
 The list holds every country and area with a numbering plan of its own, 245 of them, by name. `.preferred(regions)` lists some first, under "Suggested". `.countries(regions)` lists only those; it limits the list, not what can be typed, so check the country on the server if it matters. Search finds a country by name (with or without accents), by its two-letter code or by its dial code.
 
-Flags are the system's flag emoji. To draw them with your own SVG set, pass a function: `.flags(|region| my_flag(region.as_str()))`. Each flag then goes into the page once, in a template the list copies from.
+Flags are the system's flag emoji. To draw them with your own SVG set, pass a function: `.flags(|region| my_flag(region.as_str()))`. Each flag then goes into the page once, in a template the list copies from. A form drawn by `FormView` takes the same function with `.phone_flags(...)`. A small `<img>` of a flag your app serves keeps the template light, since a browser fetches only the flags in view.
 
 ## Right to left
 

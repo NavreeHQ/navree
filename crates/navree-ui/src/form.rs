@@ -519,6 +519,7 @@ pub struct FormView<T> {
     values: Vec<(String, String)>,
     errors: BTreeMap<String, Vec<String>>,
     options: BTreeMap<&'static str, Vec<(String, String)>>,
+    rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
     searches: BTreeMap<&'static str, Href>,
     columns: bool,
     csrf: Option<String>,
@@ -526,6 +527,8 @@ pub struct FormView<T> {
     today: Option<chrono::NaiveDate>,
     #[cfg(feature = "phone")]
     phone_region: Option<navree_phone::Region>,
+    #[cfg(feature = "phone")]
+    phone_flags: Option<fn(navree_phone::Region) -> Node>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -540,6 +543,7 @@ impl<T: Form> FormView<T> {
             values: Vec::new(),
             errors: BTreeMap::new(),
             options: BTreeMap::new(),
+            rich: BTreeMap::new(),
             searches: BTreeMap::new(),
             columns: true,
             csrf: None,
@@ -547,6 +551,8 @@ impl<T: Form> FormView<T> {
             today: None,
             #[cfg(feature = "phone")]
             phone_region: None,
+            #[cfg(feature = "phone")]
+            phone_flags: None,
             marker: PhantomData,
         }
     }
@@ -556,6 +562,15 @@ impl<T: Form> FormView<T> {
     #[cfg(feature = "phone")]
     pub fn phone_region(mut self, region: Option<navree_phone::Region>) -> Self {
         self.phone_region = region;
+        self
+    }
+
+    /// Draws the flags in the country lists of the form's phone fields with
+    /// `flag`, in place of the flag emoji (feature `phone`). See
+    /// [`PhoneInput::flags`](crate::PhoneInput::flags).
+    #[cfg(feature = "phone")]
+    pub fn phone_flags(mut self, flag: fn(navree_phone::Region) -> Node) -> Self {
+        self.phone_flags = Some(flag);
         self
     }
 
@@ -628,6 +643,18 @@ impl<T: Form> FormView<T> {
         self
     }
 
+    /// Sets the choices of a picker field as [`Choice`](crate::Choice)s, for a list
+    /// that shows more than a label: an icon or a picture before it, a line under
+    /// it, words it is found by. A browser's own `select` shows only the labels.
+    pub fn choices(
+        mut self,
+        field: &'static str,
+        choices: impl IntoIterator<Item = crate::select::Choice>,
+    ) -> Self {
+        self.rich.insert(field, choices.into_iter().collect());
+        self
+    }
+
     /// Searches a combobox or multi-select field on the server: the runtime asks `url`
     /// with `?q=text` and shows the answer, a [`ChoiceList`](crate::ChoiceList). Give
     /// the field's current choices with [`options`](Self::options), so an edit form can
@@ -653,7 +680,10 @@ impl<T: Form> FormView<T> {
     }
 
     /// The choices of a field: the form's own, or the ones the field's type lists.
-    fn choices(&self, field: &FormField) -> Vec<crate::select::Choice> {
+    fn choices_of(&self, field: &FormField) -> Vec<crate::select::Choice> {
+        if let Some(choices) = self.rich.get(field.name) {
+            return choices.clone();
+        }
         match self.options.get(field.name) {
             Some(options) => options
                 .iter()
@@ -763,7 +793,7 @@ impl<T: Form> FormView<T> {
             Widget::Listbox => {
                 let mut select = crate::select::Select::new(field.name)
                     .id(Self::picker_id(field))
-                    .options(self.choices(field))
+                    .options(self.choices_of(field))
                     .required_if(rules.required)
                     .invalid(invalid);
                 if let Some(prompt) = field.prompt.or(field.placeholder) {
@@ -777,7 +807,7 @@ impl<T: Form> FormView<T> {
             Widget::Combobox => {
                 let mut combo = crate::select::Combobox::new(field.name)
                     .id(Self::picker_id(field))
-                    .options(self.choices(field))
+                    .options(self.choices_of(field))
                     .required_if(rules.required)
                     .invalid(invalid);
                 if let Some(prompt) = field.placeholder.or(field.prompt) {
@@ -794,7 +824,7 @@ impl<T: Form> FormView<T> {
             Widget::Multi => {
                 let mut multi = crate::select::MultiSelect::new(field.name)
                     .id(Self::picker_id(field))
-                    .options(self.choices(field))
+                    .options(self.choices_of(field))
                     .required_if(rules.required)
                     .invalid(invalid)
                     .selected_values(self.values_of(field.name));
@@ -845,6 +875,9 @@ impl<T: Form> FormView<T> {
         let mut input = crate::phone::PhoneInput::new(field.name)
             .region(country)
             .invalid(invalid);
+        if let Some(flag) = self.phone_flags {
+            input = input.flags(flag);
+        }
         if let Some(value) = value {
             input = input.text(value);
         }
