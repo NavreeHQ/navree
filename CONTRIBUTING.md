@@ -204,16 +204,27 @@ moderate when memory is tight.
 
 A suite that needs a server reads its address from a `NAVREE_TEST_*` variable
 (`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`, `NAVREE_TEST_MONGODB_URL`,
-`NAVREE_TEST_REDIS_URL`, `NAVREE_TEST_S3_URL`, and so on; the module comment of
-each suite names its own) and prints `SKIPPED` and passes without it. Crates that
+`NAVREE_TEST_REDIS_URL`, `NAVREE_TEST_S3_URL`, `NAVREE_TEST_GCS_URL`,
+`NAVREE_TEST_AZURE_URL`, `NAVREE_TEST_MAILPIT_URL`, and so on; the module comment
+of each suite names its own). Without the variable the test prints a `SKIPPED`
+notice and passes, so a plain `cargo test` on a laptop proves nothing about a
+server. Set `NAVREE_TEST_REQUIRE_SERVICES=1` to make a missing server, Chrome,
+Node.js or FFmpeg a failure; CI and the final gate always set it. Crates that
 take their database from `NAVREE_TEST_DATABASE` (`sqlite`, the default,
-`postgres` or `mysql`) run once per value. Set `NAVREE_TEST_REQUIRE_SERVICES=1`
-to make a missing server, Chrome, Node.js or FFmpeg a failure.
+`postgres` or `mysql`) run once per value.
 
 With Docker, `scripts/ci-services.sh start` starts every server the suites use
-on `127.0.0.1` and prints the variables (`scripts/ci-services.sh stop` removes
-them). On Windows without Docker, `scripts/dev-databases.ps1 start` runs
-PostgreSQL with TimescaleDB, MySQL and MongoDB from portable archives.
+(PostgreSQL with TimescaleDB, pgvector, MySQL, MariaDB, MongoDB, Redis, S3,
+Google Cloud Storage and Azure Blob emulators, Qdrant, Typesense, Meilisearch,
+stripe-mock, Pebble, NATS, MQTT, Kafka, RabbitMQ and four Mailpit servers) on
+`127.0.0.1`, waits until each answers, and prints the variables, including
+`NAVREE_TEST_REQUIRE_SERVICES=1`. The servers are described in
+`scripts/services/compose.yml`. `scripts/ci-services.sh stop` removes them, and
+`scripts/ci-services.sh check-skips LOG` counts the skip notices in the output
+of a run made with `cargo test ... -- --show-output`; the by-design skips are
+listed in `scripts/services/skips.allow`. On Windows without Docker,
+`scripts/dev-databases.ps1 start` runs PostgreSQL with TimescaleDB, MySQL and
+MongoDB from portable archives.
 
 `.github/workflows/rust-suites.yml` runs every suite on demand and on a
 schedule: weekly on Linux against all of those servers, with each

@@ -1,0 +1,23 @@
+# Skip notices that are allowed in a test run made with
+# NAVREE_TEST_REQUIRE_SERVICES=1 (scripts/ci-services.sh check-skips).
+# One extended regular expression per line, then an optional ` # reason`.
+# A service test that skips itself because its server is missing never goes
+# here: with NAVREE_TEST_REQUIRE_SERVICES=1 it fails instead.
+
+# A test written for one database, run on another (NAVREE_TEST_DATABASE).
+SKIPPED .*: not on [A-Za-z]+
+skipped: needs NAVREE_TEST_DATABASE=postgres
+
+# MySQL 8.4 has no VECTOR type; MySQL 9 and later do.
+skipped: MySql has no vector type
+
+# Dock starts containers itself: it needs the Docker command in the same
+# environment as the tests (not in WSL on this machine). Run it with
+# NAVREE_TEST_DOCKER=1 on Windows or Linux with Docker.
+SKIPPED: set NAVREE_TEST_DOCKER=1
+
+# Opt-in builds of generated apps (tests marked #[ignore]).
+SKIPPED: set NAVREE_TEST_KIT_WEB=1
+
+# The docs and skills are not next to a crate that is built from a package.
+SKIPPED: the (docs page|skill)

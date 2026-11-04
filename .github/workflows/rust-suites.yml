@@ -1,11 +1,16 @@
 # Every Rust test suite in the workspace, on Linux and on Windows.
 #
 # Linux runs against real servers: SQLite, PostgreSQL 17 with TimescaleDB,
-# MySQL 8.4 and MongoDB 8.0 (replica set rs0), plus Redis, an S3 server,
-# Qdrant, pgvector, Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT,
-# Kafka and RabbitMQ (scripts/ci-services.sh starts them; the suites find them
-# through NAVREE_TEST_* variables). NAVREE_TEST_REQUIRE_SERVICES=1 turns a
-# missing server, Chrome, Node.js or FFmpeg into a failure instead of a skip.
+# MySQL 8.4, MariaDB and MongoDB 8.0 (replica set rs0), plus Redis, an S3
+# server, Google Cloud Storage and Azure Blob emulators, Qdrant, pgvector,
+# Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka, RabbitMQ and
+# four Mailpit servers (plain, with login, STARTTLS, TLS).
+# scripts/ci-services.sh starts them from scripts/services/compose.yml; the
+# suites find them through NAVREE_TEST_* variables.
+# NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server, Chrome, Node.js or
+# FFmpeg into a failure instead of a skip. Each run keeps its output (cargo
+# test ... -- --show-output) and a step counts the "skipped" notices in it: a
+# service test that skipped itself fails the job.
 # The job builds every test binary once (all features), then runs:
 #
 # 1. the whole workspace on SQLite, with the servers up for the suites that
@@ -178,25 +183,46 @@ jobs:
         run: scripts/ci-services.sh start
 
       - name: Test the workspace on SQLite
-        run: cargo test --locked --workspace --all-features --no-fail-fast
+        shell: bash
+        run: |
+          mkdir -p target/logs
+          cargo test --locked --workspace --all-features --no-fail-fast -- --show-output 2>&1 | tee target/logs/sqlite.log
 
       - name: Test on PostgreSQL
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        shell: bash
         env:
           NAVREE_TEST_DATABASE: postgres
         run: |
           packages=()
           for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
-          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}"
+          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output 2>&1 | tee target/logs/postgres.log
 
       - name: Test on MySQL
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        shell: bash
         env:
           NAVREE_TEST_DATABASE: mysql
         run: |
           packages=()
           for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
-          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}"
+          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output 2>&1 | tee target/logs/mysql.log
+
+      - name: Count the skipped service tests
+        # With NAVREE_TEST_REQUIRE_SERVICES=1 a service test fails instead of
+        # skipping, so a "skipped" notice that is not on the list of by-design
+        # skips (scripts/services/skips.allow) means a test did not check
+        # that.
+        if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        shell: bash
+        run: |
+          status=0
+          for log in target/logs/sqlite.log target/logs/postgres.log target/logs/mysql.log; do
+            echo "::group::$log"
+            scripts/ci-services.sh check-skips "$log" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
 
       - name: Test with the default features
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
