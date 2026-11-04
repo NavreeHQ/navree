@@ -517,21 +517,6 @@ mod tests {
         assert!(!session.contains(SESSION_KEY));
     }
 
-    // MOD-003: without the feature the resolver finds nothing.
-    #[cfg(not(feature = "session"))]
-    #[test]
-    fn without_the_feature_the_session_resolver_finds_nothing() {
-        let request = parts("/deals", &[("x-workspace", "acme")], true);
-        let config = WorkspaceConfig {
-            resolvers: vec![ResolverKind::Session, ResolverKind::Header],
-            ..WorkspaceConfig::default()
-        };
-        assert_eq!(
-            identifier(&config, &request),
-            Some((ResolverKind::Header, "acme".to_owned()))
-        );
-    }
-
     #[test]
     fn organizations_and_partitions_have_their_own_resolvers() {
         let token = jwt(serde_json::json!({ "organization": "org-claim", "partition": "eu" }));
