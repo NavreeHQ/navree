@@ -376,3 +376,24 @@ fn files_are_attached_from_disk_with_their_type() {
     ));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// CONN-103
+#[test]
+fn a_malformed_idempotency_key_fails_validation() {
+    let base = || Message::new().from("a@example.in").to("b@example.in");
+    assert!(
+        base()
+            .idempotency_key("navree-mail-0199")
+            .validate()
+            .is_ok()
+    );
+    for key in ["", "two words", "line\nbreak"] {
+        assert!(
+            matches!(
+                base().idempotency_key(key).validate(),
+                Err(MailError::Header { .. })
+            ),
+            "{key:?}"
+        );
+    }
+}

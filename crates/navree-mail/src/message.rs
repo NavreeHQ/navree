@@ -259,8 +259,9 @@ impl Message {
         if let Some(key) = &self.idempotency_key
             && (key.is_empty() || key.len() > 255 || !key.bytes().all(|b| b.is_ascii_graphic()))
         {
-            return Err(MailError::InvalidHeader {
-                field: "idempotency_key",
+            return Err(MailError::Header {
+                name: "Idempotency-Key".to_owned(),
+                reason: "an idempotency key is 1 to 255 visible ASCII characters without spaces",
             });
         }
         Ok(())
