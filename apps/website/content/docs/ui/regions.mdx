@@ -105,6 +105,19 @@ Send a comment first. Firefox reports a stream as open only when the first bytes
 
 An action's reply can name regions to refetch with an `invalidate` op, so a change in one place updates another without the handler drawing both. See [Commands and ops](/docs/ui/commands-and-ops/).
 
+## When a fetch fails
+
+When your app answers a region's fetch with an error (a 401, 403, 404, 410, 429, 500 or 503), the runtime shows the state the server drew where the region was, keeps the card around it, and says what happened once. The Try again button fetches the region again. A region that polls stops asking after a 401, 403, 404 or 410. See [Errors and states](/docs/ui/errors-and-states/#a-region-that-gets-an-error).
+
+When nothing answers at all (the connection failed, the request ran out of time, a proxy answered in its own words), the region keeps what it had and `.when_failed(state)` shows a state beside it. `.when_offline()` is that with "You're offline" and a Try again button.
+
+```rust
+Region::new("revenue")
+    .src("/fragments/revenue")
+    .lazy()
+    .when_offline()
+```
+
 ## Live tables
 
 A [DataTable](/docs/ui/data-table/) has its own `.live(every)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks, keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook. It shares the stream handling described above.

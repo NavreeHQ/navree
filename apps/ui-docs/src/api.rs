@@ -56,6 +56,11 @@ pub const FILES: &[&str] = &[
     "theme/appearance.rs",
     "theme/menu.rs",
     "theme/builder.rs",
+    "pages/state.rs",
+    "pages/labels.rs",
+    "pages/options.rs",
+    "pages/render.rs",
+    "pages/return_to.rs",
 ];
 
 /// One constructor or method.

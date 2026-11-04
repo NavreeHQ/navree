@@ -18,6 +18,7 @@ mod overlays;
 mod patterns;
 mod phone;
 mod pickers;
+mod states;
 mod store;
 mod themes;
 
@@ -32,6 +33,7 @@ pub fn all() -> Vec<Example> {
     all.extend(display::all());
     all.extend(activity::all());
     all.extend(feedback::all());
+    all.extend(states::all());
     all.extend(overlays::all());
     all.extend(layout::all());
     all.extend(navigation::all());

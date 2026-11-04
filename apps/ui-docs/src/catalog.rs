@@ -72,7 +72,19 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "feedback",
         title: "Feedback",
-        components: &["alert", "toast", "empty", "progress", "skeleton", "spinner"],
+        components: &[
+            "alert",
+            "toast",
+            "empty",
+            "empty-state",
+            "error-page",
+            "forbidden",
+            "not-found",
+            "sign-in-required",
+            "progress",
+            "skeleton",
+            "spinner",
+        ],
     },
     Group {
         id: "overlays",
@@ -335,6 +347,29 @@ pub const COMPONENTS: &[Component] = &[
     )
     .parts("action"),
     component("empty", "Empty", &["Empty"], "thumb").parts("default"),
+    component(
+        "empty-state",
+        "EmptyState",
+        &["EmptyState", "EmptyKind"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "error-page",
+        "ErrorPage",
+        &["ErrorPage", "State", "StateKind", "StateSize"],
+        "thumb",
+    )
+    .parts("default"),
+    component("forbidden", "Forbidden", &["Forbidden"], "thumb").parts("default"),
+    component("not-found", "NotFound", &["NotFound"], "thumb").parts("default"),
+    component(
+        "sign-in-required",
+        "SignInRequired",
+        &["SignInRequired", "SessionEnded", "ReturnTo"],
+        "thumb",
+    )
+    .parts("default"),
     component("progress", "Progress", &["Progress"], "thumb").parts("default"),
     component(
         "skeleton",
@@ -488,6 +523,19 @@ pub const COMPONENTS: &[Component] = &[
     component("commands", "Commands", &["Cmd", "Op", "Reply"], "toggle")
         .page("/docs/ui/commands-and-ops/"),
     component("regions", "Regions", &["Region"], "lazy").page("/docs/ui/regions/"),
+    component(
+        "errors-and-states",
+        "Errors and states",
+        &[
+            "PagesOptions",
+            "StateLabels",
+            "KindWords",
+            "ErrorShell",
+            "StateKind",
+        ],
+        "kinds",
+    )
+    .page("/docs/ui/errors-and-states/"),
     // The example apps' views, shown on `/ui/` rather than a docs page.
     component(
         "build-anything",

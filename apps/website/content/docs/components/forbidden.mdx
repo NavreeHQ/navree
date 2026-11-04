@@ -1,0 +1,61 @@
+---
+title: "Forbidden"
+description: "The state for a card, tab, region or table row the user may not see."
+---
+
+<UiPreview example="forbidden/default" />
+
+`Forbidden` fills the place of something the user has no access to. It says so in one line and, if you add a way to ask, offers it. It never says whether the thing exists.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Revenue").body(Forbidden::new().what("report"))
+```
+
+`.what("report")` names the thing: "You don't have access to this report."
+
+## When to use it
+
+Use it where a part of a page is withheld and the rest of the page is fine. For a whole page, `UiModule` shows an [ErrorPage](/docs/components/error-page/) on a 403.
+
+<UiChoose name="state" current="Forbidden" />
+
+## Asking for access
+
+The app owns the address `.request_access(href)` leads to.
+
+<UiPreview example="forbidden/request-access" />
+
+## A row the user lost
+
+A row that cannot be shown takes one cell that spans the table. The table keeps its header and its order, and the row has no checkbox and no link.
+
+<UiPreview example="forbidden/row" />
+
+```rust
+Forbidden::new().row(2)
+```
+
+## Compact
+
+`.compact()` is one line: an icon and the words. Use it in a list. `.size(StateSize::Page)` is the whole width of a page.
+
+## Anatomy
+
+<UiAnatomy component="forbidden" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The headline is a paragraph, not a heading, so the page's outline stays yours. Ask for a heading with `.heading(3)`.
+- The icon is hidden from assistive technology.
+- A locked row has no tab stop of its own, and only the actions you add can take focus.
+- In a region that gets a 403, the runtime announces the state once.
+
+</UiA11y>
+
+## API
+
+<UiProps type="Forbidden" />

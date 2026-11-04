@@ -1,0 +1,137 @@
+---
+title: "Errors and states"
+description: "What your app shows when a request ends in an error, when the user may not see something, or when there is nothing to show: a page in the shell for browsers, JSON for APIs, and one state for every place in between."
+---
+
+<UiPreview example="errors-and-states/kinds" />
+
+A request that ends in a 401, 403, 404, 405, 409, 410, 419, 422, 429, 500 or 503 gets a page, not a JSON blob, when a person asked for a page. The page says what happened in plain words, offers the next step, and shows a reference that support can find in the log. An API route keeps its [JSON error](/docs/basics/errors/) exactly as it was.
+
+You add nothing to get this. `UiModule` draws the pages for every route that serves one. The same markup, called a state, is also what a card, a tab, a region or a table row shows when the user may not see it, or when there is nothing in it.
+
+```rust title="src/main.rs"
+App::builder()
+    .module(HttpModule::from_config())
+    .module(UiModule::from_config())
+    .module(AppModule)
+```
+
+## Who gets what
+
+The server decides from what asked. A route marked `page()` or `json_only()` is decided by its mark; any other route is decided by the `Accept` header and by what the request is.
+
+| The request | The answer |
+|---|---|
+| A route marked `json_only()`, or a client that asks for JSON alone | the JSON error body, unchanged |
+| A route under `http.api_prefix` that is not marked `page()` | the JSON error body, even for a browser |
+| A browser opening a page, with or without JavaScript | a page |
+| A boosted link | the same page, which the runtime shows in place: the shell stays, the title changes and the page is announced |
+| A region fetching its content | the state alone, shown where the region was |
+| A form posted through the runtime | an ops response with one toast, so the form and what was typed stay |
+
+```rust
+RouteDef::on(Method::GET, "!/deals/{id}", show).authenticated().page()
+```
+
+A page route answers a client that asks for JSON alone with JSON. Without a mark, `*/*` and no `Accept` header are JSON, and a browser's `text/html` is a page.
+
+## In the shell, or on its own
+
+A signed-in user gets the page inside the [app shell](/docs/ui/app-shell/): the sidebar and top bar stay, the short title is the page's heading, and the state sits below it. The app needs a `Shell` provider for this, as it does for any page. If it builds the shell per request, contribute an `ErrorShell`:
+
+```rust
+m.contribute(ErrorShell::new(|request| async move { shell_for(request.user).await }));
+```
+
+A guest gets a page on its own: the same stylesheet, one `h1` and no script. So does a 401, a 429 and a 503 for anyone, because those must work when much else does not, and so does a panic.
+
+## Sign in, and back to where you were
+
+A 401 shows a button to your sign-in page with the page the user was on as `next`. Set the address once:
+
+```toml
+[ui]
+sign_in = "/sign-in"
+sign_in_redirect = false   # true sends a guest straight there with a 303
+```
+
+Your sign-in page reads `next` with `ReturnTo`, which accepts only an address on your site. Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example` or an encoded slash, is dropped and the user lands on your fallback.
+
+```rust
+let target = ReturnTo::resolve(form.next.as_deref(), "/");
+Reply::redirect(target)
+```
+
+[SignInRequired](/docs/components/sign-in-required/) and [SessionEnded](/docs/components/sign-in-required/#after-a-session-ends) are the pieces that go on and around the sign-in page.
+
+## What is never shown
+
+A 500, and any 5xx but a 503, shows fixed words. The error's source, its message, SQL, file paths and panic text never reach the page or its headers. A 4xx or a 503 shows the error's own `detail` when it has one, which is what the JSON `message` already says, cut to 300 characters and escaped.
+
+Every page shows a reference, the request id from the `X-Request-Id` header, so a user can quote it and you can find the log line. In the shell it has a Copy button.
+
+A debug build can show more. Turn on `ui.debug` (on by default only in a build with debug assertions) and a block marked "Development only" lists the status, route, message and cause. Never turn it on where users can see it.
+
+## Inside a page
+
+The same state fits wherever a place has nothing to show.
+
+<UiPreview example="errors-and-states/inline" />
+
+- [Forbidden](/docs/components/forbidden/) for a card, tab or row the user may not see. It never says whether the thing exists.
+- [NotFound](/docs/components/not-found/) for a record that is gone.
+- [SignInRequired](/docs/components/sign-in-required/) for a part that needs a user.
+- [EmptyState](/docs/components/empty-state/) for a list with nothing in it, and what to do next.
+
+<UiChoose name="state" current="ErrorPage" />
+
+## A region that gets an error
+
+A [region](/docs/ui/regions/) that gets a 401, 403, 404, 410, 429, 500 or 503 shows the state in place, keeps its card, and announces it once. Its Try again button fetches the region again. A region that polls stops on a 401, 403, 404 or 410: a door that is shut stays shut.
+
+## An action that gets an error
+
+A form posted through the runtime that gets a 403, 404, 409, 419, 422, 429, 500 or 503 shows one toast with the right tone and leaves the form as it was. A 401 also leads to sign-in and back to the page.
+
+## Words and settings
+
+Every word is in `StateLabels`. Replace the words of one kind, or all of them:
+
+```rust
+let labels = StateLabels::default().with_words(
+    StateKind::NotFound,
+    KindWords {
+        short: "Introuvable".into(),
+        title: "Page introuvable".into(),
+        description: "Cette page n'existe pas.".into(),
+        toast: "Introuvable.".into(),
+    },
+);
+UiModule::with_pages(PagesOptions::default().labels(labels))
+```
+
+A 419 is the page-expired state. The CSRF check keeps its 403, and its page says the page expired. Return `AppError::page_expired()` for a 419 of your own.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A page has one `h1`: the state's headline on its own, or the short title in the shell. A state inside a page has a paragraph for its headline, so the page's outline stays yours; ask for a heading with `.heading(2)`.
+- The status code is text in a chip, and the icon is hidden from assistive technology.
+- The first Tab stop is the main action. Focus rings are visible, and the actions are links, so they work with JavaScript off.
+- A boosted navigation to an error page announces its title, moves focus to the main region and keeps the shell. A state that arrives in a region is announced once.
+- A toast is a live region, so the result of an action is heard.
+
+</UiA11y>
+
+## API
+
+<UiProps type="PagesOptions" />
+
+<UiProps type="StateLabels" />
+
+<UiProps type="KindWords" />
+
+<UiProps type="StateKind" />
+
+<UiProps type="ErrorShell" />

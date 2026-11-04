@@ -1,0 +1,76 @@
+---
+title: "SignInRequired"
+description: "The state for a part that needs a signed-in user, a notice for the sign-in page, and a checked way back."
+---
+
+<UiPreview example="sign-in-required/default" />
+
+`SignInRequired` says a part of a page needs a user and offers a button to your sign-in page. `.return_to(&here)` adds the page the user was on, so signing in brings them back.
+
+```rust
+use navree::ui::*;
+
+let here = ReturnTo::of_uri(&uri);
+Card::titled("Your deals").body(match &here {
+    Some(here) => SignInRequired::new("/sign-in").what("your deals").return_to(here),
+    None => SignInRequired::new("/sign-in").what("your deals"),
+})
+```
+
+## When to use it
+
+Use it for a part of a page that a guest can see the frame of. A whole page for a guest is an [ErrorPage](/docs/components/error-page/) with a 401, which `UiModule` draws and which carries the same button.
+
+<UiChoose name="state" current="SignInRequired" />
+
+## The way back
+
+`ReturnTo` accepts only an address on your site: one path, starting with a single slash, with no second slash or backslash, no scheme, no space or control character, no dot segment, and nothing that says so once its `%xx` escapes are read. It is at most 2,048 bytes.
+
+```rust
+async fn sign_in(Form(form): Form<SignIn>) -> Reply {
+    // ... check the password ...
+    Reply::redirect(ReturnTo::resolve(form.next.as_deref(), "/"))
+}
+```
+
+Anything else, such as `//evil.example`, `/\evil.example`, `https://evil.example`, `javascript:alert(1)`, `/%2f/evil.example` or the sign-in page itself, is dropped. `resolve` then gives your fallback. Check `next` again in the handler that reads it: a hidden field can be changed.
+
+## After a session ends
+
+`SessionEnded` is a short notice for the top of the sign-in page. It takes no picture and little room, so the form stays on the screen.
+
+<UiPreview example="sign-in-required/notice" />
+
+```rust
+let ended = ReturnTo::from_query(query).is_some();
+page.body((ended.then(SessionEnded::new), form))
+```
+
+## Anatomy
+
+<UiAnatomy component="sign-in-required" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The button is a link, so it works with JavaScript off.
+- `SessionEnded` is an alert with a title and a line of help. It is read once, when the page loads.
+- The headline is a paragraph, so the page's outline stays yours.
+
+</UiA11y>
+
+## API
+
+### SignInRequired
+
+<UiProps type="SignInRequired" />
+
+### SessionEnded
+
+<UiProps type="SessionEnded" />
+
+### ReturnTo
+
+<UiProps type="ReturnTo" />

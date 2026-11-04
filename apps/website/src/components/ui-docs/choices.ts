@@ -139,6 +139,17 @@ export const choices = {
       c("AlertDialog", "It must be answered first", "/docs/components/alert-dialog/"),
     ],
   },
+  state: {
+    title: "Which state?",
+    question: "Why is there nothing to show?",
+    options: [
+      c("EmptyState", "A list has nothing in it", "/docs/components/empty-state/"),
+      c("Forbidden", "The user may not see it", "/docs/components/forbidden/"),
+      c("NotFound", "It is not there", "/docs/components/not-found/"),
+      c("SignInRequired", "It needs a user", "/docs/components/sign-in-required/"),
+      c("ErrorPage", "A whole page cannot be shown", "/docs/components/error-page/"),
+    ],
+  },
   "switch-view": {
     title: "Which way to switch views?",
     question: "What changes?",

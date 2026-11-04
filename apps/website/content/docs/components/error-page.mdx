@@ -1,0 +1,94 @@
+---
+title: "ErrorPage"
+description: "A whole page for an error status: a headline, a plain explanation, what to do next and a reference for support."
+---
+
+<UiPreview example="error-page/default" />
+
+`ErrorPage` is the page a person sees when a request ends in an error. [UiModule](/docs/ui/errors-and-states/) draws one for every page route that fails, so you rarely build one. Build one yourself to answer from a handler.
+
+```rust
+use navree::ui::*;
+
+async fn show(shell: AppShell, Path(id): Path<Uuid>, deals: Deals) -> Result<AppPage, ErrorPage> {
+    let deal = deals.find(id).await.ok_or_else(ErrorPage::not_found)?;
+    Ok(shell.page(deal.title).body(deal_view(&deal)))
+}
+```
+
+An `ErrorPage` is a response. On its own it is a document with one `h1`, the toolkit's stylesheet and no script. `in_shell(&shell)` puts it inside the app shell.
+
+## When to use it
+
+Use it for a whole page that cannot be shown. For a part of a page, use a [Forbidden](/docs/components/forbidden/), [NotFound](/docs/components/not-found/) or [EmptyState](/docs/components/empty-state/).
+
+<UiChoose name="state" current="ErrorPage" />
+
+## Every kind
+
+Each status has its own words, icon and actions. A status the list does not name gets the words of its class.
+
+<UiPreview example="error-page/kinds" />
+
+| Status | Kind | The main action |
+|---|---|---|
+| 401 | `SignIn` | Sign in, with the page the user was on as `next` |
+| 403 | `Forbidden` | Go to home |
+| 404, 410 | `NotFound`, `Gone` | Go to home |
+| 405 | `MethodNotAllowed` | Go to home |
+| 409 | `Conflict` | Reload |
+| 419 and a failed CSRF check | `Expired` | Reload |
+| 400, 422 | `Invalid` | Go to home |
+| 429 | `RateLimited` | Try again, with the wait from `Retry-After` |
+| 500, 502, 504 | `Failed` | Try again, and Go to home |
+| 503 | `Unavailable` | Try again |
+
+## In the app shell
+
+<UiPreview example="error-page/shell" />
+
+In the shell the short title is the page's heading and the state sits below it, with a button to copy the reference. The status of the response is the error's.
+
+```rust
+ErrorPage::forbidden().in_shell(&shell)
+```
+
+## Anatomy
+
+<UiAnatomy component="error-page" />
+
+## What it shows
+
+- A reference, set with `.reference(id)`, which `UiModule` fills with the request id.
+- The error's own message under the explanation, set with `.detail(text)`. Never give it the text of an internal error.
+- How long to wait, set with `.retry_after(seconds)`.
+- Actions: Go to home goes to `.home(href)`; Sign in goes to `.sign_in(href)`; Try again and Reload go to `.retry_to(href)`, which is the page that failed. Replace them all with `.actions(...)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- On its own the headline is the page's one `h1`; in the shell the page's heading is the short title, and the headline is a paragraph.
+- The first Tab stop is the main action. The actions are links, so they work with JavaScript off.
+- The status code is text, and the icon is hidden from assistive technology.
+- The reference is selectable, and in the shell has a Copy button with a name.
+
+</UiA11y>
+
+## API
+
+### ErrorPage
+
+<UiProps type="ErrorPage" />
+
+### StateKind
+
+<UiProps type="StateKind" />
+
+### State
+
+<UiProps type="State" />
+
+### StateSize
+
+<UiProps type="StateSize" />
