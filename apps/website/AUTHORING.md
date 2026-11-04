@@ -351,7 +351,8 @@ fails when it is stale, so nothing on these pages is drawn by hand.
   with Preview and Code tabs. Examples are Rust functions in
   `apps/ui-docs/src/examples/`; the function's body is the code shown.
   The preview is a static page rendered by navree-ui with its own stylesheet,
-  framed, so the toolkit's CSS and the site's never meet.
+  framed, so the toolkit's CSS and the site's never meet. Add `defer` to a
+  whole page drawn below the fold: its frame then loads after the page has.
 - `<UiAnatomy component="button" />`: the component's `data-slot` parts.
 - `<UiProps type="Button" />`: a type's constructors and methods, or an
   enum's variants, read from the toolkit's source.

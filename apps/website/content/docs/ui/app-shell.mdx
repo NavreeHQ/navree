@@ -47,6 +47,12 @@ async fn show(shell: AppShell) -> AppPage {
 
 A module that serves pages of its own and has no business registering a shell for the whole app, such as a debugging tool, builds its own `Shell` and applies it with `Shell::for_request(path, &headers)`, which does what the extractor does.
 
+## A whole page
+
+The same shell with a full page in it: counts beside the sidebar links, page actions, four figures, a [DataTable](/docs/ui/data-table/) with its filters and pages, and one deal open in a [Sheet](/docs/components/sheet/) over the table, with a [Timeline](/docs/components/timeline/) of its history in IST. The preview is drawn 1,440 px wide.
+
+<UiPreview example="app-shell/full" defer />
+
 ## When to use it
 
 <UiChoose name="wayfinding" current="Shell" />

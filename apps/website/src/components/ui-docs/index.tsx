@@ -47,8 +47,11 @@ import { flagWeightsText } from "./weights";
 
 // ------------------------------------------------------------------ preview
 
-/** `<UiPreview example="button/variants" />`. */
-export async function UiPreview({ example: id }: { example: string }) {
+/**
+ * `<UiPreview example="button/variants" />`. With `defer`, the frame loads only
+ * after the page has, as it nears the screen: for a whole page drawn below the fold.
+ */
+export async function UiPreview({ example: id, defer = false }: { example: string; defer?: boolean }) {
   const example = findExample(id);
   const html = await highlight(example.code, "rust");
   const owner = findComponent(example.component);
@@ -64,6 +67,7 @@ export async function UiPreview({ example: id }: { example: string }) {
           height={example.height}
           width={example.width}
           fit={example.layout !== "fill"}
+          defer={defer}
         />
       }
       code={<div dangerouslySetInnerHTML={{ __html: html }} />}
