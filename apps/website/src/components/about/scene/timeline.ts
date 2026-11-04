@@ -83,7 +83,7 @@ export const TYPING = { char: 0.05, line: 0.36, blank: 0.7, hold: 3.6, clear: 0.
 export const CARET_HZ = 2.4;
 
 /** The camera's slow breathing once settled: amplitude (picture pixels) and period (seconds) on each axis. */
-export const BREATH = { x: [9, 17], y: [5, 23] } as const;
+export const BREATH = { x: [6, 17], y: [3.5, 23] } as const;
 
 /** How strongly the light, the screen and the room's rain stand at time `t`. */
 export function levels(t: number) {

@@ -79,7 +79,7 @@ void main() {
   c *= mix(smoothstep(land - 0.08, land + 0.55, uTime), 1.0, uReveal);
   // The pulse brightens the picture as it passes, a little towards mint.
   float ring = ringAt(vWorld, uLightPos, uPulseAge, uPulse) * (1.0 - m.r);
-  c *= 1.0 + 0.75 * ring;
+  c *= 1.0 + 0.5 * ring;
   gl_FragColor = vec4(c, 1.0);
 }
 `;

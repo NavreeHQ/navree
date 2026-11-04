@@ -27,6 +27,7 @@ import {
   HEAD_OVER_SCREEN,
   IMAGE,
   LIGHT,
+  QUIET,
   RAIN_ZONES,
   SCREEN,
   codeBaseline,
@@ -169,7 +170,8 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
   const rain = new Rows();
   const dust = new Rows();
   const mask = drawMask();
-  const zones = (() => {
+  /** A test for whether a picture pixel lies in any of `polys`, from a quarter-size drawing of them. */
+  const within = (polys: readonly (readonly Point[])[]) => {
     const c = document.createElement("canvas");
     c.width = IMAGE.width / 4;
     c.height = IMAGE.height / 4;
@@ -177,17 +179,20 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
     if (!ctx) return () => false;
     ctx.scale(0.25, 0.25);
     ctx.fillStyle = "#fff";
-    for (const zone of RAIN_ZONES) {
-      path(ctx, zone);
+    for (const poly of polys) {
+      path(ctx, poly);
       ctx.fill();
     }
     const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    c.width = c.height = 0;
     return (x: number, y: number) => {
-      const px = Math.min(c.width - 1, Math.max(0, Math.floor(x / 4)));
-      const py = Math.min(c.height - 1, Math.max(0, Math.floor(y / 4)));
-      return data[(py * c.width + px) * 4 + 3] > 127;
+      const px = Math.min(IMAGE.width / 4 - 1, Math.max(0, Math.floor(x / 4)));
+      const py = Math.min(IMAGE.height / 4 - 1, Math.max(0, Math.floor(y / 4)));
+      return data[(py * (IMAGE.width / 4) + px) * 4 + 3] > 127;
     };
-  })();
+  };
+  const zones = within(RAIN_ZONES);
+  const quiet = within(QUIET);
 
   /** The picture's light averaged over a grid of `cw` x `ch` cells: luminance and whiteness per cell. */
   const sampleGrid = (cw: number, ch: number) => {
@@ -228,7 +233,7 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
         const y = (row + 0.5) * ch;
         if (zones(x, y)) continue;
         const z = depth.at(x, y) - 3;
-        const figure = depth.isFigure(x, y) ? 1 : 0;
+        const figure = depth.isFigure(x, y) && !quiet(x, y) ? 1 : 0;
         essential.push(
           [...toWorld(x, y, z), (tier.glyph / DIGIT) * scaleAt(z)],
           [-1, Math.min(1.1, 0.25 + l * 1.5), Math.min(1, grid.white[i] * 1.3), figure],

@@ -36,7 +36,7 @@ const PAUSED_KEY = "navree:about-motion";
 const SEEN_KEY = "navree:about-opening";
 const MAX_RATIO = 1.5;
 /** How far the pointer and the scroll move the camera, in the picture's pixels. */
-const SWAY = { x: 28, y: 16, scroll: 14 } as const;
+const SWAY = { x: 16, y: 9, scroll: 10 } as const;
 
 type Nav = Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
 type CaptureWindow = Window & {

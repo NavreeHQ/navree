@@ -116,7 +116,7 @@ export type DepthLayer = {
   figure?: boolean;
 };
 
-export const ROOM_DEPTH = 900;
+export const ROOM_DEPTH = 600;
 
 export const DEPTH_LAYERS: DepthLayer[] = [
   // The desk: its top recedes from the front edge to the wall; legs; keyboard; monitor; plant and mug.
@@ -144,7 +144,7 @@ export const DEPTH_LAYERS: DepthLayer[] = [
   {
     id: "navreet",
     z: 150,
-    round: 40,
+    round: 28,
     figure: true,
     poly: [
       [930, 192],
@@ -193,7 +193,7 @@ export const DEPTH_LAYERS: DepthLayer[] = [
   {
     id: "navraj",
     z: 110,
-    round: 34,
+    round: 24,
     figure: true,
     poly: [
       [602, 192],
@@ -237,7 +237,7 @@ export const DEPTH_LAYERS: DepthLayer[] = [
   {
     id: "father",
     z: 40,
-    round: 70,
+    round: 40,
     figure: true,
     poly: [
       [398, 88],
@@ -370,6 +370,69 @@ export const DEPTH_LAYERS: DepthLayer[] = [
       [560, 768],
     ],
   },
+];
+
+/**
+ * Faces, hair, hands and feet: the live digits shimmer and stream over the
+ * family's clothes, which the picture draws in digits, and leave these
+ * alone.
+ */
+export const QUIET: Point[][] = [
+  // The father's head and beard.
+  [
+    [382, 60],
+    [545, 60],
+    [556, 190],
+    [544, 266],
+    [470, 266],
+    [398, 248],
+    [380, 150],
+  ],
+  // Navraj's patka and head.
+  [
+    [554, 184],
+    [692, 184],
+    [692, 338],
+    [554, 338],
+  ],
+  // Navreet's head and her two braids.
+  [
+    [912, 180],
+    [1064, 180],
+    [1064, 330],
+    [912, 330],
+  ],
+  [
+    [940, 300],
+    [1004, 300],
+    [1004, 524],
+    [940, 524],
+  ],
+  [
+    [1022, 300],
+    [1074, 300],
+    [1074, 524],
+    [1022, 524],
+  ],
+  // Hands at the desk, and Navraj's foot.
+  [
+    [752, 436],
+    [846, 436],
+    [846, 500],
+    [752, 500],
+  ],
+  [
+    [826, 480],
+    [894, 480],
+    [894, 530],
+    [826, 530],
+  ],
+  [
+    [764, 640],
+    [820, 640],
+    [820, 724],
+    [764, 724],
+  ],
 ];
 
 /** Where the family's heads are, kept clear of the out-of-focus digits near the camera. */
