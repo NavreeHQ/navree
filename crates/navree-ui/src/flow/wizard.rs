@@ -53,6 +53,7 @@ pub const REVISION_FIELD: &str = "_rev";
 type Pairs = [(String, String)];
 type Render = Arc<dyn Fn(&Pairs, &FieldErrors) -> Node + Send + Sync>;
 type Check = Arc<dyn Fn(&Pairs) -> Result<(), FieldErrors> + Send + Sync>;
+type Shape<T> = Arc<dyn Fn(FormView<T>) -> FormView<T> + Send + Sync>;
 type Rows = Arc<dyn Fn(&Pairs, &str, &str) -> Vec<(String, String)> + Send + Sync>;
 
 /// What a post to a wizard asks for: the value of its `_wizard` field.
@@ -224,7 +225,7 @@ pub struct WizardStepOf<T> {
     title: Node,
     description: Option<Node>,
     optional: bool,
-    shape: Option<Arc<dyn Fn(FormView<T>) -> FormView<T> + Send + Sync>>,
+    shape: Option<Shape<T>>,
 }
 
 impl WizardStep {
@@ -280,7 +281,13 @@ fn clean_id(id: &str) -> String {
     let id: String = id
         .chars()
         .take(64)
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
     if id.is_empty() { "step".to_owned() } else { id }
 }
@@ -292,7 +299,9 @@ fn field_names<T: Form>() -> (Vec<String>, Vec<String>) {
     for field in T::FIELDS {
         if matches!(
             field.widget,
-            Widget::Input(crate::components::InputKind::Password | crate::components::InputKind::File)
+            Widget::Input(
+                crate::components::InputKind::Password | crate::components::InputKind::File
+            )
         ) {
             secret.push(field.name.to_owned());
             continue;
@@ -378,7 +387,11 @@ impl WizardStep {
             }
             all.push((name.clone(), value.clone()));
         }
-        Some(Picked { kept, all, secret_given })
+        Some(Picked {
+            kept,
+            all,
+            secret_given,
+        })
     }
 }
 
@@ -427,7 +440,8 @@ impl Wizard {
         if self.steps.len() >= MAX_STEPS {
             return self;
         }
-        let taken = |id: &str, steps: &[WizardStep]| id == REVIEW || steps.iter().any(|s| s.id == id);
+        let taken =
+            |id: &str, steps: &[WizardStep]| id == REVIEW || steps.iter().any(|s| s.id == id);
         let base = step.id.clone();
         let mut n = 1;
         while taken(&step.id, &self.steps) {
@@ -484,6 +498,11 @@ impl Wizard {
     /// A new draft on the first step.
     pub fn start(&self) -> Draft {
         Draft::new(self.id_at(0).unwrap_or(REVIEW))
+    }
+
+    /// A new draft on the first step with an id of your own (see [`Draft::with_id`]).
+    pub fn draft(&self, id: impl Into<String>) -> Draft {
+        Draft::with_id(id, self.id_at(0).unwrap_or(REVIEW))
     }
 
     /// How many steps there are, the review included.
@@ -596,9 +615,7 @@ impl Wizard {
     /// [`WizardOutcome::changed`].
     pub fn submit(&self, draft: &mut Draft, step_id: &str, pairs: &Pairs) -> WizardOutcome {
         use WizardOutcome::{Done, Go, Invalid, Left, Refused, Stale};
-        use WizardRefusal::{
-            AlreadySubmitted, NotReachable, TooLarge, UnknownAction, UnknownStep,
-        };
+        use WizardRefusal::{AlreadySubmitted, NotReachable, TooLarge, UnknownAction, UnknownStep};
         if draft.submitted {
             return Refused(AlreadySubmitted);
         }
@@ -632,7 +649,10 @@ impl Wizard {
             _ => {}
         }
         // What was typed is kept whatever comes next.
-        let before = draft.steps.get(&self.steps.get(at).map(|s| s.id.clone()).unwrap_or_default()).cloned();
+        let before = draft
+            .steps
+            .get(&self.steps.get(at).map(|s| s.id.clone()).unwrap_or_default())
+            .cloned();
         if on_form_step {
             let Some(picked) = self.steps[at].pick(pairs) else {
                 return Refused(TooLarge);
@@ -640,12 +660,29 @@ impl Wizard {
             let id = self.steps[at].id.clone();
             let visited = before.as_ref().is_some_and(|record| record.visited);
             // Changed values, or a password just typed, are not what was last checked.
-            let unchanged = before.as_ref().is_some_and(|record| record.values == picked.kept)
+            let unchanged = before
+                .as_ref()
+                .is_some_and(|record| record.values == picked.kept)
                 && !picked.secret_given;
-            let valid = if matches!(action, WizardAction::Next | WizardAction::Finish) {
-                (self.steps[at].check)(&picked.all).is_ok()
-            } else {
-                unchanged && before.as_ref().is_some_and(|record| record.valid)
+            let tried = matches!(action, WizardAction::Next | WizardAction::Finish);
+            let result = tried.then(|| (self.steps[at].check)(&picked.all));
+            let valid = match &result {
+                Some(result) => result.is_ok(),
+                None => unchanged && before.as_ref().is_some_and(|record| record.valid),
+            };
+            // What a password or a file got wrong is kept as words, since its value is not.
+            let secret_errors = match &result {
+                Some(Err(errors)) => errors
+                    .iter()
+                    .filter(|(name, _)| self.steps[at].secret.contains(name))
+                    .map(|(name, words)| (name.clone(), words.clone()))
+                    .collect(),
+                Some(Ok(())) => std::collections::BTreeMap::new(),
+                None if unchanged => before
+                    .as_ref()
+                    .map(|record| record.secret_errors.clone())
+                    .unwrap_or_default(),
+                None => std::collections::BTreeMap::new(),
             };
             draft.steps.insert(
                 id.clone(),
@@ -653,6 +690,7 @@ impl Wizard {
                     values: picked.kept,
                     visited,
                     valid,
+                    secret_errors,
                 },
             );
             if draft.bytes() > MAX_DRAFT_BYTES {
@@ -669,7 +707,10 @@ impl Wizard {
                 Left
             }
             WizardAction::Back => {
-                let to = self.id_at(at.saturating_sub(1)).unwrap_or(step_id).to_owned();
+                let to = self
+                    .id_at(at.saturating_sub(1))
+                    .unwrap_or(step_id)
+                    .to_owned();
                 draft.step.clone_from(&to);
                 Go(to)
             }
@@ -837,7 +878,15 @@ impl WizardPage {
                 let values = wizard.values(&self.draft, self.at);
                 // A step the person has moved on from shows what is wrong with it.
                 let errors = if wizard.visited(&self.draft, self.at) {
-                    (step.check)(values).err().unwrap_or_default()
+                    // The password was not kept to be checked again: what it got wrong was.
+                    let mut errors = (step.check)(values).err().unwrap_or_default();
+                    for name in &step.secret {
+                        errors.remove(name);
+                    }
+                    if let Some(record) = self.draft.steps.get(&step.id) {
+                        errors.extend(record.secret_errors.clone());
+                    }
+                    errors
                 } else {
                     FieldErrors::new()
                 };
@@ -857,8 +906,9 @@ impl WizardPage {
             .map(|(at, step)| {
                 let values = wizard.values(&self.draft, at);
                 let rows = (step.rows)(values, &words.yes, &words.no);
-                let broken = wizard.visited(&self.draft, at)
-                    && (step.check)(values).is_err()
+                // The same word as the stepper's: a step with a password can't be checked
+                // again here, so it holds if it held when it was tried.
+                let broken = wizard.visited(&self.draft, at) && !wizard.complete(&self.draft, at)
                     || (!wizard.visited(&self.draft, at) && !step.optional);
                 let id = format!("{}-review-{}", wizard.id, step.id);
                 el("section")
@@ -900,10 +950,7 @@ impl WizardPage {
                     ))
             })
             .collect();
-        el("div")
-            .slot("wizard-review")
-            .child(sections)
-            .into()
+        el("div").slot("wizard-review").child(sections).into()
     }
 
     fn into_node(self) -> Node {
@@ -975,23 +1022,29 @@ impl WizardPage {
                     .slot("wizard-step")
                     .attr("aria-labelledby", heading_id.clone())
                     .children((
-                        self.notice.clone().map(|text| {
-                            Alert::new(AlertTone::Warning).title(text)
-                        }),
+                        self.notice
+                            .clone()
+                            .map(|text| Alert::new(AlertTone::Warning).title(text)),
                         el("h2")
                             .slot("wizard-heading")
                             .attr("id", heading_id)
                             .attr("tabindex", -1_i64)
                             .child(title),
-                        description
-                            .map(|text| el("p").slot("wizard-description").child(text)),
+                        description.map(|text| el("p").slot("wizard-description").child(text)),
                         self.body(),
                     )),
                 actions,
             ));
         el("div")
             .slot("wizard")
-            .attr("data-orientation", if wizard.vertical { "vertical" } else { "horizontal" })
+            .attr(
+                "data-orientation",
+                if wizard.vertical {
+                    "vertical"
+                } else {
+                    "horizontal"
+                },
+            )
             .attr("data-step", step_id)
             .child(form)
             .into()

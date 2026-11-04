@@ -32,6 +32,10 @@ pub struct StepRecord {
     /// again from its values each time.
     #[serde(default)]
     pub valid: bool,
+    /// What was wrong with a password or a file when the step was last tried: the
+    /// words, never the value. The page says them again, since the value is gone.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub secret_errors: BTreeMap<String, Vec<String>>,
 }
 
 /// A wizard in progress. It is plain data (`serde`), so an app can keep it in a
@@ -82,6 +86,18 @@ impl Draft {
         }
     }
 
+    /// A new draft on `step` with an id of your own, for an app that makes its ids
+    /// itself or a test that needs the same one every time. The id must be one
+    /// [`is_draft_id`] accepts, or the draft gets a fresh one.
+    pub fn with_id(id: impl Into<String>, step: impl Into<String>) -> Self {
+        let mut draft = Self::new(step);
+        let id = id.into();
+        if is_draft_id(&id) {
+            draft.id = id;
+        }
+        draft
+    }
+
     /// The record of a step.
     pub fn record(&self, step: &str) -> Option<&StepRecord> {
         self.steps.get(step)
@@ -102,7 +118,11 @@ impl Draft {
     where
         T: crate::form::Form + serde::de::DeserializeOwned + navree_validation::Validate,
     {
-        let values = self.steps.get(step).map(|r| r.values.as_slice()).unwrap_or(&[]);
+        let values = self
+            .steps
+            .get(step)
+            .map(|r| r.values.as_slice())
+            .unwrap_or(&[]);
         crate::form::decode::<T>(values)
     }
 
@@ -220,7 +240,10 @@ impl MemoryDrafts {
         self.len() == 0
     }
 
-    fn with<R>(&self, f: impl FnOnce(&mut HashMap<(String, String), (Draft, Instant)>) -> R) -> Result<R, DraftError> {
+    fn with<R>(
+        &self,
+        f: impl FnOnce(&mut HashMap<(String, String), (Draft, Instant)>) -> R,
+    ) -> Result<R, DraftError> {
         let mut drafts = self
             .drafts
             .lock()
@@ -310,11 +333,25 @@ mod tests {
     #[test]
     fn ids_are_checked_before_they_are_looked_up() {
         assert!(is_draft_id(&Draft::new("a").id));
-        for bad in ["", "short", "has space  ", "../../etc/passwd", "a\0bcdefgh", &"x".repeat(65)] {
+        for bad in [
+            "",
+            "short",
+            "has space  ",
+            "../../etc/passwd",
+            "a\0bcdefgh",
+            &"x".repeat(65),
+        ] {
             assert!(!is_draft_id(bad), "{bad:?}");
         }
         assert!(is_step_id("basics-2_b"));
         assert!(!is_step_id("") && !is_step_id("a b") && !is_step_id(&"x".repeat(65)));
+    }
+
+    #[test]
+    fn a_draft_can_have_an_id_of_its_own_if_it_is_one_the_toolkit_would_make() {
+        assert_eq!(Draft::with_id("deal-draft-1", "one").id, "deal-draft-1");
+        let made = Draft::with_id("../x", "one");
+        assert!(is_draft_id(&made.id) && made.id != "../x");
     }
 
     #[test]
@@ -324,7 +361,12 @@ mod tests {
         let mut d = a.clone();
         d.steps.insert(
             "one".into(),
-            StepRecord { values: vec![("name".into(), "Ada \u{0} \"x\"".into())], visited: true, valid: true },
+            StepRecord {
+                values: vec![("name".into(), "Ada \u{0} \"x\"".into())],
+                visited: true,
+                valid: true,
+                secret_errors: BTreeMap::new(),
+            },
         );
         let json = serde_json::to_string(&d).unwrap();
         assert_eq!(serde_json::from_str::<Draft>(&json).unwrap(), d);
@@ -336,13 +378,25 @@ mod tests {
         let mut draft = Draft::new("one");
         assert_eq!(block(store.save("ada", &draft, None)), Ok(()));
         // It exists now: saving it as new is a conflict.
-        assert_eq!(block(store.save("ada", &draft, None)), Err(DraftError::Conflict));
+        assert_eq!(
+            block(store.save("ada", &draft, None)),
+            Err(DraftError::Conflict)
+        );
         let before = draft.revision;
         draft.revision += 1;
         assert_eq!(block(store.save("ada", &draft, Some(before))), Ok(()));
         // A second writer holding the old revision loses.
-        assert_eq!(block(store.save("ada", &draft, Some(before))), Err(DraftError::Conflict));
-        assert_eq!(block(store.load("ada", &draft.id)).unwrap().unwrap().revision, 1);
+        assert_eq!(
+            block(store.save("ada", &draft, Some(before))),
+            Err(DraftError::Conflict)
+        );
+        assert_eq!(
+            block(store.load("ada", &draft.id))
+                .unwrap()
+                .unwrap()
+                .revision,
+            1
+        );
     }
 
     #[test]
@@ -351,7 +405,10 @@ mod tests {
         let draft = Draft::new("one");
         block(store.save("ada", &draft, None)).unwrap();
         assert_eq!(block(store.load("grace", &draft.id)), Ok(None));
-        assert_eq!(block(store.save("grace", &draft, Some(0))), Err(DraftError::Conflict));
+        assert_eq!(
+            block(store.save("grace", &draft, Some(0))),
+            Err(DraftError::Conflict)
+        );
         assert_eq!(block(store.discard("grace", &draft.id)), Ok(()));
         assert!(block(store.load("ada", &draft.id)).unwrap().is_some());
         block(store.discard("ada", &draft.id)).unwrap();
@@ -364,15 +421,32 @@ mod tests {
         for _ in 0..2 {
             block(store.save("ada", &Draft::new("one"), None)).unwrap();
         }
-        assert_eq!(block(store.save("ada", &Draft::new("one"), None)), Err(DraftError::Full));
+        assert_eq!(
+            block(store.save("ada", &Draft::new("one"), None)),
+            Err(DraftError::Full)
+        );
         let mut big = Draft::new("one");
-        big.steps.insert("one".into(), StepRecord { values: vec![("a".into(), "x".repeat(MAX_DRAFT_BYTES))], visited: false, valid: false });
-        assert_eq!(block(MemoryDrafts::default().save("ada", &big, None)), Err(DraftError::TooLarge));
+        big.steps.insert(
+            "one".into(),
+            StepRecord {
+                values: vec![("a".into(), "x".repeat(MAX_DRAFT_BYTES))],
+                visited: false,
+                valid: false,
+                secret_errors: BTreeMap::new(),
+            },
+        );
+        assert_eq!(
+            block(MemoryDrafts::default().save("ada", &big, None)),
+            Err(DraftError::TooLarge)
+        );
         let many = MemoryDrafts::default();
         for _ in 0..100 {
             block(many.save("ada", &Draft::new("one"), None)).unwrap();
         }
-        assert_eq!(block(many.save("ada", &Draft::new("one"), None)), Err(DraftError::Full));
+        assert_eq!(
+            block(many.save("ada", &Draft::new("one"), None)),
+            Err(DraftError::Full)
+        );
         assert!(block(many.save("grace", &Draft::new("one"), None)).is_ok());
     }
 
