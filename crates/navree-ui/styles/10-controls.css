@@ -54,7 +54,7 @@
 [data-slot=checkbox]{border-radius:var(--radius);&:checked{background-image:var(--ui-tick)}}
 [data-slot=radio]{border-radius:50%;&:checked{background:var(--accent) radial-gradient(circle,var(--accent-ink) 30%,transparent 34%)}}
 [data-slot=switch]{appearance:none;position:relative;flex:none;width:1.75rem;height:1rem;margin:.125rem 0 0;border-radius:var(--radius);background:var(--line-3);cursor:pointer;transition:background-color .1s;
-  &::before{content:"";position:absolute;inset:2px auto 2px 2px;width:.75rem;border-radius:2px;background:var(--fg);transition:translate .1s}
+  &::before{content:"";position:absolute;inset:2px auto 2px 2px;width:.75rem;border-radius:2px;background:light-dark(var(--ink-0),var(--fg));transition:translate .1s}
   &:checked{background:var(--accent);&::before{translate:.75rem;background:var(--accent-ink)}}
   &:disabled{opacity:.5;cursor:not-allowed}
 }
