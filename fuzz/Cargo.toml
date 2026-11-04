@@ -52,7 +52,6 @@ navree-oauth = { path = "../crates/navree-oauth" }
 navree-openapi = { path = "../crates/navree-openapi" }
 navree-pdf = { path = "../crates/navree-pdf" }
 navree-phone = { path = "../crates/navree-phone" }
-navree-ui = { path = "../crates/navree-ui" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
 navree-sheets = { path = "../crates/navree-sheets", features = ["fuzzing"] }
