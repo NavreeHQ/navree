@@ -18,25 +18,27 @@ use serde_json::Value;
 use crate::controller::RealtimeController;
 use crate::realtime::Relay;
 use crate::relay::{self, RelayClient};
-use crate::{Backplane, BackplaneKind, Realtime, RealtimeOptions};
+use crate::{Backplane, BackplaneKind, Live, Realtime, RealtimeOptions};
 
 /// The realtime module: a Pusher-protocol (version 7) WebSocket server in
 /// the app's own HTTP server, so `pusher-js` and any Pusher client work
 /// unchanged.
 ///
 /// Global; provides and exports [`Realtime`] and `dyn Broadcaster` (the same
-/// instance), and mounts three routes:
+/// instance) and [`Live`] (the live hub's publisher), and mounts these routes:
 ///
 /// - `GET /app/{key}` (public; the `Origin` is checked): the WebSocket;
 /// - `POST /apps/{app_id}/events` (public; signed): broadcasts relayed by
 ///   the app's other processes (`realtime.relay_url`);
+/// - `GET /broadcasting/stream` (public; the `Origin` is checked): the live
+///   streams pages listen to, for topics scoped to the reader and for
+///   channels authorized like a subscription (see [`crate::stream`]);
 /// - `POST /broadcasting/auth` (authenticated; form or JSON `socket_id`,
 ///   `channel_name`): signs private and presence subscriptions after the
 ///   channel authorizer registered with [`ModuleBuilderRealtimeExt::channel`]
-///   allows them; 403 otherwise.
-///
-/// The auth route needs a `dyn Authenticator` (the auth module), like every
-/// non-public route.
+///   allows them; 403 otherwise. It is mounted only when the app has a
+///   `dyn Authenticator` (the auth module): without one nobody could be
+///   authorized, and the app hears public channels and topics only.
 ///
 /// ```no_run
 /// use navree_config::{ConfigModule, ConfigSources};
@@ -144,6 +146,14 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
         .deps(vec![ProviderKey::of::<Realtime>()]),
     )
     .exports::<dyn Broadcaster>()
+    .factory(
+        Factory::<Live>::new(|r: Resolver| async move {
+            let broadcaster = r.get::<dyn Broadcaster>().await?;
+            Ok(Arc::new(Live::new(broadcaster)))
+        })
+        .deps(vec![ProviderKey::of::<dyn Broadcaster>()]),
+    )
+    .exports::<Live>()
     .controller::<RealtimeController>();
 }
 
@@ -248,7 +258,10 @@ pub trait ModuleBuilderRealtimeExt {
     /// `private-` / `presence-` prefix, matches `pattern`: literal text and
     /// `{name}` parameters, each matching one or more characters other than
     /// `.` (`"crm.deals"`, `"users.{id}"`). The first matching pattern, in
-    /// module dependency order, decides; no match means 403.
+    /// module dependency order, decides; no match means 403. The same
+    /// authorizer decides whether a page's live stream may listen to the
+    /// channel. Patterns under `navree-live.` are reserved for live topics
+    /// and fail the boot.
     ///
     /// The module does not need to import `RealtimeModule`.
     ///

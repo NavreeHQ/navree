@@ -49,6 +49,19 @@
 //!   through it without the relay. [`MemoryBackplane`] joins the apps of
 //!   one process, for tests.
 //!
+//! - **Live streams to pages** (`GET /broadcasting/stream`): a server-sent
+//!   event stream that tells a page when what it shows changed, for Navree
+//!   UI's live regions, tables and lists. It listens to *topics*, published
+//!   with [`Live::nudge`] for an [`Audience`] (everyone, one user, or the
+//!   members of one workspace) and scoped to the reader by the stream itself,
+//!   and to *channels*, authorized by the same channel authorizers as a
+//!   WebSocket subscription. Every broadcast reaches it: in this process,
+//!   from workers through the relay, from other `serve` processes through the
+//!   backplane. A stream carries nudges only (a name and an id, never the
+//!   broadcast's data), resumes with `Last-Event-ID`, never holds a
+//!   broadcaster up, and is capped ([`StreamOptions`]). See [`stream`](crate::stream)
+//!   for the wire.
+//!
 //! Client events (`client-…`) are not relayed, and there is no Pusher HTTP
 //! publishing API; broadcast from the app instead. Without a backplane,
 //! several `serve` processes behind a load balancer each reach only their
@@ -103,14 +116,18 @@ mod backplane;
 mod channel;
 mod cluster;
 mod controller;
+mod live;
 mod module;
 mod options;
 mod protocol;
 mod realtime;
 mod relay;
 mod socket;
+pub mod stream;
 
 pub use backplane::{Backplane, BackplaneHandler, MemoryBackplane};
+pub use live::{Audience, Live, MAX_TOPIC_NAME, NUDGE_EVENT, Topic, is_topic_name};
 pub use module::{ChannelDecision, ModuleBuilderRealtimeExt, RealtimeModule};
-pub use options::{BackplaneKind, RealtimeOptions};
+pub use options::{BackplaneKind, RealtimeOptions, StreamOptions};
 pub use realtime::{Realtime, RealtimeError};
+pub use stream::STREAM_PATH;

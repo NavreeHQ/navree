@@ -27,6 +27,7 @@ use crate::cluster::{
 use crate::module::{ChannelAuthorizer, ChannelRegistration};
 use crate::protocol::{self, ClientMessage, frame};
 use crate::relay::{self, RelayClient, RelayMessage};
+use crate::stream::{EventId, Streams};
 use crate::{ChannelDecision, RealtimeOptions};
 
 /// Frames queued for one connection before it counts as too slow.
@@ -50,6 +51,9 @@ pub enum RealtimeError {
     /// The data could not be serialized to JSON.
     #[error("the broadcast data cannot be serialized to JSON: {0}")]
     Data(#[from] serde_json::Error),
+    /// A live topic's name is not 1 to 64 letters, digits, `_`, `.` and `-`.
+    #[error("invalid live topic `{0}`: use 1 to 64 letters, digits, `_`, `.` and `-`")]
+    InvalidTopic(String),
 }
 
 /// The realtime server: every open connection and channel of this process.
@@ -84,6 +88,8 @@ pub struct Realtime {
     tracker: TaskTracker,
     relay: Relay,
     cluster: Option<Cluster>,
+    /// The server-sent event streams of this process (see [`crate::stream`]).
+    streams: Streams,
 }
 
 /// This process on the backplane: its node id, the topic and what the
@@ -152,6 +158,12 @@ impl Realtime {
         for registration in channels {
             let module = registration.module.name;
             let pattern = registration.value.pattern;
+            if crate::live::is_reserved(pattern) {
+                errors.push(format!(
+                    "channel pattern `{pattern}` of module `{module}`: `navree-live.` is reserved for live topics"
+                ));
+                continue;
+            }
             match ChannelPattern::parse(pattern) {
                 Err(problem) => errors.push(format!(
                     "channel pattern `{pattern}` of module `{module}`: {problem}"
@@ -188,8 +200,10 @@ impl Realtime {
         } else {
             options.allowed_origins.clone()
         };
+        let streams = Streams::new(options.streams.clone());
         Ok(Realtime {
             options,
+            streams,
             secret: Secret::new(secret),
             allowed_origins,
             authorizers,
@@ -302,8 +316,14 @@ impl Realtime {
                 channels,
                 event,
                 data,
+                id,
             } => {
-                self.deliver(&channels, &event, &data);
+                // The sender's id, so a stream resumed on any process finds it.
+                let id = id
+                    .as_deref()
+                    .and_then(EventId::parse)
+                    .unwrap_or_else(|| self.streams.next_id());
+                self.deliver(&channels, &event, &data, id);
             }
             Message::DisconnectUser { user_id } => {
                 self.close_user(&user_id, CloseReason::DISCONNECTED);
@@ -449,6 +469,23 @@ impl Realtime {
             .map_or(0, |state| state.subscribers.len())
     }
 
+    /// The number of open server-sent event streams (`GET
+    /// /broadcasting/stream`).
+    pub fn streams(&self) -> usize {
+        self.streams.len()
+    }
+
+    /// The number of streams listening on `channel` (for a live topic, its
+    /// [`Topic::channel`](crate::Topic::channel)).
+    pub fn listeners(&self, channel: &str) -> usize {
+        self.streams.listeners(channel)
+    }
+
+    /// The streams of this process.
+    pub(crate) fn stream_hub(&self) -> &Streams {
+        &self.streams
+    }
+
     /// Sends `event` with `data` (any serializable value) to every
     /// connection subscribed to each of `channels`. Returns the number of
     /// deliveries queued (a connection on two of the channels counts twice).
@@ -478,20 +515,24 @@ impl Realtime {
             .into_iter()
             .map(|channel| channel.as_ref().to_owned())
             .collect();
-        let delivered = self.deliver(&channels, event, &data);
+        let id = self.streams.next_id();
+        let delivered = self.deliver(&channels, event, &data, id);
         if let Some(cluster) = &self.cluster {
             cluster.publish(Message::Broadcast {
                 channels,
                 event: event.to_owned(),
                 data,
+                id: Some(id.to_string()),
             });
         }
         Ok(delivered)
     }
 
     /// Queues `event` with `data` (JSON text) for this process's
-    /// subscribers of `channels`; returns the number of deliveries.
-    fn deliver(&self, channels: &[String], event: &str, data: &str) -> usize {
+    /// subscribers of `channels`, and a nudge with `id` for its streams that
+    /// listen to one of them; returns the number of WebSocket deliveries.
+    fn deliver(&self, channels: &[String], event: &str, data: &str, id: EventId) -> usize {
+        self.streams.deliver(id, channels, event);
         let mut delivered = 0;
         for channel in channels {
             let Some(state) = self.channels.get(channel) else {
@@ -542,6 +583,17 @@ impl Realtime {
     }
 
     fn close_user(&self, user_id: &str, reason: CloseReason) -> usize {
+        // Its streams end too: the page comes back, resumes and is
+        // authorized again.
+        let streams = self.streams.close_user(user_id);
+        if streams > 0 {
+            tracing::info!(
+                target: "navree::realtime",
+                user_id = %user_id,
+                streams,
+                "closed the user's live streams"
+            );
+        }
         let targets: Vec<Arc<Connection>> = self
             .connections
             .iter()
@@ -918,27 +970,9 @@ impl Realtime {
         if kind == ChannelKind::Public {
             return Err(AuthFailure::Forbidden);
         }
-        let name = unprefixed(channel);
-        let Some((authorizer, params)) = self.authorizers.iter().find_map(|authorizer| {
-            authorizer
-                .pattern
-                .matches(name)
-                .map(|params| (authorizer, params))
-        }) else {
-            tracing::debug!(target: "navree::realtime", channel, "no channel authorizer matches");
+        let Some(decision) = self.decide(principal, channel, ctx).await? else {
             return Err(AuthFailure::Forbidden);
         };
-        let decision = (authorizer.authorize)(principal, &params, ctx)
-            .await
-            .map_err(|source| {
-                AuthFailure::Failed(
-                    format!(
-                        "the authorizer of channel pattern `{}` failed: {source}",
-                        authorizer.pattern.source()
-                    )
-                    .into(),
-                )
-            })?;
         let user_id = principal.user_id.to_string();
         let response = match (kind, decision) {
             (_, ChannelDecision::Deny) => {
@@ -964,6 +998,78 @@ impl Realtime {
         self.bind_user(socket_id, &user_id);
         Ok(response)
     }
+
+    /// What the authorizer of `channel` (a private or presence channel)
+    /// decides for `principal`; `None` when no pattern matches (or the
+    /// channel is the live hub's, which only `topics` reach).
+    async fn decide(
+        &self,
+        principal: &Principal,
+        channel: &str,
+        ctx: &AppContext,
+    ) -> Result<Option<ChannelDecision>, AuthFailure> {
+        if crate::live::is_reserved(channel) {
+            return Ok(None);
+        }
+        let name = unprefixed(channel);
+        let Some((authorizer, params)) = self.authorizers.iter().find_map(|authorizer| {
+            authorizer
+                .pattern
+                .matches(name)
+                .map(|params| (authorizer, params))
+        }) else {
+            tracing::debug!(target: "navree::realtime", channel, "no channel authorizer matches");
+            return Ok(None);
+        };
+        let decision = (authorizer.authorize)(principal, &params, ctx)
+            .await
+            .map_err(|source| {
+                AuthFailure::Failed(
+                    format!(
+                        "the authorizer of channel pattern `{}` failed: {source}",
+                        authorizer.pattern.source()
+                    )
+                    .into(),
+                )
+            })?;
+        Ok(Some(decision))
+    }
+
+    /// Whether `principal` may listen to `channel` (a private or presence
+    /// channel) on a stream: by the same authorizer as a WebSocket
+    /// subscription. A presence channel is listened to without joining it.
+    pub(crate) async fn may_listen(
+        &self,
+        principal: &Principal,
+        channel: &str,
+        ctx: &AppContext,
+    ) -> ListenDecision {
+        match self.decide(principal, channel, ctx).await {
+            Ok(Some(ChannelDecision::Deny) | None) => {
+                tracing::debug!(
+                    target: "navree::realtime",
+                    channel,
+                    user_id = %principal.user_id,
+                    "live stream channel denied"
+                );
+                ListenDecision::Deny
+            }
+            Ok(Some(_)) => ListenDecision::Allow,
+            Err(AuthFailure::Failed(source)) => ListenDecision::Failed(source),
+            Err(AuthFailure::Forbidden | AuthFailure::Invalid { .. }) => ListenDecision::Deny,
+        }
+    }
+}
+
+/// What a channel's authorizer says of a stream listening to it.
+#[derive(Debug)]
+pub(crate) enum ListenDecision {
+    /// It may listen.
+    Allow,
+    /// It may not (403).
+    Deny,
+    /// The authorizer failed (500).
+    Failed(BoxError),
 }
 
 /// With a backplane, events go to this process's subscribers and, through
@@ -1043,6 +1149,7 @@ impl fmt::Debug for Realtime {
             .field("channel_patterns", &self.authorizers.len())
             .field("connections", &self.connections.len())
             .field("channels", &self.channels.len())
+            .field("streams", &self.streams)
             .field("backplane", &self.cluster.is_some())
             .finish_non_exhaustive()
     }

@@ -70,6 +70,11 @@ pub(crate) enum Message {
         channels: Vec<String>,
         event: String,
         data: String,
+        /// The sender's id for live streams (`<ms>-<seq>`), so a stream
+        /// resumed on another process finds what it missed. Absent from
+        /// senders that predate it: the receiver gives one of its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
     },
     /// Close the user's connections with 4009.
     DisconnectUser { user_id: String },
@@ -298,6 +303,7 @@ mod tests {
                 channels: vec!["news".to_owned()],
                 event: "posted".to_owned(),
                 data: "{\"id\":1}".to_owned(),
+                id: Some("1730000000000-7".to_owned()),
             },
         );
         let bytes = envelope.encode();
@@ -312,6 +318,12 @@ mod tests {
             None
         );
         assert_eq!(Envelope::decode(b"not json"), None);
+        // MOD-004: a broadcast without an id (an older sender) still reads.
+        let without = br#"{"v":1,"node":"n","type":"broadcast","channels":["a"],"event":"e","data":"{}"}"#;
+        assert!(matches!(
+            Envelope::decode(without).map(|e| e.message),
+            Some(Message::Broadcast { id: None, .. })
+        ));
         assert_eq!(
             Envelope::decode(b"{\"v\":1,\"node\":\"n\",\"type\":\"goodbye\"}").map(|e| e.message),
             Some(Message::Goodbye)

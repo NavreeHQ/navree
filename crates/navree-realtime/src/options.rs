@@ -16,6 +16,12 @@ use serde::{Deserialize, Deserializer};
 /// activity_timeout_secs = 120
 /// relay_url = "auto"            # workers hand broadcasts to `serve`
 /// backplane = "none"            # or "redis": share broadcasts and presence across processes
+///
+/// [realtime.streams]            # live streams to pages (`GET /broadcasting/stream`)
+/// names = 32                    # topics and channels one stream may name
+/// per_user = 16                 # streams one user may hold open at once
+/// lifetime_secs = 3600          # a stream ends after this, and the page resumes
+/// replay = 1024                 # broadcasts kept for streams that come back
 /// ```
 ///
 /// `Debug` redacts the secret.
@@ -60,6 +66,42 @@ pub struct RealtimeOptions {
     /// [`secret`](RealtimeOptions::secret), because a subscription signed
     /// by one process is checked by another.
     pub backplane: BackplaneKind,
+    /// The live streams pages listen to (`realtime.streams`).
+    pub streams: StreamOptions,
+}
+
+/// The caps of the live streams pages listen to (`realtime.streams`; every
+/// key optional).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct StreamOptions {
+    /// The topics and channels one stream may name together (default 32).
+    /// A stream that names more is refused with 400.
+    pub names: usize,
+    /// The streams one signed-in user may hold open at once (default 16):
+    /// one per open tab. One more is refused with 429, which a page tries
+    /// again later. Guests are held by the server's connection limits.
+    pub per_user: usize,
+    /// How long a stream stays open, give or take a tenth (default 3600
+    /// seconds). Then it ends, and the page comes back, resumes from its last
+    /// id and is authorized again.
+    pub lifetime_secs: u64,
+    /// How many of the last broadcasts a process keeps once it has served a
+    /// stream, so a stream that comes back is told only what it missed
+    /// (default 1024). `0` keeps none: a page that comes back fetches
+    /// everything it shows once.
+    pub replay: usize,
+}
+
+impl Default for StreamOptions {
+    fn default() -> Self {
+        Self {
+            names: 32,
+            per_user: 16,
+            lifetime_secs: 3600,
+            replay: 1024,
+        }
+    }
 }
 
 /// What connects the realtime hubs of an app's processes
@@ -98,6 +140,7 @@ impl Default for RealtimeOptions {
             activity_timeout_secs: 120,
             relay_url: String::new(),
             backplane: BackplaneKind::None,
+            streams: StreamOptions::default(),
         }
     }
 }
@@ -127,6 +170,15 @@ impl RealtimeOptions {
         }
         if self.activity_timeout_secs == 0 {
             errors.push("realtime.activity_timeout_secs must be at least 1".to_owned());
+        }
+        if self.streams.names == 0 {
+            errors.push("realtime.streams.names must be at least 1".to_owned());
+        }
+        if self.streams.per_user == 0 {
+            errors.push("realtime.streams.per_user must be at least 1".to_owned());
+        }
+        if self.streams.lifetime_secs == 0 {
+            errors.push("realtime.streams.lifetime_secs must be at least 1".to_owned());
         }
         if self.backplane != BackplaneKind::None && self.secret.expose().is_empty() {
             errors.push(format!(
@@ -257,6 +309,19 @@ mod tests {
                 serde_json::json!({"relay_url": "127.0.0.1:8080"}),
                 "realtime.relay_url",
             ),
+            // MOD-004
+            (
+                serde_json::json!({"streams": {"names": 0}}),
+                "realtime.streams.names",
+            ),
+            (
+                serde_json::json!({"streams": {"per_user": 0}}),
+                "realtime.streams.per_user",
+            ),
+            (
+                serde_json::json!({"streams": {"lifetime_secs": 0}}),
+                "realtime.streams.lifetime_secs",
+            ),
         ] {
             let error = load(ConfigSources::new().set("realtime", section.clone()))
                 .expect_err(&section.to_string())
@@ -268,6 +333,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(star.allowed_origins, ["*"]);
+    }
+
+    #[test]
+    fn stream_caps_have_defaults_and_read_from_the_environment() {
+        // MOD-004
+        let defaults = load(ConfigSources::new()).unwrap();
+        assert_eq!(defaults.streams, StreamOptions::default());
+        assert_eq!(
+            (defaults.streams.names, defaults.streams.per_user),
+            (32, 16)
+        );
+        assert_eq!(
+            (defaults.streams.lifetime_secs, defaults.streams.replay),
+            (3600, 1024)
+        );
+        let options = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_REALTIME__STREAMS__PER_USER", "4"),
+                ("APP_REALTIME__STREAMS__REPLAY", "0"),
+            ],
+        ))
+        .unwrap();
+        assert_eq!(options.streams.per_user, 4);
+        assert_eq!(options.streams.replay, 0, "resuming can be turned off");
+        assert_eq!(options.streams.names, 32);
     }
 
     #[test]

@@ -144,7 +144,9 @@ const HIERARCHY: &[Rule] = &[
         "navree-http", "navree-crypto", "navree-events", "navree-http-client", "navree-db",
         "navree-testing", "navree-storage",
     ]),
-    rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
+    // Realtime: a live nudge inside a unit of work waits for its commit
+    // (navree-db, same layer; the database never depends on realtime).
+    rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     // Time zones: zones, local days, send windows, holidays; the
     // `CurrentZone` extractor reads the request (navree-http) and collects

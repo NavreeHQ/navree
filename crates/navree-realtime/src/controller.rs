@@ -1,18 +1,21 @@
 //! The realtime routes: the WebSocket (`GET /app/{key}`), the channel
-//! auth endpoint (`POST /broadcasting/auth`) and the relay endpoint
-//! (`POST /apps/{app_id}/events`).
+//! auth endpoint (`POST /broadcasting/auth`), the relay endpoint
+//! (`POST /apps/{app_id}/events`) and the live streams pages listen to
+//! (`GET /broadcasting/stream`).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use http::header::{CONTENT_TYPE, HOST, ORIGIN};
+use http::request::Parts;
 use http::{HeaderMap, Method};
 use navree_contracts::{AuthState, Principal};
 use navree_http::body::Bytes;
 use navree_http::response::Response;
 use navree_http::ws::WebSocketUpgrade;
 use navree_http::{
-    ApiMeta, AppError, Controller, CurrentPrincipal, Extension, Json, Path, RouteDef,
+    ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Extension, Json, Path,
+    RouteDef,
 };
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::Deserialize;
@@ -23,10 +26,14 @@ use crate::protocol;
 use crate::realtime::AuthFailure;
 use crate::relay::SIGNATURE_HEADER;
 use crate::socket::{self, Admission, MAX_MESSAGE_BYTES};
+use crate::stream;
 
 /// Serves the realtime routes.
 pub(crate) struct RealtimeController {
     realtime: Arc<Realtime>,
+    /// Whether the app signs users in: without an authenticator nobody can
+    /// be authorized for a private channel, so the auth route is not mounted.
+    signs_in: bool,
 }
 
 impl Injectable for RealtimeController {
@@ -36,8 +43,16 @@ impl Injectable for RealtimeController {
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let signs_in = r.app().try_get::<dyn Authenticator>().await.is_some();
+            if !signs_in {
+                tracing::debug!(
+                    target: "navree::realtime",
+                    "the app has no authenticator: POST /broadcasting/auth is not mounted, and only public channels and topics can be heard"
+                );
+            }
             Ok(Self {
                 realtime: r.get::<Realtime>().await?,
+                signs_in,
             })
         })
     }
@@ -118,7 +133,34 @@ impl Controller for RealtimeController {
             ..ApiMeta::default()
         });
 
-        vec![connect, auth, relay]
+        let realtime = self.realtime.clone();
+        let stream = RouteDef::on(
+            Method::GET,
+            "!/broadcasting/stream",
+            move |Extension(ctx): Extension<AppContext>, parts: Parts| {
+                let realtime = realtime.clone();
+                async move { stream::serve(realtime, ctx, parts).await }
+            },
+        )
+        // Public: a guest hears public topics and channels; private ones are
+        // checked for the signed-in user inside.
+        .public()
+        .name("realtime.stream")
+        .api(ApiMeta {
+            summary: Some(
+                "Live updates for a page: a server-sent event stream of topics and channels"
+                    .to_owned(),
+            ),
+            tags: vec!["realtime".to_owned()],
+            responses: vec![204, 400, 401, 403, 429],
+            ..ApiMeta::default()
+        });
+
+        let mut routes = vec![connect, relay, stream];
+        if self.signs_in {
+            routes.push(auth);
+        }
+        routes
     }
 }
 

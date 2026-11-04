@@ -5769,6 +5769,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-db",
  "navree-http",
  "navree-kernel",
  "rand 0.10.3",
