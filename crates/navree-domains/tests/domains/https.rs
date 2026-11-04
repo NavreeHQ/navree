@@ -103,6 +103,13 @@ async fn the_app_is_served_over_https_with_each_domains_certificate() {
     world.app.shutdown().await.unwrap();
 }
 
+/// The header timeout of the stalled-handshake test. It is how long the stalled client
+/// holds the one slot, and it is also what the real client has, once it gets the slot, for
+/// its own handshake and request: a busy machine must not be able to take that from it. So
+/// the test does not wait for a time; it waits for what happens (the real client's answer,
+/// then the stalled client's disconnection), each with a long guard against hanging.
+const STALL_HEADER_TIMEOUT_MS: u64 = 2_000;
+
 /// A connection that never finishes its handshake counts toward
 /// `http.server.max_connections` and gives its slot back at the header
 /// timeout, so the one slot here ends up serving the real client.
@@ -112,7 +119,10 @@ async fn a_stalled_handshake_holds_a_slot_only_until_the_header_timeout() {
         builder
             .config("domains.tls", "acme")
             .config("domains.acme.terms_agreed", true)
-            .config("http.server.header_read_timeout_ms", 300)
+            .config(
+                "http.server.header_read_timeout_ms",
+                STALL_HEADER_TIMEOUT_MS,
+            )
             .config("http.server.max_connections", 1)
     })
     .await;
