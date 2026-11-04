@@ -5,6 +5,12 @@ import { ArrowLink, HomeSection, SectionHeading } from "@/components/home/parts"
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { component, example, groups } from "@/components/ui-docs/data";
 import { PreviewFrame } from "@/components/ui-docs/preview-frame";
+import { cn } from "@/lib/utils";
+
+import { GroupList } from "./gallery-group";
+
+/** How many cards a group shows on a phone before "Show all". */
+const SHOWN_ON_PHONES = 3;
 
 /** A line per group of the catalogue. A group added later shows without one until it gets its line here. */
 const blurbs: Record<string, string> = {
@@ -22,7 +28,8 @@ const blurbs: Record<string, string> = {
  * Every component in the UI catalogue (`content/ui/catalog.json`, written
  * from the toolkit by `cargo run -p ui-docs`), by group, each as its real
  * preview and a link to its page. A component that lands in the toolkit
- * shows here on the next build, with nothing to edit.
+ * shows here on the next build, with nothing to edit. On a phone each group
+ * shows its first cards and a button for the rest.
  */
 export function ComponentGallery() {
   const count = groups.reduce((n, g) => n + g.components.length, 0);
@@ -58,6 +65,10 @@ export function ComponentGallery() {
         </ul>
       </nav>
 
+      {/* Without JavaScript the groups' buttons can't open, so every card shows. */}
+      <noscript>
+        <style>{".gallery-more{display:block!important}.gallery-toggle{display:none!important}"}</style>
+      </noscript>
       <div className="mt-10 space-y-14 lg:mt-12 lg:space-y-16">
         {groups.map((g) => (
           <section
@@ -75,12 +86,15 @@ export function ComponentGallery() {
                 {blurbs[g.id] ? <p className="mt-2 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{blurbs[g.id]}</p> : null}
               </div>
             </div>
-            <ul className="grid gap-3 sm:grid-cols-2 lg:col-span-9 xl:grid-cols-3">
-              {g.components.map((id) => {
+            <GroupList id={`components-${g.id}-list`} count={g.components.length} shown={SHOWN_ON_PHONES} group={g.title}>
+              {g.components.map((id, at) => {
                 const c = component(id);
                 const thumb = example(c.thumb);
                 return (
-                  <li key={id} className="min-w-0">
+                  <li
+                    key={id}
+                    className={cn("min-w-0", at >= SHOWN_ON_PHONES && "gallery-more max-sm:hidden max-sm:group-data-[open]/list:block")}
+                  >
                     <Link
                       href={c.url}
                       prefetch={false}
@@ -113,7 +127,7 @@ export function ComponentGallery() {
                   </li>
                 );
               })}
-            </ul>
+            </GroupList>
           </section>
         ))}
       </div>
