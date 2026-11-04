@@ -238,7 +238,7 @@ impl Uses {
     pub const PHONE: Self = Self(1 << 8);
     /// The theme builder's stylesheet: no script, only its styles, linked on a
     /// page that draws the builder.
-    pub const THEME_BUILDER: Self = Self(1 << 13);
+    pub const THEME_BUILDER: Self = Self(1 << 9);
 
     /// Both sets together.
     #[must_use]
