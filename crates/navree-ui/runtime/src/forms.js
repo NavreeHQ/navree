@@ -104,14 +104,14 @@ async function send(form, submitter) {
   /** Whether the user was told the save failed. */
   let told = false;
   /** Whether the send was said to be over, and whether a failure is this runtime's to tell. */
-  let said = false, mine = true;
+  let ended = false, mine = true;
   /**
    * Says the send is over. A module that cancels the event tells the user what went
    * wrong itself: a sortable asks the server where the item is first.
    * @param {boolean} ok
    */
   const over = (ok) => {
-    said = true;
+    ended = true;
     return emit(new CustomEvent("ui:sent", { cancelable: true, detail: { form, ok, status } }));
   };
   try {
@@ -144,7 +144,7 @@ async function send(form, submitter) {
     startRegions();
   } catch {
     pending(form, submitter, false);
-    if (!said) mine = over(false);
+    if (!ended) mine = over(false);
     if (mine) toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
     told = true;
   } finally {
