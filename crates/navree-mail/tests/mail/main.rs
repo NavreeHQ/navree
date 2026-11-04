@@ -11,6 +11,7 @@ mod inbound;
 mod ingest;
 mod log;
 mod mailer;
+mod mailpit;
 mod message;
 mod module;
 mod named;

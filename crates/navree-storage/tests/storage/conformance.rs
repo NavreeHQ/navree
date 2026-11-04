@@ -109,6 +109,13 @@ type Case = fn(&Subject) -> futures_util::future::BoxFuture<'_, ()>;
 
 /// Runs every case on `subject`.
 pub async fn run(subject: &Subject) {
+    run_except(subject, &[]).await;
+}
+
+/// Runs every case on `subject` but the ones named in `except`: cases a
+/// provider cannot honour (its signed links cannot bind a content type or a
+/// size to an upload, say). The caller says why where it names them.
+pub async fn run_except(subject: &Subject, except: &[&str]) {
     let cases: [(&str, Case); 13] = [
         ("put_get_delete", |s| Box::pin(put_get_delete(s))),
         ("streams", |s| Box::pin(streams(s))),
@@ -136,7 +143,20 @@ pub async fn run(subject: &Subject) {
         }),
         ("sync_both_ways", |s| Box::pin(sync_both_ways(s))),
     ];
+    for name in except {
+        assert!(
+            cases.iter().any(|(case, _)| case == name),
+            "there is no conformance case `{name}`"
+        );
+    }
     for (name, case) in cases {
+        if except.contains(&name) {
+            println!(
+                "conformance on `{}`: {name} does not apply to this driver",
+                subject.disk.driver()
+            );
+            continue;
+        }
         clear(&subject.disk).await;
         println!("conformance on `{}`: {name}", subject.disk.driver());
         case(subject).await;

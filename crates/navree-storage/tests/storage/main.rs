@@ -8,6 +8,7 @@ mod cloud;
 mod conformance;
 mod disk;
 mod drivers;
+mod emulators;
 mod local;
 mod local_hardening;
 mod module;
