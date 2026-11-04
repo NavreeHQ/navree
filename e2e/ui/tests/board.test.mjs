@@ -196,7 +196,7 @@ for (const name of NAMES) {
       assert.equal(await listOf(page, 4), "ready");
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["4", "6"]);
       assert.deepEqual((await where(4, 6))["4"], ["ready", 0]);
-      assert.match(await status(page), /Dropped Crash when a photo is over 20 MB at position 1 of 5 in Ready/);
+      assert.match(await status(page), /Dropped Crash when a swatch photo is over 20 MB at position 1 of 5 in Ready/);
       // The count follows: Ready is full, and says so.
       assert.equal(await page.locator("#columns-list-ready [data-count]").textContent(), "5/5");
       // A click on a title is still a click: the drawer opens.
@@ -264,7 +264,7 @@ for (const name of NAMES) {
       await page.keyboard.press("Space");
       // Counts are the column's, drawn or not.
       const backlog = Number(await page.locator("#columns-list-backlog").getAttribute("data-total"));
-      assert.equal(await status(page), `Picked up Offline maps for tidal zones. Position 1 of ${backlog} in Backlog.`);
+      assert.equal(await status(page), `Picked up Offline order sheets for the dyeing unit. Position 1 of ${backlog} in Backlog.`);
       await page.keyboard.press("ArrowDown");
       assert.equal(await status(page), `Position 2 of ${backlog} in Backlog.`);
       await page.keyboard.press("ArrowRight");
@@ -275,9 +275,9 @@ for (const name of NAMES) {
       assert.equal(await status(page), "In progress holds at most 3. Position 2 of 2 in Review.");
       await page.keyboard.press("Home");
       assert.equal(await status(page), "Position 1 of 2 in Review.");
-      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Move Offline maps for tidal zones");
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Move Offline order sheets for the dyeing unit");
       await page.keyboard.press("Space");
-      assert.equal(await status(page), "Dropped Offline maps for tidal zones at position 1 of 2 in Review.");
+      assert.equal(await status(page), "Dropped Offline order sheets for the dyeing unit at position 1 of 2 in Review.");
       await settled(page);
       assert.deepEqual((await where(1))["1"], ["review", 0]);
       // Escape puts it back where the move began.
@@ -285,7 +285,7 @@ for (const name of NAMES) {
       await page.keyboard.press("Enter");
       await page.keyboard.press("ArrowRight");
       await page.keyboard.press("Escape");
-      assert.equal(await status(page), `Move cancelled. Export a survey as CSV is back at position 1 of ${backlog - 1} in Backlog.`);
+      assert.equal(await status(page), `Move cancelled. Export a shipment as CSV is back at position 1 of ${backlog - 1} in Backlog.`);
       assert.equal(await listOf(page, 2), "backlog");
       // Tabbing away cancels too: nothing moves without a drop.
       await page.keyboard.press("Space");
@@ -312,35 +312,82 @@ for (const name of NAMES) {
       await page.done();
     });
 
-    test("a member can't close a card: Done refuses it in the page and on the server", async () => {
+    test("the board is a member's until someone chooses: Done refuses a member's card, and takes the lead's", async () => {
       const page = await open();
-      await page.getByRole("button", { name: /Viewing as Mara Quinn/ }).click();
-      await page.getByRole("menuitem", { name: "Theo Park (member)" }).click();
-      await until(page, () => !!document.querySelector("#columns-list-done[data-refuse]"), null, "the board as a member");
+      // No one has chosen yet: a member, who can't close a card.
+      assert.ok(await page.getByRole("button", { name: /Viewing as Gurpreet Singh/ }).isVisible());
+      assert.ok(await page.evaluate(() => !!document.querySelector("#columns-list-done[data-refuse]")), "Done refuses a member");
       await handle(page, 13).focus();
       await page.keyboard.press("Space");
       await page.keyboard.press("ArrowRight");
       assert.match(await status(page), /Only a lead can move cards to Done/);
       await page.keyboard.press("Escape");
-      const cookie = (await page.context().cookies()).find((c) => c.name === "board_as");
-      const forged = await fetch(BASE + "/board/moves", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-navree-ui": "1", cookie: `board_as=${cookie.value}` }, body: "item=13&from_list=review&to_list=done" });
+      // The server holds to it, with no cookie as with a member's.
+      const forged = await fetch(BASE + "/board/moves", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-navree-ui": "1" }, body: "item=13&from_list=review&to_list=done" });
       assert.equal(forged.status, 409);
       assert.match(await forged.text(), /Only a lead can move cards to Done/);
+      // Choosing who to be is a post from this site: another site's is refused.
+      const elsewhere = await fetch(BASE + "/as/1", { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://elsewhere.example" }, body: "" });
+      assert.equal(elsewhere.status, 403);
+      await page.getByRole("button", { name: /Viewing as Gurpreet Singh/ }).click();
+      await page.getByRole("menuitem", { name: "Harleen Kaur (lead)" }).click();
+      await until(page, () => !document.querySelector("#columns-list-done[data-refuse]"), null, "the board as the lead");
+      await handle(page, 13).focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("Space");
+      await settled(page);
+      assert.equal((await where(13))["13"][0], "done");
       await page.done();
     });
 
-    test("a move the network loses goes back, and the card is never left waiting", async () => {
+    test("a move the network loses is asked about first, then said, and the card is never left waiting", async () => {
       const page = await open();
       await page.route("**/board/moves", (route) => route.abort());
       await handle(page, 6).focus();
       await page.keyboard.press("Space");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Space");
-      await until(page, () => /No connection/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
+      // The board is drawn again from the server, which never had the move: then, and only then, it is said.
+      await until(page, () => /That move wasn.t saved/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
       await settled(page);
       assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["6", "7"]);
-      // Put back, then said where it is once the board is drawn again from the server.
-      await until(page, () => /is at position 1 of 4 in Ready/.test(document.querySelector("#columns-status")?.textContent || ""), null, "the place said after the redraw");
+      assert.match(await status(page), /wasn't moved. It is back at position 1 of 4 in Ready/);
+      assert.equal(await page.evaluate(() => /No connection/.test(document.body.textContent)), false, "the runtime leaves the telling to the board");
+      await page.done();
+    });
+
+    test("a move whose answer is lost, though it landed, says nothing went wrong", async () => {
+      const page = await open();
+      // The server takes the move; its answer never reaches the page.
+      await page.route("**/board/moves", async (route) => {
+        await route.fetch();
+        await route.abort("timedout");
+      });
+      await handle(page, 6).focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Space");
+      await settled(page);
+      await until(page, () => /is at position 2 of 4 in Ready/.test(document.querySelector("#columns-status")?.textContent || ""), null, "the place said once the board is drawn again");
+      assert.deepEqual((await where(6))["6"], ["ready", 1]);
+      assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["7", "6"]);
+      assert.equal(await page.evaluate(() => document.querySelectorAll("[data-slot=toast][data-tone=danger]").length), 0, "no toast says it failed");
+      await page.done();
+    });
+
+    test("a move with no answer, when the board can't be fetched either, goes back and says so", async () => {
+      const page = await open();
+      await page.route("**/board/moves", (route) => route.abort());
+      await page.route("**/fragments/board**", (route) => route.abort());
+      await handle(page, 6).focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Space");
+      await until(page, () => /No connection. That move may not have been saved/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
+      await settled(page);
+      assert.deepEqual((await keysIn(page, "ready")).slice(0, 2), ["6", "7"], "back where the server last had it");
+      assert.match(await status(page), /wasn't moved. It is back at position 1 of 4 in Ready/);
       await page.done();
     });
 
@@ -410,10 +457,10 @@ for (const name of NAMES) {
     test("a click on the handle picks the card up and a second drops it, as a screen reader in browse mode clicks", async () => {
       const page = await open();
       await handle(page, 1).click();
-      assert.match(await status(page), /^Picked up Offline maps for tidal zones/);
+      assert.match(await status(page), /^Picked up Offline order sheets for the dyeing unit/);
       await page.keyboard.press("ArrowDown");
       await handle(page, 1).click();
-      assert.match(await status(page), /^Dropped Offline maps for tidal zones at position 2/);
+      assert.match(await status(page), /^Dropped Offline order sheets for the dyeing unit at position 2/);
       await settled(page);
       assert.deepEqual((await where(1))["1"], ["backlog", 1]);
       await page.done();
@@ -518,6 +565,23 @@ for (const name of NAMES) {
       await Promise.all([page.waitForURL(/show\.backlog=40/), page.locator("#columns-list-backlog-more button").click()]);
       await page.waitForLoadState();
       assert.equal((await keysIn(page, "backlog")).length, 40);
+      await page.done();
+    });
+
+    test("with JavaScript off under a filter, a card's form counts in the whole column and the board keeps the filter", async () => {
+      const page = await open("/?label=bug", { javaScriptEnabled: false });
+      const keys = await keysIn(page, "backlog");
+      assert.ok(keys.length > 3, `${keys.length} bug cards`);
+      const id = keys[1];
+      const [, at] = (await where(id))[id];
+      const card = page.locator(`#columns-item-${id}`);
+      assert.equal(await card.locator("input[name=position]").inputValue(), String(at + 1), "its place in the whole column");
+      assert.ok(at + 1 !== 2, "the filter leaves cards out before it");
+      await card.locator("summary").click();
+      await card.locator("input[name=position]").fill(String(at + 3));
+      await Promise.all([page.waitForEvent("load"), card.getByRole("button", { name: "Move" }).click()]);
+      assert.match(page.url(), /\/\?label=bug$/);
+      assert.deepEqual((await where(id))[id], ["backlog", at + 2]);
       await page.done();
     });
 
