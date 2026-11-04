@@ -20,7 +20,7 @@ use crate::options::RedisOptions;
 use crate::transport::LocalRetry;
 use crate::{
     DeadLetter, Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind,
-    Subscription, has_wildcard,
+    Subscribed, Subscription, has_wildcard,
 };
 
 /// The stream field that holds the payload; every other field is a header.
@@ -262,6 +262,19 @@ impl MicroTransport for RedisTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    /// A consumer group is made at the end of its stream, and a broadcast reader starts after
+    /// the last entry there is, so an event sent before either exists is not theirs. The
+    /// listener says it is subscribed once both are in place: an event sent after that
+    /// reaches it.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             let mut grouped = Vec::new();
             let mut broadcast = Vec::new();
@@ -300,6 +313,8 @@ impl MicroTransport for RedisTransport {
                 group: self.service.clone(),
                 consumer: self.instance.clone(),
             };
+            let starts = last_entries(&group, &broadcast).await;
+            subscribed.signal();
             let mut tasks = JoinSet::new();
             if !grouped.is_empty() {
                 let streams = Arc::new(grouped);
@@ -315,8 +330,8 @@ impl MicroTransport for RedisTransport {
             if !broadcast.is_empty() {
                 tasks.spawn(read_broadcast(
                     reader,
-                    group.clone(),
                     broadcast,
+                    starts,
                     self.options.block_ms,
                     deliveries.clone(),
                 ));
@@ -687,18 +702,12 @@ async fn claim(group: Group, streams: Arc<Vec<Stream>>, deliveries: mpsc::Sender
     }
 }
 
-/// Reads broadcast streams with `XREAD` (no group: every instance gets
-/// every entry, at most once), from the entries added after it started.
-async fn read_broadcast(
-    reader: Reader,
-    group: Group,
-    streams: Vec<Stream>,
-    block_ms: u64,
-    deliveries: mpsc::Sender<Delivery>,
-) {
+/// The id of the last entry of each broadcast stream (`0-0` for none): where a broadcast
+/// reader starts, so that it gets the entries added after this.
+async fn last_entries(group: &Group, streams: &[Stream]) -> Vec<String> {
     let mut commands = group.commands.clone();
     let mut last: Vec<String> = Vec::with_capacity(streams.len());
-    for stream in &streams {
+    for stream in streams {
         let mut cmd = redis::cmd("XREVRANGE");
         cmd.arg(&stream.key).arg("+").arg("-").arg("COUNT").arg(1);
         let id = query(&mut commands, &cmd, &group.connected)
@@ -708,6 +717,19 @@ async fn read_broadcast(
             .map_or_else(|| "0-0".to_owned(), |entry| entry.id);
         last.push(id);
     }
+    last
+}
+
+/// Reads broadcast streams with `XREAD` (no group: every instance gets
+/// every entry, at most once), from `last`, the entries added after the
+/// listener subscribed.
+async fn read_broadcast(
+    reader: Reader,
+    streams: Vec<Stream>,
+    mut last: Vec<String>,
+    block_ms: u64,
+    deliveries: mpsc::Sender<Delivery>,
+) {
     'connect: loop {
         let Some(mut connection) = reader.reconnect(&deliveries).await else {
             return;

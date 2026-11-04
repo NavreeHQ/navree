@@ -62,6 +62,16 @@ impl MiniRedis {
     pub fn has_stream(&self, key: &str) -> bool {
         self.state.data.lock().unwrap().streams.contains_key(key)
     }
+
+    /// Makes the server slow with `command` (`XGROUP`, `XREVRANGE`): it takes `delay` to
+    /// start on it, as a busy server would, so what a client does in that time happens first.
+    pub fn slow(&self, command: &str, delay: std::time::Duration) {
+        self.state
+            .delays
+            .lock()
+            .unwrap()
+            .insert(command.to_owned(), delay);
+    }
 }
 
 impl Drop for MiniRedis {
@@ -77,6 +87,8 @@ type Fields = Vec<(Vec<u8>, Vec<u8>)>;
 struct State {
     data: Mutex<Data>,
     added: Notify,
+    /// How long the server takes to start on a command: see `MiniRedis::slow`.
+    delays: Mutex<HashMap<String, std::time::Duration>>,
 }
 
 #[derive(Default)]
@@ -230,6 +242,10 @@ async fn execute(state: &State, args: &[Vec<u8>]) -> Reply {
     let Some(name) = args.first() else {
         return Reply::Error("ERR empty command".into());
     };
+    let delay = state.delays.lock().unwrap().get(&upper(name)).copied();
+    if let Some(delay) = delay {
+        tokio::time::sleep(delay).await;
+    }
     match upper(name).as_str() {
         "PING" => Reply::Simple("PONG"),
         "XADD" => xadd(state, &args[1..]),

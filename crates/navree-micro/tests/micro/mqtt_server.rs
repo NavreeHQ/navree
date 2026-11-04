@@ -88,6 +88,39 @@ impl MiniMqtt {
             .cloned()
             .collect()
     }
+
+    /// Makes the broker take `delay` to start on each SUBSCRIBE, as a busy broker would: what
+    /// a client does in that time happens before the subscription is there.
+    pub fn slow_subscriptions(&self, delay: std::time::Duration) {
+        *self.state.subscribe_delay.lock().unwrap() = delay;
+    }
+
+    /// The topic filters subscribed now, one for each subscription.
+    pub fn subscriptions(&self) -> Vec<String> {
+        self.state
+            .subs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|sub| sub.filter.clone())
+            .collect()
+    }
+
+    /// Waits until `condition` holds of the broker. Every connection, subscription and
+    /// disconnection wakes it to look again: it waits for what happens, not for a time.
+    /// A test puts a long timeout around it, so that a hang ends.
+    pub async fn until(&self, condition: impl Fn(&MiniMqtt) -> bool) {
+        loop {
+            let changed = self.state.changed.notified();
+            tokio::pin!(changed);
+            // Listening before looking, so a change between the two is not missed.
+            changed.as_mut().enable();
+            if condition(self) {
+                return;
+            }
+            changed.await;
+        }
+    }
 }
 
 impl Drop for MiniMqtt {
@@ -104,6 +137,10 @@ struct State {
     next_conn: AtomicU64,
     published: Mutex<Vec<String>>,
     clients: Mutex<HashMap<u64, String>>,
+    /// Woken when a client connects or leaves or a subscription changes.
+    changed: tokio::sync::Notify,
+    /// How long the broker takes to start on a SUBSCRIBE: see `MiniMqtt::slow_subscriptions`.
+    subscribe_delay: Mutex<std::time::Duration>,
 }
 
 #[derive(Clone)]
@@ -188,6 +225,7 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
                 let reply = match packet {
                     Packet::Connect(connect, _, _) => {
                         state.clients.lock().unwrap().insert(conn, connect.client_id);
+                        state.changed.notify_waiters();
                         Some(Packet::ConnAck(ConnAck {
                             session_present: false,
                             code: ConnectReturnCode::Success,
@@ -195,6 +233,10 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
                         }))
                     }
                     Packet::Subscribe(subscribe) => {
+                        let delay = *state.subscribe_delay.lock().unwrap();
+                        if !delay.is_zero() {
+                            tokio::time::sleep(delay).await;
+                        }
                         let id = subscribe.properties.as_ref().and_then(|p| p.id);
                         let mut codes = Vec::new();
                         let mut subs = state.subs.lock().unwrap();
@@ -210,6 +252,8 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
                             subs.push(Sub { conn, filter: path, group, id, out: out.clone() });
                             codes.push(SubscribeReasonCode::Success(QoS::AtLeastOnce));
                         }
+                        drop(subs);
+                        state.changed.notify_waiters();
                         Some(Packet::SubAck(SubAck { pkid: subscribe.pkid, return_codes: codes, properties: None }))
                     }
                     Packet::Unsubscribe(unsubscribe) => {
@@ -255,6 +299,7 @@ async fn serve(stream: TcpStream, state: Arc<State>, stop: CancellationToken) {
     }
     state.subs.lock().unwrap().retain(|sub| sub.conn != conn);
     state.clients.lock().unwrap().remove(&conn);
+    state.changed.notify_waiters();
 }
 
 #[test]

@@ -117,6 +117,34 @@ async fn two_apps_talk_over_mqtt() {
     );
 }
 
+/// A listener that has said it is subscribed gets what is sent next: an event is not kept for a
+/// topic nobody has subscribed to. A slow broker makes the time between saying so and being
+/// subscribed long enough to see it.
+#[tokio::test]
+async fn an_event_sent_once_a_listener_is_subscribed_reaches_it() {
+    let broker = MiniMqtt::start().await;
+    broker.slow_subscriptions(Duration::from_millis(400));
+    let harness = MqttHarness::new(broker.url(), MqttOptions::default());
+    let client = harness.transport("shop");
+    let mut listening = Listening::start(
+        harness.transport("billing"),
+        vec![event("invoice.paid", "billing")],
+    )
+    .await;
+    client
+        .publish(published("invoice.paid", "now"))
+        .await
+        .unwrap();
+    // The event is there once it is sent; this only ends a hang.
+    let delivery = listening
+        .next(Duration::from_secs(20))
+        .await
+        .expect("the event sent once the listener was subscribed");
+    assert_eq!(delivery.envelope().payload().as_ref(), b"now");
+    delivery.ack().await.unwrap();
+    listening.stop().await;
+}
+
 #[tokio::test]
 async fn a_listener_gets_its_subscriptions_back_after_the_broker_restarts() {
     // The broker goes away and comes back on the same port.
@@ -142,35 +170,50 @@ async fn a_listener_gets_its_subscriptions_back_after_the_broker_restarts() {
         .await
         .unwrap();
 
+    // What the new broker has to see again before the test goes on.
+    let (clients, subscriptions) = (first.clients().len(), first.subscriptions().len());
+    assert!(
+        clients >= 2 && subscriptions >= 1,
+        "{clients} {subscriptions}"
+    );
     drop(first);
     let second = MiniMqtt::start_on(&addr).await;
-    // Calls fail at once while disconnected, then work again.
-    let mut sent = false;
-    for _ in 0..100 {
-        if client.publish(published("invoice.paid", "2")).await.is_ok() {
-            sent = true;
-            break;
+    // The clients reconnect on their own, after the pauses they have between attempts, which
+    // grow while the broker is away: the test waits for the broker to see them and the
+    // listener's subscriptions again, however long that takes (the timeout only ends a hang).
+    tokio::time::timeout(
+        HANG,
+        second.until(|broker| {
+            broker.clients().len() >= clients && broker.subscriptions().len() >= subscriptions
+        }),
+    )
+    .await
+    .expect("the clients connect again and the listener subscribes again");
+    // The broker has the connection; the client has it once it has read the answer.
+    tokio::time::timeout(HANG, async {
+        while !client.is_connected() {
+            tokio::task::yield_now().await;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    assert!(sent, "the client reconnects");
-    let mut got = None;
-    for _ in 0..50 {
-        if let Some(delivery) = listening.next(Duration::from_millis(200)).await {
-            got = Some(delivery);
-            break;
-        }
-        client
-            .publish(published("invoice.paid", "2"))
-            .await
-            .unwrap();
-    }
-    let delivery = got.expect("the listener subscribed again");
+    })
+    .await
+    .expect("the client knows it is connected");
+    // Nothing is lost now: the subscription is there when the event is sent.
+    client
+        .publish(published("invoice.paid", "2"))
+        .await
+        .expect("the client sends again");
+    let delivery = listening
+        .next(HANG)
+        .await
+        .expect("the listener subscribed again");
     assert_eq!(delivery.envelope().payload().as_ref(), b"2");
     delivery.ack().await.unwrap();
     listening.stop().await;
     drop(second);
 }
+
+/// Long enough that nothing but a hang reaches it, however busy the machine is.
+const HANG: Duration = Duration::from_secs(120);
 
 #[tokio::test]
 async fn the_unreachable_broker_fails_calls_at_once() {
@@ -192,16 +235,13 @@ async fn the_unreachable_broker_fails_calls_at_once() {
         .unwrap_err();
     assert!(matches!(error, MicroError::Transport(_)), "{error:?}");
     assert!(!transport.is_connected());
-    let started = std::time::Instant::now();
-    let again = transport
-        .publish(published("deal.won", "{}"))
-        .await
-        .unwrap_err();
+    // "At once" is a future that is ready the first time it is polled: it waits for nothing,
+    // not for the broker, not for the connect timeout, and no clock is read.
+    let again =
+        futures_util::FutureExt::now_or_never(transport.publish(published("deal.won", "{}")))
+            .expect("at once while down, not after the connect timeout")
+            .unwrap_err();
     assert!(matches!(again, MicroError::Transport(_)), "{again:?}");
-    assert!(
-        started.elapsed() < Duration::from_millis(1500),
-        "at once while down, not after the connect timeout"
-    );
 }
 
 #[tokio::test]

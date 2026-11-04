@@ -32,7 +32,7 @@ use crate::transport::LocalRetry;
 use crate::transport::broker::{BrokerUrl, client_config, reconnect_delay};
 use crate::{
     DeadLetter, Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind,
-    Subscription,
+    Subscribed, Subscription,
 };
 
 /// The URL schemes: `mqtt://` (1883) and `mqtts://` (TLS, 8883).
@@ -302,6 +302,17 @@ impl MicroTransport for MqttTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    /// An event is not kept for a topic nobody has subscribed to, so the listener says it is
+    /// subscribed once the broker has answered every subscription, and not before.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             // Subscriptions made while the broker is unreachable are sent
             // once it is back.
@@ -334,6 +345,7 @@ impl MicroTransport for MqttTransport {
                     return Err(error);
                 }
             }
+            subscribed.signal();
             loop {
                 let publish = tokio::select! {
                     publish = received.recv() => publish,

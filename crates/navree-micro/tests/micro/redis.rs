@@ -71,15 +71,32 @@ impl Harness for RedisHarness {
     }
 }
 
-/// Short claim times and reads, so retries come back quickly in tests.
+/// Short claim times and reads, so retries come back quickly in tests. An entry left
+/// unacknowledged is claimed after the claim time, so it is long enough that a test the
+/// machine pauses for a moment, between taking an entry and answering it, has not had it
+/// claimed from under it.
 fn quick(prefix: &str) -> RedisOptions {
     RedisOptions {
         prefix: prefix.to_owned(),
-        claim_after_ms: 300,
+        claim_after_ms: 1_000,
         block_ms: 200,
         ..RedisOptions::default()
     }
 }
+
+/// Options for an instance that does not claim what another holds, within any test's time:
+/// a crash is made by dropping its delivery, and until the instance is stopped it must not
+/// claim that entry back for itself, however long a busy machine keeps the test from
+/// stopping it.
+fn slow_to_claim(prefix: &str) -> RedisOptions {
+    RedisOptions {
+        claim_after_ms: 600_000,
+        ..quick(prefix)
+    }
+}
+
+/// Long enough that nothing but a hang reaches it, however busy the machine is.
+const HANG: Duration = Duration::from_secs(120);
 
 fn event(pattern: &str, service: &str) -> Subscription {
     Subscription {
@@ -116,11 +133,49 @@ async fn two_apps_talk_over_redis_streams() {
     );
 }
 
+/// A listener that has said it is subscribed gets what is sent next. A consumer group is made
+/// at the end of its stream and a broadcast reader starts after the last entry, so a listener
+/// that said so before either was in place would miss an event sent at once; a slow server makes
+/// the time between the two long enough to see it.
+#[tokio::test]
+async fn an_event_sent_once_a_listener_is_subscribed_reaches_it() {
+    let server = MiniRedis::start().await;
+    server.slow("XGROUP", Duration::from_millis(400));
+    server.slow("XREVRANGE", Duration::from_millis(400));
+    let harness = RedisHarness::new(server.url(), quick("navree:"));
+    let client = harness.transport("shop");
+    let broadcast = Subscription {
+        pattern: "invoice.cast".to_owned(),
+        kind: PatternKind::Event,
+        group: Group::Instance("cast-1".to_owned()),
+        ordered: false,
+        ack_wait: Duration::ZERO,
+    };
+    for (service, subscription) in [
+        ("billing", event("invoice.paid", "billing")),
+        ("cast", broadcast),
+    ] {
+        let pattern = subscription.pattern.clone();
+        let mut listening = Listening::start(harness.transport(service), vec![subscription]).await;
+        client.publish(published(&pattern, "now")).await.unwrap();
+        // The event is there once it is sent; this only ends a hang.
+        let delivery = listening
+            .next(Duration::from_secs(20))
+            .await
+            .unwrap_or_else(|| {
+                panic!("{pattern}: the event sent once the listener was subscribed")
+            });
+        assert_eq!(delivery.envelope().payload().as_ref(), b"now");
+        delivery.ack().await.unwrap();
+        listening.stop().await;
+    }
+}
+
 #[tokio::test]
 async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
     let server = MiniRedis::start().await;
     let harness = RedisHarness::new(server.url(), quick("navree:"));
-    let first = harness.transport("billing");
+    let first = RedisHarness::new(server.url(), slow_to_claim("navree:")).transport("billing");
     let mut crashed = Listening::start(first, vec![event("invoice.paid", "billing")]).await;
     let client = harness.transport("shop");
     client
@@ -128,7 +183,7 @@ async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
         .await
         .unwrap();
     let taken = crashed
-        .next(Duration::from_secs(5))
+        .next(HANG)
         .await
         .expect("the first instance takes it");
     assert_eq!(taken.attempt(), 1);
@@ -142,7 +197,7 @@ async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
     )
     .await;
     let claimed = survivor
-        .next(Duration::from_secs(5))
+        .next(HANG)
         .await
         .expect("claimed after claim_after_ms");
     assert_eq!(claimed.attempt(), 2, "the claim is the next attempt");
@@ -157,8 +212,19 @@ async fn an_entry_a_crashed_instance_took_is_claimed_by_another() {
 
 #[tokio::test]
 async fn a_retry_longer_than_the_claim_time_waits_its_backoff() {
+    // While the backoff runs, the instance keeps the entry its own by setting it up again every
+    // half claim time, so a pause of a few hundred milliseconds in the instance does not hand it
+    // to a claim early; the claim time is long here so that a busy machine does not make such
+    // a pause. (A process that stops for the whole claim time may have its entries claimed
+    // early: at-least-once delivery allows it.)
     let server = MiniRedis::start().await;
-    let harness = RedisHarness::new(server.url(), quick("navree:"));
+    let harness = RedisHarness::new(
+        server.url(),
+        RedisOptions {
+            claim_after_ms: 2_000,
+            ..quick("navree:")
+        },
+    );
     let mut listening = Listening::start(
         harness.transport("mailer"),
         vec![event("mail.queued", "mailer")],
@@ -169,19 +235,13 @@ async fn a_retry_longer_than_the_claim_time_waits_its_backoff() {
         .publish(published("mail.queued", "m"))
         .await
         .unwrap();
-    let first = listening
-        .next(Duration::from_secs(5))
-        .await
-        .expect("first attempt");
+    let first = listening.next(HANG).await.expect("first attempt");
     let started = std::time::Instant::now();
-    first.retry_in(Duration::from_millis(900)).await.unwrap();
-    let second = listening
-        .next(Duration::from_secs(5))
-        .await
-        .expect("second attempt");
+    first.retry_in(Duration::from_millis(3_000)).await.unwrap();
+    let second = listening.next(HANG).await.expect("second attempt");
     assert_eq!(second.attempt(), 2);
     assert!(
-        started.elapsed() >= Duration::from_millis(800),
+        started.elapsed() >= Duration::from_millis(2_500),
         "came back after {:?}",
         started.elapsed()
     );
