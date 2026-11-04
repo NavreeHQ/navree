@@ -1,0 +1,42 @@
+/*
+ * navree-ui's stylesheet: Tree. Written for Navree. A tree is nested lists with no
+ * script; the module adds the roles and the keys, and then closed branches fold.
+ */
+[data-slot=tree]{min-width:0;font-size:14px}
+[data-slot=tree-root],[data-slot=tree-group]{margin:0;padding:0;list-style:none}
+[data-slot=tree-group]{margin-inline-start:.6875rem;padding-inline-start:.5rem;border-inline-start:1px solid var(--line)}
+[data-slot=tree-item],[data-slot=tree-more],[data-slot=tree-note]{position:relative;outline:0}
+[data-slot=tree-row]{display:flex;align-items:center;gap:.125rem;min-width:0;min-height:2rem;border-radius:var(--radius)}
+[data-slot=tree-item]:not([data-branch]) > [data-slot=tree-row]{padding-inline-start:1.5rem}
+[data-slot=tree-toggle]{display:inline-flex;flex:none;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:var(--radius);color:var(--fg-3);text-decoration:none;
+  & > [data-slot=icon]{width:14px;height:14px;transition:rotate .12s}
+  &:dir(rtl) > [data-slot=icon]{scale:-1 1}
+  &:is(a):hover{background:var(--ink-2);color:var(--fg)}
+}
+[data-slot=tree-item][data-open] > [data-slot=tree-row] > [data-slot=tree-toggle] > [data-slot=icon]{rotate:90deg}
+[data-slot=tree-item][data-open] > [data-slot=tree-row] > [data-slot=tree-toggle]:dir(rtl) > [data-slot=icon]{rotate:-90deg}
+[data-slot=tree-label]{display:flex;flex:1;align-items:center;gap:.5rem;min-width:0;padding:.25rem .5rem;border-radius:var(--radius);color:var(--fg-1);text-decoration:none;cursor:pointer;
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  & > [data-slot=icon]{color:var(--fg-3)}
+  & > [data-slot=checkbox],& > [data-slot=radio]{margin:0}
+  &[aria-current=page]{background:var(--ink-3);color:var(--fg);font-weight:500}
+}
+span[data-slot=tree-label]{cursor:default}
+[data-slot=tree][data-enhanced] span[data-slot=tree-label]{user-select:none}
+[data-slot=tree-text]{min-width:0;overflow-wrap:anywhere}
+[data-slot=tree-item][data-disabled] > [data-slot=tree-row] > [data-slot=tree-label]{opacity:.5;cursor:default}
+/* The choice made: the row says so beside the mark. */
+[data-slot=tree-item][aria-selected=true] > [data-slot=tree-row] > [data-slot=tree-label]{background:var(--ink-3);color:var(--fg)}
+[data-slot=tree-item][data-checked=mixed] > [data-slot=tree-row] input[data-slot=checkbox]{background-color:var(--accent);border-color:var(--accent);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%2303130a' stroke-width='3' stroke-linecap='round' viewBox='0 0 24 24'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E")}
+/* The keyboard's place: a ring on the row. */
+[data-slot=tree-item]:focus-visible > [data-slot=tree-row],[data-slot=tree-more]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--radius)}
+/* Branches fold once the module runs; with no script every level shows. */
+[data-slot=tree][data-enhanced] [data-slot=tree-item]:not([data-open]) > [data-slot=tree-group]{display:none}
+[data-slot=tree-item][aria-busy=true] > [data-slot=tree-row] > [data-slot=tree-toggle]{animation:ui-pulse 1s ease-in-out infinite}
+[data-slot=tree-more]{& > a{display:flex;align-items:center;min-height:2rem;padding:.25rem .5rem .25rem 1.75rem;border-radius:var(--radius);color:var(--fg-2);text-decoration:none;&:hover{background:var(--ink-2);color:var(--fg)}}}
+[data-slot=tree-note]{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;min-height:2rem;padding:.25rem .5rem .25rem 1.75rem;color:var(--fg-3);font-size:13px}
+[data-slot=tree-retry]{padding:0;border:0;background:none;color:var(--fg-1);font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+@media (forced-colors:active){
+  [data-slot=tree-item]:focus-visible > [data-slot=tree-row],[data-slot=tree-more]:focus-visible{outline-color:Highlight}
+  [data-slot=tree-item][aria-selected=true] > [data-slot=tree-row] > [data-slot=tree-label]{forced-color-adjust:none;background:Highlight;color:HighlightText}
+}

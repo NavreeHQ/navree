@@ -21,6 +21,8 @@ mod draft;
 mod number;
 mod slider;
 mod stepper;
+mod toolbar;
+mod tree;
 mod wizard;
 
 pub use draft::{
@@ -29,6 +31,11 @@ pub use draft::{
 pub use number::{Decimal, DecimalError};
 pub use slider::{Slider, SliderError, SliderLabels, SliderSpec};
 pub use stepper::{Step, StepState, Stepper, StepperLabels};
+pub use toolbar::{Toolbar, ToolbarGroup, ToolbarItem, ToolbarLabels};
+pub use tree::{
+    Tree, TreeChildren, TreeLabels, TreeNode, TreeSelect, TreeSelection, TreeSelectionError,
+    TreeState,
+};
 pub use wizard::{
     Wizard, WizardAction, WizardError, WizardLabels, WizardOutcome, WizardPage, WizardRefusal,
     WizardStep, WizardStepOf,

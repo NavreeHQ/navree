@@ -338,6 +338,19 @@ impl MenuSub {
     }
 }
 
+impl DropdownMenu {
+    /// This menu's entries as a submenu of another menu, opened by an item reading
+    /// `label`: how a toolbar moves a menu button into its overflow menu.
+    pub(crate) fn as_submenu(&self, label: Node) -> MenuSub {
+        MenuSub {
+            label,
+            start: None,
+            disabled: false,
+            entries: self.entries.clone(),
+        }
+    }
+}
+
 /// A button and the menu it opens.
 ///
 /// ```

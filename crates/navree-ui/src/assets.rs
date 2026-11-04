@@ -68,6 +68,8 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::DATES, DATES_URL),
         (Uses::MENUS, MENUS_URL),
         (Uses::SLIDER, SLIDER_URL),
+        (Uses::TREE, TREE_URL),
+        (Uses::TOOLBAR, TOOLBAR_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]

@@ -1,0 +1,33 @@
+/*
+ * navree-ui's stylesheet: Toolbar. Written for Navree. With no script the tools wrap;
+ * once the module runs the bar is one line and what does not fit moves into a menu.
+ */
+[data-slot=toolbar]{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;min-width:0;max-width:100%;padding:.25rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);
+  &[data-orientation=vertical]{display:inline-flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap}
+  &[data-enhanced]:not([data-orientation=vertical]){flex-wrap:nowrap;overflow:hidden}
+}
+[data-slot=toolbar-tool]{display:flex;flex:none;align-items:center;gap:.25rem;min-width:0;
+  &[data-overflow]{display:none}
+}
+[data-slot=toolbar-tool][data-kind=separator]{align-self:stretch}
+[data-slot=toolbar-group]{display:flex;align-items:center;gap:.25rem}
+[data-orientation=vertical] > [data-slot=toolbar-tool],[data-orientation=vertical] [data-slot=toolbar-group]{flex-direction:column;align-items:stretch}
+[data-slot=toolbar-separator]{align-self:stretch;width:1px;margin-inline:.25rem;background:var(--line-2);
+  [data-orientation=vertical] > [data-slot=toolbar-tool] > &{width:auto;height:1px;margin:.25rem 0}
+}
+[data-slot=toolbar-more]{display:flex;flex:none;margin-inline-start:auto}
+[data-orientation=vertical] > [data-slot=toolbar-more]{margin-inline-start:0}
+
+/* A button the bar draws like a toggle: a checkbox or a radio under a label. */
+[data-slot=toolbar-radios]{display:flex;gap:.25rem}
+[data-slot=toolbar-toggle]{position:relative;display:inline-flex;flex:none;align-items:center;justify-content:center;gap:.5rem;height:1.75rem;min-width:1.75rem;padding:0 .625rem;border:1px solid transparent;border-radius:var(--radius);color:var(--fg-2);font-size:13px;font-weight:500;line-height:1;white-space:nowrap;cursor:pointer;user-select:none;transition:background-color .1s,color .1s;
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  &:has(:checked){background:var(--ink-3);color:var(--fg)}
+  &:has(:focus-visible){outline:2px solid var(--accent);outline-offset:-2px;z-index:1}
+  &:has(:disabled){opacity:.5;pointer-events:none}
+  &[data-icon-only]{padding:0;width:1.75rem}
+  & input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+}
+@media (forced-colors:active){
+  [data-slot=toolbar-toggle]:has(:checked){forced-color-adjust:none;background:Highlight;color:HighlightText}
+}
