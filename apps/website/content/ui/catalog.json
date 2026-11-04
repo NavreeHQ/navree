@@ -65,6 +65,11 @@
         "alert",
         "toast",
         "empty",
+        "empty-state",
+        "error-page",
+        "forbidden",
+        "not-found",
+        "sign-in-required",
         "progress",
         "skeleton",
         "spinner"
@@ -829,6 +834,101 @@
       ]
     },
     {
+      "id": "empty-state",
+      "name": "EmptyState",
+      "url": "/docs/components/empty-state/",
+      "summary": "What a list, a table or a region shows when it has nothing in it, with the action each case needs. Built on the same markup as the error states.",
+      "group": "feedback",
+      "types": [
+        "EmptyState",
+        "EmptyKind"
+      ],
+      "thumb": "empty-state/thumb",
+      "anatomy": "empty-state/default",
+      "examples": [
+        "empty-state/thumb",
+        "empty-state/default",
+        "empty-state/no-results",
+        "empty-state/caught-up",
+        "empty-state/row"
+      ]
+    },
+    {
+      "id": "error-page",
+      "name": "ErrorPage",
+      "url": "/docs/components/error-page/",
+      "summary": "A whole page for an error status: the headline, the explanation, what to do next and a reference for support.",
+      "group": "feedback",
+      "types": [
+        "ErrorPage",
+        "State",
+        "StateKind",
+        "StateSize"
+      ],
+      "thumb": "error-page/thumb",
+      "anatomy": "error-page/default",
+      "examples": [
+        "error-page/thumb",
+        "error-page/default",
+        "error-page/kinds",
+        "error-page/shell"
+      ]
+    },
+    {
+      "id": "forbidden",
+      "name": "Forbidden",
+      "url": "/docs/components/forbidden/",
+      "summary": "\"You don't have access to this\": the state for a place the user may not see, for a card, a tab, a region or a table row. It never says whether the thing exists.",
+      "group": "feedback",
+      "types": [
+        "Forbidden"
+      ],
+      "thumb": "forbidden/thumb",
+      "anatomy": "forbidden/default",
+      "examples": [
+        "forbidden/thumb",
+        "forbidden/default",
+        "forbidden/request-access",
+        "forbidden/row"
+      ]
+    },
+    {
+      "id": "not-found",
+      "name": "NotFound",
+      "url": "/docs/components/not-found/",
+      "summary": "\"We can't find that\": the state for a record, a card or a region that isn't there.",
+      "group": "feedback",
+      "types": [
+        "NotFound"
+      ],
+      "thumb": "not-found/thumb",
+      "anatomy": "not-found/default",
+      "examples": [
+        "not-found/thumb",
+        "not-found/default",
+        "not-found/compact"
+      ]
+    },
+    {
+      "id": "sign-in-required",
+      "name": "SignInRequired",
+      "url": "/docs/components/sign-in-required/",
+      "summary": "The state for a card, tab or region that needs a signed-in user: a button to the sign-in page that brings the user back to where they were.",
+      "group": "feedback",
+      "types": [
+        "SignInRequired",
+        "SessionEnded",
+        "ReturnTo"
+      ],
+      "thumb": "sign-in-required/thumb",
+      "anatomy": "sign-in-required/default",
+      "examples": [
+        "sign-in-required/thumb",
+        "sign-in-required/default",
+        "sign-in-required/notice"
+      ]
+    },
+    {
       "id": "progress",
       "name": "Progress",
       "url": "/docs/components/progress/",
@@ -1420,6 +1520,26 @@
         "regions/live",
         "regions/lazy",
         "regions/poll"
+      ]
+    },
+    {
+      "id": "errors-and-states",
+      "name": "Errors and states",
+      "url": "/docs/ui/errors-and-states/",
+      "summary": "The settings of the error pages `UiModule` draws.",
+      "group": null,
+      "types": [
+        "PagesOptions",
+        "StateLabels",
+        "KindWords",
+        "ErrorShell",
+        "StateKind"
+      ],
+      "thumb": "errors-and-states/kinds",
+      "anatomy": null,
+      "examples": [
+        "errors-and-states/kinds",
+        "errors-and-states/inline"
       ]
     },
     {
@@ -11585,6 +11705,1938 @@
       ]
     },
     {
+      "id": "errors-and-states/kinds",
+      "component": "errors-and-states",
+      "slug": "kinds",
+      "title": "Every kind",
+      "kind": "single",
+      "code": "Grid::cols(2).gap(3).children(\n    [\n        StateKind::SignIn,\n        StateKind::Forbidden,\n        StateKind::NotFound,\n        StateKind::Conflict,\n        StateKind::Expired,\n        StateKind::RateLimited,\n        StateKind::Failed,\n        StateKind::Unavailable,\n    ]\n    .map(|kind| {\n        ErrorPage::of(kind)\n            .sign_in(\"/sign-in\")\n            .reference(\"01hx7k2m9q\")\n            .state(None, false)\n            .size(StateSize::Panel)\n    })\n    .into_iter()\n    .collect::<Vec<_>>(),\n)",
+      "src": "/ui-preview/errors-and-states/kinds.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state",
+              "tag": "div",
+              "count": 8,
+              "children": [
+                {
+                  "slot": "state-media",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "state-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state-code",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "state-title",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "state-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "state-actions",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state-reference",
+                      "tag": "p",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "code",
+                          "tag": "code",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "errors-and-states/inline",
+      "component": "errors-and-states",
+      "slug": "inline",
+      "title": "In a card, a tab or a list",
+      "kind": "single",
+      "code": "Stack::gap(3).children((\n    Card::titled(\"Revenue\").body(Forbidden::new().what(\"report\")),\n    Card::titled(\"Owner\").body(NotFound::new().what(\"deal\")),\n    Card::titled(\"Your deals\").body(SignInRequired::new(\"/sign-in\").what(\"your deals\")),\n))",
+      "src": "/ui-preview/errors-and-states/inline.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "card-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "card-title",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "card-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-media",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "state-title",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "error-page/thumb",
+      "component": "error-page",
+      "slug": "thumb",
+      "title": "A page not found",
+      "kind": "single",
+      "code": "ErrorPage::not_found()\n    .reference(\"01hx7k2m9q\")\n    .state(None, false)\n    .size(StateSize::Panel)",
+      "src": "/ui-preview/error-page/thumb.html",
+      "height": 240,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-code",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "state-reference",
+                  "tag": "p",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "code",
+                      "tag": "code",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "error-page/default",
+      "component": "error-page",
+      "slug": "default",
+      "title": "A page not found",
+      "kind": "single",
+      "code": "ErrorPage::not_found()\n    .reference(\"01hx7k2m9q\")\n    .state(None, false)\n    .size(StateSize::Page)",
+      "src": "/ui-preview/error-page/default.html",
+      "height": 380,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-code",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "state-reference",
+                  "tag": "p",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "code",
+                      "tag": "code",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "error-page/kinds",
+      "component": "error-page",
+      "slug": "kinds",
+      "title": "Every kind",
+      "kind": "gallery",
+      "code": "[\n    StateKind::SignIn,\n    StateKind::Forbidden,\n    StateKind::NotFound,\n    StateKind::MethodNotAllowed,\n    StateKind::Conflict,\n    StateKind::Gone,\n    StateKind::Expired,\n    StateKind::Invalid,\n    StateKind::RateLimited,\n    StateKind::Failed,\n    StateKind::Unavailable,\n]\n.map(|kind| {\n    (\n        kind.name(),\n        ErrorPage::of(kind)\n            .sign_in(\"/sign-in\")\n            .retry_after(12)\n            .reference(\"01hx7k2m9q\")\n            .state(None, false)\n            .size(StateSize::Panel),\n    )\n})",
+      "src": "/ui-preview/error-page/kinds.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "sign-in",
+        "forbidden",
+        "not-found",
+        "method-not-allowed",
+        "conflict",
+        "gone",
+        "expired",
+        "invalid",
+        "rate-limited",
+        "failed",
+        "unavailable"
+      ],
+      "slots": []
+    },
+    {
+      "id": "error-page/shell",
+      "component": "error-page",
+      "slug": "shell",
+      "title": "In the app shell",
+      "kind": "single",
+      "code": "let shell = Shell::new(\"Acme CRM\")\n    .context(\"Production\")\n    .group(\n        NavGroup::new(\"Sales\")\n            .item(NavItem::new(\"Overview\", \"/\").icon(icons::LAYOUT_DASHBOARD))\n            .item(NavItem::new(\"Deals\", \"/deals\").icon(icons::HANDSHAKE))\n            .item(NavItem::new(\"Contacts\", \"/contacts\").icon(icons::USERS)),\n    )\n    .user(UserMenu::new(\"Ada Lovelace\", \"ada@example.com\").action(\"Sign out\", \"/sign-out\"));\nshell.page(\"Page not found\", \"/deals/42/notes\").body(\n    ErrorPage::not_found()\n        .reference(\"01hx7k2m9q\")\n        .state(None, true),\n)",
+      "src": "/ui-preview/error-page/shell.html",
+      "height": 600,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "scripts": [
+        "sidebar-2b9112f19c19.js",
+        "overlay-ef4718e7fbcd.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-media",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "state-code",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-title",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-description",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "state-reference",
+                              "tag": "p",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "code",
+                                  "tag": "code",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "forbidden/thumb",
+      "component": "forbidden",
+      "slug": "thumb",
+      "title": "No access",
+      "kind": "single",
+      "code": "Forbidden::new().what(\"report\")",
+      "src": "/ui-preview/forbidden/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forbidden/default",
+      "component": "forbidden",
+      "slug": "default",
+      "title": "No access to a report",
+      "kind": "single",
+      "code": "Card::titled(\"Revenue\").body(Forbidden::new().what(\"report\"))",
+      "src": "/ui-preview/forbidden/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state-media",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-title",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forbidden/request-access",
+      "component": "forbidden",
+      "slug": "request-access",
+      "title": "With a way to ask",
+      "kind": "single",
+      "code": "Card::titled(\"Contracts\").body(\n    Forbidden::new()\n        .what(\"contract\")\n        .request_access(\"/access/contracts\"),\n)",
+      "src": "/ui-preview/forbidden/request-access.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state-media",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-title",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "state-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forbidden/row",
+      "component": "forbidden",
+      "slug": "row",
+      "title": "A row the user lost",
+      "kind": "single",
+      "code": "Table::new()\n    .caption(\"Deals\")\n    .head((TableHead::new(\"Name\"), TableHead::new(\"Amount\").numeric()))\n    .rows((\n        TableRowEl::new((TableCell::new(\"Acme\"), TableCell::new(\"1,200.00\").numeric())),\n        Forbidden::new().row(2),\n        TableRowEl::new((\n            TableCell::new(\"Globex\"),\n            TableCell::new(\"3,400.00\").numeric(),\n        )),\n    ))",
+      "src": "/ui-preview/forbidden/row.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "table-container",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table",
+              "tag": "table",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-head",
+                  "tag": "th",
+                  "count": 2,
+                  "children": []
+                },
+                {
+                  "slot": "state-row",
+                  "tag": "tr",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-media",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "state-title",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not-found/thumb",
+      "component": "not-found",
+      "slug": "thumb",
+      "title": "A deal that is gone",
+      "kind": "single",
+      "code": "NotFound::new().what(\"deal\")",
+      "src": "/ui-preview/not-found/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not-found/default",
+      "component": "not-found",
+      "slug": "default",
+      "title": "A deal that is gone",
+      "kind": "single",
+      "code": "Card::titled(\"Owner\").body(NotFound::new().what(\"deal\"))",
+      "src": "/ui-preview/not-found/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state-media",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-title",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not-found/compact",
+      "component": "not-found",
+      "slug": "compact",
+      "title": "One line",
+      "kind": "single",
+      "code": "Card::titled(\"Related\").body(Stack::gap(2).children((\n    NotFound::new().what(\"deal\").compact(),\n    Forbidden::new().what(\"contact\").compact(),\n)))",
+      "src": "/ui-preview/not-found/compact.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "state-media",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "state-title",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sign-in-required/thumb",
+      "component": "sign-in-required",
+      "slug": "thumb",
+      "title": "Sign in to see this",
+      "kind": "single",
+      "code": "SignInRequired::new(\"/sign-in\").what(\"your deals\")",
+      "src": "/ui-preview/sign-in-required/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sign-in-required/default",
+      "component": "sign-in-required",
+      "slug": "default",
+      "title": "In a card",
+      "kind": "single",
+      "code": "let here = ReturnTo::parse(\"/deals?tab=notes\");\nlet state = SignInRequired::new(\"/sign-in\").what(\"your deals\");\nCard::titled(\"Your deals\").body(match &here {\n    Some(here) => state.return_to(here),\n    None => state,\n})",
+      "src": "/ui-preview/sign-in-required/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state-media",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "state-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-title",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "state-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sign-in-required/notice",
+      "component": "sign-in-required",
+      "slug": "notice",
+      "title": "After a session ends",
+      "kind": "single",
+      "code": "Stack::gap(3).children((\n    SessionEnded::new(),\n    Field::new(\"name\", \"Email\").control(Input::email(\"email\")),\n    Button::primary(\"Sign in\"),\n))",
+      "src": "/ui-preview/sign-in-required/notice.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-title",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-description",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "field",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-state/thumb",
+      "component": "empty-state",
+      "slug": "thumb",
+      "title": "Nothing yet",
+      "kind": "single",
+      "code": "EmptyState::nothing_yet(\"deals\")",
+      "src": "/ui-preview/empty-state/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-state/default",
+      "component": "empty-state",
+      "slug": "default",
+      "title": "Nothing yet",
+      "kind": "single",
+      "code": "EmptyState::nothing_yet(\"deals\")\n    .description(\"Create a deal to start tracking your pipeline.\")\n    .action(Button::primary(\"New deal\").icon(icons::PLUS))",
+      "src": "/ui-preview/empty-state/default.html",
+      "height": 240,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-state/no-results",
+      "component": "empty-state",
+      "slug": "no-results",
+      "title": "A filter found nothing",
+      "kind": "single",
+      "code": "EmptyState::no_results().clear_filters(\"/deals\")",
+      "src": "/ui-preview/empty-state/no-results.html",
+      "height": 240,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-state/caught-up",
+      "component": "empty-state",
+      "slug": "caught-up",
+      "title": "Done",
+      "kind": "single",
+      "code": "EmptyState::caught_up()",
+      "src": "/ui-preview/empty-state/caught-up.html",
+      "height": 200,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "state",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "state-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "state-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "state-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "state-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-state/row",
+      "component": "empty-state",
+      "slug": "row",
+      "title": "In a table",
+      "kind": "single",
+      "code": "Table::new()\n    .caption(\"Deals\")\n    .head((TableHead::new(\"Name\"), TableHead::new(\"Amount\").numeric()))\n    .rows(EmptyState::no_results().clear_filters(\"/deals\").row(2))",
+      "src": "/ui-preview/empty-state/row.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "table-container",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table",
+              "tag": "table",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-head",
+                  "tag": "th",
+                  "count": 2,
+                  "children": []
+                },
+                {
+                  "slot": "state-row",
+                  "tag": "tr",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "state-media",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "state-title",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-description",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "state-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "dialog/thumb",
       "component": "dialog",
       "slug": "thumb",
@@ -15469,7 +17521,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [
@@ -19563,7 +21615,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [
@@ -19604,7 +21656,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [
@@ -19691,7 +21743,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [
@@ -19739,7 +21791,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [
@@ -19793,7 +21845,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-9a971a4cbb6e.js"
+        "core-73681bf751ee.js"
       ],
       "captions": [],
       "slots": [

@@ -513,6 +513,12 @@
         "doc": "The appearance the page is drawn in."
       },
       {
+        "name": "status",
+        "generics": "",
+        "args": "status: StatusCode",
+        "doc": "Sets the status the page answers with (`200` by default): the status of an error page drawn in the shell."
+      },
+      {
         "name": "crumb",
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
@@ -4028,6 +4034,295 @@
       }
     ]
   },
+  "EmptyKind": {
+    "name": "EmptyKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "What an `EmptyState` is about.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "NothingYet",
+        "doc": "There is nothing yet, and the user can make something.",
+        "default": false
+      },
+      {
+        "name": "NoResults",
+        "doc": "A search or a filter matched nothing.",
+        "default": false
+      },
+      {
+        "name": "CaughtUp",
+        "doc": "There was work, and it is done.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "EmptyState": {
+    "name": "EmptyState",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "What a list, a table or a region shows when it has nothing in it, with the action each case needs. Built on the same markup as the error states.",
+    "constructors": [
+      {
+        "name": "nothing_yet",
+        "generics": "",
+        "args": "what: impl Into<String>",
+        "doc": "There is nothing yet: \"No deals yet\". Add the action that makes the first one."
+      },
+      {
+        "name": "no_results",
+        "generics": "",
+        "args": "",
+        "doc": "A search or filter found nothing. Add `clear_filters` to offer the way back."
+      },
+      {
+        "name": "caught_up",
+        "generics": "",
+        "args": "",
+        "doc": "The work is done: \"You're all caught up\"."
+      }
+    ],
+    "methods": [
+      {
+        "name": "clear_filters",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Offers a link that clears the filters (a region link when it is inside a region)."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the headline."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the explanation."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Adds an action. The first is the main one."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Takes the words from `labels`."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: StateSize",
+        "doc": "Sets how much room it takes."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "One line, for a list."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Makes the headline a heading."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the `id`."
+      },
+      {
+        "name": "row",
+        "generics": "",
+        "args": "columns: usize",
+        "doc": "A table row that says the table is empty, in one cell across `columns`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ErrorPage": {
+    "name": "ErrorPage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "A whole page for an error status: the headline, the explanation, what to do next and a reference for support.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "status: StatusCode",
+        "doc": "The page for `status`."
+      },
+      {
+        "name": "of",
+        "generics": "",
+        "args": "kind: StateKind",
+        "doc": "The page for an error of `kind`, with the status the kind usually has."
+      },
+      {
+        "name": "not_found",
+        "generics": "",
+        "args": "",
+        "doc": "The page for a request that matched nothing."
+      },
+      {
+        "name": "forbidden",
+        "generics": "",
+        "args": "",
+        "doc": "The page for a user who may not see this."
+      },
+      {
+        "name": "sign_in_required",
+        "generics": "",
+        "args": "",
+        "doc": "The page for a guest."
+      }
+    ],
+    "methods": [
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "kind: StateKind",
+        "doc": "Sets the kind, which decides the words and the icon, when the status is not enough (a CSRF failure is a 403 that says the page expired)."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the headline."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the explanation."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl Into<String>",
+        "doc": "Adds the error's own message under the explanation."
+      },
+      {
+        "name": "reference",
+        "generics": "",
+        "args": "reference: impl Into<String>",
+        "doc": "Shows a reference for support: the request id."
+      },
+      {
+        "name": "retry_after",
+        "generics": "",
+        "args": "seconds: u64",
+        "doc": "Says how many seconds to wait (`Retry-After`)."
+      },
+      {
+        "name": "home",
+        "generics": "",
+        "args": "home: impl Into<Href>",
+        "doc": "Where \"Go to home\" leads."
+      },
+      {
+        "name": "sign_in",
+        "generics": "",
+        "args": "sign_in: impl Into<Href>",
+        "doc": "Where \"Sign in\" leads. Give it the address with `next` already on it (`ReturnTo::sign_in_href`)."
+      },
+      {
+        "name": "retry_to",
+        "generics": "",
+        "args": "retry: impl Into<Href>",
+        "doc": "Where \"Try again\" and \"Reload\" lead: the page that failed."
+      },
+      {
+        "name": "without_retry",
+        "generics": "",
+        "args": "",
+        "doc": "Offers no \"Try again\" or \"Reload\": for a page that answers a request a link cannot repeat, such as a form posted without script. A link would be a `GET` of an address that only takes a `POST`. The page offers Home, and the way to sign in."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Replaces the actions the kind offers."
+      },
+      {
+        "name": "debug",
+        "generics": "",
+        "args": "details: impl Into<Node>",
+        "doc": "Adds what a debug build knows. Never call this with anything in production."
+      },
+      {
+        "name": "status_code",
+        "generics": "",
+        "args": "",
+        "doc": "The status the page answers with."
+      },
+      {
+        "name": "short_title",
+        "generics": "",
+        "args": "",
+        "doc": "The page's short title: \"Page not found\". It is the document's title and the heading in the shell."
+      },
+      {
+        "name": "state",
+        "generics": "",
+        "args": "heading: Option<u8>, copy: bool",
+        "doc": "The state this page shows. `heading` is the level of its headline, if it is one."
+      },
+      {
+        "name": "into_view",
+        "generics": "",
+        "args": "",
+        "doc": "The page on its own, with no shell: a document with one `h1`, the same stylesheet and no script. For a guest, and for a page whose shell can't be built."
+      },
+      {
+        "name": "in_shell",
+        "generics": "",
+        "args": "shell: &AppShell",
+        "doc": "The page inside the app's shell, as `shell.page` would draw it: the shell's sidebar and top bar, the short title as the page's heading and the state below."
+      },
+      {
+        "name": "into_fragment",
+        "generics": "",
+        "args": "",
+        "doc": "The page as a fragment for a region: just the state, with no heading and no script, for the runtime to put where the region was. Its main action fetches the region again, where a page would reload."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ErrorShell": {
+    "name": "ErrorShell",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/render.rs",
+    "summary": "How a shell is built for a page when the app has not registered one `Shell` provider for everyone: a module contributes this to build the shell of a request, with its user's name in the menu. Return `None` for a request that has no shell.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<F, Fut>",
+        "args": "build: F",
+        "doc": "A builder of shells."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "FactCard": {
     "name": "FactCard",
     "kind": "struct",
@@ -4516,6 +4811,84 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Forbidden": {
+    "name": "Forbidden",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "\"You don't have access to this\": the state for a place the user may not see, for a card, a tab, a region or a table row. It never says whether the thing exists.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "The state."
+      }
+    ],
+    "methods": [
+      {
+        "name": "what",
+        "generics": "",
+        "args": "what: impl Into<String>",
+        "doc": "Names the thing: \"You don't have access to this deal.\""
+      },
+      {
+        "name": "request_access",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds an action that asks for access. The app owns the address it leads to."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Adds an action."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Takes the words from `labels`."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the explanation."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: StateSize",
+        "doc": "Sets how much room it takes."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "One line, for a list."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Makes the headline a heading."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the `id`."
+      },
+      {
+        "name": "row",
+        "generics": "",
+        "args": "columns: usize",
+        "doc": "A table row that says the user may not see this row, in one cell across `columns`. The table keeps its header, its order and its count; the row has no checkbox and no link."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "FormView": {
@@ -5251,6 +5624,16 @@
       }
     ]
   },
+  "KindWords": {
+    "name": "KindWords",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/labels.rs",
+    "summary": "The words of one kind of state.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "Label": {
     "name": "Label",
     "kind": "struct",
@@ -5960,6 +6343,78 @@
     "variants": [],
     "shared": []
   },
+  "NotFound": {
+    "name": "NotFound",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "\"We can't find that\": the state for a record, a card or a region that isn't there.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "The state."
+      }
+    ],
+    "methods": [
+      {
+        "name": "what",
+        "generics": "",
+        "args": "what: impl Into<String>",
+        "doc": "Names the thing: \"This deal doesn't exist, or it was removed.\""
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Adds an action."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Takes the words from `labels`."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the explanation."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: StateSize",
+        "doc": "Sets how much room it takes."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "One line, for a list."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Makes the headline a heading."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the `id`."
+      },
+      {
+        "name": "row",
+        "generics": "",
+        "args": "columns: usize",
+        "doc": "A table row that says this row is gone, in one cell across `columns`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Op": {
     "name": "Op",
     "kind": "enum",
@@ -6185,6 +6640,53 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "PagesOptions": {
+    "name": "PagesOptions",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/options.rs",
+    "summary": "The settings of the error pages `UiModule` draws.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "sign_in",
+        "generics": "",
+        "args": "sign_in: impl Into<String>",
+        "doc": "Sets where \"Sign in\" leads."
+      },
+      {
+        "name": "home",
+        "generics": "",
+        "args": "home: impl Into<String>",
+        "doc": "Sets where \"Go to home\" leads."
+      },
+      {
+        "name": "redirect_guests",
+        "generics": "",
+        "args": "redirect: bool",
+        "doc": "Sends guests straight to sign in."
+      },
+      {
+        "name": "debug",
+        "generics": "",
+        "args": "debug: bool",
+        "doc": "Turns the development details on or off."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "configured",
+        "generics": "",
+        "args": "config: &Config",
+        "doc": "These options with the `ui` section of `config` applied. A value that is not a usable address is ignored."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Pagination": {
@@ -6850,6 +7352,18 @@
         "doc": "Listens for the stream's events called `name` instead of its unnamed ones (`event: name` on the wire), so one stream can feed several regions. A name of letters, digits and `_ . : -`, at most 64 long; any other is ignored. `open` and `error` are the connection's own events, so they are ignored too."
       },
       {
+        "name": "when_failed",
+        "generics": "",
+        "args": "state: impl Into<Node>",
+        "doc": "Says `state` when a fetch of the region fails in a way the server did not draw: the connection failed, the request ran out of time, or something between answered in its own words (a proxy's page, an answer that is not HTML). What the region had stays, and the state appears beside it. An error from your app is drawn by the server as a state and shown by the runtime in place of the region (see `ErrorPage`), whether or not you call this."
+      },
+      {
+        "name": "when_offline",
+        "generics": "",
+        "args": "",
+        "doc": "`when_failed` with \"You're offline\" and a Try again button that fetches the region again, shown only when the browser could not reach the server at all (the connection failed). A request that ran out of time, or a server that answered with an error, is not being offline: use `when_failed` with your own words for those."
+      },
+      {
         "name": "children",
         "generics": "",
         "args": "children: impl IntoNodes",
@@ -6926,6 +7440,72 @@
         "generics": "",
         "args": "status: StatusCode",
         "doc": "Sets the status of the ops response."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ReturnTo": {
+    "name": "ReturnTo",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/return_to.rs",
+    "summary": "An address on this site that is safe to send a user to.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "raw: &str",
+        "doc": "Checks `raw`. `None` when it could lead anywhere but this site."
+      },
+      {
+        "name": "parse_for",
+        "generics": "",
+        "args": "raw: &str, sign_in: &str",
+        "doc": "Checks `raw` and also refuses the sign-in page itself, and anything below it, which would send the user round in a circle. `sign_in` is its address; the two are compared as a server reads them, with their escapes decoded (`/%73ign-in` is `/sign-in`). A `sign_in` that is not a path on this site (a provider's address) refuses nothing."
+      },
+      {
+        "name": "of_uri",
+        "generics": "",
+        "args": "uri: &Uri",
+        "doc": "The page a request asked for: its path and query. `None` when that could not be sent back safely, such as a path with a backslash in it."
+      },
+      {
+        "name": "from_query",
+        "generics": "",
+        "args": "query: &str",
+        "doc": "The `next` of a query string (`a=1&next=%2Fdeals`), checked."
+      },
+      {
+        "name": "resolve",
+        "generics": "",
+        "args": "next: Option<&str>, fallback: &str",
+        "doc": "Where to go after signing in: `next` when it is safe, else `fallback`, which is yours and must also be on this site (anything else becomes `#`)."
+      },
+      {
+        "name": "resolve_for",
+        "generics": "",
+        "args": "next: Option<&str>, sign_in: &str, fallback: &str",
+        "doc": "`resolve` that also drops the sign-in page at `sign_in` (see `parse_for`): what a sign-in handler should use."
+      }
+    ],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The address."
+      },
+      {
+        "name": "into_local",
+        "generics": "",
+        "args": "",
+        "doc": "The address as a redirect target."
+      },
+      {
+        "name": "sign_in_href",
+        "generics": "",
+        "args": "sign_in: &str",
+        "doc": "`sign_in` with this address as its `next`: `/sign-in?next=%2Fdeals%2F42`."
       }
     ],
     "variants": [],
@@ -7326,6 +7906,30 @@
       }
     ]
   },
+  "SessionEnded": {
+    "name": "SessionEnded",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "The notice on the sign-in page for a user who was sent there: \"You've been signed out\". It takes no picture and little room, so the form stays on the screen.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "The notice."
+      }
+    ],
+    "methods": [
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Takes the words from `labels`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Sheet": {
     "name": "Sheet",
     "kind": "struct",
@@ -7618,6 +8222,66 @@
     ],
     "shared": []
   },
+  "SignInRequired": {
+    "name": "SignInRequired",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "The state for a card, tab or region that needs a signed-in user: a button to the sign-in page that brings the user back to where they were.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "sign_in: impl Into<Href>",
+        "doc": "The state, with a button to `sign_in`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "return_to",
+        "generics": "",
+        "args": "here: &ReturnTo",
+        "doc": "Brings the user back to `here` after they sign in. An address that is not safe to return to is left out, and the user lands where the sign-in page sends everyone."
+      },
+      {
+        "name": "what",
+        "generics": "",
+        "args": "what: impl Into<String>",
+        "doc": "Names what needs a user: \"Sign in to see your deals.\""
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: StateLabels",
+        "doc": "Takes the words from `labels`."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: StateSize",
+        "doc": "Sets how much room it takes."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "One line, for a list."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Makes the headline a heading."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the `id`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Size": {
     "name": "Size",
     "kind": "enum",
@@ -7862,6 +8526,296 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "State": {
+    "name": "State",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "A state: an icon, an optional status code, a headline, a plain explanation and what to do next. It renders to a `div` with `data-slot=\"state\"`.",
+    "constructors": [
+      {
+        "name": "of",
+        "generics": "",
+        "args": "kind: StateKind",
+        "doc": "The state of `kind`, with the default words."
+      },
+      {
+        "name": "custom",
+        "generics": "",
+        "args": "name: &'static str, glyph: Icon, title: impl Into<Cow<'static, str>>",
+        "doc": "A state of your own: a `name` for `data-kind` (`empty`, `locked`), an icon and a headline."
+      }
+    ],
+    "methods": [
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &StateLabels",
+        "doc": "Takes the words from `labels`: the headline and the explanation of its kind, unless you have set your own."
+      },
+      {
+        "name": "status",
+        "generics": "",
+        "args": "status: StatusCode",
+        "doc": "Shows the HTTP status as a code beside the headline."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "Sets the headline."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Cow<'static, str>>",
+        "doc": "Sets the explanation. It is plain text, never markup."
+      },
+      {
+        "name": "without_description",
+        "generics": "",
+        "args": "",
+        "doc": "Takes the explanation away."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl Into<String>",
+        "doc": "Adds a line under the explanation: the error's own message, such as \"Email taken\"."
+      },
+      {
+        "name": "wait",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Adds a line about when to try again."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds actions. The first is the main one."
+      },
+      {
+        "name": "reference",
+        "generics": "",
+        "args": "reference: impl Into<String>, copy: Option<Cow<'static, str>>",
+        "doc": "Shows a reference support can look up, such as a request id. With `copy` (the button's name) a button copies it, which loads the core runtime."
+      },
+      {
+        "name": "debug",
+        "generics": "",
+        "args": "details: impl Into<Node>",
+        "doc": "Adds what a debug build knows. Never call this with anything in production."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: StateSize",
+        "doc": "Sets how much room it takes."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Makes the headline a heading of `level` (1 to 6) in the page's outline. Without this it is a paragraph, so a state inside a page doesn't disturb the outline."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the `id`, which also names the headline for assistive technology."
+      },
+      {
+        "name": "headline",
+        "generics": "",
+        "args": "",
+        "doc": "The headline."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "StateKind": {
+    "name": "StateKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/pages/labels.rs",
+    "summary": "What a state is about. `StateKind::of` reads it from a status.",
+    "constructors": [
+      {
+        "name": "of",
+        "generics": "",
+        "args": "status: StatusCode, code: &str",
+        "doc": "The kind of an error with `status` and the framework's `code` (`csrf_token_mismatch` is an expired page whatever its status)."
+      },
+      {
+        "name": "from_name",
+        "generics": "",
+        "args": "name: &str",
+        "doc": "The kind called `name` in `data-kind`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "status",
+        "generics": "",
+        "args": "",
+        "doc": "The status the kind stands for when nothing says otherwise."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "The name in `data-kind`."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "",
+        "doc": "The icon in the state's icon container."
+      },
+      {
+        "name": "is_transient",
+        "generics": "",
+        "args": "",
+        "doc": "Whether the user can only wait or try again, as opposed to changing something."
+      },
+      {
+        "name": "is_final",
+        "generics": "",
+        "args": "",
+        "doc": "Whether a region that gets this answer should stop asking: a door that is shut stays shut however often it is knocked on."
+      }
+    ],
+    "variants": [
+      {
+        "name": "SignIn",
+        "doc": "401: not signed in.",
+        "default": false
+      },
+      {
+        "name": "Forbidden",
+        "doc": "403: signed in, and not allowed.",
+        "default": false
+      },
+      {
+        "name": "NotFound",
+        "doc": "404: nothing at this address.",
+        "default": false
+      },
+      {
+        "name": "MethodNotAllowed",
+        "doc": "405: the address doesn't take this method.",
+        "default": false
+      },
+      {
+        "name": "Conflict",
+        "doc": "409: the change clashes with another.",
+        "default": false
+      },
+      {
+        "name": "Gone",
+        "doc": "410: it was here and is gone.",
+        "default": false
+      },
+      {
+        "name": "Expired",
+        "doc": "419, and a failed CSRF check: the page is too old to trust.",
+        "default": false
+      },
+      {
+        "name": "Invalid",
+        "doc": "400 and 422: what was sent can't be used.",
+        "default": false
+      },
+      {
+        "name": "RateLimited",
+        "doc": "429: too many requests.",
+        "default": false
+      },
+      {
+        "name": "Failed",
+        "doc": "500, and any other 5xx but 503: our failure.",
+        "default": false
+      },
+      {
+        "name": "Unavailable",
+        "doc": "503: busy or down on purpose.",
+        "default": false
+      },
+      {
+        "name": "Offline",
+        "doc": "No answer at all: the connection failed. Only the browser knows this one.",
+        "default": false
+      },
+      {
+        "name": "Client",
+        "doc": "Any other 4xx.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "StateLabels": {
+    "name": "StateLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/pages/labels.rs",
+    "summary": "The words of every state. English by default; build your own for another language. `{n}`, `{what}` and `{id}` are filled in.",
+    "constructors": [
+      {
+        "name": "about",
+        "generics": "",
+        "args": "template: &str, what: &str",
+        "doc": "`template` with `{what}` filled in."
+      }
+    ],
+    "methods": [
+      {
+        "name": "words",
+        "generics": "",
+        "args": "kind: StateKind",
+        "doc": "The words of `kind`."
+      },
+      {
+        "name": "with_words",
+        "generics": "",
+        "args": "kind: StateKind, words: KindWords",
+        "doc": "Replaces the words of `kind`."
+      },
+      {
+        "name": "wait_text",
+        "generics": "",
+        "args": "seconds: u64",
+        "doc": "\"Try again in 12 seconds.\" for `seconds`, read from `Retry-After`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "StateSize": {
+    "name": "StateSize",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/pages/state.rs",
+    "summary": "How much room a `State` takes.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Page",
+        "doc": "The page itself: centred, with room around it.",
+        "default": false
+      },
+      {
+        "name": "Panel",
+        "doc": "A card, a tab or a region: centred, in a dashed outline. The default.",
+        "default": true
+      },
+      {
+        "name": "Compact",
+        "doc": "A table row or a list line: one line of icon and words, left to right.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Switch": {
     "name": "Switch",
