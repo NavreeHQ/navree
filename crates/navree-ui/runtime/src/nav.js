@@ -155,12 +155,18 @@ function takeLook(doc) {
 }
 
 /**
- * Takes out the theme stylesheets `doc` no longer names, once it shows: a theme
- * left behind matches nothing, but would stay loaded for good.
+ * The theme stylesheets `doc` names. Read before `mergeHead`, which moves the new
+ * ones out of `doc` into this page.
  * @param {Document} doc
  */
-function dropSheets(doc) {
-  const wanted = new Set([...head(doc).querySelectorAll("link[data-ui-theme]")].map((link) => attr(link, "href")));
+const sheetsOf = (doc) => new Set([...head(doc).querySelectorAll("link[data-ui-theme]")].map((link) => attr(link, "href")));
+
+/**
+ * Takes out the theme stylesheets the new page doesn't name, once it shows: a
+ * theme left behind matches nothing, but would stay loaded for good.
+ * @param {Set<string | null>} wanted
+ */
+function dropSheets(wanted) {
   for (const link of head().querySelectorAll("link[data-ui-theme]")) if (!wanted.has(attr(link, "href"))) link.remove();
 }
 
@@ -186,6 +192,7 @@ export async function showPage(response, how = {}) {
   // A toast the last request left joins the standing toaster; the page's own is never morphed.
   adoptToasts(doc);
   // The styles it brings first: a page or region shows only in its own theme.
+  const sheets = sheetsOf(doc);
   const styles = mergeHead(doc);
   if (styles) await styles;
   if (ticket !== shows) return;
@@ -194,14 +201,14 @@ export async function showPage(response, how = {}) {
     if (from && to) {
       takeLook(doc);
       morph(from, to);
-      dropSheets(doc);
+      dropSheets(sheets);
       setTitle(titleOf(doc));
       return;
     }
   }
   takeLook(doc);
   morph(body(), body(doc), { reset: !how.region && !how.keep });
-  dropSheets(doc);
+  dropSheets(sheets);
   // The same page again is no navigation: the reader stays where they were, focus and scroll.
   const stay = how.keep && active() !== body() && holds(body(), active());
   if (!stay) {
