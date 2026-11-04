@@ -13,7 +13,10 @@
 //!   events), sent once (never retried) under the same SSRF policy.
 //! - **Retries**: idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`,
 //!   `PUT`, `DELETE`) are retried on connection errors, 5xx and 429, with
-//!   jittered exponential backoff. `POST` and `PATCH` never are.
+//!   jittered exponential backoff, waiting at least what a `Retry-After`
+//!   header asks (one asking for more than 30 seconds ends the retries).
+//!   `POST` and `PATCH` are retried only with an idempotency key
+//!   ([`RequestBuilder::idempotency_key`]), which every attempt carries.
 //!   After the last attempt the last response is returned as it is; call
 //!   [`Response::error_for_status`] to turn 4xx/5xx into an error.
 //! - **Timeouts**: each attempt has its own timeout, from connecting to the
@@ -67,6 +70,7 @@ mod module;
 mod options;
 mod request;
 mod response;
+mod retry_after;
 mod ssrf;
 mod streaming;
 
@@ -75,6 +79,6 @@ pub use error::HttpClientError;
 pub use fake::{FakeResponse, FakeServer, RecordedRequest};
 pub use module::HttpClientModule;
 pub use options::{HttpClientOptions, SsrfPolicy};
-pub use request::RequestBuilder;
+pub use request::{IDEMPOTENCY_KEY_HEADER, RequestBuilder};
 pub use response::Response;
 pub use streaming::{BodyStream, StreamingResponse};

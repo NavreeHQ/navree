@@ -1,6 +1,7 @@
 //! Integration tests for navree-http-client (one test binary, several modules).
 
 mod fake;
+mod idempotency;
 mod module;
 mod real;
 mod retry;

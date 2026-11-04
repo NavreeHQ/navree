@@ -160,13 +160,18 @@ let rates = self.rates.latest(&base).await.map_err(|error| {
 
 Builder: `get`, `post`, `put`, `patch`, `delete`, `request(method, url)`,
 then `header`, `bearer(token)`, `with_request_id(&id)` (not automatic),
-`query`, `json`, `form`, `body`, `timeout`, `retries(n)`, `secret_url()` (the whole
+`query`, `json`, `form`, `body`, `timeout`, `retries(n)`, `idempotency_key(key)`,
+`idempotency_key_header(name, key)`, `secret_url()` (the whole
 URL is a secret, as a webhook's is: errors, logs and telemetry show its host alone). Response:
 `status()`, `is_success()`, `header(name)`, `text()`, `bytes()`, `json()`.
 
 - Retries: idempotent methods (GET, HEAD, OPTIONS, TRACE, PUT, DELETE) on
-  connection failures, 5xx and 429, with exponential backoff and jitter.
-  POST and PATCH are **never** retried. A timed-out attempt isn't retried.
+  connection failures, 5xx and 429, with exponential backoff and jitter,
+  waiting at least what `Retry-After` asks (more than 30 s ends the retries
+  and returns the answer). A POST or PATCH is retried **only** with
+  `.idempotency_key(key)`: every attempt sends the same key and body. Derive
+  the key from the operation (`invoice-42-charge`), not the attempt. A
+  timed-out attempt isn't retried.
 - SSRF: private, loopback, link-local and metadata addresses are refused
   (`HttpClientError::Blocked`), checked on every resolved address and
   redirect. Allow internal services explicitly:

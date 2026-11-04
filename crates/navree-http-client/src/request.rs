@@ -31,11 +31,19 @@ pub struct RequestBuilder {
     retries: Option<u32>,
     timeout: Option<Duration>,
     secret_url: bool,
+    idempotent: bool,
     error: Option<HttpClientError>,
 }
 
 /// The header that carries the request id.
 const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+
+/// The header [`RequestBuilder::idempotency_key`] sets.
+pub const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
+
+/// The longest idempotency key accepted (Stripe's limit, the strictest of
+/// the providers that take one).
+const MAX_IDEMPOTENCY_KEY_LEN: usize = 255;
 
 impl RequestBuilder {
     /// A request for `method` `url` sent through `client`.
@@ -50,6 +58,7 @@ impl RequestBuilder {
             retries: None,
             timeout: None,
             secret_url: false,
+            idempotent: false,
             error: None,
         }
     }
@@ -147,9 +156,56 @@ impl RequestBuilder {
     /// Retries after the first attempt for this request, instead of
     /// [`HttpClientOptions::retries`](crate::HttpClientOptions::retries).
     /// Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`,
-    /// `DELETE`) are ever retried: for `POST` and `PATCH` this is ignored.
+    /// `DELETE`) and requests with an
+    /// [`idempotency_key`](Self::idempotency_key) are ever retried: for a
+    /// `POST` or `PATCH` without a key this is ignored.
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = Some(retries);
+        self
+    }
+
+    /// Sends `Idempotency-Key: <key>` and makes the request safe to repeat:
+    /// a `POST` or `PATCH` with a key is retried like an idempotent method
+    /// (connection errors, `5xx` and `429`, with backoff and jitter), every
+    /// attempt carrying the same key and body. A provider that supports
+    /// keys answers a repeated key with the first attempt's result instead
+    /// of acting twice, so a retry, by this client or by a queued job that
+    /// sends the same key again, never charges twice.
+    ///
+    /// Keys are 1 to 255 visible ASCII characters without spaces; another
+    /// key fails `send` with [`HttpClientError::Build`]. Derive the key from
+    /// what the request does (`invoice-42-refund-1`), so a later retry of
+    /// the same operation sends the same key.
+    pub fn idempotency_key(self, key: impl AsRef<str>) -> Self {
+        self.idempotency_key_header(IDEMPOTENCY_KEY_HEADER, key)
+    }
+
+    /// [`idempotency_key`](Self::idempotency_key) under the header name a
+    /// provider uses instead (`x-idempotency-key`).
+    pub fn idempotency_key_header<K>(mut self, name: K, key: impl AsRef<str>) -> Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+    {
+        let key = key.as_ref();
+        let valid = !key.is_empty()
+            && key.len() <= MAX_IDEMPOTENCY_KEY_LEN
+            && key.bytes().all(|b| b.is_ascii_graphic());
+        if !valid {
+            self.fail(
+                "invalid idempotency key: use 1 to 255 visible ASCII characters without spaces"
+                    .to_owned(),
+            );
+            return self;
+        }
+        match (HeaderName::try_from(name), HeaderValue::try_from(key)) {
+            (Ok(name), Ok(value)) => {
+                self.headers.insert(name, value);
+                self.idempotent = true;
+            }
+            (Err(error), _) => self.fail(format!("invalid header name: {}", error.into())),
+            (Ok(name), Err(_)) => self.fail(format!("invalid value for header `{name}`")),
+        }
         self
     }
 
@@ -221,6 +277,7 @@ impl RequestBuilder {
             headers,
             body: self.body,
             secret_url: self.secret_url,
+            idempotent: self.idempotent,
         };
         Ok((self.client, request, self.retries, self.timeout))
     }
@@ -245,6 +302,7 @@ impl fmt::Debug for RequestBuilder {
             .field("body_bytes", &self.body.as_ref().map(Bytes::len))
             .field("retries", &self.retries)
             .field("timeout", &self.timeout)
+            .field("idempotent", &self.idempotent)
             .field("error", &self.error)
             .finish_non_exhaustive()
     }
@@ -258,4 +316,7 @@ pub(crate) struct PreparedRequest {
     pub(crate) headers: HeaderMap,
     pub(crate) body: Option<Bytes>,
     pub(crate) secret_url: bool,
+    /// The request carries an idempotency key: a `POST` or `PATCH` may be
+    /// retried.
+    pub(crate) idempotent: bool,
 }

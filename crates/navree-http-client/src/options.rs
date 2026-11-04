@@ -35,8 +35,8 @@ pub struct HttpClientOptions {
     pub timeout_secs: u64,
     /// Time allowed to open a connection (default 5, at least 1).
     pub connect_timeout_secs: u64,
-    /// Retries after the first attempt, for idempotent requests only
-    /// (default 2).
+    /// Retries after the first attempt, for idempotent requests and
+    /// requests with an idempotency key only (default 2).
     pub retries: u32,
     /// The first retry delay in milliseconds; each later delay doubles, plus
     /// random jitter, up to 30 s (default 200).

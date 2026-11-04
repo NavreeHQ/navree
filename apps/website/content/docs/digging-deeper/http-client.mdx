@@ -39,7 +39,7 @@ allow_hosts = ["billing.internal", "*.svc.cluster.local", "10.20.0.0/16"]
 |---|---|---|
 | `timeout_secs` | `30` | Time allowed for each attempt, from connecting to the last body byte (at least 1). |
 | `connect_timeout_secs` | `5` | Time allowed to open a connection (at least 1). |
-| `retries` | `2` | Retries after the first attempt, for idempotent requests only. |
+| `retries` | `2` | Retries after the first attempt, for idempotent requests and requests with an idempotency key only. |
 | `retry_base_ms` | `200` | The first retry delay; each later one doubles up to 30 s, and each gets up to as much again in random jitter. |
 | `max_response_bytes` | `10485760` (10 MiB) | The largest response body read into memory (at least 1). |
 | `user_agent` | `navree-http-client/<version>` | The `User-Agent` sent when a request doesn't set its own (`<version>` is the crate's version, for example `navree-http-client/1.0.0`). |
@@ -116,7 +116,9 @@ The builder methods are:
 | `form(&value)` | Sends a URL-encoded form. |
 | `body(bytes)` | Sends a raw body (set `Content-Type` with `header`). |
 | `timeout(duration)` | This request's timeout per attempt. |
-| `retries(n)` | This request's number of retries (ignored for `POST` and `PATCH`). |
+| `retries(n)` | This request's number of retries (ignored for a `POST` or `PATCH` without an idempotency key). |
+| `idempotency_key(key)` | Sends `Idempotency-Key: <key>` and lets a `POST` or `PATCH` be retried (see [Retries and timeouts](#retries-and-timeouts)). |
+| `idempotency_key_header(name, key)` | The same, under the header name a provider uses instead (`x-idempotency-key`). |
 | `secret_url()` | The whole URL is a secret, as an incoming webhook's is: errors, logs, `Debug` output and the `HttpClientRequest` event show its scheme and host alone (`https://hooks.example.com/[hidden]`). Without it they show the path, never the query string or credentials. |
 
 Builder methods never fail. The first problem (an invalid URL, header or body) is kept and returned by `send` as `HttpClientError::Build`. Only `http` and `https` URLs are accepted.
@@ -145,7 +147,7 @@ impl ExchangeRates {
             .post("https://hooks.example.com/crm/deals")
             .bearer(token)
             .with_request_id(request_id)
-            .header("idempotency-key", event.deal_id.to_string())
+            .idempotency_key(format!("deal-won-{}", event.deal_id))
             .json(event)
             .send()
             .await?
@@ -206,9 +208,24 @@ A streaming request goes through the same SSRF policy, carries the same `tracepa
 
 ## Retries and timeouts
 
-Idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`) are retried when the connection fails or the server answers `5xx` or `429`. The delay starts at `retry_base_ms` and doubles each time until it reaches 30 seconds. Each delay also gets a random share of itself added (jitter), so a delay lasts between once and twice its size and clients that failed together do not retry together. `POST` and `PATCH` are never retried, because sending them twice could charge a card twice; `retries(n)` has no effect on them.
+Idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`) are retried when the connection fails or the server answers `5xx` or `429`. The delay starts at `retry_base_ms` and doubles each time until it reaches 30 seconds. Each delay also gets a random share of itself added (jitter), so a delay lasts between once and twice its size and clients that failed together do not retry together.
 
-When the last attempt still gets a `5xx` or `429`, that response is returned as it is. `Retry-After` headers are not read; the backoff schedule decides.
+A `POST` or `PATCH` is sent once, because sending it twice could charge a card twice. Give it an idempotency key and it is retried like the others:
+
+```rust
+let charge = self
+    .http
+    .post("https://payments.example.com/v1/charges")
+    .bearer(token)
+    .idempotency_key(format!("invoice-{}-charge", invoice.id))
+    .json(&body)
+    .send()
+    .await?;
+```
+
+Every attempt carries the same `Idempotency-Key` header and the same body. A provider that supports keys (Stripe, Resend and most payment APIs do) answers a key it has seen with the first answer instead of acting again. Derive the key from the operation, not from the attempt: a queued job that runs again then sends the same key, and the provider still acts once. Keys are 1 to 255 visible ASCII characters without spaces; another key fails the request with `HttpClientError::Build` before anything is sent. For a provider that names the header differently, use `idempotency_key_header("x-idempotency-key", key)`.
+
+When a retryable answer carries `Retry-After`, in seconds or as an HTTP date, the client waits at least that long, and never less than the backoff schedule says. If it asks for more than 30 seconds, the client stops retrying and returns that answer at once, so you can try again later (a queued job's own backoff is the usual place). When the last attempt still gets a `5xx` or `429`, that response is returned as it is.
 
 Each attempt has its own timeout, from connecting to the last body byte. A timed-out attempt fails with `HttpClientError::Timeout` and is **not** retried, so a server that hangs costs you one timeout, not one per retry. Opening the connection has its own, shorter limit (`connect_timeout_secs`), and a connection that can't be opened is retried. Override the timeout and the retries per request:
 
@@ -230,7 +247,7 @@ Every failure is an `HttpClientError`. URLs in its messages have no query string
 |---|---|---|
 | `Build` | Invalid URL, header, body or scheme | No |
 | `Blocked { host, reason }` | The SSRF policy refused the destination | No |
-| `Connect` | Connection refused or reset, DNS failure, connect timeout | Yes (idempotent methods) |
+| `Connect` | Connection refused or reset, DNS failure, connect timeout | Yes (idempotent methods, and requests with an idempotency key) |
 | `Timeout` | An attempt took longer than its timeout | No |
 | `BodyTooLarge` | The body is over `max_response_bytes` | No |
 | `Request` | Any other transport failure, including more than 10 redirects | No |

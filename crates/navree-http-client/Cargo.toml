@@ -12,6 +12,8 @@ workspace = true
 
 [dependencies]
 bytes = { workspace = true }
+# `Retry-After` given as an HTTP date.
+chrono = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 ipnet = { workspace = true }

@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use bytes::BytesMut;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
@@ -17,6 +17,7 @@ use crate::backoff::Backoff;
 use crate::error::{display_url, shown_url};
 use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
+use crate::retry_after::parse_retry_after;
 use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
 use crate::streaming::BodyStream;
 use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse};
@@ -41,7 +42,8 @@ pub struct HttpClient {
 static TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
 static TRACESTATE: HeaderName = HeaderName::from_static("tracestate");
 
-/// The longest wait between two attempts.
+/// The longest wait between two attempts. A `Retry-After` asking for more
+/// ends the retries: the caller gets the answer and can try again later.
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 /// Options and transport, shared by every clone.
@@ -224,9 +226,12 @@ impl HttpClient {
         &self.inner.user_agent
     }
 
-    /// Sends `request`, retrying idempotent requests on connection errors,
-    /// 5xx and 429 with exponential backoff (jittered, doubling from
-    /// `retry_base_ms`). After the last retry the last outcome is returned.
+    /// Sends `request`, retrying idempotent requests (and requests with an
+    /// idempotency key) on connection errors, 5xx and 429 with exponential
+    /// backoff (jittered, doubling from `retry_base_ms`), waiting at least
+    /// what a `Retry-After` header asks. A `Retry-After` beyond
+    /// [`MAX_RETRY_DELAY`] ends the retries. After the last retry the last
+    /// outcome is returned.
     pub(crate) async fn send(
         &self,
         mut request: PreparedRequest,
@@ -237,7 +242,7 @@ impl HttpClient {
         let span_id = inject_trace(&mut request.headers);
         let options = &self.inner.options;
         let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
-        let retries = if is_idempotent(&request.method) {
+        let retries = if is_idempotent(&request.method) || request.idempotent {
             retries.unwrap_or(options.retries)
         } else {
             0
@@ -254,21 +259,34 @@ impl HttpClient {
             let outcome = tokio::time::timeout(timeout, self.execute(request.clone()))
                 .await
                 .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }));
-            if is_retryable(&outcome)
-                && let Some(delay) = delays.next()
-            {
+            if !is_retryable(&outcome) {
+                break outcome;
+            }
+            let asked = retry_after(&outcome);
+            if asked.is_some_and(|wait| wait > MAX_RETRY_DELAY) {
                 tracing::debug!(
                     method = %request.method,
                     url = %url,
                     attempt = attempts,
-                    delay_ms = delay.as_millis() as u64,
-                    "retrying outgoing request"
+                    "the server asks to retry later than the client waits; returning its answer"
                 );
-                tokio::time::sleep(delay).await;
-                attempts += 1;
-                continue;
+                break outcome;
             }
-            break outcome;
+            let Some(delay) = delays.next() else {
+                break outcome;
+            };
+            // Never sooner than the server asked, never sooner than the
+            // backoff schedule.
+            let delay = asked.map_or(delay, |wait| delay.max(wait));
+            tracing::debug!(
+                method = %request.method,
+                url = %url,
+                attempt = attempts,
+                delay_ms = delay.as_millis() as u64,
+                "retrying outgoing request"
+            );
+            tokio::time::sleep(delay).await;
+            attempts += 1;
         };
         let outcome = outcome.map(|response| response.with_secret_url(request.secret_url));
         let elapsed = started.elapsed();
@@ -561,6 +579,13 @@ fn is_idempotent(method: &Method) -> bool {
         Method::DELETE,
     ]
     .contains(method)
+}
+
+/// The wait a retryable response's `Retry-After` header asks for, if it has
+/// a readable one.
+fn retry_after(outcome: &Result<Response, HttpClientError>) -> Option<Duration> {
+    let value = outcome.as_ref().ok()?.header("retry-after")?;
+    parse_retry_after(value, SystemTime::now())
 }
 
 /// Connection errors, 5xx and 429 are worth another attempt.
