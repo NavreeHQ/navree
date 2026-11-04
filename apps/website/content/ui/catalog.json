@@ -1031,7 +1031,8 @@
       "types": [
         "Sheet",
         "SheetSide",
-        "SheetWidth"
+        "SheetWidth",
+        "SheetBackdrop"
       ],
       "thumb": "sheet/thumb",
       "anatomy": "sheet/thumb",
@@ -1247,7 +1248,8 @@
       "thumb": "app-shell/default",
       "anatomy": "app-shell/default",
       "examples": [
-        "app-shell/default"
+        "app-shell/default",
+        "app-shell/full"
       ]
     },
     {
@@ -15781,9 +15783,9 @@
       "slug": "default",
       "title": "The app shell",
       "kind": "single",
-      "code": "let shell = Shell::new(\"Cloudworks CRM\")\n    .context(\"Production\")\n    .group(\n        NavGroup::new(\"Sales\")\n            .item(NavItem::new(\"Overview\", \"/\").icon(icons::LAYOUT_DASHBOARD))\n            .item(\n                NavItem::new(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .count(\"312\"),\n            )\n            .item(NavItem::new(\"Contacts\", \"/contacts\").icon(icons::USERS))\n            .item(\n                NavItem::new(\"Reports\", \"/reports\")\n                    .icon(icons::CHART_COLUMN)\n                    .sub(NavItem::new(\"Pipeline\", \"/reports/pipeline\"))\n                    .sub(NavItem::new(\"Forecast\", \"/reports/forecast\")),\n            ),\n    )\n    .group(\n        NavGroup::new(\"Workspace\")\n            .item(NavItem::new(\"Settings\", \"/settings\").icon(icons::SETTINGS)),\n    )\n    .user(\n        UserMenu::new(\"Gurpreet Singh\", \"gurpreet@example.com\")\n            .link(\"Profile\", \"/profile\")\n            .action(\"Sign out\", \"/sign-out\"),\n    );\nshell\n    .page(\"Deals\", \"/deals\")\n    .actions(\n        Button::primary(\"New deal\")\n            .icon(icons::PLUS)\n            .href(\"/deals/new\"),\n    )\n    .body(Grid::cols(3).gap(4).children((\n        Stat::new(\"Open deals\", \"312\").trend(\"+12 this week\", true),\n        Stat::new(\"Pipeline value\", \"₹4.2 crore\").trend(\"+3.1%\", true),\n        Stat::new(\"Won this month\", \"₹64 lakh\").trend(\"-2.4%\", false),\n    )))",
+      "code": "let shell = Shell::new(\"Cloudworks CRM\")\n    .context(\"Production\")\n    .group(\n        NavGroup::new(\"Sales\")\n            .item(NavItem::new(\"Overview\", \"/\").icon(icons::LAYOUT_DASHBOARD))\n            .item(\n                NavItem::new(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .count(\"312\"),\n            )\n            .item(NavItem::new(\"Contacts\", \"/contacts\").icon(icons::USERS))\n            .item(\n                NavItem::new(\"Reports\", \"/reports\")\n                    .icon(icons::CHART_COLUMN)\n                    .sub(NavItem::new(\"Pipeline\", \"/reports/pipeline\"))\n                    .sub(NavItem::new(\"Forecast\", \"/reports/forecast\")),\n            ),\n    )\n    .group(\n        NavGroup::new(\"Workspace\")\n            .item(NavItem::new(\"Settings\", \"/settings\").icon(icons::SETTINGS)),\n    )\n    .user(\n        UserMenu::new(\"Gurpreet Singh\", \"gurpreet@example.com\")\n            .link(\"Profile\", \"/profile\")\n            .action(\"Sign out\", \"/sign-out\"),\n    );\nshell\n    .page(\"Deals\", \"/deals\")\n    .actions(\n        Button::primary(\"New deal\")\n            .icon(icons::PLUS)\n            .href(\"/deals/new\"),\n    )\n    .body(Stack::gap(5).children((\n        Grid::cols(3).gap(4).children((\n            Stat::new(\"Open deals\", \"312\").trend(\"+12 this week\", true),\n            Stat::new(\"Pipeline value\", \"₹4.2 crore\").trend(\"+3.1%\", true),\n            Stat::new(\"Won this month\", \"₹64 lakh\").trend(\"-2.4%\", false),\n        )),\n        deals_table(),\n    )))",
       "src": "/ui-preview/app-shell/default.html",
-      "height": 600,
+      "height": 640,
       "layout": "fill",
       "cells": "narrow",
       "show": false,
@@ -15792,7 +15794,8 @@
       "width": 1100,
       "scripts": [
         "sidebar-2b9112f19c19.js",
-        "overlay-ef4718e7fbcd.js"
+        "overlay-ef4718e7fbcd.js",
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -16072,32 +16075,2373 @@
                       ]
                     },
                     {
-                      "slot": "grid",
+                      "slot": "stack",
                       "tag": "div",
                       "count": 1,
                       "children": [
                         {
-                          "slot": "stat",
+                          "slot": "grid",
                           "tag": "div",
-                          "count": 3,
+                          "count": 1,
                           "children": [
                             {
-                              "slot": "stat-label",
+                              "slot": "stat",
+                              "tag": "div",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "stat-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-trend",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "data-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "table-toolbar",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "toolbar-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "table-search",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "toolbar-end",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "column-list",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "column-row",
+                                              "tag": "div",
+                                              "count": 4,
+                                              "children": [
+                                                {
+                                                  "slot": "filter-option",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "checkbox",
+                                                      "tag": "input",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "column-move",
+                                                  "tag": "a",
+                                                  "count": 2,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "column-list",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "column-row",
+                                              "tag": "div",
+                                              "count": 6,
+                                              "children": [
+                                                {
+                                                  "slot": "filter-option",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "checkbox",
+                                                      "tag": "input",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "column-move",
+                                                  "tag": "a",
+                                                  "count": 2,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "menu-links",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-link",
+                                              "tag": "a",
+                                              "count": 3,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "filter-bar",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-options",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-option",
+                                              "tag": "label",
+                                              "count": 5,
+                                              "children": [
+                                                {
+                                                  "slot": "checkbox",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-range",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-field",
+                                              "tag": "label",
+                                              "count": 2,
+                                              "children": [
+                                                {
+                                                  "slot": "input",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-options",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-option",
+                                              "tag": "label",
+                                              "count": 4,
+                                              "children": [
+                                                {
+                                                  "slot": "checkbox",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-range",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-field",
+                                              "tag": "label",
+                                              "count": 2,
+                                              "children": [
+                                                {
+                                                  "slot": "input",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-alert",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "alert-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-container",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "table",
+                                  "tag": "table",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "th-label",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "th-label",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-footer",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "table-summary",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "footer-end",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "page-size",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "native-select",
+                                          "tag": "select",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "pagination",
+                                      "tag": "nav",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "pagination-link",
+                                          "tag": "a",
+                                          "count": 3,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "pagination-ellipsis",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "pagination-link",
+                                          "tag": "a",
+                                          "count": 2,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "app-shell/full",
+      "component": "app-shell",
+      "slug": "full",
+      "title": "A whole page: figures, a table and a drawer",
+      "kind": "single",
+      "code": "// A light backdrop: the deals stay readable beside the one open.\nlet drawer = Sheet::new(\"deal\", \"Sutlej Supply renewal\")\n    .width(SheetWidth::Lg)\n    .backdrop(SheetBackdrop::Light)\n    .description(\"Sutlej Supply Co., Ludhiana, Punjab\")\n    .body(\n        Stack::gap(4).children((\n            Row::gap(2).children((\n                Badge::new(\"Negotiation\")\n                    .variant(BadgeVariant::Warning)\n                    .dot(),\n                Badge::new(\"Closes 30 Nov\").icon(icons::CALENDAR),\n            )),\n            FactGrid::new().cols(2).cards([\n                FactCard::new(\"Amount\", \"₹48,00,000\")\n                    .icon(icons::INDIAN_RUPEE)\n                    .detail(\"120 seats, for a year\"),\n                FactCard::new(\"Contact\", \"Rajveer Brar\")\n                    .icon(icons::USER_ROUND)\n                    .detail(\"+91 98765 43210\"),\n            ]),\n            Timeline::new(\"deal-history\", \"Activity\")\n                .heading(3)\n                .time_zone(\"Asia/Kolkata\", 19_800)\n                .events([\n                    TimelineEvent::new(\"Harleen Kaur created the deal\")\n                        .at(1_793_162_700)\n                        .detail(\"From the Ludhiana trade fair\")\n                        .icon(icons::CIRCLE_PLUS),\n                    TimelineEvent::new(\"Harleen Kaur called Rajveer Brar\")\n                        .at(1_793_268_600)\n                        .detail(\"25 minutes: seats for three plants\")\n                        .icon(icons::PHONE)\n                        .tone(Tone::Info),\n                    TimelineEvent::new(\"Gurpreet Singh sent the proposal\")\n                        .at(1_793_424_900)\n                        .detail(\"₹52,00,000 for 120 seats\")\n                        .icon(icons::SEND)\n                        .tone(Tone::Info),\n                    TimelineEvent::new(\"Rajveer Brar asked for 8% off\")\n                        .at(1_793_620_800)\n                        .icon(icons::MESSAGE_SQUARE)\n                        .tone(Tone::Warning),\n                    TimelineEvent::new(\"Vikram Chopra approved the discount\")\n                        .at(1_793_681_400)\n                        .detail(\"₹48,00,000, to close by 30 November\")\n                        .icon(icons::BADGE_CHECK)\n                        .tone(Tone::Success),\n                    TimelineEvent::new(\"Harleen Kaur moved it to Negotiation\")\n                        .at(1_793_772_900)\n                        .icon(icons::MOVE_RIGHT)\n                        .tone(Tone::Warning),\n                    TimelineEvent::new(\"Contract sent for signature\")\n                        .time_text(\"Next\")\n                        .icon(icons::SIGNATURE)\n                        .current(),\n                ]),\n        )),\n    );\ncrm_shell()\n    .page(\"Deals\", \"/deals\")\n    .crumb(\"Overview\", \"/\")\n    .actions((\n        Button::outline(\"Export\").icon(icons::DOWNLOAD),\n        Button::primary(\"New deal\")\n            .icon(icons::PLUS)\n            .href(\"/deals/new\"),\n    ))\n    .body(Stack::gap(5).children((\n        Grid::cols(4).gap(3).children((\n            Stat::new(\"Pipeline\", \"₹4.2 crore\").trend(\"+3.1% this month\", true),\n            Stat::new(\"Won this month\", \"₹68.5 lakh\").trend(\"+12.4% on October\", true),\n            Stat::new(\"Open deals\", \"312\").trend(\"+12 this week\", true),\n            Stat::new(\"Win rate\", \"38%\").trend(\"-2.1 points\", false),\n        )),\n        deals_table(),\n        // Drawn open over the page, as it looks after a click on a deal.\n        el(\"div\").flag(\"data-preview-open\", true).child(drawer),\n    )))",
+      "src": "/ui-preview/app-shell/full.html",
+      "height": 840,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": true,
+      "live": false,
+      "width": 1440,
+      "scripts": [
+        "sidebar-2b9112f19c19.js",
+        "overlay-ef4718e7fbcd.js",
+        "table-89cd45739353.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
                               "tag": "span",
                               "count": 1,
                               "children": []
                             },
                             {
-                              "slot": "stat-value",
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 5,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
                               "tag": "span",
                               "count": 1,
                               "children": []
                             },
                             {
-                              "slot": "stat-trend",
+                              "slot": "sidebar-user-email",
                               "tag": "span",
                               "count": 1,
                               "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "a",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "grid",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stat",
+                              "tag": "div",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "stat-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-trend",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "data-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "table-toolbar",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "toolbar-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "table-search",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "toolbar-end",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "column-list",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "column-row",
+                                              "tag": "div",
+                                              "count": 4,
+                                              "children": [
+                                                {
+                                                  "slot": "filter-option",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "checkbox",
+                                                      "tag": "input",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "column-move",
+                                                  "tag": "a",
+                                                  "count": 2,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "column-list",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "column-row",
+                                              "tag": "div",
+                                              "count": 6,
+                                              "children": [
+                                                {
+                                                  "slot": "filter-option",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "checkbox",
+                                                      "tag": "input",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "column-move",
+                                                  "tag": "a",
+                                                  "count": 2,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "popover-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "menu-links",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-link",
+                                              "tag": "a",
+                                              "count": 3,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "filter-bar",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-options",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-option",
+                                              "tag": "label",
+                                              "count": 5,
+                                              "children": [
+                                                {
+                                                  "slot": "checkbox",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-range",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-field",
+                                              "tag": "label",
+                                              "count": 2,
+                                              "children": [
+                                                {
+                                                  "slot": "input",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-options",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-option",
+                                              "tag": "label",
+                                              "count": 4,
+                                              "children": [
+                                                {
+                                                  "slot": "checkbox",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "popover-content",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "menu-filter",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "filter-range",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "filter-field",
+                                              "tag": "label",
+                                              "count": 2,
+                                              "children": [
+                                                {
+                                                  "slot": "input",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-alert",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "alert-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-container",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "table",
+                                  "tag": "table",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "th-label",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "th-label",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "th",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sort-link",
+                                          "tag": "a",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "button",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "popover-content",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "menu-links",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "menu-link",
+                                                  "tag": "a",
+                                                  "count": 4,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "col-resize",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "table-footer",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "table-summary",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "footer-end",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "page-size",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "native-select",
+                                          "tag": "select",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "pagination",
+                                      "tag": "nav",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "pagination-link",
+                                          "tag": "a",
+                                          "count": 3,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "pagination-ellipsis",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "pagination-link",
+                                          "tag": "a",
+                                          "count": 2,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sheet",
+                          "tag": "dialog",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "dialog-header",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "dialog-title",
+                                  "tag": "h2",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "dialog-description",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "dialog-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "stack",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "row",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "badge",
+                                          "tag": "span",
+                                          "count": 2,
+                                          "children": [
+                                            {
+                                              "slot": "badge-dot",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "fact-grid",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "fact-card",
+                                          "tag": "div",
+                                          "count": 2,
+                                          "children": [
+                                            {
+                                              "slot": "fact-icon",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "icon",
+                                                  "tag": "svg",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "fact-body",
+                                              "tag": "dl",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "fact-label",
+                                                  "tag": "dt",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "fact-value",
+                                                  "tag": "dd",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "fact-detail",
+                                                  "tag": "dd",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "timeline",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "timeline-zone",
+                                          "tag": "p",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "timeline-day",
+                                          "tag": "div",
+                                          "count": 6,
+                                          "children": [
+                                            {
+                                              "slot": "timeline-day-title",
+                                              "tag": "h3",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "timeline-list",
+                                              "tag": "ol",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "timeline-event",
+                                                  "tag": "li",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "timeline-time",
+                                                      "tag": "time",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "timeline-dot",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "icon",
+                                                          "tag": "svg",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "timeline-body",
+                                                      "tag": "div",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "timeline-head",
+                                                          "tag": "div",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "timeline-title",
+                                                              "tag": "span",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "timeline-gap",
+                                                              "tag": "span",
+                                                              "count": 1,
+                                                              "children": []
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "slot": "timeline-detail",
+                                                          "tag": "p",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "dialog-close",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
                             }
                           ]
                         }
@@ -32589,7 +34933,7 @@
       "slug": "with-icons",
       "title": "India first, its region, and icons",
       "kind": "single",
-      "code": "let region = [\n    \"NP\", \"BT\", \"BD\", \"LK\", // neighbours\n    \"AE\", \"SG\", \"JP\", \"GB\", \"US\", // partners\n];\nlet tags = [\n    Badge::new(\"Store\").icon(icons::STORE),\n    Badge::new(\"Shipped\").icon(icons::TRUCK),\n    Badge::new(\"Paid\").icon(icons::INDIAN_RUPEE),\n    Badge::new(\"Ludhiana\").icon(icons::MAP_PIN),\n];\nStack::gap(4).children((\n    flag!(\"IN\").size(FlagSize::Xl),\n    Row::gap(2).children(region.map(Flag::country)),\n    Row::gap(2).children(tags),\n))",
+      "code": "let region = [\n    \"NP\", \"BT\", \"BD\", \"LK\", // neighbours\n    \"AE\", \"SG\", \"JP\", \"GB\", \"US\", // partners\n];\nlet flags = region.map(Flag::country);\nlet tags = [\n    Badge::new(\"Store\").icon(icons::STORE),\n    Badge::new(\"Shipped\").icon(icons::TRUCK),\n    Badge::new(\"Paid\").icon(icons::INDIAN_RUPEE),\n    Badge::new(\"Ludhiana\").icon(icons::MAP_PIN),\n];\nStack::gap(4).children((\n    flag!(\"IN\").size(FlagSize::Xl),\n    Row::gap(2).children(flags),\n    Row::gap(2).children(tags),\n))",
       "src": "/ui-preview/flags/with-icons.html",
       "height": 120,
       "layout": "start",
