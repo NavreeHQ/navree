@@ -1081,8 +1081,8 @@ for (const name of NAMES) {
         // The time it had left comes with it.
         const left = await toast.evaluate((t) => t.getAnimations().find((a) => a.animationName === "ui-toast-life").currentTime);
         assert.ok(left > 0, `elapsed carried over: ${left}`);
-        await page.locator("#n-reload button").click();
-        await page.waitForLoadState("load");
+        // The toast shows on this page for a moment, and the page reloads: wait for the load that follows the click.
+        await Promise.all([page.waitForEvent("load"), page.locator("#n-reload button").click()]);
         await toasts(page).filter({ hasText: "Reloading now." }).waitFor();
         await page.done();
       });
