@@ -44,6 +44,8 @@ async fn rows(ask: LazyQuery, uow: Uow) -> Result<LazyPage> {
 
 Cursors compare as text when a live item is placed, so make them sort: pad the numbers (`format!("{last_at:012}{id:012}")`).
 
+A time in whole seconds ties when two things happen in the same second, and the id then puts them in the order they were made, not the order they happened. Put a number that grows with every write between the two, such as the revision the change was written at: order by `(last_at, last_rev, id)`, page by `WHERE (last_at, last_rev, id) < (?, ?, ?)`, and write the cursor as `format!("{last_at:012}{last_rev:012}{id:012}")`. Of two items written to in one second, the later then comes first.
+
 ## Oldest first
 
 `.order(LazyOrder::Ascending)` runs the cursors the other way: a conversation, oldest message first, opened at its newest. Older messages load as the reader scrolls up, and the message they were reading stays where it was.
