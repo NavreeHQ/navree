@@ -1,18 +1,21 @@
 //! What the app stores: one team's board, its cards, their checklists, comments
 //! and what happened to them, with a seed that writes the same board on every run.
 //!
-//! The team, the product and every person are invented. Addresses are on
-//! `example.com`.
+//! The company, the product and every person are invented: the product team of a
+//! fabric exporter in Ludhiana, planning the next release of the app its mill floor,
+//! its dyeing unit and its buyers track orders and shipments in. Addresses are on
+//! `example.com`, and days and times are India's (IST).
 
-use chrono::{DateTime, Days, NaiveDate};
+use chrono::{DateTime, Days, FixedOffset, NaiveDate};
 use navree::orm::Model;
 use navree::ui::sortable::RANK_GAP;
 use navree::ui::{Tone, icons};
 
-/// The team.
-pub const TEAM: &str = "Saltmarsh";
-/// The product the board plans: a field-notes app for coastal surveys.
-pub const PROJECT: &str = "Tern 3.2";
+/// The company: a fabric exporter in Ludhiana.
+pub const TEAM: &str = "Rangla Looms";
+/// The product the board plans: the app the mill floor, the dyeing unit and the
+/// buyers track orders and shipments in.
+pub const PROJECT: &str = "Taana 3.2";
 
 /// A column of the board.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -250,10 +253,15 @@ pub struct Seed {
     pub activity: Vec<Activity>,
 }
 
-/// The day `at` falls on, in UTC.
+/// India's time, five and a half hours ahead of UTC all year.
+pub fn ist() -> FixedOffset {
+    FixedOffset::east_opt(5 * 3600 + 1800).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap())
+}
+
+/// The day `at` falls on, in India.
 pub fn day_of(at: i64) -> NaiveDate {
     DateTime::from_timestamp(at, 0)
-        .map(|time| time.date_naive())
+        .map(|time| time.with_timezone(&ist()).date_naive())
         .unwrap_or_default()
 }
 
@@ -269,50 +277,50 @@ pub fn person_icon(person: &Person) -> icons::Icon {
 
 const PEOPLE: [(&str, &str, &str, &str); 8] = [
     (
-        "Mara Quinn",
-        "mara.quinn@example.com",
+        "Harleen Kaur",
+        "harleen.kaur@example.com",
         "Product lead",
         "lead",
     ),
     (
-        "Theo Park",
-        "theo.park@example.com",
+        "Gurpreet Singh",
+        "gurpreet.singh@example.com",
         "Android engineer",
         "member",
     ),
     (
-        "Ines Okafor",
-        "ines.okafor@example.com",
+        "Neha Kapoor",
+        "neha.kapoor@example.com",
         "iOS engineer",
         "member",
     ),
     (
-        "Ravi Menon",
-        "ravi.menon@example.com",
+        "Rohit Malhotra",
+        "rohit.malhotra@example.com",
         "Backend engineer",
         "member",
     ),
     (
-        "Lena Brandt",
-        "lena.brandt@example.com",
+        "Simran Kaur",
+        "simran.kaur@example.com",
         "Designer",
         "member",
     ),
     (
-        "Sol Ferreira",
-        "sol.ferreira@example.com",
+        "Amandeep Sandhu",
+        "amandeep.sandhu@example.com",
         "Support and docs",
         "member",
     ),
     (
-        "Kai Nakamura",
-        "kai.nakamura@example.com",
+        "Arjun Sharma",
+        "arjun.sharma@example.com",
         "Data engineer",
         "member",
     ),
     (
-        "Priya Raman",
-        "priya.raman@example.com",
+        "Priya Verma",
+        "priya.verma@example.com",
         "Quality engineer",
         "member",
     ),
@@ -333,38 +341,38 @@ type CardSeed = (
 const CARDS: [CardSeed; 16] = [
     (
         Column::Backlog,
-        "Offline maps for tidal zones",
+        "Offline order sheets for the dyeing unit",
         3,
         "feature",
         None,
-        "Surveyors lose signal on the flats. Cache the tiles for the zones a survey covers, the day before it runs.",
+        "The dyeing unit loses signal behind the vats. Keep the day's order sheets on the tablet and send the changes when the signal is back.",
         &[
-            ("Pick a tile budget per zone", false),
-            ("Cache on Wi-Fi only", false),
-            ("Show what is cached", false),
+            ("Pick what each sheet keeps", false),
+            ("Sync on Wi-Fi only", false),
+            ("Show what is saved", false),
         ],
     ),
     (
         Column::Backlog,
-        "Export a survey as CSV",
+        "Export a shipment as CSV",
         4,
         "feature",
         Some(12),
-        "One row per sighting, with the species, the count, the place and the time, for the partners who keep spreadsheets.",
+        "One row per carton, with the style, the colour, the quantity and the container, for the buyers who keep spreadsheets.",
         &[],
     ),
     (
         Column::Backlog,
-        "Dark mode for the species guide",
+        "Dark mode for the fabric catalogue",
         5,
         "design",
         None,
-        "The guide is read at dawn on the shore. A dark theme that keeps the photos true to colour.",
+        "The night shift reads the catalogue under the floor's bright lights. A dark theme that keeps the swatches true to colour.",
         &[],
     ),
     (
         Column::Backlog,
-        "Crash when a photo is over 20 MB",
+        "Crash when a swatch photo is over 20 MB",
         2,
         "bug",
         Some(3),
@@ -389,7 +397,7 @@ const CARDS: [CardSeed; 16] = [
         1,
         "feature",
         Some(5),
-        "When two people edit one sighting offline, show both and let the second choose, instead of keeping the last.",
+        "When two people edit one order offline, show both and let the second choose, instead of keeping the last.",
         &[
             ("Write the merge rules", true),
             ("Design the side-by-side view", true),
@@ -415,19 +423,19 @@ const CARDS: [CardSeed; 16] = [
         6,
         "docs",
         Some(6),
-        "What changed, in the words surveyors use, with a screenshot of the new summary card.",
+        "What changed, in the words the floor uses, with a screenshot of the new order card.",
         &[],
     ),
     (
         Column::Ready,
-        "Species search ignores accents",
+        "Search finds Gurmukhi and Hindi spellings",
         3,
         "bug,feature",
         Some(-1),
-        "Searching \"Gaviao\" doesn't find \"Gavião\". Fold accents when matching, keep them when showing.",
+        "Searching \"phulkari\" doesn't find \"ਫੁਲਕਾਰੀ\" or \"फुलकारी\". Match on a transliteration, and keep each script when showing.",
         &[
-            ("Fold accents in the index", true),
-            ("Keep them in results", false),
+            ("Add the transliterations to the index", true),
+            ("Keep the script in results", false),
         ],
     ),
     (
@@ -445,11 +453,11 @@ const CARDS: [CardSeed; 16] = [
     ),
     (
         Column::Doing,
-        "Speed up the map's first draw",
+        "Speed up the order list's first draw",
         5,
         "speed,design",
         Some(4),
-        "The map takes 2.4 s to first draw on a mid-range phone. Draw the last viewport from cache first.",
+        "The order list takes 2.4 s to first draw on a mid-range phone. Draw the last screen from cache first.",
         &[
             ("Measure on three phones", true),
             ("Draw from cache", false),
@@ -458,24 +466,24 @@ const CARDS: [CardSeed; 16] = [
     ),
     (
         Column::Doing,
-        "Redesign the survey summary card",
+        "Redesign the order summary card",
         1,
         "design",
         Some(8),
         "The card shows twelve numbers. Keep four, and let the rest open on a tap.",
         &[
-            ("Pick the four numbers with surveyors", true),
+            ("Pick the four numbers with the floor managers", true),
             ("Draw it", true),
             ("Build it", false),
         ],
     ),
     (
         Column::Review,
-        "Batch-tag photos from a dive",
+        "Tag a shipment's cartons at once",
         3,
         "feature",
         Some(1),
-        "Select many photos and tag them with one species at once.",
+        "Select many cartons and give them one container at once.",
         &[
             ("Select many", true),
             ("Tag many", true),
@@ -493,20 +501,20 @@ const CARDS: [CardSeed; 16] = [
     ),
     (
         Column::Done,
-        "Add the tide table to the home screen",
+        "Add the GST invoice to the order screen",
         5,
         "feature",
         None,
-        "The next two tides, from the nearest station, on the home screen.",
-        &[("Find the nearest station", true), ("Draw the table", true)],
+        "Each order's tax invoice, with the buyer's GSTIN and the HSN codes, on the order screen.",
+        &[("Read the buyer's GSTIN", true), ("Draw the invoice", true)],
     ),
     (
         Column::Done,
-        "Labels on the map controls",
+        "Labels on the order controls",
         6,
         "design,docs",
         None,
-        "Every map control says what it does to a screen reader.",
+        "Every order control says what it does to a screen reader.",
         &[],
     ),
 ];
@@ -534,7 +542,7 @@ const COMMENTS: [(usize, i64, i64, &str); 7] = [
         10,
         5,
         20 * 3600,
-        "First draw from cache is down to 0.6 s on the Pixel 6a.",
+        "First draw from cache is down to 0.6 s on the dyeing unit's tablet.",
     ),
     (
         5,
@@ -552,7 +560,7 @@ const COMMENTS: [(usize, i64, i64, &str); 7] = [
         8,
         2,
         30 * 3600,
-        "Folding with Unicode NFD and dropping the marks covers Portuguese and Spanish.",
+        "Matching on a transliteration covers both scripts, and Roman spellings too.",
     ),
 ];
 
@@ -594,21 +602,21 @@ const VERBS: [&str; 10] = [
     "Translate",
 ];
 const SUBJECTS: [&str; 16] = [
-    "the map legend",
-    "photo uploads",
-    "species search",
+    "the order list",
+    "swatch photos",
+    "fabric search",
     "offline sync",
-    "the sighting export",
-    "the tide table",
-    "the survey summary",
-    "the field guide",
+    "the shipment export",
+    "the dye lot table",
+    "the order summary",
+    "the fabric catalogue",
     "sign-in",
     "the settings screen",
-    "dive logs",
-    "weather notes",
+    "carton labels",
+    "GST invoices",
     "the team list",
-    "GPS tracks",
-    "photo tags",
+    "loom schedules",
+    "buyer messages",
     "the release checklist",
 ];
 const PLACES: [&str; 8] = [
@@ -617,14 +625,14 @@ const PLACES: [&str; 8] = [
     "on a weak signal",
     "for tablets",
     "in the web app",
-    "for new surveyors",
-    "in Portuguese",
-    "with large photos",
+    "for new floor staff",
+    "in Punjabi",
+    "in Hindi",
 ];
 const SAYINGS: [&str; 8] = [
     "I can take this one next week.",
     "Is this still wanted after the redesign?",
-    "Reproduced it on a Pixel 6a.",
+    "Reproduced it on the dyeing unit's tablet.",
     "Added a screenshot to the thread.",
     "This blocks the export work.",
     "Looks good to me.",
@@ -636,7 +644,7 @@ const LINES: [&str; 6] = [
     "Write the fix",
     "Add a test",
     "Check it on a phone",
-    "Ask a surveyor to try it",
+    "Ask the floor team to try it",
     "Note it in the release",
 ];
 
@@ -889,6 +897,14 @@ mod tests {
             seed.cards[12_345].title,
             super::seed(1_793_793_600).cards[12_345].title
         );
+    }
+
+    #[test]
+    fn a_day_turns_at_midnight_in_india() {
+        // 18:29 and 18:30 UTC on 3 November 2026: 23:59 and 00:00 in India.
+        let before = 1_793_730_540;
+        assert_eq!(day_of(before).to_string(), "2026-11-03");
+        assert_eq!(day_of(before + 60).to_string(), "2026-11-04");
     }
 
     #[test]

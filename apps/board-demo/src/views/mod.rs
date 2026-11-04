@@ -21,7 +21,7 @@ pub fn shell() -> Shell {
                 .item(NavItem::new("Bugs", "/?label=bug").icon(icons::BUG)),
         )
         .user(
-            UserMenu::new("Saltmarsh product team", "team@example.com")
+            UserMenu::new("Rangla Looms product team", "team@example.com")
                 .action("Sign out", "/sign-out"),
         )
 }
@@ -55,10 +55,14 @@ pub fn person(people: &[Person], id: Option<i64>) -> Option<&Person> {
     id.and_then(|id| people.iter().find(|person| person.id == id))
 }
 
-/// `Mon 3 Nov, 14:05`, in UTC.
+/// `Tue 3 Nov, 19:35`, in India's time.
 pub fn moment(at: i64) -> String {
     chrono::DateTime::from_timestamp(at, 0)
-        .map(|time| time.format("%a %-d %b, %H:%M").to_string())
+        .map(|time| {
+            time.with_timezone(&crate::data::ist())
+                .format("%a %-d %b, %H:%M")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 

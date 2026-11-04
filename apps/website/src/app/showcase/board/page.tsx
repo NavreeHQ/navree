@@ -133,7 +133,7 @@ export default function BoardShowcasePage() {
           <Screen
             id="build-anything/board-sync"
             title="Two people's screens of one board, a card arriving on the second"
-            caption="Two viewers. Theo moves a card to Review; on Mara's screen it slides in, replayed here. In the app, a server-sent event tells her board to fetch itself again."
+            caption="Two viewers. Gurpreet moves a card to Review; on Harleen's screen it slides in, replayed here. In the app, a server-sent event tells her board to fetch itself again."
           />
         </div>
       </Section>

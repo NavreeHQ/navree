@@ -1,5 +1,6 @@
-//! `board-demo`: an example app on Navree UI. One product team plans a release on
-//! a board: five columns of cards that move by pointer, touch or keys.
+//! `board-demo`: an example app on Navree UI. The product team of a fabric
+//! exporter in Ludhiana plans the next release of its order and shipment app on a
+//! board: five columns of cards that move by pointer, touch or keys.
 //!
 //! ```text
 //! cargo run -p board-demo                      # http://127.0.0.1:8097

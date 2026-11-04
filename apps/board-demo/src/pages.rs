@@ -61,7 +61,7 @@ type Params = HashMap<String, String>;
 /// The cookie that says who the board is shown as.
 const AS: &str = "board_as";
 
-/// Today, in UTC.
+/// Today, in India.
 fn today() -> NaiveDate {
     day_of(now())
 }

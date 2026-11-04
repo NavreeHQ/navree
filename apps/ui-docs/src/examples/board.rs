@@ -266,8 +266,8 @@ fn drag() -> Node {
     Node::from(SafeHtml::trusted(html))
 }
 
-/// Two screens of one board, In progress and Review: Theo has just moved a card
-/// to Review, and on Mara's screen it slides in, replayed here.
+/// Two screens of one board, In progress and Review: Gurpreet has just moved a
+/// card to Review, and on Harleen's screen it slides in, replayed here.
 fn sync() -> Node {
     let before = seeded(&[]);
     let after = seeded(&[(11, Column::Review)]);
@@ -291,23 +291,23 @@ fn sync() -> Node {
             .post("/board/moves")
             .lists(lists)
     };
-    let theirs = render(&pair("mara", &after).into());
-    let card = item_markup(&theirs.replace("mara-item-", "columns-item-"), 11)
-        .map(|card| card.replace("columns-item-", "mara-item-"))
+    let theirs = render(&pair("harleen", &after).into());
+    let card = item_markup(&theirs.replace("harleen-item-", "columns-item-"), 11)
+        .map(|card| card.replace("columns-item-", "harleen-item-"))
         .unwrap_or_default()
         .replacen(
             "<li ",
-            "<li data-preview-into=\"mara-list-review-items\" data-preview-replaces=\"mara-item-11\" data-preview-at=\"end\" ",
+            "<li data-preview-into=\"harleen-list-review-items\" data-preview-replaces=\"harleen-item-11\" data-preview-at=\"end\" ",
             1,
         );
     Grid::cols(2)
         .gap(4)
         .children((
-            Card::titled("Theo's screen")
+            Card::titled("Gurpreet's screen")
                 .heading(2)
-                .body(pair("theo", &after)),
-            Card::titled("Mara's screen").heading(2).body((
-                pair("mara", &before),
+                .body(pair("gurpreet", &after)),
+            Card::titled("Harleen's screen").heading(2).body((
+                pair("harleen", &before),
                 Node::from(
                     el("template")
                         .flag("data-preview-replay", true)
