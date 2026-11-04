@@ -24,6 +24,14 @@
 //! - [`parse_dotenv`] is Navree's own `.env` parser. It never calls
 //!   `std::env::set_var` (unsafe in edition 2024): `.env` entries are a
 //!   configuration source, not process environment.
+//! - The loader records where every value came from ([`Config::origin`],
+//!   [`ValueOrigin`]), notes `.env` values that a config file hides
+//!   ([`Config::shadowed`]) and the keys and sections that nothing reads
+//!   ([`Config::unused`]). `ConfigModule` reports both at boot.
+//! - The `app` section is typed: [`AppOptions`] and [`Environment`].
+//! - `navree config:show` and `navree config:check` (see [`show`] and
+//!   [`check`]) print the effective configuration with secrets masked, and
+//!   check it without starting the app.
 //!
 //! Secrets stay out of logs: [`Config::redacted`] (and `Debug`) masks
 //! secret-looking keys, URL passwords and secret-looking URL parameters, and
@@ -62,18 +70,29 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod app;
+pub mod check;
+mod commands;
 mod config;
 mod de;
 mod dotenv;
 mod error;
 mod layers;
 mod module;
+mod origin;
 mod redact;
+mod registry;
+pub mod show;
 mod sources;
+mod usage;
 mod value;
 
+pub use app::{AppOptions, Environment};
 pub use config::Config;
 pub use dotenv::parse_dotenv;
 pub use error::ConfigError;
-pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt};
+pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt, defaults_of};
+pub use origin::{Shadowed, ValueOrigin};
+pub use registry::{FRAMEWORK_SECTIONS, SectionRegistration};
 pub use sources::ConfigSources;
+pub use usage::UnusedKey;

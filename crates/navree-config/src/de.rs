@@ -16,14 +16,16 @@
 //! Errors carry the dotted key below the section (`servers[1].port`) and the
 //! source of the value; they never carry a string value.
 
+use std::cell::RefCell;
 use std::collections::btree_map;
 use std::fmt;
 
 use serde::de::value::StrDeserializer;
 use serde::de::{self, DeserializeSeed, Visitor};
 
+use crate::origin::Origin;
 use crate::redact::REDACTED;
-use crate::value::{Kind, Origin, Table, Value};
+use crate::value::{Kind, Table, Value};
 
 /// What a value was when a conversion failed. Strings are not kept: the
 /// message says `string [redacted]`.
@@ -588,8 +590,240 @@ fn quoted(names: &[&str]) -> String {
 }
 
 /// Deserializes `value` as `T`, giving errors the key path below it.
+#[cfg(test)]
 pub(crate) fn deserialize<T: de::DeserializeOwned>(value: &Value) -> Result<T> {
     T::deserialize(value.clone())
+}
+
+/// What a [tracked](deserialize_tracked) read learned about the keys of a
+/// section.
+#[derive(Default)]
+pub(crate) struct Sink {
+    /// Dotted paths (`database.max_conections`, `servers[0].prot`) of keys
+    /// the type being read has no field for.
+    pub(crate) unknown: RefCell<Vec<String>>,
+    /// The field names that each struct read from a table declares, by the
+    /// dotted path of the table.
+    pub(crate) tables: RefCell<Vec<(String, &'static [&'static str])>>,
+}
+
+/// Like [`deserialize`], and notes in `sink` the keys that no struct on the
+/// way has a field for. `path` is the dotted path of `value`.
+///
+/// A struct that reads its table through a map (`#[serde(flatten)]`, a
+/// hand-written `Deserialize`) declares no fields, so all of its keys count
+/// as read; so do the keys of a map, an untagged or tagged enum and a
+/// `serde_json::Value`.
+pub(crate) fn deserialize_tracked<T: de::DeserializeOwned>(
+    value: &Value,
+    path: &str,
+    sink: &Sink,
+) -> Result<T> {
+    T::deserialize(Tracked {
+        value: value.clone(),
+        path: path.to_owned(),
+        sink,
+    })
+}
+
+/// `parent.key`, or `key` at the top.
+fn join(parent: &str, key: &str) -> String {
+    if parent.is_empty() {
+        key.to_owned()
+    } else {
+        format!("{parent}.{key}")
+    }
+}
+
+/// A value being read, with its dotted path and the sink that collects the
+/// unknown keys. Converts exactly like [`Value`].
+struct Tracked<'a> {
+    value: Value,
+    path: String,
+    sink: &'a Sink,
+}
+
+/// Hands a scalar conversion to the value's own deserializer.
+macro_rules! delegate {
+    ($($method:ident),* $(,)?) => {
+        $(
+            fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+                de::Deserializer::$method(self.value, visitor)
+            }
+        )*
+    };
+}
+
+impl<'de> de::Deserializer<'de> for Tracked<'_> {
+    type Error = DeError;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        let Tracked { value, path, sink } = self;
+        let Value { origin, kind } = value;
+        match kind {
+            Kind::Array(items) => visitor.visit_seq(TrackedSeq::new(items, path, sink)),
+            Kind::Table(map) => visitor.visit_map(TrackedMap::new(map, path, sink)),
+            kind => de::Deserializer::deserialize_any(Value { origin, kind }, visitor),
+        }
+    }
+
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
+        if let Kind::Table(map) = &self.value.kind {
+            self.sink
+                .tables
+                .borrow_mut()
+                .push((self.path.clone(), fields));
+            for key in map.keys() {
+                if !fields.contains(&key.as_str()) {
+                    self.sink.unknown.borrow_mut().push(join(&self.path, key));
+                }
+            }
+        }
+        de::Deserializer::deserialize_any(self, visitor)
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        // An explicit null is `None`, everything else is `Some`.
+        if matches!(self.value.kind, Kind::Null) {
+            visitor.visit_none()
+        } else {
+            visitor.visit_some(self)
+        }
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
+        de::Deserializer::deserialize_enum(self.value, name, variants, visitor)
+    }
+
+    delegate!(
+        deserialize_bool,
+        deserialize_i8,
+        deserialize_i16,
+        deserialize_i32,
+        deserialize_i64,
+        deserialize_i128,
+        deserialize_u8,
+        deserialize_u16,
+        deserialize_u32,
+        deserialize_u64,
+        deserialize_u128,
+        deserialize_f32,
+        deserialize_f64,
+        deserialize_str,
+        deserialize_string,
+    );
+
+    serde::forward_to_deserialize_any! {
+        char seq bytes byte_buf map unit identifier ignored_any
+        unit_struct tuple_struct tuple
+    }
+}
+
+struct TrackedSeq<'a> {
+    items: std::iter::Enumerate<std::vec::IntoIter<Value>>,
+    path: String,
+    sink: &'a Sink,
+}
+
+impl<'a> TrackedSeq<'a> {
+    fn new(items: Vec<Value>, path: String, sink: &'a Sink) -> Self {
+        TrackedSeq {
+            items: items.into_iter().enumerate(),
+            path,
+            sink,
+        }
+    }
+}
+
+impl<'de> de::SeqAccess<'de> for TrackedSeq<'_> {
+    type Error = DeError;
+
+    fn next_element_seed<T: DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>> {
+        match self.items.next() {
+            Some((index, value)) => {
+                let element = Tracked {
+                    value,
+                    path: format!("{}[{index}]", self.path),
+                    sink: self.sink,
+                };
+                seed.deserialize(element)
+                    .map(Some)
+                    .map_err(|e| e.prepend(&format!("[{index}]")))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.items.len())
+    }
+}
+
+struct TrackedMap<'a> {
+    entries: btree_map::IntoIter<String, Value>,
+    /// The entry whose key was handed out and whose value is next.
+    pending: Option<(String, Value)>,
+    path: String,
+    sink: &'a Sink,
+}
+
+impl<'a> TrackedMap<'a> {
+    fn new(table: Table, path: String, sink: &'a Sink) -> Self {
+        TrackedMap {
+            entries: table.into_iter(),
+            pending: None,
+            path,
+            sink,
+        }
+    }
+}
+
+impl<'de> de::MapAccess<'de> for TrackedMap<'_> {
+    type Error = DeError;
+
+    fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>> {
+        let Some((key, value)) = self.entries.next() else {
+            return Ok(None);
+        };
+        // Keys are strings that convert like any other: `HashMap<u16, _>` works.
+        let handed_out = seed.deserialize(Value::key(key.clone()))?;
+        self.pending = Some((key, value));
+        Ok(Some(handed_out))
+    }
+
+    fn next_value_seed<V: DeserializeSeed<'de>>(&mut self, seed: V) -> Result<V::Value> {
+        let Some((key, value)) = self.pending.take() else {
+            return Err(DeError::message("a map value was requested before its key"));
+        };
+        let entry = Tracked {
+            value,
+            path: join(&self.path, &key),
+            sink: self.sink,
+        };
+        seed.deserialize(entry).map_err(|e| e.prepend(&key))
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.entries.len())
+    }
 }
 
 #[cfg(test)]

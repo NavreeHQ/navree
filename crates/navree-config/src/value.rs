@@ -4,13 +4,9 @@
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::fmt;
-use std::sync::Arc;
 
+use crate::origin::Origin;
 use crate::redact;
-
-/// Where a value came from, quoted in type errors: a file path,
-/// `environment` or `ConfigSources::set`. Shared by every value of a layer.
-pub(crate) type Origin = Arc<str>;
 
 /// A table. Ordered by key, so `Debug`, redacted output and "first unknown
 /// field" errors are the same on every run.
@@ -83,6 +79,26 @@ impl Value {
             }
         }
         Some(node)
+    }
+
+    /// Calls `f(path, leaf)` for every leaf below this node, in key order. A
+    /// leaf is anything but a table: a scalar, a null or an array (arrays are
+    /// opaque). Empty tables have no leaves. `path` is the dotted path of this
+    /// node (`""` for the root).
+    pub(crate) fn for_each_leaf(&self, path: &str, f: &mut dyn FnMut(&str, &Value)) {
+        match &self.kind {
+            Kind::Table(map) => {
+                for (key, value) in map {
+                    let child = if path.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{path}.{key}")
+                    };
+                    value.for_each_leaf(&child, f);
+                }
+            }
+            _ => f(path, self),
+        }
     }
 
     /// The scalar as a string (numbers and booleans formatted); `None` for

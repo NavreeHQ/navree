@@ -88,22 +88,38 @@ impl ConfigSources {
         Self::default()
     }
 
-    /// The conventional sources, relative to the working directory: `.env`,
-    /// then `config/app.toml`, then `APP_` environment variables.
+    /// Whether `.env` ranks above `config/app.toml` in
+    /// [`defaults`](ConfigSources::defaults) (`true`), or below it (`false`).
+    /// The real environment ranks above both either way.
+    ///
+    /// This constant is the one place that sets the order: flipping it moves
+    /// `.env` over the config file in `defaults` and `defaults_in`, and the
+    /// warning about a `.env` value that a config file hides follows the
+    /// order by itself (it only exists while the file ranks higher).
+    pub const DOTENV_RANKS_ABOVE_FILES: bool = false;
+
+    /// The conventional sources, relative to the working directory: `.env`
+    /// and `config/app.toml` (in the order of
+    /// [`DOTENV_RANKS_ABOVE_FILES`](ConfigSources::DOTENV_RANKS_ABOVE_FILES)),
+    /// then `APP_` environment variables.
     pub fn defaults() -> Self {
         Self::defaults_in("")
     }
 
-    /// The conventional sources of the app in `dir`: `dir/.env`, then
+    /// The conventional sources of the app in `dir`: `dir/.env` and
     /// `dir/config/app.toml`, then `APP_` environment variables. What
     /// [`defaults`](ConfigSources::defaults) reads, for tools that look at
     /// an app from another directory (Navigator, `navree mcp`).
     pub fn defaults_in(dir: impl AsRef<std::path::Path>) -> Self {
         let dir = dir.as_ref();
-        Self::new()
-            .dotenv(dir.join(".env"))
-            .file(dir.join("config/app.toml"))
-            .env()
+        let (dotenv, file) = (dir.join(".env"), dir.join("config/app.toml"));
+        let sources = Self::new();
+        let sources = if Self::DOTENV_RANKS_ABOVE_FILES {
+            sources.file(file).dotenv(dotenv)
+        } else {
+            sources.dotenv(dotenv).file(file)
+        };
+        sources.env()
     }
 
     /// `APP_` environment variables (see [`env_prefixed`](ConfigSources::env_prefixed)).

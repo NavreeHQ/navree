@@ -115,11 +115,15 @@ fn set_values_win_whatever_the_order_and_merge_objects() {
 }
 
 #[test]
-fn defaults_read_dotenv_then_app_toml_then_app_env() {
-    assert_eq!(
-        format!("{:?}", ConfigSources::defaults()),
+fn defaults_read_dotenv_and_app_toml_in_the_declared_order_then_app_env() {
+    // `ConfigSources::DOTENV_RANKS_ABOVE_FILES` is the one switch for the
+    // order of the two files; the real environment is always read last.
+    let expected = if ConfigSources::DOTENV_RANKS_ABOVE_FILES {
+        r#"ConfigSources { sources: [File("config/app.toml"), Dotenv(".env"), Env { prefix: "APP_" }], set: [] }"#
+    } else {
         r#"ConfigSources { sources: [Dotenv(".env"), File("config/app.toml"), Env { prefix: "APP_" }], set: [] }"#
-    );
+    };
+    assert_eq!(format!("{:?}", ConfigSources::defaults()), expected);
     assert_eq!(
         format!("{:?}", ConfigSources::new().env()),
         r#"ConfigSources { sources: [Env { prefix: "APP_" }], set: [] }"#
@@ -144,8 +148,13 @@ fn defaults_in_reads_the_files_of_another_directory() {
     )
     .unwrap();
     let config = Config::load(&ConfigSources::defaults_in(dir.path())).expect("load");
-    // The same order as `defaults()`: config/app.toml over .env.
-    assert_eq!(config.get_string("mail.host").as_deref(), Some("smtp.toml"));
+    // The same order as `defaults()`.
+    let winner = if ConfigSources::DOTENV_RANKS_ABOVE_FILES {
+        "smtp.env"
+    } else {
+        "smtp.toml"
+    };
+    assert_eq!(config.get_string("mail.host").as_deref(), Some(winner));
     assert_eq!(config.get_string("mail.port").as_deref(), Some("25"));
     assert_eq!(config.get_string("key").as_deref(), Some("k"));
 }

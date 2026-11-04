@@ -84,6 +84,13 @@ pub enum ConfigError {
         /// The message returned by `validate`.
         message: String,
     },
+    /// Several registered sections are invalid at once. The boot reports
+    /// them together, so one run lists every section to fix.
+    #[error("configuration has {} problems:\n{}", .problems.len(), list(.problems))]
+    Invalid {
+        /// One error per invalid section, in registration order.
+        problems: Vec<ConfigError>,
+    },
     /// A configuration file exists but cannot be read.
     #[error("cannot read configuration file `{}`: {source}", .path.display())]
     Io {
@@ -111,6 +118,15 @@ pub(crate) fn redact_values(message: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// The problems of [`ConfigError::Invalid`], one per line.
+fn list(problems: &[ConfigError]) -> String {
+    problems
+        .iter()
+        .map(|problem| format!("  - {problem}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// ` in `path`` when a path is known, else nothing.

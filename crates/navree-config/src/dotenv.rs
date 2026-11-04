@@ -22,9 +22,18 @@ use crate::ConfigError;
 /// A key that appears twice yields two entries; consumers let the later win.
 /// Errors carry the line number but never the offending value.
 pub fn parse_dotenv(src: &str) -> Result<Vec<(String, String)>, ConfigError> {
+    parse_with_lines(src).map(|(entries, _)| entries)
+}
+
+/// Like [`parse_dotenv`], with the 1-based line each entry starts on (same
+/// order as the entries).
+pub(crate) fn parse_with_lines(
+    src: &str,
+) -> Result<(Vec<(String, String)>, Vec<usize>), ConfigError> {
     let src = src.strip_prefix('\u{feff}').unwrap_or(src);
     let lines: Vec<&str> = src.lines().collect();
     let mut entries: Vec<(String, String)> = Vec::new();
+    let mut entry_lines: Vec<usize> = Vec::new();
     // Index of the next unread line, which is also the 1-based number of the
     // line just read.
     let mut next = 0;
@@ -51,8 +60,9 @@ pub fn parse_dotenv(src: &str) -> Result<Vec<(String, String)>, ConfigError> {
                 .map_err(|message| syntax(line_no, message))?
         };
         entries.push((key.to_owned(), value));
+        entry_lines.push(line_no);
     }
-    Ok(entries)
+    Ok((entries, entry_lines))
 }
 
 fn syntax(line: usize, message: impl Into<String>) -> ConfigError {
