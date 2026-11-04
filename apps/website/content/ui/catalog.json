@@ -113,6 +113,17 @@
       ]
     },
     {
+      "id": "flow",
+      "title": "Steps, ranges and trees",
+      "components": [
+        "stepper",
+        "wizard",
+        "slider",
+        "tree-view",
+        "toolbar"
+      ]
+    },
+    {
       "id": "data",
       "title": "Data",
       "components": [
@@ -1311,6 +1322,128 @@
       "examples": [
         "command/thumb",
         "command/default"
+      ]
+    },
+    {
+      "id": "stepper",
+      "name": "Stepper",
+      "url": "/docs/components/stepper/",
+      "summary": "The steps of a task, in order.",
+      "group": "flow",
+      "types": [
+        "Stepper",
+        "Step",
+        "StepState",
+        "StepperLabels"
+      ],
+      "thumb": "stepper/thumb",
+      "anatomy": "stepper/default",
+      "examples": [
+        "stepper/thumb",
+        "stepper/default",
+        "stepper/vertical",
+        "stepper/links",
+        "stepper/narrow"
+      ]
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard",
+      "url": "/docs/components/wizard/",
+      "summary": "A form in steps.",
+      "group": "flow",
+      "types": [
+        "Wizard",
+        "WizardStep",
+        "WizardStepOf",
+        "WizardPage",
+        "WizardOutcome",
+        "WizardAction",
+        "WizardLabels",
+        "Draft",
+        "MemoryDrafts"
+      ],
+      "thumb": "wizard/thumb",
+      "anatomy": "wizard/default",
+      "examples": [
+        "wizard/thumb",
+        "wizard/default",
+        "wizard/errors",
+        "wizard/review"
+      ]
+    },
+    {
+      "id": "slider",
+      "name": "Slider",
+      "url": "/docs/components/slider/",
+      "summary": "A slider, single or a range.",
+      "group": "flow",
+      "types": [
+        "Slider",
+        "SliderSpec",
+        "SliderError",
+        "SliderLabels"
+      ],
+      "thumb": "slider/thumb",
+      "anatomy": "slider/default",
+      "examples": [
+        "slider/thumb",
+        "slider/default",
+        "slider/range",
+        "slider/marks",
+        "slider/names",
+        "slider/decimals",
+        "slider/states",
+        "slider/rtl",
+        "slider/check"
+      ]
+    },
+    {
+      "id": "tree-view",
+      "name": "TreeView",
+      "url": "/docs/components/tree-view/",
+      "summary": "A tree.",
+      "group": "flow",
+      "types": [
+        "Tree",
+        "TreeNode",
+        "TreeSelect",
+        "TreeState",
+        "TreeSelection",
+        "TreeChildren",
+        "TreeLabels"
+      ],
+      "thumb": "tree-view/thumb",
+      "anatomy": "tree-view/default",
+      "examples": [
+        "tree-view/thumb",
+        "tree-view/default",
+        "tree-view/multiple",
+        "tree-view/single",
+        "tree-view/lazy",
+        "tree-view/paged",
+        "tree-view/state"
+      ]
+    },
+    {
+      "id": "toolbar",
+      "name": "Toolbar",
+      "url": "/docs/components/toolbar/",
+      "summary": "A toolbar.",
+      "group": "flow",
+      "types": [
+        "Toolbar",
+        "ToolbarItem",
+        "ToolbarLabels"
+      ],
+      "thumb": "toolbar/thumb",
+      "anatomy": "toolbar/default",
+      "examples": [
+        "toolbar/thumb",
+        "toolbar/default",
+        "toolbar/overflow",
+        "toolbar/vertical",
+        "toolbar/groups"
       ]
     },
     {
@@ -17535,6 +17668,3071 @@
               "tag": "button",
               "count": 3,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/thumb",
+      "component": "stepper",
+      "slug": "thumb",
+      "title": "A stepper",
+      "kind": "single",
+      "code": "Stepper::new(\"Setup\")\n    .step(Step::new(\"Account\"))\n    .step(Step::new(\"Team\"))\n    .step(Step::new(\"Launch\"))\n    .current(1)",
+      "src": "/ui-preview/stepper/thumb.html",
+      "height": 90,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/default",
+      "component": "stepper",
+      "slug": "default",
+      "title": "Steps and their states",
+      "kind": "single",
+      "code": "Stepper::new(\"Checkout\")\n    .step(Step::new(\"Cart\"))\n    .step(Step::new(\"Address\"))\n    .step(Step::new(\"Payment\").state(StepState::Error))\n    .step(Step::new(\"Review\"))\n    .step(Step::new(\"Done\").state(StepState::Disabled))\n    .current(3)",
+      "src": "/ui-preview/stepper/default.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 5,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/vertical",
+      "component": "stepper",
+      "slug": "vertical",
+      "title": "Vertical",
+      "kind": "single",
+      "code": "Stepper::new(\"Setup\")\n    .vertical()\n    .step(Step::new(\"Create the account\").description(\"Your name and email\"))\n    .step(\n        Step::new(\"Invite the team\")\n            .description(\"You can do this later\")\n            .optional(),\n    )\n    .step(Step::new(\"Connect the mailbox\").state(StepState::Error))\n    .step(Step::new(\"Launch\").state(StepState::Disabled))\n    .current(1)",
+      "src": "/ui-preview/stepper/vertical.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "step-description",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/links",
+      "component": "stepper",
+      "slug": "links",
+      "title": "Steps that are links",
+      "kind": "single",
+      "code": "Stepper::new(\"Order\")\n    .step(Step::new(\"Placed\").link(\"/orders/42\"))\n    .step(Step::new(\"Packed\").link(\"/orders/42/packed\"))\n    .step(Step::new(\"Shipped\").link(\"/orders/42/shipped\"))\n    .step(Step::new(\"Delivered\"))\n    .current(2)",
+      "src": "/ui-preview/stepper/links.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stepper/narrow",
+      "component": "stepper",
+      "slug": "narrow",
+      "title": "In a narrow box",
+      "kind": "single",
+      "code": "Stepper::new(\"Setup\")\n    .step(Step::new(\"Create the account\").description(\"Your name and email\"))\n    .step(Step::new(\"Invite the team\"))\n    .step(Step::new(\"Connect the mailbox\"))\n    .step(Step::new(\"Launch\"))\n    .current(1)",
+      "src": "/ui-preview/stepper/narrow.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 390,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stepper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stepper-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "step",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "step-trigger",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step-indicator",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "step-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "step-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "step-description",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stepper-count",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wizard/thumb",
+      "component": "wizard",
+      "slug": "thumb",
+      "title": "A wizard step",
+      "kind": "single",
+      "code": "let wizard = Wizard::new(\"thumb\")\n    .base(\"/deals/new\")\n    .step(WizardStep::of::<Basics>(\"basics\", \"Basics\"))\n    .step(WizardStep::of::<Contact>(\"contact\", \"Contact\"))\n    .review();\nwizard\n    .page(&wizard.draft(\"demo-draft-0001\"), \"basics\")\n    .expect(\"the first step opens\")",
+      "src": "/ui-preview/wizard/thumb.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 820,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "wizard",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "wizard-form",
+              "tag": "form",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "wizard-default",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stepper",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stepper-list",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "step-trigger",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "step-indicator",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "step-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "step-title",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stepper-count",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-step",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "wizard-heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "form-grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "field",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "label",
+                              "tag": "label",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "input",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wizard/default",
+      "component": "wizard",
+      "slug": "default",
+      "title": "A step of a wizard",
+      "kind": "single",
+      "code": "let wizard = Wizard::new(\"deal\")\n    .base(\"/deals/new\")\n    .step(WizardStep::of::<Basics>(\"basics\", \"Basics\").description(\"What the deal is\"))\n    .step(WizardStep::of::<Contact>(\"contact\", \"Contact\").description(\"Who to write to\"))\n    .step(WizardStep::of::<Terms>(\"terms\", \"Terms\"))\n    .review();\n// The first step is done: its answers are in the draft, kept on the server.\nlet mut draft = wizard.draft(\"demo-draft-0001\");\nlet answers = pairs(&[(\"_rev\", \"0\"), (\"_wizard\", \"next\"), (\"title\", \"Annual plan\")]);\nwizard.submit(&mut draft, \"basics\", &answers);\nwizard\n    .page(&draft, \"contact\")\n    .expect(\"the second step is open\")",
+      "src": "/ui-preview/wizard/default.html",
+      "height": 480,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 820,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "wizard",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "wizard-form",
+              "tag": "form",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "wizard-default",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stepper",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stepper-list",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step",
+                          "tag": "li",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "step-trigger",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "step-indicator",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "step-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "step-title",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "step-description",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stepper-count",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-step",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "wizard-heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "wizard-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "form-grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "field",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "label",
+                              "tag": "label",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "input",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wizard/errors",
+      "component": "wizard",
+      "slug": "errors",
+      "title": "A step with errors",
+      "kind": "single",
+      "code": "let wizard = Wizard::new(\"errors\")\n    .base(\"/deals/new\")\n    .step(WizardStep::of::<Basics>(\"basics\", \"Basics\"))\n    .step(WizardStep::of::<Contact>(\"contact\", \"Contact\"))\n    .review();\nlet mut draft = wizard.draft(\"demo-draft-0001\");\nlet first = pairs(&[(\"_rev\", \"0\"), (\"_wizard\", \"next\"), (\"title\", \"Annual plan\")]);\nwizard.submit(&mut draft, \"basics\", &first);\n// Next with an address that is not one: the step stays and says why.\nlet second = pairs(&[(\"_rev\", \"1\"), (\"_wizard\", \"next\"), (\"email\", \"ada@\")]);\nwizard.submit(&mut draft, \"contact\", &second);\nwizard.page(&draft, \"contact\").expect(\"the step is open\")",
+      "src": "/ui-preview/wizard/errors.html",
+      "height": 520,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 820,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "wizard",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "wizard-form",
+              "tag": "form",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "wizard-default",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stepper",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stepper-list",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "step-trigger",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "step-indicator",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "step-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "step-title",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stepper-count",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-step",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "wizard-heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "form-grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "field",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "label",
+                              "tag": "label",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "input",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "field-error",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wizard/review",
+      "component": "wizard",
+      "slug": "review",
+      "title": "The review",
+      "kind": "single",
+      "code": "let wizard = Wizard::new(\"review\")\n    .base(\"/deals/new\")\n    .step(WizardStep::of::<Basics>(\"basics\", \"Basics\"))\n    .step(WizardStep::of::<Contact>(\"contact\", \"Contact\"))\n    .review();\nlet mut draft = wizard.draft(\"demo-draft-0001\");\nlet first = pairs(&[(\"_rev\", \"0\"), (\"_wizard\", \"next\"), (\"title\", \"Annual plan\")]);\nwizard.submit(&mut draft, \"basics\", &first);\nlet second = pairs(&[\n    (\"_rev\", \"1\"),\n    (\"_wizard\", \"next\"),\n    (\"email\", \"ada@example.com\"),\n]);\nwizard.submit(&mut draft, \"contact\", &second);\nwizard.page(&draft, \"review\").expect(\"the review is open\")",
+      "src": "/ui-preview/wizard/review.html",
+      "height": 560,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 820,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "wizard",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "wizard-form",
+              "tag": "form",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "wizard-default",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stepper",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stepper-list",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "step",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "step-trigger",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "step-indicator",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "step-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "step-title",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stepper-count",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-step",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "wizard-heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "wizard-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "wizard-review",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "wizard-review-step",
+                          "tag": "section",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "wizard-summary",
+                              "tag": "dl",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "wizard-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/thumb",
+      "component": "slider",
+      "slug": "thumb",
+      "title": "A slider",
+      "kind": "single",
+      "code": "Slider::new(\"thumb\").label(\"Volume\").value(40)",
+      "src": "/ui-preview/slider/thumb.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/default",
+      "component": "slider",
+      "slug": "default",
+      "title": "One value",
+      "kind": "single",
+      "code": "Slider::new(\"volume\")\n    .label(\"Volume\")\n    .max(100)\n    .step(5)\n    .value(40)\n    .suffix(\"%\")",
+      "src": "/ui-preview/slider/default.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/range",
+      "component": "slider",
+      "slug": "range",
+      "title": "A range",
+      "kind": "single",
+      "code": "Slider::range(\"price\")\n    .label(\"Price\")\n    .max(1000)\n    .step(10)\n    .min_gap(2)\n    .values(200, 800)\n    .prefix(\"$\")",
+      "src": "/ui-preview/slider/range.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/marks",
+      "component": "slider",
+      "slug": "marks",
+      "title": "Marks",
+      "kind": "single",
+      "code": "Slider::new(\"level\")\n    .label(\"Level\")\n    .max(100)\n    .step(5)\n    .value(50)\n    .ticks_every(5)\n    .mark(0, \"0\")\n    .mark(50, \"50\")\n    .mark(100, \"100\")",
+      "src": "/ui-preview/slider/marks.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-marks",
+              "tag": "svg",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/names",
+      "component": "slider",
+      "slug": "names",
+      "title": "Named steps",
+      "kind": "single",
+      "code": "Slider::new(\"size\")\n    .label(\"Size\")\n    .max(2)\n    .names([\"Small\", \"Medium\", \"Large\"])\n    .value(1)",
+      "src": "/ui-preview/slider/names.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-marks",
+              "tag": "svg",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/decimals",
+      "component": "slider",
+      "slug": "decimals",
+      "title": "Decimal steps",
+      "kind": "single",
+      "code": "Slider::new(\"opacity\")\n    .label(\"Opacity\")\n    .max(1)\n    .step(0.1_f64)\n    .value(0.7_f64)",
+      "src": "/ui-preview/slider/decimals.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/states",
+      "component": "slider",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"Disabled\",\n        Slider::new(\"a\").label(\"Disabled\").value(30).disabled(true),\n    ),\n    (\n        \"Read only: shown, and posted\",\n        Slider::range(\"b\")\n            .label(\"Read only\")\n            .values(10, 60)\n            .readonly(),\n    ),\n    (\n        \"Invalid\",\n        Slider::new(\"c\").label(\"Invalid\").value(90).invalid(true),\n    ),\n]",
+      "src": "/ui-preview/slider/states.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [
+        "Disabled",
+        "Read only: shown, and posted",
+        "Invalid"
+      ],
+      "slots": []
+    },
+    {
+      "id": "slider/rtl",
+      "component": "slider",
+      "slug": "rtl",
+      "title": "Right to left",
+      "kind": "single",
+      "code": "el(\"div\").attr(\"dir\", \"rtl\").child(\n    Slider::range(\"rprice\")\n        .label(\"السعر\")\n        .max(100)\n        .values(20, 70)\n        .mark(0, \"0\")\n        .mark(100, \"100\"),\n)",
+      "src": "/ui-preview/slider/rtl.html",
+      "height": 140,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "slider-8dfad556f0b3.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "slider",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "slider-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-graphic",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "slider-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "slider-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "slider-input",
+                  "tag": "input",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-marks",
+              "tag": "svg",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-ticks",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "slider-mark-labels",
+                  "tag": "g",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "slider-value",
+              "tag": "output",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slider/check",
+      "component": "slider",
+      "slug": "check",
+      "title": "Checking a post",
+      "kind": "single",
+      "code": "// The grid the browser draws is the grid the server holds a post to.\nlet grid = SliderSpec::new(0, 100).step(5);\nlet posted = [(\"volume\".to_owned(), \"37\".to_owned())];\nmatch grid.read(&posted, \"volume\") {\n    Ok(value) => Text::new(format!(\"Volume {value}\")),\n    Err(error) => Text::new(grid.message(error, &SliderLabels::default())),\n}",
+      "src": "/ui-preview/slider/check.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "text",
+          "tag": "p",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "tree-view/thumb",
+      "component": "tree-view",
+      "slug": "thumb",
+      "title": "A tree",
+      "kind": "single",
+      "code": "Tree::new(\"thumb\", \"Folders\")\n    .node(\n        TreeNode::branch(\"docs\", \"Documents\", [TreeNode::leaf(\"plans\", \"Plans\")])\n            .icon(icons::FOLDER)\n            .open(true),\n    )\n    .node(TreeNode::leaf(\"music\", \"Music\").icon(icons::FOLDER))",
+      "src": "/ui-preview/tree-view/thumb.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/default",
+      "component": "tree-view",
+      "slug": "default",
+      "title": "A tree of links",
+      "kind": "single",
+      "code": "Tree::new(\"files\", \"Files\")\n    .node(\n        TreeNode::branch(\n            \"docs\",\n            \"Documents\",\n            [\n                TreeNode::leaf(\"plans\", \"Plans\")\n                    .link(\"/files/plans\")\n                    .icon(icons::FILE),\n                TreeNode::leaf(\"notes\", \"Notes\")\n                    .link(\"/files/notes\")\n                    .icon(icons::FILE)\n                    .current(true),\n            ],\n        )\n        .icon(icons::FOLDER)\n        .open(true),\n    )\n    .node(\n        TreeNode::branch(\"music\", \"Music\", [TreeNode::leaf(\"song\", \"Song\")])\n            .icon(icons::FOLDER),\n    )\n    .node(\n        TreeNode::leaf(\"readme\", \"README\")\n            .link(\"/files/readme\")\n            .icon(icons::FILE),\n    )",
+      "src": "/ui-preview/tree-view/default.html",
+      "height": 230,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/multiple",
+      "component": "tree-view",
+      "slug": "multiple",
+      "title": "Choosing many, with parents that follow",
+      "kind": "single",
+      "code": "Tree::new(\"access\", \"Folders to share\")\n    .select(TreeSelect::Multiple)\n    .cascade()\n    .node(\n        TreeNode::branch(\n            \"eng\",\n            \"Engineering\",\n            [\n                TreeNode::leaf(\"eng/web\", \"Web\"),\n                TreeNode::leaf(\"eng/api\", \"API\").selected(true),\n                TreeNode::leaf(\"eng/old\", \"Retired\").disabled(true),\n            ],\n        )\n        .open(true),\n    )\n    .node(TreeNode::branch(\n        \"ops\",\n        \"Operations\",\n        [TreeNode::leaf(\"ops/run\", \"Runbooks\")],\n    ))",
+      "src": "/ui-preview/tree-view/multiple.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "checkbox",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "checkbox",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/single",
+      "component": "tree-view",
+      "slug": "single",
+      "title": "Choosing one",
+      "kind": "single",
+      "code": "Tree::new(\"owner\", \"Owner\")\n    .select(TreeSelect::Single)\n    .node(\n        TreeNode::branch(\n            \"sales\",\n            \"Sales\",\n            [\n                TreeNode::leaf(\"sales/ada\", \"Ada\"),\n                TreeNode::leaf(\"sales/grace\", \"Grace\").selected(true),\n            ],\n        )\n        .open(true),\n    )\n    .node(TreeNode::branch(\n        \"support\",\n        \"Support\",\n        [TreeNode::leaf(\"support/alan\", \"Alan\")],\n    ))",
+      "src": "/ui-preview/tree-view/single.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radio",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radio",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/lazy",
+      "component": "tree-view",
+      "slug": "lazy",
+      "title": "Children from the server",
+      "kind": "single",
+      "code": "Tree::new(\"lazy\", \"Folders\")\n    .node(TreeNode::lazy(\"docs\", \"Documents\", \"/tree/children?parent=docs\").icon(icons::FOLDER))\n    .node(TreeNode::lazy(\"music\", \"Music\", \"/tree/children?parent=music\").icon(icons::FOLDER))",
+      "src": "/ui-preview/tree-view/lazy.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/paged",
+      "component": "tree-view",
+      "slug": "paged",
+      "title": "A long list in pages",
+      "kind": "single",
+      "code": "Tree::new(\"people\", \"People\").node(\n    TreeNode::branch(\n        \"all\",\n        \"Everyone\",\n        (1..=5).map(|n| TreeNode::leaf(format!(\"p{n}\"), format!(\"Person {n}\"))),\n    )\n    .open(true)\n    .children_total(10_000)\n    .more(\"/people?after=5\", Some(9_995)),\n)",
+      "src": "/ui-preview/tree-view/paged.html",
+      "height": 260,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 5,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-more",
+                          "tag": "li",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-more-link",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree-view/state",
+      "component": "tree-view",
+      "slug": "state",
+      "title": "Open branches in the address",
+      "kind": "single",
+      "code": "// The address says which branches are open, and each caret is a link that changes it.\nlet state = TreeState::from_query(\"/files\", \"open=docs\");\nTree::new(\"nav\", \"Files\")\n    .state(state)\n    .node(\n        TreeNode::branch(\"docs\", \"Documents\", [TreeNode::leaf(\"plans\", \"Plans\")])\n            .icon(icons::FOLDER),\n    )\n    .node(TreeNode::lazy(\"music\", \"Music\", \"/tree/children?parent=music\").icon(icons::FOLDER))",
+      "src": "/ui-preview/tree-view/state.html",
+      "height": 220,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "tree-8cdc6e77c5c4.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tree",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tree-root",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tree-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "tree-row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-toggle",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tree-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "tree-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tree-group",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tree-item",
+                          "tag": "li",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "tree-row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "tree-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "tree-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tree-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toolbar/thumb",
+      "component": "toolbar",
+      "slug": "thumb",
+      "title": "A toolbar",
+      "kind": "single",
+      "code": "Toolbar::new(\"thumb\", \"Formatting\")\n    .item(ToolbarItem::icon_toggle(\"bold\", icons::LETTER_B, \"Bold\"))\n    .item(ToolbarItem::icon_toggle(\"italic\", icons::ITALIC, \"Italic\").pressed(true))\n    .item(ToolbarItem::icon_toggle(\n        \"underline\",\n        icons::UNDERLINE,\n        \"Underline\",\n    ))",
+      "src": "/ui-preview/toolbar/thumb.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "menus-dffd26363290.js",
+        "toolbar-ec1f1e6e41ac.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toolbar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toolbar-tool",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "toolbar-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "toolbar-more",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "label",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "menu-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toolbar/default",
+      "component": "toolbar",
+      "slug": "default",
+      "title": "A toolbar",
+      "kind": "single",
+      "code": "Toolbar::new(\"format\", \"Text formatting\")\n    .item(ToolbarItem::icon_toggle(\"bold\", icons::LETTER_B, \"Bold\"))\n    .item(ToolbarItem::icon_toggle(\"italic\", icons::ITALIC, \"Italic\").pressed(true))\n    .item(ToolbarItem::icon_toggle(\n        \"underline\",\n        icons::UNDERLINE,\n        \"Underline\",\n    ))\n    .item(ToolbarItem::separator())\n    .item(\n        ToolbarItem::radios(\"align\", \"Alignment\")\n            .option(\"left\", \"Left\")\n            .option(\"center\", \"Center\")\n            .option(\"right\", \"Right\")\n            .value(\"left\"),\n    )\n    .item(ToolbarItem::separator())\n    .item(ToolbarItem::button(\"Copy\").icon(icons::COPY))\n    .item(ToolbarItem::link(\"Help\", \"/help\"))",
+      "src": "/ui-preview/toolbar/default.html",
+      "height": 100,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "menus-dffd26363290.js",
+        "toolbar-ec1f1e6e41ac.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toolbar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toolbar-tool",
+              "tag": "div",
+              "count": 8,
+              "children": [
+                {
+                  "slot": "toolbar-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "toolbar-more",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "label",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "menu-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "menu-separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-label",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "menu-item",
+                          "tag": "label",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "menu-mark",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "menu-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "menu-separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-item",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toolbar/overflow",
+      "component": "toolbar",
+      "slug": "overflow",
+      "title": "At a narrow width",
+      "kind": "single",
+      "code": "// Too many tools for the width: the ones at the end move into More, and the one that is kept stays.\nToolbar::new(\"narrow\", \"Text formatting\")\n    .item(ToolbarItem::icon_toggle(\"bold\", icons::LETTER_B, \"Bold\"))\n    .item(ToolbarItem::icon_toggle(\"italic\", icons::ITALIC, \"Italic\"))\n    .item(ToolbarItem::button(\"Copy\").icon(icons::COPY))\n    .item(ToolbarItem::button(\"Paste\"))\n    .item(ToolbarItem::link(\"Help\", \"/help\"))\n    .item(ToolbarItem::button(\"Save\").keep())",
+      "src": "/ui-preview/toolbar/overflow.html",
+      "height": 100,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": 390,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "menus-dffd26363290.js",
+        "toolbar-ec1f1e6e41ac.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toolbar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toolbar-tool",
+              "tag": "div",
+              "count": 6,
+              "children": [
+                {
+                  "slot": "toolbar-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "toolbar-more",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "label",
+                      "count": 6,
+                      "children": [
+                        {
+                          "slot": "menu-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toolbar/vertical",
+      "component": "toolbar",
+      "slug": "vertical",
+      "title": "Vertical",
+      "kind": "single",
+      "code": "Toolbar::new(\"tools\", \"Tools\")\n    .vertical()\n    .item(ToolbarItem::button(\"Select\").icon(icons::LIST))\n    .item(ToolbarItem::button(\"Move\"))\n    .item(ToolbarItem::separator())\n    .item(ToolbarItem::button(\"Delete\").variant(ButtonVariant::Ghost))",
+      "src": "/ui-preview/toolbar/vertical.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "toolbar-ec1f1e6e41ac.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toolbar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toolbar-tool",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toolbar/groups",
+      "component": "toolbar",
+      "slug": "groups",
+      "title": "Groups and a menu",
+      "kind": "single",
+      "code": "Toolbar::new(\"groups\", \"Document\")\n    .item(ToolbarItem::group(\n        \"History\",\n        [\n            ToolbarItem::button(\"Undo\").icon(icons::ARROW_LEFT),\n            ToolbarItem::button(\"Redo\").icon(icons::ARROW_RIGHT),\n        ],\n    ))\n    .item(ToolbarItem::menu(\n        \"Share\",\n        DropdownMenu::new(\"share\", \"Share\")\n            .variant(ButtonVariant::Ghost)\n            .size(Size::Sm)\n            .caret()\n            .item(MenuItem::link(\"By email\", \"/share/email\"))\n            .item(MenuItem::action(\"Copy the link\")),\n    ))",
+      "src": "/ui-preview/toolbar/groups.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "menus-dffd26363290.js",
+        "toolbar-ec1f1e6e41ac.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "toolbar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toolbar-tool",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "a",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "toolbar-more",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "dropdown-menu",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-item",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "menu-separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "menu-item",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "dropdown-menu",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-item",
+                          "tag": "a",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "menu-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
