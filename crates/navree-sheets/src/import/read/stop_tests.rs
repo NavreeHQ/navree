@@ -34,8 +34,9 @@ fn timed(
 /// reading had ended: a thread that waits its turn on a busy machine may be late.
 const TRIES: usize = 50;
 
-/// How many times in a row a reading may end with the flag up and no stop before it counts:
-/// the flag may have gone up between the last time the reading looked at it and its end.
+/// How many readings that ended with the flag up and no stop (they need not be in a row) are
+/// the failure. One can be the flag going up between the reading's last look at it and its
+/// end; three are a reading that ignores it.
 const ENDS_WITH_FLAG_UP: usize = 3;
 
 /// The first sheet of the workbook `file` read into a table, with the stop flag raised by
@@ -45,8 +46,9 @@ const ENDS_WITH_FLAG_UP: usize = 3;
 ///
 /// A reading is only told to stop if it is still running, so one that ended before the thread
 /// raised the flag has nothing to say about stopping, whatever the load on the machine did to
-/// the thread: it is read again. What the caller sees is a reading that was stopped, or one
-/// that ended with the flag up and no stop, which is the reading ignoring it.
+/// the thread: it is read again, at most [`TRIES`] times. What the caller sees is a reading
+/// that was stopped, or the [`ENDS_WITH_FLAG_UP`]th one that ended with the flag up and no
+/// stop, which is the reading ignoring it. Its time is how long it ran after the flag went up.
 fn stopped(
     file: &[u8],
     options: ReadOptions<'_>,
