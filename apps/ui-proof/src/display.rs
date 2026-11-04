@@ -38,7 +38,8 @@ const OFFSET: i32 = 19_800;
 const NASTY: &str = "<script>window.__pwned=1</script><img src=x onerror=\"window.__pwned=1\"> &amp; \"quotes\" 'single' `tick` ${x} {{y}} javascript:alert(1)";
 const LONG: &str = "Supercalifragilisticexpialidocious-and-then-some-more-without-any-spaces-at-all-so-that-nothing-can-wrap-except-by-force-1234567890";
 
-// A small flag drawn as SVG: the flag slot takes any node.
+// A small flag drawn as SVG: the flag slot takes any node. India's is the toolkit's
+// own, whose drawing names its parts by id, the same ids in every copy on the page.
 fn flag(code: &str) -> Node {
     let shapes = match code {
         "DE" => {
@@ -47,9 +48,7 @@ fn flag(code: &str) -> Node {
         "FR" => {
             r##"<rect width="1" height="2" fill="#0055a4"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#ef4135"/>"##
         }
-        _ => {
-            r##"<rect width="3" height=".67" fill="#f93"/><rect y=".67" width="3" height=".67" fill="#fff"/><rect y="1.33" width="3" height=".67" fill="#138808"/>"##
-        }
+        _ => return Flag::country(code).decorative().into(),
     };
     el("svg")
         .attr("viewBox", "0 0 3 2")

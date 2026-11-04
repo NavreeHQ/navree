@@ -533,6 +533,20 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("a row is added though its flag draws with the same ids as a flag already on the page", async () => {
+        const page = await open("/display/live");
+        await waitLive(page, "on");
+        // Every copy of a flag names the parts of its drawing with the same ids.
+        const drawn = await page.evaluate(() => [...document.querySelectorAll("#activity-list svg[data-slot=flag] [id]")].map((e) => e.id));
+        assert.ok(drawn.length > 0, "the page already shows a flag whose drawing has ids");
+        // The second of three new rows is Maya Patel's, in Mumbai, under the same flag.
+        await post("/display/test/emit?n=3");
+        await page.waitForFunction(() => document.querySelectorAll("#activity-list > li").length === 17);
+        assert.deepEqual((await ids(page)).slice(0, 3), ["event-17", "event-16", "event-15"]);
+        assert.equal(await page.locator("#event-16 svg[data-slot=flag] [id]").count() > 0, true, "its flag is the same drawing");
+        await page.done();
+      });
+
       test("the feed keeps its newest rows only", async () => {
         const page = await open("/display/live");
         await waitLive(page, "on");

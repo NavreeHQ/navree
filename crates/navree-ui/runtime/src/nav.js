@@ -310,7 +310,8 @@ function say(el, n) {
  * A feed region asks for what is newer than its cursor and adds it at the start
  * of its container. The rows are the server's own markup, as in an `append` op.
  * Only elements are added, and one whose id the page already has is not added,
- * whatever the cursor said. A fetch that takes longer than the limit is given up on. An answer for a source the region
+ * whatever the cursor said; ids inside a drawing, which every copy of it shares,
+ * don't count. A fetch that takes longer than the limit is given up on. An answer for a source the region
  * has since left (the reader changed the period) is dropped.
  * @param {Element} el @param {string} src @param {() => boolean} current
  */
@@ -335,7 +336,9 @@ async function feed(el, src, current) {
         if (have.has(row.id) || byId(row.id)) continue;
         have.add(row.id);
       }
-      const inside = [...all(row, "[id]")];
+      // Ids inside a drawing name its parts, and every copy of the drawing has the same ones
+      // (a flag's artwork): a lookup by one finds the same parts, so those don't count.
+      const inside = [...all(row, "[id]")].filter((el) => !closest(el, "svg *"));
       if (inside.some((el) => byId(el.id) || have.has(el.id))) continue;
       for (const el of inside) have.add(el.id);
       fresh.push(row);
