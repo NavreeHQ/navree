@@ -1,9 +1,9 @@
 ---
 title: "Resolving the workspace"
-description: "Find the current workspace from a header, a subdomain, a path prefix, a token claim or the workspace's own domain, and check that the user belongs to it."
+description: "Find the current workspace from a header, a subdomain, a path prefix, a token claim, the workspace's own domain or the browser's session, and check that the user belongs to it."
 ---
 
-Every workspace request names its workspace somewhere: in a header, in the host name, in the URL or inside the access token. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
+Every workspace request names its workspace somewhere: in a header, in the host name, in the URL, inside the access token or, for pages in a browser, in the session. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
 
 ## The resolvers
 
@@ -16,6 +16,7 @@ A resolver finds an identifier: the workspace's slug (`acme`) or its id (a UUID)
 | `subdomain` | The first label of the host under `workspace.base_domain` | `acme.app.example.com` |
 | `claim` | The claim `workspace.claim` (default `workspace`) of the request's bearer JWT | `{"sub": "...", "workspace": "acme"}` |
 | `domain` | The workspace's own verified domain ([custom domains](/docs/packages/custom-domains/)) | `crm.acme-corp.com` |
+| `session` | The workspace the signed-in user switched to in this browser, kept in their session | `POST /workspace/switch` with `workspace=acme` |
 
 ### Header
 
@@ -77,6 +78,24 @@ resolvers = ["domain", "header"]
 
 `DomainsModule` looks the request's host up (cached for `domains.cache_secs`) and marks the request with a `DomainWorkspace { workspace_id, host }`, which the resolver reads. A host that is not a verified domain, such as your app's own, falls through to the next resolver. Without `DomainsModule` the resolver finds nothing. Custom domains name workspaces only: `domain` in `workspace.organizations.resolvers` or `workspace.partitions.resolvers` fails the boot.
 
+### Session
+
+<Badge feature="session" /> Server-rendered pages follow plain links and post plain forms, so they can't send a header on every request. The `session` resolver reads the workspace the signed-in user last switched to in this browser instead. It is kept in their [session](/docs/basics/sessions-and-csrf/), so it needs `SessionModule` and the `session` feature of the `navree` facade (in `full`):
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["session", "header"]
+switch_path = "/workspace/switch"  # the default
+```
+
+The browser switches with `POST /workspace/switch` (no API prefix; `workspace.switch_path` moves it). The body is a form with `workspace` (a slug or an id) and an optional `next`, as the [workspace switcher](/docs/workspaces/introduction/#workspaces-in-navree-ui-pages) posts it, or JSON `{"workspace": "acme"}`. Like every state-changing request on a session, it needs the CSRF token (`_csrf` in the form, or `X-XSRF-TOKEN`).
+
+- The route checks that the user may enter the workspace, exactly as a request into it would: a member, an organization grant, or a guest of a demo workspace when `workspace.demo.guest_role` is set. Otherwise it answers 403 `not_a_member` (or 404 `workspace_not_found`) and stores nothing, so a user can never switch into a workspace that isn't theirs.
+- On success it stores the choice for this user under the session key `workspace.current` (`{"id", "user"}`), gives the session a new id and CSRF token, and writes `workspace.switched` to the [audit log](/docs/security/audit-log/) with the workspace it came from and the one it went to.
+- A form gets a `303 See Other` to `next` when `next` is a path on this site, and to `/` otherwise, so the route can't send anyone to another site. JSON gets `200` with the workspace's `id`, `slug` and `name`.
+
+Every request checks the choice again. A choice made by another user who signed in on the same browser is ignored. A choice the user may no longer enter, because they left the workspace or it was deleted, is forgotten and the next resolver answers: the page never gets stuck on a 403. A header, path or claim that names a workspace the user isn't in is still a 403. Without the `session` feature, or outside `SessionModule`, the resolver finds nothing. The `session` resolver names workspaces only: in `workspace.organizations.resolvers` or `workspace.partitions.resolvers` it fails the boot.
+
 ## Order
 
 `workspace.resolvers` lists the resolvers to try, in order. The first one that finds an identifier wins, and the rest are not consulted:
@@ -87,7 +106,7 @@ resolvers = ["subdomain", "header"]
 base_domain = "app.example.com"
 ```
 
-The default is `["header", "path", "subdomain", "claim"]`. From the environment, use a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. A list with an unknown resolver or the same resolver twice fails the boot.
+The default is `["header", "path", "subdomain", "claim"]`. An app of server-rendered pages puts `session` first: `["session", "header"]`. From the environment, use a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. A list with an unknown resolver or the same resolver twice fails the boot.
 
 ### Pinned credentials
 
@@ -121,7 +140,7 @@ async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
 | `authorize(permission)` | `Ok(())`, or a 403 |
 | `scope(query)` | A `Builder<M>` limited to this workspace's rows (row isolation): `ws.scope(Deal::query())` |
 | `isolation()` | The configured `Isolation` |
-| `resolver()` | The resolver that found the workspace (`ResolverKind::Domain` for a custom domain; `None` when a path parameter did) |
+| `resolver()` | The resolver that found the workspace (`ResolverKind::Domain` for a custom domain, `ResolverKind::Session` for the browser's choice; `None` when a path parameter did) |
 
 The workspace is resolved once per request: the guard, `CurrentWorkspace`, `WorkspaceUow` and later extractors share the result.
 
@@ -219,6 +238,22 @@ client
     .send()
     .await
     .assert_error(404, "Workspace not found.");
+```
+
+With the `session` resolver, switch first, as a browser would. The client keeps the session cookie between requests:
+
+```rust
+let client = app.acting_as(principal(ada));
+client.csrf_cookie().await;
+client
+    .post("/workspace/switch")
+    .xsrf()
+    .form(&[("workspace", "acme"), ("next", "/deals")])
+    .send()
+    .await
+    .assert_status(303);
+
+client.get("/api/v1/deals").send().await.assert_status(200); // inside acme
 ```
 
 <LinkCards>

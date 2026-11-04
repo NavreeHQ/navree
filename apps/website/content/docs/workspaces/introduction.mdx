@@ -167,6 +167,7 @@ path_prefix = "/w"                  # /api/w/acme/... names `acme`
 claim = "workspace"                 # a claim of the bearer JWT
 isolation = "row"                   # row, schema or database
 routes = true                       # /api/workspaces and /api/invitations/accept
+switch_path = "/workspace/switch"   # where a browser switches workspace (feature `session`)
 users_table = "users"               # names and emails of members; "" for none
 schema_prefix = "workspace_"        # schema isolation
 # database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"  # database isolation
@@ -236,6 +237,7 @@ Unless `workspace.routes` is `false`, the module mounts these routes under the A
 | `GET`, `POST /api/workspaces/{workspace}/invitations` | `workspace.invitations.read`, `workspace.invitations.create` |
 | `DELETE /api/workspaces/{workspace}/invitations/{invitation}` | `workspace.invitations.delete` |
 | `POST /api/invitations/accept` `{token}` | The invited user |
+| `POST /workspace/switch` `workspace=..&next=..` (no API prefix; `workspace.switch_path`) | A member of that workspace; see [Workspaces in Navree UI pages](#workspaces-in-navree-ui-pages) |
 
 A workspace comes back as:
 
@@ -259,6 +261,47 @@ A workspace comes back as:
 `timezone` is an IANA zone, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`), and `country` an ISO 3166-1 alpha-2 code; both are optional, and `PUT .../time-zone` replaces both (`null` clears one). An unknown zone is a 400 on `timezone`, an unknown country a 400 on `country`. They give the workspace's requests and per-workspace schedules their zone: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
 
 `kind` is `live` or `demo`. Lists are `{"data": [...]}`. The routes are in the OpenAPI document under the `Workspaces` tag. Set `workspace.routes = false` to write your own with the services.
+
+## Workspaces in Navree UI pages
+
+<Badge feature="session" /> <Badge feature="ui" /> A [Navree UI](/docs/ui/overview/) app draws its pages on the server, and a browser follows plain links, so no header can carry the workspace. Keep it in the session instead. Three pieces work together:
+
+1. **The `session` resolver.** List it first: `resolvers = ["session", "header"]`. It names the workspace the signed-in user switched to in this browser (see [Resolving the workspace](/docs/workspaces/resolution/#session)).
+2. **The switch route.** `POST /workspace/switch` checks that the user may enter the workspace, stores the choice in their session and sends the browser back to the page it came from. A user who isn't a member gets a 403 and nothing changes.
+3. **`WorkspaceSwitcher`.** The menu that posts to the route: a button with the current workspace's name, and the user's workspaces in a list, the current one marked. Each item is a plain form with the session's CSRF token, so it works with JavaScript off.
+
+Take `WorkspaceSwitcher` as an extractor and put it in the page. It reads the user's workspaces, the one the request is in, the CSRF token, `workspace.switch_path` and the page's own address:
+
+```rust title="src/deals/pages.rs"
+use navree::prelude::*;
+use navree::ui::{AppPage, AppShell, DataTable, TableQuery};
+use navree::workspace::WorkspaceSwitcher;
+
+async fn index(
+    shell: AppShell,
+    ws: CurrentWorkspace,
+    switcher: WorkspaceSwitcher,
+    uow: Uow,
+    query: TableQuery<DealRow>,
+) -> Result<AppPage> {
+    // `Deal` is `#[model(workspace)]`: this lists the current workspace's deals only.
+    let page = query
+        .load_as(Deal::query(), &uow, |record| DealRow::from(record.into_inner()))
+        .await?;
+    Ok(shell
+        .page(format!("Deals of {}", ws.name))
+        .actions(switcher)
+        .body(DataTable::new("deals", &query, &page)))
+}
+```
+
+`WorkspaceSwitcher::new("Acme").workspace("acme", "Acme", true).csrf(token)` builds one by hand, for a sidebar or a page of its own.
+
+**Tables and pickers stay in the workspace.** A [DataTable](/docs/ui/data-table/), its CSV export, its bulk actions and a searched picker all start from the query you give them. Make it the workspace's: a `#[model(workspace)]` model scopes its own queries to the request's workspace (see [Workspaces and access](/docs/orm/workspaces-and-access/)), and `WorkspaceRepo::<M>::query(ws.id())` or `ws.scope(M::query())` does the same for other models. Add `.accessible(&ability, Read)` to keep only the rows the user may read.
+
+**Live streams stay in the workspace.** A [live region](/docs/ui/regions/) opens its stream with an ordinary request, so the stream's handler resolves the workspace like any page and takes `CurrentWorkspace`: send it only that workspace's events. Switching loads the next page in full, so every region and stream on it opens again inside the new workspace.
+
+**Switching is checked every time.** The route stores a choice only for a workspace the user may enter, and every request checks it again: a choice made by another user on the same browser is ignored, and one the user may no longer enter is forgotten. A stolen session cookie therefore reaches only the workspaces its own user belongs to, and a header naming any other workspace is still a 403.
 
 ## Events
 
