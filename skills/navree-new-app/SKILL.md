@@ -33,6 +33,7 @@ navree --version
 ```sh
 navree new blog                                  # API only, on TimescaleDB
 navree new shop --ui next                        # plus a Next.js front end in web/
+navree new crm --ui navree                       # plus a Navree UI front end in src/ (no Node)
 navree new blog --database sqlite                # a SQLite file, nothing to install
 navree new blog --navree-path ~/code/navree      # depend on that checkout
 ```
@@ -86,7 +87,8 @@ navree dev                     # API on :8080, web app on :3000
   `/admin`) and `member@<app>.test`, password `password123`, workspace
   `demo`.
 - `--ui next` only goes with `--kit saas` (where it changes nothing);
-  with `api` or `micro` it is an error.
+  with `api` or `micro` it is an error. `--ui navree` goes with no kit:
+  with `--kit` it is an error.
 - The kits run on TimescaleDB (the default) or, with `--database postgres`,
   plain PostgreSQL (`timescaledb = false` in `dock.toml`); `mysql` and
   `sqlite` are for the minimal app.
@@ -146,6 +148,8 @@ src/modules/users/      a profile at GET/PUT /api/v1/profile on top of AuthModul
 tests/app.rs            boots the whole app on a temporary SQLite database
 storage/                runtime data (logs, uploads; the database with --database sqlite)
 web/                    with --ui next: Next.js with a backend-for-frontend
+src/ui/                 with --ui navree: the shell, sign-in (auth.rs), the live stream
+src/modules/customers/  with --ui navree: an example table, forms and pages
 ```
 
 Routes that exist at once: `POST /api/auth/register|login|refresh|logout`,

@@ -215,7 +215,7 @@ async fn index(&self, Query(filter): Query<DealFilter>) -> Json<Vec<DealView>> {
 }
 ```
 
-Make fields `Option` or give them a serde default when they may be left out. A query string that doesn't deserialize is a 400 (`"Failed to deserialize query string: page: invalid digit found in string"`). To check values as well as types, wrap it in `Valid`: `Valid(Query(filter)): Valid<Query<DealFilter>>`; see [validation](/docs/basics/validation/).
+Make fields `Option` or give them a serde default when they may be left out. A query string that doesn't deserialize is a 400 (`"Failed to deserialize query string: page: invalid digit found in string"`). To check values as well as types, wrap it in `Valid`: `Valid(Query(filter)): Valid<Query<DealFilter>>`; see [validation](/docs/basics/validation/). A list that takes filters, a sort order, a search and pages reads them with `List<R>` instead: see [list queries](/docs/basics/list-queries/).
 
 ## Naming routes
 

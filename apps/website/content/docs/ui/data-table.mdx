@@ -63,6 +63,28 @@ Keep a table paged. 25 rows to a page is the default, and `per_pages` lets a rea
 | `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't count, with Previous and Next only |
 | `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
 
+## The URL
+
+A table reads and writes the same list-query names as the API, so a link to a table and a request to the API are written alike. What each operator means, and how a Rust endpoint reads the query, is on the [list queries](/docs/basics/list-queries/) page. The [typed client](/docs/frontend/typed-client/#list-queries) page covers the JavaScript side.
+
+```text
+/deals?filter[stage][in]=won,lost&filter[amount][gte]=500000&search=sutlej&sort=-amount&page=2&per_page=25
+```
+
+| Column filter | In the URL |
+|---|---|
+| `text` | `filter[title][contains]=sutlej` |
+| `select` | `filter[stage]=won` |
+| `multi`, `relation` | `filter[stage][in]=won,lost` |
+| `boolean` | `filter[active]=true` |
+| `range`, `date` | `filter[amount][gte]=1&filter[amount][lte]=9` |
+| empty | `filter[owner][null]=true` |
+
+- **Search and order.** `search=text` is the box above the table. `sort=-amount,title` sorts by up to four columns, and `-` means descending. `sort=` with nothing after it asks for no order.
+- **Pages.** A numbered table reads `page` and `per_page`; a `#[table(cursor)]` table reads `cursor`, `before` and `limit`. Each table ignores the other's names. The page size is always one the table offers.
+- **Its own state.** `cols`, `w`, `fb`, `density`, `open` and `count` belong to the table and are not part of the list query.
+- **Forgiving.** A table shows a page whatever the URL says. A value of the wrong kind, a column the definition doesn't list, or an operator a filter doesn't take is left out. The API answers the same mistakes with a 400 that names the parameter.
+
 ## Selection and bulk actions
 
 `.bulk(url, actions)` adds a checkbox to each row and a bar of actions for the selection. The selection is kept per tab: ticked rows survive paging, sorting and filtering, and "all that match" survives paging and sorting and takes exclusions. An action posts the selection and the count the user saw; `BulkRequest::resolve` runs the same definition on your scoped query and refuses when the count or a row's version differs.

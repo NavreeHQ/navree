@@ -196,7 +196,48 @@ try {
 
 ## List queries
 
-A list endpoint reads filters, sort, search and paging from the query string. `listQuery()` builds one; every call returns a new builder:
+Every Navree list speaks one query-string grammar: filters, sort, search and paging. A Navree server reads it with the `List<Resource>` extractor and a `ListSpec`, the allow-list of the fields a resource lets a client filter, sort and search by. A request outside that list gets a 400 that names the parameter, and `Builder::list` applies a valid query to the database query. [List queries](/docs/basics/list-queries/) covers the server side. Navree UI tables and Helm read and write the same names, so a link to one list is a link a client, a table and an admin screen all understand. This page is the JavaScript side: building a list query, writing it to a URL and reading it back.
+
+```text
+filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=acme&page=2&per_page=25
+```
+
+### The grammar
+
+| Parameter | Means |
+|---|---|
+| `filter[field]=value` | The field equals the value. The same as `filter[field][eq]=value`. |
+| `filter[field][operator]=value` | The field compared with an operator (see below). |
+| `sort=-created_at,name` | The fields to sort by, in order; a leading `-` sorts descending. At most four fields. A repeated `sort` adds fields. |
+| `search=acme` | The text to search for. |
+| `page=2&per_page=25` | Numbered pages. |
+| `cursor=eyJpZCI6NDJ9&limit=50` | Cursor pages: the page after a position, `limit` rows long. |
+| `before=eyJpZCI6NDJ9` | The page before a position, for lists that page both ways (Navree UI tables). |
+
+| Operator | Means | Value |
+|---|---|---|
+| `eq` (or none) | equals | one value |
+| `ne` | does not equal | one value |
+| `gt`, `gte`, `lt`, `lte` | greater than, at least, less than, at most | one value |
+| `in`, `not_in` | is one of, is none of | a comma list; the key may repeat |
+| `contains` | contains this text, ignoring case | text |
+| `starts_with` | starts with this text, ignoring case | text |
+| `null` | is NULL (`true` or `1`), is not NULL (`false` or `0`) | `true`, `false`, `1` or `0` |
+
+- A field name starts with a letter or `_`, then letters, digits, `_` and `.`, up to 64 characters. Operator names are exact and lower case.
+- A value that is empty or only spaces is left out. Search text is trimmed.
+- Other parameters (`owner_id=3`, `range=30d`) are not the list query's. A handler reads them itself.
+- Mixing numbered paging (`page`, `per_page`) with cursor paging (`cursor`, `before`, `limit`) is a problem.
+- A repeated `in` or `not_in` adds its values. Any other operator keeps its first value and reports the repeat.
+- The limits: 64 filters, 200 values in an `in`, 256 bytes in a value or in the search, 1,024 bytes in a cursor, 4 sort fields, page 10,000,000, page size 10,000, 1,000 parameters and 16 KiB of query. A resource's `ListSpec` sets a smaller page size (15 by default, 100 at most).
+
+### The canonical form
+
+Both the JavaScript and the Rust side write a list query the same way: the filters grouped by field, in the order each field first appears (an equal filter is written plain, without `[eq]`), then `sort`, `search`, `page`, `per_page`, `cursor`, `before` and `limit`. The encoding is `URLSearchParams`' (a space is `+`, `[` is `%5B`, `,` is `%2C`). The same query is the same string everywhere, so it works as a cache key and as a link.
+
+### Building a query
+
+`listQuery()` builds one; every call returns a new builder:
 
 ```ts
 import { listQuery } from "@navree/client";
@@ -226,12 +267,49 @@ filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&
 | `without("stage")` | removes the filter |
 | `sort("-created_at", "name")` | `sort=-created_at,name` (`-` sorts descending) |
 | `search("acme")` | `search=acme` |
-| `page(2)`, `perPage(25)` | `page=2&per_page=25` |
+| `page(2)`, `perPage(25)` | `page=2&per_page=25` (drops `cursor`, `before` and `limit`) |
 | `cursor("eyJpZCI6NDJ9")`, `limit(50)` | `cursor=eyJpZCI6NDJ9&limit=50` (drops `page` and `per_page`) |
+| `before("eyJpZCI6NDJ9")` | `before=eyJpZCI6NDJ9` (drops `page`, `per_page` and `cursor`) |
 
-The operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with` and `null`. Dates are sent as ISO 8601, booleans and numbers as text, and lists joined with commas.
+Dates are sent as ISO 8601, booleans and numbers as text, and lists joined with commas. Blank values and empty lists are left out when the query is written. `cursor(...)` and `before(...)` replace each other, because a page lies either after a position or before it.
 
-The same format works as data: `serializeListQuery(query)` writes `URLSearchParams`, `parseListQuery(input)` reads a query string, `URLSearchParams` or a Next.js `searchParams` object (ignoring parameters it doesn't own), and the client's query serializer writes a `ListQuery` object in this format. `setFilter(query, field, value)` changes one filter and goes back to page 1, `withPage(query, n)` moves to a page, and `toggleSort(sort, field)` cycles a column through ascending, descending and off.
+### Reading a query
+
+`checkListQuery(input)` reads a query string (with or without `?`), a `URLSearchParams` or a Next.js `searchParams` object. It keeps everything that is right and reports the rest, so an old or edited link still shows a page:
+
+```ts
+import { checkListQuery } from "@navree/client";
+
+const { query, problems } = checkListQuery("?filter[stage]=won&filter[hot][regex]=1&page=0&owner_id=3");
+// query:    { filter: { stage: "won" } }
+// problems: [
+//   { param: "filter[hot][regex]", message: "`regex` is not an operator; use one of: eq, ne, gt, ..." },
+//   { param: "page", message: "page must be at least 1" },
+// ]
+```
+
+Each problem names its parameter as written, the same names a Navree server gives in its 400. `parseListQuery(input)` is `checkListQuery(input).query`.
+
+A `ListQuery` is data. A field's filter is a value (equal), a list (`in`) or an object of operators:
+
+```ts
+{ filter: { stage: "won", amount: { gte: "100", lte: "900" }, owner_id: { null: true } }, sort: ["-amount"], limit: 20 }
+```
+
+Reading `filter[stage][eq]=won` gives `stage: "won"`, the same as `filter[stage]=won`. A field called `constructor` or `__proto__` is an ordinary field, not a way into the object's prototype.
+
+| Function | What it does |
+|---|---|
+| `serializeListQuery(query)` | Writes `URLSearchParams` in the canonical form. |
+| `checkListQuery(input)`, `parseListQuery(input)` | Read a query, with or without its problems. |
+| `setFilter(query, field, value)` | Sets one filter (or removes it with `undefined`) and goes back to the first page. |
+| `firstPage(query)` | Drops `page`, `cursor` and `before`; the page size stays. |
+| `withPage(query, n)` | Moves to numbered page `n` (page 1 is left out) and drops `cursor`, `before` and `limit`. |
+| `withDefaults(query, defaults)` | The query over its defaults, without mixing numbered and cursor paging. |
+| `toggleSort(sort, field)` | Cycles a column through ascending, descending and off (at most four fields). |
+| `isListParam(name)` | Whether a URL parameter is the list query's. |
+
+The client's query serializer writes a `ListQuery` object in this format, so `params: { query }` takes a list query directly.
 
 ## Pages
 

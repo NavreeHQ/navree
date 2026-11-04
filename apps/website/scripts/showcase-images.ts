@@ -83,7 +83,7 @@ function istDate(days: number): string {
 }
 
 /** The orders of the two days before today: shipped, packed and unfulfilled side by side. */
-const twoDays = () => `${STORE}/orders?f.placed_on.min=${istDate(-2)}&f.placed_on.max=${istDate(-1)}`;
+const twoDays = () => `${STORE}/orders?filter%5Bplaced_on%5D%5Bgte%5D=${istDate(-2)}&filter%5Bplaced_on%5D%5Blte%5D=${istDate(-1)}`;
 
 /** Opens the first order of the table in its drawer, and waits for the parts that load after it opens. */
 async function openFirstOrder(page: Page) {

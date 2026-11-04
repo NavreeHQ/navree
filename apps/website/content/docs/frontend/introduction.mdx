@@ -11,9 +11,9 @@ A Navree API is a bearer-token JSON API with an OpenAPI document, Navree's error
 
 | Package | What it gives you | Runs in |
 |---|---|---|
-| `@navree/client` | `createNavreeClient<paths>()` on the schema `navree openapi:client` generates, with no runtime dependencies; `NavreeError` with the error `code`; `listQuery()`; page helpers; query keys; `followOperation`; text direction and error-code translation. Abilities (`@navree/client/abilities`) and real time (`@navree/client/realtime`) are separate entry points. | Browser, server, any JavaScript runtime |
+| `@navree/client` | `createNavreeClient<paths>()` on the schema `navree openapi:client` generates, with no runtime dependencies; `NavreeError` with the error `code`; `listQuery()` and `checkListQuery()`, which write and read the one list-query grammar (`filter[field][operator]=value`, `sort`, `search`, `page`, `cursor`) that Navree servers, Navree UI tables and Helm share; page helpers; query keys; `followOperation`; text direction and error-code translation. Abilities (`@navree/client/abilities`) and real time (`@navree/client/realtime`) are separate entry points. | Browser, server, any JavaScript runtime |
 | `@navree/bff` | The backend-for-frontend on web-standard `Request` and `Response`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the `Origin` check, a streaming proxy, `ensureSession` for server rendering. | Node.js 20 and later |
-| `@navree/next` | Route handlers, `auth()` and `client()` for server components, the proxy that guards pages and refreshes tokens, `useListQuery`, `DataTable`, `useOperation`, workspaces, form errors; `AbilityProvider` and `<Can>`, `RealtimeProvider` and `useChannel`. | Next.js 15 and 16 |
+| `@navree/next` | Route handlers, `auth()` and `client()` for server components, the proxy that guards pages and refreshes tokens, `useListQuery` (a list's filters, sort, search and page in the URL, in that grammar), `DataTable`, `useOperation`, workspaces, form errors; `AbilityProvider` and `<Can>`, `RealtimeProvider` and `useChannel`. | Next.js 15 and 16 |
 | `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>`. | Nuxt 4.6.3 and later |
 | `@navree/theme` | navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, the self-hosted fonts, and the tokens as data. | Any CSS pipeline |
 
@@ -39,6 +39,20 @@ pnpm build
 }
 ```
 
+A Next.js app also needs a few settings in `next.config.ts`: see [installing from a checkout](/docs/frontend/nextjs/#installing-from-a-checkout). A Nuxt app links `@navree/nuxt` and `@navree/client` (and `@navree/theme`) the same way:
+
+```json title="web/package.json"
+{
+  "dependencies": {
+    "@navree/client": "link:../../navree/packages/js/client",
+    "@navree/nuxt": "link:../../navree/packages/js/nuxt",
+    "@navree/theme": "link:../../navree/packages/js/theme"
+  }
+}
+```
+
+Linked packages sit outside your app, so Vite and Nitro need a few settings in `nuxt.config.ts` and your app's `pnpm-workspace.yaml` needs one override: see [installing the Nuxt module](/docs/frontend/nuxt/#installing-from-a-checkout).
+
 Then generate the typed client's schema from your app:
 
 ```sh
@@ -51,6 +65,16 @@ navree openapi:client
   wrote    web/src/lib/api/schema.d.ts
   next     createNavreeClient<paths>() from @navree/client, with `import type { paths } from "./schema"`
 ```
+
+### Why a link
+
+The packages are not on npm yet, and three things decide how an app takes them from a checkout:
+
+- **They ship a built `dist/`.** Build them once (above), and again when their source changes.
+- **A copy would not install.** The packages depend on each other with `workspace:*`, which pnpm resolves only inside `packages/js`, so a `file:` dependency (a copy of the folder) cannot install from outside it. A `link:` is a symlink: it never goes stale and needs nothing from the registry. npm does not read `link:`, so the app uses pnpm.
+- **A linked package sits outside your app and brings its own `node_modules`**, with its own `react`, `react-dom` and `next`. The bundler must be allowed to read the folder and must use one copy of each library: [Next.js](/docs/frontend/nextjs/#installing-from-a-checkout) takes the checkout into its root and compiles the packages with the app, and [Nuxt](/docs/frontend/nuxt/#installing-from-a-checkout) dedupes in Vite.
+
+`navree new --ui next` and `navree new --kit saas` write this setup for the checkout the CLI came from: the two `link:` paths in `package.json`, the settings in `next.config.ts`, and the steps to build the packages in the next steps it prints. A CLI that was installed from a published version writes version ranges (`^1.0.0`) instead, and says in the README that the packages install from a checkout until they are published. The reference CRM, `apps/crm-web`, links the packages the same way.
 
 ## How a request travels
 

@@ -180,13 +180,13 @@ Navree::app().module(AiModule::for_root(AiOptions {
 
 `ai.text(prompt)` builds a request. Awaiting it sends the request and returns a `TextResponse`; a failure is an `AiError`, which `?` turns into an `AppError` in handlers.
 
-The CRM summarizes a deal's activity for whoever opens the deal. The service reads the timeline through `ActivityService`, with the reader's own access, so the summary never mentions an activity the reader couldn't open:
+The CRM summarizes a deal's activity for whoever opens the deal. The service reads the timeline through `ActivityService`, with the reader's own access, so the summary never mentions an activity the reader couldn't open. It asks for the deal's activities with a [list query](/docs/basics/list-queries/), read against the activities' own `ListSpec`:
 
 ```rust title="crates/crm-deals/src/insights.rs"
-use crm_activities::{ActivityFilter, ActivityService};
-use crm_core::SubjectType;
+use crm_activities::{ActivityList, ActivityService};
 use navree::access::{Accessible, PrincipalAccess};
 use navree::ai::Ai;
+use navree::orm::list::ListResource;
 use navree::prelude::*;
 use uuid::Uuid;
 
@@ -227,15 +227,12 @@ impl DealInsights {
 
     /// The deal's activities as one line each, newest first.
     pub async fn timeline(&self, uow: &Uow, access: &PrincipalAccess, deal_id: Uuid) -> Result<String> {
-        let filter = ActivityFilter {
-            subject_type: Some(SubjectType::Deal),
-            subject_id: Some(deal_id),
-            ..ActivityFilter::default()
-        };
-        let page = PageQuery { per_page: 50, ..PageQuery::default() };
+        let list = ActivityList::SPEC.parse(&format!(
+            "filter[subject_type]=deal&filter[subject_id]={deal_id}&per_page=50"
+        ))?;
         let activities = self
             .activities
-            .list(uow, Accessible::new(access.ability.clone()), filter, page)
+            .list(uow, Accessible::new(access.ability.clone()), &list)
             .await?;
         Ok(activities
             .data

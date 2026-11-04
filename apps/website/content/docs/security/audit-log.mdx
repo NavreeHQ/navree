@@ -128,9 +128,9 @@ async fn export(
     &self,
     uow: Uow,
     scope: Accessible<Contact, Read>,
-    Valid(Query(filters)): Valid<Query<ContactFilters>>,
+    list: List<ContactList>,
 ) -> Result<Response> {
-    let contacts = self.contacts.all(&uow, scope, filters).await?;
+    let contacts = self.contacts.all(&uow, scope, &list).await?;
     csv_response(&contacts)
 }
 ```

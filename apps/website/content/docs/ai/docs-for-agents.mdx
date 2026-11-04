@@ -118,7 +118,7 @@ Every docs page has actions next to its title:
 
 **`AGENTS.md`** is the project's instructions for coding agents, in the format most agents read on their own. It is written for the app it lives in, with the app's name, and covers:
 
-- **Layout**: what lives in `config/`, `src/app.rs`, `src/abilities.rs`, `src/modules/<name>/`, `tests/` and `storage/` (and `web/` for apps created with `--ui next`).
+- **Layout**: what lives in `config/`, `src/app.rs`, `src/abilities.rs`, `src/modules/<name>/`, `tests/` and `storage/` (and `web/` for apps created with `--ui next`, `src/ui/` and `src/modules/customers/` for apps created with `--ui navree`).
 - **Commands**: `navree dev`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt`, `navree check`, `navree routes`, `navree migrate` and `navree list`.
 - **Generators**: which `navree make:*` command to run for each kind of code, and the marker comments (`// navree:modules`, `// navree:wire`, `// navree:policies`) they register at.
 - **Conventions**: deny-by-default routes and the access attributes, modules and injected services, validated DTOs, the error shape and `AppError` helpers, the unit of work and models, migrations, configuration and secrets, and tests with `TestApp`.

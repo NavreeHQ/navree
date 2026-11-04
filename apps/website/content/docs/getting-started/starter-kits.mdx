@@ -15,6 +15,8 @@ Pick the kit for the shape you are building:
 | `api` | `navree new acme --kit api` | The same API without the front end: accounts, workspaces, billing and OpenAPI with a committed contract, for mobile apps, partners or a front end you build yourself |
 | `micro` | `navree new billing --kit micro` | A microservice: a message handler and an event handler on NATS, health checks and metrics, and a contracts crate for its clients |
 
+The minimal app has two front-end choices of its own, `--ui next` (a Next.js app in `web/`) and `--ui navree` (screens drawn on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no Node project). [The Navree UI app](#the-navree-ui-app) below describes the second one.
+
 Kits are generated code, not a framework layer. There is no kit runtime and nothing to stay compatible with: every route, screen and test is a file in your repository, written with the same modules, macros and conventions as the rest of these docs.
 
 ## Requirements
@@ -38,6 +40,8 @@ Next steps:
   navree dock up                 # TimescaleDB and Mailpit
   navree key:generate            # then set APP_KEY in .env
   navree migrate:fresh --seed    # tables and a demo workspace
+  pnpm --dir /home/ada/code/navree/packages/js install # the Navree packages (not on npm yet)
+  pnpm --dir /home/ada/code/navree/packages/js build # once; the web app links them
   pnpm --dir web install         # the web app's packages
   navree dev                     # API on :8080, web app on :3000
 
@@ -62,7 +66,7 @@ Initialized a Git repository (nothing committed yet).
 </Step>
 <Step title="Run it">
 
-`pnpm --dir web install` installs the web app's packages. `navree dev` serves the API, rebuilding it when the Rust code changes, and starts the web app's dev server (`pnpm run dev` in `web/`; `--no-web` skips it). Open `http://localhost:3000` and sign in as the owner.
+The web app links the Navree packages `@navree/next` and `@navree/client` from your Navree checkout, because they are not on npm yet; the two `pnpm --dir .../packages/js` commands install and build them, once. (A CLI installed from a published version writes version ranges instead.) `pnpm --dir web install` then installs the web app's packages; the first install adds the two links to `web/pnpm-lock.yaml`, so run it without `--frozen-lockfile` and commit the result. (A link to a folder on your machine does not exist on a CI runner or a server: until the packages are on npm, the generated CI workflow and the build step in `harbor.toml` need the Navree checkout too, or version ranges in place of the links.) `navree dev` serves the API, rebuilding it when the Rust code changes, and starts the web app's dev server (`pnpm run dev` in `web/`; `--no-web` skips it). Open `http://localhost:3000` and sign in as the owner.
 
 </Step>
 </Steps>
@@ -118,7 +122,8 @@ Every product route is scoped to a workspace. The example feature shows the patt
 #[guard(InWorkspace::guard())]
 impl ProjectsController {
     /// `GET /api/v1/projects`: the current workspace's projects, newest
-    /// first; `?status=active&search=web&page=2&per_page=20`.
+    /// first; `?filter[status]=active&search=web&sort=name&page=2&per_page=20`
+    /// (see [`ProjectList`]).
     #[get("/")]
     #[can(Read, Project)]
     #[api(summary = "List projects", tag = "Projects", response = ProjectPage, responses(400, 401, 403))]
@@ -127,10 +132,9 @@ impl ProjectsController {
         uow: WorkspaceUow,
         ws: CurrentWorkspace,
         scope: Accessible<Project, Read>,
-        Valid(Query(filter)): Valid<Query<ProjectFilter>>,
-        page: PageQuery,
+        list: List<ProjectList>,
     ) -> Result<Page<ProjectResource>> {
-        Ok(self.projects.list(&uow, ws.id(), scope, filter, page).await?)
+        Ok(self.projects.list(&uow, ws.id(), scope, &list).await?)
     }
 
     /// `POST /api/v1/projects`
@@ -152,7 +156,7 @@ impl ProjectsController {
 
 The `InWorkspace` guard resolves the workspace from the request and checks that the user is a member before the access rules run, so `#[can]` and `Accessible` decide with the user's role in that workspace. The kit uses row isolation: the service reads and writes through `WorkspaceRepo`, so every query on a workspace table is filtered by `workspace_id`, and its migrations add PostgreSQL row-level security policies. `Project` is a [navree-orm](/docs/orm/models/) model declared `#[model(table = "projects", timestamps, workspace, subject)]` with a schema-builder migration, so it is also the access subject the `#[can]` checks name. The module registers `m.model::<Project>()` and `m.workspace_scoped::<Project>()`, so `navree check` verifies all of this. The same holds for the settings module's `notification_settings` model, and for the micro kit's `invoices` model. See [Multi-tenant SaaS](/docs/patterns/multi-tenancy/) and [Workspaces](/docs/workspaces/introduction/).
 
-The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session.
+The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/), which is [`@navree/next`](/docs/frontend/nextjs/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session; `proxy.ts` sends a browser without a session from `/admin` to the sign-in page. The kit writes only what is its own: `lib/navree.ts` (the app's `createNavree()`), the social sign-in and verification-link routes (`lib/social.ts`), live updates (`RealtimeProvider` and `useChannel`) and the abilities (`createAbility`).
 
 The browser's API types are generated from the API's OpenAPI document: `web/lib/api/schema.d.ts` comes from the committed `openapi.json`. `pnpm gen:api` in `web/` exports the document again and regenerates the types with `navree openapi:client`, so a changed DTO is a TypeScript error before it is a bug.
 
@@ -198,8 +202,11 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
     billing.rs              # checkout and trials with the fake provider
     support/                # the shared test setup: a booted app on a fresh database
   web/
-    package.json
-    pnpm-lock.yaml          # committed: CI and deploys install from it
+    package.json            # links @navree/next and @navree/client from the checkout
+    pnpm-lock.yaml          # pins the other packages; the first install adds the links
+    next.config.ts          # lets Next.js read and compile the linked packages
+    proxy.ts                # sends a browser without a session from /admin to sign-in
+    README.md               # the Navree packages, and why they are linked
     components.json         # shadcn/ui
     .env.example            # NAVREE_API_URL and the real-time settings
     .env.local              # a copy for this machine (git-ignored)
@@ -208,16 +215,16 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
       (app)/
         w/[workspace]/      # dashboard, projects, settings
       api/
-        [...path]/route.ts  # the BFF: forwards with the bearer token
-        auth/               # login, two-factor, logout, refresh, email verification
+        [...path]/route.ts  # the BFF (navree.handlers): sign-in, refresh, sign-out, and the bearer-token proxy
+        auth/               # the email verification link
       admin/                # Helm, through the BFF
       auth/                 # social sign-in redirect and callback
       broadcasting/
         auth/route.ts
     lib/
-      bff/                  # the backend-for-frontend, unit-tested
+      navree.ts             # createNavree(): the backend-for-frontend and auth()
+      social.ts             # social sign-in and the verification link, unit-tested
       api/                  # the client, the generated schema and error helpers
-      realtime.ts           # live updates on the workspace's private channel
     components/
       ui/                   # shadcn/ui components
     e2e/                    # Playwright journeys against the real API
@@ -343,13 +350,79 @@ The service also serves `/health/live`, `/health/ready` (with a `micro` check th
 
 `tests/support/mod.rs` boots the service with the committed `config/app.toml` on a fresh SQLite database and replaces the broker with `MicroFake`'s in-memory transport (`override_value` with `MicroOptions` built from `micro.transport()`), so `micro.client().send(..)` and `.emit(..)` go through the same pipeline as over NATS: authentication, validation, the unit of work and the outbox.
 
+## The Navree UI app
+
+`navree new shop --ui navree` is not a kit: it is the minimal app plus a front end that Navree UI draws on the server, with no `web/` folder, no Node and no build step beyond `cargo`. `--ui none` (API only) and `--ui next` are the other two choices. A kit brings its own front end or none, so `--ui navree` with `--kit` is an error.
+
+```sh
+navree new shop --ui navree
+cd shop
+navree dock up            # the database
+navree key:generate       # paste the key into APP_KEY in .env
+navree dev                # http://127.0.0.1:8080
+```
+
+Open `http://127.0.0.1:8080` and sign in as `harpreet.singh@example.com` with the password `demo-password-2026`. The app makes that account, and forty demo customers in eight Indian cities, when it starts. It does so in development and in tests, and never when `env` is `production`.
+
+### What it writes
+
+| Address | Shows |
+|---|---|
+| `/sign-in` | the sign-in form. `?next=` is where to go afterwards, and only an address on your site is followed. A wrong password is a field error that does not say which part was wrong |
+| `/` | four figures and the newest customers. The figures fetch themselves again when a customer changes |
+| `/customers` | a [DataTable](/docs/ui/data-table/): search, a text filter, a menu of cities and of statuses, a plan filter, a range of fees, a date range and sorting. They run in the database, and the address holds them in the [list query](/docs/ui/data-table/#the-url) the API reads (`?search=ludhiana&filter[city][in]=Ludhiana,Amritsar&sort=-monthly_paise&per_page=20`). It fetches itself again when a customer is added or changed |
+| `/customers/new`, `/customers/{id}/edit` | a [form](/docs/ui/forms/) from one struct (a text field, an email, a phone number, a plan and a status chosen from lists, a fee in rupees, a date, a tick box and notes). The browser checks it first, the server checks it again, and a mistake the rules cannot see (an email another customer has) comes back under its field |
+| `/customers/{id}` | one customer, in cards |
+| `/profile` | who is signed in |
+| `POST /sign-out` | signs out, from the user menu |
+
+Amounts are stored in paise and shown with lakh grouping: `₹1,00,000`. Phone numbers are stored as `+919876501001` and shown as `+91 98765 01001`.
+
+```text
+src/
+├── ui/
+│   ├── auth.rs      # how a browser signs in: the one file that knows
+│   ├── shell.rs     # the sidebar, the top bar and the user menu
+│   ├── live.rs      # the server-sent event stream and its hub
+│   ├── pages.rs     # /sign-in, /sign-out, /profile
+│   └── format.rs    # rupees, phone numbers, days
+└── modules/customers/
+    ├── entity.rs    # the table as an ORM model; Plan and Status
+    ├── form.rs      # the form that adds and edits
+    ├── table.rs     # the table's columns, sort and filters
+    ├── service.rs   # unique emails, the figures, telling open pages
+    ├── pages.rs     # the customer pages
+    ├── home.rs      # / and its live figures
+    ├── seed.rs      # forty demo customers, never in production
+    └── migrations/  # the customers table
+tests/journey.rs     # a visitor's whole way through, over HTTP
+```
+
+### How a browser signs in
+
+Every page that needs a signed-in user is marked `.authenticated()` and `.page()`. A guest who asks for one is sent to `/sign-in?next=` and, once signed in, back to it ([Errors and states](/docs/ui/errors-and-states/#sign-in-and-back-to-where-you-were)). `config/app.toml` sets `ui.sign_in_redirect = true` for this.
+
+`src/ui/auth.rs` is the only file that knows how a browser signs in. It gives the pages three things: `CurrentAccount` (who is signed in, as a handler argument; `Option<CurrentAccount>` for a page a guest may see too), `Browser::sign_in(email, password)` and `Browser::sign_out()`. Today it looks the account up in the `users` table of `AuthModule`, checks the password with its hasher, and keeps the user's id in a [server-side session](/docs/basics/sessions-and-csrf/) that the browser's cookie names. A strategy tells the rest of the app who that is, so `.authenticated()` and `CurrentUser` work as they do for a call with a token. Forms carry the session's CSRF token (the page's script sends it as a header; a plain form posts it as a field), so a post without it is refused.
+
+To sign in another way, or when `AuthModule` offers cookie sign-in of its own, replace the bodies of `Browser::sign_in`, `Browser::sign_out` and `BrowserStrategy`. The pages, the shell and the tests stay as they are, because they never touch the cookie, the session or the hasher. The top of `auth.rs` says the same.
+
+Public sign-up is off in this app (`auth.registration = false`), since the screens are for your own staff. Accounts come from the seeder in development, or from you.
+
+### Live updates
+
+`src/ui/live.rs` is the one place that bridges the app's events to the page: a small hub. `CustomerService` calls `Hub::nudge` once a change has committed, and `GET /customers/events` tells every open table and figure to fetch itself again. Open two windows to see it. When the framework offers a live hub of its own, use that instead of this file; the pages only name the stream's address.
+
+### Tests
+
+`cargo test` runs `tests/journey.rs`, which boots the whole app on a fresh SQLite file and walks a visitor through it over HTTP: a guest sent to sign in, a wrong password, the right one, the table with its search, filters, sort and pages, a form with its mistakes, a good customer and its toast, an edit, the live stream speaking after an add, a post without the token refused, and signing out.
+
 ## Every kit includes
 
 - **`AGENTS.md` and `CLAUDE.md`**, so a coding agent knows the project's layout, commands and conventions from its first prompt. They point at the [agent skills](/docs/ai/agent-skills/) for Navree's common tasks (`navree skills:install` copies them into the project; or `npx skills add NavreeHQ/navree`).
 - **`dock.toml`** for [Dock](/docs/tools/dock/): `navree dock up` starts the services the kit needs, and `.env` already holds their settings. The CI workflow runs the same database image as a service container.
 - **`harbor.toml`** for [Harbor](/docs/tools/harbor/): `navree harbor:provision` prepares a server and `navree deploy` ships a release with a health check on `/health/ready`. In the SaaS kit, its `[frontend]` section deploys `web/` in the same release as the API, so a page and the API it calls always come from the same build.
 - **A CI workflow** in `.github/workflows/ci.yml`: formatting, clippy, `check` (the module graph), the migrations on PostgreSQL and the Rust tests; for `saas` and `api`, the OpenAPI drift check; for `micro`, `micro:patterns`; for `saas`, the web app's lint, type check, unit tests and build, and the Playwright journeys against the real API.
-- **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue, billing and the message broker. The SaaS kit's BFF and API client have unit tests (Vitest) against a scripted API, and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member, upgrading a plan through the fake checkout, and what members and viewers may do.
+- **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue, billing and the message broker. The SaaS kit's social sign-in routes and API client have unit tests (Vitest) against a scripted API, and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member, upgrading a plan through the fake checkout, and what members and viewers may do.
 
 ## Customizing a kit
 
@@ -378,7 +451,7 @@ To adopt a later kit's changes, generate a fresh copy with the current CLI and c
 
 ```sh
 navree new acme-latest --kit saas
-git diff --no-index acme-latest/web/lib/bff acme/web/lib/bff
+git diff --no-index acme-latest/web/lib acme/web/lib
 ```
 
 The release notes list what changed in each kit, so you can pick up a fix without reviewing the whole template.

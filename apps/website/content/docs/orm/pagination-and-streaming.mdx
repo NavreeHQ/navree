@@ -36,6 +36,8 @@ let wide = Deal::query().latest().paginate(&db, (2, 50)).await?;
 
 Order the query, ending with a unique column, or rows can move between pages; `latest()` orders by creation time, and with UUID v7 keys `order_by_desc(Deal::ID)` does the same with an index. A page past the end is empty and its rows aren't queried. `page.map(|deal| ..)` turns the records into another type, such as an API resource, keeping the metadata. [Pagination](/docs/database/pagination/) covers `Page` and `PageQuery` in detail.
 
+A list with filters, a sort and a search takes a `List<R>` instead, and `Builder::list` applies it before `paginate`: see [list queries](/docs/basics/list-queries/).
+
 ### Without a total
 
 Counting every matching row costs a query, and on a large table a slow one. `simple_paginate` reads one record more than the page instead, which tells whether another page follows:

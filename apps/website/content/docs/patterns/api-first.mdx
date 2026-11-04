@@ -281,7 +281,7 @@ Retire a version when nobody calls it. Every request is counted in `http_request
 
 ## Pagination
 
-Every list is paginated, so a client never downloads a whole table. Take `PageQuery` and return `Page<T>`:
+Every list is paginated, so a client never downloads a whole table. Take `List<R>`, the [list query](/docs/basics/list-queries/) of a resource, and return `Page<T>`:
 
 ```rust title="crates/crm-deals/src/controller.rs"
 #[get("/")]
@@ -291,14 +291,13 @@ async fn index(
     &self,
     uow: Uow,
     scope: Accessible<Deal, Read>,
-    Valid(Query(filter)): Valid<Query<DealFilter>>,
-    page: PageQuery,
+    list: List<DealList>,
 ) -> Result<Page<DealResource>> {
-    self.deals.list(&uow, scope, filter, page).await
+    self.deals.list(&uow, scope, &list).await
 }
 ```
 
-`GET /api/v1/deals?stage=proposal&page=2&per_page=20` answers with the page and where it is:
+`GET /api/v1/deals?filter[stage]=proposal&page=2&per_page=20` answers with the page and where it is:
 
 ```json
 {
@@ -307,9 +306,9 @@ async fn index(
 }
 ```
 
-- `page` starts at 1; `per_page` defaults to 15 and is capped at 100. Anything that isn't a positive integer is a 400.
+- `page` starts at 1; `per_page` defaults to 15, and a size above the list's maximum (100 unless its `ListSpec` says otherwise) is a 400. Anything that isn't a positive integer is a 400 too.
 - `Accessible<Deal, Read>` turns the caller's access rules into SQL, so a page only contains rows the caller may read and `total` counts only those.
-- Filters are a validated query struct (`DealFilter`) next to `PageQuery`.
+- Filters, sort and search are part of the same query, declared once in the list's `ListSpec` (`DealList`): `filter[stage]`, `filter[owner_id]`, `filter[company_id]`, `sort` and `search`. A filter the spec doesn't list is a 400 that names it.
 - For feeds and infinite scroll, cursor pagination (`CursorRequest` and the query's `cursor_paginate`) returns `next_cursor` instead of page numbers and never shifts when rows are added.
 
 `Page<T>` is generic, so give each list a named schema for the document. The CRM's `DealPage` has the same `data` and `meta` members, and the route says `response = DealPage`. See [Pagination](/docs/database/pagination/).

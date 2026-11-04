@@ -5,6 +5,27 @@ description: "Lists driven by list queries: filters, sort, search and paging in 
 
 A list screen has the same parts in every app: a table of one page of records, sortable headings, a search box, filters and the page buttons, all kept in the URL so a reload, the back button and a shared link show the same list. With Navree the server does the sorting, filtering and paging (the list endpoint reads a [list query](/docs/frontend/typed-client/#list-queries)), so the table only renders the page it gets and turns clicks into the next list query. `@navree/next` and `@navree/nuxt` ship that table on [TanStack Table](https://tanstack.com/table), styled with [the theme](/docs/frontend/theming/).
 
+## One grammar, from the URL to the database
+
+The table's URL, the request to the API and the server's query all use the same names, written the same way:
+
+```text
+filter[stage]=won                      equal
+filter[created_at][gte]=2026-10-01     an operator: eq ne gt gte lt lte in not_in contains starts_with null
+filter[stage][in]=lead,won             one of several values
+filter[owner_id][null]=true            is NULL (false: is not NULL)
+sort=-created_at,name                  a leading "-" sorts descending
+search=acme
+page=2&per_page=25                     numbered pages, or
+cursor=eyJpZCI6NDJ9&limit=50           cursor pages; before=... is the page before
+```
+
+- On the server, a handler that takes `List<Resource>` gets a query it can trust. The resource's `ListSpec` is an allow-list of the fields that can be filtered (and with which operators), sorted and searched. Anything outside it, a value of the wrong type or a page size past the maximum is a 400 that names the parameter. `Builder::list` then applies the query to the database query. See [list queries](/docs/basics/list-queries/) for the server side.
+- Navree UI tables and Helm use the same names, so a link from a Navree UI table, an admin screen and your Next.js or Nuxt page can all point at the same list.
+- In JavaScript, `@navree/client` reads and writes the grammar, and `useListQuery` and the table only go through it. The [typed client page](/docs/frontend/typed-client/#list-queries) has the operators table, the limits and the canonical form.
+
+The canonical form is what `useListQuery` writes to the URL: filters grouped by field, then `sort`, `search`, `page`, `per_page`, `cursor`, `before` and `limit`, so the same list is always the same address.
+
 ## The URL is the state
 
 `useListQuery(defaults)` reads the list query from the current URL and writes changes back with `router.replace`, keeping the page's other parameters:
@@ -12,17 +33,20 @@ A list screen has the same parts in every app: a table of one page of records, s
 | Member | What it does |
 |---|---|
 | `query` | The `ListQuery` in the URL, over `defaults`. |
+| `problems` | What is wrong in the list query of the URL, as `{ param, message }`. The rest of the query still applies, so an edited or old link shows a page; show the problems if you want. |
 | `setQuery(next)` | Replaces the list query (a value, or a function of the current one). |
 | `setFilter(field, value)` | Sets one filter, or removes it with `undefined`, and goes back to page 1. |
 | `setSearch(text)` | Sets the search (an empty string removes it) and goes back to page 1. |
 | `toggleSort(field, {multi})` | Ascending, descending, off; other fields are dropped unless `multi`. |
 | `setPage(n)` | Moves to page `n` (page 1 is left out of the URL). |
 
-Values equal to `defaults` stay out of the URL, so `useListQuery({ per_page: 25 })` keeps `?per_page=25` from every link.
+Values equal to `defaults` stay out of the URL, so `useListQuery({ per_page: 25 })` keeps `?per_page=25` from every link. A list that pages by cursor (`cursor`, `before` or `limit` in the URL) takes no default `page` or `per_page`, and a numbered one takes no default `cursor`, `before` or `limit`, so the two ways of paging never mix.
 
 ```text
 /deals?tab=open&filter[stage]=won&filter[created_at][gte]=2026-10-01&sort=-amount_cents&search=acme&page=2
 ```
+
+Parameters that are not the list query's, such as `tab` above, stay as they are. The names of the grammar are the only ones read: nothing else (`q`, `per`, `after` or `f.stage`) is part of a list query.
 
 In Next.js the hook uses `next/navigation`, so the component must sit under a `<Suspense>` boundary (Next.js requires one around `useSearchParams` in pages that are rendered ahead of time). In Nuxt it uses vue-router's route query, and its setters return the navigation's promise.
 
@@ -97,7 +121,7 @@ export function DealsTable() {
 | `align` | `start` (default), `center` or `end` (amounts and counts). |
 | `className` | Classes for the column's heading and cells, such as `hidden md:table-cell` to drop a column on phones. |
 
-A heading click sends `sort` and drops `page` and `cursor`; shift-click adds the column to the sort. Each heading carries `aria-sort`. The page buttons send `page`. The pagination bar shows "26–50 of 60" and hides when the list is empty. `Pagination` is exported on its own for card grids and boards.
+A heading click sends `sort` and drops `page`, `cursor` and `before`; shift-click adds the column to the sort (up to four fields). Each heading carries `aria-sort`. The page buttons send `page`. The pagination bar shows "26–50 of 60" and hides when the list is empty. `Pagination` is exported on its own for card grids and boards.
 
 ### Your own markup
 
@@ -153,6 +177,16 @@ Filters are list-query filters, so a filter control is a call to `setFilter`:
 </Select>
 <DateRange onChange={({ from, to }) => setFilter("created_at", { gte: from, lt: to })} />
 ```
+
+| Control | Call | In the URL |
+|---|---|---|
+| A select | `setFilter("stage", "won")` | `filter[stage]=won` |
+| A multi-select | `setFilter("stage", ["lead", "won"])` | `filter[stage][in]=lead,won` |
+| A text box | `setFilter("title", { contains: "acme" })` | `filter[title][contains]=acme` |
+| A date or number range | `setFilter("amount", { gte: 100, lte: 900 })` | `filter[amount][gte]=100&filter[amount][lte]=900` |
+| An "empty" toggle | `setFilter("owner_id", { null: true })` | `filter[owner_id][null]=true` |
+
+A blank value removes the filter. The server accepts only the fields and operators the resource's `ListSpec` lists, and answers anything else with a 400 that names the parameter (for example `filter[password][contains]`).
 
 When the endpoint reports facets in `meta.facets`, `facetCounts(meta, "stage")` from `@navree/client` gives `[{value, count, label?}]` for a filter's options, whether the API sends a map of counts or a list.
 

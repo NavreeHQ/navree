@@ -95,14 +95,13 @@ async fn index(
     &self,
     uow: Uow,
     scope: Accessible<Deal, Read>,
-    Valid(Query(filter)): Valid<Query<DealFilter>>,
-    page: PageQuery,
+    list: List<DealList>,
 ) -> Result<Page<DealResource>> {
-    self.deals.list(&uow, scope, filter, page).await
+    self.deals.list(&uow, scope, &list).await
 }
 ```
 
-The `Accessible<Deal, Read>` extractor turns the same rules into a SQL filter, so the list holds exactly the deals this user may read.
+The `Accessible<Deal, Read>` extractor turns the same rules into a SQL filter, so the list holds exactly the deals this user may read. `List<DealList>` reads the client's filters, sort, search and page from the query string against the deals' `ListSpec` ([list queries](/docs/basics/list-queries/)), and the service applies them on top of the access filter: a client's filter can narrow the list, never widen it.
 
 With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; a record the user may not touch is a 403. The handler receives the loaded record with the `Authorized<M, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
 

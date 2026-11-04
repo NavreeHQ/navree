@@ -137,32 +137,62 @@ These appear as you use more of Navree:
 
 ## With a front end
 
+The minimal app has two front-end choices. `--ui next` adds a Next.js app in `web/`. `--ui navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`.
+
+### With Next.js
+
 `navree new planner --ui next` adds a Next.js app in `web/`:
 
 <FileTree title="planner/web/">{`
-package.json          # next, react, react-dom; dev, build, start, typecheck
+package.json          # next, react, react-dom, @navree/client and @navree/next; dev, build, start, typecheck
+pnpm-workspace.yaml   # pnpm settings for the web app
 tsconfig.json
 next.config.ts
 .env.example          # NAVREE_API_URL, where the API listens
 README.md
+proxy.ts              # keeps pages behind sign-in
 lib/
-  bff.ts              # calls the API and keeps the tokens in httpOnly cookies
+  navree.ts           # createNavree(): the backend-for-frontend, auth() and the proxy
 app/
   layout.tsx
-  page.tsx
+  page.tsx            # a server component that shows the signed-in user
+  sign-out.tsx        # the sign-out button
   login/
     page.tsx
   api/
-    auth/
-      login/
-        route.ts      # signs in through the API, sets the cookies
-      logout/
-        route.ts
     [...path]/
-      route.ts        # forwards every other /api call with the bearer token
+      route.ts        # sign-in, sign-out and refresh, and every other /api call with the bearer token
 `}</FileTree>
 
-The browser only talks to the Next.js server, which talks to the API. The tokens stay in httpOnly cookies on that server, and the browser never sees them. `navree dev` starts the front end's dev server too.
+The browser only talks to the Next.js server, which talks to the API. `@navree/next` keeps the tokens in httpOnly cookies on that server, and the browser never sees them. Until the Navree packages are on npm, `package.json` links them from your Navree checkout, and `web/README.md` says how to build them. `navree dev` starts the front end's dev server too.
+
+### With Navree UI
+
+`navree new planner --ui navree` adds a front end to the same minimal app, with no `web/` folder and no Node project. It writes these files beside the app's own:
+
+<FileTree title="planner/">{`
+src/
+  ui/
+    auth.rs           # how a browser signs in: the one file that knows
+    shell.rs          # the sidebar, the top bar and the user menu
+    live.rs           # the server-sent event stream and its hub
+    pages.rs          # /sign-in, /sign-out, /profile
+    format.rs         # rupees, phone numbers, days
+  modules/
+    customers/        # an example feature module with its pages
+      entity.rs       # the table as an ORM model
+      form.rs         # the form that adds and edits
+      table.rs        # the DataTable's columns, sort and filters
+      service.rs
+      pages.rs        # the customer pages
+      home.rs         # / and its live figures
+      seed.rs         # forty demo customers, never in production
+      migrations/
+tests/
+  journey.rs          # a visitor's whole way through, over HTTP
+`}</FileTree>
+
+[The Navree UI app](/docs/getting-started/starter-kits/#the-navree-ui-app) describes each page.
 
 ## The framework repository
 

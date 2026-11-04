@@ -90,13 +90,14 @@ export const sections: DocsSection[] = [
   {
     slug: "basics",
     title: "The basics",
-    description: "Routes, requests, validation, responses, errors, middleware, logging and sessions: the parts every HTTP app uses.",
+    description: "Routes, requests, validation, list queries, responses, errors, middleware, logging and sessions: the parts every HTTP app uses.",
     pages: [
       "routing",
       "access-control",
       "middleware",
       "requests",
       "validation",
+      "list-queries",
       "phone-numbers",
       "responses",
       "errors",

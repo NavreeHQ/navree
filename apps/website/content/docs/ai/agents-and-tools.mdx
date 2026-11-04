@@ -39,12 +39,13 @@ The examples build the CRM's deals assistant, which answers questions about the 
 An agent is an `#[injectable]` struct, so its tools reach your services through dependency injection. The CRM's assistant uses the deal and activity services the API already uses:
 
 ```rust title="crates/crm-deals/src/assistant.rs"
-use crm_activities::{ActivityFilter, ActivityResource, ActivityService, CreateActivity};
+use crm_activities::{ActivityResource, ActivityService, CreateActivity};
 use crm_core::{Activity, ActivityKind, Deal, Move, Stage, SubjectType};
 use navree::ai::{Agent, AgentOptions, AgentRun, agent};
+use navree::orm::list::{Condition, ListQuery, Op};
 use navree::prelude::*;
 
-use crate::{DealFilter, DealResource, DealService, MoveDeal};
+use crate::{DealResource, DealService, MoveDeal};
 
 /// The deals assistant in the CRM's chat panel.
 #[injectable]
@@ -117,16 +118,18 @@ impl Agent for DealsAssistant {
     /// by stage, or only the user's own. Returns at most 20.
     #[tool(read_only)]
     async fn search_deals(&self, run: &AgentRun, args: SearchDeals) -> Result<Vec<DealResource>> {
-        let filter = DealFilter {
-            search: args.query,
-            stage: args.stage,
-            owner_id: args.mine.then(|| run.user_id()),
-            ..DealFilter::default()
-        };
-        let page = PageQuery { per_page: 20, ..PageQuery::default() };
+        let mut list = ListQuery::new();
+        list.per_page = Some(20);
+        list.search = args.query.map(|query| query.trim().to_owned()).filter(|query| !query.is_empty());
+        if let Some(stage) = args.stage {
+            list.filter.push(equals("stage", stage.as_str()));
+        }
+        if args.mine {
+            list.filter.push(equals("owner_id", run.user_id()));
+        }
         let deals = self
             .deals
-            .list(run.uow(), run.accessible::<Deal, Read>(), filter, page)
+            .list(run.uow(), run.accessible::<Deal, Read>(), &list)
             .await?;
         Ok(deals.data)
     }
@@ -134,15 +137,13 @@ impl Agent for DealsAssistant {
     /// The activity on one deal, newest first: notes, calls, emails, meetings and tasks.
     #[tool(read_only)]
     async fn deal_activity(&self, run: &AgentRun, args: DealRef) -> Result<Vec<ActivityResource>> {
-        let filter = ActivityFilter {
-            subject_type: Some(SubjectType::Deal),
-            subject_id: Some(args.deal_id),
-            ..ActivityFilter::default()
-        };
-        let page = PageQuery { per_page: 30, ..PageQuery::default() };
+        let mut list = ListQuery::new();
+        list.per_page = Some(30);
+        list.filter.push(equals("subject_type", SubjectType::Deal.as_str()));
+        list.filter.push(equals("subject_id", args.deal_id));
         let activities = self
             .activities
-            .list(run.uow(), run.accessible::<Activity, Read>(), filter, page)
+            .list(run.uow(), run.accessible::<Activity, Read>(), &list)
             .await?;
         Ok(activities.data)
     }
@@ -166,6 +167,18 @@ impl Agent for DealsAssistant {
                 },
             )
             .await
+    }
+}
+```
+
+A tool reads a list through the service, with a [list query](/docs/basics/list-queries/) it builds from its arguments. The service applies it with the same `ListSpec` as the API's endpoint, so a field the spec does not declare is an error and never reaches SQL. `equals` writes `filter[field]=value`:
+
+```rust title="crates/crm-deals/src/assistant.rs"
+fn equals(field: &str, value: impl ToString) -> Condition {
+    Condition {
+        field: field.to_owned(),
+        op: Op::Eq,
+        values: vec![value.to_string()],
     }
 }
 ```

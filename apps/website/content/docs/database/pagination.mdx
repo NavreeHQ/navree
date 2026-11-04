@@ -10,6 +10,8 @@ Lists should come back a page at a time. `navree-db` gives you two kinds of pagi
 
 A model query paginates itself, `Deal::query().latest().paginate(&uow, page)`, and answers with navree-db's `PageQuery`, `Page` and the `{data, meta}` response. This page covers those types and what an API does with them; [pagination and streaming](/docs/orm/pagination-and-streaming/) covers the query side (simple pages, cursors, chunks and streams).
 
+`page`, `per_page`, `cursor` and `limit` are also the paging names of Navree's [list query](/docs/basics/list-queries/), the one format for filters, sort, search and paging. A list that filters or sorts takes `List<R>` instead of `PageQuery`, and gets its page from `list.page_request(&SPEC)`. `PageQuery` and `CursorQuery` are the page-only subset: the same names, but they lower a page size past 100 where a list query refuses it.
+
 ## Paginating a query
 
 Take a `PageQuery` in the handler, order the query, and call `paginate` on it with the unit of work:
@@ -99,17 +101,16 @@ A value that isn't a positive integer is a 400, with a message per field:
 }
 ```
 
-`PageQuery` ignores every other query parameter, so a handler can take your filters as well:
+`PageQuery` ignores every other query parameter, so a handler can take parameters of its own beside it. For filters, sort and search, take a `List<R>` instead, which reads `page` and `per_page` with the rest of the [list query](/docs/basics/list-queries/):
 
 ```rust
 async fn index(
     &self,
     uow: Uow,
     scope: Accessible<Company, Read>,
-    Valid(Query(filters)): Valid<Query<CompanyFilters>>,
-    page: PageQuery,
+    list: List<CompanyList>,
 ) -> Result<Json<CompanyPage>> {
-    Ok(Json(self.companies.list(&uow, scope, filters, page).await?))
+    Ok(Json(self.companies.list(&uow, scope, &list).await?))
 }
 ```
 
@@ -161,7 +162,7 @@ async fn index(
 }
 ```
 
-A failed rule is a 400 in the same format, from [validation](/docs/basics/validation/). `PageQuery::new` still caps `per_page` at 100. To allow bigger pages, pass a `(page, per_page)` pair to `paginate` instead of a `PageQuery`: the pair is not capped, so validate the size yourself.
+A failed rule is a 400 in the same format, from [validation](/docs/basics/validation/). `PageQuery::new` still caps `per_page` at 100. A list with a `ListSpec` gets the same rules without code: `.page_size(20, 100)` makes 20 the default and a larger `per_page` a 400. To allow bigger pages, pass a `(page, per_page)` pair to `paginate` instead of a `PageQuery`: the pair is not capped, so validate the size yourself.
 
 ## Shaping the items
 
@@ -268,6 +269,9 @@ See [HTTP tests](/docs/testing/http-tests/) for the assertions.
   </LinkCard>
   <LinkCard href="/docs/orm/eager-loading/" title="Eager loading">
     Loading the relations a page shows in one query each.
+  </LinkCard>
+  <LinkCard href="/docs/basics/list-queries/" title="List queries">
+    Filters, sort, search and paging in one query-string format.
   </LinkCard>
   <LinkCard href="/docs/basics/validation/" title="Validation">
     `Valid<Query<T>>` for your own query parameters.

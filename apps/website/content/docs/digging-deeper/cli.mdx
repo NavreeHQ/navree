@@ -48,6 +48,9 @@ Commands:
   make:factory       Generate a model factory in a module (factories/NAME.rs)
   make:seeder        Generate a seeder in a module (seeders/NAME.rs), registered for db:seed
   make:resource      Generate a Helm admin-panel resource for a model of a module (resources/MODEL.rs)
+  make:page          Generate a Navree UI page in a module (pages/NAME.rs): a GET route in the app's shell, with its test
+  make:form          Generate a form in a module (forms/NAME.rs): a struct with its rules, and the handlers that draw and read it
+  make:table         Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler
   dev                Serve the app, rebuilding and restarting it when the code changes
   check              Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations)
   gate               Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine
@@ -128,22 +131,22 @@ storage/
 |---|---|
 | `--kit <saas\|api\|micro>` | Creates the app from a [starter kit](/docs/getting-started/starter-kits/) instead of the minimal app. |
 | `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL, a server of yours; MariaDB is [untested](/docs/database/getting-started/#mysql-and-mariadb)) or `sqlite` (a file in `storage/`). `timescale`, `postgresql` and `mariadb` are accepted as aliases. It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres` and refuse the other two. |
-| `--ui <next\|none>` | `next` also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app). `navree dev` starts it. Default: `none`, API only. With a kit, only `saas` has a front end (`--kit saas --ui next` is the same as `--kit saas`); the `api` and `micro` kits refuse `--ui next`. |
+| `--ui <next\|navree\|none>` | The front end. `next` also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app); `navree dev` starts it. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no `web/` folder and no Node: the shell, a sign-in page, a customers table with search, filters and sort, a form, a page for each customer, a home page with live figures, forty demo customers and a demo account (`harpreet.singh@example.com`, development only), and a test that walks a visitor through all of it ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). How a browser signs in is one file, `src/ui/auth.rs`, which says what to replace if you sign in another way. `none` is the API alone, and the default. With a kit, only `saas` has a front end (`--kit saas --ui next` is the same as `--kit saas`); the `api` and `micro` kits refuse `--ui next`, and every kit refuses `--ui navree`, which goes with the minimal app. |
 | `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`). Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --git`, Cargo's own copy of the repository), else `navree = "1.0.0"` (the CLI's own version), which won't build until the crate is on crates.io. |
 
 The name starts with a lower-case letter and uses lower-case letters and digits, with single `-` or `_` between words (`my-shop`). Rust keywords, Windows device names and `navree` itself are refused. `navree new` refuses a directory that exists and isn't empty, formats the generated code with `rustfmt` when it is installed, and runs `git init` (nothing is committed) unless the app is inside a repository already or Git is missing. For the starter kits, which ship a `harbor.toml`, it also writes `harbor.key` and keeps it out of Git. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
 
 ## Generators
 
-Run generators anywhere inside your app: the CLI finds the package from the current directory. They never overwrite a file (`refusing to overwrite` stops them before anything is written). They register what they create by adding `mod` declarations, adding a `.migration(..)` call to a module's migration set and inserting lines above marker comments:
+Run generators anywhere inside your app: the CLI finds the package from the current directory. They never overwrite a file (`refusing to overwrite` stops them before anything is written; only the [UI generators](#ui-generators) replace files, and only with `--force`). They register what they create by adding `mod` declarations, adding a `.migration(..)` call to a module's migration set and inserting lines above marker comments:
 
 | Marker | In | Where generators add |
 |---|---|---|
 | `// navree:modules` | `src/app.rs` | `.module(...)` lines for new modules |
-| `// navree:wire` | a module's `wire` method | registrations: controllers, providers, jobs, listeners, templates, commands, migrations, seeders, models, agents, MCP servers and Helm resources |
+| `// navree:wire` | a module's `wire` method | registrations: controllers, pages, providers, jobs, listeners, templates, commands, migrations, seeders, models, agents, MCP servers and Helm resources |
 | `// navree:policies` | `src/abilities.rs` | calls to new policies |
 
-When a marker is missing (in code you wrote by hand), the generator prints the line to add as a `next` hint instead. Names are `snake_case`; anything else fails with a suggestion (`blog_posts` for `BlogPosts`). `make:model`, `make:factory`, `make:seeder` and `make:resource` also take a model's name as `Deal` or `deal`.
+When a marker is missing (in code you wrote by hand), the generator prints the line to add as a `next` hint instead. Names are `snake_case`; anything else fails with a suggestion (`blog_posts` for `BlogPosts`). `make:model`, `make:factory`, `make:seeder` and `make:resource` also take a model's name as `Deal` or `deal`, and the [UI generators](#ui-generators) take any of `SalesReport`, `sales_report` and `sales-report`.
 
 ### make:module
 
@@ -206,6 +209,44 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, `McpModule`) |
 
 `make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [models](/docs/orm/models/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/), [tests](/docs/testing/getting-started/) and [MCP servers](/docs/ai/mcp-servers/).
+
+### UI generators
+
+Three generators write the parts of a [Navree UI](/docs/ui/overview/) screen: a page, a form and a table. They take the name first and the module as an option, `navree make:<kind> <Name> [--module <module>]`, so each reads like the screen it makes. Without `--module` they use the app's only module; when the app has several, they stop and ask you to name one. The module must exist (`make:module` first).
+
+```sh
+navree make:page Dashboard --module posts
+```
+
+```text
+  created  src/modules/posts/pages/dashboard.rs
+  created  src/modules/posts/pages/mod.rs
+  created  src/modules/posts/tests/dashboard_page.rs
+  updated  src/modules/posts/mod.rs
+  updated  src/modules/posts/tests/mod.rs
+  next     the page takes `AppShell`: the app needs `navree::ui::UiModule` and a registered `Shell` (`navree new <app> --ui navree` sets both up; see https://navree.com/docs/ui/app-shell/)
+  next     link to it from the shell: `NavItem::new("Dashboard", "/dashboard")`
+```
+
+| Command | Creates (in the module) | Registers |
+|---|---|---|
+| `make:page Dashboard` | `pages/dashboard.rs`, `DashboardPage`: a controller with `GET /dashboard` that takes `AppShell` and returns `AppPage`, for signed-in users (`#[authenticated]`; `--public` makes it `#[public]`). And `tests/dashboard_page.rs`, a test that boots the app and gets the page, as a guest and as a signed-in user | the controller, in `wire`; the test, in `tests/mod.rs` |
+| `make:form NewDeal` | `forms/new_deal.rs`: `NewDealForm`, a struct with `#[derive(Debug, Deserialize, Validate, Form)]` and a field each for a name, an amount in rupees (`Money`), a choice (an enum with `Options`) and a date, with more to copy in a comment (an email, a number, a checkbox); and the `page` and `store` functions that draw the form and read it back with `Submit<T>` and `Rejected<T>`. See [Forms](/docs/ui/forms/) | nothing: call `page` and `store` from your routes |
+| `make:table Deals` | `tables/deals.rs`: `DealRow`, a `#[derive(Clone, TableRow)]` struct with `#[table(sort = "-created_at", per = 25, per_pages(25, 50, 100))]` and columns that are sortable, searched, filtered and linked, with a badge and a numeric column to copy in a comment; `deals_table`, which draws it with a `DataTable`; and `index`, the handler. See [DataTable](/docs/ui/data-table/) | nothing: call `index` from a route |
+
+| Option | What it does |
+|---|---|
+| `--module <module>` | The module, a directory under `--path`. Default: the app's only module. |
+| `--path <dir>` | The directory holding feature modules (default `src/modules`). |
+| `--public` | `make:page` only: anyone may open the page, not only signed-in users. |
+| `--dry-run` | Prints what would be created and edited, with the contents of the files, and writes nothing. |
+| `--force` | Replaces the files that exist. Without it, a second run stops with `refusing to overwrite` before anything is written. |
+
+The name may be written `SalesReport`, `sales_report` or `sales-report`: all three make `sales_report.rs`. A page's route is its name (`/sales-report`). A form and a table are of one record, so `deals` and `deal` both make `DealRow`, and a table's route and its `DataTable` id are plural (`/deals`).
+
+A page takes `AppShell`, which reads the `Shell` the app registers, so the app needs `UiModule` and a registered `Shell` ([how](/docs/ui/app-shell/#registering-it)). `navree new <app> --ui navree` creates an app with both. A module's pages see the shell only when a global module exports it (`m.global()`) or the module imports the module that does. The generated test registers a shell of its own that way, so it runs either way.
+
+`make:table` loads the rows from the module's model when it finds one named for a row (`models/deal.rs`, the module's `entity.rs` or `entities/deal.rs`) with an `id: Uuid`, a `name: String` and a `created_at: DateTime<Utc>`, as `make:module` and `make:model` write them. It then also writes `From<Deal> for DealRow` and the `index` handler, which loads a page with `query.load_as(Deal::query(), &uow, ..)`. Without such a model it writes the row and `deals_table`, sketches the handler in a comment and says so.
 
 ## The development server
 

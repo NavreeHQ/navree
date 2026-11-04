@@ -274,7 +274,25 @@ Each filter is a **chip** in the list's toolbar: a dashed button with the filter
 | `Filter::custom(name, label, f)` | A value typed in; `f(query, value)` changes the model query |
 | `.reads([columns])`, on a boolean or custom filter | The columns its closure reads, so it runs for who may read them. Without it the filter runs only for a user with no column hidden from them. |
 
-The search, filters, sort and page are in the URL (`?search=globex&filters[stage]=won&sort=-amount_cents&page=2`), so a filtered list is a link you can share. A filter takes one or more values: repeat it, or separate them with commas.
+The search, filters, sort and page are in the URL, so a filtered list is a link you can share:
+
+```text
+/admin/resources/deals?search=globex&filter[stage][in]=lead,won&sort=-amount_cents&page=2
+```
+
+The names are the same as on every Navree list (see [list queries](/docs/basics/list-queries/)):
+
+| Parameter | Means |
+|---|---|
+| `filter[stage]=won` | The filter holds this one value |
+| `filter[stage][in]=lead,won` | The filter holds any of these values. Separate them with commas, or repeat the parameter. |
+| `search=globex` | The text to search for |
+| `sort=-amount_cents` | The column to sort by; a leading `-` sorts descending |
+| `page=2`, `per_page=50` | The page and its size (at most 100) |
+
+A Helm filter is equal to a value or one of a list, so those are the only two forms it reads. Helm sorts by one column: when a sort names several (`sort=-amount_cents,title`), the first counts. `via[column]=id` (the rows of a relationship panel) and `range` (the period of the metric cards) are Helm's own parameters, and sit after the others in the links Helm writes.
+
+A page is forgiving: a parameter Helm does not read, such as `filter[stage][gte]=won`, is left out and the list still opens. A `page` or `per_page` that is not a number in range is a 400 that names it.
 
 ### Exporting
 
@@ -574,7 +592,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 | Route | What it does |
 |---|---|
 | `GET /admin/api/resources` | The resources the user may read, with their fields, filters, actions, metrics and `can.create`, and the pages they may open |
-| `GET /admin/api/resources/{resource}` | The list: `search`, `filters[name]`, `sort`, `page`, `per_page`; answers `{"data": [..], "meta": {..}}` |
+| `GET /admin/api/resources/{resource}` | The list: `search`, `filter[name]`, `filter[name][in]`, `sort`, `page`, `per_page`; answers `{"data": [..], "meta": {..}}`. A parameter of the list query that Helm does not read (`filter[stage][gte]`, `cursor`) is a 400 that names it. |
 | `GET /admin/api/resources/{resource}/{id}` | One record with its fields |
 | `GET /admin/api/resources/{resource}/options` | Records for a relationship picker: `search`; answers `{"data": [{"id", "title"}]}`, at most 20 |
 | `POST /admin/api/resources/{resource}` | Creates a record from `{"field": value, ..}` (201) |

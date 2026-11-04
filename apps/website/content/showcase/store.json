@@ -58,7 +58,7 @@
     },
     {
       "name": "Filtered search",
-      "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+      "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
       "desktop": {
         "ttfb_ms": 14,
         "fcp_ms": 132,
@@ -180,7 +180,7 @@
       "name": "A filtered search",
       "statements": [
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM (SELECT \"id\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"state\" IN (?) LIMIT ?) AS \"counted\"",
           "ms": 1.05,
           "plan": [
@@ -190,7 +190,7 @@
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
           "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"state\" IN (?) ORDER BY \"placed_on\" DESC, \"id\" DESC LIMIT ?",
           "ms": 0.53,
           "plan": [
@@ -198,7 +198,7 @@
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
           "ms": 0.29,
           "plan": [
@@ -206,7 +206,7 @@
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
           "ms": 10.57,
           "plan": [
@@ -214,7 +214,7 @@
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "path": "/orders?filter%5Bstatus%5D%5Bin%5D=open&filter%5Bfulfilment%5D%5Bin%5D=packed&filter%5Bstate%5D%5Bin%5D=PB&search=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
           "ms": 0.49,
           "plan": [

@@ -773,7 +773,7 @@ Signatures are checked with `ring`; `alg: none`, HMAC algorithms and critical he
 
 A token in `localStorage` can be read by any script that runs on the page, so one cross-site scripting bug leaks every session. Pages your app serves itself sign the browser in on its [session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session). For a separate web front end, such as a Next.js or Nuxt app, use a **backend-for-frontend** (BFF): the browser talks only to your web server, on the same origin, and never sees a token. The web server keeps the tokens in httpOnly cookies and calls Navree with `Authorization: Bearer`.
 
-The CRM's front end, `apps/crm-web`, is a Next.js app with a BFF in `src/lib/bff`:
+The BFF is one package, `@navree/bff` (`packages/js/bff`). `@navree/next` mounts it in a Next.js app and `@navree/nuxt` in a Nuxt app, and the CRM's two front ends, `apps/crm-web` and `apps/crm-nuxt`, use it that way:
 
 - **Sign-in.** The browser posts its credentials to the BFF's `/api/auth/login`. The BFF calls Navree, stores the access token in a `navree_at` cookie (its `Max-Age` is `expires_in`) and the refresh token in `navree_rt` (30 days), both `HttpOnly; SameSite=Lax` and `Secure` in production, and returns only `{"user": ...}`. A two-factor challenge waits in a `navree_2fa` cookie that only `/api/auth/2fa` receives.
 - **Requests.** Every other `/api/*` call is forwarded with the bearer token from the cookie. On a 401 the BFF refreshes once, updates both cookies and retries. Concurrent requests share one refresh call, because a second use of a refresh token would revoke the session. If the refresh fails, it clears the cookies and the browser goes back to the sign-in page.
@@ -782,11 +782,13 @@ The CRM's front end, `apps/crm-web`, is a Next.js app with a BFF in `src/lib/bff
 - **CSRF.** Cookies are sent automatically, so every non-GET request must come from the app's own origin; anything else gets a 403.
 - **Client addresses.** The BFF never passes on the browser's own `X-Forwarded-For`, which anyone can forge. It sends the browser's address only when reverse proxies in front of it vouch for it: set `NAVREE_TRUSTED_PROXY_HOPS` to their number.
 
-```ts title="apps/crm-web/src/lib/bff/bff.ts"
-function setTokenCookies(headers: Headers, tokens: TokenPair): void {
+```ts title="packages/js/bff/src/bff.ts"
+function tokenCookies(tokens: TokenPair): string[] {
   const accessMaxAge = Math.max(1, Math.floor(tokens.expires_in ?? 900));
-  headers.append("set-cookie", cookie(ACCESS_COOKIE, tokens.access_token, { maxAge: accessMaxAge }));
-  headers.append("set-cookie", cookie(REFRESH_COOKIE, tokens.refresh_token, { maxAge: refreshMaxAge }));
+  return [
+    cookie(names.access, tokens.access_token, { maxAge: accessMaxAge }),
+    cookie(names.refresh, tokens.refresh_token, { maxAge: refreshMaxAge }),
+  ];
 }
 ```
 
@@ -794,7 +796,7 @@ On the API side, list the BFF's address in `http.trusted_proxies` so the API bel
 
 ```toml title="apps/crm-api/config/app.toml"
 [http]
-# crm-web's BFF calls from here for every browser and names the browser in
+# The CRM's BFF calls from here for every browser and names the browser in
 # X-Forwarded-For, so rate limits and the login throttle are per browser.
 trusted_proxies = ["127.0.0.1", "::1"]
 ```

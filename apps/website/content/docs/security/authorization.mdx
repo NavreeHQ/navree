@@ -485,16 +485,15 @@ pub async fn list(
     &self,
     uow: &Uow,
     scope: Accessible<Deal, Read>,
-    filter: DealFilter,
-    page: PageQuery,
+    list: &ListQuery,
 ) -> Result<Page<DealResource>> {
     let page = scope
         .apply(Deal::query())
-        .when_some(filter.stage, |query, stage| query.in_stage(stage))
-        // ...
-        .paginate(uow, page)
+        .list(list, &DealList::SPEC)?
+        .with_all(DealResource::EMBEDS)
+        .paginate(uow, list.page_request(&DealList::SPEC))
         .await?;
-    // ...
+    Ok(page.map(|deal| deal.to_resource::<DealResource>()))
 }
 ```
 

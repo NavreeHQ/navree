@@ -372,15 +372,13 @@ pusher.subscribe("private-crm.deals").bind("deal.updated", (payload: { deal: { i
 The reference front end, `apps/crm-web`, never lets the browser see a token: its Next.js server keeps them in httpOnly cookies (see the [CRM tour](/docs/example-app/crm-tour/#the-web-app)). So the WebSocket goes straight to Navree, while channel authorisation goes to a same-origin route that adds the bearer token:
 
 ```ts title="apps/crm-web/src/app/broadcasting/auth/route.ts"
-import { bff } from "@/lib/bff/server";
+import { navree } from "@/lib/navree";
 
-/** Private-channel authorisation for the Pusher client: forwarded to Navree with the bearer token. */
-export function POST(request: Request): Promise<Response> {
-  return bff.proxy(request, "/broadcasting/auth");
-}
+export const dynamic = "force-dynamic";
+export const { POST } = navree.handlers;
 ```
 
-Its real-time client (`src/lib/realtime/echo.ts`, on pusher-js) uses a custom authorizer that posts `{socket_id, channel_name}` as JSON to that route. The WebSocket host, port and key come from `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`, and `NEXT_PUBLIC_REALTIME=0` turns real time off. If the socket can't connect, the app keeps working with refetch-on-focus and polling.
+`navree` is the app's `createNavree()` from `@navree/next/server`; its handlers forward the request to Navree with the bearer token. The real-time client (`connectRealtime` in `@navree/client/realtime`, on pusher-js) authorizes private and presence channels by posting `{socket_id, channel_name}` as JSON to that route on the page's own origin. The WebSocket host, port and key come from `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`, and `NEXT_PUBLIC_REALTIME=0` turns real time off. If the socket can't connect, the app keeps working with refetch-on-focus and polling.
 
 ## Allowed origins
 

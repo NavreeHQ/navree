@@ -77,6 +77,8 @@ Missing fields must be `Option`s or have a serde default. A value of the wrong t
 }
 ```
 
+`Query<T>` suits parameters of your own. A list with filters, a sort order, a search box and pages reads them with `List<R>` instead, so every list takes the same query string (`filter[stage]=won&search=acme&page=2`): see [list queries](/docs/basics/list-queries/).
+
 ## JSON bodies
 
 `Json<T>` reads a JSON body into any `T: Deserialize`. It's navree-http's `Json`, in the prelude, and the same type serializes JSON responses. The request must say `Content-Type: application/json` (or a `+json` type such as `application/merge-patch+json`, parameters allowed), in a single header:

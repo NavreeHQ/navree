@@ -103,10 +103,9 @@ impl DealsController {
         &self,
         uow: Uow,
         scope: Accessible<Deal, Read>,
-        Valid(Query(filter)): Valid<Query<DealFilter>>,
-        page: PageQuery,
+        list: List<DealList>,
     ) -> Result<Page<DealResource>> {
-        self.deals.list(&uow, scope, filter, page).await
+        self.deals.list(&uow, scope, &list).await
     }
 
     #[post("/")]
@@ -252,13 +251,13 @@ What the derive reads:
 
 Any other `#[schema(..)]` option is a compile error. `Option<T>` is `T` or `null`, and never required; `Vec<T>`, the sets, the maps, `Box<T>`, `Arc<T>`, `Cow<T>`, `String`, the number types, `bool`, `Uuid`, chrono's dates and times and `serde_json::Value` have schemas of their own. A type can write its schema by hand with `impl ToSchema for Zone { fn schema() -> Schema { .. } }`.
 
-`m.api_schema::<T>()` (from the `ModuleBuilderApiExt` trait, in the prelude) adds any type to the components, with the schemas it refers to. The CRM uses it for its list filters, which no route body names:
+`m.api_schema::<T>()` (from the `ModuleBuilderApiExt` trait, in the prelude) adds any type to the components, with the schemas it refers to. Use it for a type that a route's document refers to only through a generic argument, such as the `Note` in a `Page<Note>` response:
 
-```rust title="crates/crm-companies/src/companies/mod.rs"
-impl CompaniesModule {
-    /// Schemas the routes' documents refer to only through query strings.
+```rust title="src/modules/notes/mod.rs"
+impl NotesModule {
+    /// Schemas the routes' documents refer to only through a generic argument.
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.api_schema::<CompanySort>().api_schema::<CompanyFilters>();
+        m.api_schema::<Note>();
     }
 }
 ```
@@ -285,7 +284,7 @@ The route then says `#[api(response = DealPage)]`, as in the controller above.
 
 The document is honest about what it knows, and there are things it can't express yet:
 
-- **Query parameters aren't documented.** `ApiMeta` has no field for them, so list filters, sorting and paging parameters are missing. Describe them in the route's `description` and, as the CRM does, register the filter type with `m.api_schema::<T>()` so its fields appear among the schemas. Generated clients then need these parameters added by hand (see [below](#typed-clients-from-the-document)).
+- **Query parameters aren't documented.** `ApiMeta` has no field for them, so list filters, sorting and paging parameters are missing. Describe them in the route's `description`; the filters, sort and search of a list follow the one [list query](/docs/basics/list-queries/) format. Generated clients then need these parameters added by hand (see [below](#typed-clients-from-the-document)).
 - **Bodies are JSON only.** A non-JSON response, such as the CRM's CSV export at `GET /api/v1/contacts/export`, has no response schema, and multipart request bodies (uploads) can't be described.
 - **Path parameters are always strings**, even when the handler parses a UUID or a number.
 - **Some framework routes have no schemas**: `/api/me/abilities` and `/api/access/*` (navree-access), `/broadcasting/auth` and `/app/{key}` (real time), `/health/*` and `/metrics`.

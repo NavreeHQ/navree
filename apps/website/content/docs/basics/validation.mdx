@@ -654,6 +654,8 @@ Query strings work the same way. `GET /api/v1/contacts?search=a&per_page=500` gi
 }
 ```
 
+A list endpoint that filters, sorts, searches and pages takes [`List<R>`](/docs/basics/list-queries/) instead of a validated query struct. It answers a bad parameter in the same format, keyed by the parameter as written: `GET /api/v1/deals?per_page=500` gives `"per_page": ["per_page must not exceed 100 (got 500)"]`.
+
 The same format is used for every 400 with field errors, including the ones you [build yourself](#validating-by-hand) and the ones navree-auth returns. The [errors page](/docs/basics/errors/) describes the error format as a whole.
 
 ## Custom messages

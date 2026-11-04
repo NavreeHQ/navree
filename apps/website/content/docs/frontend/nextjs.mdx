@@ -7,7 +7,7 @@ description: "`@navree/next`: the backend-for-frontend as route handlers, `auth(
 
 <Callout type="note" title="Apps made by navree new">
 
-`navree new --ui next` and the SaaS starter kit create `web/` with a backend-for-frontend of their own under `web/lib/`. They do not install `@navree/next`. [Moving an existing app onto the package](#moving-an-existing-app-onto-the-package) shows which pieces the package replaces.
+`navree new --ui next` and the SaaS starter kit create `web/` on `@navree/next`: `lib/navree.ts` is the `createNavree()` of the setup below, and the route handlers, the proxy and `auth()` come from it. [Installing from a checkout](#installing-from-a-checkout) says how the packages get there. The reference CRM, `apps/crm-web`, runs on the package too.
 
 </Callout>
 
@@ -16,7 +16,7 @@ description: "`@navree/next`: the backend-for-frontend as route handlers, `auth(
 <Steps>
 <Step title="Install the packages">
 
-`@navree/next`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/react`; for real time, `pusher-js`.
+`@navree/next`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/react`; for real time, `pusher-js`. While the packages are linked from a checkout, also add [the settings below](#installing-from-a-checkout).
 
 </Step>
 <Step title="Generate the client's schema">
@@ -74,6 +74,39 @@ Before Next.js 16 the file is `middleware.ts` and the export `middleware`: `expo
 
 </Step>
 </Steps>
+
+## Installing from a checkout
+
+The packages are not on npm yet. You build them in the Navree checkout (`pnpm install` and `pnpm build` in `packages/js`) and link them with `link:` (see [installing](/docs/frontend/introduction/#installing)). A linked package sits outside your app and brings its own `node_modules`, so Next.js needs its root to hold both, and the packages compiled with your app:
+
+```ts title="web/next.config.ts"
+import path from "node:path";
+import type { NextConfig } from "next";
+
+// The directory that holds both your app and the Navree checkout.
+const root = path.resolve(process.cwd(), "../..");
+
+const nextConfig: NextConfig = {
+  turbopack: { root },
+  outputFileTracingRoot: root,
+  transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
+};
+
+export default nextConfig;
+```
+
+Next.js resolves `react` and `react-dom` for the whole bundle to its own copy, so the linked components run on one React in the browser and on the server. `navree new` writes this file for the checkout it was run from, with the root worked out from the two paths.
+
+Vitest does not do that. A test that renders a component from the package needs your app's React, and `@casl/react` (a dependency of `@navree/next/abilities`) processed by your app's Vite instead of loaded on its own:
+
+```ts title="web/vitest.config.mts"
+export default defineConfig({
+  resolve: { dedupe: ["react", "react-dom"] },
+  test: { server: { deps: { inline: ["@casl/react"] } } },
+});
+```
+
+Once the packages are published, none of these settings is needed.
 
 ## The proxy
 
@@ -276,23 +309,22 @@ onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) ||
 
 ## Moving an existing app onto the package
 
-An app that keeps these pieces in its own files can move onto the packages one for one. The reference CRM front end, `apps/crm-web`, is such an app:
+An app that keeps these pieces in its own files can move onto the packages one for one. The reference CRM front end, `apps/crm-web`, did that for its backend-for-frontend, its abilities and its real-time channels (the first four rows below). Its API client, forms, query keys, data table and theme are still its own, and can move the same way:
 
-| `apps/crm-web` | With the packages |
+| An app's own files | With the packages |
 |---|---|
-| `src/lib/bff/bff.ts`, `http-errors.ts`, `server.ts` | `createNavree()` in `src/lib/navree.ts` |
-| `src/app/api/[...path]/route.ts` and the four `src/app/api/auth/*/route.ts` | One catch-all exporting `navree.handlers` |
-| `src/app/broadcasting/auth/route.ts` | `export const { POST } = navree.handlers` |
-| `src/lib/api/client.ts` (`createApiClient`, `unwrap`, `rawFetch`) | `createNavreeClient<paths>()`, `unwrap`, `api.raw` |
-| `src/lib/api/errors.ts` (`ApiError`, `errorMessage`) | `NavreeError` (with `code`), `errorMessage` |
-| `src/lib/api/form-errors.ts` | `applyFieldErrors` from `@navree/next` |
-| `src/lib/api/keys.ts` | `queryKeys("deals")` per resource |
-| `src/lib/casl/ability.ts` | `createAbility` and `AbilityProvider` |
-| `src/lib/realtime/pusher.ts`, `mock-bus.ts`, `src/components/app-shell/realtime-bridge.tsx` | `RealtimeProvider`, `useChannel`, `createMemoryRealtime` |
-| `src/components/data-table.tsx`, `pagination-bar.tsx`, `src/hooks/use-url-state.ts` | `DataTable`, `Pagination`, `useListQuery` (see [data tables](/docs/frontend/data-tables/)) |
-| The tokens in `src/app/globals.css`, `src/app/fonts.ts` | `@navree/theme/theme.css` and the fonts (see [theming](/docs/frontend/theming/)) |
+| `lib/bff/bff.ts`, `http-errors.ts`, `server.ts` | `createNavree()` in `lib/navree.ts` |
+| `app/api/[...path]/route.ts` and the four `app/api/auth/*/route.ts`, `app/broadcasting/auth/route.ts` | One catch-all exporting `navree.handlers`, and `export const { POST } = navree.handlers` for the channel authorization |
+| `lib/casl/ability.ts`, the `AbilityProvider` set up by hand | `createAbility` and `AbilityProvider` |
+| `lib/realtime/pusher.ts` and its mock bus, the component that subscribes | `RealtimeProvider`, `useChannel`, `createMemoryRealtime` |
+| `lib/api/client.ts` (`createApiClient`, `unwrap`, `rawFetch`) | `createNavreeClient<paths>()`, `unwrap`, `api.raw` |
+| `lib/api/errors.ts` (`ApiError`, `errorMessage`) | `NavreeError` (with `code`), `errorMessage` |
+| `lib/api/form-errors.ts` | `applyFieldErrors` from `@navree/next` |
+| `lib/api/keys.ts` | `queryKeys("deals")` per resource |
+| `components/data-table.tsx`, `pagination-bar.tsx`, `hooks/use-url-state.ts` | `DataTable`, `Pagination`, `useListQuery` (see [data tables](/docs/frontend/data-tables/)) |
+| The tokens in `app/globals.css`, `app/fonts.ts` | `@navree/theme/theme.css` and the fonts (see [theming](/docs/frontend/theming/)) |
 
-The cookie names, the routes and the error shape are the same, so the move can go file by file with the app working after each step. Two things change for the app's code: errors are `NavreeError` instead of `ApiError` (`status`, `errors` and `requestId` keep their meaning; `fieldErrors` becomes `errors`), and channel listeners stop with the function `listen` returns instead of `leave`. The CRM-specific parts stay in the app: its types, its screens, its mock API and its query hooks.
+The cookie names, the routes and the error shape are the same, so the move can go file by file with the app working after each step. Three things change for the app's code: errors are `NavreeError` instead of `ApiError` (`status`, `errors` and `requestId` keep their meaning; `fieldErrors` becomes `errors`), channel listeners stop with the function `listen` returns instead of `leave`, and the BFF's own refusals use the codes in [the BFF's errors](/docs/frontend/auth-and-bff/#the-bffs-own-errors) (`two_factor_expired`, `unexpected_response`). The CRM-specific parts stay in the app: its types, its screens, its mock API, its channel names and its query hooks.
 
 ## Testing
 

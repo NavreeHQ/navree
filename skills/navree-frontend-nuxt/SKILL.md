@@ -126,13 +126,13 @@ const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api
 
 ## The reference app: apps/crm-nuxt
 
-`apps/crm-nuxt` (the Navree CRM on Nuxt) wires the same BFF by hand, the
-way an app without the module does: copy its look, shell and tests. Every
-path below is a file there. Architecture background:
+`apps/crm-nuxt` (the Navree CRM on Nuxt) is built on the `@navree/nuxt`
+module (`nuxt.config.ts` and `navree.options.ts`): copy its look, shell and
+tests. Every path below is a file there. Architecture background:
 `/docs/patterns/backend-for-frontend/`. The React version of the same app is
-`apps/crm-web` (skill `navree-frontend-next`). An app on `@navree/nuxt`
-drops `server/lib/bff.ts`, the `server/api` and `server/routes` files and
-the session gate; the module provides them.
+`apps/crm-web` (skill `navree-frontend-next`). The module provides the
+backend-for-frontend routes and the session gate, so the app has no
+`server/` folder.
 
 Its steps:
 
@@ -141,7 +141,8 @@ Its steps:
    and for development
    `pnpm add -D tailwindcss @tailwindcss/vite tw-animate-css msw vitest @nuxt/test-utils @vue/test-utils happy-dom @playwright/test vue-tsc typescript h3`.
 2. **Configure Nuxt** (`nuxt.config.ts`): `ssr: false` (every screen sits
-   behind sign-in; Nitro still serves the BFF), `modules: ["@pinia/nuxt"]`,
+   behind sign-in; Nitro still serves the BFF),
+   `modules: ["@navree/nuxt", "@pinia/nuxt"]`, `navree: navreeOptions()`,
    `vite.plugins: [tailwindcss()]`, `typescript.strict: true`, and the
    runtime config below. The CRM also sets `components: { dirs: [] }` so
    every file imports its components explicitly.
@@ -150,10 +151,9 @@ Its steps:
    `cargo run -p crm-api -- openapi:export ../crm-nuxt/openapi.json`). Add
    `"gen:api": "navree openapi:client --input ./openapi.json --out app/lib/api"`
    and run `pnpm gen:api` whenever the API changes.
-4. **Add the BFF.** Copy `server/lib/bff.ts` (framework-free, unit-tested)
-   and `server/lib/http-errors.ts`, create the instance in
-   `server/lib/instance.ts`, add the routes and the session gate (next
-   section).
+4. **Set up the module.** `navree.options.ts` holds its settings (the API
+   address, the session gate, the socket and the abilities); the module
+   adds the BFF routes and the session gate (next section).
 5. **Add the API client and plugins**: `app/lib/api/client.ts` on
    `fetch.ts` (the typed fetch core of `@navree/client`, copied),
    `errors.ts`, `form-errors.ts`, `keys.ts`, `types.ts`; plugins for TanStack
@@ -161,81 +161,44 @@ Its steps:
    `03.casl.ts`, `04.api-events.ts`).
 6. **Load the user and their abilities before any screen renders**
    (`app/middleware/session.global.ts`).
-7. **Add real time** (`app/lib/realtime/pusher.ts`,
-   `app/composables/useRealtime.ts`) and list the web origin in the API's
-   `realtime.allowed_origins`.
+7. **Add real time**: turn on `realtime` in `navree.options.ts`, listen with
+   the module's `useChannel` (`app/composables/useRealtime.ts`), and list the
+   web origin in the API's `realtime.allowed_origins`.
 8. **Theme it** with the navree.com tokens and the app UI rules ("The look").
-9. **Test it**: Vitest for the BFF, its Nitro handlers and components;
+9. **Test it**: Vitest for the app's module settings and components;
    Playwright against the real API.
 
-### The BFF in Nitro
+### The BFF from the module
 
 #### Routes
 
-| File | Calls | Purpose |
-|---|---|---|
-| `server/api/auth/login.post.ts` | `bff.login` | Signs in at Navree, sets the cookies, returns only `{user}` (or `{two_factor_required, expires_in}`) |
-| `server/api/auth/2fa/verify.post.ts` | `bff.verifyTwoFactor` | Completes a two-factor sign-in with `{code}` or `{recovery_code}` |
-| `server/api/auth/logout.post.ts` | `bff.logout` | Revokes the refresh token at Navree (`{all: true}`: every device), clears the cookies |
-| `server/api/auth/refresh.post.ts` | `bff.refreshSession` | Explicit refresh: 204 with new cookies, or 401 |
-| `server/api/[...path].ts` | `bff.proxy` | Every other `/api/*` call, every method |
-| `server/routes/broadcasting/auth.post.ts` | `bff.proxy(request, "/broadcasting/auth")` | Signs private-channel subscriptions |
-| `server/middleware/session-gate.ts` | | A page request (`Accept: text/html`) with neither cookie gets `302 /login?next=...` |
+The module registers these Nitro routes; the app writes none of them:
 
-Nitro routes match the most specific file first, so the four `auth` routes win
-over the catch-all. Each route is one line: convert the h3 event to a web
-`Request` and hand it to the BFF.
+| Route | Purpose |
+|---|---|
+| `POST /api/auth/login` | Signs in at Navree, sets the cookies, returns only `{user}` (or `{two_factor_required, expires_in}`) |
+| `POST /api/auth/2fa/verify` | Completes a two-factor sign-in with `{code}` or `{recovery_code}` |
+| `POST /api/auth/logout` | Revokes the refresh token at Navree (`{all: true}`: every device), clears the cookies |
+| `POST /api/auth/refresh` | Explicit refresh: 204 with new cookies, or 401 |
+| `/api/**` | Every other `/api/*` call, every method, with the bearer token |
+| `POST /broadcasting/auth` | Signs private-channel subscriptions |
+| The session gate (a server middleware) | A page request (`Accept: text/html`) with neither cookie gets `302 /login?next=...` |
+
+All of them are `@navree/bff`, mounted by the module, with one instance per
+server so the single-flight refresh map is shared. Server code of your own
+reaches it with `useNavreeBff()`.
 
 ```ts
-// server/lib/instance.ts
-import { createBff, type Bff } from "./bff";
-
-let instance: Bff | undefined;
-
-/** Created on first use: settings are read at runtime, and the single-flight refresh map is shared. */
-export function useBff(): Bff {
-  if (instance) return instance;
-  const config = useRuntimeConfig();
-  instance = createBff({
-    apiUrl: process.env.NAVREE_API_URL || config.navreeApiUrl || "http://127.0.0.1:8092",
-    secureCookies: flag(process.env.NAVREE_COOKIE_SECURE), // undefined → on in production
-    allowedOrigins: (process.env.APP_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean),
-    trustedProxyHops: Number.parseInt(process.env.NAVREE_TRUSTED_PROXY_HOPS ?? "0", 10) || 0,
-  });
-  return instance;
+// navree.options.ts (abridged)
+export function navreeOptions(env: Record<string, string | undefined> = process.env): NavreeModuleOptions {
+  const mocks = env.NUXT_PUBLIC_API_MOCKS === "1" || env.NUXT_PUBLIC_API_MOCKS === "true";
+  return {
+    apiUrl: "http://127.0.0.1:8092", // NAVREE_API_URL changes it at runtime
+    sessionGate: mocks ? false : { loginPath: "/login" },
+    realtime: mocks ? false : { key: "navree-crm-key", wsHost: "127.0.0.1", wsPort: 8092 },
+    abilities: true,
+  };
 }
-```
-
-```ts
-// server/api/[...path].ts
-import { useBff } from "../lib/instance";
-
-export default defineEventHandler((event) => {
-  const request = toWebRequest(event);
-  return useBff().proxy(request, new URL(request.url).pathname);
-});
-
-// server/api/auth/login.post.ts
-export default defineEventHandler((event) => useBff().login(toWebRequest(event)));
-
-// server/routes/broadcasting/auth.post.ts
-export default defineEventHandler((event) => useBff().proxy(toWebRequest(event), "/broadcasting/auth"));
-```
-
-```ts
-// server/middleware/session-gate.ts (abridged)
-const PASS_THROUGH = /^\/(api|broadcasting|_nuxt|__nuxt|_ipx|login)(\/|$)|\.[a-z0-9]+$/i;
-
-export default defineEventHandler((event) => {
-  if (event.method !== "GET" && event.method !== "HEAD") return;
-  const url = getRequestURL(event);
-  if (PASS_THROUGH.test(url.pathname)) return;
-  if (!(getRequestHeader(event, "accept") ?? "").includes("text/html")) return;
-  if (useRuntimeConfig(event).public.apiMocks) return; // the mock API keeps its session in the tab
-  if (getCookie(event, ACCESS_COOKIE) || getCookie(event, REFRESH_COOKIE)) return;
-  const target = url.pathname + url.search;
-  return sendRedirect(event, target === "/" ? "/login" : `/login?next=${encodeURIComponent(target)}`, 302);
-});
 ```
 
 Whether a cookie is still valid is the API's call; the gate only spares a
@@ -247,21 +210,22 @@ signed-out visitor the app shell. The app redirects on a 401 too.
 
 ```ts
 // nuxt.config.ts (abridged)
+navree: navreeOptions(), // the module's settings: apiUrl, sessionGate, realtime, abilities
 runtimeConfig: {
-  navreeApiUrl: "", // server only; NUXT_NAVREE_API_URL (server/lib/instance.ts also reads NAVREE_API_URL)
   public: {
     apiMocks: false, // NUXT_PUBLIC_API_MOCKS=1: MSW in the browser
-    realtime: true, // NUXT_PUBLIC_REALTIME=0: no socket
-    pusherKey: "navree-crm-key", // the API's realtime.key
-    wsHost: "127.0.0.1",
-    wsPort: 8092,
     demoAccounts: false,
   },
 },
 ```
 
-`NUXT_PUBLIC_*` variables override these when the server starts, so one build
-runs anywhere. `app/composables/useCrmConfig.ts` reads them typed.
+The module's settings land in runtime config, so environment variables
+override them when the server starts and one build runs anywhere:
+`NAVREE_API_URL` (or `NUXT_NAVREE_API_URL`) is the API's address,
+`NUXT_PUBLIC_NAVREE_REALTIME=false` turns the socket off, and
+`NUXT_PUBLIC_NAVREE_REALTIME_KEY`, `NUXT_PUBLIC_NAVREE_REALTIME_WS_HOST` and
+`NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT` say where the API's socket is.
+`app/composables/useCrmConfig.ts` reads them typed.
 
 #### The client
 
@@ -434,14 +398,10 @@ Dark only, on the navree.com tokens, following `apps/website/DESIGN.md` §9
 
 ### Testing
 
-- **BFF:** `tests/unit/bff.test.ts` drives `createBff` with plain `Request`s
-  and a scripted `fetch`: cookies set and cleared, refresh once and
-  single-flight, the Origin check, token stripping, two-factor, the client
-  address.
-- **Nitro handlers:** `tests/unit/nitro-handlers.test.ts` mounts the real
-  files from `server/` on an h3 app (Nitro's auto-imports stubbed with the h3
-  functions of the same name) and calls them with web Requests, the session
-  gate included.
+- **The module's settings:** `tests/unit/navree-module.test.ts` checks
+  `navree.options.ts` and that the app carries no BFF of its own. The BFF,
+  its cookies, refresh, Origin check and two-factor steps are tested in
+  `packages/js/bff` and `packages/js/nuxt`, with `@navree/bff/testing`.
 - **Components in Nuxt:** a second Vitest project with
   `defineVitestProject` from `@nuxt/test-utils/config` (environment `nuxt`);
   `tests/nuxt/login.test.ts` mounts the login page with `mountSuspended` and
@@ -475,7 +435,7 @@ pnpm dev:mock                  # the whole app on MSW, no API
 ## Common mistakes
 
 - Keeping a hand-written `server/api/[...path].ts` next to the module (two
-  handlers for `/api/**`): remove the app's BFF files when adopting it.
+  handlers for `/api/**`): the app has no BFF files of its own.
 - Calling `$fetch("/api/...")` during SSR without cookies: use
   `useNavreeClient()` or `useNavree().fetch`, which forward them in-process.
 - Turning on `realtime` or `abilities` without installing `pusher-js` or
@@ -487,9 +447,9 @@ pnpm dev:mock                  # the whole app on MSW, no API
   in the browser. Server routes only.
 - Refreshing in parallel. Two requests spending the same refresh token make
   Navree revoke the session; keep the BFF's refresh single-flight and share
-  one BFF instance per server (`useBff()`).
-- A new non-GET server route that skips `bff.proxy` (or `bff.originAllowed`):
-  it has no CSRF check.
+  the module's one BFF instance per server (`useNavreeBff()`).
+- A new non-GET server route that skips `useNavreeBff().proxy` (or
+  `originAllowed`): it has no CSRF check.
 - Nesting a `TooltipTrigger` around a `DropdownMenuTrigger` or
   `PopoverTrigger`: Reka anchors both to the nearest popper (the tooltip's)
   and the menu is never positioned. Pass the trigger element to the content:

@@ -12,7 +12,7 @@ There is no Nuxt starter kit and `navree new` has no `--ui nuxt`: create the Nux
 <Steps>
 <Step title="Install the packages">
 
-`@navree/nuxt`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/vue`; for real time, `pusher-js`.
+`@navree/nuxt`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/vue`; for real time, `pusher-js`. While the packages are linked from a checkout, also add [the settings below](#installing-from-a-checkout).
 
 </Step>
 <Step title="Add the module">
@@ -40,6 +40,39 @@ navree openapi:client --out web/app/lib/api
 </Step>
 </Steps>
 
+## Installing from a checkout
+
+The packages are not on npm yet. You build them in the Navree checkout (`pnpm install` and `pnpm build` in `packages/js`) and link them with `link:` (see [installing](/docs/frontend/introduction/#installing)). A linked package sits outside your app and brings its own `node_modules`, so Vite and Nitro need three settings:
+
+```ts title="web/nuxt.config.ts"
+import { fileURLToPath } from "node:url";
+
+const appRoot = fileURLToPath(new URL(".", import.meta.url));
+const navreePackages = fileURLToPath(new URL("../../navree/packages/js", import.meta.url));
+
+export default defineNuxtConfig({
+  modules: ["@navree/nuxt"],
+  vite: {
+    // The packages find their own copies of these in packages/js. One copy keeps Vue's injection,
+    // CASL's ability and the socket shared between the packages and your app.
+    resolve: { dedupe: ["vue", "vue-router", "@casl/ability", "@casl/vue", "pusher-js"] },
+    // The packages' files sit outside your app. Naming a folder here replaces Vite's default, so name your app's too.
+    server: { fs: { allow: [appRoot, navreePackages] } },
+  },
+  // Bundle the packages into the server.
+  nitro: { externals: { inline: ["@navree/nuxt", "@navree/bff", "@navree/client"] } },
+});
+```
+
+Nitro's bundler loads the `deepmerge` package. Give it `@navree/deepmerge` (`packages/js/deepmerge`), which never copies a key that reaches a prototype, with the override that `packages/js/pnpm-workspace.yaml` has, in your app's own `pnpm-workspace.yaml`:
+
+```yaml title="web/pnpm-workspace.yaml"
+overrides:
+  deepmerge: link:../../navree/packages/js/deepmerge
+```
+
+`nuxt prepare` loads the module, so build the packages before `pnpm install` in your app.
+
 ## Options
 
 | Option | Default | Meaning |
@@ -53,7 +86,7 @@ navree openapi:client --out web/app/lib/api
 | `realtime` | `false` | `{ key, wsHost, wsPort, forceTLS? }`: connect pusher-js to the API's real-time server. |
 | `abilities` | `false` | One app-wide CASL ability, loaded after sign-in. |
 
-The settings land in runtime config (`runtimeConfig.navree` on the server, `runtimeConfig.public.navree` in the app), so `NUXT_NAVREE_*` variables override them without a rebuild, and settings you put there yourself win over the module's. The BFF also reads `NAVREE_COOKIE_SECURE`, `APP_ORIGINS`, `NAVREE_TRUSTED_PROXY_HOPS` and `NAVREE_CLIENT_IP_HEADER` (see [the BFF's options](/docs/frontend/auth-and-bff/#options)), the same names the Next.js package uses.
+The settings land in runtime config (`runtimeConfig.navree` on the server, `runtimeConfig.public.navree` in the app), so `NUXT_NAVREE_*` variables override the server ones and `NUXT_PUBLIC_NAVREE_*` variables the browser ones without a rebuild (`NUXT_PUBLIC_NAVREE_REALTIME_WS_HOST` moves the socket, `NUXT_PUBLIC_NAVREE_REALTIME=false` turns it off), and settings you put there yourself win over the module's. The BFF also reads `NAVREE_COOKIE_SECURE`, `APP_ORIGINS`, `NAVREE_TRUSTED_PROXY_HOPS` and `NAVREE_CLIENT_IP_HEADER` (see [the BFF's options](/docs/frontend/auth-and-bff/#options)), the same names the Next.js package uses.
 
 ## What the module adds
 
@@ -192,21 +225,23 @@ The pieces are plain Vue and h3, for a Vue app with another server, or to mount 
 
 ## Moving an existing app onto the module
 
-An app that keeps these pieces in its own files can move onto the module one piece at a time. The reference CRM's Nuxt front end, `apps/crm-nuxt`, is such an app:
+An app that keeps these pieces in its own files can move onto the module one piece at a time. The reference CRM's Nuxt front end, `apps/crm-nuxt`, runs on the module for the first six rows below: it has no `server/` folder, and `navree.options.ts` holds its settings for the module.
 
-| `apps/crm-nuxt` | With the module |
+| An app's own code | With the module |
 |---|---|
-| `server/lib/bff.ts`, `http-errors.ts`, `instance.ts` | The module's BFF (`navree.apiUrl`, `NAVREE_API_URL`) |
-| `server/api/[...path].ts`, `server/api/auth/*.post.ts`, `server/routes/broadcasting/auth.post.ts` | The module's routes |
-| `server/middleware/session-gate.ts` | `navree.sessionGate` |
-| `app/lib/api/client.ts`, `errors.ts` | `useNavreeClient<paths>()`, `NavreeError`, `unwrap` |
-| `app/lib/api/form-errors.ts` | `applyFieldErrors` |
-| `app/lib/casl/ability.ts`, `app/plugins/03.casl.ts` | `navree.abilities: true`, `useAbility`, `<Can>` |
-| `app/lib/realtime/*`, `app/composables/useRealtime.ts` | `navree.realtime`, `useChannel` (the app's handlers stay) |
-| `app/composables/useUrlState.ts`, `PaginationBar.vue`, `SortableHead.vue` | `useListQuery`, `<NavreeDataTable>`, `<NavreePagination>` |
-| The tokens and `@font-face` rules in `app/assets/css/main.css` | `@navree/theme/theme.css` and `fonts.css` |
+| A BFF in `server/lib`, and the Nitro routes `server/api/[...path].ts`, `server/api/auth/*.post.ts` and `server/routes/broadcasting/auth.post.ts` | The module's routes (`navree.apiUrl`, `NAVREE_API_URL`) |
+| A session gate in `server/middleware` | `navree.sessionGate` |
+| A copy of the typed fetch core, an error class and a client wrapper | `createNavreeClient` from `@navree/client` (or `useNavreeClient<paths>()`), `NavreeError`, `unwrap` |
+| Query hooks or a composable for sign-in, two-factor and sign-out | `useNavreeAuth()` |
+| A CASL ability plugin and a loader for `GET /api/me/abilities` | `navree.abilities: true`, `useAbility`, `<Can>` |
+| A pusher-js wrapper and a composable that opens it | `navree.realtime`, `useChannel` (the app's handlers stay) |
+| URL-state helpers, a pagination bar and sortable headers | `useListQuery`, `<NavreeDataTable>`, `<NavreePagination>` |
+| The tokens and `@font-face` rules in the main stylesheet | `@navree/theme/theme.css` and `fonts.css` |
 
-The cookie names, routes and error shape are the same as the app's own, so the move can go one piece at a time. The CRM-specific parts (its types, screens, mock API and query hooks) stay in the app. Nuxt's dev port and the API URL keep their current settings.
+The cookie names, routes and error shape are the module's, which a hand-written BFF that follows the [BFF pattern](/docs/patterns/backend-for-frontend/) shares, so the move can go one piece at a time. The app-specific parts (its types, screens, mock API, query hooks and the handlers for its channels' events) stay in the app. Two things to know:
+
+- The mock API (MSW in the browser) has no server session. Turn the session gate and the socket off when it runs (`navree.sessionGate: false`, `navree.realtime: false`), as `apps/crm-nuxt` does in `navree.options.ts`, and give `useChannel` an in-memory connection (`createMemoryRealtime` in `@navree/client/realtime`, handed to `createRealtimeController().connect(...)` and `installRealtime`).
+- The abilities load after sign-in, so a screen renders before its rules arrive. Read them in `computed` values or in the template, where `can(...)` re-renders when the rules do.
 
 ## Testing
 
