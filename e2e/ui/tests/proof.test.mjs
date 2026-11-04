@@ -24,6 +24,8 @@ async function open(path) {
   const problems = [];
   const requests = [];
   page.on("console", (message) => {
+    // WebKit says it refused a stylesheet for every inline style a test tool adds: the board suite ignores it too.
+    if (ENGINE === webkit && /Refused to apply a stylesheet/.test(message.text())) return;
     if (message.type() === "error") problems.push(message.text());
   });
   page.on("pageerror", (error) => problems.push(String(error)));
@@ -36,7 +38,9 @@ test("a page with nothing interactive ships no script", async () => {
   const { page, problems, requests, close } = await open("/plain");
   await page.waitForLoadState("networkidle");
   assert.equal(await page.locator("script").count(), 0);
-  assert.equal(requests.filter((r) => r.resourceType() === "script").length, 0);
+  // The speculation rules the header names are JSON, though WebKit files their fetch as a script.
+  const scripts = requests.filter((r) => r.resourceType() === "script" && !/\/_navree\/ui\/speculation-[0-9a-f]+\.json$/.test(r.url()));
+  assert.equal(scripts.length, 0);
   assert.deepEqual(problems, []);
   await close();
 });

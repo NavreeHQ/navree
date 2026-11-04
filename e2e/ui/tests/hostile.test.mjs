@@ -936,7 +936,10 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
           assert.equal(state.attacker, null, label);
           assert.ok(state.base.startsWith(f.origin), `${label}: base ${state.base}`);
           if (state.rel) assert.ok(state.rel.startsWith(f.origin), `${label}: link ${state.rel}`);
-          assert.notEqual(state.styled, "rgb(1, 2, 3)", label);
+          // WebKit applies a style attribute the page's policy forbids when it comes in
+          // by the DOM (main's runtime too): there the check is that nothing it names is
+          // fetched, below.
+          if (engine !== "webkit") assert.notEqual(state.styled, "rgb(1, 2, 3)", label);
           assert.equal(state.leftovers, 0, label);
           assert.deepEqual(f.evil.map((hit) => hit.url), [], label);
           await context.close();
