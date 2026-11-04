@@ -5,32 +5,32 @@
   "rows": {
     "orders": 200000,
     "lines": 359413,
-    "events": 995608,
+    "events": 995829,
     "customers": 40000,
     "products": 2000,
-    "bytes": 304620592,
-    "seed_seconds": 26.1
+    "bytes": 319891096,
+    "seed_seconds": 18.5
   },
   "pages": [
     {
       "name": "Dashboard",
       "path": "/",
       "desktop": {
-        "ttfb_ms": 35,
-        "fcp_ms": 136,
-        "lcp_ms": 136,
-        "html_bytes": 50981,
-        "html_decoded_bytes": 225927,
-        "total_bytes": 110133,
+        "ttfb_ms": 33,
+        "fcp_ms": 108,
+        "lcp_ms": 108,
+        "html_bytes": 6627,
+        "html_decoded_bytes": 73671,
+        "total_bytes": 65792,
         "requests": 7
       },
       "phone": {
-        "ttfb_ms": 33,
-        "fcp_ms": 1340,
-        "lcp_ms": 1340,
-        "html_bytes": 50981,
-        "html_decoded_bytes": 225927,
-        "total_bytes": 110133,
+        "ttfb_ms": 34,
+        "fcp_ms": 1160,
+        "lcp_ms": 1160,
+        "html_bytes": 6627,
+        "html_decoded_bytes": 73671,
+        "total_bytes": 65792,
         "requests": 7
       }
     },
@@ -38,43 +38,43 @@
       "name": "Orders",
       "path": "/orders",
       "desktop": {
-        "ttfb_ms": 21,
-        "fcp_ms": 188,
-        "lcp_ms": 188,
-        "html_bytes": 26828,
-        "html_decoded_bytes": 339314,
-        "total_bytes": 90764,
+        "ttfb_ms": 14,
+        "fcp_ms": 148,
+        "lcp_ms": 148,
+        "html_bytes": 6743,
+        "html_decoded_bytes": 87136,
+        "total_bytes": 70692,
         "requests": 8
       },
       "phone": {
-        "ttfb_ms": 21,
-        "fcp_ms": 1104,
-        "lcp_ms": 1104,
-        "html_bytes": 26828,
-        "html_decoded_bytes": 339314,
-        "total_bytes": 90764,
+        "ttfb_ms": 13,
+        "fcp_ms": 1180,
+        "lcp_ms": 1180,
+        "html_bytes": 6743,
+        "html_decoded_bytes": 87136,
+        "total_bytes": 70692,
         "requests": 8
       }
     },
     {
       "name": "Filtered search",
-      "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
+      "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
       "desktop": {
-        "ttfb_ms": 61,
-        "fcp_ms": 196,
-        "lcp_ms": 196,
-        "html_bytes": 6752,
-        "html_decoded_bytes": 77246,
-        "total_bytes": 70688,
+        "ttfb_ms": 14,
+        "fcp_ms": 132,
+        "lcp_ms": 132,
+        "html_bytes": 6923,
+        "html_decoded_bytes": 92505,
+        "total_bytes": 70872,
         "requests": 8
       },
       "phone": {
-        "ttfb_ms": 90,
-        "fcp_ms": 1340,
-        "lcp_ms": 1340,
-        "html_bytes": 6752,
-        "html_decoded_bytes": 77246,
-        "total_bytes": 70688,
+        "ttfb_ms": 14,
+        "fcp_ms": 1012,
+        "lcp_ms": 1012,
+        "html_bytes": 6923,
+        "html_decoded_bytes": 92505,
+        "total_bytes": 70872,
         "requests": 8
       }
     },
@@ -82,21 +82,21 @@
       "name": "An order's page",
       "path": "/orders/150000",
       "desktop": {
-        "ttfb_ms": 5,
-        "fcp_ms": 64,
-        "lcp_ms": 64,
-        "html_bytes": 5450,
-        "html_decoded_bytes": 23477,
-        "total_bytes": 62390,
+        "ttfb_ms": 3,
+        "fcp_ms": 52,
+        "lcp_ms": 52,
+        "html_bytes": 5720,
+        "html_decoded_bytes": 25845,
+        "total_bytes": 62673,
         "requests": 6
       },
       "phone": {
-        "ttfb_ms": 4,
-        "fcp_ms": 832,
-        "lcp_ms": 832,
-        "html_bytes": 5450,
-        "html_decoded_bytes": 23477,
-        "total_bytes": 62390,
+        "ttfb_ms": 3,
+        "fcp_ms": 788,
+        "lcp_ms": 788,
+        "html_bytes": 5720,
+        "html_decoded_bytes": 25845,
+        "total_bytes": 62673,
         "requests": 6
       }
     },
@@ -104,29 +104,29 @@
       "name": "Inventory",
       "path": "/inventory",
       "desktop": {
-        "ttfb_ms": 6,
-        "fcp_ms": 136,
-        "lcp_ms": 136,
-        "html_bytes": 7416,
-        "html_decoded_bytes": 79716,
-        "total_bytes": 71352,
+        "ttfb_ms": 5,
+        "fcp_ms": 116,
+        "lcp_ms": 116,
+        "html_bytes": 7788,
+        "html_decoded_bytes": 81744,
+        "total_bytes": 71737,
         "requests": 8
       },
       "phone": {
         "ttfb_ms": 5,
-        "fcp_ms": 1244,
-        "lcp_ms": 1244,
-        "html_bytes": 7416,
-        "html_decoded_bytes": 79716,
-        "total_bytes": 71352,
+        "fcp_ms": 1316,
+        "lcp_ms": 1316,
+        "html_bytes": 7788,
+        "html_decoded_bytes": 81744,
+        "total_bytes": 71737,
         "requests": 8
       }
     }
   ],
   "drawer": {
-    "open_ms": 139,
-    "parts_ms": 157,
-    "bytes": 6122
+    "open_ms": 151,
+    "parts_ms": 175,
+    "bytes": 6035
   },
   "plans": [
     {
@@ -135,7 +135,7 @@
         {
           "path": "/orders",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM (SELECT \"id\" FROM \"orders\" LIMIT ?) AS \"counted\"",
-          "ms": 0.62,
+          "ms": 0.66,
           "plan": [
             "CO-ROUTINE counted",
             "SCAN orders USING COVERING INDEX orders_customer",
@@ -144,8 +144,8 @@
         },
         {
           "path": "/orders",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" ORDER BY \"placed_on\" DESC, \"id\" DESC LIMIT ?",
-          "ms": 0.26,
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" ORDER BY \"placed_on\" DESC, \"id\" DESC LIMIT ?",
+          "ms": 0.52,
           "plan": [
             "SCAN orders USING INDEX orders_placed"
           ]
@@ -155,23 +155,23 @@
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
           "ms": 0.38,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         },
         {
           "path": "/orders",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
-          "ms": 9.67,
+          "ms": 12.11,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         },
         {
           "path": "/orders",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
-          "ms": 0.58,
+          "ms": 0.52,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         }
       ]
@@ -180,45 +180,45 @@
       "name": "A filtered search",
       "statements": [
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
-          "sql": "SELECT COUNT(*) AS \"aggregate\" FROM (SELECT \"id\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"country\" IN (?) LIMIT ?) AS \"counted\"",
-          "ms": 96.02,
+          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "sql": "SELECT COUNT(*) AS \"aggregate\" FROM (SELECT \"id\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"state\" IN (?) LIMIT ?) AS \"counted\"",
+          "ms": 1.05,
           "plan": [
             "CO-ROUTINE counted",
-            "SEARCH orders USING INDEX orders_country (country=?)",
+            "SEARCH orders USING INDEX orders_open (status=? AND fulfilment=? AND state=?)",
             "SCAN counted"
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"country\" IN (?) ORDER BY \"placed_on\" DESC, \"id\" DESC LIMIT ?",
-          "ms": 0.74,
+          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE (\"number\" GLOB ? OR \"customer\" GLOB ? OR \"email\" GLOB ?) AND \"status\" IN (?) AND \"fulfilment\" IN (?) AND \"state\" IN (?) ORDER BY \"placed_on\" DESC, \"id\" DESC LIMIT ?",
+          "ms": 0.53,
           "plan": [
-            "SEARCH orders USING INDEX orders_country (country=?)"
+            "SEARCH orders USING INDEX orders_open (status=? AND fulfilment=? AND state=?)"
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
+          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
-          "ms": 0.28,
+          "ms": 0.29,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
+          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
-          "ms": 8.66,
+          "ms": 10.57,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         },
         {
-          "path": "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2",
+          "path": "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"status\" = ?",
-          "ms": 0.38,
+          "ms": 0.49,
           "plan": [
-            "SEARCH orders USING COVERING INDEX orders_open (status=?)"
+            "SEARCH orders USING COVERING INDEX orders_status (status=?)"
           ]
         }
       ]
@@ -228,8 +228,8 @@
       "statements": [
         {
           "path": "/orders/150000/peek",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
-          "ms": 0.32,
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
+          "ms": 0.35,
           "plan": [
             "SEARCH orders USING INTEGER PRIMARY KEY (rowid=?)"
           ]
@@ -237,7 +237,7 @@
         {
           "path": "/orders/150000/peek",
           "sql": "SELECT \"order_lines\".\"id\", \"order_lines\".\"order_id\", \"order_lines\".\"product_id\", \"order_lines\".\"sku\", \"order_lines\".\"name\", \"order_lines\".\"icon\", \"order_lines\".\"quantity\", \"order_lines\".\"price\" FROM \"order_lines\" WHERE \"order_lines\".\"order_id\" = ? ORDER BY \"id\" ASC",
-          "ms": 0.6,
+          "ms": 0.27,
           "plan": [
             "SEARCH order_lines USING INDEX order_lines_order (order_id=?)"
           ]
@@ -245,23 +245,23 @@
         {
           "path": "/orders/150000/peek",
           "sql": "SELECT COUNT(*) AS \"aggregate\" FROM \"orders\" WHERE \"orders\".\"customer_id\" = ?",
-          "ms": 0.18,
+          "ms": 0.17,
           "plan": [
             "SEARCH orders USING COVERING INDEX orders_customer (customer_id=?)"
           ]
         },
         {
           "path": "/orders/150000/peek",
-          "sql": "SELECT \"customers\".\"id\", \"customers\".\"name\", \"customers\".\"email\", \"customers\".\"country\", \"customers\".\"city\", \"customers\".\"since\" FROM \"customers\" WHERE \"customers\".\"id\" = ? LIMIT ?",
-          "ms": 0.18,
+          "sql": "SELECT \"customers\".\"id\", \"customers\".\"name\", \"customers\".\"email\", \"customers\".\"phone\", \"customers\".\"country\", \"customers\".\"state\", \"customers\".\"city\", \"customers\".\"pin\", \"customers\".\"since\" FROM \"customers\" WHERE \"customers\".\"id\" = ? LIMIT ?",
+          "ms": 0.15,
           "plan": [
             "SEARCH customers USING INTEGER PRIMARY KEY (rowid=?)"
           ]
         },
         {
           "path": "/orders/150000/steps",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
-          "ms": 0.29,
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
+          "ms": 0.26,
           "plan": [
             "SEARCH orders USING INTEGER PRIMARY KEY (rowid=?)"
           ]
@@ -276,16 +276,16 @@
         },
         {
           "path": "/orders/150000/others",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
-          "ms": 0.14,
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"id\" = ? LIMIT ?",
+          "ms": 0.19,
           "plan": [
             "SEARCH orders USING INTEGER PRIMARY KEY (rowid=?)"
           ]
         },
         {
           "path": "/orders/150000/others",
-          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"city\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"customer_id\" = ? AND \"orders\".\"id\" <> ? ORDER BY \"placed_at\" DESC LIMIT ?",
-          "ms": 0.33,
+          "sql": "SELECT \"orders\".\"id\", \"orders\".\"number\", \"orders\".\"customer_id\", \"orders\".\"customer\", \"orders\".\"email\", \"orders\".\"country\", \"orders\".\"state\", \"orders\".\"city\", \"orders\".\"pin\", \"orders\".\"status\", \"orders\".\"fulfilment\", \"orders\".\"payment\", \"orders\".\"method\", \"orders\".\"card_brand\", \"orders\".\"card_last4\", \"orders\".\"items\", \"orders\".\"subtotal\", \"orders\".\"shipping\", \"orders\".\"total\", \"orders\".\"refunded\", \"orders\".\"warehouse\", \"orders\".\"carrier\", \"orders\".\"tracking\", \"orders\".\"note\", \"orders\".\"placed_at\", \"orders\".\"placed_on\", \"orders\".\"confirmed_at\" FROM \"orders\" WHERE \"orders\".\"customer_id\" = ? AND \"orders\".\"id\" <> ? ORDER BY \"placed_at\" DESC LIMIT ?",
+          "ms": 0.46,
           "plan": [
             "SEARCH orders USING INDEX orders_customer (customer_id=?)"
           ]
