@@ -1250,8 +1250,17 @@ impl Controller for Pages {
                 let me = who(uow, &headers).await?;
                 let filters = query.filters();
                 let summary = queries::summary(uow, &filters, me.id, now()).await?;
-                let stream = "/inbox/events";
-                Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, stream)).into_response()))
+                // The stream of the page it is drawn into: another would take a second of
+                // the six connections a browser keeps to a host.
+                let open = match filters_of_referer_open(&headers) {
+                    Some(id) => conversation(uow, id).await?,
+                    None => None,
+                };
+                let stream = open.map_or_else(
+                    || "/inbox/events".to_owned(),
+                    |found| format!("/inbox/events?open={}&customer={}", found.id, found.customer_id),
+                );
+                Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, &stream)).into_response()))
             }),
             route!(me, Method::GET, "!/inbox/{id}/fragments/head", pages, [headers: HeaderMap, Path(id): Path<i64>] => {
                 let uow = &*pages.db;

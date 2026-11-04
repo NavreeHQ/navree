@@ -14,9 +14,10 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use futures_util::FutureExt as _;
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
-use navree::db::{Db, Executor as _, ExecutorExt as _};
+use navree::db::{Db, Executor as _, ExecutorExt as _, Uow};
 use navree::http::response::sse::{Event as Sse, KeepAlive, Sse as SseResponse};
 use navree::http::response::{IntoResponse, Response};
 use navree::orm::Model as _;
@@ -135,9 +136,26 @@ impl Hub {
         }
     }
 
-    /// Tells every open stream that `change` happened.
+    /// Tells every open stream that `change` happened, once it can be read. A request
+    /// writes in its unit of work, which commits after the handler returns: a page told
+    /// sooner asks before the commit, misses the change, and has no reason to ask again.
+    /// So inside a request the news waits for the commit, and goes nowhere on a
+    /// rollback. Elsewhere (the simulator, the clock) every write is already committed.
     pub fn tell(&self, change: Change) {
-        let _ = self.tx.send(change);
+        match Uow::current() {
+            Some(uow) => {
+                let tx = self.tx.clone();
+                uow.after_commit(move || {
+                    async move {
+                        let _ = tx.send(change);
+                    }
+                    .boxed()
+                });
+            }
+            None => {
+                let _ = self.tx.send(change);
+            }
+        }
     }
 
     fn roll(&self, n: u64) -> u64 {
@@ -643,4 +661,41 @@ impl Hub {
 /// Now, in unix seconds.
 pub fn now() -> i64 {
     chrono::Utc::now().timestamp()
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::db::{Db, DbOptions};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn a_change_told_in_a_request_is_heard_after_its_commit_and_never_after_a_rollback() {
+        let db = Db::connect(&DbOptions {
+            url: "sqlite::memory:".into(),
+            ..DbOptions::default()
+        })
+        .await
+        .expect("an in-memory database");
+        let hub = Hub::new();
+        let mut heard = hub.tx.subscribe();
+        let change = Change {
+            conversation: 7,
+            customer: 3,
+        };
+        let uow = db.uow(None, None).await;
+        uow.scope(async { hub.tell(change) }).await;
+        assert!(heard.try_recv().is_err(), "nothing before the commit");
+        uow.commit().await.expect("the commit");
+        assert_eq!(heard.try_recv().ok(), Some(change));
+
+        let uow = db.uow(None, None).await;
+        uow.scope(async { hub.tell(change) }).await;
+        uow.rollback().await.expect("the rollback");
+        assert!(heard.try_recv().is_err(), "nothing after a rollback");
+
+        // Outside a request every write is committed already: at once.
+        hub.tell(change);
+        assert_eq!(heard.try_recv().ok(), Some(change));
+    }
 }
