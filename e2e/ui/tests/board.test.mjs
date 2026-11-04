@@ -115,7 +115,7 @@ for (const name of NAMES) {
       if (light) {
         await page.addStyleTag({ content: LIGHT });
         // Controls ease into the new colours: axe reads them once they are there.
-        await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+        await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => {}))));
       }
       page.done = async () => {
         let csp = rest.javaScriptEnabled === false ? [] : await page.evaluate(() => window.__csp || []);
@@ -170,7 +170,7 @@ for (const name of NAMES) {
           // The drawer over the board, and the card's own page.
           await page.getByRole("button", { name: "Fix the sign-in redirect on Android", exact: true }).click();
           await until(page, () => document.querySelector("dialog#card")?.open, null, "the drawer");
-          await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+          await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => {}))));
           assert.deepEqual(await axe(page), [], "drawer");
           assert.deepEqual(await rules(page), [], "drawer");
           if (width === 1440) {

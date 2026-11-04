@@ -237,6 +237,33 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`named elements can't break a sortable list (${engine})`, async () => {
+      const path = key("sortable");
+      // Names the module could read from the document, and fields named after what it calls on a form.
+      const clobber = `<img name="elementFromPoint" src="${GIF}" alt=""><img name="body" src="${GIF}" alt=""><img name="activeElement" src="${GIF}" alt=""><form name="getElementById"></form><img name="documentElement" src="${GIF}" alt="">`;
+      const words = JSON.stringify({ picked: "Picked up {item}.", moved: "Position {position} of {total} in {list}.", cancelled: "Back at position {position} of {total} in {list}." }).replaceAll('"', "&quot;");
+      const item = (key, name) =>
+        `<li data-slot="sortable-item" id="s-item-${key}" data-key="${key}" data-name="${name}"><button type="button" data-slot="sortable-handle" id="h${key}" aria-label="Move ${name}">Move</button><div data-slot="sortable-body">${name}</div><form data-ui-move data-ui-form method="post" action="/${path}-move"><input type="hidden" name="requestSubmit"><input type="hidden" name="elements"><input type="hidden" name="item" value="${key}"><input type="hidden" name="from_list"><input type="hidden" name="to_list"><input type="hidden" name="before"><input type="hidden" name="after"><input type="hidden" name="position"></form></li>`;
+      const list = (key, title, items) =>
+        `<section data-slot="sortable-list" id="s-list-${key}" data-list="${key}"><div data-slot="sortable-list-header"><h2 data-slot="sortable-list-title">${title}</h2></div><ol data-slot="sortable-items" id="s-list-${key}-items">${items}</ol></section>`;
+      const sortable = `<div data-slot="sortable" id="s" data-layout="board" role="group" aria-label="Board" data-ui-sortable data-l="${words}"><div data-slot="sortable-status" id="s-status" aria-live="assertive"></div><div data-slot="sortable-lists">${list("a", "First", item("1", "One") + item("2", "Two"))}${list("b", "Second", "")}</div></div>`;
+      route(`/${path}`, doc(`${clobber}${sortable}`).replace("</head>", `<script type="module" src="/_navree/ui/sortable.js"></script></head>`));
+      const { context, page: tab, errors } = await fresh(`/${path}`);
+      const read = () => tab.evaluate(() => {
+        const q = (s) => Document.prototype.querySelector.call(document, s);
+        return { status: q("#s-status").textContent, in: Element.prototype.closest.call(q("#s-item-1"), "[data-slot=sortable-list]").id };
+      });
+      await tab.focus("#h1");
+      await tab.keyboard.press("Space");
+      assert.equal((await read()).status, "Picked up One.");
+      await tab.keyboard.press("ArrowRight");
+      assert.deepEqual(await read(), { status: "Position 1 of 1 in Second.", in: "s-list-b" });
+      await tab.keyboard.press("Escape");
+      assert.deepEqual(await read(), { status: "Back at position 1 of 2 in First.", in: "s-list-a" });
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     test(`a field named enctype keeps a form multipart (${engine})`, async () => {
       const path = key("enctype");
       route(`/${path}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${path}-post"><input name="enctype" value="v"><button id="go">go</button></form>`));

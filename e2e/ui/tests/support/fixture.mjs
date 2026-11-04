@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const crate = join(dirname(fileURLToPath(import.meta.url)), "../../../../crates/navree-ui");
 const file = (name) => readFileSync(join(crate, "dist", name));
-const FILES = { "/_navree/ui/core.js": file("core.js"), "/_navree/ui/overlay.js": file("overlay.js"), "/_navree/ui/menus.js": file("menus.js"), "/_navree/ui/phone.js": file("phone.js"), "/_navree/ui/slider.js": file("slider.js"), "/_navree/ui/tree.js": file("tree.js"), "/_navree/ui/toolbar.js": file("toolbar.js"), "/_navree/ui/split.js": file("split.js"), "/_navree/ui/keys.js": file("keys.js"), "/_navree/ui/lazy.js": file("lazy.js"), "/_navree/ui/live.js": file("live.js"), "/_navree/ui/navree-ui.css": file("navree-ui.css") };
+const FILES = { "/_navree/ui/core.js": file("core.js"), "/_navree/ui/overlay.js": file("overlay.js"), "/_navree/ui/menus.js": file("menus.js"), "/_navree/ui/phone.js": file("phone.js"), "/_navree/ui/slider.js": file("slider.js"), "/_navree/ui/tree.js": file("tree.js"), "/_navree/ui/toolbar.js": file("toolbar.js"), "/_navree/ui/split.js": file("split.js"), "/_navree/ui/keys.js": file("keys.js"), "/_navree/ui/lazy.js": file("lazy.js"), "/_navree/ui/live.js": file("live.js"), "/_navree/ui/sortable.js": file("sortable.js"), "/_navree/ui/navree-ui.css": file("navree-ui.css") };
 // The phone module fetches its plans beside itself, by their hashed name.
 const PHONE_DATA = /PHONE_DATA_URL: &str = "([^"]+)"/.exec(readFileSync(join(crate, "src/assets_gen.rs"), "utf8"))[1];
 FILES[PHONE_DATA] = file("phone-data.json");
