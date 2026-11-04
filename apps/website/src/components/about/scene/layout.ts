@@ -164,7 +164,12 @@ function drawMask(): HTMLCanvasElement {
 }
 
 /** Builds every glyph of the picture for a tier from the picture itself (`image`, already decoded) and its depth. */
-export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMap): Layout {
+export async function buildLayout(
+  tier: Tier,
+  image: CanvasImageSource,
+  depth: DepthMap,
+  pause: () => Promise<void>,
+): Promise<Layout> {
   const next = random(tier.name === "wide" ? 4242 : 2424);
   const essential = new Rows();
   const rain = new Rows();
@@ -244,6 +249,8 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
     }
   }
 
+  await pause();
+
   // ---- dust: a finer fall of light, in the opening only
   if (tier.dust) {
     const [cw, ch] = [tier.cell[0] / 2, tier.cell[1] / 2];
@@ -260,6 +267,8 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
       }
     }
   }
+
+  await pause();
 
   // ---- the rain: at the edges, where the picture has its own, and in the opening across the whole room
   {
@@ -281,6 +290,8 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
       }
     }
   }
+
+  await pause();
 
   // ---- the code on the screen
   const typing = schedule(CODE);
@@ -335,6 +346,8 @@ export function buildLayout(tier: Tier, image: CanvasImageSource, depth: DepthMa
     );
     bokeh--;
   }
+
+  await pause();
 
   rain.shuffle(next);
   dust.shuffle(next);

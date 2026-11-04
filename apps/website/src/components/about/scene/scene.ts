@@ -78,12 +78,12 @@ const yieldToMain = () =>
   });
 
 export async function createScene(opts: SceneOptions): Promise<LiveScene | null> {
-  const atlasCanvas = drawAtlas(opts.font);
+  const atlasCanvas = await drawAtlas(opts.font, yieldToMain);
   if (!atlasCanvas) return null;
   await yieldToMain();
-  const depth = buildDepth(4);
+  const depth = await buildDepth(yieldToMain);
   await yieldToMain();
-  const layout = buildLayout(opts.tier, opts.image, depth);
+  const layout = await buildLayout(opts.tier, opts.image, depth, yieldToMain);
   await yieldToMain();
 
   let renderer: WebGLRenderer;
@@ -108,13 +108,18 @@ export async function createScene(opts: SceneOptions): Promise<LiveScene | null>
   const camera = new PerspectiveCamera(FOV, opts.width / opts.height, 50, 8000);
 
   // ---- the picture, bent to its depth
-  // Its pixels at their real size: an <img> with a srcset reports a size
-  // corrected for density, which isn't the size of the file it holds. The
-  // file is in the cache already, so this is no new download.
+  // Its pixels, from the image the page has already decoded, at the canvas's
+  // own resolution. (An <img> with a srcset reports a size corrected for
+  // density, not the size of its file, so the size is given here.)
   let bitmap: ImageBitmap;
   try {
-    const blob = await (await fetch(opts.image.currentSrc || opts.image.src)).blob();
-    bitmap = await createImageBitmap(blob, { imageOrientation: "flipY" });
+    const width = Math.min(2560, Math.round(opts.width * opts.pixelRatio * 1.1));
+    bitmap = await createImageBitmap(opts.image, {
+      resizeWidth: width,
+      resizeHeight: Math.round((width * IMAGE.height) / IMAGE.width),
+      resizeQuality: "high",
+      imageOrientation: "flipY",
+    });
   } catch {
     renderer.dispose();
     return null;

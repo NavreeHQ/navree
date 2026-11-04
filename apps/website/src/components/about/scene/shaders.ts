@@ -12,6 +12,7 @@
  *   `layout.ts`.
  */
 import { IMAGE } from "../picture.ts";
+import { GRID, ROWS } from "./atlas.ts";
 import { GROUP } from "./layout.ts";
 import { COLUMN, DEPTH, LAND } from "./space.ts";
 
@@ -240,9 +241,9 @@ void main() {
 
   // The quad: the cell of the atlas, facing the camera, stretched while falling (anchored at its head).
   vec2 corner = position.xy;
-  float cx = mod(cell, 16.0);
-  float cy = floor(cell / 16.0);
-  vUv = vec2((cx + uv.x) / 16.0, 1.0 - (cy + 1.0 - uv.y) / 16.0);
+  float cx = mod(cell, ${f(GRID)});
+  float cy = floor(cell / ${f(GRID)});
+  vUv = vec2((cx + uv.x) / ${f(GRID)}, 1.0 - (cy + 1.0 - uv.y) / ${f(ROWS)});
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   mv.xy += corner * size * aspect * vec2(1.0, stretch);
   mv.y += (stretch - 1.0) * size * 0.32;

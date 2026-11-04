@@ -106,7 +106,8 @@ function blur(src: Float32Array, w: number, h: number, r: number) {
   }
 }
 
-export function buildDepth(cell = 4): DepthMap {
+/** Builds the depth map; `pause` lets the page breathe between layers. */
+export async function buildDepth(pause: () => Promise<void>, cell = 4): Promise<DepthMap> {
   const cols = Math.ceil(IMAGE.width / cell);
   const rows = Math.ceil(IMAGE.height / cell);
   const canvas = document.createElement("canvas");
@@ -146,6 +147,7 @@ export function buildDepth(cell = 4): DepthMap {
       z[i] = depth;
       figure[i] = layer.figure ? 1 : 0;
     }
+    if (round) await pause();
   }
   blur(z, cols, rows, 2);
   canvas.width = canvas.height = 0;

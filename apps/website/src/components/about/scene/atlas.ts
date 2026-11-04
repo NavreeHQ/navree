@@ -2,7 +2,7 @@
  * The glyph atlas of the live picture: one texture holding every glyph it
  * draws, so all of them go to the GPU in a single draw call.
  *
- * A 16 x 16 grid of square cells. Each cell keeps three versions of its
+ * A 16 x 8 grid of square cells. Each cell keeps three versions of its
  * glyph in the three colour channels: red is the sharp glyph, green a soft
  * glow around it, blue a heavy blur (for the out-of-focus digits near the
  * camera). The shader mixes the three per glyph.
@@ -12,7 +12,9 @@
  * - `CELL.glow`: a round soft light; `CELL.caret`: the text cursor.
  */
 
+/** Cells across and down. */
 export const GRID = 16;
+export const ROWS = 8;
 /** Pixels per cell side. */
 export const CELL_PX = 64;
 /** How tall a digit stands in its cell (0 to 1): a glyph drawn `h` tall needs a quad `h / DIGIT` tall. */
@@ -28,11 +30,17 @@ export function charCell(ch: string): number {
   return 2 + (code >= 32 && code <= 126 ? code - 32 : 0);
 }
 
-/** Draws the atlas on a new canvas. `font` is the CSS font family of the digits and text. */
-export function drawAtlas(font: string): HTMLCanvasElement | null {
-  const size = GRID * CELL_PX;
+/**
+ * Draws the atlas on a new canvas. `font` is the CSS font family of the
+ * digits and text. Each blur is its own step, with `pause` between them, so
+ * none of them blocks the page for long.
+ */
+export async function drawAtlas(font: string, pause: () => Promise<void>): Promise<HTMLCanvasElement | null> {
+  const width = GRID * CELL_PX;
+  const height = ROWS * CELL_PX;
   const sharp = document.createElement("canvas");
-  sharp.width = sharp.height = size;
+  sharp.width = width;
+  sharp.height = height;
   const s = sharp.getContext("2d");
   if (!s) return null;
 
@@ -68,30 +76,34 @@ export function drawAtlas(font: string): HTMLCanvasElement | null {
   }
 
   const out = document.createElement("canvas");
-  out.width = out.height = size;
+  out.width = width;
+  out.height = height;
   const o = out.getContext("2d");
   const tint = document.createElement("canvas");
-  tint.width = tint.height = size;
+  tint.width = width;
+  tint.height = height;
   const t = tint.getContext("2d");
   if (!o || !t) return null;
   o.fillStyle = "#000";
-  o.fillRect(0, 0, size, size);
+  o.fillRect(0, 0, width, height);
   o.globalCompositeOperation = "lighter";
   // Each version goes through `tint`, coloured into its channel, then added to the atlas.
   const channel = (color: string, blur: number) => {
     t.globalCompositeOperation = "source-over";
-    t.clearRect(0, 0, size, size);
+    t.clearRect(0, 0, width, height);
     t.filter = blur ? `blur(${blur}px)` : "none";
     t.drawImage(sharp, 0, 0);
     if (blur) t.drawImage(sharp, 0, 0);
     t.filter = "none";
     t.globalCompositeOperation = "source-in";
     t.fillStyle = color;
-    t.fillRect(0, 0, size, size);
+    t.fillRect(0, 0, width, height);
     o.drawImage(tint, 0, 0);
   };
   channel("#f00", 0);
+  await pause();
   channel("#0f0", 4.5);
+  await pause();
   channel("#00f", 9);
 
   // The soft light: the same radial falloff in all three channels.

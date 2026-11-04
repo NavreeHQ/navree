@@ -12,9 +12,9 @@ import { BEATS } from "./scene/timeline";
  * about when it runs lives here.
  *
  * It runs only where it can run well, and the still picture stays
- * otherwise: never under `prefers-reduced-motion`, without WebGL 2 (or on a
- * software renderer), on devices with under 4 GB of memory or two cores, or
- * with Save-Data on. three.js is fetched only then, when the picture comes
+ * otherwise: never under `prefers-reduced-motion`, without WebGL 2 or with
+ * only a software renderer (the CPU drawing what a GPU should), on devices
+ * with under 4 GB of memory or two cores, or with Save-Data on. three.js is fetched only then, when the picture comes
  * near the screen and the browser is idle, after the page has painted.
  *
  * While it runs:
@@ -71,8 +71,11 @@ function capable(): boolean {
     const probe = document.createElement("canvas");
     const gl = probe.getContext("webgl2", { failIfMajorPerformanceCaveat: true });
     if (!gl) return false;
+    // A software renderer draws the scene on the CPU: treat it as a low-end device.
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
     gl.getExtension("WEBGL_lose_context")?.loseContext();
-    return true;
+    return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer);
   } catch {
     return false;
   }
