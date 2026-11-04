@@ -1810,7 +1810,7 @@ impl Chart {
                     .attr("x", pct(*x))
                     .attr("y", "14")
                     .attr("text-anchor", anchor)
-                    .attr_opt("data-minor", (grid.len() > 6 && j % 2 == 1).then_some(""))
+                    .attr_opt("data-minor", (grid.len() > 3 && j % 2 == 1).then_some(""))
                     .child((plan.tick_text)(*v))
                     .into()
             })
