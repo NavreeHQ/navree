@@ -403,7 +403,7 @@ Every model call goes through the [failover chain](/docs/ai/ai-sdk/#failover-and
 
 ## Memory
 
-With `Memory::Conversation`, the default, a run stores its messages and tool calls in your database (PostgreSQL, MySQL or MariaDB, or SQLite), and a later run with the same `conversation_id` continues where it stopped. The `ai` migration set creates two tables, `ai_conversations` and `ai_messages`; it runs with your other [migrations](/docs/database/migrations/).
+With `Memory::Conversation`, the default, a run stores its messages and tool calls in your database (PostgreSQL, MySQL or SQLite), and a later run with the same `conversation_id` continues where it stopped. The `ai` migration set creates two tables, `ai_conversations` and `ai_messages`; it runs with your other [migrations](/docs/database/migrations/).
 
 - A conversation belongs to the user who started it and to its agent. Continuing someone else's conversation, or another agent's, is a 404.
 - The model sees the last `ai.memory.max_messages` messages (default 40, at least 2), starting at a user message. Older ones are folded into a running summary written by `ai.memory.summary_model` (default `ai.default`) and added to the instructions, so long conversations keep their thread without growing the prompt. A failed summary is logged and the run goes on.

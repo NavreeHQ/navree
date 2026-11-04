@@ -142,7 +142,7 @@ export const sections: DocsSection[] = [
   {
     slug: "database",
     title: "Database",
-    description: "Entities, repositories, migrations, the schema builder, TimescaleDB, seeding and pagination on PostgreSQL, MySQL, MariaDB and SQLite.",
+    description: "Entities, repositories, migrations, the schema builder, TimescaleDB, seeding and pagination on PostgreSQL, MySQL and SQLite.",
     pages: [
       "getting-started",
       "entities-and-repositories",

@@ -52,7 +52,7 @@ export const homeFaq: FaqSet = {
     {
       question: "Which databases does Navree support?",
       answer:
-        "TimescaleDB, which runs on PostgreSQL, is the default for new apps. The ORM and its migrations also work with PostgreSQL, MySQL and MariaDB, SQLite and MongoDB. For SQL databases the ORM writes its own SQL. `navree new --database sqlite` makes an app that needs no database server.",
+        "TimescaleDB, which runs on PostgreSQL, is the default for new apps. The ORM and its migrations also work with PostgreSQL, MySQL, SQLite and MongoDB. MariaDB connects through the MySQL driver but is untested until its test suite runs on a MariaDB server. For SQL databases the ORM writes its own SQL. `navree new --database sqlite` makes an app that needs no database server.",
       link: { href: "/docs/orm/getting-started/", label: "Read about the ORM" },
     },
     {

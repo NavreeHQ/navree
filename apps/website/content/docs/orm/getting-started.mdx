@@ -19,7 +19,7 @@ Around models and queries the ORM has [relationships](/docs/orm/relationships/) 
 
 It runs on what `navree-db` already owns: the connection pool, the unit of work and its transaction, change events for the [audit log](/docs/security/audit-log/), after-commit hooks, and the actor and workspace settings that triggers and row-level security policies read. A record saved in a handler is part of the request's transaction: it commits when the response succeeds, rolls back when it fails, and shows up in the audit trail.
 
-The same models run on every database Navree supports: **TimescaleDB** and PostgreSQL, **MySQL** and MariaDB, **SQLite**, and **MongoDB** through a [document driver](/docs/orm/mongodb/). SQL is generated per database, with every value bound.
+The same models run on every database Navree supports: **TimescaleDB** and PostgreSQL, **MySQL** (MariaDB connects through the same driver but is [untested](/docs/database/getting-started/#mysql-and-mariadb)), **SQLite**, and **MongoDB** through a [document driver](/docs/orm/mongodb/). SQL is generated per database, with every value bound.
 
 ## Installation
 

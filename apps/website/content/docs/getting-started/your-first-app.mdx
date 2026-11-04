@@ -96,7 +96,7 @@ schema
     .await
 ```
 
-Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for whichever database the app runs on: TimescaleDB or PostgreSQL, MySQL and MariaDB, or SQLite (the tests use SQLite). Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
+Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for whichever database the app runs on: TimescaleDB or PostgreSQL, MySQL, or SQLite (the tests use SQLite); MariaDB is [untested](/docs/database/getting-started/#mysql-and-mariadb). Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
 
 ## Update the model
 

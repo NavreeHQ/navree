@@ -474,8 +474,8 @@ export const ecosystem: EcosystemEntry[] = [
     category: "connect",
     tagline: "Request-response and events between services",
     summary:
-      "Handle messages with the same modules, providers and guards as your HTTP routes. Pick TCP, NATS, Kafka, RabbitMQ, Redis Streams or MQTT, and run HTTP and messages in one binary.",
-    features: ["#[message_pattern] and #[event_pattern]", "NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP", "Hybrid HTTP and message apps", "Trace context across services"],
+      "Handle messages with the same modules, providers and guards as your HTTP routes. Pick TCP, NATS, Kafka (4.0 or later), RabbitMQ, Redis Streams or MQTT, and run HTTP and messages in one binary.",
+    features: ["#[message_pattern] and #[event_pattern]", "NATS, Kafka 4.0+, RabbitMQ, Redis Streams, MQTT, TCP", "Hybrid HTTP and message apps", "Trace context across services"],
     crate: "navree-micro",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features micro",
     href: "/docs/microservices/introduction/",

@@ -11,7 +11,8 @@ timestamp). Applied migrations are recorded in `navree_migrations`
 (`module`, `name`, `batch`, `applied_at`).
 
 Migrations are written with the schema builder (`navree::schema`), which
-writes the SQL for PostgreSQL (with TimescaleDB), MySQL, MariaDB and SQLite.
+writes the SQL for PostgreSQL (with TimescaleDB), MySQL and SQLite (MariaDB's
+own SQL too, but MariaDB is untested: no suite has run on a MariaDB server).
 Every migration implements `navree::schema::Migration`.
 
 ## Generate

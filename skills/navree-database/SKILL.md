@@ -1,6 +1,6 @@
 ---
 name: navree-database
-description: "Works with the database layer of a Navree app: the `database` configuration and its databases (TimescaleDB by default, PostgreSQL, MySQL/MariaDB, SQLite), the per-request unit of work (`Uow`), transactions in jobs and commands, models with UUID v7 keys whose writes record change events, seeders and `db:seed`, pagination, raw statements on an `Executor`, and TimescaleDB hypertables. Models and queries are the `navree-orm` skill, migrations the `navree-migrations` skill. Use when configuring the database, writing data outside a request, running raw SQL, writing a seeder, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
+description: "Works with the database layer of a Navree app: the `database` configuration and its databases (TimescaleDB by default, PostgreSQL, MySQL, SQLite; MariaDB untested), the per-request unit of work (`Uow`), transactions in jobs and commands, models with UUID v7 keys whose writes record change events, seeders and `db:seed`, pagination, raw statements on an `Executor`, and TimescaleDB hypertables. Models and queries are the `navree-orm` skill, migrations the `navree-migrations` skill. Use when configuring the database, writing data outside a request, running raw SQL, writing a seeder, or debugging \"database is locked\", 409 conflicts or writes that are not saved."
 ---
 
 # The database
@@ -11,7 +11,8 @@ the `navree-orm` skill) and write migrations with the schema builder (the
 TimescaleDB (PostgreSQL with hypertables for
 time series) is the default database: `navree new` writes its URL and turns
 on the `postgres` feature of `navree`, and `navree dock up` runs it. Plain
-PostgreSQL uses the same feature; MySQL and MariaDB the `mysql` feature
+PostgreSQL uses the same feature; MySQL the `mysql` feature (MariaDB
+connects through it but is untested: no suite has run on a MariaDB server)
 (`mysql://` or `mariadb://` URLs; MySQL 8's default accounts sign in over
 TLS); SQLite is the opt-in `sqlite` feature (the bundled library: tests,
 `navree new --database sqlite`, and the fallback when `database.url` is

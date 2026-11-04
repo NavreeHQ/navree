@@ -133,7 +133,7 @@ export function siteGraph(): Json {
         offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
         featureList: [
           "Modules and dependency injection, checked when the app boots",
-          "An ORM and migrations for TimescaleDB, PostgreSQL, MySQL and MariaDB, SQLite and MongoDB",
+          "An ORM and migrations for TimescaleDB, PostgreSQL, MySQL, SQLite and MongoDB",
           "Authentication, access control and workspaces",
           "Queues, scheduling, search, real time and workflows",
           "Navree UI: server-rendered components written in Rust",

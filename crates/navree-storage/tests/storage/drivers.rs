@@ -105,8 +105,11 @@ mod s3 {
     }
 
     #[tokio::test]
-    async fn s3_disk_conforms_on_minio() {
-        let Some(url) = service_url("NAVREE_TEST_S3_URL", "s3_disk_conforms_on_minio") else {
+    async fn s3_disk_conforms_on_a_real_s3_server() {
+        // CONN-110: CI runs RustFS (scripts/ci-services.sh); any S3-compatible
+        // server works, MinIO included.
+        let Some(url) = service_url("NAVREE_TEST_S3_URL", "s3_disk_conforms_on_a_real_s3_server")
+        else {
             return;
         };
         // http://<access key>:<secret key>@127.0.0.1:9000/<bucket>

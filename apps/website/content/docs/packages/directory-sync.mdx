@@ -51,7 +51,7 @@ Navree::app()
 
 Only `ConfigModule` and `DatabaseModule` are required. `CryptoModule` with an application key is needed to store a connection's secret (the LDAP bind password). `IntegrationsModule` is needed for the `microsoft`, `google` and `okta` sources; a SCIM-only or LDAP-only app can leave it out. Without `QueueModule`, a queued sync runs in a task of the process once its run is stored. Without `WorkspaceModule`, connections belong to the app itself.
 
-The module contributes the migration set `directory`, which creates six tables: `directory_connections` (the connections, their sealed secret, the SCIM token's hash and the delta cursor), `directory_users`, `directory_groups` and `directory_memberships` (the synced directory, per connection), `directory_runs` and `directory_run_changes` (runs and the changes they planned or applied). They run on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite; UUID columns are `BINARY(16)` on MySQL and MariaDB.
+The module contributes the migration set `directory`, which creates six tables: `directory_connections` (the connections, their sealed secret, the SCIM token's hash and the delta cursor), `directory_users`, `directory_groups` and `directory_memberships` (the synced directory, per connection), `directory_runs` and `directory_run_changes` (runs and the changes they planned or applied). They run on PostgreSQL (with or without TimescaleDB), MySQL and SQLite (MariaDB is [untested](/docs/database/getting-started/#mysql-and-mariadb)); UUID columns are `BINARY(16)` on MySQL and MariaDB.
 
 ## Configuration
 

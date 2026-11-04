@@ -16,7 +16,7 @@ Navree supports four SQL databases:
 
 - **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
 - **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
-- **MySQL** and **MariaDB** are behind the `mysql` Cargo feature ([below](#mysql-and-mariadb)).
+- **MySQL** is behind the `mysql` Cargo feature. **MariaDB** connects through the same driver but is untested: no Navree suite has run against a MariaDB server yet ([below](#mysql-and-mariadb)).
 - **SQLite** is behind the `sqlite` Cargo feature, and it is bundled: the feature compiles SQLite into your app, so there is nothing to install. Tests run on it, each in a file of its own ([below](#sqlite)).
 
 Each driver is a feature of its own, and none is on by default: a PostgreSQL or MySQL build compiles no SQLite, and a SQLite build compiles no PostgreSQL or MySQL driver. Turn on the one you use (`navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }`), and a second one only when the app talks to two kinds of server. An app whose `database.url` names a driver it was built without fails to boot with a message naming the feature to enable (for example "enable the `sqlite` feature of navree-db").
@@ -144,7 +144,7 @@ On PostgreSQL, Navree behaves differently in a few places:
 
 <Callout type="warning" title="What has been run on PostgreSQL">
 
-Most tests of Navree and of the reference CRM run on SQLite. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), paginated queries, record inserts and navree-auth's user lookup. No Navree code had to change for it.
+Most tests of Navree and of the reference CRM run on SQLite on a developer's machine. A scheduled CI job runs the suites of the 26 crates that own tables (auth, queue, audit, workspaces, billing, OAuth and the rest) again on PostgreSQL 17 with TimescaleDB and on MySQL 8.4, with `NAVREE_TEST_DATABASE=postgres` or `mysql`. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), paginated queries, record inserts and navree-auth's user lookup. No Navree code had to change for it.
 
 The ORM's real-server suite runs on PostgreSQL 17 with TimescaleDB 2.31, and on MySQL 8.4: records round-tripping every column type and cast (vectors with pgvector), conditions with JSON operators and regular expressions, joins, aggregates and compound queries, bulk writes and upserts, offset and cursor pagination, chunks, streams and cursors, row locks between two units of work (`SKIP LOCKED`, `NOWAIT` and shared locks), the unit of work's change events and rollbacks, relations and eager loading, model events, soft deletes and pruning, time buckets, statement timeouts and, on PostgreSQL, reads retried after a lost connection. `cargo test -p navree-orm --features postgres,mysql --test servers` runs it against your servers.
 
@@ -202,7 +202,13 @@ Then point `database.url` at the server. `mariadb://` works the same as `mysql:/
 export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
 ```
 
-Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree supports MySQL 8.0 or later and MariaDB 10.6 or later.
+Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree's suites run on MySQL 8.4; earlier MySQL 8.0 releases are expected to work but are not tested.
+
+<Callout type="warning" title="MariaDB is untested">
+
+Navree reads `mariadb://` URLs, opens MariaDB connections with the MySQL driver and writes MariaDB's own SQL for UUID, vector and spatial columns, but none of it has run against a MariaDB server yet: not the migrations, not the ORM's SQL, not the row locks. Until a MariaDB run of the suites passes, treat MariaDB as untested and use MySQL 8.4 in production. If you try MariaDB (10.6 or later, for `SKIP LOCKED`), run your app's own tests against it first.
+
+</Callout>
 
 ### Connections
 
@@ -289,7 +295,13 @@ NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test 
 
 The ORM's real-server suite runs on MySQL 8.4 as well ([above](#postgresql)), on tables whose UUID columns are `BINARY(16)`.
 
-MariaDB connects through the same code but hasn't been run against a server yet, and the other modules' test suites (auth, queue, audit, workspaces and the rest) run on SQLite. Try them in a staging environment before you rely on them.
+The other modules' suites (auth, queue, audit, workspaces and the rest) run on MySQL 8.4 too, in the scheduled CI job ([above](#postgresql)):
+
+```sh
+NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features mysql
+```
+
+MariaDB connects through the same code but hasn't been run against a MariaDB server yet ([above](#mysql-and-mariadb)): treat it as untested.
 
 </Callout>
 

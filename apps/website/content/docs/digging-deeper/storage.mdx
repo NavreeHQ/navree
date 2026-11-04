@@ -681,6 +681,8 @@ A memory disk signs direct uploads to the app's own route, so a test can run the
 
 To try an `s3` disk against a real store on your machine, run MinIO with [Dock](/docs/tools/dock/): `navree dock:add minio`, then `navree dock up`.
 
+Navree's own suite runs the `s3` driver against an in-process S3 server and, in CI, against RustFS, an S3-compatible server (`NAVREE_TEST_S3_URL=http://<key>:<secret>@127.0.0.1:9000/<bucket>`). AWS S3 itself, MinIO, R2 and Spaces follow the same API but are not part of that run, so try a new store in staging first.
+
 ## Related
 
 <LinkCards>
