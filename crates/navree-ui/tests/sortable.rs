@@ -59,7 +59,9 @@ fn a_board_draws_its_lists_with_titles_counts_and_limits() {
 fn each_item_has_a_handle_that_says_how_to_move_it() {
     let html = html(board());
     assert!(html.contains(r#"<li data-slot="sortable-item" id="sprint-item-12" data-key="12" data-name="Fix the sign-in redirect">"#), "{html}");
-    assert!(html.contains(r#"<button data-slot="sortable-handle" type="button" aria-label="Move Fix the sign-in redirect" aria-describedby="sprint-help">"#), "{html}");
+    // A tabindex of its own: WebKit gives a button it clicks the focus only when it has one, and a
+    // lifted card's keys and its second click need the focus on the handle.
+    assert!(html.contains(r#"<button data-slot="sortable-handle" type="button" tabindex="0" aria-label="Move Fix the sign-in redirect" aria-describedby="sprint-help">"#), "{html}");
     assert!(html.contains(
         r#"<p data-slot="sortable-help" id="sprint-help" hidden>Press Space to pick it up"#
     ));

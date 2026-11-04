@@ -746,9 +746,13 @@ impl Sortable {
             item.body.clone()
         };
         let handle = self.action.as_ref().map(|_| {
+            // WebKit gives a button it clicks the focus only when the button has a tabindex of its
+            // own. Without one, a press on a lifted card's handle moves the focus to the page and
+            // puts the card back before the click can drop it.
             el("button")
                 .slot("sortable-handle")
                 .attr("type", "button")
+                .attr("tabindex", "0")
                 .attr("aria-label", labels.handle.replace("{item}", &item.name))
                 .attr("aria-describedby", help_id.to_owned())
                 .attr_opt("aria-disabled", item.locked.as_ref().map(|_| "true"))
