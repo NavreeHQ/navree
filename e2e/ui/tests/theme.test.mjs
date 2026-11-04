@@ -108,6 +108,7 @@ for (const name of NAMES) {
           });
         }, name);
       }
+      page.scripted = rest.javaScriptEnabled !== false;
       page.done = async () => {
         if (rest.javaScriptEnabled !== false) {
           const csp = await page.evaluate(() => window.__csp || []);
@@ -121,7 +122,8 @@ for (const name of NAMES) {
 
     const shot = async (page, file) => {
       if (!SHOTS) return;
-      const before = await page.evaluate(() => (window.__csp || []).length).catch(() => null);
+      // With scripting off nothing reports, and no frame callback would run.
+      const before = page.scripted ? await page.evaluate(() => (window.__csp || []).length).catch(() => null) : null;
       await page.screenshot({ path: join(SHOTS, `${name}-${file}.png`), caret: "initial" });
       // A screenshot in Playwright's WebKit adds a <style> of the tool's own, which the policy
       // reports (on a page with nothing of this module too): reports raised by the screenshot
