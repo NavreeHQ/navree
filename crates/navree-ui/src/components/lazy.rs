@@ -12,6 +12,17 @@
 //!
 //! **Cursors compare as text.** The runtime places a live item by comparing cursors as
 //! strings, so make them sort: pad numbers (`format!("{at:012}{id:010}")`).
+//!
+//! **Revisions are taken where they commit.** A live list asks for what changed since the
+//! newest revision it has seen, so a change must never become visible after a reader has
+//! seen a later one. Take the revision inside the transaction that writes it, from
+//! something only one writer holds at a time: a counter row the transaction updates
+//! (`UPDATE counter SET rev = rev + 1 RETURNING rev`), or on SQLite, which has one writer,
+//! a row id the database assigns. A number taken from a counter in memory before the write
+//! is not safe: a later number can commit first, and the reader moves past the earlier one.
+//!
+//! A merge changes an item the list has where it stands, node by node, so the focus, a
+//! caret and the scroll stay where the reader left them.
 
 use http::HeaderValue;
 use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
@@ -98,6 +109,21 @@ impl LazyItem {
         self
     }
 
+    /// What a list that [announces new items](LazyList::announce_new) says when this
+    /// item arrives on its own: `New message from Harleen Kaur`. Without it the list's
+    /// own words are said.
+    pub fn announce(mut self, text: impl Into<String>) -> Self {
+        self.el = self.el.attr("data-ui-say", text.into());
+        self
+    }
+
+    /// Arrives without being announced: something the reader did themselves, such as
+    /// their own reply.
+    pub fn quiet(mut self) -> Self {
+        self.el = self.el.flag("data-ui-quiet", true);
+        self
+    }
+
     fn into_node(self) -> Node {
         self.el.into()
     }
@@ -161,6 +187,8 @@ pub struct LazyList {
     gap: u8,
     view: Option<String>,
     current: Option<String>,
+    announce: Option<(String, String)>,
+    seen: Option<Href>,
 }
 
 impl LazyList {
@@ -185,7 +213,28 @@ impl LazyList {
             gap: 1,
             view: None,
             current: None,
+            announce: None,
+            seen: None,
         }
+    }
+
+    /// Announces items that arrive live, politely and once they stop coming (a second
+    /// after the last, five at most after the first): `many` with `{n}` filled in, or for
+    /// one item its own words ([`LazyItem::announce`]), else `one`. Items that are only
+    /// changed, or [quiet](LazyItem::quiet), are not announced. Without this a live list
+    /// changes silently.
+    pub fn announce_new(mut self, many: impl Into<String>, one: impl Into<String>) -> Self {
+        self.announce = Some((many.into(), one.into()));
+        self
+    }
+
+    /// Tells the server, with a `POST` to `url`, that the reader has seen what the list
+    /// shows: once when the page shows it, and again when new items arrive, only while
+    /// the page is in sight, one at a time. For marking a conversation read. With no
+    /// script nothing is posted: offer a form for it.
+    pub fn seen_by(mut self, url: impl Into<Href>) -> Self {
+        self.seen = Some(url.into());
+        self
     }
 
     /// Names what the list shows: its filters, its search. A page drawn again for the
@@ -305,10 +354,14 @@ impl LazyList {
             .attr("data-ui-order", self.order.as_str())
             .attr("data-ui-max", self.max)
             .attr_opt("data-ui-current", self.current)
+            .attr_opt("data-ui-seen", self.seen)
             .attr("data-l-loaded", self.labels.loaded.clone())
             .attr("data-l-loading", self.labels.loading.clone())
             .attr("data-l-failed", self.labels.failed.clone())
             .uses(Uses::LAZY);
+        if let Some((many, one)) = self.announce {
+            root = root.attr("data-l-new", many).attr("data-l-new-one", one);
+        }
         if let Some((url, event, new_at)) = self.live {
             root = root
                 .attr("data-ui-live-src", url)
@@ -462,7 +515,9 @@ impl LazyPage {
     }
 
     /// What changed since a live ask's revision: the items as they are now, the
-    /// revision they are at, and the keys of items that left the list.
+    /// revision they are at, and the keys of items that left the list. An answer that
+    /// holds only part of what changed says so with [`more`](Self::more), and the
+    /// runtime asks again from the revision it gave.
     pub fn changes(
         items: impl IntoIterator<Item = LazyItem>,
         since: impl AsRef<str>,
@@ -474,6 +529,13 @@ impl LazyPage {
             since: Some(clip(since.as_ref())),
             gone: gone.into_iter().map(|key| clip(&key)).collect(),
         }
+    }
+
+    /// Says whether more lies beyond these items: for a page, more in the list that way;
+    /// for [changes](Self::changes), more changes after the revision this answer gives.
+    pub fn more(mut self, more: bool) -> Self {
+        self.more = more;
+        self
     }
 
     /// The items as markup.
@@ -512,12 +574,25 @@ impl IntoResponse for LazyPage {
             headers.insert("x-ui-since", value);
         }
         if !self.gone.is_empty()
-            && let Ok(value) = HeaderValue::from_str(&self.gone.join(","))
+            && let Ok(value) = HeaderValue::from_str(
+                &self
+                    .gone
+                    .iter()
+                    .map(|key| gone_key(key))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            )
         {
             headers.insert("x-ui-gone", value);
         }
         response
     }
+}
+
+/// A key as `x-ui-gone` carries it: `%` and `,` written as `%25` and `%2C`, so a comma in
+/// a key is no separator. The runtime reads each one back with `decodeURIComponent`.
+fn gone_key(key: &str) -> String {
+    key.replace('%', "%25").replace(',', "%2C")
 }
 
 into_node!(LazyList, LazyItem);
@@ -677,6 +752,53 @@ mod tests {
         assert_eq!(response.headers()["x-ui-since"], "99");
         assert_eq!(response.headers()["x-ui-gone"], "5,7\"");
         assert_eq!(response.headers()["x-ui-more"], "0");
+    }
+
+    #[test]
+    fn a_gone_key_with_a_comma_stays_one_key_and_a_long_answer_says_there_is_more() {
+        let response = LazyPage::changes(
+            [LazyItem::new("1", "1", "One")],
+            "7",
+            ["a,b".to_owned(), "50%".to_owned(), "9".to_owned()],
+        )
+        .more(true)
+        .into_response();
+        assert_eq!(response.headers()["x-ui-gone"], "a%2Cb,50%25,9");
+        assert_eq!(response.headers()["x-ui-more"], "1");
+        assert_eq!(
+            gone_key("%2C"),
+            "%252C",
+            "a key that looks encoded reads back as itself"
+        );
+    }
+
+    #[test]
+    fn a_list_can_announce_what_arrives_and_say_what_was_seen() {
+        let html = render(
+            &list()
+                .announce_new("{n} new things", "A new thing")
+                .seen_by("/things/seen")
+                .items([
+                    LazyItem::new("8", "0008", "Eight").announce("Eight came"),
+                    LazyItem::new("9", "0009", "Nine").quiet(),
+                ])
+                .into(),
+        );
+        assert!(html.contains(r#"data-ui-seen="/things/seen""#), "{html}");
+        assert!(
+            html.contains(r#"data-l-new="{n} new things" data-l-new-one="A new thing""#),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"<li data-key="8" data-cursor="0008" data-ui-say="Eight came">"#),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"<li data-key="9" data-cursor="0009" data-ui-quiet>"#),
+            "{html}"
+        );
+        let quiet = render(&list().into());
+        assert!(!quiet.contains("data-l-new") && !quiet.contains("data-ui-seen"));
     }
 
     #[test]

@@ -23,7 +23,8 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
     let browser, f;
 
     before(async () => {
-      browser = await launcher.launch();
+      // Firefox slows a page's requests while another load runs; the saves here are timed.
+      browser = await launcher.launch(engine === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
       f = await start();
     });
     after(async () => {
@@ -134,14 +135,14 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       const path = key("panes");
       // Images named after what the modules read from the document, and form fields named
       // after the methods they call on elements and event targets.
-      const clobber = ["querySelector", "querySelectorAll", "activeElement", "documentElement", "scrollingElement", "cookie", "body", "createElement"].map((name) => `<img name="${name}" src="${GIF}" alt="">`).join("");
+      const clobber = ["querySelector", "querySelectorAll", "activeElement", "documentElement", "scrollingElement", "cookie", "body", "head", "title", "hidden", "createElement", "createTextNode", "getElementById", "importNode", "dispatchEvent", "addEventListener"].map((name) => `<img name="${name}" src="${GIF}" alt="">`).join("");
       const items = (from, n) => Array.from({ length: n }, (_, i) => `<li data-key="${from + i}" data-cursor="${String(1000 - from - i).padStart(6, "0")}"><a href="/x/${from + i}">Row ${from + i}</a></li>`).join("");
       const split = `<div data-slot="split" id="s" data-ui-split data-orientation="horizontal" data-ui-split-save="/${path}-save">
         <section data-slot="split-pane" id="a" aria-label="List" data-split-basis="30" data-split-size="300" data-split-min="200" data-split-max="500"><div data-slot="split-pane-body"><div data-slot="split-pane-content">
           <form id="f"><input name="closest" value="x"><input name="matches" value="x"><input name="querySelector" value="x"><input name="contains" value="x"></form>
-          <div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/${path}-rows" data-ui-order="desc" data-ui-max="50" data-l-loaded="{n} more">
+          <div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/${path}-rows" data-ui-seen="/${path}-seen" data-ui-order="desc" data-ui-max="50" data-l-loaded="{n} more" data-l-new="{n} new rows">
             <a data-slot="lazy-more" data-dir="start" href="#" hidden>Newer</a>
-            <ul data-slot="lazy-items" id="l-v" data-ui-keep data-ui-start-done role="list" aria-label="Rows">${items(0, 10)}</ul>
+            <ul data-slot="lazy-items" id="l-v" data-ui-keep data-ui-start-done data-ui-since="5" role="list" aria-label="Rows">${items(0, 10)}</ul>
             <a data-slot="lazy-more" data-dir="end" id="more" href="/${path}?after=000991">More</a>
             <p data-slot="lazy-status" role="status" aria-live="polite"></p>
           </div>
@@ -156,9 +157,19 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
         res.end();
       });
       // The next page answers rows, a script, a handler, a duplicate key and a key that is markup.
-      f.routes.set(`/${path}-rows`, (req, res) => {
+      // A live ask is answered with row 2 changed and moved to the top, a new row, a key
+      // with a comma in it, and row 4 and that key gone.
+      f.routes.set(`/${path}-rows`, (req, res, body, url) => {
+        if (url.searchParams.get("dir") === "live") {
+          res.writeHead(200, { "content-type": "text/html", "x-ui-more": "0", "x-ui-since": "6", "x-ui-gone": "4,a%2Cb", "content-security-policy": CSP });
+          return res.end(`<li data-key="2" data-cursor="001005"><a href="/x/2">Row 2, changed</a></li><li data-key="99" data-cursor="001001" data-ui-say="Row 99 came"><a href="/x/99">Row 99</a></li>`);
+        }
         res.writeHead(200, { "content-type": "text/html", "x-ui-more": "0", "content-security-policy": CSP });
-        res.end(`${items(10, 5)}<li data-key="3" data-cursor="000500">a duplicate</li><li data-key='"]&gt;<img src=x>' data-cursor="000100"><script>document.documentElement.setAttribute("data-attacker-ran","1")</script><img src="x" onerror="document.documentElement.setAttribute('data-attacker-ran','1')" alt=""></li>`);
+        res.end(`${items(10, 5)}<li data-key="3" data-cursor="000500">a duplicate</li><li data-key='"]&gt;<img src=x>' data-cursor="000100"><script>document.documentElement.setAttribute("data-attacker-ran","1")</script><img src="x" onerror="document.documentElement.setAttribute('data-attacker-ran','1')" alt=""></li><li data-key="a,b" data-cursor="000050">a key with a comma</li>`);
+      });
+      f.routes.set(`/${path}-seen`, (req, res) => {
+        res.writeHead(204);
+        res.end();
       });
       const { context, page, errors } = await fresh(`/${path}`);
       const q = (s) => page.evaluate((s) => Document.prototype.querySelector.call(document, s) && Element.prototype.getAttribute.call(Document.prototype.querySelector.call(document, s), "aria-valuenow"), s);
@@ -166,7 +177,8 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await page.focus("#h");
       await page.keyboard.press("ArrowRight");
       assert.equal(await q("#h"), "32", "the separator moves by its keys");
-      await until(() => hits(`/${path}-save`).length, 3000);
+      // Within the save's own time limit.
+      await until(() => hits(`/${path}-save`).length, 10000);
       assert.equal(hits(`/${path}-save`).length, 1, "and saves once");
       assert.match(hits(`/${path}-save`)[0].body, /split=s&sizes=32%2C68&collapsed=/);
       // The lazy list's end is in view, so its next page comes by itself: the rows arrive
@@ -179,6 +191,40 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       assert.equal(await attr(page, "data-attacker-ran"), null, "no script or handler from the answer ran");
       assert.equal(await page.evaluate(() => Element.prototype.hasAttribute.call(Document.prototype.getElementById.call(document, "more"), "hidden")), true, "the end is done");
       assert.match(f.log.filter((entry) => entry.path.startsWith(`/${path}-rows`))[0].path, /dir=end&cursor=000991/);
+      assert.ok(rows.includes("a,b"), "a key with a comma is a key");
+      // The list was seen once it showed.
+      await until(() => hits(`/${path}-seen`).length);
+      assert.equal(hits(`/${path}-seen`)[0].method, "POST", "seen is told by a post");
+      // A live merge with row 2's link focused: the row changes and moves to the top, and
+      // keeps the focus; the new row is announced; the gone ones go.
+      await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.querySelector.call(document, "#l-v > li[data-key='2'] a")));
+      const before = hits(`/${path}-seen`).length;
+      await page.evaluate(() => EventTarget.prototype.dispatchEvent.call(Document.prototype.getElementById.call(document, "l"), new CustomEvent("ui:refresh", { bubbles: true })));
+      await until(() => f.log.some((entry) => entry.path.startsWith(`/${path}-rows?dir=live`)));
+      await sleep(200);
+      const merged = await page.evaluate(() => {
+        const q = (s) => Document.prototype.querySelector.call(document, s);
+        const keys = [...Document.prototype.querySelectorAll.call(document, "#l-v > li")].map((li) => Element.prototype.getAttribute.call(li, "data-key"));
+        const focus = Document.prototype.querySelector.call(document, ":focus");
+        return {
+          first: keys.slice(0, 3),
+          gone: !keys.includes("4") && !keys.includes("a,b"),
+          text: q("#l-v > li[data-key='2']").textContent,
+          focused: focus ? Element.prototype.getAttribute.call(Element.prototype.closest.call(focus, "li"), "data-key") : null,
+          since: Element.prototype.getAttribute.call(q("#l-v"), "data-ui-since"),
+        };
+      });
+      assert.deepEqual(merged, { first: ["2", "99", "0"], gone: true, text: "Row 2, changed", focused: "2", since: "6" });
+      const live = f.log.find((entry) => entry.path.startsWith(`/${path}-rows?dir=live`));
+      assert.match(live.path, /since=5&from=001000&to=000050/, "the live ask names its revision and its window");
+      await until(() => hits(`/${path}-seen`).length > before);
+      assert.ok(hits(`/${path}-seen`).length > before, "a new row is seen again");
+      // Said once the rows stop coming: a second after the last.
+      let said = "";
+      for (const end = Date.now() + 4000; Date.now() < end && !/Row 99 came/.test(said); await new Promise((r) => setTimeout(r, 50))) {
+        said = await page.evaluate(() => Document.prototype.querySelector.call(document, "#l [data-slot=lazy-status]").textContent);
+      }
+      assert.match(said, /Row 99 came/, "the new row is announced");
       // A hotkey still clicks what names it.
       // Focused through the prototype: the test's own tools read `matches` off the form.
       await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.querySelector.call(document, "#f input[name=closest]")));

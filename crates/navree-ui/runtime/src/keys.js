@@ -2,13 +2,16 @@
 // `data-ui-hotkey`, the way a support or mail app reads its keyboard. A key never fires
 // while someone types: in a field, in editable text, in a widget whose letters are its
 // own (a menu's typeahead, a list box), during an input method's composition, with Ctrl,
-// Alt or Meta held, or from outside a modal dialog that is open. The first element in
-// the page that can take the key does.
-import { active, attr, closest, every, has, on } from "./dom.js";
+// Alt or Meta held, or from outside a modal dialog that is open. A key that names a
+// scope (`data-ui-hotkey-scope`, an id) fires only while the focus is inside it. The
+// first element in the page that can take the key does. An app turns the keys off for
+// someone by drawing no `data-ui-hotkey` at all.
+import { active, attr, byId, closest, every, has, holds, on } from "./dom.js";
 
 /** Widgets that read letters themselves. */
 const OWN_KEYS = "input,textarea,select,[contenteditable]:not([contenteditable=false]),[role=textbox],[role=searchbox],[role=combobox],[role=spinbutton],[role=menu],[role=menubar],[role=menuitem],[role=listbox],[role=option],[role=tree],[role=treegrid],[role=grid]";
 const FIELD = /^(input|textarea|select)$/i;
+const E = Element.prototype;
 
 /** Whether keys typed now are someone's typing. @param {Element | null} el */
 const typing = (el) => !!el && (/** @type {HTMLElement} */ (el).isContentEditable || !!closest(el, OWN_KEYS));
@@ -17,7 +20,7 @@ const typing = (el) => !!el && (/** @type {HTMLElement} */ (el).isContentEditabl
 function modal() {
   for (const dialog of every("dialog[open]")) {
     try {
-      if (dialog.matches(":modal")) return dialog;
+      if (E.matches.call(dialog, ":modal")) return dialog;
     } catch {}
   }
   return null;
@@ -30,8 +33,10 @@ function usable(el, holder) {
   const dialog = closest(el, "dialog");
   if (dialog && !has(dialog, "open")) return false;
   const popover = closest(el, "[popover]");
-  if (popover && !popover.matches(":popover-open")) return false;
-  return !holder || holder.contains(el);
+  if (popover && !E.matches.call(popover, ":popover-open")) return false;
+  const scope = attr(el, "data-ui-hotkey-scope");
+  if (scope && !holds(byId(scope), active())) return false;
+  return !holder || holds(holder, el);
 }
 
 on(document, "keydown", (/** @type {KeyboardEvent} */ e) => {
@@ -43,8 +48,8 @@ on(document, "keydown", (/** @type {KeyboardEvent} */ e) => {
   for (const el of every("[data-ui-hotkey]")) {
     if (attr(el, "data-ui-hotkey") !== key || !usable(el, holder)) continue;
     e.preventDefault();
-    if (FIELD.test(el.localName) || /** @type {HTMLElement} */ (el).isContentEditable) /** @type {HTMLElement} */ (el).focus();
-    else /** @type {HTMLElement} */ (el).click();
+    if (FIELD.test(el.localName) || /** @type {HTMLElement} */ (el).isContentEditable) HTMLElement.prototype.focus.call(el);
+    else HTMLElement.prototype.click.call(el);
     return;
   }
 });

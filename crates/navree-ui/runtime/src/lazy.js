@@ -11,18 +11,37 @@
 //   that end is opened again, so a reader can scroll through thousands with a page that
 //   stays the same size.
 // - A live list (`data-ui-live-src`, followed by the live module) asks what changed since
-//   its revision: items it has are replaced, new ones go where their cursor sorts, gone
-//   ones go. An item is never in the list twice.
-import { attr, clean, closest, every, has, on, sameOrigin, set, toggle, unset } from "./dom.js";
+//   its revision. An item it has is changed where it stands, node by node, so the focus,
+//   a caret and the scroll stay; one that moved is moved, and keeps the focus. New ones
+//   go where their cursor sorts, and gone ones go. An item is never in the list twice.
+//   An answer that says more is waiting is followed by another ask.
+// - New items are announced once they stop coming (`data-l-new`), and a list that names
+//   `data-ui-seen` tells the server, by a POST, when the reader has seen what it shows.
+//
+// Every read of the document goes through dom.js: a page element named like a document
+// member (`<img name="importNode">`) can't change what this does.
+import { active, adopt, attr, body, clean, closest, cookie, emit, every, has, hidden, holds, on, sameOrigin, scrolling, set, toggle, unset } from "./dom.js";
 
 const LIMIT = 10000;
 /** How near an end, in pixels, the reader is when its next page is asked for. */
 const NEAR = 800;
 /** Pages asked for in a row while an end stays near: a short page doesn't stop the list. */
 const CHAIN = 6;
+/** New items are announced this long after the last arrives, and never later than LATEST after the first. */
+const QUIET = 1000;
+const LATEST = 5000;
+const HEADERS = { "x-navree-ui": "1" };
+
+// An item's nodes are read through their prototypes: a form in an item whose fields
+// are named `firstChild` or `attributes` can't change what the merge reads.
+const NP = Node.prototype;
+/** @param {object} proto @param {string} name */
+const getter = (proto, name) => /** @type {(this: any) => any} */ (Object.getOwnPropertyDescriptor(proto, name)?.get);
+const gFirst = getter(NP, "firstChild"), gNext = getter(NP, "nextSibling"), gType = getter(NP, "nodeType"), gName = getter(NP, "nodeName");
+const gAttrs = getter(Element.prototype, "attributes");
 
 /** @typedef {"start" | "end" | "live"} Dir */
-/** @typedef {{gen: number, src: string, box: Element | null, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number}} State */
+/** @typedef {{gen: number, src: string, box: Element | null, busy: Record<Dir, boolean>, dirty: boolean, io?: IntersectionObserver, watched: Element[], chain: number, unseen: boolean, seeing: boolean}} State */
 /** @type {WeakMap<Element, State>} */
 const states = new WeakMap();
 
@@ -31,7 +50,9 @@ const box = (list) => /** @type {HTMLElement | null} */ (list.querySelector(":sc
 /** @param {Element} list @param {"start" | "end"} dir */
 const link = (list, dir) => /** @type {HTMLAnchorElement | null} */ (list.querySelector(`:scope > [data-slot=lazy-more][data-dir=${dir}]`));
 /** @param {Element} parent */
-const items = (parent) => /** @type {HTMLElement[]} */ ([...parent.children].filter((el) => el.hasAttribute("data-key")));
+const items = (parent) => /** @type {HTMLElement[]} */ ([...parent.children].filter((el) => has(el, "data-key")));
+/** @param {Element} parent @param {string} key */
+const find = (parent, key) => /** @type {HTMLElement | null} */ (parent.querySelector(`:scope > [data-key="${CSS.escape(key)}"]`));
 /** @param {Element} el */
 const cursorOf = (el) => attr(el, "data-cursor") || "";
 
@@ -41,12 +62,12 @@ function scroller(list) {
     const overflow = getComputedStyle(el).overflowY;
     if ((overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight) return el;
   }
-  return /** @type {HTMLElement} */ (document.scrollingElement || document.documentElement);
+  return scrolling();
 }
 
 /** The top and bottom of what the reader sees, in the viewport's coordinates. @param {HTMLElement} scroll */
 function view(scroll) {
-  if (scroll === document.scrollingElement || scroll === document.documentElement) return { top: 0, bottom: innerHeight };
+  if (scroll === scrolling()) return { top: 0, bottom: innerHeight };
   const box = scroll.getBoundingClientRect();
   return { top: box.top, bottom: box.bottom };
 }
@@ -84,15 +105,123 @@ function sourceUrl(list, ask) {
 /** The items of an answer, out of the markup. @param {string} html */
 function parse(html) {
   const doc = new DOMParser().parseFromString(`<ul>${html}</ul>`, "text/html");
-  clean(doc.body);
-  return /** @type {HTMLElement[]} */ ([...doc.querySelectorAll("li[data-key]")].filter((li) => !li.parentElement?.closest("li[data-key]")).map((li) => document.importNode(li, true)));
+  clean(body(doc));
+  return /** @type {HTMLElement[]} */ ([...every("li[data-key]", doc)].filter((li) => !closest(li.parentElement, "li[data-key]")).map(adopt));
 }
 
-/** Says something to assistive technology. @param {Element} list @param {string} text */
+/** Says something to assistive technology, in the list's own polite status. @param {Element} list @param {string} text */
 function say(list, text) {
   const status = list.querySelector(":scope > [data-slot=lazy-status]");
-  if (status) status.textContent = text;
+  // The same words again are a change too: a reader hears both.
+  if (status) status.textContent = status.textContent === text ? text + " " : text;
 }
+
+/** What a list has to say about new items, and has not said yet. @type {WeakMap<Element, {n: number, one: string, soon: number, late: number}>} */
+const saying = new WeakMap();
+
+/** Says that `fresh` items came, once they have stopped coming, or five seconds after the first. @param {Element} list @param {Element[]} fresh */
+function announce(list, fresh) {
+  const many = attr(list, "data-l-new");
+  if (!many || !fresh.length) return;
+  const s = saying.get(list) || { n: 0, one: "", soon: 0, late: 0 };
+  saying.set(list, s);
+  s.n += fresh.length;
+  s.one = attr(fresh[fresh.length - 1], "data-ui-say") || attr(list, "data-l-new-one") || "";
+  const flush = () => {
+    clearTimeout(s.soon);
+    clearTimeout(s.late);
+    s.soon = s.late = 0;
+    const n = s.n;
+    s.n = 0;
+    if (n) say(list, n === 1 && s.one ? s.one : many.replace("{n}", String(n)));
+  };
+  clearTimeout(s.soon);
+  s.soon = /** @type {any} */ (setTimeout(flush, QUIET));
+  if (!s.late) s.late = /** @type {any} */ (setTimeout(flush, LATEST));
+}
+
+/**
+ * Makes `a` what `b` is, keeping every node of `a` that `b` still has at the same place:
+ * attributes are set and taken away, text is changed in place, and only nodes of
+ * another kind are swapped. A focused link stays the focused link.
+ * @param {Element} a @param {Element} b
+ */
+function patch(a, b) {
+  for (const { name } of [...gAttrs.call(a)]) if (!has(b, name)) unset(a, name);
+  for (const { name, value } of [...gAttrs.call(b)]) if (attr(a, name) !== value) set(a, name, value);
+  let x = gFirst.call(a);
+  for (let y = gFirst.call(b); y; ) {
+    const after = gNext.call(y);
+    if (x && gType.call(x) === gType.call(y) && gName.call(x) === gName.call(y)) {
+      if (gType.call(x) === 1) patch(x, y);
+      else if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue;
+      x = gNext.call(x);
+    } else NP.insertBefore.call(a, y, x);
+    y = after;
+  }
+  while (x) {
+    const after = gNext.call(x);
+    NP.removeChild.call(a, x);
+    x = after;
+  }
+}
+
+/**
+ * Merges a live answer: gone items go, changed ones change where they stand or move,
+ * new ones go where their cursor sorts. Returns the items that are new to the list.
+ * @param {Element} list @param {HTMLElement} parent @param {HTMLElement[]} changed @param {string[]} gone
+ */
+function merge(list, parent, changed, gone) {
+  const focused = /** @type {HTMLInputElement | null} */ (active());
+  /** @type {[number | null, number | null] | null} */
+  let caret = null;
+  try {
+    if (focused && "selectionStart" in focused) caret = [focused.selectionStart, focused.selectionEnd];
+  } catch {}
+  /** @type {HTMLElement[]} */
+  const fresh = [];
+  anchored(list, () => {
+    for (const key of gone) find(parent, key)?.remove();
+    for (const li of changed) {
+      const cursor = cursorOf(li);
+      const old = find(parent, attr(li, "data-key") || "");
+      const others = items(parent).filter((el) => el !== old);
+      const first = others[0], last = others[others.length - 1];
+      // Beyond what is loaded at an end that isn't: it arrives when the reader gets there.
+      if ((last && !done(list, "end") && precedes(list, cursorOf(last), cursor)) || (first && !done(list, "start") && precedes(list, cursor, cursorOf(first)))) {
+        old?.remove();
+        continue;
+      }
+      const before = others.find((el) => precedes(list, cursor, cursorOf(el))) || null;
+      if (!old) {
+        parent.insertBefore(li, before);
+        if (!has(li, "data-ui-quiet")) fresh.push(li);
+        continue;
+      }
+      patch(old, li);
+      if (old.nextElementSibling === before) continue;
+      // Moving a node takes the focus out of it: it goes back where it was.
+      const kept = holds(old, focused);
+      parent.insertBefore(old, before);
+      if (kept && focused && active() !== focused) {
+        try {
+          HTMLElement.prototype.focus.call(focused, { preventScroll: true });
+          if (caret) focused.setSelectionRange(caret[0], caret[1]);
+        } catch {}
+      }
+    }
+  });
+  return fresh;
+}
+
+/** A key as `x-ui-gone` writes it: each one encoded, so a comma in a key is no separator. @param {string} text */
+const unkey = (text) => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+};
 
 /** Takes items far off screen out of the other end, past the list's most. @param {Element} list @param {"start" | "end"} grew */
 function trim(list, grew) {
@@ -142,12 +271,12 @@ async function load(list, dir) {
   const stop = new AbortController();
   const limit = setTimeout(() => stop.abort(), LIMIT);
   try {
-    const response = await fetch(sourceUrl(list, { dir, cursor: cursorOf(edge) }), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
+    const response = await fetch(sourceUrl(list, { dir, cursor: cursorOf(edge) }), { headers: HEADERS, signal: stop.signal });
     if (!response.ok) throw new Error(String(response.status));
     const html = await response.text();
     // The list changed while this was on its way: the answer is for a list that's gone.
     if (state.gen !== gen || !list.isConnected || !edge.isConnected) return;
-    const found = parse(html).filter((li) => !parent.querySelector(`:scope > [data-key="${CSS.escape(attr(li, "data-key") || "")}"]`));
+    const found = parse(html).filter((li) => !find(parent, attr(li, "data-key") || ""));
     anchored(list, () => {
       if (dir === "end") parent.append(...found);
       else parent.prepend(...found);
@@ -158,7 +287,7 @@ async function load(list, dir) {
     if (found.length) {
       say(list, (attr(list, "data-l-loaded") || "{n} more").replace("{n}", String(found.length)));
       trim(list, dir);
-      document.dispatchEvent(new Event("ui:swap"));
+      emit(new Event("ui:swap"));
     }
   } catch {
     if (state.gen === gen && end) {
@@ -193,7 +322,7 @@ async function live(list) {
   const state = stateOf(list);
   const parent = box(list);
   const since = parent && attr(parent, "data-ui-since");
-  if (!parent || since === null) return;
+  if (!parent || since === null || !sameOrigin(attr(list, "data-ui-src") || "")) return;
   if (state.busy.live) {
     state.dirty = true;
     return;
@@ -207,33 +336,25 @@ async function live(list) {
     const all = items(parent);
     const ask = { dir: "live", since };
     if (all.length) Object.assign(ask, { from: cursorOf(all[0]), to: cursorOf(all[all.length - 1]) });
-    const response = await fetch(sourceUrl(list, ask), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
+    const response = await fetch(sourceUrl(list, ask), { headers: HEADERS, signal: stop.signal });
     if (!response.ok || state.gen !== gen || !list.isConnected) return;
     const html = await response.text();
-    if (state.gen !== gen) return;
+    if (state.gen !== gen || box(list) !== parent) return;
     const changed = parse(html);
-    const gone = (response.headers.get("x-ui-gone") || "").split(",").filter(Boolean);
-    anchored(list, () => {
-      for (const key of [...gone, ...changed.map((li) => attr(li, "data-key") || "")]) {
-        parent.querySelector(`:scope > [data-key="${CSS.escape(key)}"]`)?.remove();
-      }
-      for (const li of changed) {
-        const all = items(parent);
-        const cursor = cursorOf(li);
-        const first = all[0], last = all[all.length - 1];
-        // Beyond what is loaded at an end that isn't: it arrives when the reader gets there.
-        if (last && !done(list, "end") && precedes(list, cursorOf(last), cursor)) continue;
-        if (first && !done(list, "start") && precedes(list, cursor, cursorOf(first))) continue;
-        const before = all.find((el) => precedes(list, cursor, cursorOf(el)));
-        if (before) parent.insertBefore(li, before);
-        else parent.append(li);
-      }
-    });
+    const gone = (response.headers.get("x-ui-gone") || "").split(",").filter(Boolean).map(unkey);
+    const fresh = merge(list, parent, changed, gone);
     const next = response.headers.get("x-ui-since");
     if (next) set(parent, "data-ui-since", next);
+    // The answer was cut short: the rest comes with one more ask.
+    if (response.headers.get("x-ui-more") === "1") state.dirty = true;
     const empty = list.querySelector(":scope > [data-slot=lazy-empty]");
     if (empty && items(parent).length) empty.remove();
-    if (changed.length || gone.length) document.dispatchEvent(new Event("ui:swap"));
+    if (fresh.length) {
+      announce(list, fresh);
+      state.unseen = true;
+      seen(list);
+    }
+    if (changed.length || gone.length) emit(new Event("ui:swap"));
   } catch {} finally {
     clearTimeout(limit);
     state.busy.live = false;
@@ -244,10 +365,30 @@ async function live(list) {
   }
 }
 
+/** Tells the server the reader has seen what the list shows: one POST at a time, only while the page is shown. @param {Element} list */
+async function seen(list) {
+  const state = stateOf(list);
+  const url = attr(list, "data-ui-seen");
+  if (!url || !state.unseen || state.seeing || hidden() || !sameOrigin(url)) return;
+  state.unseen = false;
+  state.seeing = true;
+  // An empty form, as a form posts it: the server checks it as it checks any form.
+  /** @type {Record<string, string>} */
+  const headers = { ...HEADERS, "content-type": "application/x-www-form-urlencoded" };
+  const token = cookie("XSRF-TOKEN");
+  if (token) headers["x-xsrf-token"] = token;
+  try {
+    await fetch(url, { method: "POST", headers, body: "", credentials: "same-origin", signal: AbortSignal.timeout(LIMIT) });
+  } catch {} finally {
+    state.seeing = false;
+    if (state.unseen && list.isConnected) seen(list);
+  }
+}
+
 /** @param {Element} list @returns {State} */
 function stateOf(list) {
   let state = states.get(list);
-  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", box: box(list), busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0 }));
+  if (!state) states.set(list, (state = { gen: 0, src: attr(list, "data-ui-src") || "", box: box(list), busy: { start: false, end: false, live: false }, dirty: false, watched: [], chain: 0, unseen: true, seeing: false }));
   return state;
 }
 
@@ -279,7 +420,9 @@ function scan() {
       state.box = parent;
       state.dirty = false;
       state.busy = { start: false, end: false, live: false };
+      state.unseen = true;
     }
+    seen(list);
     // The page drew the ends for its first page; the list the reader kept may differ.
     for (const dir of /** @type {const} */ (["start", "end"])) {
       const end = link(list, dir);
@@ -299,7 +442,7 @@ function scan() {
           load(list, /** @type {"start" | "end"} */ (attr(entry.target, "data-dir")));
         }
       },
-      { root: scroll === document.scrollingElement ? null : scroll, rootMargin: `${NEAR}px 0px` },
+      { root: scroll === scrolling() ? null : scroll, rootMargin: `${NEAR}px 0px` },
     );
     for (const dir of /** @type {const} */ (["start", "end"])) {
       const end = link(list, dir);
@@ -330,5 +473,9 @@ on(
   },
   true,
 );
+// A page shown again tells the server what it showed while it was hidden.
+on(document, "visibilitychange", () => {
+  if (!hidden()) for (const list of every("[data-ui-lazy-list][data-ui-seen]")) seen(list);
+});
 on(document, "ui:swap", scan);
 scan();

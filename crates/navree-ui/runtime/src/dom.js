@@ -17,6 +17,10 @@ export const body = (doc = document) => gBody.call(doc);
 export const head = (doc = document) => gHead.call(doc);
 /** @param {Document} [doc] @returns {HTMLElement} */
 export const root = (doc = document) => gRoot.call(doc);
+/** The element that scrolls the page. @returns {HTMLElement} */
+export const scrolling = () => getter(D, "scrollingElement").call(document) || gRoot.call(document);
+/** A deep copy of `node`, made a node of this document. @param {Node} node @returns {any} */
+export const adopt = (node) => D.importNode.call(document, node, true);
 /** @returns {Element | null} */
 export const active = () => gActive.call(document);
 /** @returns {string} */
