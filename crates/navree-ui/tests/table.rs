@@ -86,9 +86,47 @@ fn defaults_come_from_the_definition() {
     );
 }
 
+/// A table with a select filter (`filter[stage]=won`), numbered pages.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 10, per_pages(10, 20))]
+struct Prospect {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, search)]
+    title: String,
+    #[col(filter = select)]
+    stage: Stage,
+}
+
+/// A table that pages by cursor.
+#[derive(Clone, TableRow)]
+#[table(sort = "-title", per = 25, per_pages(10, 25, 50), cursor)]
+struct Feed {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, search, filter = text)]
+    title: String,
+}
+
+fn prospect(query: &str) -> TableQuery<Prospect, NoFilter> {
+    TableQuery::parse("/prospects", query)
+}
+
+fn feed(query: &str) -> TableQuery<Feed, NoFilter> {
+    TableQuery::parse("/feed", query)
+}
+
+/// Every `href` of some HTML, with `&amp;` read back as `&`.
+fn hrefs(html: &str) -> Vec<String> {
+    html.split("href=\"")
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap().replace("&amp;", "&"))
+        .collect()
+}
+
 #[test]
 fn the_url_is_read_and_written_with_one_spelling() {
-    let raw = "sort=stage,-closed&q=ada+b&f.title=x&f.stage=won&f.stage=lead&f.amount.min=10&f.amount.max=20&f.closed.from=2026-01-01&f.hot=true&per=50&page=3&density=compact&cols=title,stage,owner&w=title:240&open=7";
+    let raw = "sort=stage,-closed&search=ada+b&filter[title][contains]=x&filter[stage][in]=won,lead&filter[amount][gte]=10&filter[amount][lte]=20&filter[closed][gte]=2026-01-01&filter[hot]=true&per_page=50&page=3&density=compact&cols=title,stage,owner&w=title:240&open=7";
     let query = q(raw);
     assert_eq!(query.search(), Some("ada b"));
     assert_eq!(query.page(), 3);
@@ -124,12 +162,216 @@ fn the_url_is_read_and_written_with_one_spelling() {
         once,
         "reading a written URL writes the same URL"
     );
+    let written = query.query_string();
+    for part in [
+        "filter%5Btitle%5D%5Bcontains%5D=x",
+        "filter%5Bstage%5D%5Bin%5D=won%2Clead",
+        "filter%5Bamount%5D%5Bgte%5D=10&filter%5Bamount%5D%5Blte%5D=20",
+        "filter%5Bclosed%5D%5Bgte%5D=2026-01-01",
+        "filter%5Bhot%5D=true",
+        "sort=stage%2C-closed",
+        "search=ada+b",
+        "page=3",
+        "per_page=50",
+        "density=compact",
+        "cols=title%2Cstage%2Cowner",
+        "w=title%3A240",
+        "open=7",
+    ] {
+        assert!(written.contains(part), "{part} in {written}");
+    }
+}
+
+/// Reads `raw`, writes it, reads what was written: the same filters and the same URL.
+/// Returns the query string written.
+fn round_trip<R: navree_ui::table::TableRow>(raw: &str) -> String {
+    let first = TableQuery::<R, NoFilter>::parse("/t", raw);
+    let href = first.href();
+    let written = href.split_once('?').map_or("", |(_, query)| query);
+    let again = TableQuery::<R, NoFilter>::parse("/t", written);
+    assert_eq!(again.filters(), first.filters(), "{raw} -> {href}");
+    assert_eq!(again.search(), first.search(), "{raw} -> {href}");
+    assert_eq!(again.href(), href, "{raw}");
+    written.to_owned()
+}
+
+#[test]
+fn every_filter_kind_round_trips_in_the_shared_grammar() {
+    // Text: contains.
+    assert_eq!(
+        round_trip::<Deal>("filter[title][contains]=sutlej+supply"),
+        "filter%5Btitle%5D%5Bcontains%5D=sutlej+supply"
+    );
+    // Multi: a comma list under `in`; a plain value is read as one value of the list.
+    assert_eq!(
+        round_trip::<Deal>("filter[stage][in]=lead,won"),
+        "filter%5Bstage%5D%5Bin%5D=lead%2Cwon"
+    );
+    assert_eq!(
+        q("filter[stage]=won").filter_on("stage"),
+        Some(&FilterValue::Values(vec!["won".into()]))
+    );
+    assert_eq!(
+        round_trip::<Deal>("filter[stage]=won"),
+        "filter%5Bstage%5D%5Bin%5D=won"
+    );
+    assert_eq!(
+        q("filter[stage][in]=lead&filter[stage][in]=won").filter_on("stage"),
+        Some(&FilterValue::Values(vec!["lead".into(), "won".into()])),
+        "the key may repeat"
+    );
+    // Range: at least and at most.
+    assert_eq!(
+        round_trip::<Deal>("filter[amount][gte]=10&filter[amount][lte]=20"),
+        "filter%5Bamount%5D%5Bgte%5D=10&filter%5Bamount%5D%5Blte%5D=20"
+    );
+    assert_eq!(
+        round_trip::<Deal>("filter[amount][lte]=20"),
+        "filter%5Bamount%5D%5Blte%5D=20"
+    );
+    // Dates are a range too. The last day stays a plain date here: the end of that day
+    // is added where the query runs.
+    assert_eq!(
+        round_trip::<Deal>("filter[closed][gte]=2026-01-01&filter[closed][lte]=2026-12-31"),
+        "filter%5Bclosed%5D%5Bgte%5D=2026-01-01&filter%5Bclosed%5D%5Blte%5D=2026-12-31"
+    );
+    assert_eq!(
+        q("filter[closed][lte]=2026-12-31").filter_on("closed"),
+        Some(&FilterValue::Range {
+            min: None,
+            max: Some("2026-12-31".into())
+        })
+    );
+    // Boolean.
+    assert_eq!(
+        round_trip::<Deal>("filter[hot]=false"),
+        "filter%5Bhot%5D=false"
+    );
+    // Relation: a list of keys, on a column that is hidden.
+    assert_eq!(
+        round_trip::<Deal>("filter[company][in]=7,9"),
+        "filter%5Bcompany%5D%5Bin%5D=7%2C9"
+    );
+    assert_eq!(
+        q("filter[company][in]=7,9").filter_on("company"),
+        Some(&FilterValue::Values(vec!["7".into(), "9".into()]))
+    );
+    // Is NULL: `true` or `1`; `false` means "is not NULL", which a table has no filter for.
+    assert_eq!(
+        round_trip::<Deal>("filter[amount][null]=true"),
+        "filter%5Bamount%5D%5Bnull%5D=true"
+    );
+    assert_eq!(
+        q("filter[amount][null]=1").filter_on("amount"),
+        Some(&FilterValue::Empty)
+    );
+    assert_eq!(q("filter[amount][null]=false").filter_on("amount"), None);
+    assert_eq!(
+        q("filter[amount][null]=true&filter[amount][gte]=5").filter_on("amount"),
+        Some(&FilterValue::Empty),
+        "empty wins over a range"
+    );
+    // A column that cannot hold NULL has no such filter.
+    assert_eq!(q("filter[hot][null]=true").filter_on("hot"), None);
+    // Select: one value, `filter[stage]=won`; `in` is read too, and its first value is taken.
+    assert_eq!(
+        round_trip::<Prospect>("filter[stage]=won"),
+        "filter%5Bstage%5D=won"
+    );
+    assert_eq!(
+        round_trip::<Prospect>("filter[stage][in]=won,lead"),
+        "filter%5Bstage%5D=won"
+    );
+    assert_eq!(
+        prospect("filter[stage][in]=won,lead").filter_on("stage"),
+        Some(&FilterValue::Values(vec!["won".into()]))
+    );
+    assert_eq!(
+        prospect("filter[stage]=bogus").filter_on("stage"),
+        None,
+        "a value that is not an option is ignored"
+    );
+    // The page size and the order ride along.
+    assert_eq!(
+        round_trip::<Prospect>("filter[stage]=lead&sort=-title&per_page=20&page=2"),
+        "filter%5Bstage%5D=lead&sort=-title&page=2&per_page=20"
+    );
+}
+
+#[test]
+fn the_list_part_is_written_as_a_list_query_is() {
+    use navree_http::list::ListQuery;
+    let query = q(
+        "per_page=50&page=3&search=ada+b&sort=-closed&filter[hot]=true&filter[amount][lte]=20&filter[amount][gte]=10&filter[stage][in]=won,lead&filter[title][contains]=x",
+    );
+    let written = query.query_string();
+    let (list, problems) = ListQuery::parse_lenient(&written);
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(
+        list.to_query_string(),
+        written,
+        "the same state is the same string in Rust and in the browser"
+    );
+    assert_eq!(list.search.as_deref(), Some("ada b"));
+    assert_eq!(list.page, Some(3));
+    assert_eq!(list.per_page, Some(50));
+    assert_eq!(list.sort.len(), 1);
+    assert_eq!(list.filter.len(), 5);
+    assert_eq!(list.eq("hot"), Some("true"));
+}
+
+#[test]
+fn search_and_sort_are_the_list_querys() {
+    assert_eq!(q("search=%20%20ada%20").search(), Some("ada"));
+    assert_eq!(q("search=").search(), None);
+    assert_eq!(q("search=a%00b").search(), None, "a NUL is refused");
+    let query = q("sort=-amount,title,-closed,stage,hot");
+    let sorts: Vec<_> = query
+        .sorts()
+        .iter()
+        .map(|term| (name(term.column), term.direction))
+        .collect();
+    assert_eq!(
+        sorts,
+        [
+            ("amount", Direction::Desc),
+            ("title", Direction::Asc),
+            ("closed", Direction::Desc),
+            ("stage", Direction::Asc)
+        ],
+        "at most four, and only sortable columns"
+    );
+    let query = q("sort=-amount&sort=title");
+    assert_eq!(query.sorts().len(), 2, "a repeated sort adds terms");
+    let none = q("sort=");
+    assert!(none.sorts().is_empty(), "sort= says no order");
+    assert_eq!(none.href(), "/deals?sort=");
+    assert_eq!(q("sort=-amount,title").href(), "/deals");
+}
+
+#[test]
+fn the_old_names_are_no_longer_read() {
+    let query = q(
+        "q=ada&per=50&f.title=x&f.stage=won&f.amount.min=1&f.amount.max=9&f.hot=true&f.amount.empty=1&after=abc&before=def",
+    );
+    assert_eq!(query.search(), None);
+    assert_eq!(query.per_page(), 25);
+    assert!(query.filters().is_empty(), "{:?}", query.filters());
+    assert_eq!(query.after(), None);
+    assert_eq!(query.before(), None);
+    assert_eq!(query.href(), "/deals");
+    let query = feed("q=ada&per=50&f.title=x&after=abc");
+    assert_eq!(query.search(), None);
+    assert_eq!(query.per_page(), 25);
+    assert!(query.filters().is_empty());
+    assert_eq!(query.after(), None);
+    assert_eq!(query.href(), "/feed");
 }
 
 #[test]
 fn sort_and_filter_columns_come_only_from_the_definition() {
     let query = q(
-        "sort=id;DROP TABLE deals,slug,-owner,title&f.slug=x&f.id=1&f.owner=x&f.nope=y&f.title.min=1&cols=slug,title",
+        "sort=id;DROP TABLE deals,slug,-owner,title&filter[slug]=x&filter[id]=1&filter[owner]=x&filter[nope]=y&filter[title][gte]=1&cols=slug,title",
     );
     let sorts: Vec<_> = query.sorts().iter().map(|term| name(term.column)).collect();
     assert_eq!(
@@ -139,28 +381,71 @@ fn sort_and_filter_columns_come_only_from_the_definition() {
     );
     assert!(query.filters().is_empty(), "{:?}", query.filters());
     assert!(
-        query.href().contains("cols=title%2Cowner") || query.href().contains("cols=title,owner"),
+        query.href().contains("cols=title%2Cowner"),
         "a locked column can't be hidden: {}",
         query.href()
     );
 }
 
 #[test]
+fn hostile_list_parameters_are_ignored() {
+    let big = "x".repeat(100 * 1024);
+    let thousand_filters: String = (0..2000)
+        .map(|at| format!("filter[f{at}]=1"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let thousand_sorts: String = (0..2000)
+        .map(|_| "sort=nope".to_owned())
+        .collect::<Vec<_>>()
+        .join("&");
+    for raw in [
+        format!("filter[title][contains]={big}"),
+        format!("search={big}&filter[hot]=maybe"),
+        "filter[__proto__]=x".to_owned(),
+        "filter[constructor][prototype]=x".to_owned(),
+        "filter[title][regex]=x".to_owned(),
+        "filter[title][contains][deeper]=x".to_owned(),
+        "filter[title][$ne]=x".to_owned(),
+        "filter[=x&filter[]=y&filter=z&filter]=w".to_owned(),
+        "filter[title]=a&filter[title]=b".to_owned(),
+        format!("filter[title][contains]={}", "é".repeat(200)),
+        thousand_filters,
+        thousand_sorts,
+    ] {
+        let query = q(&raw);
+        assert!(query.filters().is_empty(), "{:?}", query.filters());
+        assert!(query.href().len() < 4096, "{}", query.href().len());
+    }
+    // The good part of a hostile query stays.
+    let query = q(&format!(
+        "filter[title][regex]=x&filter[hot]=true&filter[title][contains]={big}"
+    ));
+    assert_eq!(query.filter_on("hot"), Some(&FilterValue::Bool(true)));
+    assert_eq!(query.filter_on("title"), None);
+}
+
+#[test]
 fn page_sizes_are_only_those_offered() {
-    assert_eq!(q("per=99999").per_page(), 25);
-    assert_eq!(q("per=11").per_page(), 25);
-    assert_eq!(q("per=-1").per_page(), 25);
-    assert_eq!(q("per=abc").per_page(), 25);
-    assert_eq!(q("per=50").per_page(), 50);
+    assert_eq!(q("per_page=99999").per_page(), 25);
+    assert_eq!(q("per_page=11").per_page(), 25);
+    assert_eq!(q("per_page=-1").per_page(), 25);
+    assert_eq!(q("per_page=abc").per_page(), 25);
+    assert_eq!(q("per_page=0").per_page(), 25);
+    assert_eq!(q("per_page=50").per_page(), 50);
+    assert_eq!(q("per_page=10").per_page(), 10);
+    assert_eq!(q("limit=50").per_page(), 25, "a numbered table has no limit");
+    assert_eq!(q("per=50").per_page(), 25, "per was the old name");
     assert_eq!(q("page=0").page(), 1);
     assert_eq!(q("page=abc").page(), 1);
     assert_eq!(q("page=99999999999999").page(), 1);
+    assert_eq!(q("page=10000000").page(), 10_000_000);
+    assert_eq!(q("page=10000001").page(), 1);
 }
 
 #[test]
 fn a_value_of_the_wrong_kind_is_dropped_alone() {
     let query = q(
-        "f.amount.min=abc&f.amount.max=20&f.closed.from=not-a-date&f.hot=maybe&f.stage=bogus&f.stage=won&f.company=x",
+        "filter[amount][gte]=abc&filter[amount][lte]=20&filter[closed][gte]=not-a-date&filter[hot]=maybe&filter[stage][in]=bogus,won&filter[company]=x",
     );
     assert_eq!(
         query.filter_on("amount"),
@@ -176,6 +461,11 @@ fn a_value_of_the_wrong_kind_is_dropped_alone() {
         Some(&FilterValue::Values(vec!["won".into()]))
     );
     assert_eq!(query.filter_on("company"), None);
+    assert_eq!(
+        q("filter[amount][null]=maybe").filter_on("amount"),
+        None,
+        "NULL is true or false"
+    );
 }
 
 #[derive(Default, Deserialize, FilterBar)]
@@ -203,11 +493,11 @@ fn one_bad_value_of_a_page_filter_drops_only_that_filter() {
 #[test]
 fn long_values_are_cut_at_a_character() {
     let long = "é".repeat(500);
-    let query = q(&format!("q={long}"));
+    let query = q(&format!("search={long}"));
     assert!(query.search().unwrap().len() <= navree_ui::table::MAX_TEXT);
     assert!(query.search().unwrap().chars().all(|c| c == 'é'));
     let many: String = (0..1000)
-        .map(|at| format!("f.stage=won&open={at}&"))
+        .map(|at| format!("filter[stage][in]=won&open={at}&"))
         .collect();
     let query = q(&many);
     assert_eq!(
@@ -219,7 +509,79 @@ fn long_values_are_cut_at_a_character() {
 
 #[test]
 fn a_cursor_means_nothing_to_a_numbered_table() {
-    assert_eq!(q("after=abc").after(), None);
+    assert_eq!(q("cursor=abc").after(), None);
+    assert_eq!(q("before=abc").before(), None);
+    assert_eq!(q("limit=50&cursor=abc").per_page(), 25);
+    assert_eq!(q("after=abc").after(), None, "after was the old name");
+    let query = q("page=2&cursor=abc&before=def&limit=10");
+    assert_eq!(query.page(), 2);
+    assert_eq!(query.after(), None);
+    assert_eq!(query.before(), None);
+    assert_eq!(query.per_page(), 25);
+    assert_eq!(query.href(), "/deals?page=2");
+}
+
+#[test]
+fn a_cursor_table_reads_cursor_before_and_limit() {
+    let query = feed("cursor=abc&limit=50");
+    assert_eq!(query.after(), Some("abc"));
+    assert_eq!(query.before(), None);
+    assert_eq!(query.per_page(), 50);
+    assert_eq!(feed("before=xyz").before(), Some("xyz"));
+    assert_eq!(feed("limit=11").per_page(), 25, "only the sizes on offer");
+    // The cursor is the position: a page number beside it means nothing, and `cursor`
+    // wins over `before`.
+    let query = feed("cursor=abc&before=xyz&page=4&per_page=50");
+    assert_eq!(query.after(), Some("abc"));
+    assert_eq!(query.before(), None);
+    assert_eq!(query.page(), 1);
+    assert_eq!(query.per_page(), 25, "per_page is the numbered pages' size");
+    // A cursor of 1,024 bytes is whole; one past the limit is ignored.
+    let whole = "c".repeat(1024);
+    assert_eq!(feed(&format!("cursor={whole}")).after(), Some(whole.as_str()));
+    assert_eq!(feed(&format!("cursor={whole}c")).after(), None);
+    // Written the way a list query is: the page size after the cursor.
+    assert_eq!(
+        feed("limit=50&before=xyz&filter[title][contains]=a").href(),
+        "/feed?filter%5Btitle%5D%5Bcontains%5D=a&before=xyz&limit=50"
+    );
+    assert_eq!(
+        feed("cursor=abc&limit=50").href(),
+        "/feed?cursor=abc&limit=50"
+    );
+    let again = feed(&feed("cursor=abc&limit=50").query_string());
+    assert_eq!(again.after(), Some("abc"));
+    assert_eq!(again.per_page(), 50);
+}
+
+#[test]
+fn a_cursor_tables_links_and_page_size_use_the_same_names() {
+    let query = feed("limit=50&search=ada");
+    let rows = vec![Feed {
+        id: 1,
+        title: "Ada".into(),
+    }];
+    let mut page = TablePage::new(rows, 0);
+    page.next = Some("n1".into());
+    page.prev = Some("p1".into());
+    let html = render(&DataTable::new("feed", &query, &page).into());
+    let links = hrefs(&html);
+    assert!(
+        links.iter().any(|href| href == "/feed?search=ada&cursor=n1&limit=50"),
+        "next: {links:?}"
+    );
+    assert!(
+        links.iter().any(|href| href == "/feed?search=ada&before=p1&limit=50"),
+        "previous: {links:?}"
+    );
+    assert!(
+        links.iter().any(|href| href == "/feed?search=ada&limit=50"),
+        "first: {links:?}"
+    );
+    assert!(html.contains(r#"name="limit""#), "the page size: {html}");
+    assert!(!html.contains(r#"name="per_page""#), "{html}");
+    assert!(!html.contains(r#"name="per""#), "{html}");
+    assert!(!links.iter().any(|href| href.contains("after=")), "{links:?}");
 }
 
 fn draw(query: &Q, rows: &[Deal], total: u64) -> String {
@@ -309,7 +671,7 @@ fn hostile_strings_are_text_everywhere() {
         title: bad.into(),
         custom: Shout(bad.into()),
     }];
-    let query = TableQuery::<Hostile, NoFilter>::parse("/x", &format!("q={bad}"));
+    let query = TableQuery::<Hostile, NoFilter>::parse("/x", &format!("search={bad}"));
     let html = render(
         &DataTable::new("t", &query, &rows)
             .bulk("/x/bulk", [BulkAction::new("a", "A")])
@@ -378,10 +740,15 @@ fn pagination_is_instant_at_any_size_and_shows_the_window() {
 
 #[test]
 fn every_link_keeps_the_rest_of_the_state() {
-    let query = q("f.title=a&q=b&per=50&density=compact&page=2");
+    let query = q("filter[title][contains]=a&search=b&per_page=50&density=compact&page=2");
     let rows: Vec<Deal> = (1..=50).map(deal).collect();
     let html = draw(&query, &rows, 500);
-    for needle in ["f.title=a", "q=b", "per=50", "density=compact"] {
+    for needle in [
+        "filter%5Btitle%5D%5Bcontains%5D=a",
+        "search=b",
+        "per_page=50",
+        "density=compact",
+    ] {
         let links = html
             .split("data-slot=\"pagination-link\"")
             .skip(1)
@@ -412,7 +779,7 @@ fn no_rows_with_no_filter_is_not_no_rows_with_a_filter() {
     let html = draw(&q(""), &[], 0);
     assert!(html.contains("Nothing here yet."), "{html}");
     assert!(!html.contains("data-slot=\"table-footer\""), "{html}");
-    let html = draw(&q("f.title=zzz"), &[], 0);
+    let html = draw(&q("filter[title][contains]=zzz"), &[], 0);
     assert!(html.contains("No results match"), "{html}");
     assert!(html.contains("Clear filters"), "{html}");
     assert!(
@@ -422,6 +789,110 @@ fn no_rows_with_no_filter_is_not_no_rows_with_a_filter() {
     assert!(
         html.contains("<thead"),
         "the headers and their filters stay: {html}"
+    );
+}
+
+#[test]
+fn chips_and_clear_links_write_the_shared_names() {
+    let html = draw(
+        &q("filter[stage][in]=won&search=ada&filter[amount][gte]=5&page=2&per_page=50"),
+        &[deal(1)],
+        1,
+    );
+    let links = hrefs(&html);
+    let stage = "filter%5Bstage%5D%5Bin%5D=won";
+    let amount = "filter%5Bamount%5D%5Bgte%5D=5";
+    // Each chip's link leaves that one thing out, goes back to page 1 and keeps the rest.
+    for want in [
+        format!("/deals?{stage}&{amount}&per_page=50"),
+        format!("/deals?{amount}&search=ada&per_page=50"),
+        format!("/deals?{stage}&search=ada&per_page=50"),
+        "/deals?per_page=50".to_owned(),
+    ] {
+        assert!(links.contains(&want), "{want} in {links:?}");
+    }
+    assert!(
+        links
+            .iter()
+            .all(|href| !href.contains("q=") && !href.contains("f.") && !href.contains("per=")),
+        "{links:?}"
+    );
+}
+
+#[test]
+fn the_export_link_carries_the_state_in_the_shared_names() {
+    let query = q("search=ada&filter[hot]=true&per_page=50&page=2&sort=-closed");
+    let rows = vec![deal(1)];
+    let html = render(
+        &DataTable::new("deals", &query, &rows)
+            .export("/deals/export")
+            .into(),
+    );
+    let want = "/deals/export?filter%5Bhot%5D=true&sort=-closed&search=ada&per_page=50";
+    assert!(hrefs(&html).iter().any(|href| href == want), "{html}");
+}
+
+#[test]
+fn the_toolbar_controls_are_named_in_the_shared_grammar() {
+    let html = draw(
+        &q("filter[title][contains]=ada&search=x&per_page=50"),
+        &[deal(1)],
+        1,
+    );
+    for name in [
+        "search",
+        "filter[title][contains]",
+        "filter[stage][in]",
+        "filter[amount][gte]",
+        "filter[amount][lte]",
+        "filter[amount][null]",
+        "filter[closed][gte]",
+        "filter[closed][lte]",
+        "filter[hot]",
+        "per_page",
+    ] {
+        assert!(
+            html.contains(&format!(r#"name="{name}""#)),
+            "{name} in {html}"
+        );
+    }
+    for old in [r#"name="q""#, r#"name="per""#, r#"name="f."#] {
+        assert!(!html.contains(old), "{old} in {html}");
+    }
+    // The empty tick says `true`.
+    assert!(
+        html.contains(r#"name="filter[amount][null]" value="true""#),
+        "{html}"
+    );
+    // The page size and the values in force are what the controls show.
+    assert!(html.contains(r#"value="ada""#), "{html}");
+    assert!(html.contains(r#"value="x""#), "{html}");
+}
+
+#[test]
+fn a_select_filter_is_a_select_named_by_its_column() {
+    let page = TablePage::new(
+        vec![Prospect {
+            id: 1,
+            title: "Arjun Sethi".into(),
+            stage: Stage::Won,
+        }],
+        1,
+    );
+    let query = prospect("filter[stage]=won");
+    let html = render(&DataTable::new("prospects", &query, &page).into());
+    assert!(html.contains(r#"name="filter[stage]""#), "{html}");
+    assert!(!html.contains(r#"name="filter[stage][in]""#), "{html}");
+    assert!(!html.contains(r#"name="f.stage""#), "{html}");
+    assert!(
+        html.contains(r#"<option value="won" selected>"#),
+        "{html}"
+    );
+    assert!(
+        hrefs(&html)
+            .iter()
+            .any(|href| href == "/prospects?filter%5Bstage%5D=won&sort=-title"),
+        "the title's sort link keeps the filter: {html}"
     );
 }
 
@@ -511,7 +982,7 @@ fn a_row_action_that_changes_something_is_a_post() {
 #[test]
 fn state_without_a_control_rides_along_in_the_form() {
     let html = draw(
-        &q("sort=title&cols=title,owner&density=compact&w=title:200&f.stage=won"),
+        &q("sort=title&cols=title,owner&density=compact&w=title:200&filter[stage][in]=won"),
         &[deal(1)],
         1,
     );
@@ -528,7 +999,7 @@ fn state_without_a_control_rides_along_in_the_form() {
         "{html}"
     );
     assert!(
-        html.contains(r#"type="hidden" name="f.stage" value="won""#),
+        html.contains(r#"type="hidden" name="filter[stage][in]" value="won""#),
         "a filter on a hidden column stays in force: {html}"
     );
     assert!(html.contains(r#"width="200""#), "{html}");
@@ -537,18 +1008,22 @@ fn state_without_a_control_rides_along_in_the_form() {
 
 #[test]
 fn filters_are_drawn_where_they_were_asked_for() {
-    let query = q("f.title=ada");
+    let query = q("filter[title][contains]=ada");
     let rows = vec![deal(1)];
     let html = render(&DataTable::new("deals", &query, &rows).filter_row().into());
     assert!(html.contains("data-slot=\"filter-row\""), "{html}");
     assert_eq!(
-        html.matches(r#"name="f.title""#).count(),
+        html.matches(r#"name="filter[title][contains]""#).count(),
         1,
         "one control per filter: {html}"
     );
     let html = render(&DataTable::new("deals", &query, &rows).into());
     assert!(!html.contains("data-slot=\"filter-row\""), "{html}");
-    assert_eq!(html.matches(r#"name="f.title""#).count(), 1, "{html}");
+    assert_eq!(
+        html.matches(r#"name="filter[title][contains]""#).count(),
+        1,
+        "{html}"
+    );
 }
 
 #[test]
@@ -621,7 +1096,7 @@ impl navree_ui::table::TableSource<Deal> for Memory {
 fn a_source_can_be_anything() {
     use navree_ui::table::TableSource as _;
     let source = Memory((1..=30).map(deal).collect());
-    let query = q("q=Deal+1&per=10");
+    let query = q("search=Deal+1&per_page=10");
     let page = futures_lite(source.page(&query));
     assert_eq!(page.total, navree_ui::table::Total::Exact(11));
     assert!(render(&DataTable::new("deals", &query, &page).into()).contains("of 11 results"));
@@ -667,7 +1142,7 @@ fn a_filter_bar_is_state_in_the_url() {
         2,
         "only those chosen: {html}"
     );
-    let held = q("fb=stage&f.hot=true");
+    let held = q("fb=stage&filter[hot]=true");
     let html = render(
         &DataTable::new("deals", &held, &[deal(1)])
             .filter_bar()
@@ -746,7 +1221,7 @@ fn a_page_that_holds_every_row_can_sort_them_in_the_browser() {
 #[test]
 fn a_page_that_holds_part_of_the_result_asks_the_server() {
     let rows: Vec<Deal> = (1..=3).map(deal).collect();
-    for (query, total) in [("", 30), ("page=2", 28), ("per=10", 11)] {
+    for (query, total) in [("", 30), ("page=2", 28), ("per_page=10", 11)] {
         let html = draw(&q(query), &rows, total);
         assert!(!html.contains("data-ui-local"), "{query}: {html}");
         assert!(!html.contains("data-kind"), "{query}: {html}");

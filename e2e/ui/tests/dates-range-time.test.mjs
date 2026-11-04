@@ -232,7 +232,7 @@ inBrowsers(({ open }) => {
   });
 
   test("a table's filter bar holds the window: choose, the rows follow, the address keeps it and the table's own state", async () => {
-    const { page, close } = await open("/dates/table?per=25&sort=-amount");
+    const { page, close } = await open("/dates/table?per_page=25&sort=-amount");
     const total = async () => (await page.locator("[data-slot=table-summary]").innerText()).replace(/\s+/g, " ");
     assert.match(await total(), /1,000/);
     await page.locator("#table-window [data-ui-act=open]").click();

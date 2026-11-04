@@ -321,7 +321,7 @@ fn rows() -> Vec<DealRow> {
 fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
     let query = TableQuery::<DealRow, DealFilter>::parse(
         "/deals",
-        "sort=-amount&page=3&per=25&q=ac&stage=closed_won",
+        "sort=-amount&page=3&per_page=25&q=ac&stage=closed_won",
     );
     assert_eq!(query.sort(), Some(("amount", Direction::Desc)));
     assert_eq!(query.page(), 3);
@@ -332,7 +332,7 @@ fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
 
     let query = TableQuery::<DealRow, DealFilter>::parse(
         "/deals",
-        "sort=owner_name&page=-1&per=999999&stage=",
+        "sort=owner_name&page=-1&per_page=999999&stage=",
     );
     assert_eq!(query.sort(), None, "only sortable columns sort");
     assert_eq!(query.page(), 1);
@@ -354,11 +354,11 @@ fn a_table_is_a_region_with_links_that_keep_the_state() {
     );
     assert!(html.contains(r#"aria-sort="ascending""#), "{html}");
     assert!(
-        html.contains(r#"href="/deals?q=a%20b&amp;sort=-amount""#),
+        html.contains(r#"href="/deals?q=a+b&amp;sort=-amount""#),
         "the next click sorts down, from page 1: {html}"
     );
     assert!(
-        html.contains(r#"href="/deals?q=a%20b&amp;sort=amount&amp;page=3""#),
+        html.contains(r#"href="/deals?q=a+b&amp;sort=amount&amp;page=3""#),
         "{html}"
     );
     assert!(html.contains(r#"data-ui-target="deals""#), "{html}");

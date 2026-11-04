@@ -42,11 +42,11 @@ const STATES = [
     await page.locator("[data-slot=field-error]").waitFor();
   }],
   ["form, on a phone", "/deals/new", null, { width: 390, height: 800 }],
-  ["table, 1,000 rows", "/deals?per=1000"],
-  ["table, sorted", "/deals?per=50&sort=-amount"],
-  ["table, paged", "/deals?per=50&page=3"],
+  ["table, 1,000 rows", "/deals?per_page=1000"],
+  ["table, sorted", "/deals?per_page=50&sort=-amount"],
+  ["table, paged", "/deals?per_page=50&page=3"],
   ["table, empty after a filter", "/deals?q=nothing-matches-this"],
-  ["table, on a phone", "/deals?per=50", null, { width: 390, height: 800 }],
+  ["table, on a phone", "/deals?per_page=50", null, { width: 390, height: 800 }],
   ["gallery", "/gallery"],
   ["display", "/display"],
   ["display, on a phone", "/display", null, { width: 390, height: 800 }],
@@ -170,7 +170,7 @@ test("Logbook's detail: axe, the page's own sections, and the replay form works"
 test("the design rules hold on every page", { timeout: 60000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
-  for (const path of ["/", "/deals?per=50", "/deals/new", "/gallery", "/plain", "/display", "/display/live"]) {
+  for (const path of ["/", "/deals?per_page=50", "/deals/new", "/gallery", "/plain", "/display", "/display/live"]) {
     await page.goto(URL_BASE + path);
     const found = await page.evaluate(() => {
       const bad = [];
@@ -262,7 +262,7 @@ test("firefox: dialogs, popovers and forms work the same", { timeout: 120000 }, 
     await page.waitForFunction(() => document.getElementById("g-popover").style.top !== "");
     const [a, p] = [await button.boundingBox(), await page.locator("#g-popover").boundingBox()];
     assert.ok(Math.abs(p.y - (a.y + a.height)) < 8 || Math.abs(a.y - (p.y + p.height)) < 8, JSON.stringify({ a, p }));
-    await page.goto(URL_BASE + "/deals?per=1000");
+    await page.goto(URL_BASE + "/deals?per_page=1000");
     await page.getByRole("link", { name: "Amount" }).click();
     await page.locator("th[aria-sort=ascending]").waitFor();
   } finally {

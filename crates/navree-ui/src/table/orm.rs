@@ -1088,17 +1088,14 @@ where
     state.before = None;
     state.count = false;
     state.open.clear();
-    let pairs = state.pairs::<R>();
-    let borrowed: Vec<(&str, &str)> = pairs
-        .iter()
-        .map(|(name, value)| (name.as_str(), value.as_str()))
-        .collect();
+    // Written the way the table writes its own links, so the view that matches the page
+    // is found by comparing strings.
     let view = SavedViewModel {
         id: uuid::Uuid::new_v4().to_string(),
         owner: owner.to_owned(),
         table_id: table.to_owned(),
         name,
-        query: crate::form::encode(&borrowed),
+        query: super::query::query_of(&state.pairs::<R>()),
         is_default,
     };
     let stored = SavedViewModel::create(exec, view).await?;

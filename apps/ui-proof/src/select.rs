@@ -531,7 +531,7 @@ fn palette() -> Command {
         .group(
             CommandGroup::new("Navigate")
                 .item(
-                    CommandItem::link("Deals", "/deals?per=25")
+                    CommandItem::link("Deals", "/deals?per_page=25")
                         .icon(icons::HANDSHAKE)
                         .shortcut("alt+d")
                         .keywords(["pipeline", "sales"]),

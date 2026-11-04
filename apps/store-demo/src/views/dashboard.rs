@@ -222,7 +222,7 @@ pub fn activity_item(entry: &FeedEntry) -> ActivityItem {
             },
         )
         .tag(format!("{} left", thousands(event.amount)))
-        .href("/inventory?f.level=low&f.level=out"),
+        .href("/inventory?filter%5Blevel%5D%5Bin%5D=low%2Cout"),
         Kind::Restocked => ActivityItem::new(
             event.actor.clone(),
             format!("added {} of", units(event.amount)),
@@ -421,7 +421,7 @@ pub fn shelves(low: &[Product], sellers: &[Seller]) -> Stack {
             .action(
                 Button::outline("Inventory")
                     .size(Size::Sm)
-                    .href("/inventory?f.level=low&f.level=out"),
+                    .href("/inventory?filter%5Blevel%5D%5Bin%5D=low%2Cout"),
             )
             .body(if low_list.is_empty() {
                 Node::from(Text::muted("Every shelf is stocked."))

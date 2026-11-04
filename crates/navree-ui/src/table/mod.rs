@@ -2,7 +2,10 @@
 //!
 //! - [`TableQuery`] reads the state from the URL (search, filters, sort, page or
 //!   cursor, page size, columns, widths, density, open rows), through an
-//!   allow-list, so links are shareable and JavaScript is optional.
+//!   allow-list, so links are shareable and JavaScript is optional. Search,
+//!   filters, sort and paging are the list query every Navree list reads
+//!   (`search`, `filter[stage]=won`, `sort=-amount`, `page` and `per_page`, or
+//!   `cursor` and `limit`), so a table's URL and an API's are the same.
 //! - With the `orm` feature, `TableQuery::load` runs it through `navree-orm` on
 //!   PostgreSQL, MySQL, SQLite and MongoDB, and `TableQuery::export_csv` writes the
 //!   same query as a file.
@@ -157,15 +160,15 @@ pub enum FilterKind {
     /// None.
     #[default]
     None,
-    /// Contains this text, ignoring case: `f.title=sutlej`.
+    /// Contains this text, ignoring case: `filter[title][contains]=sutlej`.
     Text,
-    /// Between two values, each optional: `f.amount.min=1&f.amount.max=9`.
+    /// Between two values, each optional: `filter[amount][gte]=1&filter[amount][lte]=9`.
     Range,
-    /// Is this one value: `f.stage=won`.
+    /// Is this one value: `filter[stage]=won`.
     Select,
-    /// Is any of these: `f.stage=won&f.stage=lost`.
+    /// Is any of these: `filter[stage][in]=won,lost`.
     Multi,
-    /// Yes or no: `f.active=true`.
+    /// Yes or no: `filter[active]=true`.
     Boolean,
     /// Is any of these keys of another model, named by options the page passes.
     Relation,

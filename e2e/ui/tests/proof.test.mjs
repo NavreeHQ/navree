@@ -113,7 +113,7 @@ test("a good submit toasts and goes on, keeping the shell", async () => {
   await page.selectOption("[name=company_id]", { index: 1 });
   await page.fill("[name=amount]", "12,500.50");
   await page.getByRole("button", { name: "Create deal" }).click();
-  await page.waitForURL("**/deals?per=1000");
+  await page.waitForURL("**/deals?per_page=1000");
   await page.locator("[data-slot=toast]", { hasText: "Acme renewal created" }).waitFor();
   assert.equal(await page.evaluate(() => window.kept), true, "no reload");
   assert.equal(await sidebar.evaluate((el) => el.isConnected), true, "the same sidebar");
@@ -134,7 +134,7 @@ test("the form works with JavaScript off", async () => {
   assert.equal(await page.inputValue("[name=title]"), "Acme", "the page comes back with what was typed");
   await page.fill("[name=amount]", "100");
   await page.getByRole("button", { name: "Create deal" }).click();
-  await page.waitForURL("**/deals?per=1000");
+  await page.waitForURL("**/deals?per_page=1000");
   assert.equal(await page.locator("tbody tr").count(), 1000);
   assert.match(await page.locator("[data-slot=toaster] [data-slot=toast]").textContent(), /Acme created/, "the toast comes through the redirect");
   await page.reload();
@@ -147,7 +147,7 @@ test("the form works with JavaScript off", async () => {
 });
 
 test("sorting a 1,000-row table morphs it in place and keeps the URL", async () => {
-  const { page, problems, close } = await open("/deals?per=1000");
+  const { page, problems, close } = await open("/deals?per_page=1000");
   assert.equal(await page.locator("tbody tr").count(), 1000);
   const table = await page.evaluateHandle(() => document.querySelector("[data-slot=table]"));
   const row = await page.evaluateHandle(() => document.querySelector('tr[data-key="7"]'));
@@ -168,7 +168,7 @@ test("sorting a 1,000-row table morphs it in place and keeps the URL", async () 
 });
 
 test("filtering as you type keeps focus and caret", async () => {
-  const { page, problems, close } = await open("/deals?per=1000");
+  const { page, problems, close } = await open("/deals?per_page=1000");
   const search = page.locator("input[name=q]");
   await search.click();
   await page.keyboard.type("acme", { delay: 20 });

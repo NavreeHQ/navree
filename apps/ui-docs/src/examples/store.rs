@@ -132,7 +132,7 @@ fn first_page(shop: &Shop) -> (TableQuery<OrderRow>, TablePage<OrderRow>) {
     let mut rows: Vec<OrderRow> = shop.orders.iter().cloned().map(OrderRow::from).collect();
     rows.sort_by_key(|row| std::cmp::Reverse((row.placed_on, row.id)));
     rows.truncate(10);
-    let query = TableQuery::<OrderRow>::parse("/orders", "per=10");
+    let query = TableQuery::<OrderRow>::parse("/orders", "per_page=10");
     let page = TablePage::new(rows, u64::try_from(data::ORDERS).unwrap_or(0));
     (query, page)
 }
@@ -355,7 +355,7 @@ fn inventory_page() -> Node {
         .collect();
     rows.sort_by_key(|row| (row.stock, row.id));
     rows.truncate(10);
-    let query = TableQuery::<ProductRow>::parse("/inventory", "per=10");
+    let query = TableQuery::<ProductRow>::parse("/inventory", "per_page=10");
     let page = TablePage::new(rows, shop.products.len() as u64);
     shell()
         .page("Inventory", "/inventory")

@@ -88,7 +88,7 @@ async fn workspaces_and_row_level_security_hold_on_every_path() {
     .unwrap();
 
     // With no workspace entered and row-level security on: nothing, not everything.
-    let query = TableQuery::<Private, NoFilter>::parse("/p", "per=10");
+    let query = TableQuery::<Private, NoFilter>::parse("/p", "per_page=10");
     let page = query
         .load(Private::query().without_workspace_scope(), &db)
         .await
@@ -119,7 +119,7 @@ async fn workspaces_and_row_level_security_hold_on_every_path() {
     assert!(page.rows.iter().all(|row| row.workspace_id == a));
 
     // A filter or search can't step out: B's row 1 is invisible by name.
-    let searched = TableQuery::<Private, NoFilter>::parse("/p", "q=Row+1&per=10");
+    let searched = TableQuery::<Private, NoFilter>::parse("/p", "search=Row+1&per_page=10");
     let page = searched
         .load(Private::query().for_workspace(a), &uow)
         .await

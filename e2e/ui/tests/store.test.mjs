@@ -192,7 +192,7 @@ for (const name of NAMES) {
     const toast = (page, text) => page.locator("[data-slot=toast]", { hasText: text });
     /** Opens order `number` in the drawer from the orders table, found by search. */
     async function openDrawer(number, options = {}) {
-      const page = await open(`/orders?q=${number}`, options);
+      const page = await open(`/orders?search=${number}`, options);
       await rows(page).first().waitFor();
       await rows(page).first().locator("button[aria-haspopup=dialog]").click();
       await drawer(page).waitFor({ timeout: 8000 });
@@ -239,13 +239,13 @@ for (const name of NAMES) {
       assert.equal(await rows(page).count(), 25);
       const first = await rows(page).first().getAttribute("data-key");
       // The next page is a keyset cursor in the URL, not a page number.
-      await page.locator("#orders a[href*='after=']").first().click();
-      await until(page, () => new URL(location.href).searchParams.has("after"), null, "a cursor in the URL");
+      await page.locator("#orders a[href*='cursor=']").first().click();
+      await until(page, () => new URL(location.href).searchParams.has("cursor"), null, "a cursor in the URL");
       await settled(page);
       assert.notEqual(await rows(page).first().getAttribute("data-key"), first);
       assert.equal(await rows(page).count(), 25);
       // A status filter, from the URL as a link would carry it.
-      await page.goto(BASE + "/orders?f.status=cancelled");
+      await page.goto(BASE + "/orders?filter%5Bstatus%5D%5Bin%5D=cancelled");
       await settled(page);
       const badges = await rows(page).locator("td[data-col=status] [data-slot=badge], [data-slot=badge]").allTextContents();
       assert.ok(badges.length > 0);
@@ -253,8 +253,8 @@ for (const name of NAMES) {
       assert.ok(statuses.every((s) => s === "Cancelled"), statuses.join(", "));
       // A search finds an order by its number.
       await page.goto(BASE + "/orders");
-      await page.locator("#orders input[name=q]").fill("CS-219999");
-      await until(page, () => new URL(location.href).searchParams.get("q") === "CS-219999", null, "the search in the URL");
+      await page.locator("#orders input[name=search]").fill("CS-219999");
+      await until(page, () => new URL(location.href).searchParams.get("search") === "CS-219999", null, "the search in the URL");
       await settled(page);
       const numbers = await rows(page).locator("button[aria-haspopup=dialog]").allTextContents();
       assert.deepEqual(numbers.map((n) => n.trim()), ["CS-219999"]);
@@ -424,7 +424,7 @@ for (const name of NAMES) {
       await toast(page, "Restocked").waitFor({ timeout: 8000 });
       assert.match(await toast(page, "Restocked").textContent(), new RegExp(`5 units of .+ added\\. ${before + 5} on the shelf now\\.`));
       // The table follows the stream: the product, sorted by stock, shows its new count.
-      await page.locator("#products input[name=q]").fill(name);
+      await page.locator("#products input[name=search]").fill(name);
       await until(
         page,
         ([k, n]) => {
@@ -447,7 +447,7 @@ for (const name of NAMES) {
 
     test("keyboard only: reach an order, open the drawer, open Refund, close both and come back", async () => {
       const { number } = await freshOrder();
-      const page = await open(`/orders?q=${number}`);
+      const page = await open(`/orders?search=${number}`);
       await rows(page).first().waitFor();
       let reached = false;
       for (let i = 0; i < 60 && !reached; i++) {
@@ -480,7 +480,7 @@ for (const name of NAMES) {
     // ---- JavaScript off -------------------------------------------------------------
 
     test("with JavaScript off an order's number leads to its page, with its history and the other orders drawn in", async () => {
-      const page = await open("/orders?q=CS-220470", { javaScriptEnabled: false });
+      const page = await open("/orders?search=CS-220470", { javaScriptEnabled: false });
       await Promise.all([page.waitForURL(/\/orders\/\d+$/), rows(page).first().locator("button[aria-haspopup=dialog]").click()]);
       assert.equal((await page.locator("h1").textContent()).trim(), "Order CS-220470");
       assert.ok((await page.locator("#order-page [data-slot=timeline-event]").count()) >= 2, "the history, drawn in");

@@ -456,7 +456,7 @@ fn a_table_ties_no_submit_control_to_a_form_per_row() {
                 amount: id,
             })
             .collect();
-        let query = TableQuery::<Row>::parse("/deals", "per=1000");
+        let query = TableQuery::<Row>::parse("/deals", "per_page=1000");
         submit_controls(&render(
             &DataTable::new("deals", &query, &rows)
                 .bulk(
@@ -590,7 +590,7 @@ mod times {
                 owner: "Ada",
             })
             .collect();
-        let query = TableQuery::<Row, Filter>::parse("/deals", "per=1000");
+        let query = TableQuery::<Row, Filter>::parse("/deals", "per_page=1000");
         let time = best(50, || {
             View::new("Deals")
                 .body(DataTable::new("deals", &query, &rows))

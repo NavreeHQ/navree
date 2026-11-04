@@ -10,7 +10,7 @@
 //! | Page | Shows |
 //! |---|---|
 //! | `/` | a dashboard: stats, a lazy region, a polling region |
-//! | `/deals?per=1000` | the 1,000-row table: sort, filter, page in the URL, morphed |
+//! | `/deals?per_page=1000` | the 1,000-row table: sort, filter, page in the URL, morphed |
 //! | `/deals/new` | the deal form |
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
@@ -61,7 +61,7 @@ pub(crate) fn shell() -> Shell {
             NavGroup::new("Sales")
                 .item(NavItem::new("Overview", "/").icon(icons::LAYOUT_DASHBOARD))
                 .item(
-                    NavItem::new("Deals", "/deals?per=1000")
+                    NavItem::new("Deals", "/deals?per_page=1000")
                         .icon(icons::HANDSHAKE)
                         .count("1000"),
                 )

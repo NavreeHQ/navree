@@ -357,9 +357,9 @@ pub struct DealsModule;
 
 What each part answers for:
 
-- `TableQuery<DealRow>` reads `q`, `sort`, `page`, `per` and the filters
-  from the URL, and `load_as` runs them on the server, on the rows this
-  user may read. Back, forward, reload and a shared link restore the
+- `TableQuery<DealRow>` reads `search`, `sort`, `page`, `per_page` and the
+  `filter[...]` parameters from the URL, and `load_as` runs them on the
+  server, on the rows this user may read. Back, forward, reload and a shared link restore the
   list, with JavaScript on or off.
 - `Submit<DealInput>` refuses a body from another site (403), a body that
   isn't a form (415) and a `GET` (405), and reads only the struct's

@@ -74,44 +74,44 @@ const SCHEMA: &str = "CREATE TABLE dt_deals (id BIGINT PRIMARY KEY, title VARCHA
 
 const SCENARIOS: &[&str] = &[
     "",
-    "per=100",
-    "per=100&sort=amount",
-    "per=100&sort=-amount",
-    "per=100&sort=closed_on",
-    "per=100&sort=-closed_on",
-    "per=100&sort=stage,-amount",
-    "per=100&sort=-stage,amount,title",
-    "per=100&sort=title&f.title=deal",
-    "per=100&q=deal",
-    "per=100&q=DEAL%2001",
-    "per=100&q=%25wild",
-    "per=100&q=_card",
-    "per=100&q=%5C",
-    "per=100&q=école",
-    "per=100&q=مرحبا",
-    "per=100&q=DROP",
-    "per=100&f.title=deal+1",
-    "per=100&f.stage=won",
-    "per=100&f.stage=won&f.stage=lost",
-    "per=100&f.amount.min=200",
-    "per=100&f.amount.max=200",
-    "per=100&f.amount.min=200&f.amount.max=400",
-    "per=100&f.amount.empty=1",
-    "per=100&f.closed_on.from=2026-01-05",
-    "per=100&f.closed_on.to=2026-01-05",
-    "per=100&f.closed_on.empty=1",
-    "per=100&f.active=true",
-    "per=100&f.active=false&f.stage=lead",
-    "per=100&f.company_id=2",
-    "per=100&f.company_id=2&f.company_id=3&sort=-amount",
-    "per=100&f.title=nothing-matches-this",
+    "per_page=100",
+    "per_page=100&sort=amount",
+    "per_page=100&sort=-amount",
+    "per_page=100&sort=closed_on",
+    "per_page=100&sort=-closed_on",
+    "per_page=100&sort=stage,-amount",
+    "per_page=100&sort=-stage,amount,title",
+    "per_page=100&sort=title&filter[title][contains]=deal",
+    "per_page=100&search=deal",
+    "per_page=100&search=DEAL%2001",
+    "per_page=100&search=%25wild",
+    "per_page=100&search=_card",
+    "per_page=100&search=%5C",
+    "per_page=100&search=école",
+    "per_page=100&search=مرحبا",
+    "per_page=100&search=DROP",
+    "per_page=100&filter[title][contains]=deal+1",
+    "per_page=100&filter[stage]=won",
+    "per_page=100&filter[stage][in]=won,lost",
+    "per_page=100&filter[amount][gte]=200",
+    "per_page=100&filter[amount][lte]=200",
+    "per_page=100&filter[amount][gte]=200&filter[amount][lte]=400",
+    "per_page=100&filter[amount][null]=true",
+    "per_page=100&filter[closed_on][gte]=2026-01-05",
+    "per_page=100&filter[closed_on][lte]=2026-01-05",
+    "per_page=100&filter[closed_on][null]=true",
+    "per_page=100&filter[active]=true",
+    "per_page=100&filter[active]=false&filter[stage]=lead",
+    "per_page=100&filter[company_id]=2",
+    "per_page=100&filter[company_id][in]=2,3&sort=-amount",
+    "per_page=100&filter[title][contains]=nothing-matches-this",
     "page=2",
     "page=3&sort=-amount",
-    "page=5&per=10&sort=closed_on",
-    "page=6&per=10&sort=-closed_on",
+    "page=5&per_page=10&sort=closed_on",
+    "page=6&per_page=10&sort=-closed_on",
     "page=999",
-    "per=5&page=11&sort=amount",
-    "per=5&page=12&sort=amount",
+    "per_page=5&page=11&sort=amount",
+    "per_page=5&page=12&sort=amount",
 ];
 
 async fn ids<M, R, E>(
@@ -182,7 +182,7 @@ where
     let mut last_prev = None;
     for _ in 0..100 {
         let query =
-            TableQuery::<CursorRow, NoFilter>::parse("/d", &format!("{query_base}&after={after}"));
+            TableQuery::<CursorRow, NoFilter>::parse("/d", &format!("{query_base}&cursor={after}"));
         let page = query.load_as(M::query(), exec, map).await.expect("a page");
         forward.extend(page.rows.iter().map(|row| row.id.to_string()));
         last_prev = page.prev.clone();
@@ -255,7 +255,7 @@ fn check_expectations(results: &Results) {
     assert_eq!(get("").0.len(), 10);
     assert_eq!(get("").1, "60");
     // NULL is the smallest: first going up, last going down.
-    let up = &get("per=100&sort=amount").0;
+    let up = &get("per_page=100&sort=amount").0;
     assert!(
         up[..12]
             .iter()
@@ -268,7 +268,7 @@ fn check_expectations(results: &Results) {
             .all(|id| id.parse::<i64>().unwrap() % 5 != 0),
         "{up:?}"
     );
-    let down = &get("per=100&sort=-amount").0;
+    let down = &get("per_page=100&sort=-amount").0;
     assert!(
         down[48..]
             .iter()
@@ -283,26 +283,26 @@ fn check_expectations(results: &Results) {
         "descending ties go by key down"
     );
     // `%`, `_` and `\` are text.
-    assert_eq!(get("per=100&q=%25wild").0, ["7"]);
-    assert_eq!(get("per=100&q=_card").0, ["7"]);
-    assert_eq!(get("per=100&q=%5C").0, ["7"]);
-    assert_eq!(get("per=100&q=école").0, ["8"], "case ignored past ASCII");
-    assert_eq!(get("per=100&q=مرحبا").0, ["9"]);
-    assert_eq!(get("per=100&q=DROP").0, ["10"]);
-    assert_eq!(get("per=100&f.title=nothing-matches-this").1, "0");
-    assert_eq!(get("per=100&f.amount.empty=1").1, "12");
+    assert_eq!(get("per_page=100&search=%25wild").0, ["7"]);
+    assert_eq!(get("per_page=100&search=_card").0, ["7"]);
+    assert_eq!(get("per_page=100&search=%5C").0, ["7"]);
+    assert_eq!(get("per_page=100&search=école").0, ["8"], "case ignored past ASCII");
+    assert_eq!(get("per_page=100&search=مرحبا").0, ["9"]);
+    assert_eq!(get("per_page=100&search=DROP").0, ["10"]);
+    assert_eq!(get("per_page=100&filter[title][contains]=nothing-matches-this").1, "0");
+    assert_eq!(get("per_page=100&filter[amount][null]=true").1, "12");
     // A page past the end is the last page.
     assert_eq!(get("page=999").2, 6);
     assert_eq!(get("page=999").0.len(), 10);
     // Reading from the far end gives the same rows as from the near end.
-    let whole = &get("per=100&sort=amount").0;
-    let page_11 = &get("per=5&page=11&sort=amount").0;
-    let page_12 = &get("per=5&page=12&sort=amount").0;
+    let whole = &get("per_page=100&sort=amount").0;
+    let page_11 = &get("per_page=5&page=11&sort=amount").0;
+    let page_12 = &get("per_page=5&page=12&sort=amount").0;
     assert_eq!(page_11.as_slice(), &whole[50..55], "a far page");
     assert_eq!(page_12.as_slice(), &whole[55..60], "the last page");
-    let whole = &get("per=100&sort=-closed_on").0;
+    let whole = &get("per_page=100&sort=-closed_on").0;
     assert_eq!(
-        get("page=6&per=10&sort=-closed_on").0.as_slice(),
+        get("page=6&per_page=10&sort=-closed_on").0.as_slice(),
         &whole[50..60]
     );
 }
@@ -379,12 +379,15 @@ async fn views_sql(db: &Db, label: &str) {
         .execute_script("DROP TABLE IF EXISTS navree_ui_table_views")
         .await;
     db.pool().execute_script("CREATE TABLE navree_ui_table_views (id VARCHAR(64) PRIMARY KEY, owner VARCHAR(64) NOT NULL, table_id VARCHAR(64) NOT NULL, name VARCHAR(200) NOT NULL, query TEXT NOT NULL, is_default BOOLEAN NOT NULL)").await.unwrap();
-    let query = TableQuery::<SqlDeal, NoFilter>::parse("/d", "f.stage=won&sort=title&page=3&per=5");
+    let query = TableQuery::<SqlDeal, NoFilter>::parse("/d", "filter[stage][in]=won&sort=title&page=3&per_page=5");
     let first = navree::ui::table::save_view(db, "me", "t", "Won", &query, true)
         .await
         .unwrap();
     assert!(
-        !first.query.contains("page"),
+        !first
+            .query
+            .split('&')
+            .any(|part| part.starts_with("page=") || part.starts_with("cursor=")),
         "{label}: a view holds no position: {}",
         first.query
     );
@@ -446,7 +449,7 @@ async fn bulk_sql(db: &Db, label: &str) {
         .await
         .unwrap();
     let request = post(format!(
-        "action=a&_mode=all&_expected={}&ex=1&ex=4&_q=f.stage%3Dwon",
+        "action=a&_mode=all&_expected={}&ex=1&ex=4&_q=filter%5Bstage%5D%5Bin%5D%3Dwon",
         matching - 2
     ))
     .unwrap();
@@ -468,7 +471,7 @@ async fn bulk_sql(db: &Db, label: &str) {
     assert_eq!(keys.len() as u64, matching - 2, "{label}");
     // The set changed: refused, whatever is asked.
     let request = post(format!(
-        "action=a&_mode=all&_expected={}&_q=f.stage%3Dwon",
+        "action=a&_mode=all&_expected={}&_q=filter%5Bstage%5D%5Bin%5D%3Dwon",
         matching + 1
     ))
     .unwrap();
@@ -589,7 +592,7 @@ async fn sqlite_mysql_postgres_and_mongodb_agree() {
             .await
             .unwrap();
         let body = format!(
-            "action=a&_mode=all&_expected={}&ex=1&ex=4&_q=f.stage%3Dwon",
+            "action=a&_mode=all&_expected={}&ex=1&ex=4&_q=filter%5Bstage%5D%5Bin%5D%3Dwon",
             matching - 2
         );
         let request = BulkRequest::<MongoDeal, NoFilter>::parse(body.as_bytes()).unwrap();

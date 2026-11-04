@@ -227,7 +227,7 @@ function sync(root) {
   measureSticky(root);
   drawSelection(root);
   if (root.hasAttribute("data-ui-grid")) setupGrid(root);
-  const place = location.search.replace(/.*\b(page|after|before)=([^&]*).*/, "$2");
+  const place = location.search.replace(/.*\b(page|cursor|before)=([^&]*).*/, "$2");
   const scroll = root.getAttribute("data-scroll-to");
   if (scroll && /** @type {any} */ (root).uiPlace !== undefined && /** @type {any} */ (root).uiPlace !== place) document.getElementById(scroll)?.scrollIntoView();
   /** @type {any} */ (root).uiPlace = place;

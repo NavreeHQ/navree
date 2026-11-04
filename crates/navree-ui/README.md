@@ -252,7 +252,7 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 | `.cell(name, fn)`, `.live(every)`, `.live_from(url)`, `.refreshable()` | see below |
 | `.views(&views, url)`, `.export(url)`, `.foot(col, cell)`, `.labels(&labels)`, `.can_select(bool)`, `.failed(msg)`, `.loading()` | the rest |
 
-**The URL holds everything but the selection:** `q`, `sort=-amount,title`, `page`, `per`, `after`, `before`, `f.<col>`, `f.<col>.min`, `.max`, `.empty`, `cols`, `w`, `density`, `open`. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
+**The URL holds everything but the selection:** `search`, `sort=-amount,title`, `page` and `per_page` (or `cursor`, `before` and `limit` on a cursor table), `filter[col]...`, `cols`, `w`, `fb`, `density`, `open`. Search, sort, filters and paging are the list query every Navree list reads. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
 
 **Speed.** Keep a table paged: 25 rows a page is the default. A page that holds every
 row of its result sorts a column of numbers or dates in the browser at once, and the

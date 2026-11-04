@@ -33,7 +33,7 @@ fn time(name: &str, rounds: u32, work: impl Fn() -> String) {
 pub fn run() {
     let shell: Shell = crate::shell();
     let deals = rows(1000);
-    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "per=1000");
+    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "per_page=1000");
     let (selected, total) = select(&query, &deals);
 
     time("deal form page", 2000, || {
@@ -62,7 +62,7 @@ pub fn run() {
             .to_html()
     });
     time("1,000-row page, sort and all", 300, || {
-        let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per=1000&sort=-amount");
+        let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per_page=1000&sort=-amount");
         let (found, count) = select(&sorted, &deals);
         shell
             .page("Deals", "/deals")

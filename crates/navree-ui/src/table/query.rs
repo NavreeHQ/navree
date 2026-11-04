@@ -2,46 +2,56 @@
 //! ignored rather than an error: a URL can be old or edited, and a table should
 //! still show.
 //!
+//! The list part of the URL is the grammar every Navree list speaks, the one a
+//! JSON endpoint reads (see `navree_http::list`). The table reads it with
+//! `ListQuery::parse_lenient` and keeps what its columns allow. The rest is the
+//! table's own state: which columns, how wide, how dense, which rows are open.
+//!
 //! ```text
-//! q=sutlej                   the global search
-//! sort=-amount,title         columns, in priority order; `-` is descending; `sort=` is none
-//! page=3  per=50             a numbered page, and the page size
-//! after=...  before=...      a cursor, in cursor mode
-//! count=1                    count now, for a table that doesn't by itself
-//! f.title=sutlej             a filter: text, select, boolean, relation
-//! f.stage=won&f.stage=lost   any of these
-//! f.amount.min=1  .max=9     a range; dates too
-//! f.owner.empty=1            is NULL
-//! cols=title,amount          the columns shown, in order
-//! w=title:240,amount:120     widths in pixels
-//! fb=stage,amount             the filters a filter bar shows, in order
-//! density=compact            row height
-//! open=12,15                 rows open to their details
+//! search=sutlej                         the global search
+//! sort=-amount,title                    columns, in priority order; `-` is descending; `sort=` is none
+//! page=3  per_page=50                   a numbered page, and the page size
+//! cursor=...  before=...  limit=50      a cursor table: the page after, the page before, the page size
+//! filter[title][contains]=sutlej        a text filter
+//! filter[stage]=won                     a select filter; a boolean one is filter[active]=true
+//! filter[stage][in]=won,lost            any of these (multi and relation filters)
+//! filter[amount][gte]=1&filter[amount][lte]=9   a range; dates too
+//! filter[owner][null]=true              is NULL
+//! count=1                               count now, for a table that doesn't by itself
+//! cols=title,amount                     the columns shown, in order
+//! w=title:240,amount:120                widths in pixels
+//! fb=stage,amount                       the filters a filter bar shows, in order
+//! density=compact                       row height
+//! open=12,15                            rows open to their details
 //! ```
+//!
+//! A table that pages by number reads `page` and `per_page` and ignores `cursor`,
+//! `before` and `limit`; a cursor table is the other way round. The page size is
+//! only one the table offers.
 
 use std::marker::PhantomData;
 
 use http::request::Parts;
 use navree_http::extract::{FromRequestParts, urlencoded};
+use navree_http::list::{
+    Condition, ListQuery, MAX_PARAMS, MAX_QUERY_BYTES, MAX_SORTS, encode_component,
+};
+pub(crate) use navree_http::list::Op;
 use serde::de::DeserializeOwned;
 
 use super::{
     Column, Direction, FilterBar, FilterKind, MAX_PER_PAGE, NoFilter, TableDensity, TableRow,
 };
-use crate::form::{encode, encode_into};
+use crate::form::encode;
 
 /// The longest text a search or text filter keeps, in bytes.
-pub const MAX_TEXT: usize = 256;
+pub const MAX_TEXT: usize = navree_http::list::MAX_TEXT;
 /// The most values one multi filter keeps.
-pub const MAX_VALUES: usize = 200;
+pub const MAX_VALUES: usize = navree_http::list::MAX_VALUES;
 /// The most rows open at once.
 pub const MAX_OPEN_ROWS: usize = 25;
-/// The most query parameters read from one URL.
-const MAX_PARAMS: usize = 1000;
 /// The most page-owned filter parameters read.
 const MAX_PAGE_FILTER_PARAMS: usize = 64;
-/// The most sort terms kept.
-const MAX_SORTS: usize = 4;
 /// Widths a URL can set, in pixels.
 const WIDTHS: std::ops::RangeInclusive<u32> = 40..=1600;
 
@@ -118,7 +128,7 @@ pub(crate) struct State {
 ///     amount: i64,
 /// }
 ///
-/// let query = TableQuery::<Row, NoFilter>::parse("/rows", "sort=title&sort2=x&per=99999&page=-1");
+/// let query = TableQuery::<Row, NoFilter>::parse("/rows", "sort=title&sort2=x&per_page=99999&page=-1");
 /// assert_eq!(query.sorts()[0].direction, Direction::Asc);
 /// assert_eq!(query.page(), 1);
 /// assert_eq!(query.per_page(), 25, "a page size the table doesn't offer is ignored");
@@ -131,20 +141,171 @@ pub struct TableQuery<R, F = NoFilter> {
     marker: PhantomData<fn() -> R>,
 }
 
-fn clip(mut text: String) -> String {
-    if text.len() > MAX_TEXT {
-        let mut end = MAX_TEXT;
-        while !text.is_char_boundary(end) {
-            end -= 1;
-        }
-        text.truncate(end);
+/// Whether `name` is one of the list query's parameters, which the table reads from
+/// the shared grammar and not from its own pairs.
+fn is_list_name(name: &str) -> bool {
+    matches!(
+        name,
+        "sort" | "search" | "page" | "per_page" | "limit" | "cursor" | "before" | "filter"
+    ) || name.starts_with("filter[")
+}
+
+/// The query string cut to the most the grammar reads, at a character.
+fn clip_query(query: &str) -> &str {
+    let query = query.strip_prefix('?').unwrap_or(query);
+    if query.len() <= MAX_QUERY_BYTES {
+        return query;
     }
-    text
+    let mut end = MAX_QUERY_BYTES;
+    while !query.is_char_boundary(end) {
+        end -= 1;
+    }
+    &query[..end]
+}
+
+/// Pairs written as a query string, in the list query's spelling: the same string a
+/// link has.
+pub(crate) fn query_of(pairs: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (at, (name, value)) in pairs.iter().enumerate() {
+        if at > 0 {
+            out.push('&');
+        }
+        out.push_str(&encode_component(name));
+        out.push('=');
+        out.push_str(&encode_component(value));
+    }
+    out
+}
+
+/// The name of the parameter that carries a filter on `column` with operator `op`:
+/// `filter[stage]` for equality, `filter[amount][gte]` for the rest. Forms and
+/// links write it, so they never spell it twice.
+pub(crate) fn filter_param(column: &str, op: Op) -> String {
+    Condition {
+        field: column.to_owned(),
+        op,
+        values: Vec::new(),
+    }
+    .param()
+}
+
+/// The name of the page size parameter: `per_page` for numbered pages, `limit` for
+/// cursor pages.
+pub(crate) const fn size_param(cursor: bool) -> &'static str {
+    if cursor { "limit" } else { "per_page" }
+}
+
+/// Whether `value` is one a column's filter takes: one of its options, if it has
+/// any, and of its kind.
+fn allowed(column: &Column, value: &str) -> bool {
+    (column.options.is_empty() || column.options.iter().any(|(option, _)| *option == value))
+        && column.kind.accepts(value)
+}
+
+/// The filters of a list query that the columns allow, in the order of the columns
+/// whatever the URL's order. Anything else is left out.
+fn read_filters<R: TableRow>(list: &ListQuery) -> Vec<ActiveFilter> {
+    let columns = R::COLUMNS;
+    let mut texts: Vec<Option<String>> = vec![None; columns.len()];
+    let mut values: Vec<Vec<String>> = vec![Vec::new(); columns.len()];
+    let mut mins: Vec<Option<String>> = vec![None; columns.len()];
+    let mut maxes: Vec<Option<String>> = vec![None; columns.len()];
+    let mut flags: Vec<Option<bool>> = vec![None; columns.len()];
+    let mut empties: Vec<bool> = vec![false; columns.len()];
+    for condition in &list.filter {
+        let Some(at) = columns
+            .iter()
+            .position(|column| column.name == condition.field)
+        else {
+            continue;
+        };
+        let column = &columns[at];
+        let value = condition.value();
+        match (column.filter, condition.op) {
+            (FilterKind::None, _) => {}
+            (FilterKind::Text, Op::Contains) => {
+                let text = value.trim();
+                if texts[at].is_none() && !text.is_empty() {
+                    texts[at] = Some(text.to_owned());
+                }
+            }
+            (FilterKind::Boolean, Op::Eq) => {
+                if flags[at].is_none() {
+                    flags[at] = matches!(value, "true" | "false").then_some(value == "true");
+                }
+            }
+            // One value: the first the column takes.
+            (FilterKind::Select, Op::Eq | Op::In) => {
+                if values[at].is_empty()
+                    && let Some(first) = condition.values.iter().find(|v| allowed(column, v))
+                {
+                    values[at].push(first.clone());
+                }
+            }
+            (FilterKind::Multi | FilterKind::Relation, Op::Eq | Op::In) => {
+                for value in &condition.values {
+                    if allowed(column, value)
+                        && values[at].len() < MAX_VALUES
+                        && !values[at].contains(value)
+                    {
+                        values[at].push(value.clone());
+                    }
+                }
+            }
+            (FilterKind::Range, Op::Gte) => {
+                if mins[at].is_none() && column.kind.accepts(value) {
+                    mins[at] = Some(value.to_owned());
+                }
+            }
+            (FilterKind::Range, Op::Lte) => {
+                if maxes[at].is_none() && column.kind.accepts(value) {
+                    maxes[at] = Some(value.to_owned());
+                }
+            }
+            // `null=false` ("is not NULL") is a filter a table does not have.
+            (_, Op::Null) if column.nullable => {
+                if condition.null_flag() == Some(true) {
+                    empties[at] = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut filters = Vec::new();
+    for at in 0..columns.len() {
+        let filter = if empties[at] {
+            Some(FilterValue::Empty)
+        } else if let Some(text) = texts[at].take() {
+            Some(FilterValue::Text(text))
+        } else if let Some(flag) = flags[at] {
+            Some(FilterValue::Bool(flag))
+        } else if !values[at].is_empty() {
+            Some(FilterValue::Values(std::mem::take(&mut values[at])))
+        } else if mins[at].is_some() || maxes[at].is_some() {
+            Some(FilterValue::Range {
+                min: mins[at].take(),
+                max: maxes[at].take(),
+            })
+        } else {
+            None
+        };
+        if let Some(value) = filter {
+            filters.push(ActiveFilter { column: at, value });
+        }
+    }
+    filters
 }
 
 impl State {
-    /// Reads a query string against a definition.
-    fn parse<R: TableRow>(pairs: &[(String, String)]) -> (Self, Vec<(String, String)>) {
+    /// Reads a query string against a definition: the list query's part from `list`
+    /// (what `ListQuery::parse_lenient` made of the whole string), the table's own
+    /// part from `pairs`. The second answer is the parameters that are neither: the
+    /// page's own filters.
+    fn parse<R: TableRow>(
+        pairs: &[(String, String)],
+        list: &ListQuery,
+    ) -> (Self, Vec<(String, String)>) {
         let columns = R::COLUMNS;
         let config = R::CONFIG;
         let index_of = |name: &str| columns.iter().position(|column| column.name == name);
@@ -168,6 +329,7 @@ impl State {
                 .map(|(at, _)| at)
                 .collect()
         };
+        let searchable = columns.iter().any(|column| column.search);
         let mut state = Self {
             q: None,
             sort: default_sort(),
@@ -187,52 +349,10 @@ impl State {
         let mut sort_seen = false;
         let mut cols: Vec<usize> = Vec::new();
         let mut cols_seen = false;
-        // Filters, in the order of the columns whatever the URL's order.
-        let mut texts: Vec<Option<String>> = vec![None; columns.len()];
-        let mut values: Vec<Vec<String>> = vec![Vec::new(); columns.len()];
-        let mut mins: Vec<Option<String>> = vec![None; columns.len()];
-        let mut maxes: Vec<Option<String>> = vec![None; columns.len()];
-        let mut flags: Vec<Option<bool>> = vec![None; columns.len()];
-        let mut empties: Vec<bool> = vec![false; columns.len()];
         for (name, value) in pairs.iter().take(MAX_PARAMS) {
             match name.as_str() {
-                "sort" => {
-                    // `sort=` says no order, unlike no `sort` at all.
-                    if !sort_seen {
-                        state.sort.clear();
-                        sort_seen = true;
-                    }
-                    for term in value.split(',') {
-                        let (name, direction) = term
-                            .strip_prefix('-')
-                            .map_or((term, Direction::Asc), |name| (name, Direction::Desc));
-                        let Some(column) = index_of(name).filter(|at| columns[*at].sortable) else {
-                            continue;
-                        };
-                        if state.sort.len() < MAX_SORTS
-                            && !state.sort.iter().any(|term| term.column == column)
-                        {
-                            state.sort.push(SortTerm { column, direction });
-                        }
-                    }
-                }
-                "q" if columns.iter().any(|column| column.search) => {
-                    let value = value.trim();
-                    if !value.is_empty() {
-                        state.q = Some(clip(value.to_owned()));
-                    }
-                }
-                "page" => state.page = value.parse::<u32>().unwrap_or(1).max(1),
-                "per" => {
-                    if let Ok(per) = value.parse::<u32>()
-                        && per <= MAX_PER_PAGE
-                        && (per == config.per || config.per_pages.contains(&per))
-                    {
-                        state.per = per;
-                    }
-                }
-                "after" if !value.is_empty() => state.after = Some(clip(value.clone())),
-                "before" if !value.is_empty() => state.before = Some(clip(value.clone())),
+                // `sort=` says no order, unlike no `sort` at all.
+                "sort" => sort_seen = true,
                 "count" => state.count = value == "1",
                 "density" => state.density = TableDensity::parse(value),
                 "cols" => {
@@ -283,77 +403,63 @@ impl State {
                         }
                     }
                 }
-                other => match other.strip_prefix("f.") {
-                    Some(rest) if !value.is_empty() => {
-                        let (column_name, part) = rest
-                            .split_once('.')
-                            .map_or((rest, ""), |(name, part)| (name, part));
-                        let Some(at) = index_of(column_name) else {
-                            continue;
-                        };
-                        let column = &columns[at];
-                        match (column.filter, part) {
-                            (FilterKind::Text, "") => {
-                                texts[at] = Some(clip(value.trim().to_owned()))
-                                    .filter(|text| !text.is_empty())
-                            }
-                            (FilterKind::Boolean, "") => {
-                                flags[at] = matches!(value.as_str(), "true" | "false")
-                                    .then_some(value == "true")
-                            }
-                            (FilterKind::Select | FilterKind::Multi | FilterKind::Relation, "") => {
-                                let allowed = column.options.is_empty()
-                                    || column.options.iter().any(|(option, _)| *option == value);
-                                if allowed
-                                    && column.kind.accepts(value)
-                                    && values[at].len() < MAX_VALUES
-                                    && !values[at].contains(value)
-                                {
-                                    if column.filter == FilterKind::Select {
-                                        values[at].clear();
-                                    }
-                                    values[at].push(clip(value.clone()));
-                                }
-                            }
-                            (FilterKind::Range, "min" | "from") if column.kind.accepts(value) => {
-                                mins[at] = Some(value.clone())
-                            }
-                            (FilterKind::Range, "max" | "to") if column.kind.accepts(value) => {
-                                maxes[at] = Some(value.clone())
-                            }
-                            (FilterKind::None, _) => {}
-                            (_, "empty") if column.nullable => empties[at] = value == "1",
-                            _ => {}
-                        }
+                // A table with no searchable column leaves `search` to the page.
+                "search" if searchable => {}
+                "search" => {
+                    if !value.is_empty() {
+                        rest.push((name.clone(), value.clone()));
                     }
-                    Some(_) => {}
-                    None => {
-                        if !value.is_empty() {
-                            rest.push((name.clone(), value.clone()));
-                        }
+                }
+                other if is_list_name(other) => {}
+                _ => {
+                    if !value.is_empty() {
+                        rest.push((name.clone(), value.clone()));
                     }
-                },
+                }
             }
         }
-        for at in 0..columns.len() {
-            let filter = if empties[at] {
-                Some(FilterValue::Empty)
-            } else if let Some(text) = texts[at].take() {
-                Some(FilterValue::Text(text))
-            } else if let Some(flag) = flags[at] {
-                Some(FilterValue::Bool(flag))
-            } else if !values[at].is_empty() {
-                Some(FilterValue::Values(std::mem::take(&mut values[at])))
-            } else if mins[at].is_some() || maxes[at].is_some() {
-                Some(FilterValue::Range {
-                    min: mins[at].take(),
-                    max: maxes[at].take(),
+        if sort_seen {
+            state.sort = list
+                .sort
+                .iter()
+                .filter_map(|key| {
+                    let column = index_of(&key.field).filter(|at| columns[*at].sortable)?;
+                    let direction = if key.descending {
+                        Direction::Desc
+                    } else {
+                        Direction::Asc
+                    };
+                    Some(SortTerm { column, direction })
                 })
-            } else {
-                None
-            };
-            if let Some(value) = filter {
-                state.filters.push(ActiveFilter { column: at, value });
+                .take(MAX_SORTS)
+                .collect();
+        }
+        if searchable {
+            state.q = list.search.clone();
+        }
+        state.filters = read_filters::<R>(list);
+        // Only a page size the table offers.
+        let offered = |size: u64| -> Option<u32> {
+            let size = u32::try_from(size).ok()?;
+            (size <= MAX_PER_PAGE && (size == config.per || config.per_pages.contains(&size)))
+                .then_some(size)
+        };
+        if config.cursor {
+            // A cursor is the position; a page number beside it means nothing, and the
+            // page after wins over the page before.
+            state.after = list.cursor.clone();
+            if state.after.is_none() {
+                state.before = list.before.clone();
+            }
+            if let Some(size) = list.limit.and_then(offered) {
+                state.per = size;
+            }
+        } else {
+            if let Some(page) = list.page {
+                state.page = u32::try_from(page).unwrap_or(1).max(1);
+            }
+            if let Some(size) = list.per_page.and_then(offered) {
+                state.per = size;
             }
         }
         if cols_seen {
@@ -366,16 +472,6 @@ impl State {
             if !cols.is_empty() {
                 state.cols = cols;
             }
-        }
-        // A cursor is the position; a page number beside it means nothing.
-        if config.cursor {
-            state.page = 1;
-            if state.after.is_some() {
-                state.before = None;
-            }
-        } else {
-            state.after = None;
-            state.before = None;
         }
         (state, rest)
     }
@@ -405,38 +501,50 @@ impl State {
         at == self.cols.len()
     }
 
-    /// The pairs that say what the filters are.
-    pub(crate) fn filter_pairs<R: TableRow>(&self, pairs: &mut Vec<(String, String)>) {
-        if let Some(q) = &self.q {
-            pairs.push(("q".to_owned(), q.clone()));
-        }
+    /// The pairs that say what the filters are, in the list query's spelling.
+    pub(crate) fn condition_pairs<R: TableRow>(&self, pairs: &mut Vec<(String, String)>) {
         for filter in &self.filters {
-            let name = R::COLUMNS[filter.column].name;
+            let column = &R::COLUMNS[filter.column];
+            let param = |op: Op| filter_param(column.name, op);
             match &filter.value {
-                FilterValue::Text(text) => pairs.push((format!("f.{name}"), text.clone())),
-                FilterValue::Values(values) => pairs.extend(
-                    values
-                        .iter()
-                        .map(|value| (format!("f.{name}"), value.clone())),
-                ),
-                FilterValue::Bool(flag) => pairs.push((format!("f.{name}"), flag.to_string())),
-                FilterValue::Empty => pairs.push((format!("f.{name}.empty"), "1".to_owned())),
+                FilterValue::Text(text) => pairs.push((param(Op::Contains), text.clone())),
+                // A select holds one value, written plain.
+                FilterValue::Values(values) if column.filter == FilterKind::Select => {
+                    if let Some(first) = values.first() {
+                        pairs.push((param(Op::Eq), first.clone()));
+                    }
+                }
+                FilterValue::Values(values) => pairs.push((param(Op::In), values.join(","))),
+                FilterValue::Bool(flag) => pairs.push((param(Op::Eq), flag.to_string())),
+                FilterValue::Empty => pairs.push((param(Op::Null), "true".to_owned())),
                 FilterValue::Range { min, max } => {
                     if let Some(min) = min {
-                        pairs.push((format!("f.{name}.min"), min.clone()));
+                        pairs.push((param(Op::Gte), min.clone()));
                     }
                     if let Some(max) = max {
-                        pairs.push((format!("f.{name}.max"), max.clone()));
+                        pairs.push((param(Op::Lte), max.clone()));
                     }
                 }
             }
         }
     }
 
-    /// Every pair, in one order, leaving out what's at its default.
+    /// The pairs that say what is searched for and filtered.
+    pub(crate) fn filter_pairs<R: TableRow>(&self, pairs: &mut Vec<(String, String)>) {
+        self.condition_pairs::<R>(pairs);
+        if let Some(q) = &self.q {
+            pairs.push(("search".to_owned(), q.clone()));
+        }
+    }
+
+    /// Every pair, in one order, leaving out what's at its default. The list query's
+    /// come first, in the order a list query is written (filters, sort, search, page,
+    /// page size, cursor, before); the table's own state follows.
     pub(crate) fn pairs<R: TableRow>(&self) -> Vec<(String, String)> {
+        let cursor = R::CONFIG.cursor;
+        let default_size = self.per == R::CONFIG.per.clamp(1, MAX_PER_PAGE);
         let mut pairs = Vec::new();
-        self.filter_pairs::<R>(&mut pairs);
+        self.condition_pairs::<R>(&mut pairs);
         if !self.is_default_sort::<R>() {
             let mut sort = String::new();
             for (at, term) in self.sort.iter().enumerate() {
@@ -450,8 +558,23 @@ impl State {
             }
             pairs.push(("sort".to_owned(), sort));
         }
-        if self.per != R::CONFIG.per.clamp(1, MAX_PER_PAGE) {
-            pairs.push(("per".to_owned(), self.per.to_string()));
+        if let Some(q) = &self.q {
+            pairs.push(("search".to_owned(), q.clone()));
+        }
+        if self.page > 1 {
+            pairs.push(("page".to_owned(), self.page.to_string()));
+        }
+        if !cursor && !default_size {
+            pairs.push((size_param(false).to_owned(), self.per.to_string()));
+        }
+        if let Some(after) = &self.after {
+            pairs.push(("cursor".to_owned(), after.clone()));
+        }
+        if let Some(before) = &self.before {
+            pairs.push(("before".to_owned(), before.clone()));
+        }
+        if cursor && !default_size {
+            pairs.push((size_param(true).to_owned(), self.per.to_string()));
         }
         if !self.is_default_cols::<R>() {
             let names: Vec<&str> = self.cols.iter().map(|at| R::COLUMNS[*at].name).collect();
@@ -483,15 +606,6 @@ impl State {
         if self.count {
             pairs.push(("count".to_owned(), "1".to_owned()));
         }
-        if self.page > 1 {
-            pairs.push(("page".to_owned(), self.page.to_string()));
-        }
-        if let Some(after) = &self.after {
-            pairs.push(("after".to_owned(), after.clone()));
-        }
-        if let Some(before) = &self.before {
-            pairs.push(("before".to_owned(), before.clone()));
-        }
         pairs
     }
 }
@@ -522,10 +636,15 @@ fn page_filter<F: Default + DeserializeOwned>(pairs: &[(String, String)]) -> F {
 impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {
     /// Reads a query string.
     pub fn parse(path: impl Into<String>, query: &str) -> Self {
+        let query = clip_query(query);
         let pairs: Vec<(String, String)> = urlencoded::parse(query.as_bytes())
+            .take(MAX_PARAMS)
             .map(|(name, value)| (name.into_owned(), value.into_owned()))
             .collect();
-        let (state, rest) = State::parse::<R>(&pairs);
+        // What is wrong in the list query's part is left out, not reported: a URL can
+        // be old or edited, and the table should still show.
+        let (list, _problems) = ListQuery::parse_lenient(query);
+        let (state, rest) = State::parse::<R>(&pairs, &list);
         let filter = page_filter::<F>(&rest);
         Self {
             path: path.into(),
@@ -568,7 +687,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         &self.state.sort
     }
 
-    /// The search text.
+    /// The search text (`search` in the URL).
     pub fn search(&self) -> Option<&str> {
         self.state.q.as_deref()
     }
@@ -597,7 +716,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         self.state.page
     }
 
-    /// The rows per page.
+    /// The rows per page (`per_page` in the URL, `limit` for a cursor table).
     pub fn per_page(&self) -> u32 {
         self.state.per
     }
@@ -607,7 +726,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         u64::from(self.state.page.saturating_sub(1)) * u64::from(self.state.per)
     }
 
-    /// The cursor to read after.
+    /// The cursor to read after (`cursor` in the URL).
     pub fn after(&self) -> Option<&str> {
         self.state.after.as_deref()
     }
@@ -648,12 +767,14 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let mut out = String::with_capacity(self.path.len() + 40);
         out.push_str(&self.path);
         let mut sep = '?';
+        // The list query's own spelling, so a link is the same string as the one the
+        // browser's clients write for the same state.
         let mut push = |out: &mut String, name: &str, value: &str| {
             out.push(sep);
             sep = '&';
-            encode_into(out, name);
+            out.push_str(&encode_component(name));
             out.push('=');
-            encode_into(out, value);
+            out.push_str(&encode_component(value));
         };
         for (name, value) in &own {
             push(&mut out, name, value);
@@ -690,11 +811,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         for (name, value) in self.filter.params() {
             pairs.push((name.to_owned(), value));
         }
-        let borrowed: Vec<(&str, &str)> = pairs
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.as_str()))
-            .collect();
-        encode(&borrowed)
+        query_of(&pairs)
     }
 
     /// The column at `index`.
@@ -715,5 +832,59 @@ where
             parts.uri.path(),
             parts.uri.query().unwrap_or_default(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_list_querys_names_are_not_the_tables() {
+        for name in [
+            "sort",
+            "search",
+            "page",
+            "per_page",
+            "limit",
+            "cursor",
+            "before",
+            "filter",
+            "filter[a]",
+            "filter[a][in]",
+        ] {
+            assert!(is_list_name(name), "{name}");
+        }
+        for name in [
+            "q", "per", "after", "f.title", "cols", "w", "fb", "density", "open", "count", "term",
+        ] {
+            assert!(!is_list_name(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_filter_is_named_the_way_the_grammar_names_it() {
+        assert_eq!(filter_param("stage", Op::Eq), "filter[stage]");
+        assert_eq!(filter_param("title", Op::Contains), "filter[title][contains]");
+        assert_eq!(filter_param("stage", Op::In), "filter[stage][in]");
+        assert_eq!(filter_param("amount", Op::Gte), "filter[amount][gte]");
+        assert_eq!(filter_param("amount", Op::Lte), "filter[amount][lte]");
+        assert_eq!(filter_param("owner", Op::Null), "filter[owner][null]");
+    }
+
+    #[test]
+    fn the_page_size_is_per_page_or_limit() {
+        assert_eq!(size_param(false), "per_page");
+        assert_eq!(size_param(true), "limit");
+    }
+
+    #[test]
+    fn a_long_query_is_cut_at_a_character() {
+        let long = "é".repeat(MAX_QUERY_BYTES);
+        let cut = clip_query(&long);
+        assert!(cut.len() <= MAX_QUERY_BYTES);
+        assert!(cut.chars().all(|c| c == 'é'));
+        assert_eq!(clip_query("?a=1"), "a=1");
+        assert_eq!(clip_query("a=1"), "a=1");
     }
 }

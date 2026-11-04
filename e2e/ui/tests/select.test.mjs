@@ -759,7 +759,7 @@ for (const browserName of browsers) {
       await page.keyboard.press("Control+k");
       await page.keyboard.type("deals");
       await page.keyboard.press("Enter");
-      await page.waitForURL("**/deals?per=25");
+      await page.waitForURL("**/deals?per_page=25");
       await close();
     });
 
@@ -791,7 +791,7 @@ for (const browserName of browsers) {
       assert.equal(await page.locator("#pick-dialog").evaluate((d) => d.open), false);
       await page.keyboard.press("Escape");
       await page.keyboard.press("Alt+d");
-      await page.waitForURL("**/deals?per=25");
+      await page.waitForURL("**/deals?per_page=25");
       await close();
     });
 

@@ -26,7 +26,7 @@ const HOSTILE = encodeURIComponent('"><img src=x onerror=alert(1)>');
 
 /** Traffic for the list: pages of the proof app, a missing one, a very long one, a hostile one. */
 async function traffic() {
-  const paths = ["/plain", "/deals?per=3", "/gallery", "/nope", `/${LONG}`, `/plain?q=${LONG}`, `/plain?x=${HOSTILE}`, "/deals/new"];
+  const paths = ["/plain", "/deals?per_page=3", "/gallery", "/nope", `/${LONG}`, `/plain?q=${LONG}`, `/plain?x=${HOSTILE}`, "/deals/new"];
   for (const path of paths) await fetch(`${LOGBOOK}${path}`).catch(() => {});
 }
 

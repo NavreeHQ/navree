@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 
-use super::query::{FilterValue, State};
+use super::query::{FilterValue, Op, State, filter_param, size_param};
 use super::{
     Align, CellWriter, Column, Direction, FilterBar, FilterKind, NoFilter, Sticky, TableQuery,
     TableRow, ValueKind,
@@ -1055,7 +1055,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .iter()
             .find(|filter| filter.column == at)
             .map(|filter| &filter.value);
-        let name = format!("f.{}", column.name);
+        // The parameter that carries this column's filter, by operator.
+        let name = |op: Op| filter_param(column.name, op);
         let body: Node = match column.filter {
             FilterKind::None => Node::Empty,
             FilterKind::Text => {
@@ -1065,7 +1066,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 };
                 self.filter_input(
                     "search",
-                    name,
+                    name(Op::Contains),
                     value,
                     Some(column.label.to_owned()),
                     format!("{}: {}", labels.search, column.label),
@@ -1086,12 +1087,12 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 };
                 let step = (kind == "number" && column.kind != ValueKind::Int).then_some("any");
                 let inputmode = (kind == "text").then_some("decimal");
-                let input = |suffix: &str, value, word: &Cow<'static, str>| {
+                let input = |op: Op, value, word: &Cow<'static, str>| {
                     el("label").slot("filter-field").children((
                         el("span").child(word.to_string()),
                         self.filter_input(
                             kind,
-                            format!("{name}.{suffix}"),
+                            name(op),
                             value,
                             None,
                             format!("{} {word}", column.label),
@@ -1102,7 +1103,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 };
                 el("div")
                     .slot("filter-range")
-                    .children((input("min", min, low), input("max", max, high)))
+                    .children((input(Op::Gte, min, low), input(Op::Lte, max, high)))
                     .into()
             }
             FilterKind::Select | FilterKind::Boolean => {
@@ -1119,7 +1120,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     Some(FilterValue::Bool(flag)) => Some(flag.to_string()),
                     _ => None,
                 };
-                let mut select = NativeSelect::new(name)
+                let mut select = NativeSelect::new(name(Op::Eq))
                     .prompt(labels.any.to_string())
                     .attr("form", self.form_id())
                     .attr("aria-label", column.label);
@@ -1140,7 +1141,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 if choices.is_empty() {
                     // No list of choices: the key itself.
                     let value = selected.first().map(String::as_str);
-                    self.filter_input("text", name, value, None, column.label.to_owned())
+                    self.filter_input("text", name(Op::In), value, None, column.label.to_owned())
                         .into()
                 } else {
                     let find = (choices.len() > 8).then(|| {
@@ -1159,7 +1160,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                                 el("input")
                                     .slot("checkbox")
                                     .attr("type", "checkbox")
-                                    .attr("name", name.clone())
+                                    .attr("name", name(Op::In))
                                     .attr("value", choice.value.clone())
                                     .attr("form", self.form_id())
                                     .flag("checked", selected.contains(&choice.value)),
@@ -1179,8 +1180,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 el("input")
                     .slot("checkbox")
                     .attr("type", "checkbox")
-                    .attr("name", format!("f.{}.empty", column.name))
-                    .attr("value", "1")
+                    .attr("name", name(Op::Null))
+                    .attr("value", "true")
                     .attr("form", self.form_id())
                     .flag("checked", matches!(active, Some(FilterValue::Empty))),
                 el("span").child(labels.empty_value.to_string()),
@@ -1591,7 +1592,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             inputs.push(hidden(name, value));
         }
         for (name, value) in state.pairs::<R>() {
-            // `cols` and `fb` are their menus' ticks, and `per` its select.
+            // `cols` and `fb` are their menus' ticks, and the page size its select.
             if matches!(name.as_str(), "sort" | "w" | "density") {
                 inputs.push(hidden(name, value));
             }
@@ -1605,7 +1606,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let form = self.form_id();
         let searchable = R::COLUMNS.iter().any(|column| column.search);
         let search = searchable.then(|| {
-            let input = Input::search("q")
+            let input = Input::search("search")
                 .placeholder(labels.search.to_string())
                 .attr("aria-label", labels.search.to_string());
             let input = match &state.q {
@@ -2518,7 +2519,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         if config.per_pages.len() < 2 {
             return None;
         }
-        let mut select = NativeSelect::new("per")
+        let mut select = NativeSelect::new(size_param(config.cursor))
             .attr("form", self.form_id())
             .attr("data-size", "sm")
             .attr("aria-label", labels.rows_per_page.to_string());

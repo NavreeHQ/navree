@@ -251,7 +251,7 @@ fn data_table_bulk() -> Node {
 }
 
 fn data_table_filter_row() -> Node {
-    let query = TableQuery::<Deal>::parse("/deals", "f.amount.min=500000");
+    let query = TableQuery::<Deal>::parse("/deals", "filter[amount][gte]=500000");
     let page = TablePage::new(deals(), 4);
     DataTable::new("deals", &query, &page)
         .caption("Deals")

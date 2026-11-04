@@ -213,7 +213,7 @@ for (const browserName of browsers) {
     for (const later of ["sort", "search"]) test(`after a sort here the server confirmed, a failed fetch keeps what the server last drew (then a ${later})`, async () => {
       {
         await reset();
-        const { page, close } = await open("/deals?q=renewal%201&per=50");
+        const { page, close } = await open("/deals?search=renewal%201&per_page=50");
         const state = () => page.evaluate(() => ({
           keys: [...document.querySelectorAll("#deals tbody tr[data-key]")].map((row) => row.getAttribute("data-key")).filter((key) => !key.endsWith("-detail")),
           sorts: [...document.querySelectorAll("#deals thead th[aria-sort]")].map((th) => `${th.getAttribute("data-col")}:${th.getAttribute("aria-sort")}`),
@@ -227,8 +227,8 @@ for (const browserName of browsers) {
         await page.waitForFunction(() => new URLSearchParams(location.search).get("sort") === "amount" && !document.getElementById("deals").hasAttribute("data-ui-confirm"));
         await settled(page);
         if (later === "search") {
-          await page.locator("#deals form[data-ui-target] input[name=q]").fill("renewal 13");
-          await page.waitForFunction(() => new URLSearchParams(location.search).get("q") === "renewal 13");
+          await page.locator("#deals form[data-ui-target] input[name=search]").fill("renewal 13");
+          await page.waitForFunction(() => new URLSearchParams(location.search).get("search") === "renewal 13");
           await settled(page);
         }
         const confirmed = await state();
@@ -267,7 +267,7 @@ for (const browserName of browsers) {
 
     test("a page that holds part of the result asks the server to sort", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       assert.equal(await page.locator("#deals[data-ui-local]").count(), 0);
       const before = await keys(page);
       await page.route(/sort=amount/, async (route) => {
@@ -280,13 +280,13 @@ for (const browserName of browsers) {
       assert.deepEqual(await keys(page), before, "nothing moved yet");
       await page.waitForURL(/sort=amount/);
       await settled(page);
-      assert.deepEqual(await keys(page), await serverKeys("/deals?per=10&sort=amount", "deals"));
+      assert.deepEqual(await keys(page), await serverKeys("/deals?per_page=10&sort=amount", "deals"));
       await close();
     });
 
     test("a tick in a filter's list applies at once; typing waits for a pause", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       // By the page's own clock: when an input happened, and when the runtime asked.
       await page.evaluate(() => {
         const original = window.fetch;
@@ -299,25 +299,25 @@ for (const browserName of browsers) {
         document.addEventListener("input", (e) => window.inputs.push({ at: performance.now(), name: e.target.name }), true);
       });
       await page.locator("[popovertarget=deals-m-stage]").click();
-      await page.locator("#deals-m-stage input[name='f.stage'][value=won]").check();
-      await page.waitForFunction(() => window.asked.some((ask) => /f\.stage=won/.test(ask.url)));
+      await page.locator("#deals-m-stage input[name='filter[stage][in]'][value=won]").check();
+      await page.waitForFunction(() => window.asked.some((ask) => /filter%5Bstage%5D%5Bin%5D=won/.test(ask.url)));
       const tick = await page.evaluate(() => {
-        const input = window.inputs.findLast((item) => item.name === "f.stage");
-        const ask = window.asked.find((item) => /f\.stage=won/.test(item.url));
+        const input = window.inputs.findLast((item) => item.name === "filter[stage][in]");
+        const ask = window.asked.find((item) => /filter%5Bstage%5D%5Bin%5D=won/.test(item.url));
         return ask.at - input.at;
       });
       assert.ok(tick < 50, `the tick asked ${tick} ms after it happened`);
       await page.keyboard.press("Escape");
       await settled(page);
-      const search = page.locator("#deals input[name=q]");
+      const search = page.locator("#deals input[name=search]");
       await search.click();
       await search.pressSequentially("acme", { delay: 20 });
       await page.waitForTimeout(500);
       // Each request waited for a pause: the last keystroke before it was 100 ms back.
       const waits = await page.evaluate(() =>
         window.asked
-          .filter((item) => /[?&]q=/.test(item.url))
-          .map((ask) => ask.at - window.inputs.filter((item) => item.name === "q" && item.at < ask.at).at(-1).at),
+          .filter((item) => /[?&]search=/.test(item.url))
+          .map((ask) => ask.at - window.inputs.filter((item) => item.name === "search" && item.at < ask.at).at(-1).at),
       );
       assert.ok(waits.length >= 1 && waits.length < 4, `one request per pause, not per key: ${waits}`);
       assert.ok(waits.every((wait) => wait >= 95), `typing waited ${waits} ms`);
@@ -326,7 +326,7 @@ for (const browserName of browsers) {
 
     test("a filter matching nothing keeps headers, chips and a way out", async () => {
       await reset();
-      const { page, close, problems } = await open("/deals?q=nothing-matches-this");
+      const { page, close, problems } = await open("/deals?search=nothing-matches-this");
       assert.match(await page.locator("#deals tbody").innerText(), /No results match/);
       assert.equal(await page.locator("#deals [data-slot=filter-chip]").count(), 1);
       assert.equal(await page.locator("#deals thead th[data-col=title]").count(), 1);
@@ -365,8 +365,8 @@ for (const browserName of browsers) {
       await settled(page);
       const second = await keys(page);
       assert.notDeepEqual(first, second);
-      await page.locator("#deals [name=q]").fill("renewal");
-      await page.waitForURL(/q=renewal/);
+      await page.locator("#deals [name=search]").fill("renewal");
+      await page.waitForURL(/search=renewal/);
       await settled(page);
       const url = page.url();
       assert.ok(!/page=2/.test(url), "a new filter starts from page 1");
@@ -375,12 +375,12 @@ for (const browserName of browsers) {
       await page.waitForURL(/page=2/);
       await settled(page);
       assert.deepEqual(await keys(page), second, "back");
-      assert.equal(await page.locator("#deals [name=q]").inputValue(), "", "back clears the box the state doesn't hold");
+      assert.equal(await page.locator("#deals [name=search]").inputValue(), "", "back clears the box the state doesn't hold");
       await page.goForward();
-      await page.waitForURL(/q=renewal/);
+      await page.waitForURL(/search=renewal/);
       await settled(page);
       assert.deepEqual(await keys(page), filtered, "forward");
-      assert.equal(await page.locator("#deals [name=q]").inputValue(), "renewal");
+      assert.equal(await page.locator("#deals [name=search]").inputValue(), "renewal");
       await page.reload();
       assert.deepEqual(await keys(page), filtered, "reload");
       const other = await context.newPage();
@@ -395,11 +395,11 @@ for (const browserName of browsers) {
       const { page, close, problems } = await open("/deals");
       await page.locator("#deals-m-stage").evaluate((pop) => pop.showPopover());
       await page.locator("#deals-m-stage input[value=won]").check();
-      await page.waitForURL(/f\.stage=won/);
+      await page.waitForURL((url) => url.searchParams.get("filter[stage][in]") === "won");
       await settled(page);
       assert.ok(await page.locator("#deals-m-stage").evaluate((pop) => pop.matches(":popover-open")), "the popover stays open while the table morphs");
       await page.locator("#deals-m-stage input[value=lost]").check();
-      await page.waitForURL(/f\.stage=lost/);
+      await page.waitForURL((url) => url.searchParams.get("filter[stage][in]") === "won,lost");
       await settled(page);
       const stages = await rows(page).locator("td:nth-child(5)").allInnerTexts();
       assert.ok(stages.length > 0 && stages.every((text) => /Won|Lost/.test(text)), stages.join());
@@ -415,32 +415,32 @@ for (const browserName of browsers) {
       assert.equal(await page.locator("#deals-m-stage input[value=won]").isChecked(), false, "a removed filter unticks its box");
 
       await page.locator("#deals-m-amount").evaluate((pop) => pop.showPopover());
-      await page.locator("#deals-m-amount [name='f.amount.min']").fill("1000");
-      await page.waitForURL(/f\.amount\.min=1000/);
+      await page.locator("#deals-m-amount [name='filter[amount][gte]']").fill("1000");
+      await page.waitForURL((url) => url.searchParams.get("filter[amount][gte]") === "1000");
       await settled(page);
       await page.keyboard.press("Escape");
 
       await page.locator("#deals-m-closed_on").evaluate((pop) => pop.showPopover());
-      await page.locator("#deals-m-closed_on [name='f.closed_on.min']").fill("2026-02-01");
-      await page.waitForURL(/f\.closed_on\.min=2026-02-01/);
+      await page.locator("#deals-m-closed_on [name='filter[closed_on][gte]']").fill("2026-02-01");
+      await page.waitForURL((url) => url.searchParams.get("filter[closed_on][gte]") === "2026-02-01");
       await settled(page);
       await page.keyboard.press("Escape");
 
       await page.locator("#deals-m-active").evaluate((pop) => pop.showPopover());
       await page.locator("#deals-m-active select").selectOption("true");
-      await page.waitForURL(/f\.active=true/);
+      await page.waitForURL((url) => url.searchParams.get("filter[active]") === "true");
       await settled(page);
       await page.keyboard.press("Escape");
 
       await page.locator("#deals-m-company").evaluate((pop) => pop.showPopover());
       await page.locator("#deals-m-company label", { hasText: "Globex" }).locator("input").check();
-      await page.waitForURL(/f\.company=/);
+      await page.waitForURL((url) => [...url.searchParams.keys()].includes("filter[company][in]"));
       await settled(page);
       await page.keyboard.press("Escape");
       assert.ok((await chips.count()) >= 4);
       await shot(page, `${browserName}-chips`);
       await page.locator("[data-slot=chips-clear]").click();
-      await page.waitForFunction(() => !location.search.includes("f."));
+      await page.waitForFunction(() => ![...new URLSearchParams(location.search).keys()].some((name) => name.startsWith("filter[")));
       await settled(page);
       assert.equal(await rows(page).count(), 25);
       assert.deepEqual(problems, []);
@@ -451,11 +451,11 @@ for (const browserName of browsers) {
       await reset();
       const { page, close } = await open("/deals-row");
       const row = page.locator("[data-slot=filter-row]");
-      await row.locator("[name='f.title']").fill("globex");
-      await page.waitForURL(/f\.title=globex/);
+      await row.locator("[name='filter[title][contains]']").fill("globex");
+      await page.waitForURL((url) => url.searchParams.get("filter[title][contains]") === "globex");
       await settled(page);
-      assert.equal(await row.locator("[name='f.title']").inputValue(), "globex");
-      assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "f.title"), "focus stays in the box");
+      assert.equal(await row.locator("[name='filter[title][contains]']").inputValue(), "globex");
+      assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "filter[title][contains]"), "focus stays in the box");
       const titles = await rows(page).locator("td[data-truncate]").allInnerTexts();
       assert.ok(titles.length > 0 && titles.every((text) => /globex/i.test(text)), titles.join());
       await shot(page, `${browserName}-filter-row`);
@@ -486,8 +486,8 @@ for (const browserName of browsers) {
 
     test("select all on this page, across pages, excluding some, then a bulk action on exactly that", async () => {
       await reset();
-      const { page, close, problems } = await open("/deals?f.stage=won&sort=title&per=10");
-      const total = Number(await get("/__t/count?f.stage=won"));
+      const { page, close, problems } = await open("/deals?filter%5Bstage%5D%5Bin%5D=won&sort=title&per_page=10");
+      const total = Number(await get("/__t/count?filter%5Bstage%5D%5Bin%5D=won"));
       assert.ok(total > 20, String(total));
       await page.locator("[data-ui-select-page]").check();
       const bar = page.locator("[data-slot=table-bulk]");
@@ -507,7 +507,7 @@ for (const browserName of browsers) {
       assert.match(await bar.innerText(), new RegExp(`${total - 1} of ${total} results are selected`));
       assert.equal(await page.locator("[data-ui-select-page]").evaluate((box) => box.indeterminate), true);
       await page.getByRole("link", { name: "Page 1", exact: true }).click();
-      await page.waitForFunction(() => !location.search.includes("page="));
+      await page.waitForFunction(() => !/[?&]page=/.test(location.search));
       await settled(page);
       await page.locator(`[data-ui-select-row][value="${firstKey}"]`).uncheck();
       assert.match(await bar.innerText(), new RegExp(`${total - 2} of ${total} results are selected`));
@@ -526,8 +526,8 @@ for (const browserName of browsers) {
 
     test("the set changed between seeing and acting: refused, nothing changed, selection kept", async () => {
       await reset();
-      const { page, close } = await open("/deals?f.stage=won&per=10");
-      const total = Number(await get("/__t/count?f.stage=won"));
+      const { page, close } = await open("/deals?filter%5Bstage%5D%5Bin%5D=won&per_page=10");
+      const total = Number(await get("/__t/count?filter%5Bstage%5D%5Bin%5D=won"));
       await page.locator("[data-ui-select-page]").check();
       await page.locator("[data-ui-select-all]").click();
       await post("/__t/add/9001");
@@ -548,17 +548,17 @@ for (const browserName of browsers) {
 
     test("a filter change ends select-all; ids survive it and say so; a destructive action asks", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       await page.locator("[data-ui-select-page]").check();
       await page.locator("[data-ui-select-all]").click();
-      await page.locator("#deals [name=q]").fill("globex");
-      await page.waitForURL(/q=globex/);
+      await page.locator("#deals [name=search]").fill("globex");
+      await page.waitForURL(/search=globex/);
       await settled(page);
       const bar = page.locator("[data-slot=table-bulk]");
       assert.match(await bar.innerText(), /The filter changed/);
       assert.equal(await page.locator("[data-ui-select-row]:checked").count(), 0);
 
-      await page.goto(BASE + "/deals?per=10");
+      await page.goto(BASE + "/deals?per_page=10");
       const list = await keys(page);
       await page.locator(`[data-ui-select-row][value="${list[0]}"]`).check();
       await page.locator(`[data-ui-select-row][value="${list[1]}"]`).check();
@@ -586,7 +586,7 @@ for (const browserName of browsers) {
 
     test("shift-click ticks a range; reload keeps the selection; a new tab doesn't share it", async () => {
       await reset();
-      const { page, context, close } = await open("/deals?per=10");
+      const { page, context, close } = await open("/deals?per_page=10");
       const boxes = page.locator("[data-ui-select-row]");
       await boxes.nth(1).click();
       await boxes.nth(4).click({ modifiers: ["Shift"] });
@@ -594,7 +594,7 @@ for (const browserName of browsers) {
       await page.reload();
       assert.equal(await page.locator("[data-ui-select-row]:checked").count(), 4, "same tab, after a reload");
       const other = await context.newPage();
-      await other.goto(BASE + "/deals?per=10");
+      await other.goto(BASE + "/deals?per_page=10");
       assert.equal(await other.locator("[data-ui-select-row]:checked").count(), 0, "two tabs, two selections");
       await other.locator("[data-ui-select-row]").first().check();
       assert.equal(await page.locator("[data-ui-select-row]:checked").count(), 4, "no cross-talk");
@@ -607,7 +607,7 @@ for (const browserName of browsers) {
 
     test("very long text, Unicode, RTL and hostile strings hold the layout and run nothing", async () => {
       await reset();
-      const { page, close, problems } = await open("/deals?sort=title&per=100");
+      const { page, close, problems } = await open("/deals?sort=title&per_page=100");
       await page.evaluate(() => {
         window.ran = 0;
         window.alert = () => window.ran++;
@@ -621,14 +621,14 @@ for (const browserName of browsers) {
       assert.ok(overflow <= 1, `the page doesn't scroll sideways: ${overflow}`);
       const tallest = await page.locator("#deals tbody td:not([data-wrap])").evaluateAll((cells) => Math.max(...cells.map((cell) => cell.getBoundingClientRect().width)));
       assert.ok(tallest <= 450, `no text blows a column open: ${tallest}`);
-      await page.locator("#deals [name=q]").fill("<img src=x onerror=alert(1)>");
-      await page.waitForURL(/q=/);
+      await page.locator("#deals [name=search]").fill("<img src=x onerror=alert(1)>");
+      await page.waitForURL(/search=/);
       await settled(page);
       assert.equal(await page.locator("#deals img").count(), 0);
       assert.equal(await rows(page).count(), 1);
       await shot(page, `${browserName}-hostile`);
       assert.deepEqual(await axe(page), []);
-      await page.goto(BASE + "/deals?cols=title,notes,stage&f.title=مرحبا");
+      await page.goto(BASE + "/deals?cols=title,notes,stage&filter%5Btitle%5D%5Bcontains%5D=مرحبا");
       assert.equal(await rows(page).count(), 1);
       assert.deepEqual(problems, []);
       await close();
@@ -683,9 +683,9 @@ for (const browserName of browsers) {
       }));
       assert.ok(inFrame, "busy within a frame");
       await shot(page, `${browserName}-pending`);
-      await page.locator("#deals [name=q]").fill("x");
-      assert.equal(await page.locator("#deals [name=q]").inputValue(), "x");
-      await page.waitForURL(/q=x/);
+      await page.locator("#deals [name=search]").fill("x");
+      assert.equal(await page.locator("#deals [name=search]").inputValue(), "x");
+      await page.waitForURL(/search=x/);
       await settled(page);
       await close();
     });
@@ -747,9 +747,9 @@ for (const browserName of browsers) {
       await page.getByRole("link", { name: "Page 2", exact: true }).click();
       assert.match(page.url(), /page=2/);
       assert.match(page.url(), /sort=amount/);
-      await page.locator("#deals [name=q]").fill("globex");
+      await page.locator("#deals [name=search]").fill("globex");
       await page.getByRole("button", { name: "Apply" }).click();
-      await page.waitForURL(/q=globex/);
+      await page.waitForURL(/search=globex/);
       assert.ok(!/page=2/.test(page.url()));
       const titles = await rows(page).locator("td[data-truncate]").allInnerTexts();
       assert.ok(titles.length > 0 && titles.every((text) => /globex/i.test(text)));
@@ -759,11 +759,11 @@ for (const browserName of browsers) {
       await page.locator("#deals-m-stage input[value=won]").check();
       await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Apply" }).click();
-      await page.waitForURL(/f\.stage=won/);
-      assert.match(page.url(), /q=globex/);
+      await page.waitForURL((url) => url.searchParams.get("filter[stage][in]") === "won");
+      assert.match(page.url(), /search=globex/);
       // A chip is a link.
       await page.locator("[data-slot=filter-chip]").first().click();
-      await page.waitForURL((url) => !url.search.includes("q=globex"));
+      await page.waitForURL((url) => !url.search.includes("search=globex"));
       // Columns, density, per page.
       await page.goto(BASE + "/deals");
       await page.locator("[popovertarget=deals-columns]").click();
@@ -776,9 +776,9 @@ for (const browserName of browsers) {
       await page.locator("#deals-view a", { hasText: "Compact" }).click();
       await page.waitForURL(/density=compact/);
       assert.equal(await page.locator("#deals").getAttribute("data-density"), "compact");
-      await page.locator("[name=per]").selectOption("10");
+      await page.locator("[name=per_page]").selectOption("10");
       await page.getByRole("button", { name: "Apply" }).click();
-      await page.waitForURL(/per=10/);
+      await page.waitForURL(/per_page=10/);
       assert.equal(await rows(page).count(), 10);
       // Ticks and a plain post.
       const key = (await keys(page))[0];
@@ -792,7 +792,7 @@ for (const browserName of browsers) {
 
     test("keyboard only: reach everything, resize, reorder, and the grid keys", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       // Sorting by Enter on a focused link.
       await page.locator("thead th[data-col=amount] [data-slot=sort-link]").focus();
       await page.keyboard.press("Enter");
@@ -827,7 +827,7 @@ for (const browserName of browsers) {
       assert.ok(order.indexOf("stage") < order.indexOf("company"), order.join());
       await page.keyboard.press("Escape");
       // Tabbing never gets stuck, and focus is visible.
-      await page.locator("#deals [name=q]").focus();
+      await page.locator("#deals [name=search]").focus();
       for (let at = 0; at < 12; at++) {
         await page.keyboard.press("Tab");
         const shown = await page.evaluate(() => {
@@ -882,7 +882,7 @@ for (const browserName of browsers) {
 
     test("only safe links are fetched ahead of a click, and they say so", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       const seen = [];
       page.on("request", (request) => {
         if (request.headers()["x-navree-prefetch"]) seen.push(request.url());
@@ -912,7 +912,7 @@ for (const browserName of browsers) {
 
     test("a user who loses permission mid-session: fetch and action are both handled", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       const before = await keys(page);
       await page.locator("[data-ui-select-page]").check();
       await post("/__t/permission/no-act");
@@ -944,7 +944,7 @@ for (const browserName of browsers) {
 
     test("no GET a hover can fire changes anything; writes clear prefetched pages", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       const before = await get("/__t/count");
       const links = await page.locator("#deals a[href]").evaluateAll((items) => [...new Set(items.map((item) => item.getAttribute("href")))]);
       assert.ok(links.length > 10);
@@ -961,7 +961,7 @@ for (const browserName of browsers) {
       await page.locator("#deals-confirm").getByRole("button", { name: "Yes, go ahead" }).click();
       await page.locator("[data-slot=toast]").first().waitFor();
       await settled(page);
-      const expected = await page.evaluate(async () => (await (await fetch("/deals?per=10&page=2")).text()).match(/data-key="(\d+)"/)[1]);
+      const expected = await page.evaluate(async () => (await (await fetch("/deals?per_page=10&page=2")).text()).match(/data-key="(\d+)"/)[1]);
       await next.click();
       await page.waitForURL(/page=2/);
       await settled(page);
@@ -971,7 +971,7 @@ for (const browserName of browsers) {
 
     test("columns: visibility, reorder by drag, resize by drag, density", async () => {
       await reset();
-      const { page, close } = await open("/deals?per=10");
+      const { page, close } = await open("/deals?per_page=10");
       await page.locator("[popovertarget=deals-columns]").click();
       await shot(page, `${browserName}-columns`);
       await page.locator("#deals-columns [data-col=notes] input[type=checkbox]").check();
@@ -1016,7 +1016,7 @@ for (const browserName of browsers) {
 
     test("details open in the URL, row actions post, sticky header stays", async () => {
       await reset();
-      const { page, close, problems } = await open("/deals?sort=title&per=10");
+      const { page, close, problems } = await open("/deals?sort=title&per_page=10");
       const key = (await keys(page))[0];
       const toggle = page.locator(`tr[data-key="${key}"] [data-slot=row-toggle]`);
       assert.equal(await toggle.getAttribute("aria-expanded"), "false");
@@ -1032,7 +1032,7 @@ for (const browserName of browsers) {
       await page.locator(`#deals-a-${key}`).getByRole("button", { name: "Archive" }).click();
       await page.locator("[data-slot=toast]").first().waitFor();
       await page.keyboard.press("Escape");
-      await page.goto(BASE + "/deals?per=100");
+      await page.goto(BASE + "/deals?per_page=100");
       const container = page.locator("#deals [data-slot=table-container]");
       await container.evaluate((box) => { box.scrollTop = 800; });
       const head = await page.locator("#deals thead").boundingBox();
@@ -1045,7 +1045,7 @@ for (const browserName of browsers) {
 
     test("saved views: save, apply, default, delete; a stale view is harmless; no selection held", async () => {
       await reset();
-      const { page, close } = await open("/deals?f.stage=won&sort=title&per=10&page=2");
+      const { page, close } = await open("/deals?filter%5Bstage%5D%5Bin%5D=won&sort=title&per_page=10&page=2");
       await page.locator("[data-ui-select-row]").first().check();
       await page.locator("[popovertarget=deals-views]").click();
       await page.locator("#deals-views [name=_name]").fill("Won deals <b>");
@@ -1056,12 +1056,12 @@ for (const browserName of browsers) {
       await shot(page, `${browserName}-views`);
       assert.deepEqual(await axe(page), []);
       const href = await page.locator("#deals-views [data-slot=view-row] a").first().getAttribute("href");
-      assert.ok(!/page=/.test(href), "a view is how to look, not where one was");
+      assert.ok(!/[?&]page=/.test(href), "a view is how to look, not where one was");
       assert.ok(!/sel|ids/.test(href), "no selection");
       assert.match(await page.locator("#deals-views [data-slot=view-row] a").first().innerHTML(), /Won deals &lt;b&gt;/);
       const fresh = await page.context().newPage();
       await fresh.goto(BASE + "/deals");
-      assert.equal(new URL(fresh.url()).searchParams.get("f.stage"), "won", "the default view opens");
+      assert.equal(new URL(fresh.url()).searchParams.get("filter[stage][in]"), "won", "the default view opens");
       await fresh.close();
       await page.locator("#deals-views [data-slot=view-row] button").first().click();
       await page.waitForFunction(() => !document.querySelector("#deals-views [data-slot=view-row]"));
@@ -1073,11 +1073,11 @@ for (const browserName of browsers) {
       const { page, close } = await open("/deals?sort=title&cols=title,stage,amount");
       const link = page.locator("#deals a[download]");
       assert.match(await link.getAttribute("href"), /^\/deals\/export\?/);
-      const csv = await get("/deals/export?sort=title&cols=title,stage,amount&f.stage=won");
+      const csv = await get("/deals/export?sort=title&cols=title,stage,amount&filter%5Bstage%5D%5Bin%5D=won");
       const lines = csv.trim().split("\r\n");
       assert.match(lines[0], /^﻿?Deal,Stage,Amount$/);
-      assert.equal(lines.length - 1, Number(await get("/__t/count?f.stage=won")));
-      const all = await get("/deals/export?cols=title&per=10");
+      assert.equal(lines.length - 1, Number(await get("/__t/count?filter%5Bstage%5D%5Bin%5D=won")));
+      const all = await get("/deals/export?cols=title&per_page=10");
       assert.equal(all.trim().split("\r\n").length - 1, 137, "the whole result, not a page");
       assert.ok(all.includes(`"'=HYPERLINK(""http://evil.example"",""click"")"`), "a formula is text");
       await close();
@@ -1140,7 +1140,7 @@ for (const browserName of browsers) {
       await settled(page, "extras");
       assert.deepEqual(await page.evaluate(() => window.scrolledTo), ["extras"]);
       await page.getByRole("link", { name: "Page 1", exact: true }).click();
-      await page.waitForFunction(() => !location.search.includes("page="));
+      await page.waitForFunction(() => !/[?&]page=/.test(location.search));
       await settled(page, "extras");
       // A click on a row goes to it, a click on a control doesn't.
       const row = page.locator("#extras tbody tr[data-key]").nth(2);
@@ -1200,14 +1200,14 @@ for (const browserName of browsers) {
       await simple.close();
       const loading = await open("/skeleton");
       assert.ok((await loading.page.locator("#deals tbody [data-slot=skeleton]").count()) > 10);
-      assert.equal(await loading.page.locator("#deals [name=q]").count(), 1);
+      assert.equal(await loading.page.locator("#deals [name=search]").count(), 1);
       await shot(loading.page, `${browserName}-loading`);
       assert.deepEqual(await axe(loading.page), []);
       await loading.close();
       const failed = await open("/failed");
       assert.match(await failed.page.locator("#deals tbody").innerText(), /couldn't load/);
       assert.equal(await failed.page.locator("#deals tbody").getByRole("link", { name: "Try again" }).count(), 1);
-      assert.equal(await failed.page.locator("#deals [name=q]").count(), 1, "the toolbar stays, to change the query");
+      assert.equal(await failed.page.locator("#deals [name=search]").count(), 1, "the toolbar stays, to change the query");
       await shot(failed.page, `${browserName}-failed-server`);
       assert.deepEqual(await axe(failed.page), []);
       await failed.close();
@@ -1299,10 +1299,10 @@ for (const browserName of browsers) {
       const { page, close } = await open("/rich");
       const bar = page.locator("#rich [data-slot=filter-bar]");
       assert.equal(await bar.locator("[data-filter-trigger]").count(), 4);
-      assert.equal(await page.locator("#rich-m-stage [name='f.stage']").count(), 0, "not in the header too");
+      assert.equal(await page.locator("#rich-m-stage [name='filter[stage][in]']").count(), 0, "not in the header too");
       await bar.locator("[popovertarget=rich-p-stage]").click();
       await page.locator("#rich-p-stage input[value=won]").check();
-      await page.waitForURL(/f\.stage=won/);
+      await page.waitForURL((url) => url.searchParams.get("filter[stage][in]") === "won");
       await settled(page, "rich");
       await page.keyboard.press("Escape");
       await shot(page, `${browserName}-filter-bar`);
@@ -1316,7 +1316,7 @@ for (const browserName of browsers) {
       await page.keyboard.press("Escape");
       assert.equal(await bar.locator("[popovertarget=rich-p-active]").count(), 0, "hidden");
       assert.equal(await bar.locator("[popovertarget=rich-p-stage]").count(), 1, "holds a value, so it stays");
-      assert.match(page.url(), /f\.stage=won/);
+      assert.equal(new URL(page.url()).searchParams.get("filter[stage][in]"), "won");
       const url = page.url();
       await page.reload();
       assert.equal(page.url(), url);
@@ -1330,19 +1330,19 @@ for (const browserName of browsers) {
 
     test("live refresh: new rows arrive; typing, menus, selection and the URL are kept", async () => {
       await reset();
-      const { page, close, problems } = await open("/live?sort=-closed_on&per=10&f.title=Added");
+      const { page, close, problems } = await open("/live?sort=-closed_on&per_page=10&filter%5Btitle%5D%5Bcontains%5D=Added");
       assert.equal(await page.locator("#deals [data-slot=table-live]").count(), 1);
       await shot(page, `${browserName}-live`);
       await post("/__t/add/9001");
       await page.locator("tr[data-key='9001']").waitFor({ timeout: 5000 });
       await page.locator("[data-ui-select-row][value='9001']").check();
       const url = page.url();
-      await page.locator("#deals [name=q]").click();
+      await page.locator("#deals [name=search]").click();
       await page.keyboard.type("Add");
       await post("/__t/add/9002");
       await page.locator("tr[data-key='9002']").waitFor({ timeout: 5000 });
       assert.equal(await page.locator("[data-ui-select-row][value='9001']").isChecked(), true, "the selection stays");
-      assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "q"), "focus stays");
+      assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "search"), "focus stays");
       await page.locator("#deals-m-title").evaluate((pop) => pop.showPopover());
       await post("/__t/add/9003");
       await page.locator("tr[data-key='9003']").waitFor({ timeout: 5000 });
@@ -1354,8 +1354,8 @@ for (const browserName of browsers) {
 
     test("live refresh: a late poll can't undo a newer choice; Refresh now; an event stream", async () => {
       await reset();
-      const { page, close } = await open("/live?per=10");
-      await page.route(/\/live\?per=10$/, async (route) => {
+      const { page, close } = await open("/live?per_page=10");
+      await page.route(/\/live\?per_page=10$/, async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 1500));
         await route.continue();
       });
@@ -1367,9 +1367,9 @@ for (const browserName of browsers) {
       await page.waitForTimeout(1600);
       assert.match(page.url(), /sort=amount/);
       assert.deepEqual(await keys(page), chosen, "the late answer was dropped");
-      await page.unroute(/\/live\?per=10$/);
+      await page.unroute(/\/live\?per_page=10$/);
       await close();
-      const stream = await open("/live-stream?per=10&f.title=Added");
+      const stream = await open("/live-stream?per_page=10&filter%5Btitle%5D%5Bcontains%5D=Added");
       await post("/__t/add/9004");
       await stream.page.locator("tr[data-key='9004']").waitFor({ timeout: 6000 });
       await post("/__t/add/9005");
@@ -1380,7 +1380,7 @@ for (const browserName of browsers) {
 
     test("XLSX: the same state, as a typed spreadsheet", async () => {
       await reset();
-      const response = await fetch(BASE + "/deals/export.xlsx?f.stage=won&sort=title&cols=title,stage,amount");
+      const response = await fetch(BASE + "/deals/export.xlsx?filter%5Bstage%5D%5Bin%5D=won&sort=title&cols=title,stage,amount");
       assert.equal(response.status, 200);
       assert.match(response.headers.get("content-type"), /spreadsheetml/);
       const bytes = Buffer.from(await response.arrayBuffer());
@@ -1392,7 +1392,7 @@ for (const browserName of browsers) {
       await reset();
       const clean = await get("/deals");
       const count = (html) => (html.match(/<tr data-key="/g) || []).length;
-      for (const attack of ["sort=id;DROP TABLE dt_deals", "sort=version", "per=1000000", "per=-1", "page=-5", "f.version=1", "cols=version", "w=title:99999999", "after=abc", "before=%00", "density=<script>", "open=1;DROP"]) {
+      for (const attack of ["sort=id;DROP TABLE dt_deals", "sort=version", "per_page=1000000", "per_page=-1", "page=-5", "filter[version]=1", "filter[__proto__]=1", "filter[title][regex]=x", "cols=version", "w=title:99999999", "cursor=abc", "before=%00", "density=<script>", "open=1;DROP"]) {
         const html = await get(`/deals?${attack}`);
         assert.ok(count(html) <= 25, attack);
         assert.ok(!html.includes("<script>a"), attack);
@@ -1402,7 +1402,7 @@ for (const browserName of browsers) {
     });
 
     test("a thousand rows load and sort in this browser", async () => {
-      const { page, close } = await open("/big-pages?per=1000");
+      const { page, close } = await open("/big-pages?per_page=1000");
       assert.equal(await rows(page, "big").count(), 1000);
       await page.locator("thead th[data-col=title] [data-slot=sort-link]").click();
       await page.waitForURL(/sort=title/);
@@ -1420,13 +1420,13 @@ for (const browserName of browsers) {
       };
       // Warm first: this measures the table, not a cold disk on a busy machine.
       for (const path of ["/big", "/big-pages", "/big-pages?page=10000", "/big-pages?sort=title&page=19999", "/big?sort=amount", "/big?sort=-created_on"]) await timed(path);
-      for (const path of ["/big", "/big?sort=amount", "/big?sort=-created_on", "/big-pages", "/big-pages?page=10000", "/big-pages?sort=title&page=19999", "/big-pages?f.stage=won", "/big-pages?f.amount.min=4000000&sort=-amount"]) {
+      for (const path of ["/big", "/big?sort=amount", "/big?sort=-created_on", "/big-pages", "/big-pages?page=10000", "/big-pages?sort=title&page=19999", "/big-pages?filter%5Bstage%5D=won", "/big-pages?filter%5Bamount%5D%5Bgte%5D=4000000&sort=-amount"]) {
         const { time, ok, rows: count } = await timed(path);
         assert.ok(ok && count === 50, `${path}: ${count}`);
         assert.ok(time < 800, `${path}: ${time} ms`);
       }
       const first = await timed("/big");
-      const next = first.html.match(/href="(\/big\?after=[^"]+)"/);
+      const next = first.html.match(/href="(\/big\?cursor=[^"]+)"/);
       assert.ok(next, "a next link");
       const second = await timed(next[1].replaceAll("&amp;", "&"));
       assert.equal(second.rows, 50);
@@ -1436,7 +1436,7 @@ for (const browserName of browsers) {
       assert.match(counted.html, /1,000,000 results/, "counted when asked");
       const { page, close } = await open("/big");
       await page.getByRole("link", { name: "Next" }).click();
-      await page.waitForURL(/after=/);
+      await page.waitForURL(/cursor=/);
       await settled(page, "big");
       await page.getByRole("link", { name: "Previous" }).click();
       await page.waitForURL(/before=/);

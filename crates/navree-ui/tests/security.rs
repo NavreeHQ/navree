@@ -1151,7 +1151,7 @@ fn page_zero_is_page_one() {
 #[test]
 fn a_page_past_the_end_says_so_in_the_footer() {
     type Query = navree_ui::TableQuery<Linked, navree_ui::table::NoFilter>;
-    let query = Query::parse("/t", "page=4294967295&per=1000");
+    let query = Query::parse("/t", "page=10000000&per_page=1000");
     let rows = vec![Linked {
         id: "1".to_owned(),
         label: "open".to_owned(),

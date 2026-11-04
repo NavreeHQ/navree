@@ -93,13 +93,13 @@ fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> AppPage {
     let form = form
         .post("/deals")
         .submit("Create deal")
-        .cancel("Cancel", "/deals?per=1000")
+        .cancel("Cancel", "/deals?per_page=1000")
         .options("company_id", choices(&["Acme", "Globex", "Initech"]))
         .options("contact_id", choices(&["Ada Lovelace", "Alan Turing"]))
         .options("owner_id", choices(&["Grace Hopper", "Edsger Dijkstra"]));
     shell
         .page("New deal")
-        .crumb("Deals", "/deals?per=1000")
+        .crumb("Deals", "/deals?per_page=1000")
         .body(
             Card::new()
                 .description("Track an opportunity through the pipeline.")
@@ -115,7 +115,7 @@ pub fn page(shell: &AppShell) -> AppPage {
 /// `POST /deals`.
 pub fn store(shell: &AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal>>) -> Response {
     match submit {
-        Ok(Submit(deal)) => Reply::redirect("/deals?per=1000")
+        Ok(Submit(deal)) => Reply::redirect("/deals?per_page=1000")
             .toast(ToastTone::Success, format!("{} created", deal.title))
             .into_response(),
         Err(rejected) => rejected.respond(|form| page_with(shell, form)),

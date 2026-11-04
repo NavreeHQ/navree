@@ -231,7 +231,7 @@ fn open_deals() -> Vec<OpenDeal> {
 /// The open deals as a DataTable: rupees, a flag beside each city, days as `30 Nov`,
 /// the filters and the pages.
 fn deals_table() -> Node {
-    let query = TableQuery::<OpenDeal>::parse("/deals", "per=8");
+    let query = TableQuery::<OpenDeal>::parse("/deals", "per_page=8");
     let page = TablePage::new(open_deals(), 312);
     DataTable::new("deals", &query, &page)
         .caption("Open deals")

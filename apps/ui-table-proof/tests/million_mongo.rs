@@ -68,9 +68,9 @@ async fn a_million_documents() {
         "",
         "sort=amount",
         "sort=-created_on",
-        "f.stage=won",
-        "f.amount.min=4000000",
-        "q=abc123",
+        "filter[stage]=won",
+        "filter[amount][gte]=4000000",
+        "search=abc123",
         "count=1",
     ] {
         let mut times = Vec::new();
@@ -92,9 +92,9 @@ async fn a_million_documents() {
         "page=2",
         "page=10000",
         "page=20000",
-        "f.stage=won",
-        "f.stage=won&page=2000",
-        "q=abc123",
+        "filter[stage]=won",
+        "filter[stage]=won&page=2000",
+        "search=abc123",
     ] {
         let mut times = Vec::new();
         let mut rows = 0;
