@@ -690,17 +690,17 @@ fn city_fact() -> FactCard {
         "Ships to",
         Row::gap(2)
             .align(Align::Center)
-            .children((flag("AR"), Text::new("Buenos Aires").inline())),
+            .children((flag("IN"), Text::new("Sri Ganganagar").inline())),
     )
     .icon(icons::MAP_PIN)
-    .detail("Argentina")
+    .detail("Rajasthan")
 }
 
 /// Fact cards where the space they get depends on their own content: a table's
 /// cell, a row beside a long sentence, and a grid of a fixed card width with a
 /// long unbroken address in it.
 fn facts_in_tight_places() -> Vec<Node> {
-    let sentence = "Ordered three times this year, always shipped from the Rotterdam warehouse, and paid by card on every order.";
+    let sentence = "Ordered three times this year, always shipped from the Ludhiana warehouse, and paid by UPI on every order.";
     vec![
         Table::new()
             .caption("A fact card in a table's cell")
@@ -716,7 +716,7 @@ fn facts_in_tight_places() -> Vec<Node> {
             .into(),
         FactGrid::new()
             .attr("id", "words-grid")
-            .card(city_fact().detail("customer.service.team.northwest@fernhill-supply.example.com"))
+            .card(city_fact().detail("customer.service.team.northwest@charkha-supply.example.com"))
             .into(),
     ]
 }
