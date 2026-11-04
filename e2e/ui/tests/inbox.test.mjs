@@ -475,7 +475,16 @@ for (const name of NAMES) {
       await until(page, () => [...document.querySelectorAll("#assign-agent [role=option]")].length > 0 && [...document.querySelectorAll("#assign-agent [role=option]")].every((o) => /Technical/.test(o.textContent)), null, "the Technical team, from the server");
       assert.ok(searches.includes("tech"), searches.join());
       await input.fill("");
+      // Each letter asks again, and each answer redraws the list: click once the answer
+      // to the whole name is drawn, not on an option an earlier answer is about to replace.
+      const answered = page.waitForResponse((r) => r.url().includes("/inbox/agents/options") && new URL(r.url()).searchParams.get("q") === "Manpreet");
       await input.pressSequentially("Manpreet", { delay: 30 });
+      await answered;
+      await until(page, () => {
+        const options = [...document.querySelectorAll("#assign-agent [role=option]")];
+        return options.length === 1 && /Manpreet Gill/.test(options[0].textContent);
+      }, null, "the answer to the whole name");
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       await page.locator("#assign-agent [role=option]", { hasText: "Manpreet Gill" }).click();
       await page.locator("#assign").getByRole("button", { name: "Assign", exact: true }).click();
       await page.locator("[data-slot=toast]", { hasText: "Manpreet Gill has it now" }).waitFor();
