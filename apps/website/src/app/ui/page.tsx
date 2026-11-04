@@ -7,6 +7,7 @@ import { TableShowcase } from "@/components/ui-docs/table-showcase";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
+import { BuildAnything } from "./build";
 import { ChooseFrontEnd } from "./choose";
 import { UiClosing } from "./closing";
 import { BringYourDesign } from "./design";
@@ -25,8 +26,8 @@ export const metadata: Metadata = pageMetadata({
 
 /**
  * `/ui/`, the page about Navree UI, top to bottom: what it is, the choice of
- * front end, how it works, a live example, every component, what every page
- * can do, what comes next, bringing a design, and the way to start. The
+ * front end, how it works, a live example, every component, an example app
+ * built from them, what every page can do, what comes next, bringing a design, and the way to start. The
  * components, the sizes and the roadmap are read from the files that own
  * them, so the page follows the toolkit without edits.
  */
@@ -59,6 +60,9 @@ export default function UiPage() {
       </Part>
       <Part>
         <ComponentGallery />
+      </Part>
+      <Part>
+        <BuildAnything />
       </Part>
       <Part>
         <UiFeatures />
