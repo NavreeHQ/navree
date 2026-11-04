@@ -1,20 +1,25 @@
 //! A report's figures through navree-orm: one grouped query per measure, on the
 //! app's scoped query, so workspace scoping and row-level security hold.
 //!
-//! - **TimescaleDB** on PostgreSQL, when it is installed and the report names its
-//!   zone: `time_bucket` in that zone (hours from the window's first instant, so a
+//! - **TimescaleDB** on PostgreSQL, when it is installed and the report's zone has an
+//!   IANA name: `time_bucket` in that zone (hours from the window's first instant, so a
 //!   clock change neither merges nor splits an hour).
 //! - **Everywhere else on SQL** (PostgreSQL without it, MySQL, SQLite): each row's
 //!   period by bound comparisons against the periods' ends, halving the list, so a
 //!   row costs about log2(periods) comparisons and the periods are exactly the
 //!   report's, in any zone.
-//! - **MongoDB**: the ORM's time buckets of an hour (a quarter of an hour in a zone
-//!   off UTC by a part of an hour), folded into the report's periods here.
+//! - **MongoDB**: the ORM's time buckets of an hour (or of a quarter of an hour, a
+//!   minute or a second, whichever every period starts and ends on), folded into the
+//!   report's periods here.
+//!
+//! On every path a row outside the window counts nowhere, whatever the app's query
+//! says, and the app's conditions are grouped before the window's are added.
 
 use chrono::{DateTime, Utc};
+use navree_orm::ir::{Boolean, Where, WhereClause};
 use navree_orm::{
-    Access, Builder, Dialect, Executor, Expr, FieldError, Model, Result, Row, Selectable, Value,
-    col,
+    Access, Builder, Dialect, Executor, Expr, FieldError, HasQuery, Model, Result, Row, Selectable,
+    Value, col,
 };
 
 use super::report::Report;
@@ -123,23 +128,24 @@ impl Selectable for Aggregate {
     }
 }
 
-/// A row's period, as a number: an index, or the bucket's start in seconds.
+/// A row's period, as a number (an index, or the bucket's first second), times the
+/// groups and plus its group; `None` for a row outside the window.
 struct Key(Expr);
 
 impl Selectable for Key {
-    type Output = i64;
+    type Output = Option<i64>;
 
     fn selected(&self) -> Expr {
         self.0.clone()
     }
 
-    fn read(&self, row: &Row, column: &str) -> std::result::Result<i64, FieldError> {
+    fn read(&self, row: &Row, column: &str) -> std::result::Result<Option<i64>, FieldError> {
         Ok(row
             .value(column)
             .ok()
             .as_ref()
             .and_then(number)
-            .map_or(-1, |v| v.round() as i64))
+            .map(|v| v.round() as i64))
     }
 }
 
@@ -191,7 +197,7 @@ fn invalid(message: impl Into<String>) -> navree_orm::OrmError {
 }
 
 /// `CASE WHEN c < ? THEN .. ELSE .. END`, halving the periods: the index of the period
-/// each row is in. Rows are already inside the window.
+/// each row is in, for a row inside the window.
 fn halve(
     column: &str,
     ends: &[Value],
@@ -260,10 +266,46 @@ async fn has_timescale<E: Executor + ?Sized>(exec: &E) -> bool {
     matches!(navree_orm::select_one(exec, probe).await, Ok(Some(_)))
 }
 
+/// The app's conditions as one group, so the window's are added to all of them: a
+/// query `a OR b` is counted as `(a OR b) AND window`, never `a OR (b AND window)`.
+fn grouped<M: Model>(mut query: Builder<M>) -> Builder<M> {
+    let ir = query.query_mut();
+    if ir
+        .wheres
+        .iter()
+        .skip(1)
+        .any(|clause| clause.boolean == Boolean::Or)
+    {
+        let all = std::mem::take(&mut ir.wheres);
+        ir.wheres.push(WhereClause {
+            boolean: Boolean::And,
+            negated: false,
+            filter: Where::Group(all),
+        });
+    }
+    query
+}
+
+/// Two values of one period, from two groups of rows: added, or the least or greatest.
+fn combine(metric: Metric, a: f64, b: f64) -> f64 {
+    match metric {
+        Metric::Min(_) => a.min(b),
+        Metric::Max(_) => a.max(b),
+        // A period is one group on every path; only counts and sums ever meet.
+        _ => a + b,
+    }
+}
+
+/// The most groups `measure_by` names: one colour each, and one more for Other.
+const MOST_GROUPS: usize = crate::charts::MAX_SERIES - 1;
+
 impl Report {
-    /// `measure` in each period of the report, over `query` (the app's scoped query)
+    /// `metric` in each period of the report, over `query` (the app's scoped query)
     /// with its rows' instants in `time`. A column of seconds or milliseconds since
     /// 1970 is named with [`TimeColumn::UnixSeconds`] or [`TimeColumn::UnixMillis`].
+    ///
+    /// Only rows inside the window count, whatever `query` says: its conditions are
+    /// grouped before the window's are added, so an `or_where` can't reach outside.
     ///
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
@@ -278,14 +320,14 @@ impl Report {
         &self,
         query: Builder<M>,
         time: impl Into<TimeColumn>,
-        measure: Metric,
+        metric: Metric,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
     where
         M: Model,
         E: Executor + ?Sized,
     {
-        self.measure_with(query, time, measure, Bucketing::Auto, exec)
+        self.measure_with(query, time, metric, Bucketing::Auto, exec)
             .await
     }
 
@@ -294,7 +336,7 @@ impl Report {
         &self,
         query: Builder<M>,
         time: impl Into<TimeColumn>,
-        measure: Metric,
+        metric: Metric,
         bucketing: Bucketing,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
@@ -302,24 +344,103 @@ impl Report {
         M: Model,
         E: Executor + ?Sized,
     {
-        let time = time.into();
-        if !plain(time.name()) || measure.column().is_some_and(|c| !plain(c)) {
-            return Err(invalid(
-                "a report's columns are plain names: letters, digits, `_` and one `.`",
-            ));
+        let mut series = self
+            .measure_groups(query, time.into(), metric, None, bucketing, exec)
+            .await?;
+        Ok(series.pop().unwrap_or_default())
+    }
+
+    /// `metric` per value of `group` in each period: one series per name in `groups`, in
+    /// that order, and one more for every other value, NULL included (Other). At most
+    /// seven names are counted on their own, as a chart draws eight series: the rest are
+    /// counted in Other. On an SQL database this is one grouped query.
+    pub async fn measure_by<M, E>(
+        &self,
+        query: Builder<M>,
+        time: impl Into<TimeColumn>,
+        group: &'static str,
+        groups: &[&str],
+        metric: Metric,
+        exec: &E,
+    ) -> Result<Vec<Vec<Option<f64>>>>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+    {
+        let names = &groups[..groups.len().min(MOST_GROUPS)];
+        self.measure_groups(
+            query,
+            time.into(),
+            metric,
+            Some((group, names)),
+            Bucketing::Auto,
+            exec,
+        )
+        .await
+    }
+
+    /// The figures of each group (or of all rows, with no groups) in each period.
+    async fn measure_groups<M, E>(
+        &self,
+        query: Builder<M>,
+        time: TimeColumn,
+        metric: Metric,
+        groups: Option<(&'static str, &[&str])>,
+        bucketing: Bucketing,
+        exec: &E,
+    ) -> Result<Vec<Vec<Option<f64>>>>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+    {
+        let plain_names = "a report's columns are plain names: letters, digits, `_` and one `.`";
+        if !plain(time.name())
+            || metric.column().is_some_and(|c| !plain(c))
+            || groups.is_some_and(|(g, _)| !plain(g))
+        {
+            return Err(invalid(plain_names));
         }
+        let width = groups.map_or(1, |(_, names)| names.len() + 1);
         let count = self.buckets().len();
-        let mut out = vec![None; count];
+        let mut out = vec![vec![None; count]; width];
         if count == 0 {
             return Ok(out);
         }
         let (start, end) = self.bounds();
-        let window = query
+        let window = grouped(query)
             .where_(col(time.name()).gte(time.value(start)))
             .where_(col(time.name()).lt(time.value(end)));
         let dialect = exec.target(Access::Read).await?.dialect();
         let Some(dialect) = dialect else {
-            return self.measure_documents(window, time, measure, exec).await;
+            // A document store: one query per group, each folded into the periods.
+            let mut out = Vec::with_capacity(width);
+            match groups {
+                None => out.push(self.measure_documents(window, time, metric, exec).await?),
+                Some((group, names)) => {
+                    let column = qualified::<M>(group);
+                    for name in names {
+                        let only = window
+                            .clone()
+                            .where_(col(column.clone()).eq(Value::String((*name).to_owned())));
+                        out.push(self.measure_documents(only, time, metric, exec).await?);
+                    }
+                    let values: Vec<Value> = names
+                        .iter()
+                        .map(|n| Value::String((*n).to_owned()))
+                        .collect();
+                    let rest = if values.is_empty() {
+                        window
+                    } else {
+                        window.where_(
+                            col(column.clone())
+                                .not_in(values)
+                                .or(col(column.clone()).is_null()),
+                        )
+                    };
+                    out.push(self.measure_documents(rest, time, metric, exec).await?);
+                }
+            }
+            return Ok(out);
         };
         let timescale = match bucketing {
             Bucketing::Exact => false,
@@ -331,106 +452,73 @@ impl Report {
             Bucketing::TimeBucket => {
                 if dialect != Dialect::Postgres || !self.timescale_fits(time) {
                     return Err(invalid(
-                        "TimescaleDB buckets need PostgreSQL, a timestamp column, a named zone and weeks from Monday",
+                        "TimescaleDB buckets need PostgreSQL, a timestamp column, a zone with an IANA name and weeks from Monday",
                     ));
                 }
                 true
             }
         };
         let column = quoted::<M>(time.name(), dialect);
+        // The period of each row: an index, or its bucket's first second with TimescaleDB;
+        // NULL for a row outside the window, which is never counted.
+        let mut values = vec![time.value(start), time.value(end)];
+        let mut sql = String::with_capacity(count * 40 + 120);
         if timescale {
-            let (sql, values) = self.time_bucket_sql(&column);
-            let found = window
-                .group_by_raw("2", Vec::<Value>::new())
-                .pluck_keyed(
-                    exec,
-                    Aggregate(measure.expr::<M>()),
-                    Key(Expr::raw(sql, values)),
-                )
-                .await?;
-            for (seconds, value) in found {
-                let Some(at) = DateTime::from_timestamp(seconds, 0) else {
-                    continue;
-                };
-                if let Some(i) = self.bucket_of(at.max(start)) {
-                    out[i] = value;
-                }
-            }
+            let (bucket, bound) = self.time_bucket_sql(&column);
+            sql.push_str(&format!(
+                "CASE WHEN {column} >= ? AND {column} < ? THEN {bucket} END"
+            ));
+            values.extend(bound);
         } else {
             let ends: Vec<Value> = self.buckets().iter().map(|b| time.value(b.end)).collect();
-            let mut sql = String::with_capacity(count * 40);
-            let mut bound = Vec::with_capacity(count);
-            halve(&column, &ends, 0, count - 1, &mut sql, &mut bound);
-            let found = window
-                .group_by_raw("2", Vec::<Value>::new())
-                .pluck_keyed(
-                    exec,
-                    Aggregate(measure.expr::<M>()),
-                    Key(Expr::raw(sql, bound)),
-                )
-                .await?;
-            for (index, value) in found {
-                if let Some(slot) = usize::try_from(index).ok().and_then(|i| out.get_mut(i)) {
-                    *slot = value;
+            sql.push_str(&format!(
+                "CASE WHEN {column} < ? OR {column} >= ? THEN NULL ELSE "
+            ));
+            halve(&column, &ends, 0, count - 1, &mut sql, &mut values);
+            sql.push_str(" END");
+        }
+        // Each group is a number from 0; the key is the period times the groups, plus it.
+        if let Some((group, names)) = groups {
+            let group_column = quoted::<M>(group, dialect);
+            let mut which = String::from("CASE");
+            for (at, name) in names.iter().enumerate() {
+                which.push_str(&format!(" WHEN {group_column} = ? THEN {at}"));
+                values.push(Value::String((*name).to_owned()));
+            }
+            which.push_str(&format!(" ELSE {} END", names.len()));
+            sql = format!("({sql}) * {width} + ({which})");
+        }
+        let found = window
+            .group_by_raw("2", Vec::<Value>::new())
+            .pluck_keyed(
+                exec,
+                Aggregate(metric.expr::<M>()),
+                Key(Expr::raw(sql, values)),
+            )
+            .await?;
+        let width = width as i64;
+        for (key, value) in found {
+            let (Some(key), Some(value)) = (key, value) else {
+                continue;
+            };
+            let (period, group) = (key.div_euclid(width), key.rem_euclid(width) as usize);
+            let index = if timescale {
+                DateTime::from_timestamp(period, 0).and_then(|at| self.bucket_of(at.max(start)))
+            } else {
+                usize::try_from(period).ok().filter(|i| *i < count)
+            };
+            if let Some(i) = index {
+                let slot = &mut out[group][i];
+                *slot = Some(slot.map_or(value, |v| combine(metric, v, value)));
+            }
+        }
+        if metric.zero_when_empty() {
+            for series in &mut out {
+                for value in series {
+                    value.get_or_insert(0.0);
                 }
             }
         }
-        if measure.zero_when_empty() {
-            for value in &mut out {
-                value.get_or_insert(0.0);
-            }
-        }
-        Ok(out)
-    }
-
-    /// `measure` per value of `group` in each period: one series per name in `groups`,
-    /// in that order, and one more for every other value (Other). For a stacked chart
-    /// of statuses over time.
-    pub async fn measure_by<M, E>(
-        &self,
-        query: Builder<M>,
-        time: impl Into<TimeColumn>,
-        group: &'static str,
-        groups: &[&str],
-        measure: Metric,
-        exec: &E,
-    ) -> Result<Vec<Vec<Option<f64>>>>
-    where
-        M: Model,
-        E: Executor + ?Sized,
-    {
-        let time = time.into();
-        if !plain(group) {
-            return Err(invalid(
-                "a report's columns are plain names: letters, digits, `_` and one `.`",
-            ));
-        }
-        let mut out = Vec::with_capacity(groups.len() + 1);
-        let column = if group.contains('.') {
-            group.to_owned()
-        } else {
-            format!("{}.{group}", M::meta().table())
-        };
-        for name in groups {
-            let scoped = query
-                .clone()
-                .where_(col(column.clone()).eq(Value::String((*name).to_owned())));
-            out.push(self.measure(scoped, time, measure, exec).await?);
-        }
-        let names: Vec<Value> = groups
-            .iter()
-            .map(|n| Value::String((*n).to_owned()))
-            .collect();
-        let rest = if names.is_empty() {
-            query
-        } else {
-            query.where_(
-                col(column.clone())
-                    .not_in(names)
-                    .or(col(column.clone()).is_null()),
-            )
-        };
-        out.push(self.measure(rest, time, measure, exec).await?);
         Ok(out)
     }
 
@@ -442,7 +530,7 @@ impl Report {
                     && (self.grain() != Grain::Week || self.week_start() == chrono::Weekday::Mon)))
     }
 
-    /// `EXTRACT(EPOCH FROM time_bucket(..))`: the start of each row's bucket.
+    /// `EXTRACT(EPOCH FROM time_bucket(..))`: the first second of each row's bucket.
     fn time_bucket_sql(&self, column: &str) -> (String, Vec<Value>) {
         let (start, _) = self.bounds();
         match self.grain() {
@@ -483,12 +571,38 @@ impl Report {
         }
     }
 
-    /// A document store: the ORM's hourly buckets, folded into the report's periods.
+    /// The width of the ORM's buckets a document store counts in: the widest of an hour,
+    /// a quarter of an hour, a minute and a second that every period starts and ends on,
+    /// so each one falls whole inside a period, in any zone (Kolkata kept its own clock
+    /// to the second until 1906).
+    fn fine_width(&self) -> &'static str {
+        let latest = super::report::latest_instant();
+        let on = |unit: i64| {
+            self.buckets().iter().all(|b| {
+                [b.start, b.end].iter().all(|at| {
+                    *at == latest
+                        || (at.timestamp_subsec_nanos() == 0
+                            && at.timestamp().rem_euclid(unit) == 0)
+                })
+            })
+        };
+        if on(3600) {
+            "1 hour"
+        } else if on(900) {
+            "15 minutes"
+        } else if on(60) {
+            "1 minute"
+        } else {
+            "1 second"
+        }
+    }
+
+    /// A document store: the ORM's buckets, folded into the report's periods.
     async fn measure_documents<M, E>(
         &self,
         window: Builder<M>,
         time: TimeColumn,
-        measure: Metric,
+        metric: Metric,
         exec: &E,
     ) -> Result<Vec<Option<f64>>>
     where
@@ -499,22 +613,13 @@ impl Report {
         if !matches!(time, TimeColumn::Timestamp(_)) {
             return Err(invalid("a report over MongoDB reads a date column"));
         }
-        if matches!(measure, Metric::CountDistinct(_)) {
+        if matches!(metric, Metric::CountDistinct(_)) {
             return Err(invalid(
                 "counting distinct values per period needs an SQL database",
             ));
         }
-        // Whole hours fit every zone off UTC by whole hours; a quarter of an hour fits the rest.
-        let fine = if self
-            .buckets()
-            .iter()
-            .all(|b| b.start.timestamp().rem_euclid(3600) == 0)
-        {
-            "1 hour"
-        } else {
-            "15 minutes"
-        };
-        let qualified = format!("{}.{}", M::meta().table(), time.name());
+        let fine = self.fine_width();
+        let at = qualified::<M>(time.name());
         let fold = |found: Vec<(i64, Option<f64>)>, combine: fn(f64, f64) -> f64| {
             let mut out: Vec<Option<f64>> = vec![None; count];
             for (seconds, value) in found {
@@ -527,14 +632,16 @@ impl Report {
             }
             out
         };
-        let pick = |m: Metric| pick_documents(&window, exec, m, fine, &qualified);
-        let mut out = match measure {
-            Metric::Count | Metric::Sum(_) => fold(pick(measure).await?, |a, b| a + b),
-            Metric::Min(_) => fold(pick(measure).await?, f64::min),
-            Metric::Max(_) => fold(pick(measure).await?, f64::max),
+        let pick = |what: Expr| pick_documents(&window, exec, what, fine, &at);
+        let mut out = match metric {
+            Metric::Count | Metric::Sum(_) => fold(pick(metric.expr::<M>()).await?, |a, b| a + b),
+            Metric::Min(_) => fold(pick(metric.expr::<M>()).await?, f64::min),
+            Metric::Max(_) => fold(pick(metric.expr::<M>()).await?, f64::max),
             Metric::Average(c) => {
-                let sums = fold(pick(Metric::Sum(c)).await?, |a, b| a + b);
-                let counts = fold(pick(Metric::Count).await?, |a, b| a + b);
+                // As SQL averages: over the rows whose value isn't NULL.
+                let values = col(qualified::<M>(c));
+                let sums = fold(pick(Expr::sum(values.clone())).await?, |a, b| a + b);
+                let counts = fold(pick(Expr::count(values)).await?, |a, b| a + b);
                 sums.into_iter()
                     .zip(counts)
                     .map(|(s, n)| match (s, n) {
@@ -543,9 +650,9 @@ impl Report {
                     })
                     .collect()
             }
-            Metric::CountDistinct(_) => unreachable!("refused above"),
+            Metric::CountDistinct(_) => Vec::new(),
         };
-        if measure.zero_when_empty() {
+        if metric.zero_when_empty() {
             for value in &mut out {
                 value.get_or_insert(0.0);
             }
@@ -554,13 +661,22 @@ impl Report {
     }
 }
 
-/// One grouped query on a document store: `m` per bucket of `fine`.
+/// `name` qualified by the model's table, unless it has a table already.
+fn qualified<M: Model>(name: &str) -> String {
+    if name.contains('.') {
+        name.to_owned()
+    } else {
+        format!("{}.{name}", M::meta().table())
+    }
+}
+
+/// One grouped query on a document store: `what` per bucket of `fine`.
 async fn pick_documents<M, E>(
     window: &Builder<M>,
     exec: &E,
-    m: Metric,
+    what: Expr,
     fine: &'static str,
-    qualified: &str,
+    at: &str,
 ) -> Result<Vec<(i64, Option<f64>)>>
 where
     M: Model,
@@ -571,8 +687,8 @@ where
         .group_by(["key"])
         .pluck_keyed(
             exec,
-            Aggregate(m.expr::<M>()),
-            InstantKey(Expr::time_bucket(fine, col(qualified.to_owned()))),
+            Aggregate(what),
+            InstantKey(Expr::time_bucket(fine, col(at.to_owned()))),
         )
         .await?;
     Ok(found.into_iter().collect())

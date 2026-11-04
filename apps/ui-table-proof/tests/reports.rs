@@ -136,10 +136,7 @@ fn reports() -> Vec<(String, Report)> {
                 Grain::Quarter,
             ),
         ] {
-            out.push((
-                format!("{zone} {grain:?}"),
-                Report::new(range, grain, &tz).zone_name(zone),
-            ));
+            out.push((format!("{zone} {grain:?}"), Report::new(range, grain, &tz)));
         }
     }
     out
@@ -176,10 +173,12 @@ fn expected(report: &Report, metric: Metric, only: Option<&str>) -> Vec<Option<f
         .collect()
 }
 
+/// Whether two series agree. MySQL writes the average of integers to four decimals, so
+/// values agree to 1e-4.
 fn close(a: &[Option<f64>], b: &[Option<f64>]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(a, b)| match (a, b) {
-            (Some(a), Some(b)) => (a - b).abs() <= 1e-6 * a.abs().max(1.0),
+            (Some(a), Some(b)) => (a - b).abs() <= 1e-4 * a.abs().max(1.0),
             (None, None) => true,
             _ => false,
         })
@@ -317,6 +316,281 @@ async fn seed(db: &Db, schema: &str) {
     }
 }
 
+// ---- The window holds whatever the app's query says --------------------------------
+
+/// Only workspace 1, as an app's workspace scope would.
+pub struct Ws1;
+
+macro_rules! sparse {
+    ($plain:ident, $scoped:ident, $($attrs:tt)*) => {
+        #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+        #[model($($attrs)*)]
+        pub struct $plain {
+            pub id: i64,
+            pub ws: i64,
+            pub kind: Option<String>,
+            pub amount: Option<i64>,
+            pub at: DateTime<Utc>,
+        }
+
+        #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+        #[model($($attrs)*, global_scopes(crate::Ws1))]
+        pub struct $scoped {
+            pub id: i64,
+            pub ws: i64,
+            pub kind: Option<String>,
+            pub amount: Option<i64>,
+            pub at: DateTime<Utc>,
+        }
+
+        impl navree::orm::GlobalScope<$scoped> for Ws1 {
+            fn apply(&self, query: Builder<$scoped>) -> Builder<$scoped> {
+                query.where_(col("ws").eq(Value::I64(1)))
+            }
+        }
+    };
+}
+
+sparse!(SqlSparse, SqlScoped, table = "rp_sparse");
+sparse!(
+    MongoSparse,
+    MongoScoped,
+    collection = "rp_sparse",
+    driver = "mongodb"
+);
+
+/// (id, workspace, kind, amount, at)
+type Sparse = (i64, i64, Option<&'static str>, Option<i64>, DateTime<Utc>);
+
+fn utc(y: i32, m: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
+    NaiveDate::from_ymd_opt(y, m, d)
+        .unwrap()
+        .and_hms_opt(h, mi, 0)
+        .unwrap()
+        .and_utc()
+}
+
+fn sparse_rows() -> Vec<Sparse> {
+    let mut out: Vec<Sparse> = Vec::new();
+    let mut id = 0;
+    let mut push = |ws, kind, amount, at| {
+        id += 1;
+        out.push((id, ws, kind, amount, at));
+    };
+    // Workspace 1 inside 1 to 3 November 2026, with missing kinds and amounts.
+    for i in 0..12_u32 {
+        let kind = [Some("a"), Some("b"), None][(i % 3) as usize];
+        let amount = (i % 4 != 0).then_some(10 * i64::from(i));
+        push(1, kind, amount, utc(2026, 11, 1 + i % 3, 5 + i, 0));
+    }
+    // Workspace 1, kind a, two weeks before the window: an `or_where` must not reach it.
+    for i in 0..5 {
+        push(1, Some("a"), Some(1), utc(2026, 10, 15, i, 0));
+    }
+    // Workspace 2 inside the window: the scope must keep it out.
+    for i in 0..10 {
+        push(
+            2,
+            if i < 7 { None } else { Some("a") },
+            Some(1000),
+            utc(2026, 11, 2, i, 0),
+        );
+    }
+    // Ten more kinds, for the cap on groups.
+    for (at, kind) in ["c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
+        .into_iter()
+        .enumerate()
+    {
+        push(1, Some(kind), Some(1), utc(2026, 11, 3, at as u32, 30));
+    }
+    // Zones whose midnight is off UTC by seconds: Kolkata in 1900, Monrovia in 1970.
+    for (zone, year, ws) in [("Asia/Kolkata", 1900, 3), ("Africa/Monrovia", 1970, 4)] {
+        let tz: Tz = zone.parse().unwrap();
+        for d in 1..=5 {
+            let (midnight, _) =
+                DateRange::single(NaiveDate::from_ymd_opt(year, 4, d).unwrap()).utc_bounds(&tz);
+            push(ws, Some("old"), Some(1), midnight + Duration::minutes(3));
+            push(ws, Some("old"), Some(1), midnight - Duration::seconds(1));
+        }
+    }
+    out
+}
+
+fn sparse_expected(
+    report: &Report,
+    keep: impl Fn(&Sparse) -> bool,
+    metric: Metric,
+) -> Vec<Option<f64>> {
+    let mut groups: Vec<Vec<Option<i64>>> = vec![Vec::new(); report.buckets().len()];
+    for row in sparse_rows() {
+        if keep(&row)
+            && let Some(i) = report.bucket_of(row.4)
+        {
+            groups[i].push(row.3);
+        }
+    }
+    groups
+        .into_iter()
+        .map(|g| match metric {
+            Metric::Count => Some(g.len() as f64),
+            Metric::Sum(_) => Some(g.into_iter().flatten().map(|v| v as f64).sum()),
+            Metric::Average(_) => {
+                let v: Vec<f64> = g.into_iter().flatten().map(|v| v as f64).collect();
+                (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
+            }
+            _ => unreachable!(),
+        })
+        .collect()
+}
+
+async fn check_conditions<P: Model, S: Model, E: Executor + ?Sized>(
+    store: &str,
+    exec: &E,
+    plain: impl Fn() -> Builder<P>,
+    scoped: impl Fn() -> Builder<S>,
+    bucketings: &[Bucketing],
+) {
+    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+    let window = Report::new(DateRange::new(day(1), day(3)), Grain::Day, &Utc);
+    for bucketing in bucketings {
+        // A top-level `or_where` under the workspace scope: (a OR b) AND window AND scope.
+        let query = scoped()
+            .where_(col("kind").eq(Value::String("a".into())))
+            .or_where(col("kind").eq(Value::String("b".into())));
+        let found = window
+            .measure_with(query, "at", Metric::Count, *bucketing, exec)
+            .await
+            .unwrap();
+        let want = sparse_expected(
+            &window,
+            |r| r.1 == 1 && matches!(r.2, Some("a" | "b")),
+            Metric::Count,
+        );
+        assert!(
+            close(&found, &want),
+            "{store} {bucketing:?} or_where: {found:?} want {want:?}"
+        );
+        // An average skips rows with no value, as SQL does.
+        let found = window
+            .measure_with(
+                plain().where_(col("ws").eq(Value::I64(1))),
+                "at",
+                Metric::Average("amount"),
+                *bucketing,
+                exec,
+            )
+            .await
+            .unwrap();
+        let want = sparse_expected(&window, |r| r.1 == 1, Metric::Average("amount"));
+        assert!(
+            close(&found, &want),
+            "{store} {bucketing:?} average: {found:?} want {want:?}"
+        );
+    }
+    // Other, under the scope: workspace 1's rows with no kind or another kind, nothing of workspace 2.
+    let by = window
+        .measure_by(scoped(), "at", "kind", &["a", "b"], Metric::Count, exec)
+        .await
+        .unwrap();
+    assert_eq!(by.len(), 3);
+    let other = sparse_expected(
+        &window,
+        |r| r.1 == 1 && !matches!(r.2, Some("a" | "b")),
+        Metric::Count,
+    );
+    assert!(
+        close(&by[2], &other),
+        "{store} Other: {:?} want {other:?}",
+        by[2]
+    );
+    assert!(close(
+        &by[0],
+        &sparse_expected(&window, |r| r.1 == 1 && r.2 == Some("a"), Metric::Count)
+    ));
+    // At most seven named groups and Other: a chart's eight colours.
+    let names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+    let by = window
+        .measure_by(scoped(), "at", "kind", &names, Metric::Count, exec)
+        .await
+        .unwrap();
+    assert_eq!(by.len(), 8, "{store}");
+    let other = sparse_expected(
+        &window,
+        |r| r.1 == 1 && !matches!(r.2, Some("a" | "b" | "c" | "d" | "e" | "f" | "g")),
+        Metric::Count,
+    );
+    assert!(
+        close(&by[7], &other),
+        "{store} capped Other: {:?} want {other:?}",
+        by[7]
+    );
+    // Midnights off UTC by seconds: every row in its own day.
+    for (zone, year, ws) in [("Asia/Kolkata", 1900, 3_i64), ("Africa/Monrovia", 1970, 4)] {
+        let tz: Tz = zone.parse().unwrap();
+        let from = NaiveDate::from_ymd_opt(year, 4, 1).unwrap();
+        let report = Report::new(
+            DateRange::new(from, from + Duration::days(4)),
+            Grain::Day,
+            &tz,
+        );
+        for bucketing in bucketings {
+            let found = report
+                .measure_with(
+                    plain().where_(col("ws").eq(Value::I64(ws))),
+                    "at",
+                    Metric::Count,
+                    *bucketing,
+                    exec,
+                )
+                .await
+                .unwrap();
+            let want = sparse_expected(&report, |r| r.1 == ws, Metric::Count);
+            assert!(
+                close(&found, &want),
+                "{store} {zone} {year} {bucketing:?}: {found:?} want {want:?}"
+            );
+        }
+    }
+}
+
+fn sql_sparse() -> Vec<SqlSparse> {
+    sparse_rows()
+        .into_iter()
+        .map(|(id, ws, kind, amount, at)| SqlSparse {
+            id,
+            ws,
+            kind: kind.map(str::to_owned),
+            amount,
+            at,
+        })
+        .collect()
+}
+
+fn mongo_sparse() -> Vec<MongoSparse> {
+    sparse_rows()
+        .into_iter()
+        .map(|(id, ws, kind, amount, at)| MongoSparse {
+            id,
+            ws,
+            kind: kind.map(str::to_owned),
+            amount,
+            at,
+        })
+        .collect()
+}
+
+async fn seed_sparse(db: &Db, schema: &str) {
+    let _ = db
+        .pool()
+        .execute_script("DROP TABLE IF EXISTS rp_sparse")
+        .await;
+    db.pool().execute_script(schema).await.expect("the table");
+    SqlSparse::query()
+        .insert(db, sql_sparse())
+        .await
+        .expect("the rows");
+}
+
 #[tokio::test]
 async fn sqlite_counts_like_memory() {
     let dir = std::env::temp_dir().join(format!("ui-reports-{}", uuid::Uuid::new_v4()));
@@ -333,6 +607,19 @@ async fn sqlite_counts_like_memory() {
         SqlEvent::query,
         &[Bucketing::Auto, Bucketing::Exact],
         true,
+    )
+    .await;
+    seed_sparse(
+        &db,
+        "CREATE TABLE rp_sparse (id BIGINT PRIMARY KEY, ws BIGINT NOT NULL, kind TEXT, amount BIGINT, at TEXT NOT NULL)",
+    )
+    .await;
+    check_conditions(
+        "sqlite",
+        &db,
+        SqlSparse::query,
+        SqlScoped::query,
+        &[Bucketing::Auto, Bucketing::Exact],
     )
     .await;
     // TimescaleDB's buckets are PostgreSQL's: asking for them elsewhere says so.
@@ -397,6 +684,19 @@ async fn postgres_counts_like_memory_with_and_without_timescaledb() {
             eprintln!("TimescaleDB is not installable here: bound comparisons only");
         }
         check("postgres", &db, SqlEvent::query, &bucketings, true).await;
+        seed_sparse(
+            &db,
+            "CREATE TABLE rp_sparse (id BIGINT PRIMARY KEY, ws BIGINT NOT NULL, kind VARCHAR(20), amount BIGINT, at TIMESTAMPTZ NOT NULL)",
+        )
+        .await;
+        check_conditions(
+            "postgres",
+            &db,
+            SqlSparse::query,
+            SqlScoped::query,
+            &bucketings,
+        )
+        .await;
         db.close().await.unwrap();
     }
     admin
@@ -436,6 +736,19 @@ async fn mysql_counts_like_memory() {
             true,
         )
         .await;
+        seed_sparse(
+            &db,
+            "CREATE TABLE rp_sparse (id BIGINT PRIMARY KEY, ws BIGINT NOT NULL, kind VARCHAR(20), amount BIGINT, at DATETIME(6) NOT NULL)",
+        )
+        .await;
+        check_conditions(
+            "mysql",
+            &db,
+            SqlSparse::query,
+            SqlScoped::query,
+            &[Bucketing::Exact, Bucketing::Auto],
+        )
+        .await;
         db.close().await.unwrap();
     }
     admin
@@ -466,6 +779,19 @@ async fn mongodb_counts_like_memory() {
         MongoEvent::query,
         &[Bucketing::Auto],
         false,
+    )
+    .await;
+    MongoSparse::query().delete(&mongo).await.unwrap();
+    MongoSparse::query()
+        .insert(&mongo, mongo_sparse())
+        .await
+        .unwrap();
+    check_conditions(
+        "mongodb",
+        &mongo,
+        MongoSparse::query,
+        MongoScoped::query,
+        &[Bucketing::Auto],
     )
     .await;
     mongo.database().drop().await.unwrap();
