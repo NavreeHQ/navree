@@ -14,6 +14,8 @@ pub const COMPANY: &str = "Sukhna Labs";
 pub const PRODUCT: &str = "Sukhna Bookings";
 /// The desk's own time zone, which every page shows its times in.
 pub const ZONE: &str = "Asia/Kolkata";
+/// What the pages call it: short, and with no slash for a narrow line to break at.
+pub const ZONE_NAME: &str = "IST";
 /// India Standard Time's offset from UTC, in seconds: the same all year.
 pub const OFFSET: i32 = 19_800;
 /// The agent a visitor works as until they choose another.

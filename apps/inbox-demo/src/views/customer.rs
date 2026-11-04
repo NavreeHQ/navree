@@ -4,7 +4,7 @@
 use navree::ui::*;
 
 use crate::data::{
-    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Status, ZONE, rupees,
+    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Status, ZONE_NAME, rupees,
 };
 use crate::views::inbox::CustomerView;
 use crate::views::{Filters, ago, place, thousands};
@@ -154,7 +154,7 @@ pub fn customer_body(view: &CustomerView, current: i64, filters: &Filters, now: 
             Timeline::new("customer-timeline", "Account history")
                 .heading(3)
                 .newest_first()
-                .time_zone(ZONE, OFFSET)
+                .time_zone(ZONE_NAME, OFFSET)
                 .events(view.history.iter().map(step)),
         ))
         .into()
