@@ -60,7 +60,7 @@ New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have 
 
 ## Two moves at once
 
-Run the check and the write in one transaction that takes the write lock first: on SQLite, Navree's units of work start with `BEGIN IMMEDIATE`. Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in.
+Run the check and the write in one transaction that holds a lock on the lists it touches before it reads them. On SQLite, Navree's units of work start with `BEGIN IMMEDIATE`, which is that lock. On PostgreSQL and MySQL a transaction alone is not enough: take the lock yourself first, with `SELECT ... FOR UPDATE` on a row per list or an advisory lock named after the list, or two moves can both pass a limit or take the same rank. Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in.
 
 In one page, moves go to the server one at a time, in the order they were made. A refused move puts its item back where the server last had it, and drops that item's other moves.
 
