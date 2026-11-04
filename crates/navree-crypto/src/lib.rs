@@ -32,6 +32,9 @@
 //! - [`webpush`] encrypts Web Push messages (RFC 8291, `aes128gcm`) and
 //!   signs their VAPID headers (RFC 8292) with a P-256
 //!   [`VapidKey`](webpush::VapidKey).
+//! - [`sns`] checks Amazon SNS messages: the text SNS signs, signature
+//!   versions 1 and 2 against the signing certificate's key, and the URLs
+//!   a certificate or a subscription confirmation may come from.
 //!
 //! Keys, plaintexts and passwords never appear in `Debug` output or error
 //! messages.
@@ -59,6 +62,7 @@ pub mod jose;
 mod key;
 mod module;
 pub mod qr;
+pub mod sns;
 mod tokens;
 pub mod totp;
 pub mod webpush;

@@ -4595,6 +4595,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
  "zeroize",
 ]
 

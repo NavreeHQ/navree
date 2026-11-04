@@ -30,6 +30,8 @@ subtle = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# `sns`: the host and path of SNS certificate and confirmation URLs.
+url = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
