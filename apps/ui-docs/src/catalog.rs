@@ -126,7 +126,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "data",
         title: "Data",
-        components: &["table", "data-table", "lazy-list", "stat"],
+        components: &["table", "data-table", "lazy-list", "stat", "sortable"],
     },
 ];
 
@@ -567,6 +567,13 @@ pub const COMPONENTS: &[Component] = &[
     )
     .parts("default"),
     component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
+    component(
+        "sortable",
+        "Sortable",
+        &["Sortable", "SortList", "SortItem", "SortLabels", "Move", "ListState"],
+        "thumb",
+    )
+    .parts("default"),
     // Pages that aren't components
     component("foundations", "Foundations", &["Size"], "radius").page("/docs/ui/foundations/"),
     component(

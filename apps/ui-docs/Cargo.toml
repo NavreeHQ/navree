@@ -20,6 +20,8 @@ unsafe_code = "forbid"
 store-demo = { path = "../store-demo" }
 # The example support inbox, whose views the website shows under "Build anything" and on its showcase page.
 inbox-demo = { path = "../inbox-demo" }
+# The example board, whose views its showcase page shows.
+board-demo = { path = "../board-demo" }
 chrono = { workspace = true }
 navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
 proc-macro2 = { workspace = true }

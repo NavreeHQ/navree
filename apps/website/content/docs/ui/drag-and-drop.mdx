@@ -1,0 +1,73 @@
+---
+title: "Drag and drop"
+description: "Moves that feel instant and stay correct: the page moves the item at once, your server checks every move against the data as it is now, and other viewers see it live."
+---
+
+<UiPreview example="sortable/board" />
+
+A drag feels finished the moment the item lands, but the move is only real once your server has saved it. [Sortable](/docs/components/sortable/) does both: the page moves the item at once and posts the move; your handler checks it and saves it, or refuses it, and the page puts the item back with a toast.
+
+## What a move says
+
+A drop posts a `Move`: the item, the list the browser saw it in, the list it goes to, and the items on either side of where it landed.
+
+| Field | Means |
+|---|---|
+| `item` | the key of the item that moved |
+| `from_list` | where the browser saw it; if it is somewhere else now, someone moved it first |
+| `to_list` | where it goes, the same list to reorder |
+| `before` | the item it lands before |
+| `after` | the item it lands after, sent too, for a drop below the last item the page holds |
+| `position` | a number, from the form people use with JavaScript off |
+
+It names neighbours, not an index. An index means something different to every page that has a different filter or a different number of items loaded; a neighbour means the same thing everywhere.
+
+## Checking a move
+
+Read the lists in the transaction that writes the move and hold the move to them:
+
+```rust
+let lists = vec![
+    ListState::new("ready", "Ready", ready_keys).limit(5),
+    ListState::new("doing", "In progress", doing_keys).limit(3),
+    ListState::new("done", "Done", done_keys).refuse_if(!user.is_lead(), "Only a lead can move cards to Done."),
+];
+match mv.check(&lists) {
+    Ok(landing) => save(landing.to_list, landing.order),
+    Err(refusal) => return Ok(mv.refused("/board", refusal.message())),
+}
+```
+
+`check` refuses with a `Refusal`: `Stale` (the item has moved), `Moved` (its neighbour has), `Full`, `Refused`, `Gone`, `NoList` or `Malformed`. `refusal.is_stale()` says the page is out of date: add an op that fetches the board again.
+
+## Long lists, by rank
+
+A column of 12,000 cards can't be read whole for every move. Keep each item's place as a **rank**, a number, and order by it. `Move::place` asks your store for what it needs, one indexed read at a time: where the item is, how many the list holds, and the ranks beside where it goes. It returns one new rank between them, so a move writes one row.
+
+```rust
+impl RankedLists for MyStore {
+    // spot(key), list(key, item), beside(list, rank, lower, item), nth(list, index, item), last(list, item)
+}
+
+match mv.place(&store).await? {
+    Ok(Placement { rank: Some(rank), .. }) => write_rank(rank),
+    Ok(Placement { rank: None, to_list, .. }) => { renew_ranks(to_list); /* then place again */ }
+    Err(refusal) => /* refused */,
+}
+```
+
+New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have no room left between them, the placement says so and you give that list fresh ranks.
+
+## Two moves at once
+
+Run the check and the write in one transaction that takes the write lock first: on SQLite, Navree's units of work start with `BEGIN IMMEDIATE`. Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in.
+
+In one page, moves go to the server one at a time, in the order they were made. A refused move puts its item back where the server last had it, and drops that item's other moves.
+
+## Live for everyone
+
+Put the board in a [region](/docs/ui/regions/) that follows a server-sent event stream, and nudge the stream after each saved move. Every open board fetches itself again, and the cards slide to their new places. A region waits while someone is dragging in it, so nothing moves under their pointer, and its source keeps asking for as many items as the page has loaded.
+
+## Lazy columns
+
+Draw the first cards of each column and end it with `SortList::more(...)`: a form with a keyset cursor (`rank.id`) that the page submits as it scrolls into sight. Answer with `Sortable::page(key)`. Cap how many a column keeps in the page with `SortList::end_note(...)`, and let filters and search find the rest. The example board holds 20,000 cards this way.

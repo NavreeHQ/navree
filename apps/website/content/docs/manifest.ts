@@ -230,6 +230,7 @@ export const sections: DocsSection[] = [
       "commands-and-ops",
       "regions",
       "errors-and-states",
+      "drag-and-drop",
       "coming-next",
     ],
   },
@@ -318,6 +319,7 @@ export const sections: DocsSection[] = [
       "table",
       "lazy-list",
       "stat",
+      "sortable",
     ],
     groups: [
       { title: "Actions", from: "button" },
