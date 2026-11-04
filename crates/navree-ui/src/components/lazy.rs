@@ -181,7 +181,7 @@ pub struct LazyList {
     after: Option<Href>,
     max: u32,
     since: Option<String>,
-    live: Option<(Href, Option<&'static str>, LazyEnd)>,
+    live: Option<(Href, Option<String>, LazyEnd)>,
     empty: Option<Node>,
     labels: LazyLabels,
     gap: u8,
@@ -308,8 +308,19 @@ impl LazyList {
         event: Option<&'static str>,
         new_at: LazyEnd,
     ) -> Self {
-        let event = event.filter(|name| valid_event_name(name));
+        let event = event
+            .filter(|name| valid_event_name(name))
+            .map(str::to_owned);
         self.live = Some((url.into(), event, new_at));
+        self
+    }
+
+    /// Merges what changed whenever its stream says one of its names: the app's
+    /// live hub ([`LiveStream::on`](crate::LiveStream::on)) or any stream on this
+    /// site. See [`live_from`](Self::live_from).
+    pub fn live_on(mut self, live: impl Into<super::Live>, new_at: LazyEnd) -> Self {
+        let live = live.into();
+        self.live = Some((live.src().clone(), live.event_attr(), new_at));
         self
     }
 

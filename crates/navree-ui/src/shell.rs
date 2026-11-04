@@ -334,7 +334,7 @@ struct GroupLive {
     id: String,
     src: Href,
     stream: Href,
-    event: Option<&'static str>,
+    event: Option<String>,
 }
 
 impl NavGroup {
@@ -380,7 +380,29 @@ impl NavGroup {
             id: id.into(),
             src: src.into(),
             stream: stream.into(),
-            event: event.filter(|name| crate::table::region::valid_event_name(name)),
+            event: event
+                .filter(|name| crate::table::region::valid_event_name(name))
+                .map(str::to_owned),
+        });
+        self
+    }
+
+    /// [`live`](Self::live) on the app's live hub
+    /// ([`LiveStream::on`](crate::LiveStream::on)) or any stream, listening for
+    /// one name or several.
+    #[must_use]
+    pub fn live_on(
+        mut self,
+        id: impl Into<String>,
+        src: impl Into<Href>,
+        live: impl Into<crate::components::Live>,
+    ) -> Self {
+        let live = live.into();
+        self.live = Some(GroupLive {
+            id: id.into(),
+            src: src.into(),
+            stream: live.src().clone(),
+            event: live.event_attr(),
         });
         self
     }
@@ -727,7 +749,7 @@ impl Shell {
                         .flag("data-ui-region", true)
                         .attr("data-ui-src", live.src.clone())
                         .attr("data-ui-live-src", live.stream.clone())
-                        .attr_opt("data-ui-live-event", live.event)
+                        .attr_opt("data-ui-live-event", live.event.clone())
                         .uses(Uses::CORE.with(Uses::LIVE));
                 }
                 div.children((

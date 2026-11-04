@@ -456,9 +456,10 @@ impl ActivityFeed {
     }
 
     /// Wraps the feed in a [`Region`] that fetches new rows from `src` (with
-    /// `after=<cursor>`) whenever the server-sent event stream at `stream` speaks,
-    /// and adds them at the top. `cursor` is the newest row's cursor. The feed shows
-    /// its live dot.
+    /// `after=<cursor>`) whenever `stream` speaks, and adds them at the top:
+    /// a stream's address, or names on the app's live hub
+    /// ([`LiveStream::on`](crate::LiveStream::on)). `cursor` is the newest row's
+    /// cursor. The feed shows its live dot.
     ///
     /// ```
     /// use navree_ui::{ActivityFeed, render};
@@ -472,7 +473,7 @@ impl ActivityFeed {
         self,
         region_id: &str,
         src: impl Into<Href>,
-        stream: impl Into<Href>,
+        stream: impl Into<super::Live>,
         cursor: impl Into<String>,
     ) -> Region {
         let list = self.list_id();
@@ -482,7 +483,7 @@ impl ActivityFeed {
         let many = self.labels.new_many.to_string();
         Region::new(region_id.to_owned())
             .src(src)
-            .live_from(stream)
+            .live_on(stream)
             .feed(list, cursor, Some(&empty))
             .announce_new(many, one)
             .children(self.live())

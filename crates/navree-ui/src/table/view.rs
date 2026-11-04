@@ -566,7 +566,7 @@ pub struct DataTable<'a, R, F = NoFilter> {
     cells: Vec<(&'static str, RowFn<'a, R, Node>)>,
     live: Option<Duration>,
     live_from: Option<Href>,
-    live_event: Option<&'static str>,
+    live_event: Option<String>,
     refreshable: bool,
     debounce: Option<u32>,
     prefetch: bool,
@@ -673,8 +673,19 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// See [`Region::live_event`].
     pub fn live_event(mut self, name: &'static str) -> Self {
         if super::region::valid_event_name(name) {
-            self.live_event = Some(name);
+            self.live_event = Some(name.to_owned());
         }
+        self
+    }
+
+    /// Refetches the table whenever its stream says one of its names: the app's
+    /// live hub ([`LiveStream::on`](crate::LiveStream::on)) or any stream on this
+    /// site. See [`Region::live_on`].
+    pub fn live_on(mut self, live: impl Into<crate::components::Live>) -> Self {
+        let live = live.into();
+        self.live_event = live.event_attr();
+        self.live_from = Some(live.src().clone());
+        self.refreshable = true;
         self
     }
 
@@ -2670,7 +2681,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)),
             )
             .attr_opt("data-ui-live-src", self.live_from.clone())
-            .attr_opt("data-ui-live-event", self.live_event)
+            .attr_opt("data-ui-live-event", self.live_event.clone())
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
         if self.live_from.is_some() {

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::components::{Button, Size, Skeleton, SkeletonShape};
+use crate::components::{Button, Live, Size, Skeleton, SkeletonShape};
 use crate::html::Href;
 use crate::icons;
 use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
@@ -142,10 +142,38 @@ impl Region {
         self
     }
 
+    /// Refetches the region, or with a feed asks for what is new, whenever its
+    /// stream says one of its names: the app's live hub
+    /// ([`LiveStream::on`](crate::LiveStream::on)) or any stream on this site.
+    /// Everything [`live_from`](Self::live_from) says holds; use one or the
+    /// other. With the hub, a stream that comes back after it dropped is told
+    /// only what it missed, so the region fetches only if it missed something.
+    ///
+    /// ```
+    /// use navree_ui::{LiveStream, Region, render};
+    ///
+    /// let stream = LiveStream::topics(["conversation.42", "clock"]);
+    /// let heading = Region::new("heading")
+    ///     .src("/conversations/42/heading")
+    ///     .live_on(stream.on("conversation.42").event("clock"));
+    /// let html = render(&heading.into());
+    /// assert!(html.contains(r#"data-ui-live-event="conversation.42 clock""#));
+    /// ```
+    pub fn live_on(mut self, live: impl Into<Live>) -> Self {
+        let live = live.into();
+        self.el = self
+            .el
+            .attr("data-ui-live-src", live.src().clone())
+            .attr_opt("data-ui-live-event", live.event_attr())
+            .uses(Uses::LIVE);
+        self
+    }
+
     /// Listens for the stream's events called `name` instead of its unnamed ones
     /// (`event: name` on the wire), so one stream can feed several regions. A name
     /// of letters, digits and `_ . : -`, at most 64 long; any other is ignored.
     /// `open` and `error` are the connection's own events, so they are ignored too.
+    /// [`live_on`](Self::live_on) takes names made at run time, and several.
     pub fn live_event(mut self, name: &'static str) -> Self {
         if valid_event_name(name) {
             self.el = self.el.attr("data-ui-live-event", name);

@@ -13,6 +13,13 @@
 // of its own in flight: events that come while it waits cost one more fetch after it lands.
 // A fetch is given up on after 15 s (in nav.js); one that somehow is still out after 20 s
 // is left behind and the next event fetches anew.
+//
+// A region may listen for several names (`data-ui-live-event="a b"`). The app's live hub
+// starts every connection with `ui:live`, and gives each event an id. A connection to it
+// that comes back sends the last id it heard (`last_event_id`, as EventSource can't set
+// headers); the hub answers `ui:resumed` and says again only what was missed, so no region
+// fetches unless it missed something. When it answers `ui:live`, or nothing within 2.5 s,
+// every region catches up as with any other stream. Only an event's name and id are read.
 import { cookies, every, hidden, on, sameOrigin } from "./dom.js";
 
 /**
@@ -44,12 +51,15 @@ const SESSION_GAP = 5000;
 /** Event names a region may listen for. `open` and `error` are the connection's own. */
 const NAME = /^[\w.:-]{1,64}$/;
 const OWN = new Set(["open", "error"]);
+/** What the live hub starts a connection with: it could not resume (catch up), or it did. */
+const FRESH = "ui:live";
+const RESUMED = "ui:resumed";
 /** What a stream's refusal means for good: nothing to send, or not allowed. */
 const FINAL = new Set([204, 401, 403]);
 
 /**
- * @typedef {{name: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number}} Sub
- * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string, changed: number}} Stream
+ * @typedef {{names: string[], key: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number}} Sub
+ * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string, changed: number, last: string, hub: boolean, resuming: boolean}} Stream
  */
 
 /** One stream per address. @type {Map<string, Stream>} */
@@ -108,7 +118,7 @@ function fire(s, el) {
 /** @param {Stream} s @param {string} name */
 function heard(s, name) {
   for (const [el, sub] of s.subs) {
-    if (sub.name !== name) continue;
+    if (!sub.names.includes(name)) continue;
     if (sub.busy && !stalled(sub)) sub.dirty = true;
     else if (!sub.timer) sub.timer = /** @type {any} */ (setTimeout(() => fire(s, el), QUIET));
   }
@@ -124,15 +134,33 @@ function catchUp(s) {
   }
 }
 
+/** Keeps the id of what was heard, to come back from. @param {Stream} s @param {Event} e */
+function note(s, e) {
+  const id = /** @type {MessageEvent} */ (e).lastEventId;
+  if (id) s.last = id;
+}
+
 /** @param {Stream} s */
 function listen(s) {
   const es = s.es;
   if (!es) return;
   for (const sub of s.subs.values()) {
-    if (s.listening.has(sub.name)) continue;
-    s.listening.add(sub.name);
-    es.addEventListener(sub.name, () => heard(s, sub.name));
+    for (const name of sub.names) {
+      if (s.listening.has(name)) continue;
+      s.listening.add(name);
+      es.addEventListener(name, (e) => {
+        note(s, e);
+        heard(s, name);
+      });
+    }
   }
+}
+
+/** The stream's address with the last id heard, so the hub says only what was missed. @param {Stream} s */
+function resumeUrl(s) {
+  const url = new URL(s.url);
+  url.searchParams.set("last_event_id", s.last);
+  return url.href;
 }
 
 /** Asks once what a stream that never opened answers: the browser says only that it failed. @param {Stream} s */
@@ -159,11 +187,29 @@ async function probe(s) {
 function open(s) {
   // A retry that is pending is the only thing that reopens a failed stream.
   if (s.es || s.retry || s.stopped || hidden() || !s.subs.size) return;
-  const es = new EventSource(s.url);
+  // A hub that heard us before is asked for what we missed; any other stream is caught up with.
+  s.resuming = s.hub && !!s.last;
+  const es = new EventSource(s.resuming ? resumeUrl(s) : s.url);
   s.es = es;
   s.listening = new Set();
   s.opened = false;
   s.token = token();
+  es.addEventListener(RESUMED, (e) => {
+    s.hub = true;
+    note(s, e);
+    if (!s.resuming) return;
+    // Nothing to catch up with: what was missed follows as events.
+    s.resuming = false;
+    s.missed = false;
+    clearTimeout(s.wait);
+  });
+  es.addEventListener(FRESH, (e) => {
+    s.hub = true;
+    note(s, e);
+    if (!s.resuming) return;
+    s.resuming = false;
+    catchUp(s);
+  });
   paint(s, s.failed ? "retry" : "connecting");
   // An event a stream names `open` or `error` reaches these handlers too, as a MessageEvent.
   es.onopen = (e) => {
@@ -171,11 +217,20 @@ function open(s) {
     s.opened = true;
     s.probed = false;
     paint(s, "on");
-    // Whatever was said while it was down was lost.
+    // Whatever was said while it was down was lost, unless the hub says it again.
     const owed = s.failed > 0 || s.missed;
     clearTimeout(s.steady);
     s.steady = /** @type {any} */ (setTimeout(() => (s.failed = 0), STEADY));
-    if (owed) catchUp(s);
+    if (!owed) return;
+    if (!s.resuming) {
+      catchUp(s);
+      return;
+    }
+    clearTimeout(s.wait);
+    s.wait = /** @type {any} */ (setTimeout(() => {
+      s.resuming = false;
+      catchUp(s);
+    }, CATCH_WAIT));
   };
   es.onerror = (e) => {
     if (e instanceof MessageEvent) return;
@@ -251,24 +306,25 @@ function scanLive() {
   const wanted = new Map();
   for (const el of every("[data-ui-live-src]")) {
     const raw = el.getAttribute("data-ui-live-src") || "";
-    const name = el.getAttribute("data-ui-live-event") || "message";
-    // A stream on another site is no stream of ours, and a name must be a name an event can have.
-    if (!el.id || !sameOrigin(raw) || !NAME.test(name) || OWN.has(name)) continue;
-    wanted.set(el, { url: new URL(raw, location.href).href, name });
+    // A name must be a name an event can have; a region with none left listens for nothing.
+    const names = (el.getAttribute("data-ui-live-event") || "message").split(/\s+/).filter((n) => NAME.test(n) && !OWN.has(n));
+    // A stream on another site is no stream of ours.
+    if (!el.id || !sameOrigin(raw) || !names.length) continue;
+    wanted.set(el, { url: new URL(raw, location.href).href, names, key: names.join(" ") });
   }
   for (const s of [...streams.values()]) {
     for (const el of [...s.subs.keys()]) {
       const now = wanted.get(el);
-      if (!el.isConnected || !now || now.url !== s.url || now.name !== s.subs.get(el)?.name) leave(s, el);
+      if (!el.isConnected || !now || now.url !== s.url || now.key !== s.subs.get(el)?.key) leave(s, el);
     }
   }
-  for (const [el, { url, name }] of wanted) {
+  for (const [el, { url, names, key }] of wanted) {
     let s = streams.get(url);
     if (!s) {
-      s = { url, es: null, subs: new Map(), failed: 0, retry: 0, steady: 0, wait: 0, listening: new Set(), state: "connecting", missed: false, opened: false, probed: false, stopped: false, token: token(), changed: -Infinity };
+      s = { url, es: null, subs: new Map(), failed: 0, retry: 0, steady: 0, wait: 0, listening: new Set(), state: "connecting", missed: false, opened: false, probed: false, stopped: false, token: token(), changed: -Infinity, last: "", hub: false, resuming: false };
       streams.set(url, s);
     }
-    if (!s.subs.has(el)) s.subs.set(el, { name, timer: 0, busy: false, dirty: false, since: 0, run: 0 });
+    if (!s.subs.has(el)) s.subs.set(el, { names, key, timer: 0, busy: false, dirty: false, since: 0, run: 0 });
     el.setAttribute("data-live", hidden() ? "paused" : s.state);
     open(s);
     listen(s);
@@ -301,6 +357,8 @@ function session() {
     s.stopped = false;
     s.failed = 0;
     s.missed = true;
+    // Another reader: what the page shows was drawn for the last one, so it all comes again.
+    s.last = "";
     if (hidden()) paint(s, "paused");
     open(s);
   }
