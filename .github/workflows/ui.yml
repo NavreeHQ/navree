@@ -10,6 +10,7 @@ on:
       - "apps/ui-proof/**"
       - "apps/store-demo/**"
       - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
       - "apps/ui-docs/**"
       - "apps/website/content/ui/**"
       - "e2e/ui/**"
@@ -75,6 +76,7 @@ jobs:
       - run: cargo build --release -p ui-proof
       - run: cargo build --release -p store-demo
       - run: cargo build --release -p inbox-demo
+      - run: cargo build --release -p board-demo
       - run: npm ci
         working-directory: e2e/ui
       - run: npx playwright install --with-deps chromium firefox webkit
@@ -86,8 +88,10 @@ jobs:
           # The store seeds 200,000 orders when it starts, which takes a while.
           STORE_SIMULATOR=off STORE_TEST_HOOKS=1 target/release/store-demo &
           INBOX_SCALE=2000 INBOX_SIMULATOR=off INBOX_TICK=off INBOX_TEST_HOOKS=1 target/release/inbox-demo &
+          BOARD_SIMULATOR=off BOARD_TEST_HOOKS=1 BOARD_DATABASE_URL="sqlite://target/board-demo.db?mode=rwc" target/release/board-demo &
           until curl -sf http://127.0.0.1:8090/plain >/dev/null; do sleep 0.2; done
           until curl -sf http://127.0.0.1:8092/plain >/dev/null; do sleep 0.2; done
           timeout 300 bash -c 'until curl -sf http://127.0.0.1:8095/ >/dev/null; do sleep 0.5; done'
           until curl -sf http://127.0.0.1:8096/inbox >/dev/null; do sleep 0.2; done
+          until curl -sf http://127.0.0.1:8097/ >/dev/null; do sleep 0.2; done
           cd e2e/ui && UI_LOGBOOK_URL=http://127.0.0.1:8092 STORE_BROWSERS=chromium,firefox,webkit npm test
