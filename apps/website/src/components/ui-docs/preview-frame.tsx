@@ -100,7 +100,7 @@ function watchOverlays(frame: HTMLIFrameElement, grow: (height: number) => void,
   let pending = 0;
   let quiet = 0;
   let held = false;
-  const watched = new Set<Element>();
+  const watched = new Set<HTMLElement>();
   const sizes = new win.ResizeObserver(() => schedule());
 
   const update = () => {

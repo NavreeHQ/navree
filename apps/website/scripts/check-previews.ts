@@ -142,7 +142,8 @@ function shownIn(frame: Frame, opener: Locator | null): Promise<Shown[]> {
       };
     });
   };
-  return opener ? opener.evaluate(read) : frame.evaluate(() => read(null));
+  // `read` runs in the frame: it is sent as it is written, so it uses nothing from here.
+  return opener ? opener.evaluate(read) : frame.evaluate(read, null);
 }
 
 /** The frame's own height, in its px: unscaled, as the page inside it sees it. */
