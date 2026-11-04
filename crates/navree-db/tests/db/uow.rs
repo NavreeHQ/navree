@@ -24,6 +24,31 @@ async fn uow_commits_writes_made_through_its_transaction() {
 }
 
 #[tokio::test]
+async fn a_uows_isolation_level_is_chosen_before_its_transaction_begins() {
+    use navree_db::IsolationLevel;
+
+    let temp = TempDb::new();
+    let db = notes_db(&temp).await;
+    let uow = db.uow(None, None).await;
+    assert_eq!(uow.isolation(), None, "the server's own level by default");
+    uow.set_isolation(IsolationLevel::ReadCommitted)
+        .await
+        .expect("before the first statement");
+    assert_eq!(uow.isolation(), Some(IsolationLevel::ReadCommitted));
+    record::insert(&uow, &new_note("a")).await.expect("insert");
+    // Too late once the transaction has begun: refused, not ignored.
+    let late = uow
+        .set_isolation(IsolationLevel::Serializable)
+        .await
+        .expect_err("after the first statement");
+    assert_eq!(late.kind(), ErrorKind::InvalidStatement);
+    assert!(late.to_string().contains("before"), "{late}");
+    assert_eq!(uow.isolation(), Some(IsolationLevel::ReadCommitted));
+    uow.commit().await.expect("commit");
+    assert!(uow.set_isolation(IsolationLevel::ReadCommitted).await.is_err(), "finished");
+}
+
+#[tokio::test]
 async fn uow_rollback_discards_writes() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;

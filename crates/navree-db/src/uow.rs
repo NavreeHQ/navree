@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::queries::{QueryCounter, log_stats};
 use crate::{
-    Backend, Db, DbError, Executed, Executor, QueryStats, Row, RowStream, Transaction, TxOptions,
-    mysql,
+    Backend, Db, DbError, ErrorKind, Executed, Executor, IsolationLevel, QueryStats, Row,
+    RowStream, Transaction, TxOptions, mysql,
 };
 
 /// What happened to a record.
@@ -194,6 +194,8 @@ struct UowInner {
     request_id: Option<String>,
     /// The workspace the work is done in, once one was entered.
     workspace: Mutex<Option<Uuid>>,
+    /// The isolation level the transaction begins at, when one was chosen.
+    isolation: Mutex<Option<IsolationLevel>>,
     tx: tokio::sync::Mutex<TxState>,
     /// The transaction while change observers run inside the commit (the
     /// unit of work already counts as finished).
@@ -262,6 +264,7 @@ impl Uow {
                 impersonator,
                 request_id,
                 workspace: Mutex::new(None),
+                isolation: Mutex::new(None),
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 observing: Mutex::new(None),
                 session_variables: Mutex::new(Vec::new()),
@@ -271,6 +274,46 @@ impl Uow {
                 queries: Mutex::new(QueryCounter::default()),
             }),
         }
+    }
+
+    /// Chooses the isolation level the unit of work's transaction begins at,
+    /// on PostgreSQL and MySQL, in place of the server's or the pool's own
+    /// (`database.postgres.isolation_level`, `database.mysql.isolation_level`).
+    /// SQLite's transactions are serializable whatever is chosen. It must come
+    /// before the first statement: once the transaction has begun, or the unit
+    /// of work has finished, it is refused, so a level is never silently not
+    /// the one asked for.
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
+    /// use navree_db::IsolationLevel;
+    ///
+    /// let uow = db.uow(None, None).await;
+    /// uow.set_isolation(IsolationLevel::ReadCommitted).await?;
+    /// // every statement through `uow` now runs in a READ COMMITTED transaction
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorKind::InvalidStatement`] when the transaction has begun or the
+    /// unit of work has finished.
+    pub async fn set_isolation(&self, level: IsolationLevel) -> Result<(), DbError> {
+        let state = self.inner.tx.lock().await;
+        if !matches!(*state, TxState::Idle) {
+            return Err(DbError::new(
+                ErrorKind::InvalidStatement,
+                "a unit of work's isolation level is chosen before its first statement",
+            ));
+        }
+        *lock(&self.inner.isolation) = Some(level);
+        Ok(())
+    }
+
+    /// The isolation level chosen with [`set_isolation`](Uow::set_isolation),
+    /// or `None` for the server's or the pool's own.
+    pub fn isolation(&self) -> Option<IsolationLevel> {
+        *lock(&self.inner.isolation)
     }
 
     /// The statements the unit of work ran on its connection while it was
@@ -673,9 +716,12 @@ impl Uow {
         Box::pin(async move {
             let db = &self.inner.db;
             let backend = db.backend();
-            let options = match backend {
-                Backend::Sqlite => TxOptions::new().immediate(),
-                Backend::Postgres | Backend::MySql => TxOptions::new(),
+            let options = match (backend, self.isolation()) {
+                (Backend::Sqlite, _) => TxOptions::new().immediate(),
+                (Backend::Postgres | Backend::MySql, Some(level)) => {
+                    TxOptions::new().isolation(level)
+                }
+                (Backend::Postgres | Backend::MySql, None) => TxOptions::new(),
             };
             let tx = db.begin_with(options).await?;
             if let Some(statement) = self.settings_statement(backend) {
