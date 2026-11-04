@@ -362,7 +362,7 @@ async fn sasl_plain_authenticates_and_wrong_credentials_fail() {
         sasl: Some(SaslOptions {
             mechanism: "PLAIN".into(),
             username: "deals".into(),
-            password: password.into(),
+            password: password.to_owned().into(),
         }),
         ..options()
     };
@@ -379,7 +379,7 @@ async fn sasl_plain_authenticates_and_wrong_credentials_fail() {
         sasl: Some(SaslOptions {
             mechanism: "SCRAM-SHA-256".into(),
             username: "deals".into(),
-            password: "s3cret".into(),
+            password: "s3cret".to_owned().into(),
         }),
         ..options()
     };

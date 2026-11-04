@@ -1,10 +1,11 @@
 //! [`MicroOptions`]: the `micro` configuration section.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::PathBuf;
 
 use navree_config::ConfigSection;
-use navree_contracts::Backoff;
+use navree_contracts::{Backoff, Secret};
 use serde::Deserialize;
 
 use crate::{Codec, Transport, TransportKind};
@@ -38,7 +39,11 @@ use crate::{Codec, Transport, TransportKind};
 ///
 /// As environment variables: `APP_MICRO__SERVICE=deals`,
 /// `APP_MICRO__TRANSPORT=nats`, `APP_MICRO__URL=nats://nats.internal:4222`.
-#[derive(Clone, Debug, Deserialize)]
+///
+/// `Debug` never shows a credential: URL passwords are masked, and the
+/// NATS token, the Kafka SASL password and the MQTT password are
+/// [`Secret`]s.
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct MicroOptions {
     /// The service's name: its consumer group, its client id and the
@@ -123,6 +128,37 @@ impl Default for MicroOptions {
             mqtt: MqttOptions::default(),
             clients: BTreeMap::new(),
         }
+    }
+}
+
+/// The URL's password is masked.
+impl fmt::Debug for MicroOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MicroOptions")
+            .field("service", &self.service)
+            .field("transport", &self.transport)
+            .field("url", &self.url.as_deref().map(redact_url))
+            .field("codec", &self.codec)
+            .field("request_timeout_ms", &self.request_timeout_ms)
+            .field("connect_timeout_ms", &self.connect_timeout_ms)
+            .field("concurrency", &self.concurrency)
+            .field("listen_with_serve", &self.listen_with_serve)
+            .field("max_message_bytes", &self.max_message_bytes)
+            .field("forward_auth", &self.forward_auth)
+            .field("outbox", &self.outbox)
+            .field("inbox", &self.inbox)
+            .field("inbox_retention_hours", &self.inbox_retention_hours)
+            .field("outbox_poll_ms", &self.outbox_poll_ms)
+            .field("auto_setup", &self.auto_setup)
+            .field("events", &self.events)
+            .field("tcp", &self.tcp)
+            .field("nats", &self.nats)
+            .field("kafka", &self.kafka)
+            .field("rabbitmq", &self.rabbitmq)
+            .field("redis", &self.redis)
+            .field("mqtt", &self.mqtt)
+            .field("clients", &self.clients)
+            .finish()
     }
 }
 
@@ -389,8 +425,9 @@ pub struct NatsOptions {
     /// fails at connect. Use `token`, a user and password in the URL, or
     /// TLS client certificates.
     pub credentials: Option<PathBuf>,
-    /// A token, for servers with token authentication.
-    pub token: Option<String>,
+    /// A token, for servers with token authentication
+    /// (`APP_MICRO__NATS__TOKEN`). Never shown in `Debug`.
+    pub token: Option<Secret<String>>,
     /// TLS files.
     pub tls: TlsOptions,
 }
@@ -418,9 +455,10 @@ pub struct SaslOptions {
     /// The user name.
     #[serde(default)]
     pub username: String,
-    /// The password (`APP_MICRO__KAFKA__SASL__PASSWORD`).
+    /// The password (`APP_MICRO__KAFKA__SASL__PASSWORD`). Never shown in
+    /// `Debug`.
     #[serde(default)]
-    pub password: String,
+    pub password: Secret<String>,
 }
 
 /// Kafka settings (`micro.kafka`).
@@ -519,8 +557,8 @@ pub struct MqttOptions {
     pub session_expiry_secs: u32,
     /// The user name.
     pub username: Option<String>,
-    /// The password.
-    pub password: Option<String>,
+    /// The password (`APP_MICRO__MQTT__PASSWORD`). Never shown in `Debug`.
+    pub password: Option<Secret<String>>,
     /// TLS files.
     pub tls: TlsOptions,
 }
@@ -540,8 +578,9 @@ impl Default for MqttOptions {
 }
 
 /// A named client (`micro.clients.<name>`): the keys of the `micro` section
-/// a client uses. Unset keys take the app's values.
-#[derive(Clone, Debug, Default, Deserialize)]
+/// a client uses. Unset keys take the app's values. `Debug` masks the URL's
+/// password.
+#[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct ClientOptions {
     /// The transport (required).
@@ -564,6 +603,23 @@ pub struct ClientOptions {
     pub redis: Option<RedisOptions>,
     /// MQTT settings.
     pub mqtt: Option<MqttOptions>,
+}
+
+impl fmt::Debug for ClientOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClientOptions")
+            .field("transport", &self.transport)
+            .field("url", &self.url.as_deref().map(redact_url))
+            .field("codec", &self.codec)
+            .field("request_timeout_ms", &self.request_timeout_ms)
+            .field("tcp", &self.tcp)
+            .field("nats", &self.nats)
+            .field("kafka", &self.kafka)
+            .field("rabbitmq", &self.rabbitmq)
+            .field("redis", &self.redis)
+            .field("mqtt", &self.mqtt)
+            .finish()
+    }
 }
 
 /// A URL with its password masked, for logs.
@@ -707,6 +763,54 @@ mod tests {
             errors,
             ["micro.transport = \"nats\" needs the `micro-nats` feature of navree"]
         );
+    }
+
+    #[test]
+    fn debug_never_shows_credentials() {
+        let options = parse(json!({
+            "transport": "nats",
+            "url": "amqps://deals:url-secret@rabbitmq:5671/crm",
+            "nats": { "token": "nats-token-secret" },
+            "kafka": {
+                "sasl": { "mechanism": "PLAIN", "username": "deals", "password": "kafka-sasl-secret" },
+            },
+            "mqtt": { "username": "deals", "password": "mqtt-password-secret" },
+            "clients": {
+                "billing": {
+                    "transport": "mqtt",
+                    "url": "mqtts://billing:client-url-secret@mqtt.internal:8883",
+                    "mqtt": { "username": "billing", "password": "client-mqtt-secret" },
+                },
+            },
+        }));
+        let printed = format!("{options:?}");
+        for secret in [
+            "url-secret",
+            "nats-token-secret",
+            "kafka-sasl-secret",
+            "mqtt-password-secret",
+            "client-url-secret",
+            "client-mqtt-secret",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(
+            printed.contains("amqps://deals:***@rabbitmq:5671/crm"),
+            "{printed}"
+        );
+        assert!(printed.contains("[redacted]"), "{printed}");
+
+        // The transports still read the values.
+        let token = options
+            .nats
+            .token
+            .as_ref()
+            .map(|token| token.expose().as_str());
+        assert_eq!(token, Some("nats-token-secret"));
+        let sasl = options.kafka.sasl.as_ref().unwrap();
+        assert_eq!(sasl.password.expose(), "kafka-sasl-secret");
+        let password = options.mqtt.password.as_ref().map(|p| p.expose().as_str());
+        assert_eq!(password, Some("mqtt-password-secret"));
     }
 
     #[test]

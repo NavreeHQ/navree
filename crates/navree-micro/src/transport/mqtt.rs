@@ -145,7 +145,11 @@ impl MqttTransport {
         };
         let settings = Settings {
             username: options.username.clone().or_else(|| url.username.clone()),
-            password: options.password.clone().or_else(|| url.password.clone()),
+            password: options
+                .password
+                .as_ref()
+                .map(|password| password.expose().clone())
+                .or_else(|| url.password.clone()),
             url,
             prefix: options.prefix.trim_end_matches('/').to_owned(),
             client_id,

@@ -1633,7 +1633,7 @@ mod tests {
             sasl: Some(crate::SaslOptions {
                 mechanism: "GSSAPI".into(),
                 username: "u".into(),
-                password: "p".into(),
+                password: "p".to_owned().into(),
             }),
             ..KafkaOptions::default()
         };

@@ -435,7 +435,7 @@ async fn connect_options(
         )));
     }
     if let Some(token) = &options.token {
-        connect = connect.token(token.clone());
+        connect = connect.token(token.expose().clone());
     }
     if let Some(ca) = &options.tls.ca {
         connect = connect.add_root_certificates(ca.clone());

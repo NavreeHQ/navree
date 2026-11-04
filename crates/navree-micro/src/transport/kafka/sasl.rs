@@ -16,7 +16,11 @@ pub(crate) async fn authenticate(conn: &Conn, credentials: &SaslOptions) -> Resu
     sasl_handshake(conn, mechanism).await?;
     match mechanism {
         "PLAIN" => {
-            sasl_authenticate(conn, plain(&credentials.username, &credentials.password)).await?;
+            sasl_authenticate(
+                conn,
+                plain(&credentials.username, credentials.password.expose()),
+            )
+            .await?;
             Ok(())
         }
         "SCRAM-SHA-256" | "SCRAM-SHA-512" => {
@@ -26,7 +30,12 @@ pub(crate) async fn authenticate(conn: &Conn, credentials: &SaslOptions) -> Resu
                 Hash::Sha512
             };
             let nonce = uuid::Uuid::new_v4().simple().to_string();
-            let mut scram = Scram::new(hash, &credentials.username, &credentials.password, &nonce);
+            let mut scram = Scram::new(
+                hash,
+                &credentials.username,
+                credentials.password.expose(),
+                &nonce,
+            );
             let server_first = sasl_authenticate(conn, Bytes::from(scram.client_first())).await?;
             let client_final = scram.client_final(&server_first)?;
             let server_final = sasl_authenticate(conn, Bytes::from(client_final)).await?;
