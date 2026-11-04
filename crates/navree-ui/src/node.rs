@@ -248,6 +248,9 @@ impl Uses {
     /// The toolbar module: one tab stop with the arrow keys, and what does not fit
     /// moved into a menu.
     pub const TOOLBAR: Self = Self(1 << 14);
+    /// The sortable module: lists and boards whose items move by pointer, touch
+    /// or keys, each move posted to the server.
+    pub const SORTABLE: Self = Self(1 << 15);
     /// The split module: separators that resize panes by pointer and by the keys of
     /// the window splitter pattern, collapsing panes, and saving the sizes.
     pub const SPLIT: Self = Self(1 << 16);
@@ -257,9 +260,6 @@ impl Uses {
     /// The lazy module: lists that load pages by cursor as they are read, keep the
     /// reader's place, drop what is far off screen, and merge live changes.
     pub const LAZY: Self = Self(1 << 18);
-    /// The sortable module: lists and boards whose items move by pointer, touch
-    /// or keys, each move posted to the server.
-    pub const SORTABLE: Self = Self(1 << 16);
 
     /// Both sets together.
     #[must_use]
@@ -834,6 +834,7 @@ mod tests {
             Uses::SLIDER,
             Uses::TREE,
             Uses::TOOLBAR,
+            Uses::SORTABLE,
         ];
         for module in [Uses::SPLIT, Uses::KEYS, Uses::LAZY] {
             assert!(known.iter().all(|other| other.0 & module.0 == 0));
