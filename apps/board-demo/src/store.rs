@@ -168,9 +168,14 @@ pub struct Ranks<'a> {
     pub viewer: &'a Person,
 }
 
-/// The card `key` names, when it is a number.
+/// The card `key` names: digits only, no sign and no leading zero, so one card has
+/// one key. Anything else names no card.
 fn id_of(key: &str) -> i64 {
-    key.parse().unwrap_or(0)
+    let plain = !key.is_empty()
+        && key.len() <= 18
+        && key.bytes().all(|b| b.is_ascii_digit())
+        && !key.starts_with('0');
+    if plain { key.parse().unwrap_or(0) } else { 0 }
 }
 
 impl RankedLists for Ranks<'_> {
@@ -555,6 +560,12 @@ pub async fn place_and_write(
     at: i64,
 ) -> Result<Result<Placement, navree::ui::Refusal>, OrmError> {
     let ranks = Ranks { uow, viewer };
+    // A card in Done is a lead's to reopen, as it was a lead's to close.
+    if !viewer.is_lead() && mv.from_list == Column::Done.key() && mv.to_list != Column::Done.key() {
+        return Ok(Err(navree::ui::Refusal::Refused {
+            reason: "Only a lead can reopen a card from Done.".to_owned(),
+        }));
+    }
     let mut placed = mv.place(&ranks).await?;
     if let Ok(Placement {
         rank: None,

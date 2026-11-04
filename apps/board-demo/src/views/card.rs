@@ -144,7 +144,7 @@ pub fn checklist(data: &CardData) -> Node {
         SortItem::new(check.id.to_string(), check.text.clone()).body(
             el("form")
                 .attr("method", "post")
-                .attr("action", format!("/checks/{}/toggle", check.id))
+                .attr("action", format!("/checks/{}/done", check.id))
                 .attr("id", format!("check-{}", check.id))
                 .flag("data-ui-form", true)
                 .uses(Uses::CORE)
