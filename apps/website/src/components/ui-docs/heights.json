@@ -1,0 +1,4 @@
+{
+  "$comment": "Written by `pnpm check:previews --measure`: the height each preview settles at in the docs column at 1440 px. A frame starts at it, so the page doesn't shift as the frames load.",
+  "heights": {}
+}

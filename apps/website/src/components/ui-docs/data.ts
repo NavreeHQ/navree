@@ -11,6 +11,8 @@ import api from "@content/ui/api.json";
 import catalog from "@content/ui/catalog.json";
 import toolkit from "@content/ui/toolkit.json";
 
+import measured from "./heights.json";
+
 import type { FlagWeights } from "./weights";
 
 export type Slot = { slot: string; tag: string; count: number; children: Slot[] };
@@ -94,6 +96,17 @@ export function example(id: string): UiExample {
   const found = examples.get(id);
   if (!found) throw new Error(`UI docs: no example "${id}" in content/ui/catalog.json (run \`cargo run -p ui-docs\`)`);
   return found;
+}
+
+const heights = (measured as { heights: Record<string, number> }).heights;
+
+/**
+ * The height a preview starts at: the height it settles at in the docs column, as
+ * `pnpm check:previews --measure` found it, or the example's own least height. A
+ * frame that grows to what it shows then doesn't shift the page as it loads.
+ */
+export function startHeight(example: UiExample): number {
+  return example.fit ? Math.max(example.height, heights[example.id] ?? 0) : example.height;
 }
 
 export function component(id: string): UiComponent {

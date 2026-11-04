@@ -35,6 +35,7 @@ import {
   example as findExample,
   groups,
   kb,
+  startHeight,
   toolkitInfo,
   typeDoc,
   type Method,
@@ -71,7 +72,7 @@ export async function UiPreview({ example: id, defer = false }: { example: strin
         <PreviewFrame
           src={example.src}
           title={`${owner.name}: ${example.title}, rendered by navree-ui`}
-          height={example.height}
+          height={startHeight(example)}
           width={example.width}
           fit={example.fit}
           phoneHeight={example.fit ? undefined : PHONE_HEIGHT}
