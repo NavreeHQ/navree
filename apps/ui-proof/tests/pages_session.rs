@@ -34,6 +34,9 @@ impl Controller for Pages {
             RouteDef::on(Method::POST, "!/save", || async { View::new("Saved") })
                 .public()
                 .page(),
+            RouteDef::on(Method::POST, "!/save-data", || async { View::new("Saved") })
+                .public()
+                .json_only(),
         ]
     }
 }
@@ -120,4 +123,27 @@ async fn a_script_gets_the_json_error_it_always_got() {
     assert_eq!(response.status(), 403);
     assert_eq!(response.header("content-type"), Some("application/json"));
     assert_eq!(response.json_value()["code"], "csrf_token_mismatch");
+}
+
+#[tokio::test]
+async fn a_json_only_route_answers_a_refused_token_as_data_for_every_client() {
+    // The CSRF check is a layer ahead of the router: the route has not run, and its mark still decides.
+    let app = app().await;
+    let client = app.client();
+    client.csrf_cookie().await;
+    for (accept, runtime) in [(BROWSER, false), ("*/*", true), ("application/json", false)] {
+        let mut request = client.post("/save-data").header("accept", accept);
+        if runtime {
+            request = request.header("x-navree-ui", "1");
+        }
+        let response = request.send().await;
+        assert_eq!(response.status(), 403, "{accept} {runtime}");
+        assert_eq!(
+            response.header("content-type"),
+            Some("application/json"),
+            "{accept} {runtime}: {}",
+            response.text()
+        );
+        assert_eq!(response.json_value()["code"], "csrf_token_mismatch");
+    }
 }
