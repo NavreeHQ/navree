@@ -483,6 +483,36 @@
     "constructors": [],
     "methods": [
       {
+        "name": "appearance",
+        "generics": "",
+        "args": "appearance: Appearance",
+        "doc": "Sets how this page looks, in place of what the app, the workspace and the reader chose: a preview, say."
+      },
+      {
+        "name": "layout",
+        "generics": "",
+        "args": "layout: ShellLayout",
+        "doc": "Sets where this page's navigation stands, in place of the app's layout."
+      },
+      {
+        "name": "density",
+        "generics": "",
+        "args": "density: Density",
+        "doc": "Sets this page's density, in place of its theme's."
+      },
+      {
+        "name": "theme_sheet",
+        "generics": "",
+        "args": "theme: &Theme",
+        "doc": "Links the stylesheet of a theme of your own that a part of the page is drawn in. See `View::theme_sheet`."
+      },
+      {
+        "name": "current_appearance",
+        "generics": "",
+        "args": "",
+        "doc": "The appearance the page is drawn in."
+      },
+      {
         "name": "crumb",
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
@@ -528,6 +558,84 @@
         "generics": "",
         "args": "title: impl Into<Cow<'static, str>>",
         "doc": "A page titled `title`."
+      },
+      {
+        "name": "workspace",
+        "generics": "",
+        "args": "setting: ThemeSetting",
+        "doc": "Sets what the workspace chose, from the app's store: it lies over the app's default, and when locked the reader can't change its theme."
+      },
+      {
+        "name": "user",
+        "generics": "",
+        "args": "setting: ThemeSetting",
+        "doc": "Sets what the reader chose, from the app's store, in place of the cookie. A theme set here is the app's word: it needn't be one the shell offers."
+      },
+      {
+        "name": "appearance",
+        "generics": "",
+        "args": "",
+        "doc": "How this request's pages look: the app's default, then the workspace's, then the reader's (the app's store, else the cookie), then `?theme=` and `?mode=`. A locked workspace keeps its theme; the mode is still the reader's."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Appearance": {
+    "name": "Appearance",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/appearance.rs",
+    "summary": "A theme and a mode: how a page looks.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "theme: Theme, mode: Mode",
+        "doc": "`theme` in `mode`."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "value: &str",
+        "doc": "Reads `to_value`'s text. A theme of your own comes back with the id `custom`; match it to yours by `Theme::key`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "theme",
+        "generics": "",
+        "args": "",
+        "doc": "The theme."
+      },
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "",
+        "doc": "The mode."
+      },
+      {
+        "name": "with_theme",
+        "generics": "",
+        "args": "theme: Theme",
+        "doc": "The same with another theme."
+      },
+      {
+        "name": "with_mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "The same with another mode."
+      },
+      {
+        "name": "to_value",
+        "generics": "",
+        "args": "",
+        "doc": "The text to store for it, in a column or a cookie: `dark.ocean`. `Appearance::parse` reads it back."
+      },
+      {
+        "name": "is_default",
+        "generics": "",
+        "args": "",
+        "doc": "Whether this is what a page gets with nothing set: the default theme, dark."
       }
     ],
     "variants": [],
@@ -988,6 +1096,84 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "BuilderDraft": {
+    "name": "BuilderDraft",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/builder.rs",
+    "summary": "A theme being built: the base it starts from and every choice on top, read from the builder's query by a strict parser. Fields that don't parse are kept as typed, with an error, and left out of the theme.",
+    "constructors": [
+      {
+        "name": "from_query",
+        "generics": "",
+        "args": "query: &str",
+        "doc": "Reads a draft from the builder's query string (or a posted body of the same fields). Nothing in it can fail: unknown fields are passed over, values from closed lists that aren't on them are ignored, and a colour that doesn't parse is kept as typed with an error."
+      },
+      {
+        "name": "from_theme",
+        "generics": "",
+        "args": "theme: &Theme",
+        "doc": "A draft that is `theme` exactly, every colour set: what an imported theme becomes, to keep working on it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "to_query",
+        "generics": "",
+        "args": "",
+        "doc": "The draft as the builder's query: what a link or a redirect to it carries."
+      },
+      {
+        "name": "spec",
+        "generics": "",
+        "args": "",
+        "doc": "Everything the draft sets: the base, then the greys, the accent, the corners, density and font, then each colour set by hand."
+      },
+      {
+        "name": "draft",
+        "generics": "",
+        "args": "",
+        "doc": "The draft as a theme, whatever its contrast: what the preview draws. A draft that changes nothing is its base, which needs no stylesheet of its own."
+      },
+      {
+        "name": "shortfalls",
+        "generics": "",
+        "args": "",
+        "doc": "The pairs that fall short in either palette."
+      },
+      {
+        "name": "errors",
+        "generics": "",
+        "args": "",
+        "doc": "The fields that don't parse, by field name, with why."
+      },
+      {
+        "name": "to_theme",
+        "generics": "",
+        "args": "",
+        "doc": "The finished theme: refused while a field doesn't parse or any text pair fails WCAG AA. What a save handler stores."
+      },
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "",
+        "doc": "The mode the page previews in."
+      },
+      {
+        "name": "layout",
+        "generics": "",
+        "args": "",
+        "doc": "The layout the page previews."
+      },
+      {
+        "name": "base",
+        "generics": "",
+        "args": "",
+        "doc": "The base theme."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "BulkAction": {
@@ -2099,6 +2285,39 @@
       {
         "name": "Organisation",
         "doc": "A body: the European Union, the United Nations, ASEAN and the like.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Collapse": {
+    "name": "Collapse",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "What the sidebar does when its button or `Ctrl/Cmd+B` folds it, on wide screens. On phones it is always a sheet.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The `data-collapse` value."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Icons",
+        "doc": "Folds to a rail of icons: the default.",
+        "default": true
+      },
+      {
+        "name": "Offcanvas",
+        "doc": "Slides away entirely.",
+        "default": false
+      },
+      {
+        "name": "Never",
+        "doc": "Never folds: no button on wide screens.",
         "default": false
       }
     ],
@@ -3443,6 +3662,52 @@
     "variants": [],
     "shared": []
   },
+  "Density": {
+    "name": "Density",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "How tightly controls and space are packed. Text keeps its size.",
+    "constructors": [
+      {
+        "name": "from_id",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The density with the id `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The `data-density` value."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The name shown."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Compact",
+        "doc": "Seven eighths: 28 px controls.",
+        "default": false
+      },
+      {
+        "name": "Default",
+        "doc": "32 px controls.",
+        "default": true
+      },
+      {
+        "name": "Comfortable",
+        "doc": "Nine eighths: 36 px controls.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Dialog": {
     "name": "Dialog",
     "kind": "struct",
@@ -4186,6 +4451,68 @@
       {
         "name": "Xl",
         "doc": "48 px wide.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Font": {
+    "name": "Font",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "The text face, from a safe list: Geist ships with the toolkit; the others are the system's own fonts and download nothing.",
+    "constructors": [
+      {
+        "name": "from_id",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The font with the id `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The id stored and posted."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The name shown."
+      },
+      {
+        "name": "stack",
+        "generics": "",
+        "args": "",
+        "doc": "The `font-family` list. Provenance: the system stacks follow Modern Font Stacks (CC0)."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Geist",
+        "doc": "Geist, self-hosted.",
+        "default": true
+      },
+      {
+        "name": "System",
+        "doc": "The operating system's interface font.",
+        "default": false
+      },
+      {
+        "name": "Humanist",
+        "doc": "A humanist sans: Seravek, Gill Sans Nova, Ubuntu, Calibri.",
+        "default": false
+      },
+      {
+        "name": "Geometric",
+        "doc": "A geometric sans: Avenir, Montserrat, Corbel.",
+        "default": false
+      },
+      {
+        "name": "Serif",
+        "doc": "A serif for reading: Charter, Sitka, Cambria.",
         "default": false
       }
     ],
@@ -5364,6 +5691,58 @@
     "variants": [],
     "shared": []
   },
+  "Mode": {
+    "name": "Mode",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/appearance.rs",
+    "summary": "Light, dark, or whatever the device prefers.",
+    "constructors": [
+      {
+        "name": "from_id",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The mode with the id `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The `data-mode` value: `light`, `dark` or `system`."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The name shown."
+      },
+      {
+        "name": "color_scheme",
+        "generics": "",
+        "args": "",
+        "doc": "The `<meta name=\"color-scheme\">` value."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Light",
+        "doc": "Always light.",
+        "default": false
+      },
+      {
+        "name": "Dark",
+        "doc": "Always dark: the toolkit's default.",
+        "default": true
+      },
+      {
+        "name": "System",
+        "doc": "The device's choice, followed live as it changes.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "MultiSelect": {
     "name": "MultiSelect",
     "kind": "struct",
@@ -5850,6 +6229,54 @@
       }
     ]
   },
+  "Palette": {
+    "name": "Palette",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "One mode's colours: a value for every `Token`.",
+    "constructors": [
+      {
+        "name": "from_array",
+        "generics": "",
+        "args": "colours: [Rgb; TOKEN_COUNT]",
+        "doc": "A palette from a colour per token, in `Token::ALL`'s order."
+      }
+    ],
+    "methods": [
+      {
+        "name": "get",
+        "generics": "",
+        "args": "token: Token",
+        "doc": "The colour of `token`."
+      },
+      {
+        "name": "set",
+        "generics": "",
+        "args": "token: Token, colour: Rgb",
+        "doc": "Sets the colour of `token`."
+      },
+      {
+        "name": "with",
+        "generics": "",
+        "args": "token: Token, colour: Rgb",
+        "doc": "This palette with `token` set to `colour`."
+      },
+      {
+        "name": "iter",
+        "generics": "",
+        "args": "",
+        "doc": "Every token and its colour, in `Token::ALL`'s order."
+      },
+      {
+        "name": "derive_accent",
+        "generics": "",
+        "args": "fill: Rgb",
+        "doc": "Sets the accent to `fill` and derives what reads on and around it: the text on it (white where white reads, else a deep shade of its hue), the accent as text (moved toward the page's text until it reaches 4.5:1 on the page and on cards) and the focus ring (3:1 on the page and cards)."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "PhoneInput": {
     "name": "PhoneInput",
     "kind": "struct",
@@ -6227,6 +6654,48 @@
       }
     ]
   },
+  "Radius": {
+    "name": "Radius",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "The corners: controls (buttons, inputs, badges) and surfaces (cards, popovers, dialogs). Never a pill: controls go to 8 px at most.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "control: u8, surface: u8",
+        "doc": "Corners of `control` px on controls and `surface` px on surfaces."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads one length: a whole number of pixels, `4` or `4px`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "control",
+        "generics": "",
+        "args": "",
+        "doc": "The controls' corner, in px."
+      },
+      {
+        "name": "surface",
+        "generics": "",
+        "args": "",
+        "doc": "The surfaces' corner, in px."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "",
+        "doc": "The step's id, when it is one of `STEPS`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "RangeRules": {
     "name": "RangeRules",
     "kind": "struct",
@@ -6451,6 +6920,102 @@
         "generics": "",
         "args": "status: StatusCode",
         "doc": "Sets the status of the ops response."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Rgb": {
+    "name": "Rgb",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/colour.rs",
+    "summary": "An sRGB colour, eight bits a channel. There is no alpha: contrast is undefined for a colour you can see through.",
+    "constructors": [
+      {
+        "name": "hex",
+        "generics": "",
+        "args": "value: u32",
+        "doc": "The colour `0xrrggbb`."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads `#rgb`, `#rrggbb` (any case) or `rgb(r, g, b)` with whole numbers from 0 to 255, commas or spaces between them. Nothing else: no names, no alpha, no other functions, no escapes. Spaces around the colour are ignored."
+      },
+      {
+        "name": "from_oklab",
+        "generics": "",
+        "args": "[lightness, a, b]: [f64; 3]",
+        "doc": "The colour at an OKLab point, or `None` when the point is outside sRGB."
+      },
+      {
+        "name": "from_oklch",
+        "generics": "",
+        "args": "l: f64, c: f64, h: f64",
+        "doc": "The colour at lightness `l`, chroma `c` and hue `h` (degrees) in OKLCH, with the chroma lowered until it fits in sRGB."
+      }
+    ],
+    "methods": [
+      {
+        "name": "to_u32",
+        "generics": "",
+        "args": "",
+        "doc": "The colour as `0xrrggbb`."
+      },
+      {
+        "name": "to_hex",
+        "generics": "",
+        "args": "",
+        "doc": "`#rrggbb`, lower case: the only way a colour is written into CSS."
+      },
+      {
+        "name": "write_hex",
+        "generics": "",
+        "args": "out: &mut String",
+        "doc": "Writes `to_hex` into `out`."
+      },
+      {
+        "name": "luminance",
+        "generics": "",
+        "args": "",
+        "doc": "The relative luminance, from 0 (black) to 1 (white), as WCAG 2 defines it."
+      },
+      {
+        "name": "contrast",
+        "generics": "",
+        "args": "other: Self",
+        "doc": "The WCAG 2 contrast ratio with `other`, from 1 to 21."
+      },
+      {
+        "name": "to_oklab",
+        "generics": "",
+        "args": "",
+        "doc": "The colour in OKLab: lightness from 0 to 1, then the two axes."
+      },
+      {
+        "name": "to_oklch",
+        "generics": "",
+        "args": "",
+        "doc": "The colour in OKLCH: lightness, chroma and hue in degrees."
+      },
+      {
+        "name": "mix",
+        "generics": "",
+        "args": "other: Self, amount: f64",
+        "doc": "`self` mixed with `other` in OKLab: `0.0` is `self`, `1.0` is `other`."
+      },
+      {
+        "name": "until_contrast",
+        "generics": "",
+        "args": "on: &[Self], ratio: f64, toward: Self",
+        "doc": "`self` moved toward `toward` in OKLab, in steps of 2 %, until it reaches `ratio` against every colour of `on`. `toward` itself when no step does."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "",
+        "doc": "The text to put on a fill of this colour: white wherever white reaches 4.5:1, otherwise a deep shade of the fill's own hue, which never reads as plain black on a bright colour."
       }
     ],
     "variants": [],
@@ -6816,6 +7381,48 @@
     ],
     "methods": [
       {
+        "name": "appearance",
+        "generics": "",
+        "args": "appearance: Appearance",
+        "doc": "Sets how every page looks unless a workspace, the reader or the URL says otherwise: the app's default theme and mode. Dark Navree with nothing set."
+      },
+      {
+        "name": "themes",
+        "generics": "",
+        "args": "themes: impl IntoIterator<Item = Theme>",
+        "doc": "Sets the themes a reader may choose: the `ThemeMenu`'s cards, and the only themes a cookie or the URL can pick. Every built-in by default."
+      },
+      {
+        "name": "theme_menu",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a `ThemeMenu` in the top bar, posting to the toolkit's route, which keeps the reader's choice in a cookie."
+      },
+      {
+        "name": "layout",
+        "generics": "",
+        "args": "layout: ShellLayout",
+        "doc": "Sets where the navigation stands: `ShellLayout::Sidebar` by default."
+      },
+      {
+        "name": "collapse",
+        "generics": "",
+        "args": "collapse: Collapse",
+        "doc": "Sets what folding the sidebar does: `Collapse::Icons` by default."
+      },
+      {
+        "name": "default_appearance",
+        "generics": "",
+        "args": "",
+        "doc": "The app's default appearance."
+      },
+      {
+        "name": "offered_themes",
+        "generics": "",
+        "args": "",
+        "doc": "The themes a reader may choose."
+      },
+      {
         "name": "prefetch_home",
         "generics": "",
         "args": "",
@@ -6861,38 +7468,86 @@
         "name": "for_request",
         "generics": "",
         "args": "path: impl Into<String>, headers: &HeaderMap",
-        "doc": "This shell applied to a request: which link is active, whether the sidebar is collapsed, a toast left for this page. It is what the `AppShell` extractor does for the app's own `Shell`, for a module that serves pages of its own and has no business registering one for the whole app (a debugging tool)."
+        "doc": "This shell applied to a request: which link is active, whether the sidebar is collapsed, a toast left for this page, the reader's theme. It is what the `AppShell` extractor does for the app's own `Shell`, for a module that serves pages of its own and has no business registering one for the whole app (a debugging tool). A `?` in `path` starts its query."
       }
     ],
     "variants": [],
     "shared": []
   },
-  "Side": {
-    "name": "Side",
+  "ShellLayout": {
+    "name": "ShellLayout",
     "kind": "enum",
-    "file": "crates/navree-ui/src/components/overlays.rs",
-    "summary": "Which side of what opens it a popup appears on.",
-    "constructors": [],
-    "methods": [],
-    "variants": [
+    "file": "crates/navree-ui/src/shell.rs",
+    "summary": "Where an app's navigation stands. On phones every layout puts it in a sheet that slides over the page.",
+    "constructors": [
       {
-        "name": "Top",
-        "doc": "Above.",
-        "default": false
+        "name": "from_id",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The layout with the id `id`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The `data-layout` value, and the id a form posts."
       },
       {
-        "name": "Bottom",
-        "doc": "Below: the default.",
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The name shown."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Sidebar",
+        "doc": "A sidebar docked to the edge of the window: the default.",
         "default": true
       },
       {
-        "name": "Left",
-        "doc": "To the left.",
+        "name": "Inset",
+        "doc": "The sidebar on the frame's colour, and the page in a card beside it.",
         "default": false
       },
       {
-        "name": "Right",
-        "doc": "To the right.",
+        "name": "Floating",
+        "doc": "The sidebar as a card floating over the frame.",
+        "default": false
+      },
+      {
+        "name": "Header",
+        "doc": "The links in the top bar, and no sidebar on wide screens.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Side": {
+    "name": "Side",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "Which palette: what `light-dark()` picks between.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "`light` or `dark`."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Light",
+        "doc": "The light palette.",
+        "default": false
+      },
+      {
+        "name": "Dark",
+        "doc": "The dark palette.",
         "default": false
       }
     ],
@@ -7790,6 +8445,287 @@
       }
     ]
   },
+  "Theme": {
+    "name": "Theme",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "A theme: an id, a name and a `ThemeSpec`. The built-in ones are associated constants; `Theme::custom` makes your own.",
+    "constructors": [
+      {
+        "name": "custom",
+        "generics": "",
+        "args": "id: ThemeId, name: impl Into<String>, spec: ThemeSpec",
+        "doc": "A theme of your own, refused when any text pair fails WCAG AA in either palette. The name is only ever shown as text."
+      },
+      {
+        "name": "builtin",
+        "generics": "",
+        "args": "id: &str",
+        "doc": "The built-in theme with the id `id`."
+      },
+      {
+        "name": "from_short_form",
+        "generics": "",
+        "args": "form: &str",
+        "doc": "The theme a short form names: a built-in's id, or a theme's values. A theme from its values is called \"Custom\" and has the id `custom`; its contrast is checked."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "",
+        "doc": "The theme's id: a built-in's name, or yours."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "The name shown."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "",
+        "doc": "One line about it: the built-ins have one."
+      },
+      {
+        "name": "spec",
+        "generics": "",
+        "args": "",
+        "doc": "The colours, corners, density and font."
+      },
+      {
+        "name": "is_builtin",
+        "generics": "",
+        "args": "",
+        "doc": "Whether it ships in the toolkit's stylesheet."
+      },
+      {
+        "name": "key",
+        "generics": "",
+        "args": "",
+        "doc": "The `data-theme` value: a built-in's id, or `c` and twelve hex digits of the theme's hash. Never text you gave."
+      },
+      {
+        "name": "stylesheet",
+        "generics": "",
+        "args": "",
+        "doc": "The theme's stylesheet, for a theme of your own; a built-in needs none."
+      },
+      {
+        "name": "css",
+        "generics": "",
+        "args": "",
+        "doc": "The stylesheet of a theme of your own, as served at `stylesheet`; `None` for a built-in, which is in the toolkit's own."
+      },
+      {
+        "name": "short_form",
+        "generics": "",
+        "args": "",
+        "doc": "The short form a cookie or a URL carries: a built-in's id, or `v1-` and the theme's values."
+      },
+      {
+        "name": "renamed",
+        "generics": "",
+        "args": "id: ThemeId, name: impl Into<String>",
+        "doc": "The same look under another id and name."
+      },
+      {
+        "name": "neutral",
+        "generics": "",
+        "args": "",
+        "doc": "The family of greys a built-in theme is made of; `None` for one with a table of its own (high contrast, or a theme of yours)."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ThemeBuilder": {
+    "name": "ThemeBuilder",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/builder.rs",
+    "summary": "The builder: the form, the preview, the contrast report and the export.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "draft: &BuilderDraft, path: &str",
+        "doc": "The builder for `draft`, on the page at `path`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "save",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a Save button posting the draft (`draft`, its query) to `href`."
+      },
+      {
+        "name": "import",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds an import box posting a stored theme (`json`) to `href`."
+      },
+      {
+        "name": "import_failed",
+        "generics": "",
+        "args": "text: impl Into<String>, errors: Vec<String>",
+        "doc": "Shows a refused import again: the text as pasted and why."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Adds the session's CSRF token to the posts."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "page: AppPage",
+        "doc": "`page` with the builder in it, drawn in the draft when its text passes (else in the base theme), in the draft's mode, layout and density."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ThemeMenu": {
+    "name": "ThemeMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/menu.rs",
+    "summary": "A button that opens the reader's theme and mode: a card for each theme the app offers, each drawn in its own colours, and Light, Dark and System. It is a plain form: with JavaScript off it posts with its Apply button; with it on, a choice applies as it is made, in one round trip.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "current: &Appearance, themes: &[Theme]",
+        "doc": "A menu showing `current`, offering `themes`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "action",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Posts the choice to `href`, where the app keeps it: the form sends `theme` (an id or a short form, see `Theme::from_short_form`), `mode` and `back`."
+      },
+      {
+        "name": "back",
+        "generics": "",
+        "args": "path: impl Into<String>",
+        "doc": "Where to come back to after the choice: this page."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Adds the session's CSRF token, for an app whose posts need one."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the popover's id, when a page has two menus."
+      },
+      {
+        "name": "without_modes",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the mode out: for an app that keeps one mode for everyone."
+      },
+      {
+        "name": "sheets",
+        "generics": "",
+        "args": "",
+        "doc": "The custom themes the menu draws, whose stylesheets the page must link."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ThemeSetting": {
+    "name": "ThemeSetting",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/appearance.rs",
+    "summary": "What one level says about how pages look: a theme, a mode, both or neither. A locked setting keeps its theme from the levels after it; they can still choose the mode.",
+    "constructors": [
+      {
+        "name": "none",
+        "generics": "",
+        "args": "",
+        "doc": "Nothing chosen."
+      },
+      {
+        "name": "theme",
+        "generics": "",
+        "args": "theme: Theme",
+        "doc": "A theme."
+      },
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "A mode."
+      },
+      {
+        "name": "appearance",
+        "generics": "",
+        "args": "appearance: Appearance",
+        "doc": "Both."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "value: &str",
+        "doc": "Reads `mode.theme`, `mode` alone, or `.theme` alone."
+      }
+    ],
+    "methods": [
+      {
+        "name": "locked",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps this level's theme from the levels after it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ThemeSpec": {
+    "name": "ThemeSpec",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "Everything a theme sets: both palettes, the corners, the density and the font.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "palette",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "The palette for `side`."
+      },
+      {
+        "name": "palette_mut",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "The palette for `side`, to change."
+      },
+      {
+        "name": "shortfalls",
+        "generics": "",
+        "args": "",
+        "doc": "The pairs that fall short, in both palettes. Empty means every text pair reaches WCAG AA and every graphic pair 3:1."
+      },
+      {
+        "name": "text_passes",
+        "generics": "",
+        "args": "",
+        "doc": "Whether every text pair reaches WCAG AA in both palettes: what saving and exporting need."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "TimePicker": {
     "name": "TimePicker",
     "kind": "struct",
@@ -8623,6 +9559,183 @@
       {
         "name": "Outline",
         "doc": "A line round each item.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Token": {
+    "name": "Token",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/theme/mod.rs",
+    "summary": "A colour a theme sets, by its CSS custom property.",
+    "constructors": [
+      {
+        "name": "from_name",
+        "generics": "",
+        "args": "name: &str",
+        "doc": "The token called `name` (`ink-0`), exactly."
+      }
+    ],
+    "methods": [
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "The custom property's name, without `--`."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "What the token is for, in a few words."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "",
+        "doc": "The group the builder shows the token in."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Ink0",
+        "doc": "The page.",
+        "default": false
+      },
+      {
+        "name": "Ink1",
+        "doc": "Cards, inputs, the sidebar.",
+        "default": false
+      },
+      {
+        "name": "Ink2",
+        "doc": "Hover.",
+        "default": false
+      },
+      {
+        "name": "Ink3",
+        "doc": "Selected, raised.",
+        "default": false
+      },
+      {
+        "name": "Line",
+        "doc": "Dividers.",
+        "default": false
+      },
+      {
+        "name": "Line2",
+        "doc": "Borders of controls.",
+        "default": false
+      },
+      {
+        "name": "Line3",
+        "doc": "Borders on hover.",
+        "default": false
+      },
+      {
+        "name": "Fg",
+        "doc": "Headings and values.",
+        "default": false
+      },
+      {
+        "name": "Fg1",
+        "doc": "Body text.",
+        "default": false
+      },
+      {
+        "name": "Fg2",
+        "doc": "Secondary text.",
+        "default": false
+      },
+      {
+        "name": "Fg3",
+        "doc": "Hints and labels.",
+        "default": false
+      },
+      {
+        "name": "Accent",
+        "doc": "The primary action's fill.",
+        "default": false
+      },
+      {
+        "name": "AccentInk",
+        "doc": "Text on the accent.",
+        "default": false
+      },
+      {
+        "name": "AccentText",
+        "doc": "The accent as text, on the page and on cards.",
+        "default": false
+      },
+      {
+        "name": "Ring",
+        "doc": "The focus ring.",
+        "default": false
+      },
+      {
+        "name": "Success",
+        "doc": "Good news: a won deal, a rising figure.",
+        "default": false
+      },
+      {
+        "name": "Amber",
+        "doc": "Warnings.",
+        "default": false
+      },
+      {
+        "name": "Danger",
+        "doc": "Failures and destructive actions.",
+        "default": false
+      },
+      {
+        "name": "Info",
+        "doc": "Information.",
+        "default": false
+      },
+      {
+        "name": "Violet",
+        "doc": "A tone for labels.",
+        "default": false
+      },
+      {
+        "name": "Cyan",
+        "doc": "A tone for labels.",
+        "default": false
+      },
+      {
+        "name": "Rose",
+        "doc": "A tone for labels.",
+        "default": false
+      },
+      {
+        "name": "Bar",
+        "doc": "Neutral bars of a chart.",
+        "default": false
+      },
+      {
+        "name": "Chart1",
+        "doc": "The first series of a chart.",
+        "default": false
+      },
+      {
+        "name": "Chart2",
+        "doc": "The second series.",
+        "default": false
+      },
+      {
+        "name": "Chart3",
+        "doc": "The third series.",
+        "default": false
+      },
+      {
+        "name": "Chart4",
+        "doc": "The fourth series.",
+        "default": false
+      },
+      {
+        "name": "Chart5",
+        "doc": "The fifth series.",
         "default": false
       }
     ],

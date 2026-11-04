@@ -439,6 +439,38 @@ pub const COMPONENTS: &[Component] = &[
     component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
     // Pages that aren't components
     component("foundations", "Foundations", &["Size"], "radius").page("/docs/ui/foundations/"),
+    component(
+        "themes",
+        "Themes",
+        &[
+            "Theme",
+            "Appearance",
+            "Mode",
+            "ThemeSetting",
+            "ThemeMenu",
+            "ShellLayout",
+            "Collapse",
+        ],
+        "built-in",
+    )
+    .page("/docs/ui/themes/"),
+    component(
+        "theme-builder",
+        "Theme builder",
+        &[
+            "ThemeBuilder",
+            "BuilderDraft",
+            "ThemeSpec",
+            "Palette",
+            "Token",
+            "Rgb",
+            "Radius",
+            "Density",
+            "Font",
+        ],
+        "default",
+    )
+    .page("/docs/ui/theme-builder/"),
     component("icons", "Icons", &["Icon"], "usage").page("/docs/ui/icons/"),
     component(
         "flags",

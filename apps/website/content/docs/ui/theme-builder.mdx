@@ -1,0 +1,131 @@
+---
+title: "Theme builder"
+description: "A page your developers or an app's admins use to build a theme: colours, corners, density and font, real components in light and dark, a contrast check, and Rust or JSON to take away."
+---
+
+<UiPreview example="theme-builder/default" />
+
+The theme builder is a page you add to your app. Start from a built-in theme, pick an accent, the greys, the corners, the density and a font, or set any colour by hand. The page shows the result as you go: the whole page takes the draft, and real components are drawn in it in light and dark side by side. A contrast check lists every pair, and a theme whose text fails WCAG AA can't be saved or exported.
+
+## Adding it
+
+The builder is a `GET` form, so its state is the page's address: a draft can be shared, reloaded and walked back with the back button. With JavaScript on, the page follows each change in place; with it off, the Preview button does the same.
+
+```rust title="src/settings/theme.rs"
+use navree::http::extract::RawQuery;
+use navree::ui::theme::{BuilderDraft, ThemeBuilder};
+use navree::ui::*;
+
+async fn builder(shell: AppShell, RawQuery(query): RawQuery) -> AppPage {
+    let draft = BuilderDraft::from_query(query.as_deref().unwrap_or(""));
+    ThemeBuilder::new(&draft, "/settings/theme")
+        .save("/settings/theme/save")
+        .import("/settings/theme/import")
+        .page(shell.page("Theme builder"))
+}
+```
+
+`ThemeBuilder::page` puts the builder in the page and draws the page in the draft, its mode and its layout. While the draft's text fails, the page stays in the base theme and only the preview shows the draft.
+
+## Saving and importing
+
+Save posts the draft's query as `draft`. Read it with the same parser and check it again: the server is the authority, whatever the page showed.
+
+```rust title="src/settings/theme.rs"
+async fn save(Form(fields): Form<SaveFields>) -> Reply {
+    let draft = BuilderDraft::from_query(&fields.draft);
+    match draft.to_theme() {
+        Ok(theme) => {
+            themes::store(&theme.to_json()).await;
+            Reply::redirect(format!("/settings/theme?{}", fields.draft)).toast(ToastTone::Success, "Saved.")
+        }
+        Err(_) => Reply::redirect(format!("/settings/theme?{}", fields.draft)),
+    }
+}
+```
+
+`to_theme` refuses a draft while a field doesn't parse (`BuildError::Fields`) or a text pair fails (`BuildError::Contrast`). Import posts the pasted JSON as `json`: `Theme::from_json` reads it, and `BuilderDraft::from_theme(&theme).to_query()` is the address to send the reader to, to keep working on it. A file that isn't a theme is refused with every field that is wrong; show them with `ThemeBuilder::import_failed`.
+
+## What you can set
+
+| Control | Values |
+|---|---|
+| Start from | Any built-in theme |
+| Accent | Green, Blue, Violet, Orange, Rose, Cyan, Amber, Mono, or any colour |
+| Greys | Navree, Neutral, Slate, Stone, Zinc |
+| Corners | Sharp (0 and 0 px), Small (2 and 4), Default (4 and 6), Round (6 and 8), Rounder (8 and 12) |
+| Density | Compact, Default, Comfortable: controls and space at 7/8, 1 and 9/8; text keeps its size |
+| Font | Geist, which ships with the toolkit, or the System, Humanist, Geometric or Serif stack, which download nothing |
+| Every colour | Each of the 28 colour tokens, light and dark, as `#rgb`, `#rrggbb` or `rgb(r, g, b)` |
+
+An accent you pick fills buttons as picked. What reads on and around it is worked out for you: the text on it is white wherever white reaches 4.5:1 and otherwise a deep shade of its own hue; the accent as text moves toward the page's text until it reaches 4.5:1 on the page and on cards; the focus ring reaches 3:1.
+
+## Export
+
+When the draft's text passes, the builder shows it two ways, each with a Copy button:
+
+- **Rust:** a function returning the `Theme`, to paste into your app and give `Shell::appearance` or `Shell::themes`.
+- **A stored theme:** JSON naming its schema, `navree-theme/1`, for a column in your database or a file to share.
+
+## Contrast
+
+The check covers every pair the components draw, in both palettes: body, secondary and hint text on the page, on cards and on hover; text on the accent; the accent as text; and each tone. Text must reach 4.5:1 or the theme is refused. The focus ring and the chart colours should reach 3:1; under it, the builder warns.
+
+## Values from outside
+
+Every value is read on the server. A colour goes through one parser that takes `#rgb`, `#rrggbb` or `rgb(r, g, b)` and nothing else, and is written back as `#` and six digits. The corners, density, font and layout come from closed lists. A name is only ever shown as text. The draft's stylesheet is written by Navree from those values, so nothing typed into the builder reaches the page as CSS or markup; a value that doesn't parse stays in its box, marked, with the reason.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves through the bases, the choices, the colour boxes, the preview, the report and the export. |
+| `Arrow keys` | Move within a group of choices and choose, as in any radio group. |
+| `Enter` | On a base: starts from it. In a box with JavaScript off: previews. |
+
+- Each group of choices is a fieldset with a legend; each colour box is named by its token and palette, such as "Hints in dark".
+- A box whose colour doesn't parse is marked invalid and tied to its message.
+- The contrast summary is a status, so a screen reader hears when a change makes text fail or pass.
+- The swatches and samples are drawn in the draft and hidden from assistive technology; each pair's ratio and result are text.
+
+</UiA11y>
+
+## API
+
+### ThemeBuilder
+
+<UiProps type="ThemeBuilder" />
+
+### BuilderDraft
+
+<UiProps type="BuilderDraft" />
+
+### ThemeSpec
+
+<UiProps type="ThemeSpec" />
+
+### Palette
+
+<UiProps type="Palette" />
+
+### Token
+
+<UiProps type="Token" />
+
+### Rgb
+
+<UiProps type="Rgb" />
+
+### Radius
+
+<UiProps type="Radius" />
+
+### Density
+
+<UiProps type="Density" />
+
+### Font
+
+<UiProps type="Font" />

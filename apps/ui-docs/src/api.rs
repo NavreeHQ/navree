@@ -51,6 +51,11 @@ pub const FILES: &[&str] = &[
     "select/single.rs",
     "cmd.rs",
     "op.rs",
+    "theme/mod.rs",
+    "theme/colour.rs",
+    "theme/appearance.rs",
+    "theme/menu.rs",
+    "theme/builder.rs",
 ];
 
 /// One constructor or method.

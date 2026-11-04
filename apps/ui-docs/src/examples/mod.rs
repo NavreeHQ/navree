@@ -19,6 +19,7 @@ mod patterns;
 mod phone;
 mod pickers;
 mod store;
+mod themes;
 
 /// Every example, in the order the docs list them.
 pub fn all() -> Vec<Example> {
@@ -37,6 +38,7 @@ pub fn all() -> Vec<Example> {
     all.extend(menus::all());
     all.extend(data::all());
     all.extend(patterns::all());
+    all.extend(themes::all());
     all.extend(icons::all());
     all.extend(store::all());
     all

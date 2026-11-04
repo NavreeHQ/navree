@@ -63,6 +63,12 @@ A module that serves pages of its own and has no business registering a shell fo
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
 
+## Layouts and folding
+
+`Shell::layout` places the navigation: a docked sidebar (the default), `ShellLayout::Inset` with the page in a card beside the sidebar, `ShellLayout::Floating` with the sidebar as a card, or `ShellLayout::Header` with the links in the top bar and each labelled group as a menu. `Shell::collapse` sets what folding does: `Collapse::Icons` (the default), `Collapse::Offcanvas` to slide it away, or `Collapse::Never`. On a phone every layout puts the links in a sheet. See [Themes](/docs/ui/themes/#layouts) for each one drawn.
+
+`Shell::theme_menu()` adds the reader's theme and mode to the top bar; see [Themes](/docs/ui/themes/#the-theme-menu).
+
 ## Fetched ahead of a click
 
 Nothing is fetched ahead of a click unless you ask, link by link. `NavItem::prefetch()` fetches a sidebar item when the pointer rests on it or it takes focus, so the page is often there before the click; `NavItem::prefetch_eager()` fetches it as soon as the page is quiet. `AppPage::prefetch_crumbs()` does the same for a page's breadcrumb, and `Shell::prefetch_home()` for the app's name. Each costs a request the user may never need, so ask only for the places users usually go next, and only for pages whose `GET` changes nothing.

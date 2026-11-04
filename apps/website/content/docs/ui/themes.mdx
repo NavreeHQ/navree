@@ -1,0 +1,165 @@
+---
+title: "Themes"
+description: "Seven built-in themes in light, dark or the device's mode, themes of your own, a theme menu, and four shell layouts, all painted right from the first byte."
+---
+
+<UiPreview example="themes/built-in" />
+
+A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
+
+## Built-in themes
+
+| Theme | Constant | Look |
+|---|---|---|
+| Navree | `Theme::NAVREE` | The toolkit's own: green on near-black, or on white |
+| Neutral | `Theme::NEUTRAL` | Plain greys, with a white or black accent |
+| Ocean | `Theme::OCEAN` | Slate greys and a blue accent |
+| Violet | `Theme::VIOLET` | Cool greys and a violet accent |
+| Sunset | `Theme::SUNSET` | Warm greys and an orange accent |
+| Rose | `Theme::ROSE` | Neutral greys and a rose accent |
+| High contrast | `Theme::CONTRAST` | Text at 7:1 or more, borders at 3:1, a bright accent |
+
+Every one ships in the toolkit's stylesheet, so choosing one costs no request. A test checks every text pair of every theme at WCAG AA (4.5:1) in both palettes, and the focus ring and chart colours at 3:1.
+
+<UiPreview example="themes/light" />
+
+## Light, dark and the device's mode
+
+`Mode::Light`, `Mode::Dark` and `Mode::System` are chosen apart from the theme. Each token is written as `light-dark(light, dark)` and the mode only sets `color-scheme`, so System follows the device with no script, and changes the moment the device does.
+
+<UiPreview example="themes/modes" />
+
+## Choosing a theme
+
+An app sets its default on the shell. A workspace, the reader and the URL can each lay their own choice over it, in that order.
+
+```rust title="src/shell.rs"
+use navree::ui::theme::{Appearance, Mode, Theme};
+use navree::ui::*;
+
+pub fn shell() -> Shell {
+    Shell::new("Acme CRM")
+        .appearance(Appearance::new(Theme::OCEAN, Mode::System))
+        .theme_menu()
+        .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)))
+}
+```
+
+| Level | Where it comes from | How |
+|---|---|---|
+| App | `Shell::appearance` | Every page, unless a level below says otherwise |
+| Workspace | Your store | `shell.workspace(ThemeSetting)`; `.locked()` keeps its theme for everyone in it |
+| User | Your store, or the cookie | `shell.user(ThemeSetting)` replaces the cookie |
+| URL | `?theme=ocean&mode=light` | That page only: for a preview or a shared link |
+
+A locked workspace keeps its theme; the reader still picks light or dark. A cookie or a URL can only pick a theme the shell offers: every built-in by default, or the list you give `Shell::themes`.
+
+```rust title="src/deals/pages.rs"
+async fn show(shell: AppShell, user: CurrentUser) -> AppPage {
+    shell
+        .workspace(ThemeSetting::theme(user.workspace.theme()).locked())
+        .user(ThemeSetting::parse(&user.appearance).unwrap_or_default())
+        .page("Deals")
+}
+```
+
+To keep the choice in your own table, store `Appearance::to_value()` (`light.ocean`) and read it back with `Appearance::parse` or `ThemeSetting::parse`.
+
+## The theme menu
+
+`Shell::theme_menu()` puts a button in the top bar. It opens a card for each theme, each drawn in its own colours, and Light, Dark and System. It is a plain form: with JavaScript on, a choice applies as it is made, in one round trip, and focus stays in the menu; with it off, Apply posts and the next page is in the new theme.
+
+<UiPreview example="themes/menu" />
+
+By default it posts to the toolkit's route, which keeps the choice in a cookie for a year, `HttpOnly`, and sends the reader back to the page. The route refuses a post from another site, and only goes back to a path on this one. To keep the choice with the user instead, give the menu your own action: `ThemeMenu::new(&current, &themes).action("/settings/appearance")`. The form posts `theme`, `mode` and `back`.
+
+## A theme of your own
+
+Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust export into your app, or write it yourself:
+
+```rust title="src/theme.rs"
+let theme = Theme::custom(ThemeId::parse("acme")?, "Acme", spec)?;
+```
+
+`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>.css`, where the file's name is the theme's values in a short form. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file.
+
+A stored theme is JSON: `theme.to_json()` writes it, and `Theme::from_json` reads it back, checking every field and naming each one that is wrong.
+
+## Layouts
+
+`Shell::layout` places the navigation; `Shell::collapse` says what folding the sidebar does. On a phone every layout puts the links in a sheet.
+
+| Layout | Looks like |
+|---|---|
+| `ShellLayout::Sidebar` | A sidebar docked to the window's edge: the default |
+| `ShellLayout::Inset` | The sidebar on the frame's colour, and the page in a card beside it |
+| `ShellLayout::Floating` | The sidebar as a card floating over the frame |
+| `ShellLayout::Header` | The links in the top bar; each labelled group is a menu |
+
+<UiPreview example="themes/inset" />
+
+<UiPreview example="themes/floating" />
+
+<UiPreview example="themes/header" />
+
+| Collapse | Folding the sidebar |
+|---|---|
+| `Collapse::Icons` | Folds to a rail of icons: the default |
+| `Collapse::Offcanvas` | Slides away entirely |
+| `Collapse::Never` | Never folds, and has no button on wide screens |
+
+The folded state is kept in a cookie read on the server, so the next page paints folded too.
+
+## Tokens for charts and status
+
+Charts read `--chart-1` to `--chart-5` and `--bar`; status reads `--success`, `--amber`, `--danger` and `--info`, and labels `--violet`, `--cyan` and `--rose`. Text drawn in the accent reads `--accent-text`, and focus rings `--ring`, so any accent stays readable. Every theme sets all of them; see [Foundations](/docs/ui/foundations/).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space` | On the menu's button: opens the menu. |
+| `Tab` | Moves from the themes to the modes and to Apply. |
+| `Arrow keys` | Move between themes, or between Light, Dark and System, and choose it. |
+| `Esc` | Closes the menu. |
+| `Ctrl+B`, `Cmd+B` | Folds or unfolds the sidebar, in the layouts that fold. |
+
+- The menu is a dialog named "Appearance". Themes and modes are radio groups with legends, so a screen reader names the group and the choice.
+- Each card's swatches are drawn in the theme itself and hidden from assistive technology; the theme's name and description are its label.
+- In the header layout a labelled group is a button that opens its links; the current page's link has `aria-current="page"`.
+
+</UiA11y>
+
+## API
+
+### Theme
+
+<UiProps type="Theme" />
+
+### Appearance
+
+<UiProps type="Appearance" />
+
+### Mode
+
+<UiProps type="Mode" />
+
+### ThemeSetting
+
+<UiProps type="ThemeSetting" />
+
+### ThemeMenu
+
+<UiProps type="ThemeMenu" />
+
+### ShellLayout
+
+<UiProps type="ShellLayout" />
+
+### Collapse
+
+<UiProps type="Collapse" />
+
+Next, the [theme builder](/docs/ui/theme-builder/) makes a theme of your own, and [Foundations](/docs/ui/foundations/) lists every token.

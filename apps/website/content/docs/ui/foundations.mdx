@@ -1,19 +1,31 @@
 ---
 title: "Foundations"
-description: "The tokens behind every component: colour, corners, control sizes and type, from one table in the toolkit."
+description: "The tokens behind every component: colour in light and dark, corners, control sizes, density and type, from one table in the toolkit."
 ---
 
-Every colour and length the components use is a CSS custom property from one table, `navree_ui::tokens::TOKENS`. The toolkit's stylesheet, the `@navree/theme` package for React and Vue apps and this website's colours are all generated from it, and tests fail when any of them drifts.
+Every colour and length the components use is a CSS custom property from one table, `navree_ui::tokens::TOKENS`. The toolkit's stylesheet, the `@navree/theme` package for React and Vue apps and this website's colours are all generated from it, and tests fail when any of them drifts. The table is the default theme; [Themes](/docs/ui/themes/) sets the same tokens to other values.
 
 ## Colour
 
-The dark theme ships. Surfaces step up from `ink-0` (the page) to `ink-3`; text steps down from `fg` to `fg-3`; three accents carry meaning.
+Every token has a light value and a dark one, and a page shows one or the other by its mode: light, dark, or whatever the device prefers. Dark is the default. Surfaces step up from `ink-0` (the page) to `ink-3`; text steps down from `fg` to `fg-3`; the accent and the tones carry meaning. The values below are the dark ones.
 
 <UiTokens />
 
+| Token | For |
+|---|---|
+| `ink-0` to `ink-3` | The page, cards and inputs, hover, the selected row |
+| `line`, `line-2`, `line-3` | Dividers, borders of controls, borders on hover |
+| `fg` to `fg-3` | Headings, body text, secondary text, hints |
+| `accent`, `accent-ink` | The primary action's fill, and the text on it |
+| `accent-text` | The accent as text: a link, a sorted column, a chosen item |
+| `ring` | The focus ring |
+| `success`, `amber`, `danger`, `info` | Good news, warnings, failures, information |
+| `violet`, `cyan`, `rose` | Tones for labels |
+| `chart-1` to `chart-5`, `bar` | Chart series, and neutral bars |
+
 - **Green is for one thing at a time:** the primary action of a view, the focus ring, and good news (a won deal, a rising figure). Navigation, selection and hover use the ink steps, never green.
 - **Amber warns, red fails or destroys.** A destructive button and a failed alert are red; a warning is amber.
-- **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1, checked by a test in the crate.
+- **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1 in both modes of every built-in theme, and the focus ring and chart colours reach 3:1, checked by a test in the crate and measured again in real browsers.
 
 <UiPreview example="foundations/colour" />
 
@@ -35,11 +47,11 @@ Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` ma
 
 ## Type
 
-Body text is 14 px Geist and secondary text 13 px. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
+Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a system stack instead (System, Humanist, Geometric or Serif), which downloads nothing. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
 
 ## Density
 
-A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
+A theme's density scales controls and space together while text keeps its size: compact at 7/8 (28 px controls), default, and comfortable at 9/8 (36 px). A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
 
 ## Layout and the shell
 

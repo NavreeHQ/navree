@@ -218,6 +218,8 @@ export const sections: DocsSection[] = [
       "choosing-a-ui",
       "overview",
       "foundations",
+      "themes",
+      "theme-builder",
       "icons",
       "flags",
       "layout",
