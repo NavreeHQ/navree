@@ -79,7 +79,7 @@ export type Layout = {
   steps: number[];
   /** How many glyphs can still show once the opening is over (they come first: the opening's rain and dust follow). */
   essential: number;
-  /** The mask the picture's shader reads: red the screen's glass, green the edge rain zones. */
+  /** The mask the picture's shader reads: red the screen's glass, green the edge rain zones, blue Navraj's patka. */
   mask: HTMLCanvasElement;
   /** The light: the middle of the screen, in the world. */
   light: [number, number, number];
@@ -136,7 +136,7 @@ const path = (ctx: CanvasRenderingContext2D, poly: readonly Point[]) => {
   ctx.closePath();
 };
 
-/** The picture's mask at half size: red is the glass (minus Navreet's head), green the edge rain zones, feathered. */
+/** The picture's mask at half size: red is the glass (minus Navreet's head), green the edge rain zones, blue the patka, feathered. */
 function drawMask(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = IMAGE.width / 2;
@@ -162,6 +162,10 @@ function drawMask(): HTMLCanvasElement {
     path(ctx, zone);
     ctx.fill();
   }
+  ctx.filter = "blur(1.5px)";
+  ctx.fillStyle = "#00f";
+  path(ctx, PATKA);
+  ctx.fill();
   ctx.filter = "none";
   return canvas;
 }
@@ -202,6 +206,8 @@ export async function buildLayout(
   const zones = within(RAIN_ZONES);
   const quiet = within(QUIET);
   const patka = within([PATKA]);
+  const box = PATKA.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
+  const near = (x: number, y: number) => x > box[0] - 16 && x < box[2] + 16 && y > box[1] - 16 && y < box[3] + 16;
 
   /** The picture's light averaged over a grid of `cw` x `ch` cells: luminance and whiteness per cell. */
   const sampleGrid = (cw: number, ch: number) => {
@@ -283,6 +289,8 @@ export async function buildLayout(
       let row = 0;
       for (let y = 6; y < IMAGE.height; y += rh, row++) {
         const edge = zones(x, y);
+        // The opening's rain falls past the patka, never down it.
+        if (!edge && near(x, y)) continue;
         // Fainter towards the bottom, as in the picture.
         const fade = Math.max(0.15, 1 - y / 520);
         (edge ? essential : rain).push(

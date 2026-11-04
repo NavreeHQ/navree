@@ -67,7 +67,7 @@ varying vec3 vWorld;
 ${common}
 void main() {
   vec3 c = texture2D(uImage, vUv).rgb;
-  vec2 m = texture2D(uMask, vUv).rg;
+  vec3 m = texture2D(uMask, vUv).rgb;
   vec2 p = vec2(vUv.x, 1.0 - vUv.y) * vec2(${f(IMAGE.width)}, ${f(IMAGE.height)});
   // The picture's own edge rain gives way to the live rain.
   c *= 1.0 - m.g;
@@ -76,7 +76,8 @@ void main() {
   // Lit by the screen: darker until its light reaches the family.
   c *= mix(0.42, 1.0, uLight);
   // The opening: each column appears as its digits land.
-  float land = landAt(p);
+  // Navraj's patka appears whole, at one moment, rather than column by column.
+  float land = mix(landAt(p), landAt(vec2(615.0, 230.0)) + 0.1, m.b);
   c *= mix(smoothstep(land - 0.08, land + 0.55, uTime), 1.0, uReveal);
   // The pulse brightens the picture as it passes, a little towards mint.
   float ring = ringAt(vWorld, uLightPos, uPulseAge, uPulse) * (1.0 - m.r);
