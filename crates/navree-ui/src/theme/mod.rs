@@ -885,6 +885,19 @@ impl Theme {
     pub fn renamed(&self, id: ThemeId, name: impl Into<String>) -> Self {
         Self::unchecked(id, name.into(), *self.spec())
     }
+
+    /// The family of greys a built-in theme is made of; `None` for one with a
+    /// table of its own (high contrast, or a theme of yours).
+    pub fn neutral(&self) -> Option<Neutral> {
+        match &self.0 {
+            Repr::Builtin(Builtin::Navree) => Some(Neutral::Navree),
+            Repr::Builtin(Builtin::Neutral | Builtin::Rose) => Some(Neutral::Neutral),
+            Repr::Builtin(Builtin::Ocean) => Some(Neutral::Slate),
+            Repr::Builtin(Builtin::Violet) => Some(Neutral::Zinc),
+            Repr::Builtin(Builtin::Sunset) => Some(Neutral::Stone),
+            Repr::Builtin(Builtin::Contrast) | Repr::Custom(_) => None,
+        }
+    }
 }
 
 impl Default for Theme {

@@ -708,79 +708,94 @@ impl Shell {
             ))
     }
 
-    /// The links of every group in a row, for the top bar of [`ShellLayout::Header`].
-    /// An item with items below it opens them in a popover.
+    /// The navigation in a row, for the top bar of [`ShellLayout::Header`]: the
+    /// links of a group with no label, and a menu for each labelled group, so the
+    /// bar stays short. An item with items below it opens them in a menu too.
     fn topnav(&self, path: &str) -> Element {
         let home = self.home.as_str();
         let best = self.best(path);
+        let here = |item: &NavItem| {
+            item.current
+                .unwrap_or(best > 0 && item.score(path, home) == best)
+        };
+        let within = |item: &NavItem| here(item) || item.sub.iter().any(|sub| here(sub));
+        let link = |item: &NavItem, slot: &'static str| {
+            el("a")
+                .slot(slot)
+                .href(item.href.clone())
+                .attr_opt("aria-current", here(item).then_some("page"))
+                .flag("data-ui-prefetch", item.prefetch == Prefetch::Intent)
+                .children((item.glyph.map(icon), el("span").child(item.label.clone())))
+        };
+        let menu = |id: String,
+                    label: Cow<'static, str>,
+                    glyph: Option<Icon>,
+                    active: bool,
+                    links: Vec<Element>| {
+            el("li").children((
+                el("button")
+                    .slot("topnav-item")
+                    .attr("type", "button")
+                    .attr("popovertarget", id.clone())
+                    .flag("data-active", active)
+                    .children((
+                        glyph.map(icon),
+                        el("span").child(label.clone()),
+                        icon(icons::CHEVRON_DOWN),
+                    )),
+                el("div")
+                    .slot("popover-content")
+                    .attr("id", id)
+                    .attr("popover", "auto")
+                    .attr("aria-label", label)
+                    .attr("tabindex", -1_i64)
+                    .flag("data-ui-place", true)
+                    .attr("data-side", "bottom")
+                    .attr("data-align", "start")
+                    .uses(Uses::OVERLAY)
+                    .child(el("ul").slot("topnav-sub").child(links)),
+            ))
+        };
+        // An item and the items below it, as rows of a menu.
+        let rows = |item: &NavItem| -> Vec<Element> {
+            std::iter::once(el("li").child(link(item, "menu-link")))
+                .chain(item.sub.iter().map(|sub| {
+                    el("li")
+                        .attr("data-nested", "")
+                        .child(link(sub, "menu-link"))
+                }))
+                .collect()
+        };
         let mut items: Vec<Element> = Vec::new();
-        for (at, item) in self
-            .groups
-            .iter()
-            .flat_map(|group| &group.items)
-            .enumerate()
-        {
-            let active = item
-                .current
-                .unwrap_or(best > 0 && item.score(path, home) == best);
-            if item.sub.is_empty() {
-                items.push(
-                    el("li").child(
-                        el("a")
-                            .slot("topnav-item")
-                            .href(item.href.clone())
-                            .attr_opt("aria-current", active.then_some("page"))
-                            .flag("data-ui-prefetch", item.prefetch == Prefetch::Intent)
-                            .children((item.glyph.map(icon), el("span").child(item.label.clone()))),
-                    ),
-                );
-                continue;
+        for (at, group) in self.groups.iter().enumerate() {
+            match &group.label {
+                Some(label) => {
+                    let active = group.items.iter().any(within);
+                    let links = group.items.iter().flat_map(rows).collect();
+                    items.push(menu(
+                        format!("ui-topnav-{at}"),
+                        label.clone(),
+                        None,
+                        active,
+                        links,
+                    ));
+                }
+                None => {
+                    for (n, item) in group.items.iter().enumerate() {
+                        if item.sub.is_empty() {
+                            items.push(el("li").child(link(item, "topnav-item")));
+                        } else {
+                            items.push(menu(
+                                format!("ui-topnav-{at}-{n}"),
+                                item.label.clone(),
+                                item.glyph,
+                                within(item),
+                                rows(item),
+                            ));
+                        }
+                    }
+                }
             }
-            let open = item
-                .sub
-                .iter()
-                .any(|sub| sub.best(path, home) == best && best > 0);
-            let id = format!("ui-topnav-{at}");
-            let links: Vec<Element> = std::iter::once(item)
-                .chain(&item.sub)
-                .map(|link| {
-                    let here = link
-                        .current
-                        .unwrap_or(best > 0 && link.score(path, home) == best);
-                    el("li").child(
-                        el("a")
-                            .slot("menu-link")
-                            .href(link.href.clone())
-                            .attr_opt("aria-current", here.then_some("page"))
-                            .child(link.label.clone()),
-                    )
-                })
-                .collect();
-            items.push(
-                el("li").children((
-                    el("button")
-                        .slot("topnav-item")
-                        .attr("type", "button")
-                        .attr("popovertarget", id.clone())
-                        .flag("data-active", active || open)
-                        .children((
-                            item.glyph.map(icon),
-                            el("span").child(item.label.clone()),
-                            icon(icons::CHEVRON_DOWN),
-                        )),
-                    el("div")
-                        .slot("popover-content")
-                        .attr("id", id)
-                        .attr("popover", "auto")
-                        .attr("aria-label", item.label.clone())
-                        .attr("tabindex", -1_i64)
-                        .flag("data-ui-place", true)
-                        .attr("data-side", "bottom")
-                        .attr("data-align", "start")
-                        .uses(Uses::OVERLAY)
-                        .child(el("ul").slot("topnav-sub").child(links)),
-                )),
-            );
         }
         el("nav")
             .slot("topnav")

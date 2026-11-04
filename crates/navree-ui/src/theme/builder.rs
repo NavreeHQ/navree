@@ -253,7 +253,8 @@ impl BuilderDraft {
     /// corners, density and font, then each colour set by hand.
     pub fn spec(&self) -> ThemeSpec {
         let mut spec = *self.base.spec();
-        if let Some(neutral) = self.neutral {
+        // The base's own greys are what it has: choosing them again changes nothing.
+        if let Some(neutral) = self.neutral.filter(|n| Some(*n) != self.base.neutral()) {
             neutral.apply(&mut spec);
             // The accent's derived colours depend on the greys under them.
             let (dark, light) = (spec.dark.get(Token::Accent), spec.light.get(Token::Accent));
@@ -305,9 +306,14 @@ impl BuilderDraft {
         }
     }
 
-    /// The draft as a theme, whatever its contrast: what the preview draws.
+    /// The draft as a theme, whatever its contrast: what the preview draws. A
+    /// draft that changes nothing is its base, which needs no stylesheet of its own.
     pub fn draft(&self) -> Theme {
-        Theme::unchecked(self.theme_id(), self.theme_name(), self.spec())
+        let spec = self.spec();
+        if spec == *self.base.spec() {
+            return self.base.clone();
+        }
+        Theme::unchecked(self.theme_id(), self.theme_name(), spec)
     }
 
     /// The pairs that fall short in either palette.
@@ -602,18 +608,12 @@ impl ThemeBuilder {
                         .attr("value", custom_valid),
                 ),
         ));
-        let neutral_value = draft.neutral.unwrap_or(match draft.base.id() {
-            "neutral" | "rose" | "contrast" => Neutral::Neutral,
-            "ocean" => Neutral::Slate,
-            "violet" => Neutral::Zinc,
-            "sunset" => Neutral::Stone,
-            _ => Neutral::Navree,
-        });
+        let neutral_value = draft.neutral.or_else(|| draft.base.neutral());
         let neutrals = Self::choices(
             "neutral",
             "Greys",
             Neutral::ALL.iter().map(|n| (n.id(), n.label())),
-            neutral_value.id(),
+            neutral_value.map_or("", Neutral::id),
             |_| None,
         );
         let radius = Self::choices(
@@ -1167,6 +1167,99 @@ impl From<ThemeBuilder> for Node {
 mod tests {
     use super::*;
     use crate::render::render;
+
+    /// The proof app's own theme, built here and exported as Rust: the app
+    /// compiles the export as it comes.
+    const EXAMPLE: &str = "accent=custom&accent_hex=%237c5cff&neutral=zinc&radius=round&font=system&id=acme&name=Acme";
+
+    fn example() -> (std::path::PathBuf, String) {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/ui-proof/src/acme_theme.rs");
+        let theme = BuilderDraft::from_query(EXAMPLE).to_theme().unwrap();
+        let text = format!(
+            "//! The \"Acme\" theme: the theme builder's Rust export, used as it comes. A
+//! test in navree-ui writes it and keeps it current.
+
+{}",
+            theme.to_rust("navree::ui")
+        );
+        (path, text)
+    }
+
+    #[test]
+    fn the_proof_apps_exported_theme_is_current() {
+        let (path, text) = example();
+        let committed = std::fs::read_to_string(&path).unwrap_or_default().replace(
+            "
+", "
+",
+        );
+        assert_eq!(
+            committed,
+            text,
+            "{} is stale: cargo test -p navree-ui --lib theme::builder::tests::write_the_proof_apps_exported_theme -- --ignored",
+            path.display()
+        );
+    }
+
+    /// Not a check: writes the file the test above compares.
+    #[test]
+    #[ignore = "writes a file"]
+    fn write_the_proof_apps_exported_theme() {
+        let (path, text) = example();
+        std::fs::write(&path, text).unwrap();
+    }
+
+    /// What the builder's form posts as it is first drawn for `base`: every choice
+    /// as shown, nothing changed.
+    fn untouched(base: &Theme) -> String {
+        let html = render(
+            &ThemeBuilder::new(
+                &BuilderDraft::from_query(&format!("base={}", base.id())),
+                "/b",
+            )
+            .into(),
+        );
+        let mut fields = vec![format!("base={}", base.id())];
+        for chunk in html.split("<input ").skip(1) {
+            let attr = |name: &str| {
+                chunk
+                    .split_once(&format!("{name}=\""))
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .map(|(value, _)| value.to_owned())
+            };
+            let kind = attr("type").unwrap_or_default();
+            let checked = chunk
+                .split('>')
+                .next()
+                .unwrap_or_default()
+                .contains(" checked");
+            if let (Some(name), Some(value)) = (attr("name"), attr("value")) {
+                if (kind == "radio" && checked)
+                    || kind == "color"
+                    || (kind == "text" && !value.is_empty())
+                {
+                    fields.push(format!("{name}={}", encode(&value)));
+                }
+            }
+        }
+        fields.join("&")
+    }
+
+    #[test]
+    fn the_form_as_first_drawn_is_its_base_exactly() {
+        for base in Theme::BUILT_IN {
+            let query = untouched(&base);
+            let draft = BuilderDraft::from_query(&query);
+            assert_eq!(draft.spec(), *base.spec(), "{}: {query}", base.id());
+            assert_eq!(
+                draft.draft().key(),
+                base.key(),
+                "{}: no stylesheet of its own",
+                base.id()
+            );
+        }
+    }
 
     #[test]
     fn a_draft_reads_the_query_strictly() {

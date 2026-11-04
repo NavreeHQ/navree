@@ -250,6 +250,8 @@ impl Theme {
             return Err(fields("theme", "A theme is a JSON object."));
         };
         let mut errors: Vec<(String, String)> = Vec::new();
+        // What is missing comes after what is wrong, so a short list shows the worst first.
+        let mut missing: Vec<(String, String)> = Vec::new();
         let mut error = |at: &str, what: &str| errors.push((at.to_owned(), what.to_owned()));
         for key in root.keys() {
             if !matches!(
@@ -360,10 +362,11 @@ impl Theme {
                         Ok(colour) => palette.set(token, colour),
                         Err(why) => error(&at, &why.to_string()),
                     },
-                    None => error(&at, "Missing."),
+                    None => missing.push((at, "Missing.".to_owned())),
                 }
             }
         }
+        errors.append(&mut missing);
         if !errors.is_empty() {
             return Err(ImportError::Fields(errors));
         }
