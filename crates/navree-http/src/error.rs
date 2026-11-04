@@ -172,6 +172,17 @@ impl AppError {
         )
     }
 
+    /// 419 `page_expired` `"Page Expired"`: the page was open too long, or the
+    /// session it belongs to changed, so what it sends can't be trusted. The
+    /// user reloads and tries again.
+    pub fn page_expired() -> Self {
+        Self::new(
+            StatusCode::from_u16(419).unwrap_or(StatusCode::BAD_REQUEST),
+            codes::PAGE_EXPIRED,
+            "Page Expired",
+        )
+    }
+
     /// 400 with field errors (`{"field.path": ["message"]}`): `message` is
     /// every field message, flattened in field order, and `errors` the map.
     pub fn validation(errors: BTreeMap<String, Vec<String>>) -> Self {
@@ -667,6 +678,10 @@ mod tests {
             (
                 AppError::payload_too_large(16),
                 json!({"statusCode": 413, "message": "The request body must not exceed 16 bytes.", "error": "Payload Too Large", "code": "payload_too_large"}),
+            ),
+            (
+                AppError::page_expired(),
+                json!({"statusCode": 419, "message": "Page Expired", "error": "Page Expired", "code": "page_expired"}),
             ),
             (
                 AppError::too_many_requests(Duration::from_secs(3)),

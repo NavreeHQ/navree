@@ -102,6 +102,7 @@ mod compression;
 mod controller;
 mod cors;
 mod error;
+mod error_pages;
 pub mod extract;
 pub mod handler;
 mod limiter;
@@ -125,6 +126,9 @@ pub use compression::{Compression, CompressionLayer};
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 pub use cors::{Cors, CorsLayer};
 pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
+pub use error_pages::{
+    ErrorContext, ErrorPages, ErrorPagesHandle, Preference, RouteKind, preference,
+};
 pub use extract::{
     ClientIp, Extension, Form, Json, Multipart, MultipartLimits, Path, Query, RawQuery, Scoped,
 };

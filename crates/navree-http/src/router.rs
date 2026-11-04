@@ -107,10 +107,16 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         .map(|c| (*c.value).clone())
         .collect();
     let format = ErrorFormat::from(&options.errors);
+    let pages = ctx
+        .contributions::<crate::ErrorPagesHandle>()
+        .into_iter()
+        .next()
+        .map(|c| (*c.value).clone());
     let mut stages = Stages {
         checks: Some(CheckStages {
             mappers,
             format,
+            pages: pages.clone(),
             maintenance: pipeline::MaintenanceGate {
                 mode: server.maintenance.clone(),
                 except: options.maintenance_except.clone(),
@@ -131,6 +137,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         timeout: Duration::from_secs(options.timeout_secs),
         security_headers: options.security_headers,
         format,
+        pages: pages.clone(),
     });
     if let Some(cors) = cors_layer(&options.cors)? {
         router = with_stages(router, &mut stages).layer(cors);
@@ -148,6 +155,8 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         proxies: ProxyTrust::new(options.trust_proxy, &options.trusted_proxies),
         telemetry,
         policy,
+        pages,
+        api_prefix: Arc::from(options.api_prefix.as_str()),
     });
     router = with_stages(router, &mut stages);
     apply_edge(ctx, router)

@@ -15,6 +15,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use futures_util::FutureExt;
+use http::header::VARY;
 use http::header::{
     CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue,
     REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, USER_AGENT, X_CONTENT_TYPE_OPTIONS,
@@ -35,6 +36,7 @@ use uuid::Uuid;
 use crate::body::{Body, HttpBody as _};
 use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
+use crate::error_pages::{self, ErrorContext, ErrorPagesHandle, RouteKind};
 use crate::extract::{ProxyTrust, Request};
 use crate::limiter::KeyedRateLimiter;
 use crate::maintenance::MaintenanceMode;
@@ -102,6 +104,8 @@ pub(crate) struct GuardStages {
     /// `http.errors`: the panic catcher and the timeout render their
     /// errors themselves, outside the error stage.
     pub(crate) format: ErrorFormat,
+    /// The module that answers errors with pages, if any.
+    pub(crate) pages: Option<ErrorPagesHandle>,
 }
 
 /// Error rendering, maintenance mode and the per-IP rate limit; then, when
@@ -110,6 +114,8 @@ pub(crate) struct CheckStages {
     pub(crate) mappers: Vec<ErrorMapper>,
     /// `http.errors`.
     pub(crate) format: ErrorFormat,
+    /// The module that answers errors with pages, if any.
+    pub(crate) pages: Option<ErrorPagesHandle>,
     pub(crate) maintenance: MaintenanceGate,
     pub(crate) per_ip: Option<PerIpLimit>,
     pub(crate) authentication: Option<Authentication>,
@@ -138,21 +144,27 @@ impl Stages {
         let Some(guard) = &self.guard else {
             return self.checked(request, next).await;
         };
-        catch_panic(guard.format, request, move |request| {
-            timeout(
-                guard.timeout,
-                guard.format,
-                request,
-                move |request| async move {
-                    let response = self.checked(request, next).await;
-                    if guard.security_headers {
-                        with_security_headers(response)
-                    } else {
-                        response
-                    }
-                },
-            )
-        })
+        catch_panic(
+            guard.format,
+            guard.pages.as_ref(),
+            request,
+            move |request| {
+                timeout(
+                    guard.timeout,
+                    guard.format,
+                    guard.pages.as_ref(),
+                    request,
+                    move |request| async move {
+                        let response = self.checked(request, next).await;
+                        if guard.security_headers {
+                            with_security_headers(response)
+                        } else {
+                            response
+                        }
+                    },
+                )
+            },
+        )
         .await
     }
 
@@ -160,19 +172,25 @@ impl Stages {
         let Some(checks) = &self.checks else {
             return next.run(request).await;
         };
-        render_errors(&checks.mappers, checks.format, request, move |request| {
-            maintenance(&checks.maintenance, request, move |request| async move {
-                match &checks.per_ip {
-                    Some(limit) => {
-                        per_ip_rate_limit(limit, request, move |request| {
-                            checks.authenticated(request, next)
-                        })
-                        .await
+        render_errors(
+            &checks.mappers,
+            checks.format,
+            checks.pages.as_ref(),
+            request,
+            move |request| {
+                maintenance(&checks.maintenance, request, move |request| async move {
+                    match &checks.per_ip {
+                        Some(limit) => {
+                            per_ip_rate_limit(limit, request, move |request| {
+                                checks.authenticated(request, next)
+                            })
+                            .await
+                        }
+                        None => checks.authenticated(request, next).await,
                     }
-                    None => checks.authenticated(request, next).await,
-                }
-            })
-        })
+                })
+            },
+        )
         .await
     }
 }
@@ -215,6 +233,11 @@ pub(crate) struct ContextState {
     pub(crate) telemetry: Telemetry,
     /// How a request's trace starts (`observe.tracing`).
     pub(crate) policy: TracePolicy,
+    /// The module that answers errors with pages, if any: with one, each
+    /// request carries the facts it decides with.
+    pub(crate) pages: Option<ErrorPagesHandle>,
+    /// `http.api_prefix`.
+    pub(crate) api_prefix: Arc<str>,
 }
 
 /// The `traceparent` and `tracestate` headers (W3C Trace Context).
@@ -252,6 +275,16 @@ where
     request
         .headers_mut()
         .insert(X_REQUEST_ID.clone(), header.clone());
+    let error_context = state.pages.is_some().then(|| ErrorContext {
+        method: request.method().clone(),
+        uri: request.uri().clone(),
+        headers: error_pages::capture(request.headers()),
+        ctx: state.ctx.clone(),
+        request_id: Some(request_id.clone()),
+        route: None,
+        user: None,
+        api_prefix: state.api_prefix.clone(),
+    });
     let extensions = request.extensions_mut();
     extensions.insert(request_id.clone());
     extensions.insert(ip);
@@ -261,6 +294,9 @@ where
     extensions.insert(RequestScope::new());
     let matched_route = MatchedRoute::default();
     extensions.insert(matched_route.clone());
+    if let Some(error_context) = error_context {
+        extensions.insert(Arc::new(error_context));
+    }
     let path = state
         .telemetry
         .enabled(EventKind::RequestHandled)
@@ -365,12 +401,18 @@ fn method_name(method: &Method) -> &'static str {
 
 /// Turns a panicking handler or layer into a 500 error (and an
 /// [`ExceptionReported`] event with the panic's location).
-async fn catch_panic<F, Fut>(format: ErrorFormat, request: Request, next: F) -> Response
+async fn catch_panic<F, Fut>(
+    format: ErrorFormat,
+    pages: Option<&ErrorPagesHandle>,
+    request: Request,
+    next: F,
+) -> Response
 where
     F: FnOnce(Request) -> Fut,
     Fut: Future<Output = Response>,
 {
     let request_id = request_id_of(&request);
+    let context = pages.and_then(|_| error_context_of(&request));
     let reported = TelemetryContext::with_current(|context| {
         context.telemetry().enabled(EventKind::ExceptionReported)
     })
@@ -409,7 +451,8 @@ where
                     }),
                 }));
             }
-            AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR).render(format)
+            let error = AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR);
+            error_response(&error, format, pages, context.as_deref(), None, None).await
         }
     }
 }
@@ -429,6 +472,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 async fn timeout<F, Fut>(
     default: Duration,
     format: ErrorFormat,
+    pages: Option<&ErrorPagesHandle>,
     mut request: Request,
     next: F,
 ) -> Response
@@ -437,6 +481,7 @@ where
     Fut: Future<Output = Response>,
 {
     let request_id = request_id_of(&request);
+    let context = pages.and_then(|_| error_context_of(&request));
     let route_timeout = TimeoutOverride::default();
     request.extensions_mut().insert(route_timeout.clone());
     let start = Instant::now();
@@ -462,7 +507,8 @@ where
                     request_id = request_id.as_ref().map(tracing::field::display),
                     "request timed out"
                 );
-                return timeout_error().render(format);
+                return error_response(&timeout_error(), format, pages, context.as_deref(), None, None)
+                    .await;
             }
         }
     }
@@ -507,6 +553,7 @@ fn with_security_headers(mut response: Response) -> Response {
 async fn render_errors<F, Fut>(
     mappers: &[ErrorMapper],
     format: ErrorFormat,
+    pages: Option<&ErrorPagesHandle>,
     request: Request,
     next: F,
 ) -> Response
@@ -517,16 +564,68 @@ where
     let request_id = request_id_of(&request);
     let method = request.method().clone();
     let uri = request.uri().clone();
+    let context = pages.and_then(|_| error_context_of(&request));
     let response = next(request).await;
     finalize(
         response,
         request_id.as_ref(),
         mappers,
         format,
+        (pages, context.as_deref()),
         &method,
         uri.path(),
     )
     .await
+}
+
+/// The facts the request context kept for the module that renders error pages.
+fn error_context_of(request: &Request) -> Option<Arc<ErrorContext>> {
+    request.extensions().get::<Arc<ErrorContext>>().cloned()
+}
+
+/// How long the module that renders pages gets to answer. It runs on the error path, and
+/// an error is no reason to hold a connection.
+const PAGES_DEADLINE: Duration = Duration::from_secs(3);
+
+/// The response for `error`: the page the module renders when it answers, else the JSON
+/// body. `route` and `user` are what the request found out on its way in; a panic or a
+/// timeout knows neither.
+async fn error_response(
+    error: &AppError,
+    format: ErrorFormat,
+    pages: Option<&ErrorPagesHandle>,
+    context: Option<&ErrorContext>,
+    route: Option<Arc<RouteMeta>>,
+    user: Option<Uuid>,
+) -> Response {
+    let (Some(pages), Some(context)) = (pages, context) else {
+        return error.render(format);
+    };
+    if route
+        .as_ref()
+        .is_some_and(|meta| meta.kind == RouteKind::Json)
+    {
+        return error.render(format);
+    }
+    let mut context = context.clone();
+    context.route = route;
+    context.user = user;
+    // A module that fails or panics here leaves the error as JSON: the answer to a failure
+    // can't be another failure.
+    let page = tokio::time::timeout(
+        PAGES_DEADLINE,
+        AssertUnwindSafe(pages.0.render(&context, error)).catch_unwind(),
+    )
+    .await;
+    if let Ok(Ok(Some(page))) = page {
+        return page;
+    }
+    // A cache must not hand this JSON to a browser that would have got a page.
+    let mut response = error.render(format);
+    response
+        .headers_mut()
+        .append(VARY, HeaderValue::from_static("accept"));
+    response
 }
 
 async fn finalize(
@@ -534,6 +633,7 @@ async fn finalize(
     request_id: Option<&RequestId>,
     mappers: &[ErrorMapper],
     format: ErrorFormat,
+    (pages, context): (Option<&ErrorPagesHandle>, Option<&ErrorContext>),
     method: &Method,
     path: &str,
 ) -> Response {
@@ -573,13 +673,19 @@ async fn finalize(
         report_exception(&error, &response, method, path);
     }
 
-    let rendered = error.render(format);
+    let route = response.extensions().get::<Arc<RouteMeta>>().cloned();
+    let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
+    let rendered = error_response(&error, format, pages, context, route, user).await;
     let (mut parts, _) = response.into_parts();
     let (rendered_parts, body) = rendered.into_parts();
     parts.status = rendered_parts.status;
     parts.headers.remove(CONTENT_LENGTH);
+    // A header the answer sets replaces the response's own, every value of it.
+    for name in rendered_parts.headers.keys() {
+        parts.headers.remove(name);
+    }
     for (name, value) in &rendered_parts.headers {
-        parts.headers.insert(name, value.clone());
+        parts.headers.append(name.clone(), value.clone());
     }
     Response::from_parts(parts, body)
 }

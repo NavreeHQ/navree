@@ -10,6 +10,7 @@ use http::Method;
 use navree_kernel::ModuleId;
 
 use crate::Guard;
+use crate::error_pages::RouteKind;
 use crate::handler::{Endpoint, Handler};
 
 /// One route: a method, a path, a [`Handler`] and its metadata.
@@ -176,6 +177,25 @@ impl RouteDef {
         self
     }
 
+    /// Marks the route as a page. Its errors are pages (a 404 inside the shell, a
+    /// sign-in prompt for a guest) for every client that doesn't ask for JSON
+    /// alone, whatever the client's `Accept` says. Without a mark the `Accept`
+    /// header decides, and a route under `http.api_prefix` is JSON.
+    ///
+    /// Only an app with a module that renders error pages (navree-ui's
+    /// `UiModule`) changes anything.
+    pub fn page(mut self) -> Self {
+        self.meta.kind = RouteKind::Page;
+        self
+    }
+
+    /// Marks the route as data: its errors are always the JSON error body, for
+    /// every client, even one that asks for HTML.
+    pub fn json_only(mut self) -> Self {
+        self.meta.kind = RouteKind::Json;
+        self
+    }
+
     /// Adds an OpenAPI specification extension to the route's operation
     /// (`name` should start with `x-`), such as navree-flags'
     /// `x-navree-flag`. navree-api renders it as a member of the operation
@@ -228,6 +248,8 @@ pub struct RouteMeta {
     pub body_limit: Option<usize>,
     /// Responses go out uncompressed (see [`RouteDef::no_compression`]).
     pub no_compression: bool,
+    /// Whether its errors are pages or JSON (see [`RouteDef::page`]).
+    pub kind: RouteKind,
     /// The module that registered the route (set when mounted).
     pub module: Option<&'static str>,
     /// The id of that module (set when mounted): [`Scoped`](crate::Scoped)

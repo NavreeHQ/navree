@@ -187,6 +187,10 @@ pub trait ModuleBuilderHttpExt {
     /// Maps errors of type `E` found in a 500 [`AppError`]'s source chain to
     /// a specific error (e.g. a database "record not found" to 404).
     fn map_error<E: StdError + 'static>(&mut self, f: fn(&E) -> Option<AppError>) -> &mut Self;
+
+    /// Lets `pages` answer errors in another form than JSON: a page for a
+    /// browser, say. The app uses the first one contributed.
+    fn error_pages(&mut self, pages: impl crate::ErrorPages) -> &mut Self;
 }
 
 impl ModuleBuilderHttpExt for ModuleBuilder {
@@ -201,5 +205,9 @@ impl ModuleBuilderHttpExt for ModuleBuilder {
 
     fn map_error<E: StdError + 'static>(&mut self, f: fn(&E) -> Option<AppError>) -> &mut Self {
         self.contribute(ErrorMapper::new(f))
+    }
+
+    fn error_pages(&mut self, pages: impl crate::ErrorPages) -> &mut Self {
+        self.contribute(crate::ErrorPagesHandle::new(pages))
     }
 }

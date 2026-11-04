@@ -4,6 +4,7 @@
 mod support;
 
 mod access;
+mod error_pages;
 mod errors;
 mod logs;
 mod matching;

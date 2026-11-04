@@ -30,6 +30,7 @@
 //! | `limit_reached` | 409 | `AppError::limit_reached`: a plan or quota limit |
 //! | `payload_too_large` | 413 | `AppError::payload_too_large` |
 //! | `unsupported_media_type` | 415 | a JSON or form body of another content type |
+//! | `page_expired` | 419 | `AppError::page_expired`: a page left open too long |
 //! | `too_many_requests` | 429 | `AppError::too_many_requests`, rate limits |
 //! | `internal_error` | 500 | `AppError::internal`, `?` on any error, panics |
 //! | `service_unavailable` | 503 | `AppError::service_unavailable` |
@@ -73,6 +74,9 @@ pub const LIMIT_REACHED: &str = "limit_reached";
 pub const PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 /// 415: a JSON or form body sent with another content type.
 pub const UNSUPPORTED_MEDIA_TYPE: &str = "unsupported_media_type";
+/// 419: a page that was open too long or whose session changed
+/// ([`AppError::page_expired`](crate::AppError::page_expired)).
+pub const PAGE_EXPIRED: &str = "page_expired";
 /// 429: a rate limit is exceeded
 /// ([`AppError::too_many_requests`](crate::AppError::too_many_requests)).
 pub const TOO_MANY_REQUESTS: &str = "too_many_requests";
@@ -102,6 +106,7 @@ pub const ALL: &[&str] = &[
     LIMIT_REACHED,
     PAYLOAD_TOO_LARGE,
     UNSUPPORTED_MEDIA_TYPE,
+    PAGE_EXPIRED,
     TOO_MANY_REQUESTS,
     INTERNAL_ERROR,
     SERVICE_UNAVAILABLE,
