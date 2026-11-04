@@ -109,7 +109,7 @@ export const lessons: Lesson[] = [
     title: "Plan for teams from the start.",
     lesson: "Sooner or later every product serves teams, and adding them late means touching every query.",
     feature: "Workspaces built in",
-    text: "Members, roles, invitations, and data kept apart by row, schema or database, in every new app.",
+    text: "Members, roles, invitations, and data kept apart by row, schema or database, in the default features: add WorkspaceModule to your app, or start from the saas or api starter kit, which adds it for you.",
     link: { href: "/docs/workspaces/introduction/", label: "Workspaces" },
   },
   {
