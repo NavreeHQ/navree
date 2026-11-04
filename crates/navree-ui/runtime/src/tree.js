@@ -123,6 +123,9 @@ function checks(item) {
   const state = mixed ? "mixed" : input.checked ? "true" : "false";
   set(item, "data-checked", state);
   set(row, single ? "aria-selected" : "aria-checked", state);
+  // A disabled choice posts nothing, so one that was chosen posts a hidden copy of itself, for as long as it stays chosen.
+  const keep = first(row, "input[data-slot=tree-keep]");
+  if (keep) keep.disabled = !input.checked || input.indeterminate;
 }
 
 /** @param {HTMLElement} root */
@@ -277,6 +280,7 @@ async function load(item) {
   if (!items) {
     say_in(group, l.failed, l.retry);
     say(root, l.failed);
+    release(item);
     return;
   }
   unset(group, "data-src");
@@ -332,25 +336,69 @@ function settle(root, parent, items) {
   for (const item of items) {
     for (const child of [item, ...list(item, ITEM)]) {
       enhanceItem(child);
-      set(child, "data-ui-keep-attrs", "data-ui-keep-attrs role data-open data-checked");
+      set(child, "data-ui-keep-attrs", "data-ui-keep-attrs role data-open data-checked data-pending");
     }
   }
-  // A branch that was chosen before its children came stands for them.
-  if (parent && input && input.checked && has(root, "data-cascade")) {
-    for (const item of items) setBelow(item, true);
+  if (parent && has(root, "data-cascade")) {
+    // A branch chosen while its children were on their way was held back from posting; they are here now.
+    const held = has(parent, "data-pending");
+    if (held) {
+      unset(parent, "data-pending");
+      if (input && !has(parent, "data-disabled")) input.disabled = false;
+    }
+    // A branch that was chosen before its children came chooses them, as far as they are shown.
+    if (input && input.checked) for (const item of items) setBelow(item, true);
+    // What the person has chosen is worked out again from what they were shown. A branch chosen as a whole
+    // by the page stays whole as pages of its children come, until the person changes something under it.
+    if (held || !(input && input.checked)) refresh(parent);
   }
-  if (parent && has(root, "data-cascade")) refresh(parent);
+}
+
+/**
+ * Whether a branch has children that are not here to be seen: a Show more row, a group still to be
+ * fetched, or more than are drawn. Such a branch is never whole by what is drawn under it.
+ * @param {HTMLElement} item
+ */
+function unseen(item) {
+  const group = first(item, ":scope > [data-slot=tree-group]");
+  if (!group) return false;
+  if (has(group, "data-src") || first(group, ":scope > li[data-slot=tree-more]")) return true;
+  const kids = list(group, ":scope > li[data-slot=tree-item]");
+  return kids.length > 0 && (Number(attr(kids[0], "data-setsize")) || 0) > kids.length;
+}
+
+/** A chosen branch whose children have not come: it stands for them, and they have not been shown. Its box waits. @param {HTMLElement} item @param {HTMLInputElement} input */
+function hold(item, input) {
+  set(item, "data-pending", "");
+  input.disabled = true;
+  checks(item);
+  open(item);
+}
+
+/** A branch that was held and whose children could not come is not chosen after all. @param {HTMLElement} item */
+function release(item) {
+  if (!has(item, "data-pending")) return;
+  unset(item, "data-pending");
+  const input = inputOf(item);
+  if (input) {
+    input.disabled = has(item, "data-disabled");
+    input.checked = false;
+  }
+  checks(item);
+  const up = parentOf(item);
+  if (up) refresh(up);
 }
 
 // ---- Choosing ------------------------------------------------------------
 
 /** Sets an item and everything loaded under it. @param {HTMLElement} item @param {boolean} on */
 function setBelow(item, on) {
+  // A branch whose children have not been fetched is not chosen on their behalf: nobody has been shown them.
   const own = inputOf(item);
-  if (own && !own.disabled) own.checked = on;
+  if (own && !own.disabled && !(on && has(item, "data-lazy"))) own.checked = on;
   for (const child of list(item, "li[data-slot=tree-item]")) {
     const input = inputOf(child);
-    if (input && !input.disabled) input.checked = on;
+    if (input && !input.disabled && !(on && has(child, "data-lazy"))) input.checked = on;
   }
   for (const each of [item, ...list(item, BRANCH)]) {
     unset(each, "data-checked");
@@ -360,15 +408,25 @@ function setBelow(item, on) {
   }
 }
 
+/** Whether every choice under an item that can be made, and has been fetched, is made. @param {HTMLElement} item */
+function allChosen(item) {
+  const boxes = list(item, "li[data-slot=tree-item]")
+    .filter((each) => !has(each, "data-lazy"))
+    .map(inputOf)
+    .filter((box) => box && !box.disabled);
+  return boxes.length > 0 && boxes.every((box) => box.checked);
+}
+
 /** Works out a branch's state from its children, upward. @param {HTMLElement} item */
 function refresh(item) {
   for (let up = item; up; up = parentOf(up)) {
     const input = inputOf(up);
-    // A choice that is disabled is not the person's to make: it doesn't count.
-    const kids = list(up, ":scope > [data-slot=tree-group] > li[data-slot=tree-item]").filter((kid) => !has(kid, "data-disabled"));
+    // A disabled child counts: one that is not chosen keeps its parent from being whole, so a parent never
+    // stands for what the person could not choose. Nor does a branch stand for children it has not shown.
+    const kids = list(up, ":scope > [data-slot=tree-group] > li[data-slot=tree-item]");
     if (input && kids.length) {
-      const states = kids.map((kid) => attr(kid, "data-checked") || "false");
-      const every = states.every((s) => s === "true");
+      const states = kids.map((kid) => (has(kid, "data-pending") ? "mixed" : attr(kid, "data-checked") || "false"));
+      const every = states.every((s) => s === "true") && !unseen(up);
       const none = states.every((s) => s === "false");
       input.checked = every;
       set(up, "data-checked", every ? "true" : none ? "false" : "mixed");
@@ -394,9 +452,12 @@ on(document, "change", (e) => {
   unset(item, "data-checked");
   input.indeterminate = false;
   if (has(root, "data-cascade")) {
-    setBelow(item, input.checked);
-    const up = parentOf(item);
-    if (up) refresh(up);
+    if (input.checked && has(item, "data-lazy")) hold(item, input);
+    // Pressed when all that can be chosen under it is chosen (a disabled child, or children not shown, keep it from
+    // being whole), the parent clears them: otherwise it could never be cleared from there.
+    else setBelow(item, input.checked && !allChosen(item));
+    // From the item itself: a parent with a disabled child not chosen, or with children not shown, is mixed.
+    refresh(item);
   } else {
     checks(item);
   }
@@ -465,10 +526,12 @@ function typeahead(root, from, key) {
 /** The anchor of a range of choices, by tree. @type {WeakMap<Element, Element>} */
 const anchors = new WeakMap();
 
-/** Chooses or unchooses with a click on the item's input. @param {HTMLElement} item @param {boolean} [force] */
-function choose(item, force) {
+/** Chooses or unchooses with a click on the item's input. @param {HTMLElement} item @param {boolean} [force] @param {boolean} [bulk] */
+function choose(item, force, bulk) {
   const input = inputOf(item);
   if (!input || input.disabled) return;
+  // A range or Ctrl+A chooses what is shown, not a branch whose children have not been fetched.
+  if (bulk && has(item, "data-lazy")) return;
   if (force === undefined || input.checked !== force) input.click();
   const root = rootOf(item);
   if (root) anchors.set(root, item);
@@ -480,7 +543,7 @@ function range(root, from, to) {
   let a = items.indexOf(from), b = items.indexOf(to);
   if (a < 0 || b < 0) return;
   if (a > b) [a, b] = [b, a];
-  for (const item of items.slice(a, b + 1)) choose(item, true);
+  for (const item of items.slice(a, b + 1)) choose(item, true, true);
 }
 
 on(document, "keydown", (e) => {
@@ -499,7 +562,7 @@ on(document, "keydown", (e) => {
   const done = () => e.preventDefault();
   if (e.ctrlKey && !e.shiftKey && key.toLowerCase() === "a" && multiple) {
     done();
-    for (const each of items) choose(each, true);
+    for (const each of items) choose(each, true, true);
     return;
   }
   if (e.ctrlKey && e.shiftKey && multiple && (key === "Home" || key === "End")) {

@@ -23,7 +23,7 @@ use std::collections::BTreeSet;
 
 use crate::components::icon;
 use crate::form::{encode, encode_into};
-use crate::html::Href;
+use crate::html::{Href, LocalHref};
 use crate::icons::{self, Icon};
 use crate::node::{Element, Node, Uses, el, into_node};
 
@@ -33,6 +33,13 @@ pub const MAX_IDS: usize = 1000;
 pub const MAX_ID_BYTES: usize = 256;
 /// The most open branches an address keeps.
 pub const MAX_OPEN: usize = 200;
+/// The most bytes the open branches take in the address every caret's link keeps. Each caret
+/// repeats it, so a page's size is the number of branches times this and the next.
+pub const MAX_OPEN_BYTES: usize = 2048;
+/// The most bytes the other fields of the query take in those links.
+pub const MAX_QUERY_BYTES: usize = 1024;
+/// The most other fields of the query those links keep.
+const MAX_QUERY_FIELDS: usize = 20;
 
 /// What choosing in a tree does.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -230,11 +237,18 @@ pub struct TreeState {
 
 impl TreeState {
     /// Reads the open branches from a query string. Other fields of the query stay
-    /// in the links. At most 200 open branches are kept, and ids over 256 bytes
-    /// are dropped.
+    /// in the links, within limits: every caret repeats them, so at most 200 open
+    /// branches of 256 bytes each and 2 KiB in all are kept, and at most 20 other fields
+    /// and 1 KiB of them; what does not fit is left out of the links.
+    ///
+    /// The links are local: a `path` that is not (`//host/x`, a scheme) is left out, and
+    /// they are `?open=...` on the page the person is on.
     pub fn from_query(path: impl Into<String>, query: &str) -> Self {
         let path: String = path.into();
-        let path = path.split(['?', '#']).next().unwrap_or_default().to_owned();
+        let path = path.split(['?', '#']).next().unwrap_or_default();
+        let path = LocalHref::parse(path)
+            .map(|local| local.as_str().to_owned())
+            .unwrap_or_default();
         let mut state = Self {
             path,
             others: Vec::new(),
@@ -259,13 +273,29 @@ impl TreeState {
         for (name, value) in navree_http::extract::urlencoded::parse(query.as_bytes()).take(10_000)
         {
             if name == self.param.as_str() {
-                if self.open.len() < MAX_OPEN && !value.is_empty() && value.len() <= MAX_ID_BYTES {
+                if value.is_empty() || value.len() > MAX_ID_BYTES || self.open.contains(&*value) {
+                    continue;
+                }
+                if self.open.len() < MAX_OPEN && self.open_bytes() + value.len() <= MAX_OPEN_BYTES {
                     self.open.insert(value.into_owned());
                 }
-            } else if self.others.len() < 100 {
+            } else if self.others.len() < MAX_QUERY_FIELDS
+                && self.other_bytes() + name.len() + value.len() <= MAX_QUERY_BYTES
+            {
                 self.others.push((name.into_owned(), value.into_owned()));
             }
         }
+    }
+
+    fn open_bytes(&self) -> usize {
+        self.open.iter().map(String::len).sum()
+    }
+
+    fn other_bytes(&self) -> usize {
+        self.others
+            .iter()
+            .map(|(name, value)| name.len() + value.len())
+            .sum()
     }
 
     /// Whether the branch `id` is open.
@@ -281,7 +311,11 @@ impl TreeState {
     /// The address with `id` opened, or closed if it was open.
     pub fn toggled(&self, id: &str) -> String {
         let mut open = self.open.clone();
-        if !open.remove(id) && open.len() < MAX_OPEN {
+        // One that would not fit the limits is not added: the link then goes where it already is.
+        if !open.remove(id)
+            && open.len() < MAX_OPEN
+            && self.open_bytes() + id.len() <= MAX_OPEN_BYTES
+        {
             open.insert(id.to_owned());
         }
         let mut query = String::new();
@@ -300,7 +334,11 @@ impl TreeState {
             encode_into(&mut query, each);
         }
         if query.is_empty() {
-            self.path.clone()
+            if self.path.is_empty() {
+                "?".to_owned()
+            } else {
+                self.path.clone()
+            }
         } else {
             format!("{}?{query}", self.path)
         }
@@ -609,10 +647,9 @@ impl Tree {
             .enumerate()
             .map(|(at, node)| {
                 let (item, check) = self.item(cx, node, level, offset + at + 1, total, inherited);
-                // A choice that is disabled is not the person's to make: it doesn't count.
-                if !node.disabled {
-                    checks.push(check);
-                }
+                // A disabled child counts too: one that is not chosen keeps its parent from
+                // being whole, so a parent never stands for what the person could not choose.
+                checks.push(check);
                 item
             })
             .collect();
@@ -675,8 +712,15 @@ impl Tree {
                     .more
                     .as_ref()
                     .map(|more| self.more_row(more, level + 1));
+                // Children not drawn (a Show more row, a count above what is here) are children
+                // the person was not shown: what is drawn all being chosen is not the whole.
+                let unseen =
+                    node.more.is_some() || node.total.is_some_and(|all| all > children.len());
                 let check = if self.cascades() && !children.is_empty() {
-                    overall
+                    match overall {
+                        Check::On if unseen && !own => Check::Mixed,
+                        other => other,
+                    }
                 } else if own {
                     Check::On
                 } else {
@@ -733,6 +777,11 @@ impl Tree {
                 } else {
                     "checkbox"
                 };
+                // A disabled box posts nothing, so a node that was chosen and cannot be changed
+                // would be dropped by the next save: it posts a hidden copy of itself instead.
+                // (Only where many are chosen: beside a radio the copy would post as well as
+                // whatever is chosen next.)
+                let keep = select == TreeSelect::Multiple && node.disabled && own;
                 el("label").slot("tree-label").children((
                     el("input")
                         .slot(kind)
@@ -741,6 +790,13 @@ impl Tree {
                         .attr("value", node.id.clone())
                         .flag("checked", check == Check::On)
                         .flag("disabled", node.disabled),
+                    keep.then(|| {
+                        el("input")
+                            .slot("tree-keep")
+                            .attr("type", "hidden")
+                            .attr("name", self.name.clone())
+                            .attr("value", node.id.clone())
+                    }),
                     label_body,
                 ))
             }
@@ -1139,5 +1195,194 @@ mod tests {
         // A parent function that loops forever is cut off.
         let looping = TreeSelection::parse(&[("t".to_owned(), "x".to_owned())], "t").unwrap();
         assert_eq!(looping.roots(|_| Some("y".to_owned())), ["x"]);
+    }
+
+    /// A cascading tree of one branch with the given children, open.
+    fn cascading(children: Vec<TreeNode>) -> Tree {
+        Tree::new("t", "T")
+            .select(TreeSelect::Multiple)
+            .cascade()
+            .node(TreeNode::branch("p", "P", children).open(true))
+    }
+
+    fn state_of(out: &str, id: &str) -> String {
+        let at = out
+            .find(&format!(r#"value="{id}""#))
+            .expect("the node is drawn");
+        let start = out[..at].rfind("<li ").unwrap();
+        let tag = &out[start..out[start..].find('>').unwrap() + start];
+        tag.split(r#"data-checked=""#)
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .unwrap_or("")
+            .to_owned()
+    }
+
+    #[test]
+    fn a_parent_is_whole_only_when_every_child_is_chosen_a_disabled_one_included() {
+        // The one child that is not chosen is disabled: the parent is half chosen, not whole,
+        // so it does not post its own id, which would stand for what the person could not choose.
+        let out = html(cascading(vec![
+            TreeNode::leaf("p/open", "Open").selected(true),
+            TreeNode::leaf("p/secret", "Secret").disabled(true),
+        ]));
+        assert_eq!(state_of(&out, "p"), "mixed", "{out}");
+        assert!(!out.contains(r#"value="p" checked"#), "{out}");
+        // A disabled child that is chosen counts as chosen.
+        let out = html(cascading(vec![
+            TreeNode::leaf("p/open", "Open").selected(true),
+            TreeNode::leaf("p/kept", "Kept")
+                .selected(true)
+                .disabled(true),
+        ]));
+        assert_eq!(state_of(&out, "p"), "true", "{out}");
+        // Nothing chosen and a disabled child: nothing is chosen.
+        let out = html(cascading(vec![
+            TreeNode::leaf("p/open", "Open"),
+            TreeNode::leaf("p/secret", "Secret").disabled(true),
+        ]));
+        assert_eq!(state_of(&out, "p"), "false", "{out}");
+    }
+
+    #[test]
+    fn a_parent_does_not_stand_for_children_the_person_was_not_shown() {
+        // Every child drawn is chosen, but a Show more row, or a larger count, says there are more.
+        let shown = || {
+            vec![
+                TreeNode::leaf("p/a", "A").selected(true),
+                TreeNode::leaf("p/b", "B").selected(true),
+            ]
+        };
+        let paged = Tree::new("t", "T")
+            .select(TreeSelect::Multiple)
+            .cascade()
+            .node(
+                TreeNode::branch("p", "P", shown())
+                    .open(true)
+                    .more("/p?after=b", Some(98)),
+            );
+        assert_eq!(state_of(&html(paged), "p"), "mixed");
+        let counted = Tree::new("t", "T")
+            .select(TreeSelect::Multiple)
+            .cascade()
+            .node(
+                TreeNode::branch("p", "P", shown())
+                    .open(true)
+                    .children_total(100),
+            );
+        assert_eq!(state_of(&html(counted), "p"), "mixed");
+        // With nothing more to come it is whole.
+        assert_eq!(state_of(&html(cascading(shown())), "p"), "true");
+        // A branch the app itself chose as a whole is drawn as chosen: that is the app's own word.
+        let whole = Tree::new("t", "T")
+            .select(TreeSelect::Multiple)
+            .cascade()
+            .node(
+                TreeNode::branch("p", "P", shown())
+                    .open(true)
+                    .selected(true)
+                    .more("/p?after=b", Some(98)),
+            );
+        assert_eq!(state_of(&html(whole), "p"), "true");
+    }
+
+    #[test]
+    fn a_chosen_node_that_is_disabled_posts_a_hidden_copy_so_a_save_does_not_drop_it() {
+        let tree = |select| {
+            Tree::new("grant", "Grant")
+                .select(select)
+                .node(TreeNode::leaf("kept", "Kept").selected(true).disabled(true))
+                .node(TreeNode::leaf("locked", "Locked").disabled(true))
+                .node(TreeNode::leaf("free", "Free").selected(true))
+        };
+        let out = html(tree(TreeSelect::Multiple));
+        assert!(
+            out.contains(
+                r#"<input data-slot="tree-keep" type="hidden" name="grant" value="kept">"#
+            ),
+            "{out}"
+        );
+        // Only the chosen and disabled one has it.
+        assert_eq!(out.matches(r#"type="hidden""#).count(), 1, "{out}");
+        // A single choice is a radio, and a hidden copy would post beside whatever is chosen next.
+        assert_eq!(
+            html(tree(TreeSelect::Single))
+                .matches(r#"type="hidden""#)
+                .count(),
+            0
+        );
+        // A parent that is only drawn chosen because its children are is not the person's word.
+        let derived = html(
+            Tree::new("t", "T")
+                .select(TreeSelect::Multiple)
+                .cascade()
+                .node(
+                    TreeNode::branch("p", "P", [TreeNode::leaf("p/a", "A").selected(true)])
+                        .open(true)
+                        .disabled(true),
+                ),
+        );
+        assert_eq!(derived.matches(r#"type="hidden""#).count(), 0, "{derived}");
+    }
+
+    #[test]
+    fn the_open_set_and_the_rest_of_the_query_in_every_link_are_capped() {
+        // 100 open ids of 250 bytes and a field of 50 KB: what a link keeps is bounded.
+        let query: String = (0..100)
+            .map(|n| format!("open={n:03}{}", "z".repeat(247)))
+            .chain(["q=".to_owned() + &"y".repeat(50_000)])
+            .collect::<Vec<_>>()
+            .join("&");
+        let state = TreeState::from_query("/files", &query);
+        assert!(state.open_ids().map(str::len).sum::<usize>() <= MAX_OPEN_BYTES);
+        let link = state.toggled("another");
+        assert!(
+            link.len() <= MAX_OPEN_BYTES + MAX_QUERY_BYTES + 1000,
+            "{}",
+            link.len()
+        );
+        // Every caret carries the same bounded link, so the page is bounded too.
+        let nodes = (0..300).map(|n| {
+            TreeNode::branch(
+                format!("b{n}"),
+                format!("Branch {n}"),
+                [TreeNode::leaf(format!("b{n}/x"), "x")],
+            )
+        });
+        let page = html(Tree::new("files", "Files").state(state).nodes(nodes));
+        assert!(
+            page.len() < 300 * (MAX_OPEN_BYTES + MAX_QUERY_BYTES) * 4,
+            "{}",
+            page.len()
+        );
+        // What fits is kept, in order of arrival.
+        let small = TreeState::from_query("/f", "open=a&open=b&q=1");
+        assert_eq!(small.toggled("c"), "/f?q=1&open=a&open=b&open=c");
+    }
+
+    #[test]
+    fn an_address_that_is_not_local_gives_links_that_are() {
+        for path in [
+            "//evil.example/x",
+            "https://evil.example/x",
+            "/\\evil.example",
+            "javascript:alert(1)",
+        ] {
+            let state = TreeState::from_query(path, "open=a");
+            let link = state.toggled("b");
+            assert!(
+                link.starts_with('?')
+                    || (link.starts_with('/') && !link.starts_with("//") && !link.contains('\\')),
+                "{path} -> {link}"
+            );
+            assert!(
+                !link.contains("evil.example") && !link.contains("javascript"),
+                "{path} -> {link}"
+            );
+        }
+        assert_eq!(
+            TreeState::from_query("/files?x=1#top", "").toggled("a"),
+            "/files?open=a"
+        );
     }
 }
