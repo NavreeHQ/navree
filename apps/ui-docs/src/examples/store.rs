@@ -371,8 +371,13 @@ mod tests {
             code.starts_with("/// An order, as the table shows it."),
             "{code}"
         );
-        assert!(code.contains("#[table(
-    cursor,"), "{code}");
+        assert!(
+            code.contains(
+                "#[table(
+    cursor,"
+            ),
+            "{code}"
+        );
         assert!(code.ends_with('}'));
         let code = super::items(super::ORDER_RS, &["pub fn order_drawer"]);
         assert!(code.contains("SheetWidth::Xl"), "{code}");
