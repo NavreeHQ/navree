@@ -639,4 +639,35 @@ mod tests {
         );
         assert!(error.contains("edr.api_url must be an absolute"), "{error}");
     }
+
+    #[test]
+    fn the_section_never_shows_a_client_secret_in_debug_output() {
+        let mut apps = BTreeMap::new();
+        apps.insert(
+            "mail".to_owned(),
+            AppCredentials {
+                client_id: "mail-app".into(),
+                client_secret: Some("mail-app-cl1ent-s3cret".into()),
+            },
+        );
+        let microsoft = ProviderConfig {
+            apps,
+            ..ProviderConfig::new(ProviderType::Microsoft).client("ms-app", "ms-cl1ent-s3cret")
+        };
+        let options = IntegrationsOptions::default()
+            .with_provider("microsoft", microsoft)
+            .with_provider(
+                "hubspot",
+                ProviderConfig::new(ProviderType::OAuth2).client("hub-app", "hub-cl1ent-s3cret"),
+            );
+        let printed = format!("{options:?}");
+        for secret in [
+            "mail-app-cl1ent-s3cret",
+            "ms-cl1ent-s3cret",
+            "hub-cl1ent-s3cret",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("ms-app"), "{printed}");
+    }
 }

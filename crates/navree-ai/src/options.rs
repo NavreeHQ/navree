@@ -809,4 +809,40 @@ mod tests {
         };
         assert!(!format!("{vectors:?}").contains("qdrant-key"));
     }
+
+    #[test]
+    fn the_section_never_shows_a_credential_in_debug_output() {
+        let bedrock = ProviderConfig {
+            access_key_id: Some("AKIA4EXAMPLE7ID".into()),
+            secret_access_key: Some("aws-s3cr3t-access-key".into()),
+            session_token: Some("aws-s3ssion-t0ken".into()),
+            ..ProviderConfig::bedrock("eu-west-1")
+        };
+        let options = AiOptions {
+            providers: [
+                (
+                    "anthropic".to_owned(),
+                    ProviderConfig::anthropic("sk-ant-api-s3cr3t"),
+                ),
+                ("bedrock".to_owned(), bedrock),
+            ]
+            .into(),
+            vectors: VectorsOptions {
+                key: Some("qdrant-api-s3cr3t".into()),
+                ..VectorsOptions::default()
+            },
+            ..AiOptions::default()
+        };
+        let printed = format!("{options:?}");
+        for secret in [
+            "sk-ant-api-s3cr3t",
+            "AKIA4EXAMPLE7ID",
+            "aws-s3cr3t-access-key",
+            "aws-s3ssion-t0ken",
+            "qdrant-api-s3cr3t",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("eu-west-1"), "{printed}");
+    }
 }

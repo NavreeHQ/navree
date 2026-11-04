@@ -568,4 +568,24 @@ mod tests {
             assert!(error.contains(message), "{key} = {value}: {error}");
         }
     }
+
+    #[test]
+    fn the_section_never_shows_the_api_token_in_debug_output() {
+        let options = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_DOMAINS__DNS__PROVIDER", "cloudflare"),
+                ("APP_DOMAINS__DNS__ZONE", "links.example.com"),
+                (
+                    "APP_DOMAINS__DNS__CLOUDFLARE__API_TOKEN",
+                    "cf-api-t0ken-s3cret",
+                ),
+                ("APP_DOMAINS__DNS__CLOUDFLARE__ZONE_ID", "zone-1"),
+            ],
+        ))
+        .unwrap();
+        let printed = format!("{options:?}");
+        assert!(!printed.contains("cf-api-t0ken-s3cret"), "{printed}");
+        assert!(printed.contains("zone-1"), "{printed}");
+    }
 }

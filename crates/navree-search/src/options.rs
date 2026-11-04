@@ -708,4 +708,29 @@ mod tests {
         let options: SearchOptions = typesense.into();
         assert!(options.check().unwrap_err().contains("search.key"));
     }
+
+    #[test]
+    fn the_section_never_shows_a_key_in_debug_output() {
+        let mut vectors = VectorOptions::new(VectorStoreKind::Qdrant);
+        vectors.url = Some("http://127.0.0.1:6333".to_owned());
+        vectors.key = Some("qdrant-api-s3cret".to_owned());
+        let options = SearchOptions {
+            vectors: Some(vectors),
+            ..SearchOptions::from(
+                Engine::meilisearch("http://127.0.0.1:7700").key("meili-master-s3cret"),
+            )
+        };
+        let typesense = SearchOptions::from(
+            Engine::typesense("http://127.0.0.1:8108").key("typesense-api-s3cret"),
+        );
+        let printed = format!("{options:?} {typesense:?}");
+        for secret in [
+            "qdrant-api-s3cret",
+            "meili-master-s3cret",
+            "typesense-api-s3cret",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("http://127.0.0.1:7700"), "{printed}");
+    }
 }
