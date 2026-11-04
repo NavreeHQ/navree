@@ -347,7 +347,13 @@ pub const COMPONENTS: &[Component] = &[
     // Overlays
     component("dialog", "Dialog", &["Dialog"], "thumb").parts("thumb"),
     component("alert-dialog", "AlertDialog", &["AlertDialog"], "thumb").parts("thumb"),
-    component("sheet", "Sheet", &["Sheet", "SheetSide"], "thumb").parts("thumb"),
+    component(
+        "sheet",
+        "Sheet",
+        &["Sheet", "SheetSide", "SheetWidth"],
+        "thumb",
+    )
+    .parts("thumb"),
     component("drawer", "Drawer", &["Drawer"], "thumb").parts("thumb"),
     component(
         "popover",
@@ -444,6 +450,14 @@ pub const COMPONENTS: &[Component] = &[
     component("commands", "Commands", &["Cmd", "Op", "Reply"], "toggle")
         .page("/docs/ui/commands-and-ops/"),
     component("regions", "Regions", &["Region"], "lazy").page("/docs/ui/regions/"),
+    // The example app's views, shown on `/ui/` rather than a docs page.
+    component(
+        "build-anything",
+        "Build anything",
+        &["DataTable", "Sheet", "ActivityFeed"],
+        "recipients",
+    )
+    .page("/ui/#build-anything"),
 ];
 
 /// One cell of a searchable gallery.
@@ -545,6 +559,9 @@ pub struct Example {
     /// Drawn this many px wide and scaled to fit the column: for a whole page,
     /// whose layout changes below 768px.
     pub width: Option<u32>,
+    /// Drawn as it stands, with nothing it would follow: a live part's stream is
+    /// left out, since a static page has no server to stream from.
+    pub still: bool,
 }
 
 impl Example {
@@ -568,6 +585,7 @@ impl Example {
             live: false,
             streaming: None,
             width: None,
+            still: false,
         }
     }
 
@@ -624,6 +642,12 @@ impl Example {
     /// Shows the live dot in `state`.
     pub fn streaming(mut self, state: &'static str) -> Self {
         self.streaming = Some(state);
+        self
+    }
+
+    /// Leaves out the stream a live part follows, and the module that would open it.
+    pub fn still(mut self) -> Self {
+        self.still = true;
         self
     }
 }

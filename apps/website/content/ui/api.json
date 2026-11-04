@@ -4212,6 +4212,12 @@
         "doc": "The country a phone field starts on when its number has none: the workspace's or the user's (feature `phone`)."
       },
       {
+        "name": "phone_flags",
+        "generics": "",
+        "args": "flag: fn(navree_phone::Region) -> Node",
+        "doc": "Draws the flags in the country lists of the form's phone fields with `flag`, in place of the flag emoji (feature `phone`). See `PhoneInput::flags`."
+      },
+      {
         "name": "post",
         "generics": "",
         "args": "action: impl Into<Href>",
@@ -4264,6 +4270,12 @@
         "generics": "",
         "args": "field: &'static str, options: impl IntoIterator<Item =(String, String)>",
         "doc": "Sets the choices of a select whose options come from the database."
+      },
+      {
+        "name": "choices",
+        "generics": "",
+        "args": "field: &'static str, choices: impl IntoIterator<Item = crate::select::Choice>",
+        "doc": "Sets the choices of a picker field as `Choice`s, for a list that shows more than a label: an icon or a picture before it, a line under it, words it is found by. A browser's own `select` shows only the labels."
       },
       {
         "name": "search",
@@ -6705,6 +6717,12 @@
         "doc": "Sets the edge."
       },
       {
+        "name": "width",
+        "generics": "",
+        "args": "width: SheetWidth",
+        "doc": "Sets the width of a sheet on the left or right. A sheet at the top or bottom is as wide as the screen."
+      },
+      {
         "name": "description",
         "generics": "",
         "args": "description: impl Into<Node>",
@@ -6752,6 +6770,27 @@
       {
         "name": "Bottom",
         "doc": "The bottom.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "SheetWidth": {
+    "name": "SheetWidth",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/overlays.rs",
+    "summary": "How wide a `Sheet` on the left or right is. A sheet is never wider than the screen less 3 rem, so on a phone every width is the same.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Md",
+        "doc": "24 rem: a form or a list of filters. The default.",
+        "default": true
+      },
+      {
+        "name": "Lg",
+        "doc": "40 rem: a record's details, with room for cards side by side and tabs.",
         "default": false
       }
     ],

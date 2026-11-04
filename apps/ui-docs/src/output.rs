@@ -245,6 +245,7 @@ fn columns(cells: Cells, n: usize) -> i64 {
 fn scripts(example: &Example, node: &Node) -> Vec<String> {
     assets::scripts(measure(node).uses)
         .filter(|url| example.live || *url != assets::CORE_URL)
+        .filter(|url| !example.still || *url != assets::LIVE_URL)
         .map(|url| file_of(url).to_owned())
         .collect()
 }
@@ -286,11 +287,33 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
     } else {
         ""
     };
+    let mut body = render(stage);
+    if example.still {
+        body = without_streams(&body);
+    }
     format!(
-        "{head}<body data-preview=\"{}\"{show}>{}</body>\n</html>\n",
+        "{head}<body data-preview=\"{}\"{show}>{body}</body>\n</html>\n",
         example.layout.as_str(),
-        render(stage)
     )
+}
+
+/// `html` with no `data-ui-live-src` or `data-ui-live-event` attribute: the regions
+/// and tables in it follow no stream.
+fn without_streams(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some((at, name)) = [" data-ui-live-src=\"", " data-ui-live-event=\""]
+        .iter()
+        .filter_map(|name| rest.find(name).map(|at| (at, name.len())))
+        .min()
+    {
+        out.push_str(&rest[..at]);
+        let value = &rest[at + name..];
+        let end = value.find('"').map_or(value.len(), |end| end + 1);
+        rest = &value[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 #[derive(Serialize)]
@@ -630,6 +653,19 @@ fn check(examples: &[Example], api: &BTreeMap<String, TypeDoc>) {
         }
     }
     let _ = Layout::Center;
+}
+
+#[cfg(test)]
+mod still_tests {
+    #[test]
+    fn a_still_preview_follows_no_stream() {
+        let html = r#"<div id="r" data-ui-src="/f" data-ui-live-src="/events" data-ui-live-event="stats"><table data-ui-live-src="/events"></table></div>"#;
+        assert_eq!(
+            super::without_streams(html),
+            r#"<div id="r" data-ui-src="/f"><table></table></div>"#
+        );
+        assert_eq!(super::without_streams("<p>plain</p>"), "<p>plain</p>");
+    }
 }
 
 #[cfg(test)]

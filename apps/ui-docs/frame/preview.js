@@ -41,3 +41,21 @@ for (const form of document.querySelectorAll("form[data-preview-search]")) {
   });
   form.addEventListener("submit", (event) => event.preventDefault());
 }
+
+// A live feed, replayed: the rows a stream would bring were drawn by the app's own
+// Rust into a template, and this adds them to the top of the list one by one. A
+// static page has no server to stream from; in an app the server sends them.
+for (const template of document.querySelectorAll("template[data-preview-replay]")) {
+  const list = document.getElementById(template.dataset.previewReplay ?? "");
+  const rows = [...template.content.children];
+  if (!list) continue;
+  let at = 0;
+  const next = () => {
+    const row = rows[at++];
+    if (!row) return;
+    row.setAttribute("data-preview-new", "");
+    list.prepend(row);
+    setTimeout(next, 2800);
+  };
+  setTimeout(next, 1600);
+}

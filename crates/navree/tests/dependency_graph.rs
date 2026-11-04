@@ -542,8 +542,9 @@ const HIERARCHY: &[Rule] = &[
     rule("ui-table-proof", 9, &["navree"]),
     // The example app (an email campaign) on the `navree` facade.
     rule("campaign-demo", 9, &["navree"]),
-    // The website's UI docs generator: one binary on the `navree` facade.
-    rule("ui-docs", 9, &["navree"]),
+    // The website's UI docs generator: one binary on the `navree` facade, drawing
+    // the example app's views for the website from the app itself.
+    rule("ui-docs", 10, &["navree", "campaign-demo"]),
     // The skills' Rust blocks, compiled against the facade.
     rule("skill-snippets", 9, &["navree"]),
 ];

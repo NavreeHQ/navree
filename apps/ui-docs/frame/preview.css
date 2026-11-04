@@ -15,6 +15,7 @@ body[data-preview-show] [data-preview-stage]{flex-direction:column}
 [data-preview-show] :is([data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]):not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:32rem;height:auto;max-height:none;border-width:1px;border-radius:var(--radius-lg)}
 [data-preview-show] [data-slot=alert-dialog]:not([open]){max-width:26rem}
 [data-preview-show] [data-slot=sheet]:not([open]){max-width:24rem}
+[data-preview-show] [data-slot=sheet][data-width=lg]:not([open]){max-width:40rem}
 [data-preview-show] [data-slot=select-popup]:not(:popover-open){display:flex;flex-direction:column;position:relative;inset:auto;margin:6px 0 0;width:100%;max-width:none;height:auto}
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
@@ -54,3 +55,8 @@ body[data-preview=fill] [data-preview-stage]:has([data-preview-search]){padding:
 [data-preview-gallery=flag] [data-preview-cell-body]{min-height:32px}
 [data-preview-gallery=flag] figcaption{display:flex;flex-direction:column;gap:2px}
 [data-preview-gallery=flag] figcaption small{color:var(--fg-3);font:11px/1.3 var(--font-sans);overflow-wrap:anywhere}
+
+/* A row a replayed feed adds: it eases in where a stream would put it. */
+@keyframes preview-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+[data-preview-new]{animation:preview-arrive .3s ease-out}
+@media (prefers-reduced-motion:reduce){[data-preview-new]{animation:none}}

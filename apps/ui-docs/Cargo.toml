@@ -16,6 +16,8 @@ path = "src/main.rs"
 unsafe_code = "forbid"
 
 [dependencies]
+# The example app, whose views the website shows under "Build anything".
+campaign-demo = { path = "../campaign-demo" }
 chrono = { workspace = true }
 navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
 proc-macro2 = { workspace = true }

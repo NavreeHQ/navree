@@ -919,7 +919,8 @@
       "group": "overlays",
       "types": [
         "Sheet",
-        "SheetSide"
+        "SheetSide",
+        "SheetWidth"
       ],
       "thumb": "sheet/thumb",
       "anatomy": "sheet/thumb",
@@ -1367,6 +1368,26 @@
         "regions/live",
         "regions/lazy",
         "regions/poll"
+      ]
+    },
+    {
+      "id": "build-anything",
+      "name": "Build anything",
+      "url": "/ui/#build-anything",
+      "summary": "A table with search, filters, sort links, selection and pagination, as one region.",
+      "group": null,
+      "types": [
+        "DataTable",
+        "Sheet",
+        "ActivityFeed"
+      ],
+      "thumb": "build-anything/recipients",
+      "anatomy": null,
+      "examples": [
+        "build-anything/recipients",
+        "build-anything/recipient",
+        "build-anything/activity",
+        "build-anything/funnel"
       ]
     }
   ],
@@ -20098,6 +20119,1787 @@
               "tag": "svg",
               "count": 3,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/recipients",
+      "component": "build-anything",
+      "slug": "recipients",
+      "title": "The recipients table",
+      "kind": "single",
+      "code": "#[derive(Clone, TableRow)]\n#[table(sort = \"-last_activity\", per = 25, per_pages(10, 25, 50, 100))]\npub struct RecipientRow {\n    #[col(skip)]\n    pub id: i64,\n    #[col(sortable, search, sticky, label = \"Recipient\")]\n    pub name: String,\n    #[col(search, hidden)]\n    pub email: String,\n    // A relation's choices come from the page: each status with how many hold it.\n    #[col(sortable, filter = relation)]\n    pub status: String,\n    #[col(filter = multi, options = COUNTRIES, hide_on_mobile, label = \"Location\")]\n    pub country: String,\n    #[col(skip)]\n    pub city: String,\n    #[col(hide_on_mobile)]\n    pub device: String,\n    #[col(sortable, numeric)]\n    pub opens: i64,\n    #[col(sortable, numeric)]\n    pub clicks: i64,\n    #[col(sortable, filter = date, label = \"Last activity\")]\n    pub last_activity: Option<NaiveDate>,\n}\n\npub fn recipients_table<'a>(\n    query: &'a TableQuery<RecipientRow>,\n    page: &'a TablePage<RecipientRow>,\n    counts: &[(Status, u64)],\n    today: NaiveDate,\n) -> DataTable<'a, RecipientRow> {\n    let statuses = counts\n        .iter()\n        .map(|(status, n)| FilterOption::new(status.key(), status.label()).count(*n))\n        .collect();\n    DataTable::new(\"recipients\", query, page)\n        .caption(\"Recipients of Spring launch\")\n        .options(\"status\", statuses)\n        .cell(\"name\", person_cell)\n        .cell(\"status\", |row| status_badge(&row.status))\n        .cell(\"country\", place_cell)\n        .cell(\"device\", device_cell)\n        .cell(\"last_activity\", move |row| {\n            Text::new(day_label(row.last_activity, today)).inline()\n        })\n        .filter_bar()\n        .sticky_header()\n        .live_from(\"/events\")\n        .live_event(\"recipients\")\n        .empty(\n            Empty::new(\"No recipient matches\")\n                .icon(icons::USER_SEARCH)\n                .description(\"Clear a filter, or search for part of a name or an address.\"),\n        )\n}",
+      "src": "/ui-preview/build-anything/recipients.html",
+      "height": 560,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-ef4718e7fbcd.js",
+        "table-89cd45739353.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "data-table",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table-toolbar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "toolbar-form",
+                  "tag": "form",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-search",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "toolbar-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-live",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "live-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "column-list",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "column-row",
+                              "tag": "div",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "filter-option",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "checkbox",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "column-move",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "column-list",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "column-row",
+                              "tag": "div",
+                              "count": 8,
+                              "children": [
+                                {
+                                  "slot": "filter-option",
+                                  "tag": "label",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "checkbox",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "column-move",
+                                  "tag": "a",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-links",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-link",
+                              "tag": "a",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "filter-bar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-filter",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "filter-options",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "filter-option",
+                              "tag": "label",
+                              "count": 6,
+                              "children": [
+                                {
+                                  "slot": "checkbox",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "filter-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-filter",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "filter-options",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "filter-option",
+                              "tag": "label",
+                              "count": 25,
+                              "children": [
+                                {
+                                  "slot": "checkbox",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "menu-filter",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "filter-range",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "filter-field",
+                              "tag": "label",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "filter-option",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "checkbox",
+                              "tag": "input",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-alert",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "alert-text",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "th-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "th",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sort-link",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "popover-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "menu-links",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-link",
+                                  "tag": "a",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "col-resize",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-summary",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "footer-end",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-size",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "pagination",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "pagination-link",
+                          "tag": "a",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "pagination-ellipsis",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "pagination-link",
+                          "tag": "a",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/recipient",
+      "component": "build-anything",
+      "slug": "recipient",
+      "title": "A recipient in a sheet",
+      "kind": "single",
+      "code": "pub fn recipient_sheet(person: &Recipient, events: &[Event]) -> Sheet {\n    Sheet::new(SHEET, person.name.clone())\n        .width(SheetWidth::Lg)\n        .body(recipient_detail(person, events, 3))\n        .footer((\n            Button::outline(\"Open as a page\").href(format!(\"/recipients/{}\", person.id)),\n            Button::primary(\"Edit contact\")\n                .icon(icons::PENCIL)\n                .href(format!(\"/recipients/{}/edit\", person.id)),\n        ))\n}\n\npub fn recipient_detail(person: &Recipient, events: &[Event], level: u8) -> Stack {\n    let status = Status::parse(&person.status).unwrap_or(Status::Delivered);\n    Stack::gap(4).children((\n        Row::gap(3)\n            .align(Align::Center)\n            .justify(Justify::Between)\n            .wrap()\n            .children((\n                Row::gap(3).align(Align::Center).children((\n                    Avatar::placeholder(person.name.clone()).size(Size::Lg),\n                    Stack::gap(0).children((\n                        Text::new(person.email.clone()),\n                        Text::muted(format!(\"{} at {}\", person.role, person.company)),\n                        navree::validation::Phone::parse(&person.phone, None)\n                            .ok()\n                            .map(|phone| Text::muted(phone.international())),\n                    )),\n                )),\n                Row::gap(2).children((\n                    Badge::new(CAMPAIGN)\n                        .icon(icons::MAIL)\n                        .variant(BadgeVariant::Outline),\n                    Badge::new(status.label()).tone(status.tone()).dot(),\n                )),\n            )),\n        outcomes(events),\n        recipient_facts(person, events),\n        Tabs::new(\"recipient-tabs\", \"About this recipient\")\n            .param(\"section\")\n            .tab(\n                Tab::new(\"timeline\", \"Timeline\")\n                    .count(events.len().to_string())\n                    .panel(recipient_timeline(person, events, level)),\n            )\n            .tab(Tab::new(\"device\", \"Device and network\").panel(device_tab(person)))\n            .tab(Tab::new(\"email\", \"Email\").panel(email_tab(events, level)))\n            .tab(Tab::new(\"technical\", \"Technical\").panel(technical_tab(person, events))),\n    ))\n}\n\npub fn recipient_timeline(person: &Recipient, events: &[Event], level: u8) -> Timeline {\n    Timeline::new(\n        \"recipient-timeline\",\n        format!(\"{CAMPAIGN} to {}\", person.name),\n    )\n    .heading(level)\n    .time_zone(ZONE, OFFSET)\n    .labels(proxy_labels())\n    .events(events.iter().map(step))\n}",
+      "src": "/ui-preview/build-anything/recipient.html",
+      "height": 900,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "menus-dffd26363290.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sheet",
+          "tag": "dialog",
+          "count": 1,
+          "children": [
+            {
+              "slot": "dialog-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "dialog-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "dialog-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "row",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "row",
+                          "tag": "div",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "avatar",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "text",
+                                  "tag": "p",
+                                  "count": 3,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "fact-grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "fact-card",
+                          "tag": "div",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "fact-icon",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "fact-body",
+                              "tag": "dl",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "fact-label",
+                                  "tag": "dt",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "fact-value",
+                                  "tag": "dd",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "row",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "flag",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "text",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "fact-detail",
+                                  "tag": "dd",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "tabs",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "tabs-list",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "tab",
+                              "tag": "a",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "tab-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "tabs-panel",
+                          "tag": "div",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "timeline",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-zone",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "hidden-notice",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "hidden-notice-text",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "hidden-notice-toggle",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "reveal",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "hidden-notice-dismiss",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "timeline-day",
+                                  "tag": "div",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "timeline-day-title",
+                                      "tag": "h3",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "timeline-list",
+                                      "tag": "ol",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "timeline-event",
+                                          "tag": "li",
+                                          "count": 6,
+                                          "children": [
+                                            {
+                                              "slot": "timeline-time",
+                                              "tag": "time",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "timeline-dot",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "timeline-body",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "timeline-head",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "timeline-title",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "timeline-gap",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "meta",
+                                                  "tag": "ul",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "meta-item",
+                                                      "tag": "li",
+                                                      "count": 2,
+                                                      "children": [
+                                                        {
+                                                          "slot": "meta-start",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "icon",
+                                                              "tag": "svg",
+                                                              "count": 1,
+                                                              "children": []
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "slot": "meta-text",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "dialog-footer",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "dialog-close",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/activity",
+      "component": "build-anything",
+      "slug": "activity",
+      "title": "Recent activity, live",
+      "kind": "single",
+      "code": "pub fn activity_feed(entries: &[FeedEntry], period: Period, total: u64) -> Region {\n    let newest = entries\n        .iter()\n        .map(|entry| entry.event.id)\n        .max()\n        .unwrap_or(0);\n    ActivityFeed::new(\"activity\", \"Recent activity\")\n        .heading(2)\n        .live()\n        .summary(format!(\"{} events {}\", thousands(total), period.words()))\n        .time_zone(ZONE, OFFSET)\n        .labels(proxy_labels())\n        .height(FeedHeight::Lg)\n        .period_select(\"/\", \"activity-region\", period_select(period))\n        .items(entries.iter().map(activity_item))\n        .empty(Empty::new(\"Quiet in this period\").description(\"Choose a longer period.\"))\n        .in_region(\n            \"activity-region\",\n            format!(\"/fragments/activity?period={}\", period.key()),\n            \"/events\",\n            newest.to_string(),\n        )\n        .live_event(\"activity\")\n}\n\npub fn activity_item(entry: &FeedEntry) -> ActivityItem {\n    let event = &entry.event;\n    let kind = Kind::parse(&event.kind);\n    let verb = match kind {\n        Kind::Opened => \"opened\".to_owned(),\n        Kind::Clicked => format!(\"clicked “{}” in\", short_link(&event.link)),\n        Kind::Converted => \"started a Pro trial from\".to_owned(),\n        Kind::Unsubscribed => \"unsubscribed from\".to_owned(),\n        Kind::Bounced => \"could not be reached by\".to_owned(),\n        Kind::ProxyOpen => \"had images fetched by a mail proxy for\".to_owned(),\n        Kind::Sent | Kind::Delivered => \"received\".to_owned(),\n    };\n    let mut item = ActivityItem::new(entry.name.clone(), verb)\n        .object(CAMPAIGN)\n        .tone(kind.tone())\n        .icon(kind.icon())\n        .at(event.at)\n        .metas(read_on(event))\n        .href(format!(\"/recipients/{}\", event.recipient_id))\n        .id(format!(\"event-{}\", event.id));\n    if kind == Kind::Bounced {\n        item = item.meta(Meta::icon(icons::SERVER, event.detail.clone()));\n    }\n    if kind == Kind::ProxyOpen {\n        item = item.muted().filtered();\n    }\n    item\n}",
+      "src": "/ui-preview/build-anything/activity.html",
+      "height": 560,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "region",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "activity-feed",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-header",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "live-state",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "live-dot",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "activity-zone",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "activity-period",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "native-select",
+                          "tag": "select",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "hidden-notice",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "hidden-notice-text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hidden-notice-toggle",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "reveal",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "hidden-notice-dismiss",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "activity-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-item",
+                      "tag": "li",
+                      "count": 40,
+                      "children": [
+                        {
+                          "slot": "activity-icon",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "activity-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "activity-line",
+                              "tag": "p",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "activity-actor",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "activity-verb",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "activity-object",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "meta",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "meta-item",
+                                  "tag": "li",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "meta-start",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "meta-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "activity-time",
+                          "tag": "time",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "activity-item",
+          "tag": "li",
+          "count": 8,
+          "children": [
+            {
+              "slot": "activity-icon",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "activity-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-line",
+                  "tag": "p",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-actor",
+                      "tag": "a",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "activity-verb",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "activity-object",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "meta",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "meta-item",
+                      "tag": "li",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "meta-start",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "meta-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "activity-time",
+              "tag": "time",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/funnel",
+      "component": "build-anything",
+      "slug": "funnel",
+      "title": "A funnel of plain SVG elements",
+      "kind": "single",
+      "code": "fn stage(name: &'static str, count: u64, of: u64, colour: &'static str) -> Stack {\n    let width = (count * 1000).checked_div(of).unwrap_or(0);\n    Stack::gap(1).children((\n        Row::gap(2).justify(Justify::Between).children((\n            Text::new(name).inline(),\n            Text::muted(format!(\"{} · {}\", thousands(count), percent(count, of))).inline(),\n        )),\n        el(\"svg\")\n            .attr(\"viewBox\", \"0 0 1000 8\")\n            .attr(\"preserveAspectRatio\", \"none\")\n            .attr(\"width\", \"100%\")\n            .attr(\"height\", 8_i64)\n            .attr(\"aria-hidden\", \"true\")\n            .children((\n                el(\"rect\")\n                    .attr(\"width\", 1000_i64)\n                    .attr(\"height\", 8_i64)\n                    .attr(\"fill\", \"var(--ink-3)\"),\n                el(\"rect\")\n                    .attr(\"width\", i64::try_from(width).unwrap_or(0))\n                    .attr(\"height\", 8_i64)\n                    .attr(\"fill\", colour),\n            )),\n    ))\n}\n\npub fn funnel(counts: &Counts) -> Card {\n    Card::titled(\"Funnel\")\n        .description(\"Each step as a share of everyone it was sent to\")\n        .body(\n            Stack::gap(3).children((\n                stage(\"Delivered\", counts.delivered, counts.sent, \"var(--fg-3)\"),\n                stage(\"Opened\", counts.opened, counts.sent, \"var(--info)\"),\n                stage(\"Clicked\", counts.clicked, counts.sent, \"var(--violet)\"),\n                stage(\"Converted\", counts.converted, counts.sent, \"var(--accent)\"),\n                Row::gap(2).wrap().children((\n                    Badge::new(format!(\"{} unsubscribed\", thousands(counts.unsubscribed)))\n                        .tone(Tone::Warning)\n                        .dot(),\n                    Badge::new(format!(\"{} bounced\", thousands(counts.bounced)))\n                        .tone(Tone::Danger)\n                        .dot(),\n                    Badge::new(format!(\n                        \"{} proxy opens left out\",\n                        thousands(counts.proxied)\n                    ))\n                    .icon(icons::SHIELD),\n                )),\n            )),\n        )\n}",
+      "src": "/ui-preview/build-anything/funnel.html",
+      "height": 320,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "card-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "row",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "text",
+                              "tag": "span",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "badge",
+                          "tag": "span",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "badge-dot",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
