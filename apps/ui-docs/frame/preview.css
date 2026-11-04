@@ -31,6 +31,8 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
 [data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
+/* The room of a picture drawn in place while the real one is open: nothing under the pointer moves. */
+[data-preview-kept]{flex:none;max-width:100%;visibility:hidden}
 /* A toaster drawn in place, with its toasts staying: a preview is a picture, not a page that fades them. */
 [data-preview] [data-slot=toaster]{position:static;translate:none;width:100%;max-width:24rem}
 [data-preview] [data-slot=toast]{animation:none}

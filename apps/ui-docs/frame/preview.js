@@ -12,6 +12,75 @@ addEventListener(
 );
 addEventListener("submit", (event) => event.preventDefault(), true);
 
+// ---- Pictures drawn in place ----
+
+// A preview that shows a menu, list, card or dialog as it looks open draws the real
+// element in place. Opened for real, it moves to the top layer and leaves the page:
+// a stand-in of its size keeps its room meanwhile, so the control that opened it
+// stays under the pointer, and a hover card doesn't close as its trigger moves away.
+const PICTURES =
+  "[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer],[data-slot=select-popup],[data-slot=command-dialog],[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content],[data-slot=dropdown-menu]";
+if (document.body.hasAttribute("data-preview-show")) {
+  /** @type {Map<Element, HTMLElement>} */
+  const kept = new Map();
+  /** The room `el` takes where it is drawn, margins too; nothing when it isn't drawn in place. */
+  const roomOf = (el) => {
+    const style = getComputedStyle(el);
+    if (style.position !== "relative" || style.display === "none") return null;
+    const box = el.getBoundingClientRect();
+    const px = (value) => Number.parseFloat(value) || 0;
+    return {
+      width: box.width + px(style.marginLeft) + px(style.marginRight),
+      height: box.height + px(style.marginTop) + px(style.marginBottom),
+    };
+  };
+  const keep = (el, room) => {
+    if (kept.has(el) || !room) return;
+    const stand = document.createElement("div");
+    stand.setAttribute("data-preview-kept", "");
+    stand.setAttribute("aria-hidden", "true");
+    stand.style.width = `${room.width}px`;
+    stand.style.height = `${room.height}px`;
+    el.before(stand);
+    kept.set(el, stand);
+  };
+  const free = (el) => {
+    kept.get(el)?.remove();
+    kept.delete(el);
+  };
+  // A popover is measured as it is about to open, while it is still in place, and
+  // gives its room back as it is about to close, so the page never moves between.
+  addEventListener(
+    "beforetoggle",
+    (event) => {
+      const el = event.target;
+      if (!(el instanceof Element) || !el.matches(PICTURES)) return;
+      if (event.newState === "open") keep(el, roomOf(el));
+      else free(el);
+    },
+    true,
+  );
+  // A dialog opened with showModal() may say nothing before it opens, so its room is
+  // read while it is in place, and its stand-in goes in before the next paint.
+  const dialogs = [...document.querySelectorAll(PICTURES)].filter((el) => el instanceof HTMLDialogElement);
+  /** @type {WeakMap<Element, {width: number, height: number}>} */
+  const rooms = new WeakMap();
+  const sizes = new ResizeObserver(() => {
+    for (const dialog of dialogs) {
+      const room = dialog.open ? null : roomOf(dialog);
+      if (room) rooms.set(dialog, room);
+    }
+  });
+  for (const dialog of dialogs) sizes.observe(dialog);
+  new MutationObserver((changes) => {
+    for (const { target } of changes) {
+      if (!dialogs.includes(target)) continue;
+      if (target.open) keep(target, rooms.get(target));
+      else free(target);
+    }
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["open"] });
+}
+
 // A searchable gallery: someone types, the cells that do not match go away. The
 // cells are plain markup, so without this script the gallery still shows them all.
 for (const form of document.querySelectorAll("form[data-preview-search]")) {
