@@ -496,6 +496,9 @@ struct State {
     sub_pending: HashMap<u16, String>,
     /// The paths the broker has accepted, on this connection or in the session it kept.
     confirmed: HashSet<String>,
+    /// What `confirmed` held when the connection was lost: the broker still has those if it
+    /// kept the session, and does not if it did not.
+    confirmed_before: HashSet<String>,
     /// The paths the broker refused, and what it said.
     refused: HashMap<String, String>,
     /// Every subscription, restored on a reconnect without a session.
@@ -740,11 +743,18 @@ impl Session {
     fn on_connected(&self, writer: mpsc::UnboundedSender<Packet>, session_present: bool) {
         let mut state = self.lock();
         state.writer = Some(writer);
-        if !session_present {
-            // The broker forgot them: they are asked for again, and counted once it says yes.
+        // A broker that kept the session still has what it had accepted; one that did not
+        // forgot it all. Whatever it does not have is asked for, whether it was asked for before
+        // or only while the connection was down, and counted once the broker says yes.
+        let before = std::mem::take(&mut state.confirmed_before);
+        if session_present {
+            state.confirmed.extend(before);
+        } else {
             state.confirmed.clear();
-            let subscriptions = state.subscriptions.clone();
-            for (path, id) in subscriptions {
+        }
+        let subscriptions = state.subscriptions.clone();
+        for (path, id) in subscriptions {
+            if !state.confirmed.contains(&path) {
                 let pkid = state.next_pkid();
                 state.sub_pending.insert(pkid, path.clone());
                 state.write(subscribe_packet(pkid, &path, id));
@@ -770,8 +780,11 @@ impl Session {
     fn on_disconnected(&self, error: String) {
         let mut state = self.lock();
         state.writer = None;
-        // Subscriptions waiting for a SUBACK are asked for again on reconnect.
+        // Subscriptions waiting for a SUBACK are asked for again on reconnect, and none counts as
+        // accepted until the broker says whether it kept them.
         state.sub_pending.clear();
+        let confirmed = std::mem::take(&mut state.confirmed);
+        state.confirmed_before.extend(confirmed);
         drop(state);
         self.status.send_replace(Status::Down(error));
     }
