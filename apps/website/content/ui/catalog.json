@@ -1062,12 +1062,14 @@
       "summary": "A scrolling region with thin scrollbars, reachable by keyboard.",
       "group": "layout",
       "types": [
-        "ScrollArea"
+        "ScrollArea",
+        "ScrollHeight"
       ],
       "thumb": "scroll-area/default",
       "anatomy": "scroll-area/default",
       "examples": [
-        "scroll-area/default"
+        "scroll-area/default",
+        "scroll-area/fixed"
       ]
     },
     {
@@ -13308,7 +13310,7 @@
       "slug": "default",
       "title": "A scroll area",
       "kind": "single",
-      "code": "ScrollArea::new(\"Activity\").children(\n    Stack::gap(2).children(\n        [\n            \"Gurpreet moved Sutlej Supply renewal to Proposal\",\n            \"Harleen created Haveli Home renewal\",\n            \"Manpreet closed Doaba Traders expansion\",\n            \"Gurpreet added a note to Phulkari Textiles pilot\",\n            \"Harleen changed the owner of Pind Pantry deal\",\n            \"Manpreet archived Majha Mills trial\",\n            \"Gurpreet uploaded contract-sutlej.pdf\",\n            \"Harleen invited Ravneet to the workspace\",\n        ]\n        .map(Text::muted),\n    ),\n)",
+      "code": "ScrollArea::new(\"Activity\")\n    .max_height(ScrollHeight::Sm)\n    .children(\n        Stack::gap(2).children(\n            [\n                \"Gurpreet moved Sutlej Supply renewal to Proposal\",\n                \"Harleen created Haveli Home renewal\",\n                \"Manpreet closed Doaba Traders expansion\",\n                \"Gurpreet added a note to Phulkari Textiles pilot\",\n                \"Harleen changed the owner of Pind Pantry deal\",\n                \"Manpreet archived Majha Mills trial\",\n                \"Gurpreet uploaded contract-sutlej.pdf\",\n                \"Harleen invited Ravneet to the workspace\",\n            ]\n            .map(Text::muted),\n        ),\n    )",
       "src": "/ui-preview/scroll-area/default.html",
       "height": 120,
       "layout": "start",
@@ -13334,6 +13336,46 @@
                   "slot": "text",
                   "tag": "p",
                   "count": 8,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scroll-area/fixed",
+      "component": "scroll-area",
+      "slug": "fixed",
+      "title": "A fixed height",
+      "kind": "single",
+      "code": "ScrollArea::new(\"Activity\")\n    .height(ScrollHeight::Sm)\n    .children(\n        Stack::gap(2).children(\n            [\n                \"Gurpreet moved Sutlej Supply renewal to Proposal\",\n                \"Harleen created Haveli Home renewal\",\n                \"Manpreet closed Doaba Traders expansion\",\n            ]\n            .map(Text::muted),\n        ),\n    )",
+      "src": "/ui-preview/scroll-area/fixed.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "scroll-area",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 3,
                   "children": []
                 }
               ]
