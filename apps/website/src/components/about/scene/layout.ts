@@ -248,12 +248,13 @@ export async function buildLayout(
         const y = (row + 0.5) * ch;
         if (zones(x, y) || patka(x, y)) continue;
         const z = depth.at(x, y) - 3;
-        const figure = depth.isFigure(x, y) && !quiet(x, y) ? 1 : 0;
+        // 1 over the family's clothes, -1 over faces, hair and hands (quiet), 0 elsewhere.
+        const figure = quiet(x, y) ? -1 : depth.isFigure(x, y) ? 1 : 0;
         essential.push(
           [...toWorld(x, y, z), (tier.glyph / DIGIT) * scaleAt(z)],
           [-1, Math.min(1.1, 0.25 + l * 1.5), Math.min(1, grid.white[i] * 1.3), figure],
           [next(), GROUP.picture, 0.5, 0],
-          [x, y, col + 1000 * figure, row],
+          [x, y, col + 1000 * Math.max(0, figure), row],
         );
       }
     }

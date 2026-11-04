@@ -90,7 +90,7 @@ export const glyphVertex = /* glsl */ `
 precision highp float;
 
 attribute vec4 iA; // world x, y, z, quad size
-attribute vec4 iB; // atlas cell (-1 a changing digit), brightness, tint, figure (picture digits)
+attribute vec4 iB; // atlas cell (-1 a changing digit), brightness, tint, figure (picture digits: 1 clothes, -1 quiet, 0 else)
 attribute vec4 iC; // seed, group, glow, a value of the group's own
 attribute vec4 iD; // picture x, y, column, row
 
@@ -164,7 +164,8 @@ void main() {
       tint = mix(tint, 0.6, moving);
       mixw = vec3(0.8, 0.0, 0.0);
     } else {
-      float figure = iB.w;
+      float figure = max(iB.w, 0.0);
+      float quiet = step(iB.w, -0.5);
       // Over the family: digits that glint in and out, slowly...
       float glint = smoothstep(0.86, 1.0, 0.5 + 0.5 * sin(t * (0.25 + 0.5 * hash(seed * 31.0)) + seed * 60.0));
       float rest = figure * glint * 0.55;
@@ -185,7 +186,7 @@ void main() {
       }
       // The pulse: the digits it passes light up and change.
       float ring = ringAt(iA.xyz, uLightPos, uPulseAge, uPulse);
-      rest += ring * (0.35 + 0.6 * figure);
+      rest += ring * (0.35 + 0.6 * figure) * (1.0 - quiet);
       tint = mix(tint, 1.0, ring * 0.6);
       swap += step(distance(iA.xyz, uLightPos), uPulseAge * uPulse.x) * uPulseIndex * 3.0;
       rest *= uLight;
