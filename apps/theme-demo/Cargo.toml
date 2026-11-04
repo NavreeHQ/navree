@@ -1,0 +1,25 @@
+[package]
+name = "theme-demo"
+description = "The live theme builder the docs frame at navree.com/demo/ui/: the toolkit's themes pages and nothing else, keeping nothing between visitors."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "theme-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui"] }
+
+[dev-dependencies]
+navree = { workspace = true, default-features = false, features = ["ui", "testing"] }
+serde_json = { workspace = true }
+tokio = { workspace = true }
