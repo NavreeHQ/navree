@@ -190,15 +190,17 @@ async fn order_view(uow: &Uow, id: i64) -> Result<Option<OrderView>> {
         .where_(Order::CUSTOMER_ID.eq(order.customer_id))
         .count(uow)
         .await?;
-    let since = Customer::query()
+    let customer = Customer::query()
         .find(uow, order.customer_id)
         .await?
-        .and_then(|customer| customer.into_inner().since);
+        .map(|record| record.into_inner())
+        .unwrap_or_default();
     Ok(Some(OrderView {
         order,
         lines,
         orders,
-        since,
+        since: customer.since,
+        phone: customer.phone,
         now: now(),
     }))
 }

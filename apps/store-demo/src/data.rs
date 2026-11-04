@@ -2,38 +2,39 @@
 //! in each, and everything that happened to an order or a product, with a seed
 //! that writes the same shop on every run.
 //!
-//! Every name, address and company here is invented. Addresses are on
-//! `example.com`, `example.org` and `example.net`, and card numbers are four
-//! digits picked by the seed.
+//! Every name, address, business and number here is invented. Addresses are on
+//! `example.com`, `example.org` and `example.net`, phone numbers follow one
+//! made-up pattern (`+91 98765 0xxxx`), and card numbers are four digits picked by
+//! the seed.
 
 use chrono::{DateTime, NaiveDate};
 use navree::orm::Model;
 use navree::ui::{Tone, icons};
 
 /// The shop the app runs.
-pub const SHOP: &str = "Fernhill Supply";
+pub const SHOP: &str = "Charkha Supply Co.";
 /// The shop's own time zone, which every page shows its times in.
-pub const ZONE: &str = "Europe/Amsterdam";
-/// That zone's offset from UTC in November, in seconds.
-pub const OFFSET: i32 = 3600;
+pub const ZONE: &str = "Asia/Kolkata";
+/// That zone's offset from UTC, in seconds.
+pub const OFFSET: i32 = 19_800;
 /// How far back the seeded orders go: a year.
 pub const DAYS: i64 = 365;
 /// How many orders the seed writes.
 pub const ORDERS: i64 = 200_000;
 /// How many customers the seed writes.
 pub const CUSTOMERS: i64 = 40_000;
-/// How many products the shop sells: every item of [`CATALOGUE`] in colours
-/// and editions.
+/// How many products the shop sells: every item of [`CATALOGUE`] from several
+/// makers' towns and in several editions.
 pub const PRODUCTS: usize = 2_000;
 /// How many orders the seed writes at a time, so the shop never sits in memory
 /// whole.
 pub const CHUNK: i64 = 2_000;
-/// The order that ships for free from this subtotal, in cents.
-pub const FREE_SHIPPING: i64 = 10_000;
+/// An order ships for free from this subtotal, in paise: ₹999.
+pub const FREE_SHIPPING: i64 = 99_900;
 /// The person running the shop, who issues refunds and restocks.
-pub const STAFF: &str = "Ines Varga";
+pub const STAFF: &str = "Ravneet Kaur";
 
-/// A product, as stored. Prices are in cents.
+/// A product, as stored. Prices are in paise.
 #[derive(Model, Clone, Debug, Default, serde::Serialize)]
 #[model(table = "products")]
 pub struct Product {
@@ -58,13 +59,19 @@ pub struct Customer {
     pub id: i64,
     pub name: String,
     pub email: String,
-    /// A two-letter country code.
+    /// In E.164: `+919876501234`.
+    pub phone: String,
+    /// A two-letter country code: `IN`, now and then another.
     pub country: String,
+    /// A state's code in [`STATES`], or `EX` outside India.
+    pub state: String,
     pub city: String,
+    /// The PIN code, or a postcode outside India.
+    pub pin: String,
     pub since: Option<NaiveDate>,
 }
 
-/// An order, as stored. Amounts are in cents.
+/// An order, as stored. Amounts are in paise.
 #[derive(Model, Clone, Debug, Default, serde::Serialize)]
 #[model(table = "orders")]
 pub struct Order {
@@ -73,16 +80,18 @@ pub struct Order {
     pub customer_id: i64,
     pub customer: String,
     pub email: String,
-    /// Where it goes: a two-letter country code and a city.
+    /// Where it goes: a country, a state, a city and its PIN code.
     pub country: String,
+    pub state: String,
     pub city: String,
+    pub pin: String,
     /// One of [`Status`], as its key.
     pub status: String,
     /// One of [`Fulfilment`], as its key.
     pub fulfilment: String,
     /// One of [`Payment`], as its key.
     pub payment: String,
-    /// `card` or `transfer`.
+    /// `upi`, `card` or `cod` (cash on delivery, paid when it arrives).
     pub method: String,
     pub card_brand: String,
     pub card_last4: String,
@@ -92,7 +101,7 @@ pub struct Order {
     pub shipping: i64,
     pub total: i64,
     pub refunded: i64,
-    /// The warehouse it ships from, by its country code in [`WAREHOUSES`].
+    /// The warehouse it ships from, by its code in [`WAREHOUSES`].
     pub warehouse: String,
     pub carrier: String,
     pub tracking: String,
@@ -132,7 +141,7 @@ pub struct Event {
     pub order_id: i64,
     /// The product, or 0.
     pub product_id: i64,
-    /// An amount in cents, or a number of units for stock.
+    /// An amount in paise, or a number of units for stock.
     pub amount: i64,
     /// Who did it: a customer, the warehouse, a carrier, the staff.
     pub actor: String,
@@ -419,105 +428,164 @@ impl Kind {
     }
 }
 
-/// A place orders go to.
+/// A place orders go to: a country, a state, a city and the first PIN code of its
+/// range.
 pub struct Place {
     pub country: &'static str,
+    pub state: &'static str,
     pub city: &'static str,
+    pub pin: u32,
 }
 
-const fn place(country: &'static str, city: &'static str) -> Place {
-    Place { country, city }
+const fn place(state: &'static str, city: &'static str, pin: u32) -> Place {
+    Place {
+        country: "IN",
+        state,
+        city,
+        pin,
+    }
 }
 
-/// Where customers live.
-pub const PLACES: [Place; 30] = [
-    place("NL", "Utrecht"),
-    place("NL", "Rotterdam"),
-    place("BE", "Ghent"),
-    place("DE", "Hamburg"),
-    place("DE", "Leipzig"),
-    place("FR", "Lyon"),
-    place("FR", "Nantes"),
-    place("GB", "Bristol"),
-    place("GB", "Edinburgh"),
-    place("IE", "Galway"),
-    place("ES", "Valencia"),
-    place("PT", "Porto"),
-    place("IT", "Bologna"),
-    place("AT", "Graz"),
-    place("DK", "Aarhus"),
-    place("SE", "Gothenburg"),
-    place("NO", "Bergen"),
-    place("FI", "Tampere"),
-    place("PL", "Wrocław"),
-    place("CZ", "Brno"),
-    place("CH", "Lausanne"),
-    place("US", "Portland"),
-    place("US", "Minneapolis"),
-    place("CA", "Halifax"),
-    place("MX", "Guadalajara"),
-    place("AR", "Buenos Aires"),
-    place("AU", "Hobart"),
-    place("NZ", "Christchurch"),
-    place("JP", "Sapporo"),
-    place("ZA", "Stellenbosch"),
+const fn abroad(country: &'static str, city: &'static str) -> Place {
+    Place {
+        country,
+        state: "EX",
+        city,
+        pin: 0,
+    }
+}
+
+/// Where customers in India live: mostly Punjab and the north, some further away.
+pub const PLACES: [Place; 32] = [
+    place("PB", "Ludhiana", 141_001),
+    place("PB", "Ludhiana", 141_001),
+    place("PB", "Amritsar", 143_001),
+    place("PB", "Amritsar", 143_001),
+    place("PB", "Jalandhar", 144_001),
+    place("PB", "Jalandhar", 144_001),
+    place("PB", "Patiala", 147_001),
+    place("PB", "Bathinda", 151_001),
+    place("PB", "Mohali", 160_055),
+    place("PB", "Moga", 142_001),
+    place("PB", "Hoshiarpur", 146_001),
+    place("CH", "Chandigarh", 160_017),
+    place("CH", "Chandigarh", 160_017),
+    place("HR", "Panchkula", 134_109),
+    place("HR", "Gurugram", 122_001),
+    place("HR", "Karnal", 132_001),
+    place("DL", "Delhi", 110_001),
+    place("DL", "Delhi", 110_017),
+    place("DL", "Delhi", 110_024),
+    place("UP", "Noida", 201_301),
+    place("UP", "Lucknow", 226_001),
+    place("UP", "Varanasi", 221_001),
+    place("UP", "Kanpur", 208_001),
+    place("RJ", "Jaipur", 302_001),
+    place("UK", "Dehradun", 248_001),
+    place("HP", "Shimla", 171_001),
+    place("HP", "Dharamshala", 176_215),
+    place("JK", "Jammu", 180_001),
+    place("MH", "Mumbai", 400_050),
+    place("MH", "Pune", 411_001),
+    place("KA", "Bengaluru", 560_034),
+    place("GJ", "Ahmedabad", 380_009),
 ];
 
-/// A warehouse: where it is, and the carrier that collects from it.
+/// Where the few orders that go abroad go: about one in fifty.
+pub const ABROAD: [Place; 4] = [
+    abroad("AE", "Dubai"),
+    abroad("CA", "Brampton"),
+    abroad("GB", "Leicester"),
+    abroad("AU", "Melbourne"),
+];
+
+/// The states the shop ships to, for the orders' filter, and `EX` for abroad.
+pub const STATES: &[(&str, &str)] = &[
+    ("PB", "Punjab"),
+    ("CH", "Chandigarh"),
+    ("HR", "Haryana"),
+    ("DL", "Delhi"),
+    ("UP", "Uttar Pradesh"),
+    ("RJ", "Rajasthan"),
+    ("UK", "Uttarakhand"),
+    ("HP", "Himachal Pradesh"),
+    ("JK", "Jammu and Kashmir"),
+    ("MH", "Maharashtra"),
+    ("KA", "Karnataka"),
+    ("GJ", "Gujarat"),
+    ("EX", "Outside India"),
+];
+
+/// `Punjab` for `PB`.
+pub fn state_name(code: &str) -> &'static str {
+    STATES
+        .iter()
+        .find(|(key, _)| *key == code)
+        .map_or("", |(_, name)| *name)
+}
+
+/// A warehouse: its code, where it is, and the courier that collects from it.
 pub struct Warehouse {
-    pub country: &'static str,
+    pub code: &'static str,
+    pub state: &'static str,
     pub city: &'static str,
     pub carrier: &'static str,
 }
 
-/// The shop's warehouses, each serving its part of the world.
+/// The shop's warehouses, each serving its part of the country.
 pub const WAREHOUSES: [Warehouse; 3] = [
     Warehouse {
-        country: "NL",
-        city: "Rotterdam",
-        carrier: "Parcelway",
+        code: "LDH",
+        state: "PB",
+        city: "Ludhiana",
+        carrier: "Doaba Express",
     },
     Warehouse {
-        country: "US",
-        city: "Columbus",
-        carrier: "Northline Freight",
+        code: "DEL",
+        state: "DL",
+        city: "Delhi",
+        carrier: "Yamuna Couriers",
     },
     Warehouse {
-        country: "AU",
-        city: "Melbourne",
-        carrier: "Kestrel Post",
+        code: "BLR",
+        state: "KA",
+        city: "Bengaluru",
+        carrier: "Kaveri Logistics",
     },
 ];
 
-/// The warehouse that serves `country`.
-pub fn warehouse_for(country: &str) -> &'static Warehouse {
-    match country {
-        "US" | "CA" | "MX" | "AR" => &WAREHOUSES[1],
-        "AU" | "NZ" | "JP" => &WAREHOUSES[2],
-        _ => &WAREHOUSES[0],
+/// The warehouse that serves a state. Orders abroad leave from Delhi.
+pub fn warehouse_for(state: &str) -> &'static Warehouse {
+    match state {
+        "PB" | "CH" | "HP" | "JK" => &WAREHOUSES[0],
+        "MH" | "KA" | "GJ" => &WAREHOUSES[2],
+        _ => &WAREHOUSES[1],
     }
 }
 
-/// The warehouse with this country code.
+/// The warehouse with this code.
 pub fn warehouse(code: &str) -> &'static Warehouse {
     WAREHOUSES
         .iter()
-        .find(|warehouse| warehouse.country == code)
+        .find(|warehouse| warehouse.code == code)
         .unwrap_or(&WAREHOUSES[0])
 }
 
-/// Shipping for a subtotal to a country, in cents.
-pub fn shipping_for(subtotal: i64, country: &str) -> i64 {
-    if subtotal >= FREE_SHIPPING {
+/// Shipping for a subtotal to a state, in paise: free from ₹999 in India, ₹79
+/// within a warehouse's own state, ₹129 across India and ₹1,499 abroad.
+pub fn shipping_for(subtotal: i64, state: &str) -> i64 {
+    if state == "EX" {
+        149_900
+    } else if subtotal >= FREE_SHIPPING {
         0
-    } else if warehouse_for(country).country == "NL" {
-        690
+    } else if warehouse_for(state).state == state {
+        7_900
     } else {
-        1_490
+        12_900
     }
 }
 
-/// A product the shop sells: its SKU, name, category, icon, price in cents and
+/// A product the shop sells: its SKU, name, category, icon, price in paise and
 /// the stock it reorders at.
 pub struct Stock {
     pub sku: &'static str,
@@ -546,295 +614,298 @@ const fn stock(
     }
 }
 
-/// What the shop sells, before colours and editions.
+/// What the shop sells, before makers' towns and editions.
 pub const CATALOGUE: [Stock; 24] = [
-    stock("KIT-101", "Enamel camp mug", "Kitchen", "mug", 1_800, 25),
     stock(
-        "KIT-102",
-        "Stoneware pour-over set",
-        "Kitchen",
-        "pour",
-        4_600,
+        "CLO-101",
+        "Phulkari dupatta",
+        "Clothing",
+        "dupatta",
+        149_900,
         12,
     ),
+    stock("FTW-201", "Punjabi jutti", "Footwear", "jutti", 129_900, 10),
+    stock("KIT-301", "Brass lota", "Kitchen", "lota", 89_900, 15),
     stock(
-        "HOM-201",
-        "Cedar and smoke candle",
-        "Home",
-        "candle",
-        2_400,
+        "KIT-302",
+        "Steel tiffin, three tiers",
+        "Kitchen",
+        "tiffin",
+        74_900,
         20,
     ),
-    stock("HOM-202", "Brass desk lamp", "Home", "lamp", 12_800, 6),
+    stock("KIT-303", "Iron kadhai", "Kitchen", "kadhai", 119_900, 10),
+    stock("PAN-401", "Desi ghee, 1 kg", "Pantry", "ghee", 69_900, 30),
     stock(
-        "STA-301",
-        "Field notebooks, three",
-        "Stationery",
-        "notebook",
-        2_100,
-        30,
+        "PAN-402",
+        "Basmati rice, 5 kg",
+        "Pantry",
+        "rice",
+        64_900,
+        25,
     ),
+    stock("CLO-102", "Pashmina shawl", "Clothing", "shawl", 699_900, 4),
+    stock("CLO-103", "Khadi kurta", "Clothing", "kurta", 159_900, 10),
+    stock("KIT-304", "Masala dabba", "Kitchen", "dabba", 99_900, 12),
     stock(
-        "BAG-401",
-        "Waxed canvas backpack",
-        "Bags",
-        "backpack",
-        14_900,
-        8,
-    ),
-    stock(
-        "APP-501",
-        "Merino crew sweater",
-        "Apparel",
-        "sweater",
-        9_600,
-        10,
-    ),
-    stock(
-        "OUT-601",
-        "Two-person trail tent",
-        "Outdoor",
-        "tent",
-        38_900,
-        4,
-    ),
-    stock(
-        "OUT-602",
-        "Brass pocket compass",
-        "Outdoor",
-        "compass",
-        5_400,
-        10,
-    ),
-    stock(
-        "GAR-701",
-        "Herb garden starter kit",
-        "Garden",
-        "sprout",
-        3_200,
-        15,
-    ),
-    stock(
-        "OUT-603",
-        "Insulated trail flask",
-        "Outdoor",
-        "flask",
-        3_800,
+        "KIT-305",
+        "Copper bottle, 1 litre",
+        "Kitchen",
+        "bottle",
+        84_900,
         18,
     ),
     stock(
-        "KIT-103",
-        "Linen kitchen apron",
-        "Kitchen",
-        "apron",
-        4_400,
+        "CLO-104",
+        "Patiala salwar",
+        "Clothing",
+        "salwar",
+        109_900,
         10,
     ),
+    stock("HOM-501", "Cotton dhurrie", "Home", "dhurrie", 189_900, 6),
     stock(
-        "HOM-203",
-        "Wool picnic blanket",
+        "FES-601",
+        "Terracotta diyas, four",
+        "Festive",
+        "diya",
+        34_900,
+        40,
+    ),
+    stock(
+        "KIT-306",
+        "Kulhad cups, six",
+        "Kitchen",
+        "kulhad",
+        29_900,
+        30,
+    ),
+    stock(
+        "HOM-502",
+        "Handloom bedsheet",
         "Home",
-        "blanket",
-        11_800,
+        "bedsheet",
+        149_900,
+        8,
+    ),
+    stock(
+        "FES-602",
+        "Brass diya stand",
+        "Festive",
+        "stand",
+        129_900,
         6,
     ),
+    stock("KIT-307", "Chakla belan", "Kitchen", "belan", 54_900, 14),
     stock(
-        "BAG-402",
-        "Leather card wallet",
-        "Bags",
-        "wallet",
-        5_800,
-        12,
+        "PAN-403",
+        "Mustard oil, 1 litre",
+        "Pantry",
+        "oil",
+        24_900,
+        40,
+    ),
+    stock("PAN-404", "Jaggery, 1 kg", "Pantry", "jaggery", 14_900, 40),
+    stock("PAN-405", "Pinni box, 500 g", "Pantry", "pinni", 44_900, 20),
+    stock(
+        "PAN-406",
+        "Amritsari papad, 400 g",
+        "Pantry",
+        "papad",
+        19_900,
+        30,
     ),
     stock(
-        "AUD-801",
-        "Over-ear headphones",
-        "Audio",
-        "headphones",
-        17_900,
-        5,
-    ),
-    stock(
-        "APP-502",
-        "Field watch, 38 mm",
-        "Apparel",
-        "watch",
-        21_000,
-        4,
-    ),
-    stock(
-        "HOM-204",
-        "Instant film camera",
+        "HOM-503",
+        "Painted Kashmiri bowl",
         "Home",
-        "camera",
-        13_900,
-        5,
+        "bowl",
+        109_900,
+        6,
     ),
-    stock(
-        "GAR-702",
-        "Folding garden shears",
-        "Garden",
-        "shears",
-        2_900,
-        15,
-    ),
-    stock(
-        "KIT-104",
-        "Glass water carafe",
-        "Kitchen",
-        "carafe",
-        3_400,
-        12,
-    ),
-    stock(
-        "HOM-205",
-        "Pressed leaf prints, four",
-        "Home",
-        "leaf",
-        6_200,
-        8,
-    ),
-    stock(
-        "OUT-604",
-        "Commuter bike lights",
-        "Outdoor",
-        "bike",
-        4_500,
-        14,
-    ),
-    stock("BAG-403", "Market tote, natural", "Bags", "tote", 2_200, 30),
-    stock("OUT-605", "Fly-tying kit", "Outdoor", "fish", 7_400, 6),
-    stock(
-        "HOM-206",
-        "Storage crates, three",
-        "Home",
-        "crates",
-        6_600,
-        8,
-    ),
+    stock("KIT-308", "Steel thali set", "Kitchen", "thali", 249_900, 8),
 ];
 
-/// The colours each item comes in.
-const COLOURS: [&str; 12] = [
-    "sage", "rust", "charcoal", "oat", "indigo", "moss", "clay", "slate", "sand", "ochre", "pine",
-    "plum",
+/// The categories, for the inventory's filter.
+pub const CATEGORIES: &[(&str, &str)] = &[
+    ("Clothing", "Clothing"),
+    ("Festive", "Festive"),
+    ("Footwear", "Footwear"),
+    ("Home", "Home"),
+    ("Kitchen", "Kitchen"),
+    ("Pantry", "Pantry"),
 ];
 
-/// The editions each colour comes in, with what each does to the price, in
-/// percent.
+/// The makers' towns each item comes from.
+const ORIGINS: [&str; 12] = [
+    "Amritsar",
+    "Ludhiana",
+    "Patiala",
+    "Jalandhar",
+    "Jaipur",
+    "Lucknow",
+    "Varanasi",
+    "Moradabad",
+    "Panipat",
+    "Saharanpur",
+    "Kanpur",
+    "Dehradun",
+];
+
+/// The editions each comes in, with what each does to the price, in percent.
 const EDITIONS: [(&str, i64); 7] = [
     ("", 100),
     ("small", 85),
     ("large", 120),
     ("twin pack", 180),
-    ("gift set", 140),
+    ("gift box", 140),
+    ("festive edition", 130),
     ("travel", 90),
-    ("studio", 130),
-];
-
-/// The categories, for the inventory's filter.
-pub const CATEGORIES: &[(&str, &str)] = &[
-    ("Apparel", "Apparel"),
-    ("Audio", "Audio"),
-    ("Bags", "Bags"),
-    ("Garden", "Garden"),
-    ("Home", "Home"),
-    ("Kitchen", "Kitchen"),
-    ("Outdoor", "Outdoor"),
-    ("Stationery", "Stationery"),
 ];
 
 /// The icon a product is drawn with, by its key.
 pub fn product_icon(key: &str) -> icons::Icon {
     match key {
-        "mug" => icons::COFFEE,
-        "pour" => icons::GLASS_WATER,
-        "candle" => icons::FLAME,
-        "lamp" => icons::LAMP_DESK,
-        "notebook" => icons::NOTEBOOK,
-        "backpack" => icons::BACKPACK,
-        "sweater" => icons::SHIRT,
-        "tent" => icons::TENT,
-        "compass" => icons::COMPASS,
-        "sprout" => icons::SPROUT,
-        "flask" => icons::CUP_SODA,
-        "apron" => icons::UTENSILS_CROSSED,
-        "blanket" => icons::SUN,
-        "wallet" => icons::WALLET,
-        "headphones" => icons::HEADPHONES,
-        "watch" => icons::WATCH,
-        "camera" => icons::CAMERA,
-        "shears" => icons::SCISSORS,
-        "carafe" => icons::DROPLET,
-        "leaf" => icons::LEAF,
-        "bike" => icons::BIKE,
-        "tote" => icons::SHOPPING_BAG,
-        "fish" => icons::FISH,
-        _ => icons::BOX,
+        "dupatta" => icons::RIBBON,
+        "jutti" => icons::FOOTPRINTS,
+        "lota" => icons::MILK,
+        "tiffin" => icons::SOUP,
+        "kadhai" => icons::COOKING_POT,
+        "ghee" => icons::DROPLET,
+        "rice" => icons::WHEAT,
+        "shawl" => icons::LAYERS,
+        "kurta" | "salwar" => icons::SHIRT,
+        "dabba" => icons::SALAD,
+        "bottle" => icons::FLASK_ROUND,
+        "dhurrie" => icons::LAYOUT_GRID,
+        "diya" => icons::FLAME,
+        "kulhad" => icons::COFFEE,
+        "bedsheet" => icons::BED,
+        "stand" => icons::LAMP,
+        "belan" => icons::UTENSILS_CROSSED,
+        "oil" => icons::DROPLETS,
+        "jaggery" => icons::CANDY,
+        "pinni" => icons::GIFT,
+        "papad" => icons::COOKIE,
+        "bowl" => icons::PALETTE,
+        "thali" => icons::UTENSILS,
+        _ => icons::PACKAGE,
     }
 }
 
-const FIRST: [&str; 36] = [
-    "Amélie", "Bram", "Chiara", "Daan", "Elif", "Finn", "Greta", "Hugo", "Ilse", "Jonah", "Kaia",
-    "Lars", "Marisol", "Niko", "Olga", "Pieter", "Quinn", "Rosa", "Sven", "Tamsin", "Udo", "Vera",
-    "Wim", "Ximena", "Yara", "Zeno", "Anouk", "Björn", "Carys", "Dario", "Esme", "Fenna", "Gael",
-    "Hanne", "Ivo", "Juno",
+/// First names, mostly Punjabi, each with whether it's a woman's.
+const PUNJABI: [(&str, bool); 32] = [
+    ("Gurpreet", false),
+    ("Manpreet", false),
+    ("Jaspreet", false),
+    ("Amandeep", false),
+    ("Rajveer", false),
+    ("Navdeep", false),
+    ("Kulwinder", false),
+    ("Harjit", false),
+    ("Sukhwinder", false),
+    ("Jasbir", false),
+    ("Balwinder", false),
+    ("Parminder", false),
+    ("Tejinder", false),
+    ("Gagandeep", false),
+    ("Karanveer", false),
+    ("Inderjit", false),
+    ("Harleen", true),
+    ("Simran", true),
+    ("Ravneet", true),
+    ("Jasleen", true),
+    ("Manjot", true),
+    ("Gurleen", true),
+    ("Kiranjit", true),
+    ("Sukhpreet", true),
+    ("Rupinder", true),
+    ("Baljeet", true),
+    ("Paramjit", true),
+    ("Harsimran", true),
+    ("Jasmeet", true),
+    ("Prabhjot", true),
+    ("Mandeep", true),
+    ("Navneet", true),
 ];
 
-const LAST: [&str; 36] = [
-    "Laurent",
-    "de Vries",
-    "Moretti",
-    "Jansen",
-    "Aydın",
-    "Brennan",
-    "Holm",
-    "Marchetti",
-    "Visser",
-    "Okoye",
-    "Lindgren",
-    "Sato",
-    "Ortega",
-    "Kowalski",
-    "Petrova",
-    "Bakker",
-    "Fairweather",
-    "Castell",
-    "Nyström",
-    "Pryce",
-    "Hartmann",
-    "Novák",
-    "Smit",
-    "Reyes",
-    "Haddad",
-    "Ferraro",
-    "Dekker",
-    "Strand",
-    "Llewellyn",
-    "Conti",
-    "Whitlock",
-    "Mulder",
-    "Rivas",
-    "Berg",
-    "Vos",
-    "Takeda",
+/// Punjabi family names, used beside Singh and Kaur.
+const FAMILIES: [&str; 16] = [
+    "Gill", "Dhillon", "Sandhu", "Brar", "Grewal", "Bains", "Sidhu", "Randhawa", "Bajwa", "Cheema",
+    "Virk", "Mann", "Toor", "Johal", "Kang", "Aulakh",
+];
+
+/// Hindu first names from the north, each with whether it's a woman's.
+const HINDU: [(&str, bool); 30] = [
+    ("Arjun", false),
+    ("Rohit", false),
+    ("Vikram", false),
+    ("Aditya", false),
+    ("Ishaan", false),
+    ("Siddharth", false),
+    ("Rahul", false),
+    ("Karan", false),
+    ("Varun", false),
+    ("Ankit", false),
+    ("Nikhil", false),
+    ("Saurabh", false),
+    ("Mohit", false),
+    ("Gaurav", false),
+    ("Tarun", false),
+    ("Priya", true),
+    ("Neha", true),
+    ("Ananya", true),
+    ("Kavya", true),
+    ("Pooja", true),
+    ("Meera", true),
+    ("Shruti", true),
+    ("Riya", true),
+    ("Anjali", true),
+    ("Divya", true),
+    ("Nidhi", true),
+    ("Sakshi", true),
+    ("Tanvi", true),
+    ("Aarti", true),
+    ("Swati", true),
+];
+
+/// Hindu family names from the north.
+const SURNAMES: [&str; 18] = [
+    "Sharma", "Verma", "Malhotra", "Kapoor", "Chopra", "Mehra", "Arora", "Bhatia", "Gupta",
+    "Agarwal", "Khanna", "Joshi", "Saxena", "Tiwari", "Mishra", "Bansal", "Goyal", "Sethi",
+];
+
+/// Names the seed never writes, because people know someone by them.
+const KNOWN: [&str; 12] = [
+    "Rohit Sharma",
+    "Arjun Kapoor",
+    "Aditya Chopra",
+    "Siddharth Malhotra",
+    "Varun Sharma",
+    "Akash Chopra",
+    "Nikhil Chopra",
+    "Neha Sharma",
+    "Mohit Sharma",
+    "Gaurav Kapoor",
+    "Manpreet Singh",
+    "Mandeep Singh",
 ];
 
 const DOMAINS: [&str; 3] = ["example.com", "example.org", "example.net"];
 
 /// What customers write at checkout, now and then.
 const NOTES: [&str; 8] = [
-    "Please leave it with the neighbour at number 12 if nobody is home.",
-    "It's a gift: please leave the receipt out of the box.",
-    "The bell is quiet, so knock twice.",
-    "Deliver to the side door by the garage, please.",
-    "Could the candle be wrapped separately? It's for my sister.",
-    "No rush, I'm away until Friday.",
+    "Please leave it with the neighbour at the next house if nobody is home.",
+    "It's a gift for my mother: please leave the bill out of the box.",
+    "Call before coming, the gate stays locked in the afternoon.",
+    "Deliver after 6 pm on weekdays, please.",
+    "Could the diyas be packed well? They are for Diwali at my sister's.",
+    "No rush, I'm travelling until Friday.",
     "Please use as little plastic as you can.",
-    "Office delivery: reception is open from 9 to 5.",
+    "Office delivery: reception is open from 10 to 6.",
 ];
 
-const BRANDS: [&str; 3] = ["Visa", "Mastercard", "Amex"];
+const BRANDS: [&str; 3] = ["RuPay", "Visa", "Mastercard"];
 
 /// A small, fast generator: the same numbers from the same seed on every run.
 #[derive(Clone, Debug)]
@@ -876,19 +947,10 @@ impl Dice {
     }
 }
 
-/// `Amélie` as `amelie`, for an address.
+/// `Harleen` as `harleen`, for an address.
 fn ascii(word: &str) -> String {
     word.chars()
-        .map(|c| match c {
-            'á' | 'à' | 'â' | 'ä' => 'a',
-            'é' | 'è' | 'ê' | 'ë' => 'e',
-            'í' | 'ì' | 'î' | 'ï' | 'ı' => 'i',
-            'ó' | 'ò' | 'ô' | 'ö' => 'o',
-            'ú' | 'ù' | 'û' | 'ü' => 'u',
-            'ý' => 'y',
-            'ř' => 'r',
-            other => other.to_ascii_lowercase(),
-        })
+        .map(|c| c.to_ascii_lowercase())
         .filter(char::is_ascii_alphanumeric)
         .collect()
 }
@@ -900,34 +962,55 @@ pub fn day_of(at: i64) -> NaiveDate {
         .unwrap_or_default()
 }
 
-/// `FH-20481` for order 1.
+/// `CS-20481` for order 1.
 pub fn order_number(id: i64) -> String {
-    format!("FH-{}", 20_480 + id)
+    format!("CS-{}", 20_480 + id)
 }
 
-/// A tracking number for an order shipped by a carrier.
+/// A tracking number for an order, from the courier that collects it.
 pub fn tracking(order: &Order, dice: &mut Dice) -> String {
     let prefix = match warehouse(&order.warehouse).carrier {
-        "Northline Freight" => "NL",
-        "Kestrel Post" => "KP",
-        _ => "PW",
+        "Yamuna Couriers" => "YC",
+        "Kaveri Logistics" => "KL",
+        _ => "DX",
     };
     format!(
         "{prefix} {:04} {:04} {}",
         dice.below(10_000),
         dice.below(10_000),
-        order.country
+        if order.state == "EX" {
+            order.country.as_str()
+        } else {
+            order.state.as_str()
+        }
     )
 }
 
-/// One product of the shop, by its index from 0: the item, colour and edition
-/// vary so that the first few hundred products cover every item.
+/// Customer `id`'s phone number, in E.164: one made-up pattern,
+/// `+91 98765 0xxxx`, so no number belongs to anyone.
+pub fn phone_of(id: i64) -> String {
+    format!("+9198765{:05}", id.rem_euclid(100_000))
+}
+
+/// `+91 98765 01234` from `+919876501234`.
+pub fn phone_text(e164: &str) -> String {
+    match e164.strip_prefix("+91") {
+        Some(rest) if rest.len() == 10 => format!("+91 {} {}", &rest[..5], &rest[5..]),
+        _ => e164.to_owned(),
+    }
+}
+
+/// One product of the shop, by its index from 0: the item, the maker's town and
+/// the edition vary so that the first few hundred products cover every item.
 pub fn product(at: usize) -> Product {
     let item = &CATALOGUE[at % CATALOGUE.len()];
-    let colour = COLOURS[(at / CATALOGUE.len()) % COLOURS.len()];
-    let (edition, percent) = EDITIONS[(at / (CATALOGUE.len() * COLOURS.len())) % EDITIONS.len()];
+    let origin = (at / CATALOGUE.len()) % ORIGINS.len();
+    let edition_at = (at / (CATALOGUE.len() * ORIGINS.len())) % EDITIONS.len();
+    let (edition, percent) = EDITIONS[edition_at];
     let mut dice = Dice::new(u64::try_from(at).unwrap_or(0) * 31 + 7);
-    let price = (item.price * percent / 100 / 100) * 100;
+    // Prices end in 9 rupees, as shops in India price them.
+    let rupees = (item.price * percent / 100 / 100 + 5) / 10 * 10 - 1;
+    let price = rupees.max(9) * 100;
     let reorder_at = (item.reorder_at * 100 / percent).max(2);
     // Most are comfortably stocked; about one in thirty is low and one in a
     // hundred and fifty has run out.
@@ -937,19 +1020,13 @@ pub fn product(at: usize) -> Product {
         _ => reorder_at + dice.between(4, 160),
     };
     let name = if edition.is_empty() {
-        format!("{}, {colour}", item.name)
+        format!("{}, {}", item.name, ORIGINS[origin])
     } else {
-        format!("{}, {colour}, {edition}", item.name)
+        format!("{}, {}, {edition}", item.name, ORIGINS[origin])
     };
-    let sku = format!(
-        "{}-{:02}{}",
-        item.sku,
-        (at / CATALOGUE.len()) % COLOURS.len(),
-        at / (CATALOGUE.len() * COLOURS.len())
-    );
     Product {
         id: i64::try_from(at).unwrap_or(0) + 1,
-        sku,
+        sku: format!("{}-{origin:02}{edition_at}", item.sku),
         name,
         category: item.category.to_owned(),
         icon: item.icon.to_owned(),
@@ -965,28 +1042,54 @@ pub fn products() -> Vec<Product> {
     (0..PRODUCTS).map(product).collect()
 }
 
+/// Customer `id`'s name: about three in five Punjabi, the rest Hindu names from
+/// the north, never a name people know someone by.
+fn name_of(id: i64, dice: &mut Dice) -> String {
+    for _ in 0..8 {
+        let name = if dice.chance(60) {
+            let (first, woman) = PUNJABI[dice.pick(PUNJABI.len())];
+            if dice.chance(55) {
+                format!("{first} {}", if woman { "Kaur" } else { "Singh" })
+            } else {
+                format!("{first} {}", FAMILIES[dice.pick(FAMILIES.len())])
+            }
+        } else {
+            let (first, _) = HINDU[dice.pick(HINDU.len())];
+            format!("{first} {}", SURNAMES[dice.pick(SURNAMES.len())])
+        };
+        if !KNOWN.contains(&name.as_str()) {
+            return name;
+        }
+    }
+    format!("Customer {id}")
+}
+
 /// One customer, by id from 1.
 pub fn customer(id: i64, now: i64) -> Customer {
     let n = usize::try_from(id - 1).unwrap_or(0);
     let mut dice = Dice::new(u64::try_from(id).unwrap_or(0) * 104_729);
-    let names = FIRST.len() * LAST.len();
-    let (first, last) = (
-        FIRST[n % FIRST.len()],
-        LAST[(n / FIRST.len() + n * 7) % LAST.len()],
-    );
+    let name = name_of(id, &mut dice);
+    let place = if dice.chance(2) {
+        &ABROAD[dice.pick(ABROAD.len())]
+    } else {
+        &PLACES[dice.pick(PLACES.len())]
+    };
     // Namesakes are told apart by a number in their address.
-    let round = n / names;
-    let place = &PLACES[dice.pick(PLACES.len())];
+    let (first, last) = name.split_once(' ').unwrap_or((name.as_str(), ""));
+    let pin = if place.pin == 0 {
+        String::new()
+    } else {
+        (place.pin + u32::try_from(dice.below(12)).unwrap_or(0)).to_string()
+    };
     Customer {
         id,
-        name: format!("{first} {last}"),
-        email: if round == 0 {
-            format!("{}.{}@{}", ascii(first), ascii(last), DOMAINS[n % 3])
-        } else {
-            format!("{}.{}{round}@{}", ascii(first), ascii(last), DOMAINS[n % 3])
-        },
+        email: format!("{}.{}{id}@{}", ascii(first), ascii(last), DOMAINS[n % 3]),
+        name,
+        phone: phone_of(id),
         country: place.country.to_owned(),
+        state: place.state.to_owned(),
         city: place.city.to_owned(),
+        pin,
         since: Some(day_of(now - dice.between(70, 3 * 365) * 86_400)),
     }
 }
@@ -1063,7 +1166,19 @@ pub fn customer_of(id: i64) -> i64 {
     i64::try_from(dice.pick(usize::try_from(CUSTOMERS).unwrap_or(1))).unwrap_or(0) + 1
 }
 
+/// How the customer pays: UPI most often, a card, or cash on delivery.
+fn method(dice: &mut Dice, abroad: bool) -> &'static str {
+    match dice.below(100) {
+        _ if abroad => "card",
+        0..=54 => "upi",
+        55..=84 => "card",
+        _ => "cod",
+    }
+}
+
 /// One order placed at `placed_at`, with its lines and how far it got by `now`.
+/// UPI and card orders are paid at once; cash on delivery is paid when the
+/// courier hands it over.
 pub fn one_order(
     id: i64,
     placed_at: i64,
@@ -1111,8 +1226,11 @@ pub fn one_order(
         .iter()
         .map(|line| line.price * line.quantity)
         .sum();
-    let shipping = shipping_for(subtotal, &customer.country);
-    let card = dice.chance(88);
+    let shipping = shipping_for(subtotal, &customer.state);
+    let abroad = customer.state == "EX";
+    let paid_by = method(&mut dice, abroad);
+    let card = paid_by == "card";
+    let house = warehouse_for(&customer.state);
     let mut order = Order {
         id,
         number: order_number(id),
@@ -1120,11 +1238,13 @@ pub fn one_order(
         customer: customer.name.clone(),
         email: customer.email.clone(),
         country: customer.country.clone(),
+        state: customer.state.clone(),
         city: customer.city.clone(),
+        pin: customer.pin.clone(),
         status: Status::Open.key().to_owned(),
         fulfilment: Fulfilment::Unfulfilled.key().to_owned(),
         payment: Payment::Pending.key().to_owned(),
-        method: if card { "card" } else { "transfer" }.to_owned(),
+        method: paid_by.to_owned(),
         card_brand: if card {
             BRANDS[dice.pick(3)].to_owned()
         } else {
@@ -1140,8 +1260,8 @@ pub fn one_order(
         shipping,
         total: subtotal + shipping,
         refunded: 0,
-        warehouse: warehouse_for(&customer.country).country.to_owned(),
-        carrier: warehouse_for(&customer.country).carrier.to_owned(),
+        warehouse: house.code.to_owned(),
+        carrier: house.carrier.to_owned(),
         tracking: String::new(),
         note: if dice.chance(18) {
             NOTES[dice.pick(NOTES.len())].to_owned()
@@ -1168,30 +1288,27 @@ pub fn one_order(
         }
     };
     push(Kind::Placed, placed_at, order.total, &order.customer, "");
-    // A parcel to the warehouse's own neighbours arrives in a day or two.
-    let far = !matches!(order.country.as_str(), "NL" | "BE" | "DE" | "US" | "AU");
-    // Paid at once by card; by transfer some hours later.
-    let paid_at = if card {
-        placed_at + dice.between(3, 40)
-    } else {
-        placed_at + dice.between(2 * 3600, 30 * 3600)
-    };
-    let packed_at = paid_at + dice.between(40 * 60, 18 * 3600);
+    let cod = paid_by == "cod";
+    let paid_at = placed_at + dice.between(3, 40);
+    let packed_at = placed_at + dice.between(2 * 3600, 20 * 3600);
     let shipped_at = packed_at + dice.between(2 * 3600, 20 * 3600);
+    // Within the warehouse's own state a parcel arrives in a day or two, across
+    // India in two to five, abroad in a week or more.
     let delivered_at = shipped_at
-        + if far {
-            dice.between(3 * 86_400, 7 * 86_400)
+        + if abroad {
+            dice.between(6 * 86_400, 11 * 86_400)
+        } else if house.state == order.state {
+            dice.between(18 * 3600, 2 * 86_400)
         } else {
-            dice.between(20 * 3600, 3 * 86_400)
+            dice.between(2 * 86_400, 5 * 86_400)
         };
     let cancelled = dice.chance(3) && now - placed_at > 6 * 3600;
-    let house = warehouse(&order.warehouse);
-    if paid_at <= now {
+    if !cod && paid_at <= now {
         push(Kind::Paid, paid_at, order.total, &order.customer, "");
         order.payment = Payment::Paid.key().to_owned();
     }
     if cancelled {
-        let at = placed_at + dice.between(15 * 60, 5 * 3600);
+        let at = placed_at + dice.between(15 * 60, 90 * 60);
         push(
             Kind::Cancelled,
             at,
@@ -1200,7 +1317,7 @@ pub fn one_order(
             "The customer asked to cancel",
         );
         order.status = Status::Cancelled.key().to_owned();
-        if paid_at <= at {
+        if !cod && paid_at <= at {
             push(Kind::Refunded, at + 30, order.total, STAFF, "Cancelled");
             order.refunded = order.total;
             order.payment = Payment::Refunded.key().to_owned();
@@ -1209,7 +1326,7 @@ pub fn one_order(
         }
         return (order, its_lines, its_events);
     }
-    if packed_at <= now && order.payment == Payment::Paid.key() {
+    if packed_at <= now {
         push(Kind::Packed, packed_at, order.items, house.city, "");
         order.fulfilment = Fulfilment::Packed.key().to_owned();
     }
@@ -1222,6 +1339,16 @@ pub fn one_order(
         push(Kind::Delivered, delivered_at, 0, house.carrier, "");
         order.fulfilment = Fulfilment::Delivered.key().to_owned();
         order.status = Status::Completed.key().to_owned();
+        if cod {
+            push(
+                Kind::Paid,
+                delivered_at + 1,
+                order.total,
+                house.carrier,
+                "Cash on delivery",
+            );
+            order.payment = Payment::Paid.key().to_owned();
+        }
         // Now and then something comes back, or arrives broken.
         if dice.chance(5) {
             let at = delivered_at + dice.between(86_400, 6 * 86_400);
@@ -1305,7 +1432,30 @@ mod tests {
                 "{}",
                 customer.email
             );
+            assert!(customer.phone.starts_with("+9198765"), "{}", customer.phone);
+            assert!(
+                !KNOWN.contains(&customer.name.as_str()),
+                "{}",
+                customer.name
+            );
+            if customer.country == "IN" {
+                assert_eq!(customer.pin.len(), 6, "{}", customer.city);
+                assert!(!state_name(&customer.state).is_empty());
+            }
         }
+        let indian = people.iter().filter(|c| c.country == "IN").count();
+        assert!(indian * 100 / people.len() >= 95, "{indian} in India");
+        let punjab = people
+            .iter()
+            .filter(|c| c.state == "PB" || c.state == "CH")
+            .count();
+        assert!(punjab * 100 / people.len() >= 30, "{punjab} in Punjab");
+    }
+
+    #[test]
+    fn a_phone_number_reads_the_indian_way() {
+        assert_eq!(phone_of(1_234), "+919876501234");
+        assert_eq!(phone_text("+919876501234"), "+91 98765 01234");
     }
 
     #[test]
@@ -1317,14 +1467,21 @@ mod tests {
     }
 
     #[test]
-    fn two_thousand_products_each_with_its_own_sku() {
+    fn two_thousand_products_each_with_its_own_sku_and_a_price_in_rupees() {
         let all = products();
         assert_eq!(all.len(), 2_000);
         let mut skus: Vec<&str> = all.iter().map(|p| p.sku.as_str()).collect();
         skus.sort_unstable();
         skus.dedup();
         assert_eq!(skus.len(), 2_000);
-        assert!(all.iter().all(|p| p.price > 0 && p.reorder_at >= 2));
+        assert!(
+            all.iter()
+                .all(|p| p.price > 0 && p.price % 100 == 0 && p.reorder_at >= 2)
+        );
+        assert!(
+            all.iter().all(|p| (p.price / 100) % 10 == 9),
+            "prices end in 9"
+        );
         let low = all
             .iter()
             .filter(|p| p.level != Level::InStock.key())
@@ -1357,21 +1514,29 @@ mod tests {
                 }
                 _ => assert_eq!(order.refunded, 0),
             }
-            // Nothing ships before it's paid, and a cancelled order never ships.
+            // Only cash on delivery ships unpaid, and a cancelled order never ships.
             if Fulfilment::parse(&order.fulfilment) >= Fulfilment::Packed {
-                assert_ne!(Payment::parse(&order.payment), Payment::Pending);
+                assert!(
+                    Payment::parse(&order.payment) != Payment::Pending || order.method == "cod",
+                    "{}",
+                    order.number
+                );
                 assert_ne!(Status::parse(&order.status), Status::Cancelled);
+            }
+            // A delivered order is paid, cash on delivery too.
+            if Fulfilment::parse(&order.fulfilment) == Fulfilment::Delivered {
+                assert_ne!(Payment::parse(&order.payment), Payment::Pending);
             }
         }
         assert!(events.iter().all(|event| event.at <= NOW));
     }
 
     #[test]
-    fn the_numbers_look_like_a_shop() {
+    fn the_numbers_look_like_an_indian_shop() {
         let (orders, _, _) = newest(4_000);
         let today = day_of(NOW);
         let placed_today = orders.iter().filter(|o| o.placed_on == today).count();
-        assert!((300..900).contains(&placed_today), "{placed_today} today");
+        assert!((150..900).contains(&placed_today), "{placed_today} today");
         assert!(orders.iter().any(|o| o.status == Status::Cancelled.key()));
         assert!(
             orders
@@ -1379,6 +1544,14 @@ mod tests {
                 .filter(|o| o.status == Status::Open.key())
                 .count()
                 > 200
+        );
+        assert!(orders.iter().any(|o| o.method == "cod"));
+        assert!(orders.iter().filter(|o| o.method == "upi").count() > orders.len() / 3);
+        assert!(orders.iter().any(|o| o.city == "Ludhiana"));
+        let abroad = orders.iter().filter(|o| o.country != "IN").count();
+        assert!(
+            abroad > 0 && abroad * 100 < orders.len() * 5,
+            "{abroad} abroad"
         );
         // Refunds come days after delivery: look a few months back for them.
         let (older, _, _) = super::orders(150_001, 154_000, NOW, &products(), &customers(NOW));
@@ -1388,7 +1561,6 @@ mod tests {
                 .any(|o| o.payment == Payment::PartiallyRefunded.key())
         );
         assert!(older.iter().any(|o| o.payment == Payment::Refunded.key()));
-        assert!(orders.iter().any(|o| o.city == "Buenos Aires"));
         // A year back, the first orders are a year old.
         assert!(placed_at(1, NOW) < NOW - 360 * 86_400);
     }

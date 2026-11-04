@@ -1,6 +1,7 @@
 //! `store-demo`: an example app on Navree UI. It runs the back office of an
-//! invented shop, Fernhill Supply, which sells goods for the home and the
-//! outdoors from three warehouses.
+//! invented shop in Punjab, Charkha Supply Co., which sells kitchen, pantry,
+//! clothing and festive goods across India from warehouses in Ludhiana, Delhi
+//! and Bengaluru.
 //!
 //! ```text
 //! cargo run -p store-demo                        # http://127.0.0.1:8095

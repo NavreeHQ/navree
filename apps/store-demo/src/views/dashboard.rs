@@ -10,7 +10,7 @@ use crate::data::{
     Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, ZONE, day_of, warehouse,
 };
 use crate::views::order::product_with;
-use crate::views::{money, place, thousands, units};
+use crate::views::{money, place_of, thousands, units};
 
 /// Today's figures, counted in the database.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -122,9 +122,12 @@ pub struct FeedEntry {
     pub event: Event,
     pub number: String,
     pub country: String,
+    pub state: String,
     pub city: String,
     pub items: i64,
     pub warehouse: String,
+    /// How the order is paid: `upi`, `card` or `cod`.
+    pub method: String,
 }
 
 impl FeedEntry {
@@ -136,9 +139,11 @@ impl FeedEntry {
         Self {
             number: order.map(|o| o.number.clone()).unwrap_or_default(),
             country: order.map(|o| o.country.clone()).unwrap_or_default(),
+            state: order.map(|o| o.state.clone()).unwrap_or_default(),
             city: order.map(|o| o.city.clone()).unwrap_or_default(),
             items: order.map_or(0, |o| o.items),
             warehouse: order.map(|o| o.warehouse.clone()).unwrap_or_default(),
+            method: order.map(|o| o.method.clone()).unwrap_or_default(),
             event,
         }
     }
@@ -155,7 +160,7 @@ pub fn activity_item(entry: &FeedEntry) -> ActivityItem {
     let to = || {
         Meta::flag(
             Flag::country(&entry.country).size(FlagSize::Xs),
-            place(&entry.city, &entry.country),
+            place_of(&entry.city, &entry.state, &entry.country),
         )
     };
     let house = warehouse(&entry.warehouse);
@@ -168,10 +173,20 @@ pub fn activity_item(entry: &FeedEntry) -> ActivityItem {
             ))
             .meta(to())
             .href(order),
-        Kind::Paid => ActivityItem::new(event.actor.clone(), "paid for")
-            .object(entry.number.clone())
-            .meta(Meta::icon(icons::CREDIT_CARD, money(event.amount)))
-            .href(order),
+        Kind::Paid => ActivityItem::new(
+            event.actor.clone(),
+            if entry.method == "cod" {
+                "took the cash for"
+            } else {
+                "paid for"
+            },
+        )
+        .object(entry.number.clone())
+        .meta(Meta::icon(
+            method_icon(&entry.method),
+            format!("{} · {}", money(event.amount), method_words(&entry.method)),
+        ))
+        .href(order),
         Kind::Packed => ActivityItem::new(format!("{} warehouse", house.city), "packed")
             .object(entry.number.clone())
             .meta(Meta::icon(icons::PACKAGE, units(event.amount)))
@@ -289,6 +304,24 @@ pub struct Seller {
     pub revenue: i64,
 }
 
+/// The icon of a way to pay.
+pub fn method_icon(method: &str) -> icons::Icon {
+    match method {
+        "upi" => icons::SMARTPHONE,
+        "cod" => icons::BANKNOTE,
+        _ => icons::CREDIT_CARD,
+    }
+}
+
+/// `UPI`, `Card` or `Cash on delivery`.
+pub fn method_words(method: &str) -> &'static str {
+    match method {
+        "upi" => "UPI",
+        "cod" => "Cash on delivery",
+        _ => "Card",
+    }
+}
+
 /// The shelves running low, emptiest first: five at most.
 pub fn low_stock(products: &[Product]) -> Vec<Product> {
     let mut low: Vec<Product> = products
@@ -337,7 +370,7 @@ pub fn dashboard_body(
 ) -> Stack {
     Stack::gap(4).children((
         Text::muted(format!(
-            "{}. Times are in the shop's zone, Europe/Amsterdam.",
+            "{}. Times are in India Standard Time.",
             today.format("%A %-d %B")
         )),
         live_figures(counts),

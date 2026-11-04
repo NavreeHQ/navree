@@ -6,7 +6,7 @@ use chrono::{DateTime, NaiveDate};
 use navree::ui::flags::CountryCode;
 use navree::ui::*;
 
-use crate::data::{OFFSET, SHOP, STAFF};
+use crate::data::{OFFSET, SHOP, STAFF, state_name};
 
 pub mod dashboard;
 pub mod inventory;
@@ -24,21 +24,25 @@ pub fn shell() -> Shell {
                 .item(NavItem::new("Inventory", "/inventory").icon(icons::BOXES)),
         )
         .user(
-            UserMenu::new(STAFF, "ines.varga@example.com")
+            UserMenu::new(STAFF, "ravneet.kaur@example.com")
                 .link("Profile", "/")
                 .action("Sign out", "/sign-out"),
         )
 }
 
-/// `1,240`.
+/// `1,24,050`: grouped the Indian way, the last three digits and then pairs.
 pub fn thousands(n: i64) -> String {
     let digits = n.unsigned_abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    let mut out = String::with_capacity(digits.len() + digits.len() / 2 + 1);
     if n < 0 {
         out.push('-');
     }
+    let head = digits.len().saturating_sub(3);
     for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at).is_multiple_of(3) {
+        if at > 0 && at < head && (head - at).is_multiple_of(2) {
+            out.push(',');
+        }
+        if at > 0 && at == head {
             out.push(',');
         }
         out.push(digit);
@@ -46,15 +50,17 @@ pub fn thousands(n: i64) -> String {
     out
 }
 
-/// `€1,240.50` from cents.
-pub fn money(cents: i64) -> String {
-    let sign = if cents < 0 { "-" } else { "" };
-    let cents = cents.unsigned_abs();
-    format!(
-        "{sign}€{}.{:02}",
-        thousands(i64::try_from(cents / 100).unwrap_or(i64::MAX)),
-        cents % 100
-    )
+/// `₹1,24,050` from paise, with the paise only when there are some:
+/// `₹1,240.50`.
+pub fn money(paise: i64) -> String {
+    let sign = if paise < 0 { "-" } else { "" };
+    let paise = paise.unsigned_abs();
+    let rupees = thousands(i64::try_from(paise / 100).unwrap_or(i64::MAX));
+    if paise.is_multiple_of(100) {
+        format!("{sign}₹{rupees}")
+    } else {
+        format!("{sign}₹{rupees}.{:02}", paise % 100)
+    }
 }
 
 /// `09:41` in the shop's zone.
@@ -86,6 +92,14 @@ pub fn when(at: i64, today: NaiveDate) -> String {
 /// `Portugal` for `PT`.
 pub fn country_name(code: &str) -> &'static str {
     CountryCode::parse(code).map_or("Unknown", CountryCode::name)
+}
+
+/// `Ludhiana, Punjab` in India, `Dubai, United Arab Emirates` abroad.
+pub fn place_of(city: &str, state: &str, country: &str) -> String {
+    match state_name(state) {
+        "" | "Outside India" => place(city, country),
+        state => format!("{city}, {state}"),
+    }
 }
 
 /// `Porto, Portugal`.
@@ -127,19 +141,25 @@ mod tests {
     #[test]
     fn numbers_read_the_way_people_write_them() {
         assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
         assert_eq!(thousands(1_240), "1,240");
-        assert_eq!(thousands(-1_234_567), "-1,234,567");
-        assert_eq!(money(0), "€0.00");
-        assert_eq!(money(18_400), "€184.00");
-        assert_eq!(money(124_050), "€1,240.50");
-        assert_eq!(money(-4_005), "-€40.05");
+        assert_eq!(thousands(124_050), "1,24,050");
+        assert_eq!(thousands(10_000_000), "1,00,00,000");
+        assert_eq!(thousands(-1_234_567), "-12,34,567");
+        assert_eq!(money(0), "₹0");
+        assert_eq!(money(99_900), "₹999");
+        assert_eq!(money(12_405_000), "₹1,24,050");
+        assert_eq!(money(124_050), "₹1,240.50");
+        assert_eq!(money(-4_005), "-₹40.05");
+        assert_eq!(place_of("Ludhiana", "PB", "IN"), "Ludhiana, Punjab");
+        assert_eq!(place_of("Dubai", "EX", "AE"), "Dubai, United Arab Emirates");
         assert_eq!(units(1), "1 unit");
     }
 
     #[test]
     fn times_are_named_from_today() {
-        // 4 November 2026, 12:00 in Amsterdam.
-        let noon = 1_793_790_000;
+        // 4 November 2026, 12:00 in India.
+        let noon = 1_793_773_800;
         let today = crate::data::day_of(noon);
         assert_eq!(when(noon, today), "Today, 12:00");
         assert_eq!(when(noon - 86_400, today), "Yesterday, 12:00");

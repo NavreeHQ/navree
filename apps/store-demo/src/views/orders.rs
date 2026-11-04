@@ -4,8 +4,8 @@
 use chrono::NaiveDate;
 use navree::ui::*;
 
-use crate::data::{Fulfilment, Order, Payment, Status};
-use crate::views::{country_name, money, when};
+use crate::data::{Fulfilment, Order, Payment, STATES, Status};
+use crate::views::{money, place_of, when};
 
 /// The id of the drawer a row opens.
 pub const DRAWER: &str = "order";
@@ -24,35 +24,6 @@ pub const PAYMENTS: &[(&str, &str)] = &[
     ("paid", "Paid"),
     ("partially_refunded", "Partly refunded"),
     ("refunded", "Refunded"),
-];
-
-/// The country filter's choices: every country the shop ships to.
-pub const COUNTRIES: &[(&str, &str)] = &[
-    ("AR", "Argentina"),
-    ("AT", "Austria"),
-    ("AU", "Australia"),
-    ("BE", "Belgium"),
-    ("CA", "Canada"),
-    ("CH", "Switzerland"),
-    ("CZ", "Czechia"),
-    ("DE", "Germany"),
-    ("DK", "Denmark"),
-    ("ES", "Spain"),
-    ("FI", "Finland"),
-    ("FR", "France"),
-    ("GB", "United Kingdom"),
-    ("IE", "Ireland"),
-    ("IT", "Italy"),
-    ("JP", "Japan"),
-    ("MX", "Mexico"),
-    ("NL", "Netherlands"),
-    ("NO", "Norway"),
-    ("NZ", "New Zealand"),
-    ("PL", "Poland"),
-    ("PT", "Portugal"),
-    ("SE", "Sweden"),
-    ("US", "United States"),
-    ("ZA", "South Africa"),
 ];
 
 /// An order, as the table shows it. Each column says what a reader can do with
@@ -85,7 +56,9 @@ pub struct OrderRow {
     pub total: i64,
     #[col(skip)]
     pub refunded: i64,
-    #[col(filter = multi, options = COUNTRIES, hide_on_mobile, label = "Ships to")]
+    #[col(filter = multi, options = STATES, hide_on_mobile, label = "Ships to")]
+    pub state: String,
+    #[col(skip)]
     pub country: String,
     #[col(skip)]
     pub city: String,
@@ -107,6 +80,7 @@ impl From<Order> for OrderRow {
             payment: order.payment,
             total: order.total,
             refunded: order.refunded,
+            state: order.state,
             country: order.country,
             city: order.city,
             placed_on: order.placed_on,
@@ -162,13 +136,13 @@ fn total_cell(row: &OrderRow) -> Node {
         .into()
 }
 
-/// A flag and the country.
-fn country_cell(row: &OrderRow) -> Node {
+/// A flag, the city and the state.
+fn place_cell(row: &OrderRow) -> Node {
     Row::gap(2)
         .align(Align::Center)
         .children((
             Flag::country(&row.country).size(FlagSize::Xs).decorative(),
-            Text::new(country_name(&row.country)).inline(),
+            Text::new(place_of(&row.city, &row.state, &row.country)).inline(),
         ))
         .into()
 }
@@ -193,7 +167,7 @@ pub fn orders_table<'a>(
         .cell("fulfilment", |row| fulfilment_badge(&row.fulfilment))
         .cell("payment", |row| payment_badge(&row.payment))
         .cell("total", total_cell)
-        .cell("country", country_cell)
+        .cell("state", place_cell)
         .cell("placed_on", move |row| {
             Text::new(when(row.placed_at, today)).inline()
         })

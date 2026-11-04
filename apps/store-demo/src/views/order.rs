@@ -11,8 +11,9 @@ use crate::data::{
     Event, Fulfilment, Kind, Line, OFFSET, Order, Payment, Status, ZONE, product_icon, warehouse,
 };
 use crate::shop;
+use crate::views::dashboard::{method_icon, method_words};
 use crate::views::orders::{DRAWER, fulfilment_badge, payment_badge, status_badge};
-use crate::views::{city, country_name, money, thousands, units, when};
+use crate::views::{city, country_name, money, place_of, thousands, units, when};
 
 /// The id of the element that holds an order on its own page.
 pub const PAGE: &str = "order-page";
@@ -26,6 +27,8 @@ pub struct OrderView {
     pub orders: u64,
     /// When the customer joined.
     pub since: Option<NaiveDate>,
+    /// The customer's phone number, in E.164.
+    pub phone: String,
     /// Now, for the actions that depend on the time.
     pub now: i64,
 }
@@ -207,6 +210,7 @@ fn facts(view: &OrderView) -> FactGrid {
         .icon(icons::USER)
         .tone(Tone::Info)
         .detail(order.email.clone())
+        .detail(crate::data::phone_text(&view.phone))
         .detail(match view.since {
             Some(day) => format!(
                 "{} {} since {}",
@@ -217,34 +221,42 @@ fn facts(view: &OrderView) -> FactGrid {
             None => "First order".to_owned(),
         });
     let paid = Payment::parse(&order.payment);
-    let payment = if order.method == "card" {
-        FactCard::new(
-            "Payment",
-            format!("{} ending {}", order.card_brand, order.card_last4),
-        )
-        .icon(icons::CREDIT_CARD)
-    } else {
-        FactCard::new("Payment", "Bank transfer").icon(icons::LANDMARK)
-    }
-    .tone(paid.tone())
-    .detail(match paid {
-        Payment::Pending => format!("{} expected", money(order.total)),
-        _ => format!("{} paid", money(order.total)),
-    })
-    .detail(match paid {
-        Payment::Refunded => "Refunded in full".to_owned(),
-        Payment::PartiallyRefunded => format!("{} refunded", money(order.refunded)),
-        Payment::Pending => "Waiting for the transfer".to_owned(),
-        Payment::Paid => "Nothing refunded".to_owned(),
-    });
-    let from = FactCard::new("Ships from", city(house.country, house.city))
+    let payment = FactCard::new("Payment", paid_with(order))
+        .icon(method_icon(&order.method))
+        .tone(paid.tone())
+        .detail(match paid {
+            Payment::Pending if order.method == "cod" => {
+                format!("{} to collect on delivery", money(order.total))
+            }
+            Payment::Pending => format!("{} expected", money(order.total)),
+            _ => format!("{} paid", money(order.total)),
+        })
+        .detail(match paid {
+            Payment::Refunded => "Refunded in full".to_owned(),
+            Payment::PartiallyRefunded => format!("{} refunded", money(order.refunded)),
+            Payment::Pending => "Nothing paid yet".to_owned(),
+            Payment::Paid => "Nothing refunded".to_owned(),
+        });
+    let from = FactCard::new("Ships from", city("IN", house.city))
         .icon(icons::WAREHOUSE)
-        .detail(format!("{} warehouse", country_name(house.country)));
+        .detail(format!(
+            "{} warehouse, {}",
+            house.city,
+            crate::data::state_name(house.state)
+        ));
     let step = Fulfilment::parse(&order.fulfilment);
     let to = FactCard::new("Ships to", city(&order.country, &order.city))
         .icon(icons::MAP_PIN)
         .tone(Tone::named("violet"))
-        .detail(country_name(&order.country))
+        .detail(if order.pin.is_empty() {
+            country_name(&order.country).to_owned()
+        } else {
+            format!(
+                "{}, PIN {}",
+                crate::data::state_name(&order.state),
+                order.pin
+            )
+        })
         .detail(if order.tracking.is_empty() {
             match step {
                 _ if Status::parse(&order.status) == Status::Cancelled => "Not shipping".to_owned(),
@@ -272,10 +284,9 @@ pub fn steps(order: &Order, history: &[Event], level: u8) -> Timeline {
                     units(order.items),
                     money(event.amount)
                 )),
-                Kind::Paid => TimelineEvent::new("Paid").detail(if order.method == "card" {
-                    format!("{} ending {}", order.card_brand, order.card_last4)
-                } else {
-                    "Bank transfer received".to_owned()
+                Kind::Paid => TimelineEvent::new("Paid").detail(match order.method.as_str() {
+                    "cod" => format!("In cash, to {}", event.actor),
+                    _ => paid_with(order),
                 }),
                 Kind::Packed => {
                     TimelineEvent::new("Packed").detail(format!("At the {} warehouse", house.city))
@@ -383,10 +394,18 @@ pub fn actions(view: &OrderView) -> Row {
 
 /// Where a refund goes back to, in words.
 fn back_to(order: &Order) -> String {
-    if order.method == "card" {
-        format!("{} ending {}", order.card_brand, order.card_last4)
-    } else {
-        "the account it came from".to_owned()
+    match order.method.as_str() {
+        "card" => format!("{} ending {}", order.card_brand, order.card_last4),
+        "upi" => "the customer's UPI account".to_owned(),
+        _ => "the customer's bank account".to_owned(),
+    }
+}
+
+/// How an order is paid, in words: `UPI`, `RuPay ending 4821`, `Cash on delivery`.
+fn paid_with(order: &Order) -> String {
+    match order.method.as_str() {
+        "card" => format!("{} ending {}", order.card_brand, order.card_last4),
+        method => method_words(method).to_owned(),
     }
 }
 
@@ -652,7 +671,7 @@ pub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> She
             "{} for {} in {}",
             units(order.items),
             order.customer,
-            country_name(&order.country)
+            place_of(&order.city, &order.state, &order.country)
         ))
         .body((order_detail(view, 3, today, true, parts), dialogs(view)))
 }
@@ -682,10 +701,10 @@ mod tests {
 
     #[test]
     fn a_thumbnail_is_a_picture_of_the_products_icon_in_the_themes_colours() {
-        let html = render(&thumbnail("lamp"));
+        let html = render(&thumbnail("kadhai"));
         assert!(html.starts_with("<svg viewBox=\"0 0 40 40\""), "{html}");
         assert!(html.contains("fill=\"var(--ink-2)\""));
-        assert!(html.contains(icons::LAMP_DESK.shapes()));
+        assert!(html.contains(icons::COOKING_POT.shapes()));
         assert!(!html.contains("style="));
     }
 }

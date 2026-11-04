@@ -56,7 +56,7 @@ const freshOrder = async () => {
     const { order } = await step("placed");
     const html = await (await fetch(`${BASE}/orders/${order}`)).text();
     if (html.includes(">Paid<")) {
-      return { id: order, number: `FH-${20480 + order}` };
+      return { id: order, number: `CS-${20480 + order}` };
     }
   }
   assert.fail("no order paid by card in twenty tries");
@@ -220,7 +220,7 @@ for (const name of NAMES) {
         });
 
         test(`the drawer over its page is axe clean and keeps the rules (${theme}, ${width} px)`, async () => {
-          const page = await openDrawer("FH-220470", { light: theme === "light", viewport: { width, height: 900 } });
+          const page = await openDrawer("CS-220470", { light: theme === "light", viewport: { width, height: 900 } });
           await until(page, () => !document.querySelector("#order [aria-busy=true]"), null, "the drawer's parts to load");
           await settledIn(page, "dialog#order");
           assert.deepEqual(await axe(page), []);
@@ -253,11 +253,11 @@ for (const name of NAMES) {
       assert.ok(statuses.every((s) => s === "Cancelled"), statuses.join(", "));
       // A search finds an order by its number.
       await page.goto(BASE + "/orders");
-      await page.locator("#orders input[name=q]").fill("FH-219999");
-      await until(page, () => new URL(location.href).searchParams.get("q") === "FH-219999", null, "the search in the URL");
+      await page.locator("#orders input[name=q]").fill("CS-219999");
+      await until(page, () => new URL(location.href).searchParams.get("q") === "CS-219999", null, "the search in the URL");
       await settled(page);
       const numbers = await rows(page).locator("button[aria-haspopup=dialog]").allTextContents();
-      assert.deepEqual(numbers.map((n) => n.trim()), ["FH-219999"]);
+      assert.deepEqual(numbers.map((n) => n.trim()), ["CS-219999"]);
       await page.done();
     });
 
@@ -272,7 +272,7 @@ for (const name of NAMES) {
     // ---- An order in a drawer -------------------------------------------------------
 
     test("a row opens the order in a drawer 60% wide over its page, and its history loads after", async () => {
-      const page = await openDrawer("FH-220470");
+      const page = await openDrawer("CS-220470");
       const box = await drawer(page).boundingBox();
       // About 60% of the screen: of the viewport, less a scrollbar where the system draws one.
       assert.ok(box.width >= 1440 * 0.58 && box.width <= 1440 * 0.61, `about 60% of 1440 px: ${box.width}`);
@@ -327,14 +327,14 @@ for (const name of NAMES) {
     test("a refund of more than is left is refused, and nothing changes", async () => {
       const { id } = await freshOrder();
       const before = await (await fetch(`${BASE}/orders/${id}`)).text();
-      const total = before.match(/Placed [^·]+· (€[\d,.]+)/)[1];
+      const total = before.match(/Placed [^·]+· (₹[\d,.]+)/)[1];
       const res = await fetch(`${BASE}/orders/${id}/refund`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "x-navree-ui": "1" },
         body: "amount=99999.00&reason=goodwill",
       });
       assert.equal(res.status, 409);
-      assert.match(await res.text(), new RegExp(`At most ${total.replace(/[.€]/g, (c) => `\\${c}`)} is left to refund`));
+      assert.match(await res.text(), new RegExp(`At most ${total.replace(/[.₹]/g, (c) => `\\${c}`)} is left to refund`));
       const after = await (await fetch(`${BASE}/orders/${id}`)).text();
       assert.ok(after.includes(">Paid<") || /Paid/.test(after), "still paid");
       assert.ok(!/Partly refunded|>Refunded</.test(after), "no refund was written");
@@ -466,9 +466,9 @@ for (const name of NAMES) {
     // ---- JavaScript off -------------------------------------------------------------
 
     test("with JavaScript off an order's number leads to its page, with its history and the other orders drawn in", async () => {
-      const page = await open("/orders?q=FH-220470", { javaScriptEnabled: false });
+      const page = await open("/orders?q=CS-220470", { javaScriptEnabled: false });
       await Promise.all([page.waitForURL(/\/orders\/\d+$/), rows(page).first().locator("button[aria-haspopup=dialog]").click()]);
-      assert.equal((await page.locator("h1").textContent()).trim(), "Order FH-220470");
+      assert.equal((await page.locator("h1").textContent()).trim(), "Order CS-220470");
       assert.ok((await page.locator("#order-page [data-slot=timeline-event]").count()) >= 2, "the history, drawn in");
       assert.equal(await page.locator("#order-page [aria-busy=true]").count(), 0, "nothing waits for a script");
       assert.ok(await page.getByText(/More from /).isVisible());
@@ -482,7 +482,7 @@ for (const name of NAMES) {
       assert.equal(response.status(), 303);
       assert.match(response.headers().location, new RegExp(`/orders/${id}$`));
       await page.goto(`${BASE}/orders/${id}`);
-      assert.match(await page.locator("body").textContent(), /€3\.00 back to the customer/);
+      assert.match(await page.locator("body").textContent(), /₹3 back to the customer/);
       assert.match(await page.locator("#order-page").textContent(), /Partly refunded/);
       await page.done();
     });

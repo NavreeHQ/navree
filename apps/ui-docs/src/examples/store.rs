@@ -16,8 +16,8 @@ use store_demo::views::shell;
 use crate::catalog::{self, Example, items};
 
 /// The moment the previews are drawn at, fixed so the files don't change:
-/// 4 November 2026, 12:00 in Amsterdam.
-const NOW: i64 = 1_793_790_000;
+/// 4 November 2026, 12:00 in India.
+const NOW: i64 = 1_793_773_800;
 
 /// How many of the newest orders the previews draw from: the last few days,
 /// which hold every order still on its way.
@@ -159,8 +159,8 @@ fn status_counts(shop: &Shop) -> Vec<(Status, u64)> {
     ]
 }
 
-/// An order with a story to show: several lines, shipped abroad from Rotterdam,
-/// with a note from the customer and a few orders before it.
+/// An order with a story to show: several lines, shipped from Ludhiana to another
+/// state, with a note from the customer and a few orders before it.
 fn chosen(shop: &Shop) -> &Order {
     let lines = |order: &Order| {
         shop.lines
@@ -170,8 +170,10 @@ fn chosen(shop: &Shop) -> &Order {
     };
     let story = |order: &&Order| {
         order.fulfilment == "shipped"
-            && order.warehouse == "NL"
-            && order.country != "NL"
+            && order.method != "cod"
+            && order.warehouse == "LDH"
+            && order.state != "PB"
+            && order.country == "IN"
             && !order.note.is_empty()
             && lines(order) >= 3
     };
@@ -221,16 +223,18 @@ fn drawer_page() -> Node {
         })
         .collect();
     others.sort_by_key(|other| std::cmp::Reverse(other.placed_at));
-    let since = shop
+    let customer = shop
         .customers
         .iter()
         .find(|customer| customer.id == order.customer_id)
-        .and_then(|customer| customer.since);
+        .cloned()
+        .unwrap_or_default();
     let view = OrderView {
         order,
         lines,
         orders: theirs.len() as u64,
-        since,
+        since: customer.since,
+        phone: customer.phone,
         now: NOW,
     };
     let (query, page) = first_page(&shop);

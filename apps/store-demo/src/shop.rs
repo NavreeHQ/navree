@@ -405,7 +405,7 @@ mod tests {
 
     fn order(payment: Payment, fulfilment: Fulfilment, total: i64, refunded: i64) -> Order {
         Order {
-            number: "FH-20481".to_owned(),
+            number: "CS-20481".to_owned(),
             status: Status::Open.key().to_owned(),
             payment: payment.key().to_owned(),
             fulfilment: fulfilment.key().to_owned(),
@@ -467,12 +467,12 @@ mod tests {
     #[test]
     fn the_words_name_the_order() {
         assert_eq!(
-            Refusal::TooMuch(14_400).message("FH-20481"),
-            "At most €144.00 is left to refund on FH-20481."
+            Refusal::TooMuch(14_400).message("CS-20481"),
+            "At most ₹144 is left to refund on CS-20481."
         );
         assert!(
             Refusal::Shipped
-                .message("FH-20481")
+                .message("CS-20481")
                 .contains("Refund it instead")
         );
     }

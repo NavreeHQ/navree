@@ -84,8 +84,8 @@ impl Hub {
             "DROP TABLE IF EXISTS customers",
             "DROP TABLE IF EXISTS products",
             "CREATE TABLE products (id INTEGER PRIMARY KEY, sku TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, icon TEXT NOT NULL, price INTEGER NOT NULL, stock INTEGER NOT NULL, reorder_at INTEGER NOT NULL, level TEXT NOT NULL)",
-            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE)",
-            "CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER NOT NULL, customer TEXT NOT NULL, email TEXT NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, fulfilment TEXT NOT NULL, payment TEXT NOT NULL, method TEXT NOT NULL, card_brand TEXT NOT NULL, card_last4 TEXT NOT NULL, items INTEGER NOT NULL, subtotal INTEGER NOT NULL, shipping INTEGER NOT NULL, total INTEGER NOT NULL, refunded INTEGER NOT NULL, warehouse TEXT NOT NULL, carrier TEXT NOT NULL, tracking TEXT NOT NULL, note TEXT NOT NULL, placed_at INTEGER NOT NULL, placed_on DATE NOT NULL, confirmed_at INTEGER NOT NULL)",
+            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, country TEXT NOT NULL, state TEXT NOT NULL, city TEXT NOT NULL, pin TEXT NOT NULL, since DATE)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER NOT NULL, customer TEXT NOT NULL, email TEXT NOT NULL, country TEXT NOT NULL, state TEXT NOT NULL, city TEXT NOT NULL, pin TEXT NOT NULL, status TEXT NOT NULL, fulfilment TEXT NOT NULL, payment TEXT NOT NULL, method TEXT NOT NULL, card_brand TEXT NOT NULL, card_last4 TEXT NOT NULL, items INTEGER NOT NULL, subtotal INTEGER NOT NULL, shipping INTEGER NOT NULL, total INTEGER NOT NULL, refunded INTEGER NOT NULL, warehouse TEXT NOT NULL, carrier TEXT NOT NULL, tracking TEXT NOT NULL, note TEXT NOT NULL, placed_at INTEGER NOT NULL, placed_on DATE NOT NULL, confirmed_at INTEGER NOT NULL)",
             "CREATE TABLE order_lines (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, icon TEXT NOT NULL, quantity INTEGER NOT NULL, price INTEGER NOT NULL)",
             "CREATE TABLE events (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, at INTEGER NOT NULL, order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, amount INTEGER NOT NULL, actor TEXT NOT NULL, detail TEXT NOT NULL)",
         ] {
@@ -102,7 +102,7 @@ impl Hub {
         "CREATE INDEX orders_status ON orders (status, placed_on, id)",
         "CREATE INDEX orders_fulfilment ON orders (fulfilment, placed_on, id)",
         "CREATE INDEX orders_payment ON orders (payment, placed_on, id)",
-        "CREATE INDEX orders_country ON orders (country, placed_on, id)",
+        "CREATE INDEX orders_state ON orders (state, placed_on, id)",
         "CREATE INDEX orders_open ON orders (status, fulfilment)",
         "CREATE INDEX orders_total ON orders (total, id)",
         "CREATE INDEX orders_number ON orders (number, id)",
@@ -195,8 +195,7 @@ impl Hub {
         order: Option<i64>,
     ) -> Result<Option<Event>, BoxError> {
         let kind = kind.unwrap_or_else(|| match self.roll(100) {
-            0..=37 => Kind::Placed,
-            38..=49 => Kind::Paid,
+            0..=49 => Kind::Placed,
             50..=64 => Kind::Packed,
             65..=79 => Kind::Shipped,
             80..=93 => Kind::Delivered,
@@ -204,7 +203,6 @@ impl Hub {
         });
         let event = match kind {
             Kind::Placed => self.place(db, now).await?,
-            Kind::Paid => self.advance(db, now, Kind::Paid, order).await?,
             Kind::Packed => self.advance(db, now, Kind::Packed, order).await?,
             Kind::Shipped => self.advance(db, now, Kind::Shipped, order).await?,
             Kind::Delivered => self.advance(db, now, Kind::Delivered, order).await?,
@@ -252,10 +250,11 @@ impl Hub {
         order.total = order.subtotal + order.shipping;
         order.status = Status::Open.key().to_owned();
         order.fulfilment = Fulfilment::Unfulfilled.key().to_owned();
-        order.payment = if order.method == "card" {
-            Payment::Paid
-        } else {
+        // UPI and cards pay at once; cash on delivery pays when it arrives.
+        order.payment = if order.method == "cod" {
             Payment::Pending
+        } else {
+            Payment::Paid
         }
         .key()
         .to_owned();
@@ -329,17 +328,22 @@ impl Hub {
         kind: Kind,
         who: Option<i64>,
     ) -> Result<Option<Event>, BoxError> {
-        let (payment, fulfilment) = match kind {
-            Kind::Paid => (Some(Payment::Pending), Fulfilment::Unfulfilled),
-            Kind::Packed => (Some(Payment::Paid), Fulfilment::Unfulfilled),
-            Kind::Shipped => (None, Fulfilment::Packed),
-            _ => (None, Fulfilment::Shipped),
+        let fulfilment = match kind {
+            Kind::Packed => Fulfilment::Unfulfilled,
+            Kind::Shipped => Fulfilment::Packed,
+            Kind::Delivered => Fulfilment::Shipped,
+            _ => return Ok(None),
         };
         let mut query = Order::query()
             .where_(Order::STATUS.eq(Status::Open.key()))
             .where_(Order::FULFILMENT.eq(fulfilment.key()));
-        if let Some(payment) = payment {
-            query = query.where_(Order::PAYMENT.eq(payment.key()));
+        // Only a paid order is packed, or one paid in cash when it arrives.
+        if kind == Kind::Packed {
+            query = query.where_(
+                Order::PAYMENT
+                    .eq(Payment::Paid.key())
+                    .or(Order::METHOD.eq("cod")),
+            );
         }
         let order = match who {
             Some(id) => query.find(db, id).await?.map(|record| record.into_inner()),
@@ -362,13 +366,8 @@ impl Hub {
             return Ok(None);
         };
         let house = warehouse(&order.warehouse);
+        let cash = order.method == "cod";
         let (sets, actor, detail, amount) = match kind {
-            Kind::Paid => (
-                vec![Order::PAYMENT.set(Payment::Paid.key())],
-                order.customer.clone(),
-                String::new(),
-                order.total,
-            ),
             Kind::Packed => (
                 vec![Order::FULFILMENT.set(Fulfilment::Packed.key())],
                 house.city.to_owned(),
@@ -390,15 +389,16 @@ impl Hub {
                     0,
                 )
             }
-            _ => (
-                vec![
+            _ => {
+                let mut sets = vec![
                     Order::FULFILMENT.set(Fulfilment::Delivered.key()),
                     Order::STATUS.set(Status::Completed.key()),
-                ],
-                house.carrier.to_owned(),
-                String::new(),
-                0,
-            ),
+                ];
+                if cash {
+                    sets.push(Order::PAYMENT.set(Payment::Paid.key()));
+                }
+                (sets, house.carrier.to_owned(), String::new(), 0)
+            }
         };
         let changed = Order::query()
             .where_(Order::ID.eq(order.id))
@@ -418,12 +418,29 @@ impl Hub {
                 at: now,
                 order_id: order.id,
                 amount,
-                actor,
+                actor: actor.clone(),
                 detail,
                 ..Event::default()
             },
         )
         .await?;
+        // Cash on delivery: the courier takes the money at the door.
+        if cash && kind == Kind::Delivered {
+            shop::record(
+                db,
+                self.event_id(),
+                Event {
+                    kind: Kind::Paid.key().to_owned(),
+                    at: now,
+                    order_id: order.id,
+                    amount: order.total,
+                    actor,
+                    detail: "Cash on delivery".to_owned(),
+                    ..Event::default()
+                },
+            )
+            .await?;
+        }
         Ok(Some(event))
     }
 

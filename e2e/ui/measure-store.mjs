@@ -163,7 +163,7 @@ async function load(path, profile, viewport) {
 const pages = [
   { name: "Dashboard", path: "/" },
   { name: "Orders", path: "/orders" },
-  { name: "Filtered search", path: "/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2" },
+  { name: "Filtered search", path: "/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2" },
   { name: "An order's page", path: "/orders/150000" },
   { name: "Inventory", path: "/inventory" },
 ];
@@ -241,7 +241,7 @@ const plan = (sql) => {
 };
 const views = [
   { name: "The orders list, first page", paths: ["/orders"] },
-  { name: "A filtered search", paths: ["/orders?f.status=open&f.fulfilment=packed&f.country=FR&q=FH-2"] },
+  { name: "A filtered search", paths: ["/orders?f.status=open&f.fulfilment=packed&f.state=PB&q=CS-2"] },
   { name: "The order drawer", paths: ["/orders/150000/peek", "/orders/150000/steps", "/orders/150000/others"] },
 ];
 const plans = [];
