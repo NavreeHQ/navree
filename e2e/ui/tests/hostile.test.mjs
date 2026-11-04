@@ -130,6 +130,67 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`named elements and a hostile answer can't break a split, a hotkey or a lazy list (${engine})`, async () => {
+      const path = key("panes");
+      // Images named after what the modules read from the document, and form fields named
+      // after the methods they call on elements and event targets.
+      const clobber = ["querySelector", "querySelectorAll", "activeElement", "documentElement", "scrollingElement", "cookie", "body", "createElement"].map((name) => `<img name="${name}" src="${GIF}" alt="">`).join("");
+      const items = (from, n) => Array.from({ length: n }, (_, i) => `<li data-key="${from + i}" data-cursor="${String(1000 - from - i).padStart(6, "0")}"><a href="/x/${from + i}">Row ${from + i}</a></li>`).join("");
+      const split = `<div data-slot="split" id="s" data-ui-split data-orientation="horizontal" data-ui-split-save="/${path}-save">
+        <section data-slot="split-pane" id="a" aria-label="List" data-split-basis="30" data-split-size="300" data-split-min="200" data-split-max="500"><div data-slot="split-pane-body"><div data-slot="split-pane-content">
+          <form id="f"><input name="closest" value="x"><input name="matches" value="x"><input name="querySelector" value="x"><input name="contains" value="x"></form>
+          <div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/${path}-rows" data-ui-order="desc" data-ui-max="50" data-l-loaded="{n} more">
+            <a data-slot="lazy-more" data-dir="start" href="#" hidden>Newer</a>
+            <ul data-slot="lazy-items" id="l-v" data-ui-keep data-ui-start-done role="list" aria-label="Rows">${items(0, 10)}</ul>
+            <a data-slot="lazy-more" data-dir="end" id="more" href="/${path}?after=000991">More</a>
+            <p data-slot="lazy-status" role="status" aria-live="polite"></p>
+          </div>
+        </div></div></section>
+        <div data-slot="split-handle" id="h" role="separator" aria-orientation="vertical" aria-controls="a" aria-label="List" data-ui-keep-attrs="tabindex aria-valuenow aria-valuemin aria-valuemax"></div>
+        <section data-slot="split-pane" id="b" aria-label="Detail" data-split-fill data-split-min="300" data-split-max="900"><div data-slot="split-pane-body"><div data-slot="split-pane-content"><a id="hot" href="/${path}-hot" data-ui-hotkey="j" aria-keyshortcuts="j">Next</a></div></div></section>
+      </div>`;
+      route(`/${path}`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><link rel="stylesheet" href="/_navree/ui/navree-ui.css"><script type="module" src="/_navree/ui/split.js"></script><script type="module" src="/_navree/ui/keys.js"></script><script type="module" src="/_navree/ui/lazy.js"></script></head><body>${clobber}${split}</body></html>`);
+      route(`/${path}-hot`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>hot</title></head><body>hot</body></html>`);
+      f.routes.set(`/${path}-save`, (req, res) => {
+        res.writeHead(204);
+        res.end();
+      });
+      // The next page answers rows, a script, a handler, a duplicate key and a key that is markup.
+      f.routes.set(`/${path}-rows`, (req, res) => {
+        res.writeHead(200, { "content-type": "text/html", "x-ui-more": "0", "content-security-policy": CSP });
+        res.end(`${items(10, 5)}<li data-key="3" data-cursor="000500">a duplicate</li><li data-key='"]&gt;<img src=x>' data-cursor="000100"><script>document.documentElement.setAttribute("data-attacker-ran","1")</script><img src="x" onerror="document.documentElement.setAttribute('data-attacker-ran','1')" alt=""></li>`);
+      });
+      const { context, page, errors } = await fresh(`/${path}`);
+      const q = (s) => page.evaluate((s) => Document.prototype.querySelector.call(document, s) && Element.prototype.getAttribute.call(Document.prototype.querySelector.call(document, s), "aria-valuenow"), s);
+      await until(() => true, 50);
+      await page.focus("#h");
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await q("#h"), "32", "the separator moves by its keys");
+      await until(() => hits(`/${path}-save`).length, 3000);
+      assert.equal(hits(`/${path}-save`).length, 1, "and saves once");
+      assert.match(hits(`/${path}-save`)[0].body, /split=s&sizes=32%2C68&collapsed=/);
+      // The lazy list's end is in view, so its next page comes by itself: the rows arrive
+      // once each, and nothing in them runs.
+      await until(() => f.log.filter((entry) => entry.path.startsWith(`/${path}-rows`)).length);
+      await sleep(200);
+      const rows = await page.evaluate(() => [...Document.prototype.querySelectorAll.call(document, "#l-v > li")].map((li) => Element.prototype.getAttribute.call(li, "data-key")));
+      assert.equal(rows.filter((k) => k === "3").length, 1, "a duplicate key is not added twice");
+      assert.ok(rows.includes("14"));
+      assert.equal(await attr(page, "data-attacker-ran"), null, "no script or handler from the answer ran");
+      assert.equal(await page.evaluate(() => Element.prototype.hasAttribute.call(Document.prototype.getElementById.call(document, "more"), "hidden")), true, "the end is done");
+      assert.match(f.log.filter((entry) => entry.path.startsWith(`/${path}-rows`))[0].path, /dir=end&cursor=000991/);
+      // A hotkey still clicks what names it.
+      // Focused through the prototype: the test's own tools read `matches` off the form.
+      await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.querySelector.call(document, "#f input[name=closest]")));
+      await page.keyboard.press("j");
+      assert.equal(page.url(), f.origin + `/${path}`, "no hotkey while a field has focus");
+      await page.focus("#h");
+      await page.keyboard.press("j");
+      await page.waitForURL(`**/${path}-hot`);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     test(`a field named enctype keeps a form multipart (${engine})`, async () => {
       const path = key("enctype");
       route(`/${path}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${path}-post"><input name="enctype" value="v"><button id="go">go</button></form>`));

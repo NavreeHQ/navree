@@ -86,6 +86,12 @@ impl LazyItem {
         }
     }
 
+    /// Sets an attribute on the item.
+    pub fn attr(mut self, name: &'static str, value: impl Into<crate::node::AttrValue>) -> Self {
+        self.el = self.el.attr(name, value);
+        self
+    }
+
     /// Sets the item's `id`, for links and tests to find it.
     pub fn id(mut self, id: impl Into<crate::node::AttrValue>) -> Self {
         self.el = self.el.id(id);
@@ -352,6 +358,7 @@ pub enum LazyAsk {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LazyQuery {
     ask: LazyAsk,
+    window: Option<(String, String)>,
 }
 
 impl LazyQuery {
@@ -360,6 +367,8 @@ impl LazyQuery {
         let mut dir = None;
         let mut cursor = None;
         let mut since = None;
+        let mut from = None;
+        let mut to = None;
         for (count, (name, value)) in urlencoded::parse(query.as_bytes()).enumerate() {
             if count > 64 {
                 break;
@@ -368,6 +377,8 @@ impl LazyQuery {
                 "dir" => dir = Some(value.into_owned()),
                 "cursor" => cursor = Some(clip(&value)),
                 "since" => since = Some(clip(&value)),
+                "from" => from = Some(clip(&value)),
+                "to" => to = Some(clip(&value)),
                 _ => {}
             }
         }
@@ -377,7 +388,22 @@ impl LazyQuery {
             (Some("live"), _, Some(since)) if !since.is_empty() => LazyAsk::Since(since),
             _ => LazyAsk::First,
         };
-        Self { ask }
+        let window = match (&ask, from, to) {
+            (LazyAsk::Since(_), Some(from), Some(to)) if !from.is_empty() && !to.is_empty() => {
+                Some((from, to))
+            }
+            _ => None,
+        };
+        Self { ask, window }
+    }
+
+    /// For a live ask, the cursors of the first and last items the page holds: the
+    /// window it has loaded, in which the server may draw again what changed with no
+    /// write of its own, such as a clock counting down.
+    pub fn window(&self) -> Option<(&str, &str)> {
+        self.window
+            .as_ref()
+            .map(|(from, to)| (from.as_str(), to.as_str()))
     }
 
     /// What was asked.
@@ -551,6 +577,10 @@ mod tests {
         for odd in ["dir=end", "dir=end&cursor=", "dir=sideways&cursor=1", "dir=live", "dir=live&cursor=3", "%ff%fe=1", "dir=start&cursor=%00%01"] {
             assert_eq!(LazyQuery::parse(odd).ask(), &LazyAsk::First, "{odd}");
         }
+        let live = LazyQuery::parse("dir=live&since=9&from=0099&to=0042");
+        assert_eq!(live.window(), Some(("0099", "0042")));
+        assert_eq!(LazyQuery::parse("dir=end&cursor=1&from=1&to=2").window(), None);
+        assert_eq!(LazyQuery::parse("dir=live&since=9&from=1").window(), None);
         let many = "a=1&".repeat(500) + "dir=end&cursor=1";
         assert_eq!(LazyQuery::parse(&many).ask(), &LazyAsk::First, "a query past 64 pairs reads no further");
     }

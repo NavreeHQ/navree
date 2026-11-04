@@ -203,7 +203,11 @@ async function live(list) {
   const stop = new AbortController();
   const limit = setTimeout(() => stop.abort(), LIMIT);
   try {
-    const response = await fetch(sourceUrl(list, { dir: "live", since }), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
+    // The window loaded: the server may draw again what changes in it with no write, a clock.
+    const all = items(parent);
+    const ask = { dir: "live", since };
+    if (all.length) Object.assign(ask, { from: cursorOf(all[0]), to: cursorOf(all[all.length - 1]) });
+    const response = await fetch(sourceUrl(list, ask), { headers: { "x-navree-ui": "1" }, signal: stop.signal });
     if (!response.ok || state.gen !== gen || !list.isConnected) return;
     const html = await response.text();
     if (state.gen !== gen) return;
