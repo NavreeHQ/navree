@@ -1,6 +1,7 @@
 //! The auth routes under `{api_prefix}{routes_prefix}` (default
 //! `/api/auth`): `register`, `login`, `refresh`, `logout` and `me`.
 
+use std::fmt;
 use std::sync::Arc;
 
 use http::header::CONTENT_TYPE;
@@ -24,8 +25,8 @@ use crate::{
     User, UserResource,
 };
 
-/// `POST /auth/register`.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+/// `POST /auth/register`. `Debug` never shows the password.
+#[derive(Deserialize, Validate, ToSchema)]
 pub struct RegisterInput {
     /// The display name.
     #[validate(length(min = 1, max = 255))]
@@ -39,8 +40,8 @@ pub struct RegisterInput {
     pub password: String,
 }
 
-/// `POST /auth/login`.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+/// `POST /auth/login`. `Debug` never shows the password.
+#[derive(Deserialize, Validate, ToSchema)]
 pub struct LoginInput {
     /// The email address.
     #[validate(email, length(max = 255))]
@@ -51,16 +52,16 @@ pub struct LoginInput {
     pub password: String,
 }
 
-/// `POST /auth/refresh`.
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+/// `POST /auth/refresh`. `Debug` never shows the token.
+#[derive(Deserialize, Validate, ToSchema)]
 pub struct RefreshInput {
     /// The refresh token of the last token pair.
     #[validate(length(min = 1, max = 512))]
     pub refresh_token: String,
 }
 
-/// `POST /auth/logout` (an optional body).
-#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+/// `POST /auth/logout` (an optional body). `Debug` never shows the token.
+#[derive(Default, Deserialize, Validate, ToSchema)]
 pub struct LogoutInput {
     /// The session to end (its refresh token).
     #[validate(length(max = 512))]
@@ -70,6 +71,46 @@ pub struct LogoutInput {
     #[validate(skip)]
     #[serde(default)]
     pub all: bool,
+}
+
+/// Passwords and refresh tokens are credentials: never in debug output.
+impl fmt::Debug for RegisterInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RegisterInput")
+            .field("name", &self.name)
+            .field("email", &self.email)
+            .field("password", &"[redacted]")
+            .finish()
+    }
+}
+
+impl fmt::Debug for LoginInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoginInput")
+            .field("email", &self.email)
+            .field("password", &"[redacted]")
+            .finish()
+    }
+}
+
+impl fmt::Debug for RefreshInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RefreshInput")
+            .field("refresh_token", &"[redacted]")
+            .finish()
+    }
+}
+
+impl fmt::Debug for LogoutInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LogoutInput")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[redacted]"),
+            )
+            .field("all", &self.all)
+            .finish()
+    }
 }
 
 /// The login and register response: the user and a token pair.
@@ -359,6 +400,36 @@ mod tests {
 
     use super::*;
     use crate::{AccessClaims, Actor, PlatformAdmin};
+
+    #[test]
+    fn request_bodies_never_show_passwords_or_tokens() {
+        let register: RegisterInput = serde_json::from_value(serde_json::json!({
+            "name": "Navjot Kaur",
+            "email": "navjot@example.com",
+            "password": "register-pa55word",
+        }))
+        .unwrap();
+        let login: LoginInput = serde_json::from_value(serde_json::json!({
+            "email": "navjot@example.com",
+            "password": "login-pa55word",
+        }))
+        .unwrap();
+        let refresh: RefreshInput =
+            serde_json::from_value(serde_json::json!({ "refresh_token": "refresh-t0ken" }))
+                .unwrap();
+        let logout: LogoutInput =
+            serde_json::from_value(serde_json::json!({ "refresh_token": "logout-t0ken" })).unwrap();
+        let printed = format!("{register:?} {login:?} {refresh:?} {logout:?}");
+        for secret in [
+            "register-pa55word",
+            "login-pa55word",
+            "refresh-t0ken",
+            "logout-t0ken",
+        ] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("navjot@example.com"), "{printed}");
+    }
 
     #[test]
     fn handlers_on_the_auth_extractors_are_native() {

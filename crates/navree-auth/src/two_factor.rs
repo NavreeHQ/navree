@@ -92,8 +92,8 @@ impl fmt::Debug for TwoFactorProof {
     }
 }
 
-/// The result of [`AuthService::attempt_login`].
-#[derive(Debug)]
+/// The result of [`AuthService::attempt_login`]. `Debug` never shows the
+/// challenge token.
 pub enum LoginOutcome {
     /// Signed in: the user and a new token pair.
     Authenticated {
@@ -110,6 +110,24 @@ pub enum LoginOutcome {
         /// The challenge token ([`TokenType::TwoFactorChallenge`]).
         challenge_token: String,
     },
+}
+
+/// The challenge token is a credential: never in debug output.
+impl fmt::Debug for LoginOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoginOutcome::Authenticated { user, tokens } => f
+                .debug_struct("Authenticated")
+                .field("user", user)
+                .field("tokens", tokens)
+                .finish(),
+            LoginOutcome::TwoFactorRequired { user, .. } => f
+                .debug_struct("TwoFactorRequired")
+                .field("user", user)
+                .field("challenge_token", &"[redacted]")
+                .finish(),
+        }
+    }
 }
 
 /// Whether `user` has confirmed two-factor authentication (their logins
