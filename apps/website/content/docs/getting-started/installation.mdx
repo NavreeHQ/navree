@@ -13,7 +13,7 @@ Navree is a Rust framework, so you need a Rust toolchain and the `navree` comman
 | A C compiler | the one your Rust toolchain links with | The `navree` tool and any build with the `sqlite` feature compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). On Windows, a C compiler means the MSVC build tools. |
 | `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
 | Docker or Podman | Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
-| Node.js and npm | Node.js 20.9 or newer | Only for the optional Next.js front end (`navree new --ui next`). The `saas` [starter kit](/docs/getting-started/starter-kits/) needs Node.js 22 or newer and pnpm. |
+| Node.js and pnpm | Node.js 22 or newer | Only for a Next.js front end (`navree new --ui next`, or the `saas` [starter kit](/docs/getting-started/starter-kits/)). Its packages are linked from a Navree checkout and built once; the README of the generated `web/` says how. |
 
 You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need to install a database server either: new apps use [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and Dock runs it in a container. `navree new --database sqlite` makes an app that needs nothing at all (see [Database: getting started](/docs/database/getting-started/)).
 
