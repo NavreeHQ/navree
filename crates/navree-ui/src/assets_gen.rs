@@ -3,13 +3,13 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "96ab122a2da1";
+pub const BUILD: &str = "2cd62f807156";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-0efae007ae69.js";
+pub const CORE_URL: &str = "/_navree/ui/core-9a971a4cbb6e.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-966046793f1a.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-2b9112f19c19.js";
 
 /// The URL of `overlay.js`.
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-ef4718e7fbcd.js";
@@ -38,10 +38,13 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-1a2381335368.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-93d5e885864f.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-f0dcdd2d88d7.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
+
+/// The URL of `theme-builder.css`.
+pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-2a19502be90a.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -57,7 +60,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "0efae007ae69",
+        hash: "9a971a4cbb6e",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -66,7 +69,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "966046793f1a",
+        hash: "2b9112f19c19",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -149,7 +152,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "93d5e885864f",
+        hash: "f0dcdd2d88d7",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -163,6 +166,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/speculation.json"),
         gzip: Some(include_bytes!("../dist/speculation.json.gz")),
         brotli: Some(include_bytes!("../dist/speculation.json.br")),
+    },
+    Asset {
+        name: "theme-builder",
+        ext: "css",
+        hash: "2a19502be90a",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/theme-builder.css"),
+        gzip: Some(include_bytes!("../dist/theme-builder.css.gz")),
+        brotli: Some(include_bytes!("../dist/theme-builder.css.br")),
     },
     Asset {
         name: "geist",
