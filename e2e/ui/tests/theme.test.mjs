@@ -409,12 +409,21 @@ for (const name of NAMES) {
       const ok = await post("theme=ocean&mode=light&back=https%3A%2F%2Fevil.example%2F", {});
       assert.equal(ok.status, 303);
       assert.equal(ok.headers.get("location"), "/", "never off the site");
-      // The stylesheet route serves a theme's short form and nothing else.
+      // The stylesheet route serves a theme's short form and nothing else: at the
+      // URL a page links, with the build in it, for good; at any other, checked each time.
       const form = await acmeForm();
-      const sheet = await fetch(`${BASE}/_navree/ui/theme/${form}.css`);
+      await page.goto(BASE + "/themes", { waitUntil: "load" });
+      const linked = await page.evaluate((form) => [...document.querySelectorAll("link[data-ui-theme]")].map((l) => l.getAttribute("href")).find((h) => h.includes(form)), form);
+      assert.match(linked, new RegExp(`^/_navree/ui/theme/${form}-[0-9a-f]{12}\\.css$`));
+      const sheet = await fetch(BASE + linked);
       assert.equal(sheet.status, 200);
       assert.match(sheet.headers.get("cache-control"), /immutable/);
       assert.match(await sheet.text(), /^:where\(\[data-theme=c[0-9a-f]{24}\]\)\{--ink-0:/);
+      for (const other of [`${form}.css`, `${form}-000000000000.css`]) {
+        const stale = await fetch(`${BASE}/_navree/ui/theme/${other}`);
+        assert.equal(stale.status, 200, other);
+        assert.equal(stale.headers.get("cache-control"), "no-cache", other);
+      }
       for (const bad of ["navree.css", `${form.toUpperCase()}.css`, `${form.slice(0, -1)}g.css`, "v1-0406-d-g-%3B%7D.css"]) {
         assert.equal((await fetch(`${BASE}/_navree/ui/theme/${bad}`)).status, 404, bad);
       }

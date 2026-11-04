@@ -813,7 +813,12 @@ impl Theme {
     pub fn stylesheet(&self) -> Option<String> {
         match &self.0 {
             Repr::Builtin(_) => None,
-            Repr::Custom(custom) => Some(format!("{}/{}.css", css::SHEET_ROOT, custom.form)),
+            Repr::Custom(custom) => Some(format!(
+                "{}/{}-{}.css",
+                css::SHEET_ROOT,
+                custom.form,
+                css::sheet_build()
+            )),
         }
     }
 

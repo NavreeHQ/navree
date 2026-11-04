@@ -38,6 +38,12 @@ pub const MIN_SIZE: usize = 32 * 1024;
 /// Below this, a body isn't worth compressing at all.
 const TINY: usize = 256;
 
+/// Whether a body of `size` bytes goes out in brotli to a client that takes it:
+/// from [`MIN_SIZE`], or from [`TINY`] when the client doesn't take gzip.
+pub(crate) fn worth_brotli(size: usize, accept: &str) -> bool {
+    accepts(accept, "br") && size >= TINY && (size >= MIN_SIZE || !accepts(accept, "gzip"))
+}
+
 /// `bytes` in brotli.
 pub fn brotli(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() / 8 + 64);
@@ -73,7 +79,7 @@ pub(crate) async fn encode(method: &Method, accept: &str, response: Response) ->
     else {
         return Response::from_parts(parts, body);
     };
-    if size < TINY || (size < MIN_SIZE && accepts(accept, "gzip")) {
+    if !worth_brotli(size, accept) {
         return Response::from_parts(parts, body);
     }
     let bytes = match read_body(body, size).await {

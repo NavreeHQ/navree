@@ -81,7 +81,7 @@ Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust exp
 let theme = Theme::custom(ThemeId::parse("acme")?, "Acme", spec)?;
 ```
 
-`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>.css`, where the file's name is the theme's values in a short form. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file.
+`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
 
 A stored theme is JSON: `theme.to_json()` writes it, and `Theme::from_json` reads it back, checking every field and naming each one that is wrong.
 

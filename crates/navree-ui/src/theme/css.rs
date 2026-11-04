@@ -12,6 +12,7 @@
 //! stack from [`Font`], or a built-in id: never anything given.
 
 use std::fmt::Write as _;
+use std::sync::LazyLock;
 
 use bytes::Bytes;
 use http::StatusCode;
@@ -303,35 +304,83 @@ fn chevron(out: &mut String, colour: Rgb) {
     out.push_str("' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")");
 }
 
+/// The build theme stylesheets belong to: the toolkit's own and what this
+/// version writes for a sample theme, as 12 hex digits. It is in each sheet's
+/// URL, so a sheet is cached for good only while what it holds can't change.
+pub(crate) fn sheet_build() -> &'static str {
+    static BUILD: LazyLock<String> = LazyLock::new(|| {
+        let mut spec = *Theme::SUNSET.spec();
+        spec.radius = super::Radius::SHARP;
+        spec.density = Density::Compact;
+        spec.font = super::Font::System;
+        let sample = Theme::unchecked(super::ThemeId::custom(), String::new(), spec);
+        let mut text = String::from(crate::assets::BUILD);
+        text.push_str(&sheet(&sample));
+        crate::assets::content_hash(text.as_bytes())
+    });
+    &BUILD
+}
+
+/// Whether `text` is a build: 12 lower-case hex digits.
+fn is_build(text: &str) -> bool {
+    text.len() == 12
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 /// Answers `GET /_navree/ui/theme/{file}`: the stylesheet of the theme whose
-/// short form the file is named by, or 404 for anything else. The name is the
-/// content, so the answer never changes and is cached for good.
+/// short form the file is named by, then a dash and the build, or 404 for
+/// anything else. A sheet of this build is cached for good; one named by
+/// another build, or by its short form alone, is served as this build writes
+/// it and checked again each time, as the toolkit's other files are.
 pub(crate) fn respond(file: &str, request: &HeaderMap) -> Response {
-    let Some(theme) = file
-        .strip_suffix(".css")
-        .and_then(|form| super::codec::from_form(form).map(|spec| (form, spec)))
-        .map(|(_, spec)| Theme::unchecked(super::ThemeId::custom(), String::new(), spec))
+    let Some(name) = file.strip_suffix(".css") else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let built = name
+        .rsplit_once('-')
+        .filter(|(_, build)| is_build(build))
+        .and_then(|(form, build)| {
+            super::codec::from_form(form).map(|spec| (spec, build == sheet_build()))
+        });
+    let Some((spec, current)) =
+        built.or_else(|| super::codec::from_form(name).map(|spec| (spec, false)))
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let etag = HeaderValue::from_str(&format!("\"{}\"", theme.key()))
-        .unwrap_or(HeaderValue::from_static("\"theme\""));
-    let cache = HeaderValue::from_static("public, max-age=31536000, immutable");
+    let theme = Theme::unchecked(super::ThemeId::custom(), String::new(), spec);
+    let css = sheet(&theme);
+    let accept = request
+        .get(ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let brotli = crate::compress::worth_brotli(css.len(), accept);
+    // Each encoding is its own representation, with its own tag.
+    let etag = HeaderValue::from_str(&format!(
+        "\"{}-{}{}\"",
+        theme.key(),
+        sheet_build(),
+        if brotli { "-br" } else { "" }
+    ))
+    .unwrap_or(HeaderValue::from_static("\"theme\""));
+    let cache = HeaderValue::from_static(if current {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
+    });
+    let vary = HeaderValue::from_static("accept-encoding");
     if request
         .get(IF_NONE_MATCH)
-        .is_some_and(|value| value == etag)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|tags| matches_tag(tags, &etag))
     {
         return (
             StatusCode::NOT_MODIFIED,
-            [(ETAG, etag), (CACHE_CONTROL, cache)],
+            [(ETAG, etag), (CACHE_CONTROL, cache), (VARY, vary)],
         )
             .into_response();
     }
-    let css = sheet(&theme);
-    let brotli = request
-        .get(ACCEPT_ENCODING)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|accept| crate::assets::accepts(accept, "br"));
     let mut response = (
         [
             (
@@ -340,7 +389,7 @@ pub(crate) fn respond(file: &str, request: &HeaderMap) -> Response {
             ),
             (CACHE_CONTROL, cache),
             (ETAG, etag),
-            (VARY, HeaderValue::from_static("accept-encoding")),
+            (VARY, vary),
         ],
         if brotli {
             Bytes::from(crate::compress::brotli(css.as_bytes()))
@@ -355,6 +404,14 @@ pub(crate) fn respond(file: &str, request: &HeaderMap) -> Response {
             .insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
     }
     response
+}
+
+/// Whether an `If-None-Match` list names `etag`, weak or strong, or is `*`.
+fn matches_tag(tags: &str, etag: &HeaderValue) -> bool {
+    let etag = etag.to_str().unwrap_or_default();
+    tags.split(',')
+        .map(str::trim)
+        .any(|tag| tag == "*" || tag == etag || tag.strip_prefix("W/") == Some(etag))
 }
 
 #[cfg(test)]
@@ -458,6 +515,11 @@ mod tests {
         .unwrap();
         let url = theme.stylesheet().unwrap();
         let file = url.strip_prefix(&format!("{SHEET_ROOT}/")).unwrap();
+        assert_eq!(
+            file,
+            format!("{}-{}.css", theme.short_form(), sheet_build()),
+            "the build is in the name"
+        );
         let response = respond(file, &HeaderMap::new());
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
@@ -467,11 +529,44 @@ mod tests {
         assert_eq!(response.headers()[CONTENT_TYPE], "text/css; charset=utf-8");
         let etag = response.headers()[ETAG].clone();
         let mut again = HeaderMap::new();
-        again.insert(IF_NONE_MATCH, etag);
+        again.insert(IF_NONE_MATCH, etag.clone());
         assert_eq!(respond(file, &again).status(), StatusCode::NOT_MODIFIED);
+        again.insert(IF_NONE_MATCH, HeaderValue::from_static("\"x\", W/\"y\""));
+        assert_eq!(respond(file, &again).status(), StatusCode::OK);
+        // Another build's name, or the short form alone: this build's sheet, not kept.
+        let form = theme.short_form();
+        for stale in [format!("{form}-000000000000.css"), format!("{form}.css")] {
+            let response = respond(&stale, &HeaderMap::new());
+            assert_eq!(response.status(), StatusCode::OK, "{stale:.40}");
+            assert_eq!(response.headers()[CACHE_CONTROL], "no-cache", "{stale:.40}");
+            assert_eq!(response.headers()[ETAG], etag, "the same sheet");
+        }
+        // A sheet is small: a client that takes gzip gets it from the pipeline's
+        // gzip; brotli only for one that takes nothing else, with its own tag.
+        let mut both = HeaderMap::new();
+        both.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, br"));
+        let plain = respond(file, &both);
+        assert!(!plain.headers().contains_key(CONTENT_ENCODING));
+        assert_eq!(plain.headers()[ETAG], etag);
         let mut br = HeaderMap::new();
-        br.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, br"));
-        assert_eq!(respond(file, &br).headers()[CONTENT_ENCODING], "br");
+        br.insert(ACCEPT_ENCODING, HeaderValue::from_static("br"));
+        let compressed = respond(file, &br);
+        assert_eq!(compressed.headers()[CONTENT_ENCODING], "br");
+        assert_eq!(compressed.headers()[VARY], "accept-encoding");
+        let br_tag = compressed.headers()[ETAG].clone();
+        assert_ne!(br_tag, etag, "brotli and identity are told apart");
+        br.insert(IF_NONE_MATCH, etag.clone());
+        assert_eq!(
+            respond(file, &br).status(),
+            StatusCode::OK,
+            "the identity tag doesn't answer for brotli"
+        );
+        br.insert(IF_NONE_MATCH, br_tag);
+        assert_eq!(respond(file, &br).status(), StatusCode::NOT_MODIFIED);
+        assert!(crate::compress::worth_brotli(
+            crate::compress::MIN_SIZE,
+            "gzip, br"
+        ));
         for bad in [
             "",
             ".css",
@@ -480,6 +575,8 @@ mod tests {
             &file.replace(".css", ".js"),
             &file.to_ascii_uppercase(),
             &file.replacen("v1", "v9", 1),
+            &file.replace(sheet_build(), "00000000000g"),
+            &file.replace(&format!("-{}", sheet_build()), "-"),
             "../../etc/passwd",
             "v1-0406-d-g-;}body{x}.css",
         ] {
