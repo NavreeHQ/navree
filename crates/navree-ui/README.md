@@ -90,6 +90,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | A phone input | `phone`, `overlay`; the numbering plans on first focus. |
 | The app shell | `core`, `sidebar`. |
+| The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
+| The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
 `tests/budgets.rs` holds the sizes, and a regression fails the build.
@@ -327,6 +329,21 @@ change what it does.
 
 `src/tokens.rs` is the design tokens' one source, and a test fails when
 `styles/tokens.css` differs from it.
+
+## Themes
+
+`src/theme/` holds themes as typed values: seven built-in themes in the stylesheet,
+each colour written as `light-dark(light, dark)`, so a mode (`Mode::Light`, `Dark`,
+`System`) only sets `color-scheme` and System needs no script. `Shell::appearance` sets
+the app's default; a workspace, the reader (the app's store, or the `navree_ui_theme`
+cookie set by `ThemeMenu`'s route) and `?theme=`/`?mode=` lie over it. The server writes
+`data-theme` and `data-mode` on `<html>`, so the first paint is right. A theme of your
+own (`Theme::custom`, or the builder's export) is served at
+`/_navree/ui/theme/<short form>.css`, whose name is the theme, read by a strict parser,
+immutable. `Shell::layout` (sidebar, inset, floating, header) and `Shell::collapse`
+(icons, offcanvas, never) place the navigation. `ThemeBuilder` and `BuilderDraft` are the
+theme builder. A swap that brings a stylesheet waits for it before it shows, so a theme
+change never paints between two themes.
 
 ## Icons and flags
 
