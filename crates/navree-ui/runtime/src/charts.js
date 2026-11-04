@@ -152,12 +152,14 @@ function show(body, i, keyed) {
   }
   tip.replaceChildren(...parts);
   set(tip, "data-open", "");
-  // Beside the value, on whichever side has room; never past the chart's edges.
+  // Beside the value, on whichever side has room; never past the chart's edges. A chart
+  // shorter than its tooltip (a few bars with many series) grows to hold it.
   const w = tip.offsetWidth, h = tip.offsetHeight;
+  if (h > box.height) /** @type {HTMLElement} */ (body).style.minHeight = h + "px";
   let left = ax + 12;
   if (left + w > box.width) left = ax - 12 - w;
   tip.style.left = Math.max(0, Math.min(left, box.width - w)) + "px";
-  tip.style.top = Math.max(0, Math.min(ay - h / 2, box.height - h)) + "px";
+  tip.style.top = Math.max(0, Math.min(ay - h / 2, Math.max(box.height, h) - h)) + "px";
   if (keyed) {
     const say = one(figure, "[data-slot=chart-announce]");
     if (say) say.textContent = [text.head, ...text.rows.map((r) => `${r.name} ${r.value}`)].join(", ");
@@ -195,13 +197,18 @@ function under(body, e) {
   return mark && holds(body, mark) ? Number(attr(mark, "data-i")) : -1;
 }
 
+/** The last move over a chart, drawn once per frame: moves that arrive faster end where the pointer stopped. @type {PointerEvent | null} */
+let latest = null;
 let frame = 0;
 on(document, "pointermove", (e) => {
-  const body = closest(e.target, BODY);
-  if (!body || frame) return;
+  if (!closest(e.target, BODY)) return;
+  latest = e;
+  if (frame) return;
   frame = requestAnimationFrame(() => {
     frame = 0;
-    const i = under(body, /** @type {PointerEvent} */ (e));
+    const body = latest && closest(latest.target, BODY);
+    if (!body) return;
+    const i = under(body, /** @type {PointerEvent} */ (latest));
     if (i >= 0) show(body, i, false);
     else if (mode(body) === "rows" || mode(body) === "parts") hide(body);
   });
