@@ -225,11 +225,17 @@ impl Hub {
         for statement in scale::INDEXES {
             db.pool().execute_script(statement).await?;
         }
+        // The seed and its indexes pass through the write-ahead log: at full size that is
+        // hundreds of megabytes, which the first write after it would copy back while a
+        // reader waited. Copy it now and empty the log.
+        db.pool()
+            .execute_script("PRAGMA wal_checkpoint(TRUNCATE)")
+            .await?;
         let most = |table: &'static str| async move {
             db.fetch_scalar::<i64>(&navree::db::Statement::text(format!(
-                    "SELECT COALESCE(MAX(id), 0) FROM {table}"
-                )))
-                .await
+                "SELECT COALESCE(MAX(id), 0) FROM {table}"
+            )))
+            .await
         };
         self.next_message
             .store(most("messages").await? + 1, Ordering::SeqCst);
@@ -325,15 +331,15 @@ impl Hub {
             .await?;
         Message::query().insert(db, [message.clone()]).await?;
         db.execute(&navree::db::Statement::portable(
-                "INSERT INTO conversations_fts (rowid, subject, customer, company) VALUES (?, ?, ?, ?)",
-                [
-                    navree::db::Value::I64(id),
-                    navree::db::Value::String(topic.subject.to_owned()),
-                    navree::db::Value::String(customer.name.clone()),
-                    navree::db::Value::String(customer.company.clone()),
-                ],
-            ))
-            .await?;
+            "INSERT INTO conversations_fts (rowid, subject, customer, company) VALUES (?, ?, ?, ?)",
+            [
+                navree::db::Value::I64(id),
+                navree::db::Value::String(topic.subject.to_owned()),
+                navree::db::Value::String(customer.name.clone()),
+                navree::db::Value::String(customer.company.clone()),
+            ],
+        ))
+        .await?;
         if let Some((name, bytes)) = first.file {
             Attachment::query()
                 .insert(
@@ -409,7 +415,12 @@ impl Hub {
         on: Option<i64>,
     ) -> Result<Option<Change>, BoxError> {
         let Some(conversation) = self
-            .pick(db, &[Status::Open, Status::Pending, Status::Snoozed], on, false)
+            .pick(
+                db,
+                &[Status::Open, Status::Pending, Status::Snoozed],
+                on,
+                false,
+            )
             .await?
         else {
             return Ok(None);
@@ -421,8 +432,7 @@ impl Hub {
         else {
             return Ok(None);
         };
-        let body =
-            FOLLOW_UPS[usize::try_from(self.roll(FOLLOW_UPS.len() as u64)).unwrap_or(0)];
+        let body = FOLLOW_UPS[usize::try_from(self.roll(FOLLOW_UPS.len() as u64)).unwrap_or(0)];
         Message::query()
             .insert(
                 db,
@@ -492,8 +502,7 @@ impl Hub {
         let (kind, body, status) = match what {
             Happening::TeammateReply => (
                 Author::Agent,
-                ANSWERS[usize::try_from(self.roll(ANSWERS.len() as u64)).unwrap_or(0)]
-                    .to_owned(),
+                ANSWERS[usize::try_from(self.roll(ANSWERS.len() as u64)).unwrap_or(0)].to_owned(),
                 Status::Pending,
             ),
             Happening::TeammateNote => (
@@ -595,29 +604,36 @@ impl Hub {
         // A first comment goes out at once: Firefox reports a stream open only when its
         // first bytes arrive.
         let queue = VecDeque::from([Sse::default().comment("ready")]);
-        let events = futures_util::stream::unfold((rx, queue), move |(mut rx, mut queue)| async move {
-            loop {
-                if let Some(event) = queue.pop_front() {
-                    return Some((Ok::<_, Infallible>(event), (rx, queue)));
-                }
-                let (lists, thread, person) = match rx.recv().await {
-                    Ok(change) if change == Change::TICK => (true, open > 0, false),
-                    Ok(change) => (
-                        true,
-                        open > 0 && change.conversation == open,
-                        customer > 0 && change.customer == customer,
-                    ),
-                    // Missed some: everything may have changed.
-                    Err(broadcast::error::RecvError::Lagged(_)) => (true, open > 0, customer > 0),
-                    Err(broadcast::error::RecvError::Closed) => return None,
-                };
-                for (yes, name) in [(lists, "conversations"), (thread, "thread"), (person, "customer")] {
-                    if yes {
-                        queue.push_back(Sse::default().event(name).data("changed"));
+        let events =
+            futures_util::stream::unfold((rx, queue), move |(mut rx, mut queue)| async move {
+                loop {
+                    if let Some(event) = queue.pop_front() {
+                        return Some((Ok::<_, Infallible>(event), (rx, queue)));
+                    }
+                    let (lists, thread, person) = match rx.recv().await {
+                        Ok(change) if change == Change::TICK => (true, open > 0, false),
+                        Ok(change) => (
+                            true,
+                            open > 0 && change.conversation == open,
+                            customer > 0 && change.customer == customer,
+                        ),
+                        // Missed some: everything may have changed.
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            (true, open > 0, customer > 0)
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    };
+                    for (yes, name) in [
+                        (lists, "conversations"),
+                        (thread, "thread"),
+                        (person, "customer"),
+                    ] {
+                        if yes {
+                            queue.push_back(Sse::default().event(name).data("changed"));
+                        }
                     }
                 }
-            }
-        });
+            });
         SseResponse::new(events)
             .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
             .into_response()

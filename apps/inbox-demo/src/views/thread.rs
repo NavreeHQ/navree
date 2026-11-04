@@ -237,15 +237,18 @@ fn close_or_reopen(conversation: &Conversation) -> Node {
     } else {
         ("closed", "Close", icons::CIRCLE_CHECK)
     };
-    post_form("close-form", format!("/inbox/{}/status/{to}", conversation.id))
-        .child(
-            Button::new(label)
-                .submit()
-                .icon(glyph)
-                .size(Size::Sm)
-                .hotkey("e"),
-        )
-        .into()
+    post_form(
+        "close-form",
+        format!("/inbox/{}/status/{to}", conversation.id),
+    )
+    .child(
+        Button::new(label)
+            .submit()
+            .icon(glyph)
+            .size(Size::Sm)
+            .hotkey("e"),
+    )
+    .into()
 }
 
 /// The heading: the subject, who and where from, what stands, and what to do.
@@ -311,8 +314,18 @@ pub fn thread_head(open: &Open<'_>) -> Node {
                 ),
                 el("span"),
                 Row::gap(1).children((
-                    step(open.neighbours.0, icons::CHEVRON_UP, "Newer conversation", "k"),
-                    step(open.neighbours.1, icons::CHEVRON_DOWN, "Older conversation", "j"),
+                    step(
+                        open.neighbours.0,
+                        icons::CHEVRON_UP,
+                        "Newer conversation",
+                        "k",
+                    ),
+                    step(
+                        open.neighbours.1,
+                        icons::CHEVRON_DOWN,
+                        "Older conversation",
+                        "j",
+                    ),
                 )),
             )),
             Heading::h2(conversation.subject.clone()).id("thread-subject"),
@@ -388,10 +401,7 @@ fn message(message: &MessageRow, files: &[&FileRow], now: i64) -> Node {
             Attachment::new(file.name.clone())
                 .meta(file_size(file.bytes))
                 .icon(file_icon(&file.name))
-                .href(format!(
-                    "/inbox/{}/files/{}",
-                    file.conversation_id, file.id
-                ))
+                .href(format!("/inbox/{}/files/{}", file.conversation_id, file.id))
                 .into()
         })
         .collect();
@@ -399,10 +409,13 @@ fn message(message: &MessageRow, files: &[&FileRow], now: i64) -> Node {
         .attr("id", format!("message-{}", message.id))
         .attr("data-key", message.id)
         .attr("data-author", author.key())
-        .attr("aria-label", match author {
-            Author::Note => format!("Internal note by {}", message.author),
-            _ => format!("Message from {}", message.author),
-        })
+        .attr(
+            "aria-label",
+            match author {
+                Author::Note => format!("Internal note by {}", message.author),
+                _ => format!("Message from {}", message.author),
+            },
+        )
         .child(
             Message::new(side)
                 .avatar(Avatar::placeholder(message.author.clone()).size(Size::Sm))
@@ -418,8 +431,15 @@ fn message(message: &MessageRow, files: &[&FileRow], now: i64) -> Node {
 
 /// One message as an item of the lazy list.
 pub fn message_item(item: &MessageRow, files: &[FileRow], now: i64) -> LazyItem {
-    let mine: Vec<&FileRow> = files.iter().filter(|file| file.message_id == item.id).collect();
-    LazyItem::new(item.id.to_string(), message_cursor(item.id), message(item, &mine, now))
+    let mine: Vec<&FileRow> = files
+        .iter()
+        .filter(|file| file.message_id == item.id)
+        .collect();
+    LazyItem::new(
+        item.id.to_string(),
+        message_cursor(item.id),
+        message(item, &mine, now),
+    )
 }
 
 /// The newest messages of a conversation and the window of them a page holds: older
@@ -432,13 +452,23 @@ pub struct Window<'a> {
 }
 
 /// The messages, oldest first: a lazy list that starts at the newest.
-pub fn thread_lazy(conversation: &Conversation, window: &Window<'_>, stream: &str, now: i64) -> LazyList {
+pub fn thread_lazy(
+    conversation: &Conversation,
+    window: &Window<'_>,
+    stream: &str,
+    now: i64,
+) -> LazyList {
     let id = conversation.id;
     let mut list = LazyList::new(MESSAGES, "Messages", format!("/inbox/{id}/messages"))
         .order(LazyOrder::Ascending)
         .view(format!("conversation-{id}"))
         .gap(4)
-        .items(window.messages.iter().map(|item| message_item(item, window.files, now)))
+        .items(
+            window
+                .messages
+                .iter()
+                .map(|item| message_item(item, window.files, now)),
+        )
         .since(window.messages.last().map_or(0, |last| last.id).to_string())
         .live_from(stream.to_owned(), Some("thread"), LazyEnd::End)
         .max(400)

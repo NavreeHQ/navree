@@ -31,7 +31,8 @@ pub struct ListRow {
 /// What the line over the list says.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Summary {
-    pub total: u64,
+    /// How many the view holds; none for the closed list, which isn't counted.
+    pub total: Option<u64>,
     pub unread: u64,
     pub overdue: u64,
 }
@@ -171,15 +172,20 @@ pub fn conversation_item(
 
 /// The line that counts the view.
 pub fn summary_line(summary: Summary, filters: &Filters) -> Node {
-    let noun = if summary.total == 1 {
-        "conversation"
-    } else {
-        "conversations"
-    };
-    let mut text = if filters.narrowed() {
-        format!("{} {noun} match", thousands(summary.total))
-    } else {
-        format!("{} {noun}", thousands(summary.total))
+    let mut text = match summary.total {
+        None => "Newest first".to_owned(),
+        Some(total) => {
+            let noun = if total == 1 {
+                "conversation"
+            } else {
+                "conversations"
+            };
+            if filters.narrowed() {
+                format!("{} {noun} match", thousands(total))
+            } else {
+                format!("{} {noun}", thousands(total))
+            }
+        }
     };
     if summary.unread > 0 {
         text.push_str(&format!(" · {} new", thousands(summary.unread)));
@@ -225,7 +231,13 @@ pub struct ListPage<'a> {
 }
 
 /// The list: lazy, live, and kept as the agent left it while they open conversations.
-pub fn list_lazy(page: &ListPage<'_>, filters: &Filters, open: Option<i64>, now: i64, stream: &str) -> LazyList {
+pub fn list_lazy(
+    page: &ListPage<'_>,
+    filters: &Filters,
+    open: Option<i64>,
+    now: i64,
+    stream: &str,
+) -> LazyList {
     let path = match open {
         Some(id) => format!("/inbox/{id}"),
         None => "/inbox".to_owned(),
@@ -260,9 +272,9 @@ pub fn list_lazy(page: &ListPage<'_>, filters: &Filters, open: Option<i64>, now:
                         .href(Filters::with_view(filters.view).href("/inbox")),
                 )
         } else {
-            Empty::new("All caught up")
-                .icon(icons::INBOX)
-                .description("Nothing is waiting in this view. New conversations show up here as they arrive.")
+            Empty::new("All caught up").icon(icons::INBOX).description(
+                "Nothing is waiting in this view. New conversations show up here as they arrive.",
+            )
         });
     if let Some(id) = open {
         list = list.current(id.to_string());

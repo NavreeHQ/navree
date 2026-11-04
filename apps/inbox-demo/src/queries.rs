@@ -2,10 +2,13 @@
 //! an offset), the conversations either side of an open one, what changed since a
 //! revision, a window of a conversation's messages, and the customer pane. Every query
 //! reads by an index; `EXPLAIN QUERY PLAN` of each is in the browser suite's numbers.
+//!
+//! Each takes any executor: a page reads through the database handle, outside a unit of
+//! work, so on SQLite's write-ahead log a reader never waits for a writer, and an action
+//! reads through its unit of work, whose `BEGIN IMMEDIATE` makes read-then-write safe.
 
-use navree::db::Uow;
 use navree::http::AppError;
-use navree::orm::{Builder, Filter, Model as _, Value};
+use navree::orm::{Builder, Executor, Filter, Model as _, Value};
 use navree::ui::LazyAsk;
 
 use crate::data::{
@@ -86,18 +89,24 @@ fn inner(records: navree::orm::Collection<Conversation>) -> Vec<Conversation> {
 
 /// After the cursor `(last_at, id)` in the list: older activity.
 pub(crate) fn after(at: i64, id: i64) -> Filter {
-    Filter::raw("(\"last_at\", \"id\") < (?, ?)", [Value::I64(at), Value::I64(id)])
+    Filter::raw(
+        "(\"last_at\", \"id\") < (?, ?)",
+        [Value::I64(at), Value::I64(id)],
+    )
 }
 
 /// Before the cursor in the list: newer activity.
 pub(crate) fn before(at: i64, id: i64) -> Filter {
-    Filter::raw("(\"last_at\", \"id\") > (?, ?)", [Value::I64(at), Value::I64(id)])
+    Filter::raw(
+        "(\"last_at\", \"id\") > (?, ?)",
+        [Value::I64(at), Value::I64(id)],
+    )
 }
 
 /// A page of the list: the rows, whether more come after them, and whether more come
 /// before them. A cursor that doesn't read is the first page.
 pub async fn list_page(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
     ask: &LazyAsk,
@@ -154,7 +163,10 @@ pub async fn list_page(
 }
 
 /// Rows with the names they show: the customers and agents of these conversations only.
-pub async fn hydrate(uow: &Uow, conversations: Vec<Conversation>) -> Result<Vec<ListRow>> {
+pub async fn hydrate(
+    uow: &(impl Executor + ?Sized),
+    conversations: Vec<Conversation>,
+) -> Result<Vec<ListRow>> {
     let mut customer_ids: Vec<i64> = conversations.iter().map(|c| c.customer_id).collect();
     customer_ids.sort_unstable();
     customer_ids.dedup();
@@ -192,13 +204,36 @@ pub async fn hydrate(uow: &Uow, conversations: Vec<Conversation>) -> Result<Vec<
         .collect())
 }
 
+/// Conversations with something new, written as the partial index's own condition so
+/// the count reads only them.
+pub(crate) fn something_new() -> Filter {
+    Filter::raw("\"unread\" > 0", Vec::<Value>::new())
+}
+
 /// The count over the list: how many, how many with something new, how many past due.
-pub async fn summary(uow: &Uow, filters: &Filters, me: i64, now: i64) -> Result<Summary> {
-    let total = in_view(filters, me).count(uow).await?;
-    let unread = in_view(filters, me)
-        .where_(Conversation::UNREAD.gt(0_i64))
-        .count(uow)
-        .await?;
+pub async fn summary(
+    uow: &(impl Executor + ?Sized),
+    filters: &Filters,
+    me: i64,
+    now: i64,
+) -> Result<Summary> {
+    // The closed list only grows: an agent reads it newest first, and counting it all on
+    // every page would read every closed row. Filters narrow it enough to count.
+    let total = if filters.view == View::Closed && !filters.narrowed() {
+        None
+    } else {
+        Some(in_view(filters, me).count(uow).await?)
+    };
+    // Closing a conversation reads what was new in it: the closed list has nothing new,
+    // and counting it would read every closed row.
+    let unread = if filters.view == View::Closed {
+        0
+    } else {
+        in_view(filters, me)
+            .where_(something_new())
+            .count(uow)
+            .await?
+    };
     let overdue = if matches!(filters.view, View::Snoozed | View::Closed) {
         0
     } else {
@@ -218,7 +253,7 @@ pub async fn summary(uow: &Uow, filters: &Filters, me: i64, now: i64) -> Result<
 /// The conversations either side of `conversation` in the view: the newer one above it
 /// and the older one below, for `k` and `j`.
 pub async fn neighbours(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
     conversation: &Conversation,
@@ -244,7 +279,7 @@ pub async fn neighbours(
 /// What changed since revision `since`: the conversations that fit the view now, the
 /// keys of those that left it, and the revision the answer is at.
 pub async fn changes(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
     since: i64,
@@ -299,7 +334,7 @@ pub async fn changes(
 /// countdown changes with no write, so a live answer draws them again. At most what the
 /// page holds, read by the view's index between the window's two cursors.
 pub async fn clocks_in(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     filters: &Filters,
     me: i64,
     window: (&str, &str),
@@ -337,7 +372,7 @@ pub async fn clocks_in(
 /// the page before or after a cursor, or everything after a live revision. Then whether
 /// older and newer messages lie beyond it.
 pub async fn thread_window(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     id: i64,
     ask: &LazyAsk,
 ) -> Result<(Vec<Message>, Vec<Attachment>, bool, bool)> {
@@ -409,7 +444,9 @@ pub async fn thread_window(
         Vec::new()
     } else {
         Attachment::query()
-            .where_(Attachment::MESSAGE_ID.is_in(messages.iter().map(|m| m.id).collect::<Vec<i64>>()))
+            .where_(
+                Attachment::MESSAGE_ID.is_in(messages.iter().map(|m| m.id).collect::<Vec<i64>>()),
+            )
             .order_by("id")
             .get(uow)
             .await?
@@ -423,7 +460,11 @@ pub async fn thread_window(
 
 /// The customer pane: the customer, their latest history, their latest conversations,
 /// and how many are open.
-pub async fn customer_view(uow: &Uow, customer: Customer, now: i64) -> Result<CustomerView> {
+pub async fn customer_view(
+    uow: &(impl Executor + ?Sized),
+    customer: Customer,
+    now: i64,
+) -> Result<CustomerView> {
     let mut history: Vec<CustomerEvent> = CustomerEvent::query()
         .where_(CustomerEvent::CUSTOMER_ID.eq(customer.id))
         .order_by_desc("at")

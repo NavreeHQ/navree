@@ -26,7 +26,7 @@ use navree::db::{Db, Uow};
 use navree::http::extract::{Json, Path, Query};
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{AppError, Controller, RouteDef};
-use navree::orm::{Filter, Model as _};
+use navree::orm::{Executor, Filter, Model as _};
 use navree::prelude::*;
 use navree::ui::form::{FieldErrors, Rejected};
 use navree::ui::*;
@@ -46,7 +46,7 @@ use crate::views::inbox::{
 };
 use crate::views::list::{LIST, ListPage, conversation_item, summary_region};
 use crate::views::thread::{
-    AssignForm, ActForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
+    ActForm, AssignForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
     SnoozeForm, composer, message_item,
 };
 use crate::views::{Filters, View, ViewCounts, shell};
@@ -218,7 +218,7 @@ fn no_store(mut response: Response) -> Response {
 }
 
 /// The agent a visitor works as: the cookie's, if they are on the team, or the default.
-async fn who(uow: &Uow, headers: &HeaderMap) -> Result<Agent> {
+async fn who(uow: &(impl Executor + ?Sized), headers: &HeaderMap) -> Result<Agent> {
     let wanted = cookie(headers, AGENT_COOKIE)
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(DEFAULT_AGENT);
@@ -236,7 +236,7 @@ async fn who(uow: &Uow, headers: &HeaderMap) -> Result<Agent> {
         .unwrap_or_default())
 }
 
-async fn team(uow: &Uow) -> Result<Vec<Agent>> {
+async fn team(uow: &(impl Executor + ?Sized)) -> Result<Vec<Agent>> {
     Ok(Agent::query()
         .order_by("id")
         .get(uow)
@@ -248,7 +248,7 @@ async fn team(uow: &Uow) -> Result<Vec<Agent>> {
 }
 
 /// How many conversations each view holds.
-async fn counts(uow: &Uow, me: i64) -> Result<ViewCounts> {
+async fn counts(uow: &(impl Executor + ?Sized), me: i64) -> Result<ViewCounts> {
     let open_or_pending = [Status::Open.key(), Status::Pending.key()];
     Ok(ViewCounts {
         all: Conversation::query()
@@ -272,7 +272,7 @@ async fn counts(uow: &Uow, me: i64) -> Result<ViewCounts> {
     })
 }
 
-async fn conversation(uow: &Uow, id: i64) -> Result<Option<Conversation>> {
+async fn conversation(uow: &(impl Executor + ?Sized), id: i64) -> Result<Option<Conversation>> {
     Ok(Conversation::query()
         .find(uow, id)
         .await?
@@ -281,7 +281,7 @@ async fn conversation(uow: &Uow, id: i64) -> Result<Option<Conversation>> {
 
 /// An open conversation: the window of messages `ask` names, and its neighbours in the view.
 async fn open_thread(
-    uow: &Uow,
+    uow: &(impl Executor + ?Sized),
     id: i64,
     ask: &LazyAsk,
     filters: &Filters,
@@ -319,7 +319,10 @@ async fn open_thread(
 }
 
 /// The customer pane of conversation `id`.
-async fn customer_of(uow: &Uow, id: i64) -> Result<Option<crate::views::inbox::CustomerView>> {
+async fn customer_of(
+    uow: &(impl Executor + ?Sized),
+    id: i64,
+) -> Result<Option<crate::views::inbox::CustomerView>> {
     let Some(found) = conversation(uow, id).await? else {
         return Ok(None);
     };
@@ -334,7 +337,7 @@ async fn customer_of(uow: &Uow, id: i64) -> Result<Option<crate::views::inbox::C
 }
 
 /// The sizes the agent saved for their panes.
-async fn saved_sizes(uow: &Uow, me: i64) -> Result<Option<SplitSizes>> {
+async fn saved_sizes(uow: &(impl Executor + ?Sized), me: i64) -> Result<Option<SplitSizes>> {
     let kept = Layout::query()
         .where_(Layout::AGENT_ID.eq(me))
         .where_(Layout::SPLIT.eq(SPLIT))
@@ -372,12 +375,20 @@ fn event_line(hub: &Hub, conversation: i64, me: &Agent, text: String, at: i64) -
 /// A conversation that isn't there: a page, or a toast for the runtime.
 fn missing_reply() -> Response {
     Reply::ops_or_redirect("/inbox")
-        .toast(ToastTone::Warning, "That conversation isn't in the inbox any more.")
+        .toast(
+            ToastTone::Warning,
+            "That conversation isn't in the inbox any more.",
+        )
         .into_response()
 }
 
 /// A form's refusal for a reason found after it decoded.
-fn refuse<T: navree::ui::form::Form>(value: &T, field: &str, message: &str, parts: &Parts) -> Rejected<T> {
+fn refuse<T: navree::ui::form::Form>(
+    value: &T,
+    field: &str,
+    message: &str,
+    parts: &Parts,
+) -> Rejected<T> {
     let errors: FieldErrors = BTreeMap::from([(field.to_owned(), vec![message.to_owned()])]);
     Rejected::after_decode(value, errors, parts)
 }
@@ -415,7 +426,7 @@ impl<'a> PageInput<'a> {
 
 impl Pages {
     /// The inbox page, drawn for `input`.
-    async fn page(&self, uow: &Uow, input: PageInput<'_>) -> Result<Response> {
+    async fn page(&self, uow: &(impl Executor + ?Sized), input: PageInput<'_>) -> Result<Response> {
         let me = who(uow, input.headers).await?;
         let team = team(uow).await?;
         let counts = counts(uow, me.id).await?;
@@ -457,7 +468,8 @@ impl Pages {
         };
         let split = inbox_split(&page, sizes.as_ref());
         let title = input.filters.view.label().to_owned();
-        let shell = shell(&me, &team, counts, input.filters.view).for_request(input.path.clone(), input.headers);
+        let shell = shell(&me, &team, counts, input.filters.view)
+            .for_request(input.path.clone(), input.headers);
         let view = shell
             .page(title)
             .actions(page_actions())
@@ -466,15 +478,26 @@ impl Pages {
         Ok(no_store(view.into_response()))
     }
 
-    fn missing(&self, me: &Agent, team: &[Agent], counts: ViewCounts, input: &PageInput<'_>) -> Response {
-        let shell = shell(me, team, counts, input.filters.view).for_request(input.path.clone(), input.headers);
+    fn missing(
+        &self,
+        me: &Agent,
+        team: &[Agent],
+        counts: ViewCounts,
+        input: &PageInput<'_>,
+    ) -> Response {
+        let shell = shell(me, team, counts, input.filters.view)
+            .for_request(input.path.clone(), input.headers);
         let view = shell
             .page("No such conversation")
             .body(
                 Empty::new("That conversation isn't here")
                     .icon(icons::MESSAGE_SQUARE_X)
-                    .description("It may have been merged or removed. The list has everything that is open.")
-                    .actions(Button::outline("Back to the inbox").href(input.filters.href("/inbox"))),
+                    .description(
+                        "It may have been merged or removed. The list has everything that is open.",
+                    )
+                    .actions(
+                        Button::outline("Back to the inbox").href(input.filters.href("/inbox")),
+                    ),
             )
             .to_view()
             .status(StatusCode::NOT_FOUND);
@@ -483,14 +506,27 @@ impl Pages {
 
     /// `GET /inbox/{id}`: also marks the conversation read, unless the browser is only
     /// fetching ahead.
-    async fn show(&self, uow: Uow, headers: HeaderMap, path: String, id: i64, query: ListQuery) -> Result<Response> {
+    async fn show(
+        &self,
+        headers: HeaderMap,
+        path: String,
+        id: i64,
+        query: ListQuery,
+    ) -> Result<Response> {
+        let db = &*self.db;
         if !is_prefetch(&headers)
-            && let Some(found) = conversation(&uow, id).await?
+            && let Some(found) = conversation(db, id).await?
             && found.unread > 0
         {
             Conversation::query()
                 .where_(Conversation::ID.eq(id))
-                .update(&uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(self.hub.rev())])
+                .update(
+                    db,
+                    [
+                        Conversation::UNREAD.set(0_i64),
+                        Conversation::REV.set(self.hub.rev()),
+                    ],
+                )
                 .await?;
             self.hub.tell(Change {
                 conversation: id,
@@ -501,7 +537,7 @@ impl Pages {
         input.pane = query.pane.clone();
         input.list = query.list_ask();
         input.thread = query.thread_ask();
-        self.page(&uow, input).await
+        self.page(db, input).await
     }
 
     /// What an action answers: the heading and the customer drawn again, the list and the
@@ -570,7 +606,13 @@ impl Pages {
             .or(form.saved.as_deref().filter(|key| !key.is_empty()));
         if let Some(key) = pick {
             let Some(chosen) = saved(key) else {
-                return Ok(refuse(&form, "body", "That saved reply isn't there any more.", &parts).into_response());
+                return Ok(refuse(
+                    &form,
+                    "body",
+                    "That saved reply isn't there any more.",
+                    &parts,
+                )
+                .into_response());
             };
             let mut draft = body.trim_end().to_owned();
             if !draft.is_empty() {
@@ -585,7 +627,10 @@ impl Pages {
                         target: COMPOSER_BODY.to_owned(),
                     },
                 ])
-                .toast(ToastTone::Info, format!("Added “{}”. Edit it, then send.", chosen.title))
+                .toast(
+                    ToastTone::Info,
+                    format!("Added “{}”. Edit it, then send.", chosen.title),
+                )
                 .into_response());
             }
             let mut input = PageInput::new(&headers, format!("/inbox/{id}"), filters, Some(id));
@@ -614,7 +659,11 @@ impl Pages {
             return Ok(response);
         }
         let at = now();
-        let author = if kind == "note" { Author::Note } else { Author::Agent };
+        let author = if kind == "note" {
+            Author::Note
+        } else {
+            Author::Agent
+        };
         Message::query()
             .insert(
                 &uow,
@@ -661,8 +710,11 @@ impl Pages {
             .await?
             .map_or_else(|| "the customer".to_owned(), |record| record.name.clone());
         let toast = if author == Author::Agent {
-            Toast::new(ToastTone::Success, format!("Your reply is on its way to {customer}."))
-                .title("Reply sent")
+            Toast::new(
+                ToastTone::Success,
+                format!("Your reply is on its way to {customer}."),
+            )
+            .title("Reply sent")
         } else {
             Toast::new(ToastTone::Success, "Only the team can see it.").title("Note added")
         };
@@ -674,7 +726,13 @@ impl Pages {
     }
 
     /// Assigns conversation `id` to `agent`, or to nobody.
-    async fn assign_to(&self, uow: &Uow, headers: &HeaderMap, id: i64, agent: Option<Agent>) -> Result<Response> {
+    async fn assign_to(
+        &self,
+        uow: &Uow,
+        headers: &HeaderMap,
+        id: i64,
+        agent: Option<Agent>,
+    ) -> Result<Response> {
         let Some(found) = conversation(uow, id).await? else {
             return Ok(missing_reply());
         };
@@ -738,10 +796,21 @@ impl Pages {
         }
         let active = Agent::query().where_(Agent::ACTIVE.eq(true));
         if !TEAM
-            .all_pickable(active.clone(), [picked.as_str()], &uow, OptionSource::as_int)
+            .all_pickable(
+                active.clone(),
+                [picked.as_str()],
+                &uow,
+                OptionSource::as_int,
+            )
             .await?
         {
-            return Ok(refuse(&form, "agent", "Choose someone on the team who is in today.", &parts).into_response());
+            return Ok(refuse(
+                &form,
+                "agent",
+                "Choose someone on the team who is in today.",
+                &parts,
+            )
+            .into_response());
         }
         let agent = active
             .find(&uow, picked.parse::<i64>().unwrap_or(0))
@@ -754,7 +823,10 @@ impl Pages {
     async fn status(&self, uow: Uow, headers: HeaderMap, id: i64, to: &str) -> Result<Response> {
         let Some(status) = Status::parse(to).filter(|status| *status != Status::Snoozed) else {
             return Ok(Reply::ops_or_redirect(format!("/inbox/{id}"))
-                .toast(ToastTone::Warning, "That isn't a status a conversation can have.")
+                .toast(
+                    ToastTone::Warning,
+                    "That isn't a status a conversation can have.",
+                )
                 .status(StatusCode::UNPROCESSABLE_ENTITY)
                 .into_response());
         };
@@ -810,11 +882,20 @@ impl Pages {
             customer: found.customer_id,
         });
         let toast = match status {
-            Status::Closed => Toast::new(ToastTone::Success, format!("“{}” is closed.", found.subject)).title("Closed"),
-            Status::Open => Toast::new(ToastTone::Info, "It's back in the open list.").title("Reopened"),
+            Status::Closed => Toast::new(
+                ToastTone::Success,
+                format!("“{}” is closed.", found.subject),
+            )
+            .title("Closed"),
+            Status::Open => {
+                Toast::new(ToastTone::Info, "It's back in the open list.").title("Reopened")
+            }
             _ => Toast::new(ToastTone::Info, "Waiting for the customer.").title("Marked pending"),
         };
-        Ok(self.after(&uow, &headers, id, toast, true).await?.into_response())
+        Ok(self
+            .after(&uow, &headers, id, toast, true)
+            .await?
+            .into_response())
     }
 
     /// `POST /inbox/{id}/priority/{priority}`: a running clock is held to the new target.
@@ -849,7 +930,11 @@ impl Pages {
                     &self.hub,
                     id,
                     &me,
-                    format!("{} set the priority to {}", me.name, priority.label().to_lowercase()),
+                    format!(
+                        "{} set the priority to {}",
+                        me.name,
+                        priority.label().to_lowercase()
+                    ),
                     at,
                 )],
             )
@@ -858,12 +943,24 @@ impl Pages {
             conversation: id,
             customer: found.customer_id,
         });
-        let toast = Toast::new(ToastTone::Info, format!("Priority is {} now.", priority.label().to_lowercase()));
-        Ok(self.after(&uow, &headers, id, toast, true).await?.into_response())
+        let toast = Toast::new(
+            ToastTone::Info,
+            format!("Priority is {} now.", priority.label().to_lowercase()),
+        );
+        Ok(self
+            .after(&uow, &headers, id, toast, true)
+            .await?
+            .into_response())
     }
 
     /// Snoozes conversation `id` to `day`, which the caller has checked.
-    async fn snooze_to(&self, uow: &Uow, headers: &HeaderMap, id: i64, day: NaiveDate) -> Result<Response> {
+    async fn snooze_to(
+        &self,
+        uow: &Uow,
+        headers: &HeaderMap,
+        id: i64,
+        day: NaiveDate,
+    ) -> Result<Response> {
         let Some(found) = conversation(uow, id).await? else {
             return Ok(missing_reply());
         };
@@ -889,14 +986,21 @@ impl Pages {
         Message::query()
             .insert(
                 uow,
-                [event_line(&self.hub, id, &me, format!("{} snoozed it until {label}", me.name), at)],
+                [event_line(
+                    &self.hub,
+                    id,
+                    &me,
+                    format!("{} snoozed it until {label}", me.name),
+                    at,
+                )],
             )
             .await?;
         self.hub.tell(Change {
             conversation: id,
             customer: found.customer_id,
         });
-        let toast = Toast::new(ToastTone::Info, format!("It comes back on {label}.")).title("Snoozed");
+        let toast =
+            Toast::new(ToastTone::Info, format!("It comes back on {label}.")).title("Snoozed");
         let reply = self
             .after(uow, headers, id, toast, true)
             .await?
@@ -939,8 +1043,16 @@ impl Pages {
             None => form.until,
         };
         match day {
-            Some(day) if day > today && day <= last => self.snooze_to(&uow, &headers, id, day).await,
-            _ => Ok(refuse(&form, "until", "Pick a day from tomorrow to 90 days ahead.", &parts).into_response()),
+            Some(day) if day > today && day <= last => {
+                self.snooze_to(&uow, &headers, id, day).await
+            }
+            _ => Ok(refuse(
+                &form,
+                "until",
+                "Pick a day from tomorrow to 90 days ahead.",
+                &parts,
+            )
+            .into_response()),
         }
     }
 
@@ -983,10 +1095,10 @@ impl Pages {
 
     /// `GET /inbox/{id}/files/{file}`: a file sent with a message. The example keeps no
     /// files, so it answers a short text that says so, under the file's name.
-    async fn file(&self, uow: Uow, id: i64, file: i64) -> Result<Response> {
+    async fn file(&self, uow: &(impl Executor + ?Sized), id: i64, file: i64) -> Result<Response> {
         let Some(found) = Attachment::query()
             .where_(Attachment::CONVERSATION_ID.eq(id))
-            .find(&uow, file)
+            .find(uow, file)
             .await?
             .map(|record| record.into_inner())
         else {
@@ -996,7 +1108,13 @@ impl Pages {
         let safe: String = found
             .name
             .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') { ch } else { '-' })
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                    ch
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{safe}\""))
             .unwrap_or(HeaderValue::from_static("attachment"));
@@ -1027,7 +1145,10 @@ impl Pages {
                 .into_response());
         };
         let mut response = Reply::redirect("/inbox")
-            .toast(ToastTone::Info, format!("You're working as {}.", found.name))
+            .toast(
+                ToastTone::Info,
+                format!("You're working as {}.", found.name),
+            )
             .into_response();
         if let Ok(value) = HeaderValue::from_str(&format!(
             "{AGENT_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly",
@@ -1060,16 +1181,18 @@ impl Controller for Pages {
         let me = self.clone();
         let mut routes = vec![
             RouteDef::on(Method::GET, "!/", || async { Reply::redirect("/inbox") }).public(),
-            route!(me, Method::GET, "!/inbox", pages, [uow: Uow, headers: HeaderMap, Query(query): Query<ListQuery>] => {
+            route!(me, Method::GET, "!/inbox", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
+                let uow = &*pages.db;
                 let mut input = PageInput::new(&headers, "/inbox".to_owned(), query.filters(), None);
                 input.list = query.list_ask();
-                pages.page(&uow, input).await
+                pages.page(uow, input).await
             }),
-            route!(me, Method::GET, "!/inbox/{id}", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<ListQuery>] => {
-                pages.show(uow, headers, format!("/inbox/{id}"), id, query).await
+            route!(me, Method::GET, "!/inbox/{id}", pages, [headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<ListQuery>] => {
+                pages.show(headers, format!("/inbox/{id}"), id, query).await
             }),
-            route!(me, Method::GET, "!/inbox/rows", pages, [uow: Uow, headers: HeaderMap, ask: LazyQuery, Query(query): Query<ListQuery>] => {
-                let me = who(&uow, &headers).await?;
+            route!(me, Method::GET, "!/inbox/rows", pages, [headers: HeaderMap, ask: LazyQuery, Query(query): Query<ListQuery>] => {
+                let uow = &*pages.db;
+                let me = who(uow, &headers).await?;
                 let filters = query.filters();
                 let now = now();
                 let open = filters_of_referer_open(&headers);
@@ -1077,7 +1200,7 @@ impl Controller for Pages {
                     let since = since.parse::<i64>().unwrap_or(i64::MAX);
                     // Read the revision first: a change made while this runs comes next time.
                     let at = pages.hub.current_rev();
-                    let (rows, gone, newest) = queries::changes(&uow, &filters, me.id, since, ask.window()).await?;
+                    let (rows, gone, newest) = queries::changes(uow, &filters, me.id, since, ask.window()).await?;
                     let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
                     // A write takes its revision before it commits, so the newest few are asked
                     // for again next time: one still on its way when this read can't be missed.
@@ -1085,25 +1208,26 @@ impl Controller for Pages {
                     let next = since.max(newest.min(at) - 8);
                     return Ok::<_, AppError>(LazyPage::changes(items, next.to_string(), gone).into_response());
                 }
-                let (rows, more_after, more_before) = queries::list_page(&uow, &filters, me.id, ask.ask()).await?;
+                let (rows, more_after, more_before) = queries::list_page(uow, &filters, me.id, ask.ask()).await?;
                 let more = match ask.ask() {
                     LazyAsk::Before(_) => more_before,
                     _ => more_after,
                 };
                 Ok(LazyPage::new(rows.iter().map(|row| conversation_item(row, &filters, open, now, None)), more).into_response())
             }),
-            route!(me, Method::GET, "!/inbox/{id}/messages", pages, [uow: Uow, headers: HeaderMap, ask: LazyQuery, Path(id): Path<i64>] => {
+            route!(me, Method::GET, "!/inbox/{id}/messages", pages, [headers: HeaderMap, ask: LazyQuery, Path(id): Path<i64>] => {
+                let uow = &*pages.db;
                 let now = now();
-                let (messages, files, older, newer) = queries::thread_window(&uow, id, ask.ask()).await?;
+                let (messages, files, older, newer) = queries::thread_window(uow, id, ask.ask()).await?;
                 if let LazyAsk::Since(since) = ask.ask() {
                     // Drawn into a page that has the conversation open: what is new is seen.
                     if !is_prefetch(&headers)
-                        && let Some(found) = conversation(&uow, id).await?
+                        && let Some(found) = conversation(uow, id).await?
                         && found.unread > 0
                     {
                         Conversation::query()
                             .where_(Conversation::ID.eq(id))
-                            .update(&uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(pages.hub.rev())])
+                            .update(uow, [Conversation::UNREAD.set(0_i64), Conversation::REV.set(pages.hub.rev())])
                             .await?;
                         pages.hub.tell(Change {
                             conversation: id,
@@ -1120,27 +1244,30 @@ impl Controller for Pages {
                 };
                 Ok(LazyPage::new(messages.iter().map(|m| message_item(m, &files, now)), more).into_response())
             }),
-            route!(me, Method::GET, "!/inbox/fragments/summary", pages, [uow: Uow, headers: HeaderMap, Query(query): Query<ListQuery>] => {
+            route!(me, Method::GET, "!/inbox/fragments/summary", pages, [headers: HeaderMap, Query(query): Query<ListQuery>] => {
+                let uow = &*pages.db;
                 let _ = &pages;
-                let me = who(&uow, &headers).await?;
+                let me = who(uow, &headers).await?;
                 let filters = query.filters();
-                let summary = queries::summary(&uow, &filters, me.id, now()).await?;
+                let summary = queries::summary(uow, &filters, me.id, now()).await?;
                 let stream = "/inbox/events";
                 Ok::<_, AppError>(no_store(fragment("Count", summary_region(summary, &filters, stream)).into_response()))
             }),
-            route!(me, Method::GET, "!/inbox/{id}/fragments/head", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>] => {
+            route!(me, Method::GET, "!/inbox/{id}/fragments/head", pages, [headers: HeaderMap, Path(id): Path<i64>] => {
+                let uow = &*pages.db;
                 let _ = &pages;
                 let filters = filters_of_referer(&headers);
-                let me = who(&uow, &headers).await?;
-                match open_thread(&uow, id, &LazyAsk::First, &filters, me.id).await? {
+                let me = who(uow, &headers).await?;
+                match open_thread(uow, id, &LazyAsk::First, &filters, me.id).await? {
                     Some(thread) => Ok::<_, AppError>(no_store(fragment("Conversation", head_region(&open_of(&thread, &filters))).into_response())),
                     None => Ok(StatusCode::NOT_FOUND.into_response()),
                 }
             }),
-            route!(me, Method::GET, "!/inbox/{id}/fragments/customer", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>] => {
+            route!(me, Method::GET, "!/inbox/{id}/fragments/customer", pages, [headers: HeaderMap, Path(id): Path<i64>] => {
+                let uow = &*pages.db;
                 let _ = &pages;
                 let filters = filters_of_referer(&headers);
-                match customer_of(&uow, id).await? {
+                match customer_of(uow, id).await? {
                     Some(view) => {
                         let customer = view.customer.id;
                         Ok::<_, AppError>(no_store(fragment("Customer", customer_region(id, customer, &filters, Some(&view), now())).into_response()))
@@ -1153,12 +1280,13 @@ impl Controller for Pages {
                 let customer = ListQuery::number(query.customer.as_deref()).unwrap_or(0);
                 pages.hub.stream(&headers, open, customer)
             }),
-            route!(me, Method::GET, "!/inbox/agents/options", pages, [uow: Uow, query: OptionQuery] => {
+            route!(me, Method::GET, "!/inbox/agents/options", pages, [query: OptionQuery] => {
+                let uow = &*pages.db;
                 let _ = &pages;
                 TEAM.find(
                     Agent::query().where_(Agent::ACTIVE.eq(true)),
                     &query,
-                    &uow,
+                    uow,
                     "/inbox/agents/options",
                     |record| {
                         let agent = record.into_inner();
@@ -1181,9 +1309,10 @@ impl Controller for Pages {
                 let me = who(&uow, &headers).await?;
                 pages.assign_to(&uow, &headers, id, Some(me)).await
             }),
-            route!(me, Method::GET, "!/inbox/{id}/assign", pages, [uow: Uow, headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<OptionQueryText>] => {
-                let me = who(&uow, &headers).await?;
-                let Some(found) = conversation(&uow, id).await? else {
+            route!(me, Method::GET, "!/inbox/{id}/assign", pages, [headers: HeaderMap, Path(id): Path<i64>, Query(query): Query<OptionQueryText>] => {
+                let uow = &*pages.db;
+                let me = who(uow, &headers).await?;
+                let Some(found) = conversation(uow, id).await? else {
                     return Ok::<_, AppError>(missing_reply());
                 };
                 let q: String = query.q.unwrap_or_default().trim().chars().take(100).collect();
@@ -1196,14 +1325,14 @@ impl Controller for Pages {
                 }
                 let found_team: Vec<Agent> = team_query
                     .order_by("name")
-                    .get(&uow)
+                    .get(uow)
                     .await?
                     .into_vec()
                     .into_iter()
                     .map(|record| record.into_inner())
                     .collect();
-                let everyone = team(&uow).await?;
-                let counts = counts(&uow, me.id).await?;
+                let everyone = team(uow).await?;
+                let counts = counts(uow, me.id).await?;
                 let _ = &pages;
                 let page = shell(&me, &everyone, counts, View::All)
                     .for_request(format!("/inbox/{id}/assign"), &headers)
@@ -1243,7 +1372,8 @@ impl Controller for Pages {
             route!(me, Method::POST, "!/inbox/panes", pages, [uow: Uow, headers: HeaderMap, save: SplitSave] => {
                 pages.panes(uow, headers, save).await
             }),
-            route!(me, Method::GET, "!/inbox/{id}/files/{file}", pages, [uow: Uow, Path((id, file)): Path<(i64, i64)>] => {
+            route!(me, Method::GET, "!/inbox/{id}/files/{file}", pages, [Path((id, file)): Path<(i64, i64)>] => {
+                let uow = &*pages.db;
                 pages.file(uow, id, file).await
             }),
             route!(me, Method::POST, "!/as/{agent}", pages, [uow: Uow, Path(agent): Path<i64>, sent: std::result::Result<Submit<ActForm>, Rejected<ActForm>>] => {
@@ -1369,27 +1499,111 @@ async fn explain(uow: &Uow) -> std::result::Result<String, AppError> {
     let searched = Filters::read(Some("closed"), Some("booking page"), None, None);
     let channel = Filters::read(Some("closed"), None, Some("api"), Some("high"));
     let conversations = [
-        ("list: the first page of all open", queries::in_view(&all, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("list: the page after a cursor, closed", queries::in_view(&closed, 1).where_(queries::after(at, 50_000)).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("list: the page before a cursor, closed", queries::in_view(&closed, 1).where_(queries::before(at, 50_000)).order_by("last_at").order_by("id").limit(51)),
-        ("list: assigned to me", queries::in_view(&mine, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("list: unassigned", queries::in_view(&unassigned, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("list: closed, one channel and priority", queries::in_view(&channel, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("search: closed, \"booking page\"", queries::in_view(&searched, 1).order_by_desc("last_at").order_by_desc("id").limit(51)),
-        ("live: what changed since a revision", Conversation::query().where_(Conversation::REV.gt(1_i64)).order_by("rev").limit(300)),
+        (
+            "list: the first page of all open",
+            queries::in_view(&all, 1)
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "list: the page after a cursor, closed",
+            queries::in_view(&closed, 1)
+                .where_(queries::after(at, 50_000))
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "list: the page before a cursor, closed",
+            queries::in_view(&closed, 1)
+                .where_(queries::before(at, 50_000))
+                .order_by("last_at")
+                .order_by("id")
+                .limit(51),
+        ),
+        (
+            "list: assigned to me",
+            queries::in_view(&mine, 1)
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "list: unassigned",
+            queries::in_view(&unassigned, 1)
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "list: closed, one channel and priority",
+            queries::in_view(&channel, 1)
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "search: closed, \"booking page\"",
+            queries::in_view(&searched, 1)
+                .order_by_desc("last_at")
+                .order_by_desc("id")
+                .limit(51),
+        ),
+        (
+            "live: what changed since a revision",
+            Conversation::query()
+                .where_(Conversation::REV.gt(1_i64))
+                .order_by("rev")
+                .limit(300),
+        ),
         ("count: all open", queries::in_view(&all, 1)),
+        (
+            "count: something new in all open",
+            queries::in_view(&all, 1).where_(queries::something_new()),
+        ),
     ];
     let messages = [
-        ("thread: the newest thirty", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).order_by_desc("id").limit(31)),
-        ("thread: thirty before a cursor", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).where_(Message::ID.lt(500_i64)).order_by_desc("id").limit(31)),
-        ("thread: what is new since a message", Message::query().where_(Message::CONVERSATION_ID.eq(1_008_i64)).where_(Message::ID.gt(500_i64)).order_by("id").limit(200)),
+        (
+            "thread: the newest thirty",
+            Message::query()
+                .where_(Message::CONVERSATION_ID.eq(1_008_i64))
+                .order_by_desc("id")
+                .limit(31),
+        ),
+        (
+            "thread: thirty before a cursor",
+            Message::query()
+                .where_(Message::CONVERSATION_ID.eq(1_008_i64))
+                .where_(Message::ID.lt(500_i64))
+                .order_by_desc("id")
+                .limit(31),
+        ),
+        (
+            "thread: what is new since a message",
+            Message::query()
+                .where_(Message::CONVERSATION_ID.eq(1_008_i64))
+                .where_(Message::ID.gt(500_i64))
+                .order_by("id")
+                .limit(200),
+        ),
     ];
     let mut statements = Vec::new();
     for (name, builder) in conversations {
-        statements.push((name, builder.to_sql(Dialect::Sqlite).map_err(|e| AppError::internal(e.to_string()))?));
+        statements.push((
+            name,
+            builder
+                .to_sql(Dialect::Sqlite)
+                .map_err(|e| AppError::internal(e.to_string()))?,
+        ));
     }
     for (name, builder) in messages {
-        statements.push((name, builder.to_sql(Dialect::Sqlite).map_err(|e| AppError::internal(e.to_string()))?));
+        statements.push((
+            name,
+            builder
+                .to_sql(Dialect::Sqlite)
+                .map_err(|e| AppError::internal(e.to_string()))?,
+        ));
     }
     let mut out = String::new();
     for (name, statement) in statements {

@@ -615,7 +615,11 @@ pub fn short_span(seconds: i64) -> String {
 
 /// The first line of `body`, cut to about 120 characters on a word.
 pub fn preview_of(body: &str) -> String {
-    let line = body.lines().find(|line| !line.trim().is_empty()).unwrap_or("").trim();
+    let line = body
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("")
+        .trim();
     if line.chars().count() <= 120 {
         return line.to_owned();
     }
@@ -719,9 +723,30 @@ const FIRST: [&str; 24] = [
 ];
 
 const LAST: [&str; 24] = [
-    "Whitfield", "Ortega", "Sato", "Fischer", "MacLeod", "Rahimi", "Iyer", "Marino", "Boateng",
-    "Jensen", "Navarro", "Haddad", "Pryce", "Okonkwo", "Becker", "Doyle", "Ruiz", "Andersen",
-    "Eze", "Kowalska", "Ito", "Farouk", "Bianchi", "Duarte",
+    "Whitfield",
+    "Ortega",
+    "Sato",
+    "Fischer",
+    "MacLeod",
+    "Rahimi",
+    "Iyer",
+    "Marino",
+    "Boateng",
+    "Jensen",
+    "Navarro",
+    "Haddad",
+    "Pryce",
+    "Okonkwo",
+    "Becker",
+    "Doyle",
+    "Ruiz",
+    "Andersen",
+    "Eze",
+    "Kowalska",
+    "Ito",
+    "Farouk",
+    "Bianchi",
+    "Duarte",
 ];
 
 const ROLES: [&str; 6] = [
@@ -801,11 +826,23 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::High,
         team: "Billing",
         lines: &[
-            c("Hi, we tried to move from Starter to Growth this morning and the card was declined twice. The bank says nothing was blocked on their side. Can you see what went wrong?"),
-            a("Thanks for flagging this. I can see two attempts at 09:12 and 09:14, both answered \"do not honour\" by the card's issuer. That answer usually comes from a fraud check on the bank's side rather than from us."),
-            n("Issuer answered 05 twice. No retries queued. If they try a third card, check the 3-D Secure step loads in their region."),
-            cf("We called the bank again and they insist it's fine. Here's the screen we get.", "upgrade-error.png", 184_320),
-            a("Thank you, that helps. The screenshot shows the 3-D Secure window closed before it finished. Could you try once more in a private window, so no extension blocks the bank's page?"),
+            c(
+                "Hi, we tried to move from Starter to Growth this morning and the card was declined twice. The bank says nothing was blocked on their side. Can you see what went wrong?",
+            ),
+            a(
+                "Thanks for flagging this. I can see two attempts at 09:12 and 09:14, both answered \"do not honour\" by the card's issuer. That answer usually comes from a fraud check on the bank's side rather than from us.",
+            ),
+            n(
+                "Issuer answered 05 twice. No retries queued. If they try a third card, check the 3-D Secure step loads in their region.",
+            ),
+            cf(
+                "We called the bank again and they insist it's fine. Here's the screen we get.",
+                "upgrade-error.png",
+                184_320,
+            ),
+            a(
+                "Thank you, that helps. The screenshot shows the 3-D Secure window closed before it finished. Could you try once more in a private window, so no extension blocks the bank's page?",
+            ),
             c("That worked! We're on Growth now. Thanks for the patience."),
         ],
     },
@@ -815,9 +852,15 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Urgent,
         team: "Technical",
         lines: &[
-            c("Since Sunday every reminder text reaches clients an hour before it should. Three people turned up an hour early today. What changed?"),
-            n("Account still has the old fixed offset (+01:00) instead of a named zone. The clock change on Sunday exposed it. Fix is to set the zone in Settings > Locations."),
-            a("I'm sorry about the early arrivals. Your location's time zone is set as a fixed offset rather than a named zone, so it didn't follow the clock change. I've switched it to the named zone; reminders from now on go at the right time."),
+            c(
+                "Since Sunday every reminder text reaches clients an hour before it should. Three people turned up an hour early today. What changed?",
+            ),
+            n(
+                "Account still has the old fixed offset (+01:00) instead of a named zone. The clock change on Sunday exposed it. Fix is to set the zone in Settings > Locations.",
+            ),
+            a(
+                "I'm sorry about the early arrivals. Your location's time zone is set as a fixed offset rather than a named zone, so it didn't follow the clock change. I've switched it to the named zone; reminders from now on go at the right time.",
+            ),
             c("Thanks. Will the ones already queued for tomorrow be right too?"),
         ],
     },
@@ -827,11 +870,19 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::High,
         team: "Technical",
         lines: &[
-            cf("We moved to a new identity provider on Friday. Since then nobody can sign in with single sign-on: the error says \"invalid audience\". Metadata attached.", "idp-metadata.xml", 7_168),
-            a("Thanks for the metadata. The audience your new provider sends is the old entity ID. In your provider's app settings, set the audience to the value shown on your Fernway SSO page, then try again."),
+            cf(
+                "We moved to a new identity provider on Friday. Since then nobody can sign in with single sign-on: the error says \"invalid audience\". Metadata attached.",
+                "idp-metadata.xml",
+                7_168,
+            ),
+            a(
+                "Thanks for the metadata. The audience your new provider sends is the old entity ID. In your provider's app settings, set the audience to the value shown on your Fernway SSO page, then try again.",
+            ),
             c("Updated it, same error. Is there a cache on your side?"),
             n("Their SAML config is cached for 15 min per tenant. Cleared it by hand at 10:40."),
-            a("There is, for fifteen minutes. I've cleared it for your account now, so the next sign-in reads the new settings."),
+            a(
+                "There is, for fifteen minutes. I've cleared it for your account now, so the next sign-in reads the new settings.",
+            ),
         ],
     },
     Topic {
@@ -840,9 +891,17 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Onboarding",
         lines: &[
-            c("We're moving from our old booking tool next month. Can we bring two years of bookings and client records with us?"),
-            a("Yes. Send us an export as CSV, one file for clients and one for bookings, and we'll check the columns before anything is imported. Most moves take two working days."),
-            cf("Here are the two files. The bookings one is big.", "bookings-2024-2026.csv", 9_437_184),
+            c(
+                "We're moving from our old booking tool next month. Can we bring two years of bookings and client records with us?",
+            ),
+            a(
+                "Yes. Send us an export as CSV, one file for clients and one for bookings, and we'll check the columns before anything is imported. Most moves take two working days.",
+            ),
+            cf(
+                "Here are the two files. The bookings one is big.",
+                "bookings-2024-2026.csv",
+                9_437_184,
+            ),
             n("41k rows. Dates are day-first; set the importer to DMY."),
         ],
     },
@@ -852,8 +911,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::High,
         team: "Technical",
         lines: &[
-            c("Our booking.created webhook gets nothing since Friday. Your delivery log shows 410 Gone from our endpoint, but the endpoint is up."),
-            a("A 410 makes us stop sending to that address, as the docs describe. It came from your server at 17:02 on Friday, perhaps during a deploy. I've switched deliveries back on; nothing is lost, because events wait for 72 hours."),
+            c(
+                "Our booking.created webhook gets nothing since Friday. Your delivery log shows 410 Gone from our endpoint, but the endpoint is up.",
+            ),
+            a(
+                "A 410 makes us stop sending to that address, as the docs describe. It came from your server at 17:02 on Friday, perhaps during a deploy. I've switched deliveries back on; nothing is lost, because events wait for 72 hours.",
+            ),
             c("Ah, the deploy. Thank you. Can we replay what was missed?"),
         ],
     },
@@ -863,9 +926,17 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Billing",
         lines: &[
-            cf("We were charged twice for October. Invoice attached.", "INV-20418.pdf", 96_256),
-            n("Two captures 4 s apart on 1 Oct; the gateway retried after a timeout. Second capture to refund."),
-            a("You're right, and I'm sorry. A timeout made our payment provider take the payment twice. I've refunded the second charge in full."),
+            cf(
+                "We were charged twice for October. Invoice attached.",
+                "INV-20418.pdf",
+                96_256,
+            ),
+            n(
+                "Two captures 4 s apart on 1 Oct; the gateway retried after a timeout. Second capture to refund.",
+            ),
+            a(
+                "You're right, and I'm sorry. A timeout made our payment provider take the payment twice. I've refunded the second charge in full.",
+            ),
         ],
     },
     Topic {
@@ -874,8 +945,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Low,
         team: "Onboarding",
         lines: &[
-            c("We're opening a second studio in March. Can one account run both, with separate calendars?"),
-            a("It can. Under Settings > Locations, add the new address. Each location gets its own calendar, rooms and opening hours, and staff can work at one or both."),
+            c(
+                "We're opening a second studio in March. Can one account run both, with separate calendars?",
+            ),
+            a(
+                "It can. Under Settings > Locations, add the new address. Each location gets its own calendar, rooms and opening hours, and staff can work at one or both.",
+            ),
             c("Perfect. Does the second location cost extra?"),
         ],
     },
@@ -885,9 +960,15 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Technical",
         lines: &[
-            c("Our booking widget gets 429 Too Many Requests from /v2/availability at busy times. We only have about 40 visitors at once."),
-            n("Their widget polls every 2 s per visitor: 40 visitors = 1,200/min, double the limit."),
-            a("Your widget asks for availability every two seconds for each visitor, which is about 1,200 requests a minute at busy times. Asking when a visitor picks a day, rather than on a timer, keeps you far under the limit."),
+            c(
+                "Our booking widget gets 429 Too Many Requests from /v2/availability at busy times. We only have about 40 visitors at once.",
+            ),
+            n(
+                "Their widget polls every 2 s per visitor: 40 visitors = 1,200/min, double the limit.",
+            ),
+            a(
+                "Your widget asks for availability every two seconds for each visitor, which is about 1,200 requests a minute at busy times. Asking when a visitor picks a day, rather than on a timer, keeps you far under the limit.",
+            ),
         ],
     },
     Topic {
@@ -896,8 +977,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Low,
         team: "Customer success",
         lines: &[
-            c("Our accountant needs a list of all clients with their total spend this year. Is there an export?"),
-            a("There is: Reports > Clients, set the dates to this year, then Export. The file has each client's bookings and spend."),
+            c(
+                "Our accountant needs a list of all clients with their total spend this year. Is there an export?",
+            ),
+            a(
+                "There is: Reports > Clients, set the dates to this year, then Export. The file has each client's bookings and spend.",
+            ),
         ],
     },
     Topic {
@@ -906,8 +991,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Customer success",
         lines: &[
-            c("Our therapists can see each other's appointments, including client names. For privacy we'd like each person to see only their own. Possible?"),
-            a("Yes. Under Settings > Roles, edit the Therapist role and set Calendar to \"Own bookings only\". It takes effect the next time each person loads the calendar."),
+            c(
+                "Our therapists can see each other's appointments, including client names. For privacy we'd like each person to see only their own. Possible?",
+            ),
+            a(
+                "Yes. Under Settings > Roles, edit the Therapist role and set Calendar to \"Own bookings only\". It takes effect the next time each person loads the calendar.",
+            ),
             c("Done, thank you. Can managers still see everything?"),
         ],
     },
@@ -917,9 +1006,15 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::High,
         team: "Billing",
         lines: &[
-            c("Clients see prices in dollars on our booking page, but we charge in euros. Card payments are in euros, so people are confused."),
-            n("Location currency is EUR but the booking page theme has a hard-coded $ from an old template."),
-            a("The prices are charged in euros; the dollar sign comes from your page's old theme, which writes it as text. I've switched you to the current theme, which shows each location's currency."),
+            c(
+                "Clients see prices in dollars on our booking page, but we charge in euros. Card payments are in euros, so people are confused.",
+            ),
+            n(
+                "Location currency is EUR but the booking page theme has a hard-coded $ from an old template.",
+            ),
+            a(
+                "The prices are charged in euros; the dollar sign comes from your page's old theme, which writes it as text. I've switched you to the current theme, which shows each location's currency.",
+            ),
         ],
     },
     Topic {
@@ -928,9 +1023,13 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Customer success",
         lines: &[
-            c("We're closing the clinic in January and need to cancel. Our term ends on 31 December."),
+            c(
+                "We're closing the clinic in January and need to cancel. Our term ends on 31 December.",
+            ),
             n("Long-standing customer. Offer the pause option before cancelling."),
-            a("I'm sorry to hear about the clinic. I can set the subscription to end on 31 December, so you keep everything until then. If you might reopen, we can also pause the account and keep your records for free for a year."),
+            a(
+                "I'm sorry to hear about the clinic. I can set the subscription to end on 31 December, so you keep everything until then. If you might reopen, we can also pause the account and keep your records for free for a year.",
+            ),
         ],
     },
     Topic {
@@ -939,8 +1038,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Low,
         team: "Customer success",
         lines: &[
-            c("Our evening classes fill up within an hour. Could clients join a waiting list and get the place when someone cancels?"),
-            a("That's a good idea, and many studios have asked for it. I've added your vote to the request our product team is working through, and I'll let you know when it's planned."),
+            c(
+                "Our evening classes fill up within an hour. Could clients join a waiting list and get the place when someone cancels?",
+            ),
+            a(
+                "That's a good idea, and many studios have asked for it. I've added your vote to the request our product team is working through, and I'll let you know when it's planned.",
+            ),
         ],
     },
     Topic {
@@ -949,8 +1052,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Low,
         team: "Billing",
         lines: &[
-            c("Can our VAT number be printed on the invoices you send us? Our accountant needs it for the reverse charge."),
-            a("Of course. Add it under Billing > Company details and every invoice from then on carries it. Would you like me to issue the last three again with it?"),
+            c(
+                "Can our VAT number be printed on the invoices you send us? Our accountant needs it for the reverse charge.",
+            ),
+            a(
+                "Of course. Add it under Billing > Company details and every invoice from then on carries it. Would you like me to issue the last three again with it?",
+            ),
             c("Yes please, that would save a lot of back and forth."),
         ],
     },
@@ -960,8 +1067,12 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Billing",
         lines: &[
-            c("A client didn't turn up yesterday and the no-show fee wasn't charged, though our policy is on."),
-            a("The policy charges the card held for the booking. This booking was made by phone through your front desk, so no card was held. Bookings made online keep a card, and those are charged."),
+            c(
+                "A client didn't turn up yesterday and the no-show fee wasn't charged, though our policy is on.",
+            ),
+            a(
+                "The policy charges the card held for the booking. This booking was made by phone through your front desk, so no card was held. Bookings made online keep a card, and those are charged.",
+            ),
             c("Can the front desk take a card on the phone then?"),
         ],
     },
@@ -971,9 +1082,17 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Urgent,
         team: "Technical",
         lines: &[
-            cf("We updated our website theme and now the booking widget is an empty box. Console error attached. We're losing bookings!", "console-log.txt", 2_048),
-            n("Their new theme sends a Content-Security-Policy without our widget's origin in frame-src."),
-            a("I can see why: your new theme sends a content security policy that doesn't allow our widget's address. Add book.example.net to frame-src in your theme's settings and it shows again."),
+            cf(
+                "We updated our website theme and now the booking widget is an empty box. Console error attached. We're losing bookings!",
+                "console-log.txt",
+                2_048,
+            ),
+            n(
+                "Their new theme sends a Content-Security-Policy without our widget's origin in frame-src.",
+            ),
+            a(
+                "I can see why: your new theme sends a content security policy that doesn't allow our widget's address. Add book.example.net to frame-src in your theme's settings and it shows again.",
+            ),
         ],
     },
 ];
@@ -1321,11 +1440,19 @@ mod tests {
         assert_eq!(one.messages.len(), two.messages.len());
         assert!(one.conversations.len() >= 40, "{}", one.conversations.len());
         for conversation in &one.conversations {
-            assert!(one.customers.iter().any(|c| c.id == conversation.customer_id));
+            assert!(
+                one.customers
+                    .iter()
+                    .any(|c| c.id == conversation.customer_id)
+            );
             assert!(Status::parse(&conversation.status).is_some());
             assert!(Priority::parse(&conversation.priority).is_some());
             assert!(Channel::parse(&conversation.channel).is_some());
-            assert!(one.messages.iter().any(|m| m.conversation_id == conversation.id));
+            assert!(
+                one.messages
+                    .iter()
+                    .any(|m| m.conversation_id == conversation.id)
+            );
             if let Some(agent) = conversation.assignee_id {
                 assert!(one.agents.iter().any(|a| a.id == agent && a.active));
             }
@@ -1337,16 +1464,35 @@ mod tests {
         // a clock close to due and one past it.
         let has = |status: Status| one.conversations.iter().any(|c| c.status == status.key());
         assert!(Status::ALL.into_iter().all(has));
-        assert!(one.conversations.iter().any(|c| c.assignee_id.is_none() && c.status == "open"));
+        assert!(
+            one.conversations
+                .iter()
+                .any(|c| c.assignee_id.is_none() && c.status == "open")
+        );
         assert!(one.conversations.iter().any(|c| c.unread > 0));
-        assert!(one.conversations.iter().any(|c| c.assignee_id == Some(DEFAULT_AGENT)));
-        let clocks: Vec<Sla> = one.conversations.iter().filter_map(|c| Sla::of(c, NOW)).collect();
+        assert!(
+            one.conversations
+                .iter()
+                .any(|c| c.assignee_id == Some(DEFAULT_AGENT))
+        );
+        let clocks: Vec<Sla> = one
+            .conversations
+            .iter()
+            .filter_map(|c| Sla::of(c, NOW))
+            .collect();
         assert!(clocks.iter().any(|sla| sla.breached()));
         assert!(clocks.iter().any(|sla| sla.at_risk()));
         assert!(clocks.iter().any(|sla| !sla.at_risk() && !sla.breached()));
         // Addresses are on the documentation domains.
         for customer in &one.customers {
-            assert!(customer.email.ends_with(".example.com") || customer.email.ends_with("@example.com") || customer.email.ends_with("@example.org") || customer.email.ends_with("@example.net"), "{}", customer.email);
+            assert!(
+                customer.email.ends_with(".example.com")
+                    || customer.email.ends_with("@example.com")
+                    || customer.email.ends_with("@example.org")
+                    || customer.email.ends_with("@example.net"),
+                "{}",
+                customer.email
+            );
         }
     }
 
@@ -1369,7 +1515,11 @@ mod tests {
         assert_eq!(sla.text(), "2 h 5 min left");
         assert!(!sla.at_risk());
         conversation.status = "pending".to_owned();
-        assert_eq!(Sla::of(&conversation, NOW), None, "the clock stops while the customer owes the answer");
+        assert_eq!(
+            Sla::of(&conversation, NOW),
+            None,
+            "the clock stops while the customer owes the answer"
+        );
     }
 
     #[test]

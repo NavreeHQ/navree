@@ -89,7 +89,11 @@ const NOTE_LINES: [&str; 8] = [
 /// More subjects than the scripted topics have, for variety at scale.
 const SUBJECTS: [(&str, &str, &str); 24] = [
     ("Booking page won't load on phones", "chat", "high"),
-    ("Invoice shows the wrong number of seats", "help-centre", "normal"),
+    (
+        "Invoice shows the wrong number of seats",
+        "help-centre",
+        "normal",
+    ),
     ("Staff app logs us out every day", "in-app", "normal"),
     ("Double booking in the same room", "chat", "urgent"),
     ("Change the wording of reminder texts", "help-centre", "low"),
@@ -98,7 +102,11 @@ const SUBJECTS: [(&str, &str, &str); 24] = [
     ("Calendar shows old opening hours", "chat", "high"),
     ("Refund a duplicate class payment", "help-centre", "normal"),
     ("Add a second payment method", "phone", "low"),
-    ("Booking page in the client's language", "help-centre", "low"),
+    (
+        "Booking page in the client's language",
+        "help-centre",
+        "low",
+    ),
     ("Waiting list didn't offer a free place", "chat", "high"),
     ("Export is missing phone numbers", "help-centre", "normal"),
     ("Different hours at each location", "phone", "low"),
@@ -128,9 +136,9 @@ const FILES: [(&str, i64); 10] = [
 ];
 
 const FIRST_NAMES: [&str; 32] = [
-    "Ada", "Bruno", "Carla", "Dmitri", "Elif", "Farah", "Gustav", "Hiro", "Ines", "Jamal",
-    "Katya", "Liam", "Mina", "Nils", "Olga", "Pablo", "Quinn", "Rosa", "Sven", "Tara", "Umar",
-    "Vera", "Wen", "Ximena", "Yusuf", "Zoe", "Anouk", "Bilal", "Chiara", "Dara", "Emil", "Fleur",
+    "Ada", "Bruno", "Carla", "Dmitri", "Elif", "Farah", "Gustav", "Hiro", "Ines", "Jamal", "Katya",
+    "Liam", "Mina", "Nils", "Olga", "Pablo", "Quinn", "Rosa", "Sven", "Tara", "Umar", "Vera",
+    "Wen", "Ximena", "Yusuf", "Zoe", "Anouk", "Bilal", "Chiara", "Dara", "Emil", "Fleur",
 ];
 
 const LAST_NAMES: [&str; 32] = [
@@ -141,14 +149,48 @@ const LAST_NAMES: [&str; 32] = [
 ];
 
 const PREFIXES: [&str; 24] = [
-    "Alder", "Beacon", "Cedar", "Driftwood", "Ember", "Fern", "Garnet", "Hazel", "Indigo",
-    "Juniper", "Kelp", "Linen", "Maple", "Nimbus", "Oak", "Pine", "Quarry", "Rowan", "Sage",
-    "Thistle", "Umber", "Violet", "Willow", "Yarrow",
+    "Alder",
+    "Beacon",
+    "Cedar",
+    "Driftwood",
+    "Ember",
+    "Fern",
+    "Garnet",
+    "Hazel",
+    "Indigo",
+    "Juniper",
+    "Kelp",
+    "Linen",
+    "Maple",
+    "Nimbus",
+    "Oak",
+    "Pine",
+    "Quarry",
+    "Rowan",
+    "Sage",
+    "Thistle",
+    "Umber",
+    "Violet",
+    "Willow",
+    "Yarrow",
 ];
 
 const KINDS: [&str; 16] = [
-    "Yoga", "Physio", "Dental", "Salon", "Tutoring", "Climbing", "Vet Clinic", "Pilates",
-    "Barbers", "Massage", "Music School", "Swim School", "Counselling", "Gym", "Spa",
+    "Yoga",
+    "Physio",
+    "Dental",
+    "Salon",
+    "Tutoring",
+    "Climbing",
+    "Vet Clinic",
+    "Pilates",
+    "Barbers",
+    "Massage",
+    "Music School",
+    "Swim School",
+    "Counselling",
+    "Gym",
+    "Spa",
     "Language School",
 ];
 
@@ -283,9 +325,14 @@ fn word_tables() -> Vec<String> {
     }
     out.push(format!(
         "INSERT INTO seed_subject (n, subject, channel, priority) VALUES {}",
-        values(subjects.iter().enumerate().map(|(n, (subject, channel, priority))| {
-            format!("{n}, {}, '{channel}', '{priority}'", literal(subject))
-        }))
+        values(
+            subjects
+                .iter()
+                .enumerate()
+                .map(|(n, (subject, channel, priority))| {
+                    format!("{n}, {}, '{channel}', '{priority}'", literal(subject))
+                })
+        )
     ));
     out.push(format!(
         "INSERT INTO seed_file (n, name, bytes) VALUES {}",
@@ -518,7 +565,11 @@ pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::da
         Some((subject, channel, priority)) => ((*subject).to_owned(), *channel, *priority),
         None => {
             let topic = &TOPICS[at - SUBJECTS.len()];
-            (topic.subject.to_owned(), topic.channel.key(), topic.priority.key())
+            (
+                topic.subject.to_owned(),
+                topic.channel.key(),
+                topic.priority.key(),
+            )
         }
     };
     let status = if age < 259_200 {
@@ -543,8 +594,13 @@ pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::da
         FIRST_CUSTOMER + (a / 3) % customers
     };
     let names = FIRST_NAMES.len() * LAST_NAMES.len();
-    let n = usize::try_from(((customer_id - FIRST_CUSTOMER).max(0) * 37) % names as i64).unwrap_or(0);
-    let customer = format!("{} {}", FIRST_NAMES[n / LAST_NAMES.len()], LAST_NAMES[n % LAST_NAMES.len()]);
+    let n =
+        usize::try_from(((customer_id - FIRST_CUSTOMER).max(0) * 37) % names as i64).unwrap_or(0);
+    let customer = format!(
+        "{} {}",
+        FIRST_NAMES[n / LAST_NAMES.len()],
+        LAST_NAMES[n % LAST_NAMES.len()]
+    );
     let active: Vec<(i64, &str)> = AGENTS
         .iter()
         .enumerate()
@@ -607,13 +663,14 @@ pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::da
 
 /// The indexes every query of the app reads by, and the search index, built once the
 /// rows are in. Then the planner's statistics.
-pub const INDEXES: [&str; 12] = [
+pub const INDEXES: [&str; 13] = [
     "CREATE INDEX IF NOT EXISTS conversations_inbox ON conversations (inbox, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_mine ON conversations (assignee_id, inbox, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_unassigned ON conversations (status, assignee_id, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_rev ON conversations (rev)",
     "CREATE INDEX IF NOT EXISTS conversations_customer ON conversations (customer_id, last_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS conversations_clock ON conversations (status, sla_due)",
+    "CREATE INDEX IF NOT EXISTS conversations_unread ON conversations (inbox, assignee_id) WHERE unread > 0",
     "CREATE INDEX IF NOT EXISTS messages_conversation ON messages (conversation_id, id)",
     "CREATE INDEX IF NOT EXISTS attachments_message ON attachments (message_id)",
     "CREATE INDEX IF NOT EXISTS customer_events_customer ON customer_events (customer_id, at)",
@@ -640,17 +697,28 @@ mod tests {
 
     #[test]
     fn search_words_become_a_safe_prefix_query() {
-        assert_eq!(match_query("Card declined"), Some("\"card\"* \"declined\"*".to_owned()));
-        assert_eq!(match_query("\"; DROP TABLE x; --"), Some("\"drop\"* \"table\"* \"x\"*".to_owned()));
+        assert_eq!(
+            match_query("Card declined"),
+            Some("\"card\"* \"declined\"*".to_owned())
+        );
+        assert_eq!(
+            match_query("\"; DROP TABLE x; --"),
+            Some("\"drop\"* \"table\"* \"x\"*".to_owned())
+        );
         assert_eq!(match_query("   ***  "), None);
         assert_eq!(match_query("Wrocław"), Some("\"wrocław\"*".to_owned()));
-        assert_eq!(match_query(&"a ".repeat(50)).map(|q| q.matches('*').count()), Some(8));
+        assert_eq!(
+            match_query(&"a ".repeat(50)).map(|q| q.matches('*').count()),
+            Some(8)
+        );
     }
 
     #[test]
     fn the_word_tables_are_quoted() {
         let tables = word_tables().join(";\n");
-        assert!(tables.contains("'Hi, a client says the booking page won''t load on their phone. Can you check?'"));
+        assert!(tables.contains(
+            "'Hi, a client says the booking page won''t load on their phone. Can you check?'"
+        ));
         assert_eq!(kind_of(1), "customer");
         assert_eq!(kind_of(2), "agent");
         assert_eq!(kind_of(9), "note");

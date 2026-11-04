@@ -107,7 +107,11 @@ fn others(conversations: &[Conversation], current: i64, filters: &Filters, now: 
     if rows.is_empty() {
         return Text::muted("No other conversations.").into();
     }
-    el("ul").slot("stack").attr("data-gap", "1").child(rows).into()
+    el("ul")
+        .slot("stack")
+        .attr("data-gap", "1")
+        .child(rows)
+        .into()
 }
 
 /// One step of the account's story.

@@ -9,8 +9,7 @@ use crate::data::{
 use crate::views::customer::{CUSTOMER, customer_body, customer_head};
 use crate::views::list::{LIST_BODY, ListPage, Summary, list_header, list_lazy, summary_region};
 use crate::views::thread::{
-    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, Open, Window, composer, thread_head,
-    thread_lazy,
+    COMPOSER, COMPOSER_BODY, COMPOSER_SAVED, HEAD, Open, Window, composer, thread_head, thread_lazy,
 };
 use crate::views::{Filters, View};
 
@@ -130,13 +129,21 @@ pub fn head_region(open: &Open<'_>) -> Region {
 }
 
 /// The customer region: fetched after the page, and again when the customer changes.
-pub fn customer_region(conversation: i64, customer: i64, filters: &Filters, view: Option<&CustomerView>, now: i64) -> Region {
+pub fn customer_region(
+    conversation: i64,
+    customer: i64,
+    filters: &Filters,
+    view: Option<&CustomerView>,
+    now: i64,
+) -> Region {
     let region = Region::new(CUSTOMER)
         .src(format!(
             "/inbox/{conversation}/fragments/customer{}",
             query_of(filters)
         ))
-        .live_from(format!("/inbox/events?open={conversation}&customer={customer}"))
+        .live_from(format!(
+            "/inbox/events?open={conversation}&customer={customer}"
+        ))
         .live_event("customer");
     match view {
         Some(view) => region.children(customer_body(view, conversation, filters, now)),
@@ -282,12 +289,20 @@ pub fn palette(page: &Inbox<'_>) -> Command {
                         .not_recent(),
                 )
                 .item(
-                    CommandItem::post("Snooze until tomorrow", format!("/inbox/{id}/snooze/tomorrow"))
-                        .icon(icons::ALARM_CLOCK)
-                        .not_recent(),
+                    CommandItem::post(
+                        "Snooze until tomorrow",
+                        format!("/inbox/{id}/snooze/tomorrow"),
+                    )
+                    .icon(icons::ALARM_CLOCK)
+                    .not_recent(),
                 )
         };
-        for priority in [Priority::Urgent, Priority::High, Priority::Normal, Priority::Low] {
+        for priority in [
+            Priority::Urgent,
+            Priority::High,
+            Priority::Normal,
+            Priority::Low,
+        ] {
             if priority.key() != thread.conversation.priority {
                 actions = actions.item(
                     CommandItem::post(
@@ -305,10 +320,7 @@ pub fn palette(page: &Inbox<'_>) -> Command {
             replies = replies.item(
                 CommandItem::run(
                     reply.title,
-                    vec![
-                        Cmd::value(COMPOSER_SAVED, reply.key),
-                        Cmd::submit(COMPOSER),
-                    ],
+                    vec![Cmd::value(COMPOSER_SAVED, reply.key), Cmd::submit(COMPOSER)],
                 )
                 .id(format!("saved-{}", reply.key))
                 .icon(icons::MESSAGE_SQUARE_TEXT)
@@ -337,9 +349,13 @@ pub fn palette(page: &Inbox<'_>) -> Command {
 pub fn shortcuts() -> Dialog {
     let row = |keys: &[&'static str], what: &'static str| {
         TableRowEl::new((
-            TableCell::new(Row::gap(1).children(
-                keys.iter().map(|key| Kbd::new(*key).into()).collect::<Vec<Node>>(),
-            )),
+            TableCell::new(
+                Row::gap(1).children(
+                    keys.iter()
+                        .map(|key| Kbd::new(*key).into())
+                        .collect::<Vec<Node>>(),
+                ),
+            ),
             TableCell::new(what),
         ))
     };
@@ -423,11 +439,19 @@ pub fn assign_page(conversation: &Conversation, team: &[Agent], q: &str, back: &
                     )),
                 ),
             if rows.is_empty() {
-                Node::from(Empty::new("Nobody matches").description("Try part of a name or a team."))
+                Node::from(
+                    Empty::new("Nobody matches").description("Try part of a name or a team."),
+                )
             } else {
-                el("ul").slot("stack").attr("data-gap", "1").child(rows).into()
+                el("ul")
+                    .slot("stack")
+                    .attr("data-gap", "1")
+                    .child(rows)
+                    .into()
             },
-            Button::ghost("Back to the conversation").icon(icons::ARROW_LEFT).href(back.to_owned()),
+            Button::ghost("Back to the conversation")
+                .icon(icons::ARROW_LEFT)
+                .href(back.to_owned()),
         ))
         .into()
 }

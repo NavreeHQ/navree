@@ -191,8 +191,15 @@ pub fn shell(me: &Agent, team: &[Agent], counts: ViewCounts, current: View) -> S
     };
     let mut menu = UserMenu::new(me.name.clone(), me.email.clone());
     // No sign-in in a demo: work as someone else instead.
-    for other in team.iter().filter(|other| other.id != me.id && other.active).take(4) {
-        menu = menu.action(format!("Work as {}", other.name), format!("/as/{}", other.id));
+    for other in team
+        .iter()
+        .filter(|other| other.id != me.id && other.active)
+        .take(4)
+    {
+        menu = menu.action(
+            format!("Work as {}", other.name),
+            format!("/as/{}", other.id),
+        );
     }
     Shell::new(COMPANY)
         .context("Support")
@@ -317,15 +324,29 @@ mod tests {
 
     #[test]
     fn filters_read_what_they_can_and_write_the_rest() {
-        let filters = Filters::read(Some("mine"), Some("  card declined "), Some("chat"), Some("nope"));
+        let filters = Filters::read(
+            Some("mine"),
+            Some("  card declined "),
+            Some("chat"),
+            Some("nope"),
+        );
         assert_eq!(filters.view, View::Mine);
         assert_eq!(filters.query(), "view=mine&q=card+declined&channel=chat");
-        assert_eq!(filters.href("/inbox/7"), "/inbox/7?view=mine&q=card+declined&channel=chat");
+        assert_eq!(
+            filters.href("/inbox/7"),
+            "/inbox/7?view=mine&q=card+declined&channel=chat"
+        );
         let plain = Filters::read(Some("<script>"), None, Some("x"), None);
         assert_eq!(plain, Filters::default());
         assert_eq!(plain.href("/inbox"), "/inbox");
         let long = "é".repeat(500);
-        assert_eq!(Filters::read(None, Some(&long), None, None).q.chars().count(), 100);
+        assert_eq!(
+            Filters::read(None, Some(&long), None, None)
+                .q
+                .chars()
+                .count(),
+            100
+        );
         assert_eq!(encode("a&b=c/ü"), "a%26b%3Dc%2F%C3%BC");
     }
 
