@@ -168,7 +168,21 @@ for (const name of NAMES) {
       const y = onto ? target.y + 6 : target.y + target.height + 4;
       await page.mouse.move(target.x + target.width / 2, y, { steps: 10 });
       await until(page, () => !!document.querySelector("[data-ghost]"), null, "the copy that follows the pointer");
-      await sleep(80);
+      // Let go once the card is where it was taken: before `onto`, or at the end of
+      // `list`, or once the list it was taken to refuses it.
+      await until(
+        page,
+        ([id, onto, list]) => {
+          const target = onto ? document.querySelector(`#columns-item-${onto}`)?.closest("[data-slot=sortable-list]") : document.querySelector(`#columns-list-${list}`);
+          const item = document.querySelector(`#columns-item-${id}`);
+          if (!target || !item) return false;
+          if (target.hasAttribute("data-refusing")) return true;
+          if (item.closest("[data-slot=sortable-list]") !== target) return false;
+          return onto ? item.nextElementSibling?.id === `columns-item-${onto}` : !item.nextElementSibling;
+        },
+        [id, onto, list],
+        "the card over its place"
+      );
       await page.mouse.up();
     }
 
@@ -327,6 +341,25 @@ for (const name of NAMES) {
       await page.done();
     });
 
+    test("a refused move whose card the server has out of sight says so, and the keys stay in its list", async () => {
+      const page = await open();
+      // Someone moves card 7 to the end of the backlog, past what the page draws, and no page hears of it.
+      assert.equal(await (await post("/__test/move?item=7&to=backlog&quiet=1")).text(), "moved");
+      await handle(page, 7).focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Space");
+      await until(page, () => /Someone else moved it first/.test(document.querySelector("[data-slot=toast]")?.textContent || ""), null, "the toast");
+      await until(page, () => !document.getElementById("columns-item-7"), null, "the card gone from the page");
+      await said(page, /^Retry uploads on a weak signal is no longer shown here\.$/);
+      // Nothing said that the redraw made untrue: the last word is where it went.
+      assert.match(await status(page), /no longer shown here/);
+      // The keys are on the card that took its place in Ready, not lost to the page.
+      await until(page, () => document.activeElement?.matches("[data-slot=sortable-handle]") && !!document.activeElement.closest("#columns-list-ready"), null, "the keys in Ready");
+      assert.equal(await page.evaluate(() => document.activeElement.closest("[data-slot=sortable-item]").dataset.key), "8");
+      await page.done();
+    });
+
     test("the board is a member's until someone chooses: Done refuses a member's card, and takes the lead's", async () => {
       const page = await open();
       // No one has chosen yet: a member, who can't close a card.
@@ -442,10 +475,15 @@ for (const name of NAMES) {
       }
       await settled(page);
       await until(page, () => !document.querySelector("#board[aria-busy]"), null, "the redraw");
-      await sleep(400);
-      const server = await where(6, 7, 8, 9);
-      const order = Object.entries(server).filter(([, [list]]) => list === "ready").sort((a, b) => a[1][1] - b[1][1]).map(([id]) => id);
-      assert.deepEqual(await keysIn(page, "ready"), order);
+      // The page ends where the server has it: wait for that, not for a time.
+      const serverOrder = async () => {
+        const server = await where(6, 7, 8, 9);
+        return Object.entries(server).filter(([, [list]]) => list === "ready").sort((a, b) => a[1][1] - b[1][1]).map(([id]) => id);
+      };
+      for (const end = Date.now() + 12000; Date.now() < end; await sleep(60)) {
+        if (JSON.stringify(await keysIn(page, "ready")) === JSON.stringify(await serverOrder())) break;
+      }
+      assert.deepEqual(await keysIn(page, "ready"), await serverOrder());
       await page.done();
     });
 
@@ -538,8 +576,10 @@ for (const name of NAMES) {
       assert.ok(total > 11_000, `${total} cards in the backlog`);
       assert.equal(await page.locator("#columns-list-backlog [data-count]").textContent(), String(total));
       for (let i = 0; i < 40 && (await keysIn(page, "backlog")).length < 200; i++) {
+        const had = (await keysIn(page, "backlog")).length;
         await page.mouse.wheel(0, 3000);
-        await sleep(150);
+        // The next page joins once its button comes into sight: wait for the list to grow.
+        await page.waitForFunction((n) => document.querySelectorAll("#columns-list-backlog [data-slot=sortable-item]").length > n, had, { timeout: 4000 }).catch(() => {});
       }
       const keys = await keysIn(page, "backlog");
       assert.equal(keys.length, 200, "the cap");
