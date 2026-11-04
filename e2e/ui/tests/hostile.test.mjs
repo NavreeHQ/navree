@@ -264,6 +264,133 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    /** Waits until `check`, which may be async, holds, or `ms` pass. */
+    const eventually = async (check, ms = 5000) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((resolve) => setTimeout(resolve, 20))) if (await check()) return;
+    };
+
+    test(`invalidate fetches a region, a plain element with a source, and a feed again (${engine})`, async () => {
+      const name = key("inv");
+      const go = (t) => `<form id="f-${t}" data-ui-form method="post" action="/${name}-inv-${t}"><button id="go-${t}">go ${t}</button></form>`;
+      route(`/${name}`, doc(`<div id="rg" data-ui-region data-ui-src="/${name}-rg">r0</div><div id="pl" data-ui-src="/${name}-pl">p0</div><div id="fd" data-ui-src="/${name}-fd" data-ui-feed="into" data-ui-after="0"><ul id="into"></ul></div>${go("rg")}${go("pl")}${go("fd")}`));
+      route(`/${name}-rg`, () => doc(`<div id="rg" data-ui-region data-ui-src="/${name}-rg">r${hits(`/${name}-rg`).length}</div>`));
+      route(`/${name}-pl`, () => doc(`<div id="pl" data-ui-src="/${name}-pl">p${hits(`/${name}-pl`).length}</div>`));
+      f.routes.set(`/${name}-fd`, (req, res) => f.html(res, `<li id="row-${hits(`/${name}-fd`).length}">row</li>`, { "x-ui-cursor": String(hits(`/${name}-fd`).length) }));
+      for (const t of ["rg", "pl", "fd"]) f.routes.set(`/${name}-inv-${t}`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: t }] }));
+      const { context, page, errors } = await fresh(`/${name}`);
+      // A feed asks for what follows its cursor, in the query.
+      const fetched = (t) => f.log.filter((entry) => entry.path.split("?")[0] === `/${name}-${t}`).length;
+      for (const t of ["rg", "pl", "fd"]) {
+        const before = fetched(t);
+        await page.click(`#go-${t}`);
+        await until(() => fetched(t) > before, 4000);
+        assert.equal(fetched(t), before + 1, `${t} is fetched again, once`);
+      }
+      await eventually(async () => (await page.textContent("#rg")) === "r1" && (await page.textContent("#pl")) === "p1");
+      assert.equal(await page.textContent("#rg"), "r1", "the region is drawn again");
+      assert.equal(await page.textContent("#pl"), "p1", "the plain element is drawn again");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a form that says how long it waits gives up then, and says so (${engine})`, async () => {
+      const name = key("deadline");
+      route(`/${name}`, doc(`<form id="f" data-ui-form data-ui-deadline="700" method="post" action="/${name}-post"><button id="go">go</button></form>`));
+      // An answer that never comes.
+      const held = [];
+      f.routes.set(`/${name}-post`, (req, res) => held.push(res));
+      const { context, page, errors } = await fresh(`/${name}`);
+      await page.evaluate(() => {
+        window.__sent = [];
+        document.addEventListener("ui:sent", (e) => window.__sent.push({ ok: e.detail.ok, status: e.detail.status }));
+      });
+      const start = Date.now();
+      await page.click("#go");
+      await eventually(async () => (await page.evaluate(() => window.__sent.length)) > 0, 5000);
+      const waited = Date.now() - start;
+      assert.deepEqual(await page.evaluate(() => window.__sent), [{ ok: false, status: 0 }]);
+      assert.ok(waited >= 600 && waited < 4000, `gave up after ${waited} ms`);
+      await eventually(async () => (await toasts(page)).some((t) => /No connection/.test(t)));
+      assert.equal(await page.evaluate(() => Document.prototype.querySelector.call(document, "#f").hasAttribute("data-pending")), false, "nothing left pending");
+      for (const res of held) res.destroy();
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    /** A sortable as `Sortable` draws one, its move forms posting to `/${path}-move`, with fields named after what the module and the runtime call. */
+    const sortablePage = (path, clobber = "") => {
+      const words = JSON.stringify({ picked: "Picked up {item}.", moved: "Position {position} of {total} in {list}.", dropped: "Dropped {item}.", cancelled: "Back at position {position} of {total} in {list}.", returned: "{item} is back at position {position} of {total} in {list}.", failed: "That move wasn't saved. Try again.", offline: "No connection. That move may not have been saved." }).replaceAll('"', "&quot;");
+      const fields = ["requestSubmit", "elements", "isConnected", "action", "closest", "querySelector"].map((n) => `<input type="hidden" name="${n}">`).join("");
+      const item = (key, name) =>
+        `<li data-slot="sortable-item" id="s-item-${key}" data-key="${key}" data-name="${name}"><button type="button" data-slot="sortable-handle" id="h${key}" aria-label="Move ${name}">Move</button><div data-slot="sortable-body">${name}</div><form data-ui-move data-ui-form method="post" action="/${path}-move">${fields}<input type="hidden" name="item" value="${key}"><input type="hidden" name="from_list" value="a"><input type="hidden" name="to_list" value="a"><input type="hidden" name="before"><input type="hidden" name="after"><input type="hidden" name="position"></form></li>`;
+      const list = (key, title, items) =>
+        `<section data-slot="sortable-list" id="s-list-${key}" data-list="${key}"><div data-slot="sortable-list-header"><h2 data-slot="sortable-list-title">${title}</h2></div><ol data-slot="sortable-items" id="s-list-${key}-items">${items}</ol></section>`;
+      const sortable = `<div data-slot="sortable" id="s" data-layout="board" role="group" aria-label="Board" data-ui-sortable data-l="${words}"><div data-slot="sortable-status" id="s-status" aria-live="assertive"></div><div data-slot="sortable-lists">${list("a", "First", item("1", "One") + item("2", "Two"))}${list("b", "Second", item("3", "Three"))}</div></div>`;
+      return doc(`${clobber}${sortable}`).replace("</head>", `<script type="module" src="/_navree/ui/sortable.js"></script></head>`);
+    };
+    const field = (body, name) => new URLSearchParams(body).get(name);
+
+    test(`a sortable under clobbering names drops, posts its move, and says a server's failure apart from no connection (${engine})`, async () => {
+      const path = key("sortpost");
+      const clobber = `<img name="elementFromPoint" src="${GIF}" alt=""><img name="body" src="${GIF}" alt=""><img name="activeElement" src="${GIF}" alt=""><form name="getElementById"></form><img name="documentElement" src="${GIF}" alt="">`;
+      route(`/${path}`, sortablePage(path, clobber));
+      let answer = 200;
+      f.routes.set(`/${path}-move`, (req, res) => (answer === 200 ? f.ops(res, { ops: [] }) : (res.writeHead(answer, { "content-type": "text/plain" }), res.end("broken"))));
+      const { context, page: tab, errors } = await fresh(`/${path}`);
+      const read = () => tab.evaluate(() => {
+        const q = (s) => Document.prototype.querySelector.call(document, s);
+        return { status: q("#s-status").textContent, in: Element.prototype.closest.call(q("#s-item-1"), "[data-slot=sortable-list]").id };
+      });
+      // 1 to the second list, before 3: dropped, posted, taken.
+      await tab.focus("#h1");
+      await tab.keyboard.press("Space");
+      await tab.keyboard.press("ArrowRight");
+      await tab.keyboard.press("Space");
+      await until(() => hits(`/${path}-move`).length === 1);
+      const posted = hits(`/${path}-move`)[0];
+      assert.equal(posted.headers["x-navree-ui"], "1", "by the runtime");
+      for (const [name, value] of Object.entries({ item: "1", from_list: "a", to_list: "b", before: "3", after: "", position: "" })) {
+        assert.equal(field(posted.body, name), value, name);
+      }
+      await eventually(async () => !(await tab.evaluate(() => Document.prototype.querySelector.call(document, "#s-item-1").hasAttribute("data-pending"))));
+      assert.deepEqual(await read(), { status: "Dropped One.", in: "s-list-b" });
+      assert.deepEqual(await toasts(tab), []);
+      // Back to the first list, and the server fails: no region to ask, so it goes back and the toast says the server failed it.
+      answer = 503;
+      await tab.focus("#h1");
+      await tab.keyboard.press("Space");
+      await tab.keyboard.press("ArrowLeft");
+      await tab.keyboard.press("Space");
+      await until(() => hits(`/${path}-move`).length === 2);
+      await eventually(async () => (await toasts(tab)).length > 0);
+      assert.deepEqual(await toasts(tab), ["That move wasn't saved. Try again."]);
+      await eventually(async () => (await read()).in === "s-list-b");
+      assert.match((await read()).status, /^One is back at position 1 of 2 in Second\./);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a sortable silences only its own failed move: another form's failure on the page still says so (${engine})`, async () => {
+      const path = key("sortcancel");
+      route(`/${path}`, sortablePage(path).replace("</body>", `<form id="other" data-ui-form method="post" action="/${path}-other"><button id="go">go</button></form></body>`));
+      f.routes.set(`/${path}-move`, (req, res) => req.socket.destroy());
+      f.routes.set(`/${path}-other`, (req, res) => (res.writeHead(500, { "content-type": "text/plain" }), res.end("broken")));
+      const { context, page: tab, errors } = await fresh(`/${path}`);
+      // The move gets no answer: the sortable tells, once, in its own words.
+      await tab.focus("#h1");
+      await tab.keyboard.press("Space");
+      await tab.keyboard.press("ArrowDown");
+      await tab.keyboard.press("Space");
+      await eventually(async () => (await toasts(tab)).length > 0);
+      assert.deepEqual(await toasts(tab), ["No connection. That move may not have been saved."]);
+      // Another form that fails is the runtime's to tell.
+      await tab.click("#go");
+      await eventually(async () => (await toasts(tab)).length > 1);
+      assert.deepEqual((await toasts(tab)).sort(), ["No connection. That move may not have been saved.", "That didn't work. Try again."]);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     test(`a field named enctype keeps a form multipart (${engine})`, async () => {
       const path = key("enctype");
       route(`/${path}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${path}-post"><input name="enctype" value="v"><button id="go">go</button></form>`));
