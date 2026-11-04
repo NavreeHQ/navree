@@ -427,6 +427,23 @@ for (const name of NAMES) {
         assert.equal(await spark.getByRole("table", { name: /last 24 hours/ }).count(), 3, "the three tables are there for a screen reader");
         await spark.done();
       });
+
+      test("a state is as tall as the chart it stands in for, so nothing moves when the data comes", async () => {
+        for (const kase of ["empty", "loading", "failed"]) {
+          const page = await open(`/charts?case=${kase}`);
+          const state = page.locator(`#${kase} [data-slot=chart-state]`);
+          const want = Number(await state.getAttribute("data-h"));
+          const got = (await state.boundingBox()).height;
+          assert.ok(want > 100, `${kase}: a drawing's height (${want})`);
+          assert.ok(Math.abs(got - want) < 0.5, `${kase}: ${got} px against ${want}`);
+          await page.done();
+        }
+        // The line case draws the same chart: its drawing is the height the states keep.
+        const line = await open("/charts?case=line");
+        const drawn = (await line.locator("#line [data-slot=chart-frame]").boundingBox()).height;
+        assert.ok(Math.abs(drawn - 232) < 0.5, `the drawing is ${drawn} px`);
+        await line.done();
+      });
     });
 
     // ---- 3: keyboard only -------------------------------------------------------------------
@@ -742,6 +759,40 @@ for (const name of NAMES) {
         await until(async () => (await view(bars, "bar")).active[0] === "6", "the bars to follow the last move");
         await page.done();
         await bars.done();
+      });
+
+      test("a move and a leave in one frame leave the tooltip hidden", async () => {
+        const page = await open("/charts?case=line");
+        const box = await plotBox(page, "line");
+        const y = box.y + box.height / 2;
+        await page.evaluate(({ x, y }) => {
+          const el = document.elementFromPoint(x, y);
+          el.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
+          // Out of the chart, to the page, before the frame that would draw the move.
+          el.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, clientX: 1, clientY: 1, relatedTarget: document.body }));
+        }, { x: box.x + box.width / 2, y });
+        // Two frames: the one the move asked for, and one more.
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        const after = await view(page, "line");
+        assert.equal(after.open, false, "no tooltip after the pointer left");
+        assert.equal(after.cursor.visibility, "hidden", "no crosshair either");
+        await page.done();
+      });
+
+      test("a tooltip taller than its chart grows the chart while it shows, and no longer", async () => {
+        const page = await open("/charts?case=bar-horizontal-stacked");
+        const body = page.locator("#bar-horizontal-stacked [data-slot=chart-body]");
+        const natural = (await body.boundingBox()).height;
+        await body.focus();
+        await until(async () => (await view(page, "bar-horizontal-stacked")).open, "the tooltip");
+        const tip = await page.locator("#bar-horizontal-stacked [data-slot=chart-tip]").boundingBox();
+        const grown = (await body.boundingBox()).height;
+        assert.ok(grown >= Math.min(tip.height, natural) && grown >= natural, `${grown} holds the tooltip`);
+        await page.keyboard.press("Escape");
+        await until(async () => !(await view(page, "bar-horizontal-stacked")).open, "the tooltip to hide");
+        assert.equal(await body.evaluate((el) => el.style.minHeight), "", "the height it was given is taken back");
+        assert.ok(Math.abs((await body.boundingBox()).height - natural) < 1, "the chart is its own height again");
+        await page.done();
       });
 
       test("the tooltip never leaves the chart's box, anywhere the pointer goes, at 390 and 1440 px", async () => {
