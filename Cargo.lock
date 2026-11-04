@@ -9840,6 +9840,7 @@ name = "ui-docs"
 version = "1.0.0"
 dependencies = [
  "chrono",
+ "inbox-demo",
  "navree",
  "proc-macro2",
  "quote",
