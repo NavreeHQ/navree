@@ -21,6 +21,10 @@
 //! - [`ValidAsync`] then runs the DTO's [`AsyncRules`] ([`AsyncRule::unique`],
 //!   [`AsyncRule::exists`]) in the request's unit of work, as parameterised
 //!   `SELECT 1 ... LIMIT 1` queries on validated identifiers.
+//! - For input that is checked on a path of its own (Navree UI's forms),
+//!   [`check_async_rules`] runs the same database rules in the request's unit
+//!   of work, and [`AppMessages`] renders failures with the app's messages
+//!   and translator, as the extractors do.
 //! - [`rules`] has the rules' functions, and Navree's rules for `custom`:
 //!   [`confirmed`], [`rules::uuid`], [`rules::date_ymd`],
 //!   [`rules::one_of`]; [`rule_error`] gives your own rules table-driven
@@ -91,6 +95,7 @@
 // The derive names the crate `::navree_validation`, here too.
 extern crate self as navree_validation;
 
+mod app_messages;
 mod async_rules;
 mod context;
 mod country;
@@ -114,12 +119,15 @@ mod time;
 mod validate;
 mod value;
 
+pub use app_messages::AppMessages;
 pub use async_rules::{AsyncRule, AsyncRules, RuleError, UowCheck};
 pub use context::{InputContext, RegionSource};
 pub use country::{Country, InvalidCountry};
 pub use digits::{Folded, fold_digits};
 pub use errors::ValidationErrors;
-pub use extract::{Valid, ValidAsync, ValidInput, validate, validate_in, validate_value};
+pub use extract::{
+    Valid, ValidAsync, ValidInput, check_async_rules, validate, validate_in, validate_value,
+};
 pub use failure::rule_error;
 #[cfg(feature = "html")]
 pub use html::HtmlError;

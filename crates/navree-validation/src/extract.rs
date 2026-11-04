@@ -18,7 +18,9 @@ use serde_json::Value;
 
 use crate::context;
 use crate::failure::{self, Failure};
-use crate::{AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages};
+use crate::{
+    AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages, Violation, Violations,
+};
 
 /// Bodies of this many bytes or more are deserialized, sanitized and checked
 /// on Tokio's blocking pool, not on the async worker that reads the request:
@@ -564,35 +566,71 @@ impl RuleRequest {
 
     /// Runs `rules` in the unit of work; failures are a 400.
     async fn check(self, rules: Vec<AsyncRule>) -> Result<(), AppError> {
+        let violations = self.failures(rules).await?;
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(Invalid::body(failure::from_violations(violations))
+                .reject(self.ctx.as_ref())
+                .await)
+        }
+    }
+
+    /// Runs `rules` in the unit of work and returns the ones that failed, each as the
+    /// violation of its rule key at its field. An error when a rule can't run: a bad
+    /// identifier, no unit of work, a database error (all 500s).
+    async fn failures(&self, rules: Vec<AsyncRule>) -> Result<Violations, AppError> {
         // Bad identifiers fail even when no query is needed; null values pass.
         for rule in &rules {
             rule.check_identifiers().map_err(AppError::internal)?;
         }
         let rules: Vec<AsyncRule> = rules.into_iter().filter(|r| !r.is_null()).collect();
+        let mut violations = Violations::new();
         if rules.is_empty() {
-            return Ok(());
+            return Ok(violations);
         }
-        let uow = self.uow.ok_or_else(|| {
+        let uow = self.uow.as_ref().ok_or_else(|| {
             AppError::internal(
                 "ValidAsync needs the request's unit of work: add DatabaseModule to the app",
             )
         })?;
-        let mut failures = Vec::new();
         for rule in &rules {
             if !rule
-                .passes_for(&uow, &self.path_params)
+                .passes_for(uow, &self.path_params)
                 .await
                 .map_err(AppError::internal)?
             {
-                failures.push(Failure::keyed(rule.field(), rule.rule()));
+                violations.add(rule.field(), Violation::rule(rule.rule()));
             }
         }
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(Invalid::body(failures).reject(self.ctx.as_ref()).await)
-        }
+        Ok(violations)
     }
+}
+
+/// Runs a value's database rules ([`AsyncRules`]: `unique`, `exists`, a
+/// [`UowCheck`](crate::UowCheck)) in the request's unit of work, exactly as
+/// [`ValidAsync`] does after a value passes its rules: identifiers are checked first, a
+/// null value's rule passes without a query, and a rule that ignores a path parameter
+/// ([`AsyncRule::ignore_path_param`]) reads it from the route `parts` matched.
+///
+/// The rules that failed come back as [`Violations`] (the rule key, `unique` or
+/// `exists`, at the rule's field), for the caller to render with the app's messages
+/// ([`AppMessages`](crate::AppMessages)): Navree UI's forms show them under their
+/// fields. A rule that can't run is an error: a bad identifier, a request without a
+/// unit of work (the app needs `DatabaseModule`), a database error.
+///
+/// ```ignore
+/// let violations = check_async_rules(&parts, input.async_rules()).await?;
+/// if !violations.is_empty() {
+///     let errors = AppMessages::of(ctx).await.render_violations(&violations, "body");
+///     // ...
+/// }
+/// ```
+pub async fn check_async_rules(
+    parts: &Parts,
+    rules: Vec<AsyncRule>,
+) -> Result<Violations, AppError> {
+    RuleRequest::of(parts).failures(rules).await
 }
 
 /// Unrendered failures and what rendering them needs.
@@ -800,7 +838,7 @@ where
 }
 
 /// The app's [`MessageTranslator`], when `ctx` has one.
-async fn translator(ctx: Option<&AppContext>) -> Option<Arc<dyn MessageTranslator>> {
+pub(crate) async fn translator(ctx: Option<&AppContext>) -> Option<Arc<dyn MessageTranslator>> {
     match ctx {
         Some(ctx) => ctx.try_get::<dyn MessageTranslator>().await,
         None => None,

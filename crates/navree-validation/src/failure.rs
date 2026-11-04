@@ -155,21 +155,26 @@ fn decode(message: &str) -> Rule {
 /// The failures of a value's [`Violations`].
 pub(crate) fn from_violations(violations: Violations) -> Vec<Failure> {
     violations
-        .into_iter()
-        .map(|(path, violation)| Failure {
-            path,
-            rule: match violation.as_text() {
-                Some(text) => Rule::Text(text.to_owned()),
-                None => Rule::Keyed {
-                    key: violation.key().unwrap_or_default().to_owned(),
-                    params: violation
-                        .params()
-                        .map(|(name, value)| (name.to_owned(), value.to_owned()))
-                        .collect(),
-                },
-            },
-        })
+        .iter()
+        .map(|(path, violation)| of(path, violation))
         .collect()
+}
+
+/// The failure of one [`Violation`](crate::Violation) at `path`.
+pub(crate) fn of(path: &str, violation: &crate::Violation) -> Failure {
+    Failure {
+        path: path.to_owned(),
+        rule: match violation.as_text() {
+            Some(text) => Rule::Text(text.to_owned()),
+            None => Rule::Keyed {
+                key: violation.key().unwrap_or_default().to_owned(),
+                params: violation
+                    .params()
+                    .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                    .collect(),
+            },
+        },
+    }
 }
 
 /// The failure for a serde error `message` at `path`: a missing field is

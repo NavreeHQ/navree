@@ -144,6 +144,33 @@ impl Messages {
         self
     }
 
+    /// Sets the template of `key` (a rule, or `"<field>.<rule>"`) unless the table
+    /// has one already: an override, or a built-in template. For rule keys a module
+    /// brings its own words for (Navree UI's `form.number`), so that the app's
+    /// `validation.messages` still wins.
+    ///
+    /// ```
+    /// use navree_validation::Messages;
+    ///
+    /// let messages = Messages::default()
+    ///     .with_message("form.number", "Numbers only in :attribute")
+    ///     .with_default_message("form.number", ":attribute: enter a number.")
+    ///     .with_default_message("form.date", ":attribute: enter a date.");
+    /// assert_eq!(messages.render("age", "form.number", &[]), "Numbers only in age");
+    /// assert_eq!(messages.render("due", "form.date", &[]), "due: enter a date.");
+    /// ```
+    pub fn with_default_message(
+        mut self,
+        key: impl Into<String>,
+        template: impl Into<String>,
+    ) -> Self {
+        let key = key.into();
+        if !self.overrides.contains_key(&key) && default_template(&key).is_none() {
+            self.overrides.insert(key, template.into());
+        }
+        self
+    }
+
     /// Sets the display name of `field` (a dotted path such as `address.city`).
     pub fn with_attribute(mut self, field: impl Into<String>, name: impl Into<String>) -> Self {
         self.attributes.insert(field.into(), name.into());
