@@ -6413,6 +6413,42 @@
     "variants": [],
     "shared": []
   },
+  "ListState": {
+    "name": "ListState",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/moves.rs",
+    "summary": "One list as the server has it now, to check a `Move` against.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<I, K>",
+        "args": "key: impl Into<String>, title: impl Into<String>, items: I",
+        "doc": "The list `key`, called `title`, holding `items` in this order."
+      }
+    ],
+    "methods": [
+      {
+        "name": "limit",
+        "generics": "",
+        "args": "limit: impl Into<Option<u32>>",
+        "doc": "The most items it holds: a move from another list into a list this full is refused."
+      },
+      {
+        "name": "refuse",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Takes no item from another list, because of `reason`."
+      },
+      {
+        "name": "refuse_if",
+        "generics": "",
+        "args": "refused: bool, reason: impl Into<String>",
+        "doc": "Takes no item from another list when `refused` is true."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Marker": {
     "name": "Marker",
     "kind": "struct",
@@ -6846,6 +6882,12 @@
         "generics": "",
         "args": "flag: impl Into<Node>, text: impl Into<Node>",
         "doc": "A flag (or any small picture), then some text."
+      },
+      {
+        "name": "list",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = Meta>",
+        "doc": "Facts in a row that wraps: under a card's title, beside a record's name. Nothing at all when there are none."
       }
     ],
     "methods": [
@@ -6915,6 +6957,78 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Move": {
+    "name": "Move",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/moves.rs",
+    "summary": "One move of one item, as a `Sortable` posts it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "item: impl Into<String>, from_list: impl Into<String>, to_list: impl Into<String>",
+        "doc": "A move of `item` from `from_list` to `to_list`, at the end."
+      },
+      {
+        "name": "from_form",
+        "generics": "",
+        "args": "body: &[u8]",
+        "doc": "Reads a move from a urlencoded body. The first value of each field counts; `before`, `after` and `position` may be empty."
+      }
+    ],
+    "methods": [
+      {
+        "name": "before",
+        "generics": "",
+        "args": "item: impl Into<String>",
+        "doc": "Puts it before `item`."
+      },
+      {
+        "name": "after",
+        "generics": "",
+        "args": "item: impl Into<String>",
+        "doc": "Puts it after `item`."
+      },
+      {
+        "name": "at",
+        "generics": "",
+        "args": "position: u32",
+        "doc": "Puts it at `position`, 1 being first."
+      },
+      {
+        "name": "lists",
+        "generics": "",
+        "args": "",
+        "doc": "The lists the move touches, sorted and each once: the lists to lock, in the order to lock them in, so that two moves never wait for each other."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "lists: &[ListState]",
+        "doc": "Holds the move against `lists`, the lists as the server has them now, and says where the item lands, or why it can't move."
+      },
+      {
+        "name": "done",
+        "generics": "",
+        "args": "page: impl Into<LocalHref>",
+        "doc": "The answer to a move that was made. The runtime has moved the item already, so it gets no ops; with JavaScript off the browser goes back to `page`."
+      },
+      {
+        "name": "refused",
+        "generics": "",
+        "args": "page: impl Into<LocalHref>, why: impl Into<String>",
+        "doc": "The answer to a refused move: `409 Conflict` and a toast that says `why`. The runtime puts the item back where it was; with JavaScript off the browser goes back to `page`, which shows the toast. Add a morph of the lists when the refusal means the page is out of date."
+      },
+      {
+        "name": "place",
+        "generics": "<L: RankedLists + Sync>",
+        "args": "lists: &L",
+        "doc": "Holds the move against lists kept by rank, reading only what it needs, and says where the item goes, or why it can't. The checks are those of `check`: the item is where the browser saw it, its anchor is still in the list it goes to, and that list has room and takes items."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "MultiSelect": {
@@ -9741,6 +9855,220 @@
         "generics": "",
         "args": "error: SliderError, labels: &SliderLabels",
         "doc": "The error in words, with the grid's numbers in them."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SortItem": {
+    "name": "SortItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/mod.rs",
+    "summary": "One item of a list.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl Into<String>, name: impl Into<String>",
+        "doc": "An item: `key` is what a move posts and must be unique in the sortable, `name` is what it is called when it is announced and in its move form. With no `body`, the name is what shows."
+      }
+    ],
+    "methods": [
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Sets what the item shows: a card, a row, any nodes. Links in it still work: a press that doesn't move is a click."
+      },
+      {
+        "name": "locked",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Keeps it where it is, and says `reason` to someone who tries to move it. The server must refuse its moves too: this is only what the page shows."
+      },
+      {
+        "name": "position",
+        "generics": "",
+        "args": "position: usize",
+        "doc": "Its place in its whole list, 1 being first, when the page draws only some of the list (a filter): its move form starts at this number, which is what the server reads `Move::position` against. Without it, the place is counted among the items drawn, from `SortList::from`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SortLabels": {
+    "name": "SortLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/mod.rs",
+    "summary": "The words a sortable says and shows. `{item}`, `{list}`, `{position}`, `{total}`, `{limit}` and `{count}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "SortList": {
+    "name": "SortList",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/mod.rs",
+    "summary": "One list: a column of a board, or the only list of a checklist.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl Into<String>, title: impl Into<String>",
+        "doc": "A list called `title`; `key` is what a move into it posts."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: SortItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = SortItem>",
+        "doc": "Adds items, in order."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "total: usize",
+        "doc": "How many items the list holds when not all of them are drawn: a filter shows some. The count beside the title, and the limit, go by this."
+      },
+      {
+        "name": "from",
+        "generics": "",
+        "args": "start: usize",
+        "doc": "Says the items drawn start at this place in the list, 0 being first: a page after the first. Their move forms count positions from there."
+      },
+      {
+        "name": "more",
+        "generics": "<K, V>",
+        "args": "action: impl Into<Href>, fields: impl IntoIterator<Item =(K, V)>",
+        "doc": "Ends the list with a button that loads its next items: a `GET` of `action` with `fields`, such as a cursor and a count. The `sortable` module presses it as it scrolls into sight; the answer is `Sortable::page`. With JavaScript off it is a plain form: answer it with the page, the list showing more."
+      },
+      {
+        "name": "end_note",
+        "generics": "",
+        "args": "note: impl Into<String>",
+        "doc": "Ends the list with a note in place of more items: the page holds as many as it will (\"Showing the first 200 of 12,034\")."
+      },
+      {
+        "name": "limit",
+        "generics": "",
+        "args": "limit: u32",
+        "doc": "The most items the list holds: shown beside its title, and a drop into it is refused in the browser when it is full. Hold the server to it too, with `ListState::limit`."
+      },
+      {
+        "name": "refuse",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Takes no item from another list, and says `reason` when one is brought to it: \"Only a lead can move cards to Done.\" Items already in it still move within it. Hold the server to it too, with `ListState::refuse`."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds controls to the list's header, after its title and count."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl IntoNodes",
+        "doc": "Adds something under the items: a form to add one, a link to the rest."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "What an empty list says."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title and the count for assistive technology only: for a list whose name the page already shows."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Sortable": {
+    "name": "Sortable",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/mod.rs",
+    "summary": "Lists whose items move, within a list and between lists.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "Lists with the id `id`, named `label` for assistive technology. The lists' and items' ids are made from it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "list",
+        "generics": "",
+        "args": "list: SortList",
+        "doc": "Adds a list."
+      },
+      {
+        "name": "lists",
+        "generics": "",
+        "args": "lists: impl IntoIterator<Item = SortList>",
+        "doc": "Adds lists, in order."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "action: impl Into<Href>",
+        "doc": "Makes the items move, each move posted to `action` as a `Move`. Without it nothing moves."
+      },
+      {
+        "name": "board",
+        "generics": "",
+        "args": "",
+        "doc": "Sets the lists side by side, as a board."
+      },
+      {
+        "name": "layout",
+        "generics": "",
+        "args": "layout: SortLayout",
+        "doc": "Sets how the lists sit."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: SortLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's token in every move form, for a server whose session checks a field when JavaScript is off."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Sets the level of the lists' titles: `h2` by default, `h3` in a sheet whose title is the `h2`. Clamped to 2 through 6."
+      },
+      {
+        "name": "deadline_ms",
+        "generics": "",
+        "args": "ms: u32",
+        "doc": "How long a move may wait for the server's answer before the item is put back, in milliseconds: 15 s by default, at least 1 s."
+      },
+      {
+        "name": "page",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "The next items of the list `key`, as ops: they join the end of that list in the page, and its \"Load more\" button gives way to the list's own: another one for the page after, its note, or nothing when the list is all there. Build the sortable as for the whole page, with that list holding only the new items, `from` where they start."
       }
     ],
     "variants": [],

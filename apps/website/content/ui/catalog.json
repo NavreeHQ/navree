@@ -131,7 +131,8 @@
         "table",
         "data-table",
         "lazy-list",
-        "stat"
+        "stat",
+        "sortable"
       ]
     }
   ],
@@ -1558,6 +1559,30 @@
       ]
     },
     {
+      "id": "sortable",
+      "name": "Sortable",
+      "url": "/docs/components/sortable/",
+      "summary": "Lists whose items move, within a list and between lists.",
+      "group": "data",
+      "types": [
+        "Sortable",
+        "SortList",
+        "SortItem",
+        "SortLabels",
+        "Move",
+        "ListState"
+      ],
+      "thumb": "sortable/thumb",
+      "anatomy": "sortable/default",
+      "examples": [
+        "sortable/thumb",
+        "sortable/default",
+        "sortable/board",
+        "sortable/limits",
+        "sortable/long"
+      ]
+    },
+    {
       "id": "foundations",
       "name": "Foundations",
       "url": "/docs/ui/foundations/",
@@ -1748,7 +1773,11 @@
         "build-anything/inbox-panes",
         "build-anything/inbox-thread",
         "build-anything/inbox-phone",
-        "build-anything/inbox-palette"
+        "build-anything/inbox-palette",
+        "build-anything/board-columns",
+        "build-anything/board-card",
+        "build-anything/board-drag",
+        "build-anything/board-sync"
       ]
     }
   ],
@@ -3211,8 +3240,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3305,8 +3334,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3412,8 +3441,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3519,8 +3548,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3633,8 +3662,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3791,8 +3820,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [
         "Clearable",
@@ -3819,8 +3848,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -3913,8 +3942,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4033,8 +4062,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4140,8 +4169,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4253,8 +4282,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [
         "Invalid",
@@ -4279,8 +4308,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4439,8 +4468,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4612,8 +4641,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4785,8 +4814,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [
         "At most three",
@@ -4811,8 +4840,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -4930,8 +4959,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -5087,7 +5116,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5182,7 +5211,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5290,7 +5319,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5385,7 +5414,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5480,7 +5509,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5575,7 +5604,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5742,7 +5771,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -5844,7 +5873,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "de",
@@ -5869,7 +5898,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "dates-9d5bc15bcced.js"
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "Read only",
@@ -5893,8 +5922,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6009,8 +6038,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6144,8 +6173,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6286,8 +6315,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "Invalid",
@@ -6312,8 +6341,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6428,8 +6457,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "de",
@@ -6454,8 +6483,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6583,8 +6612,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6746,8 +6775,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -6909,8 +6938,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7072,8 +7101,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7248,8 +7277,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7411,8 +7440,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7580,8 +7609,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7669,8 +7698,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7771,8 +7800,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "en",
@@ -7797,8 +7826,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -7899,8 +7928,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [
         "Invalid",
@@ -7925,8 +7954,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "dates-9d5bc15bcced.js"
+        "overlay-6bca78094f80.js",
+        "dates-a1e5c75f8c65.js"
       ],
       "captions": [],
       "slots": [
@@ -8020,8 +8049,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [],
       "slots": [
@@ -8105,8 +8134,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [],
       "slots": [
@@ -8209,8 +8238,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [],
       "slots": [
@@ -8307,8 +8336,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [
         "No country yet",
@@ -8334,8 +8363,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [],
       "slots": [
@@ -8419,8 +8448,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "phone-5ca8cf051dbe.js"
+        "overlay-6bca78094f80.js",
+        "phone-60d54e29c4fa.js"
       ],
       "captions": [],
       "slots": [
@@ -12348,8 +12377,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14651,7 +14680,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14692,7 +14721,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14759,7 +14788,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [
         "Top",
@@ -14785,7 +14814,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14833,7 +14862,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14914,7 +14943,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -14955,7 +14984,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -15846,7 +15875,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "split-a7d0a72f1705.js"
+        "split-cf0ec95ae061.js"
       ],
       "captions": [],
       "slots": [
@@ -15988,7 +16017,7 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "split-a7d0a72f1705.js"
+        "split-cf0ec95ae061.js"
       ],
       "captions": [],
       "slots": [
@@ -16249,7 +16278,7 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "split-a7d0a72f1705.js"
+        "split-cf0ec95ae061.js"
       ],
       "captions": [],
       "slots": [
@@ -16384,7 +16413,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "split-a7d0a72f1705.js"
+        "split-cf0ec95ae061.js"
       ],
       "captions": [],
       "slots": [
@@ -16493,7 +16522,7 @@
       "live": false,
       "width": 390,
       "scripts": [
-        "split-a7d0a72f1705.js"
+        "split-cf0ec95ae061.js"
       ],
       "captions": [],
       "slots": [
@@ -16635,7 +16664,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "lazy-49a38fdb3228.js"
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -16715,7 +16744,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "lazy-49a38fdb3228.js"
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -16795,7 +16824,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "lazy-49a38fdb3228.js"
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -16882,8 +16911,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -18126,8 +18155,8 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -20294,7 +20323,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20343,7 +20372,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20430,7 +20459,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20542,7 +20571,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20649,7 +20678,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20769,7 +20798,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -20837,7 +20866,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js"
       ],
       "captions": [],
@@ -21088,7 +21117,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -22154,7 +22183,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22221,7 +22250,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22288,7 +22317,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22355,7 +22384,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22453,7 +22482,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22551,7 +22580,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22618,7 +22647,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [
         "Disabled",
@@ -22643,7 +22672,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "slider-a1713dabf875.js"
+        "slider-9da1f9c89e8d.js"
       ],
       "captions": [],
       "slots": [
@@ -22767,7 +22796,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -22889,7 +22918,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23017,7 +23046,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23145,7 +23174,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23273,7 +23302,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23367,7 +23396,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23503,7 +23532,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "tree-70b17e2f570a.js"
+        "tree-c2f62f33312d.js"
       ],
       "captions": [],
       "slots": [
@@ -23625,9 +23654,9 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js",
-        "toolbar-8e359e3417d8.js"
+        "toolbar-edc3b0e09da2.js"
       ],
       "captions": [],
       "slots": [
@@ -23729,9 +23758,9 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js",
-        "toolbar-8e359e3417d8.js"
+        "toolbar-edc3b0e09da2.js"
       ],
       "captions": [],
       "slots": [
@@ -23903,9 +23932,9 @@
       "live": false,
       "width": 390,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js",
-        "toolbar-8e359e3417d8.js"
+        "toolbar-edc3b0e09da2.js"
       ],
       "captions": [],
       "slots": [
@@ -24007,7 +24036,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "toolbar-8e359e3417d8.js"
+        "toolbar-edc3b0e09da2.js"
       ],
       "captions": [],
       "slots": [
@@ -24056,9 +24085,9 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "menus-dffd26363290.js",
-        "toolbar-8e359e3417d8.js"
+        "toolbar-edc3b0e09da2.js"
       ],
       "captions": [],
       "slots": [
@@ -24344,7 +24373,7 @@
       "live": false,
       "width": 720,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -24975,7 +25004,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -25658,7 +25687,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -26444,7 +26473,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -27127,7 +27156,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -27758,7 +27787,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [
@@ -27911,6 +27940,858 @@
                   "tag": "svg",
                   "count": 1,
                   "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable/thumb",
+      "component": "sortable",
+      "slug": "thumb",
+      "title": "A board",
+      "kind": "single",
+      "code": "Sortable::new(\"thumb\", \"Release board\")\n    .board()\n    .post(\"/moves\")\n    .list(\n        SortList::new(\"todo\", \"To do\")\n            .item(SortItem::new(\"1\", \"Write the changelog\"))\n            .item(SortItem::new(\"2\", \"Tag the release\")),\n    )\n    .list(SortList::new(\"doing\", \"Doing\").item(SortItem::new(\"3\", \"Run the load test\")))",
+      "src": "/ui-preview/sortable/thumb.html",
+      "height": 260,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-lists",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-list",
+                  "tag": "section",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "sortable-list-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-list-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-count",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-items",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "sortable-handle",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sortable-move",
+                              "tag": "details",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-move-summary",
+                                  "tag": "summary",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "native-select",
+                                      "tag": "select",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-empty",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable/default",
+      "component": "sortable",
+      "slug": "default",
+      "title": "A list",
+      "kind": "single",
+      "code": "Sortable::new(\"setlist\", \"Set list\")\n    .post(\"/setlist/moves\")\n    .list(\n        SortList::new(\"songs\", \"Songs\")\n            .hide_title()\n            .item(SortItem::new(\"1\", \"Opening, slow build\"))\n            .item(SortItem::new(\"2\", \"The single\"))\n            .item(SortItem::new(\"3\", \"Acoustic, two voices\"))\n            .item(SortItem::new(\"4\", \"Encore\")),\n    )",
+      "src": "/ui-preview/sortable/default.html",
+      "height": 260,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-f11bb7046e31.js",
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-lists",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-list",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sortable-list-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-list-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-count",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-items",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-item",
+                          "tag": "li",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "sortable-handle",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sortable-move",
+                              "tag": "details",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-move-summary",
+                                  "tag": "summary",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "native-select",
+                                      "tag": "select",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-empty",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable/board",
+      "component": "sortable",
+      "slug": "board",
+      "title": "A board of columns",
+      "kind": "single",
+      "code": "let card = |key: &str, title: &str, label: Badge| {\n    SortItem::new(key, title).body(Stack::gap(2).children((label, Text::new(title.to_owned()))))\n};\nSortable::new(\"launch\", \"Launch board\")\n    .board()\n    .post(\"/launch/moves\")\n    .list(\n        SortList::new(\"ready\", \"Ready\")\n            .item(card(\n                \"11\",\n                \"Pick the launch date\",\n                Badge::new(\"Plan\").tone(Tone::Info),\n            ))\n            .item(card(\n                \"12\",\n                \"Draft the press note\",\n                Badge::new(\"Docs\").tone(Tone::named(\"cyan\")),\n            )),\n    )\n    .list(SortList::new(\"doing\", \"In progress\").limit(3).item(card(\n        \"13\",\n        \"Fix the sign-up email\",\n        Badge::new(\"Bug\").tone(Tone::Danger),\n    )))\n    .list(SortList::new(\"done\", \"Done\").empty(\"Nothing done yet\"))",
+      "src": "/ui-preview/sortable/board.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-f11bb7046e31.js",
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-lists",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-list",
+                  "tag": "section",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "sortable-list-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-list-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-count",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-items",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "sortable-handle",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "stack",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "badge",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "text",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-move",
+                              "tag": "details",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-move-summary",
+                                  "tag": "summary",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "native-select",
+                                      "tag": "select",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-empty",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable/limits",
+      "component": "sortable",
+      "slug": "limits",
+      "title": "Limits and refusals",
+      "kind": "single",
+      "code": "Sortable::new(\"review\", \"Review board\")\n    .board()\n    .post(\"/review/moves\")\n    .list(\n        SortList::new(\"doing\", \"In progress\")\n            .item(SortItem::new(\"21\", \"Speed up the search page\"))\n            .item(SortItem::new(\"22\", \"Invoice run\").locked(\"A payment is being taken.\")),\n    )\n    .list(\n        SortList::new(\"review\", \"Review\")\n            .limit(1)\n            .item(SortItem::new(\"23\", \"New pricing table\")),\n    )\n    .list(SortList::new(\"shipped\", \"Shipped\").refuse(\"Only a lead can ship.\"))",
+      "src": "/ui-preview/sortable/limits.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-f11bb7046e31.js",
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-lists",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-list",
+                  "tag": "section",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "sortable-list-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-list-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-count",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-items",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "sortable-handle",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sortable-move",
+                              "tag": "details",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-move-summary",
+                                  "tag": "summary",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "native-select",
+                                      "tag": "select",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-empty",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable/long",
+      "component": "sortable",
+      "slug": "long",
+      "title": "A long list, a page at a time",
+      "kind": "single",
+      "code": "let items = (1..=3).map(|n| SortItem::new(n.to_string(), format!(\"Ticket {n}\")));\nSortable::new(\"queue\", \"Support queue\")\n    .post(\"/queue/moves\")\n    .list(\n        SortList::new(\"open\", \"Open\")\n            .total(4_210)\n            .items(items)\n            .more(\"/queue/open\", [(\"after\", \"196608.3\"), (\"show\", \"6\")]),\n    )",
+      "src": "/ui-preview/sortable/long.html",
+      "height": 320,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-f11bb7046e31.js",
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-lists",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-list",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sortable-list-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-list-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-count",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-items",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-item",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "sortable-handle",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "sortable-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sortable-move",
+                              "tag": "details",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-move-summary",
+                                  "tag": "summary",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-form",
+                                  "tag": "form",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "native-select",
+                                      "tag": "select",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-move-field",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-empty",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "sortable-more",
+                      "tag": "form",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -28277,7 +29158,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -28318,7 +29199,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -28405,7 +29286,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -28453,7 +29334,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -28507,7 +29388,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-4302904cbc7a.js"
+        "core-f11bb7046e31.js"
       ],
       "captions": [],
       "slots": [
@@ -28842,7 +29723,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js"
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -29000,8 +29881,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -29478,8 +30359,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -29956,8 +30837,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -30515,8 +31396,8 @@
       "live": false,
       "width": 1280,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -36103,8 +36984,8 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -37859,8 +38740,8 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -39149,8 +40030,8 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js"
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js"
       ],
       "captions": [],
       "slots": [
@@ -39779,8 +40660,8 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
         "table-89cd45739353.js"
       ],
       "captions": [],
@@ -40850,14 +41731,14 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js",
-        "dates-9d5bc15bcced.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js",
+        "dates-a1e5c75f8c65.js",
         "menus-dffd26363290.js",
-        "split-a7d0a72f1705.js",
-        "keys-5d46c32edc7d.js",
-        "lazy-49a38fdb3228.js"
+        "split-cf0ec95ae061.js",
+        "keys-49b3218a2c25.js",
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -42790,14 +43671,14 @@
       "live": false,
       "width": 1440,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js",
-        "dates-9d5bc15bcced.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js",
+        "dates-a1e5c75f8c65.js",
         "menus-dffd26363290.js",
-        "split-a7d0a72f1705.js",
-        "keys-5d46c32edc7d.js",
-        "lazy-49a38fdb3228.js"
+        "split-cf0ec95ae061.js",
+        "keys-49b3218a2c25.js",
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -44360,14 +45241,14 @@
       "live": false,
       "width": 390,
       "scripts": [
-        "sidebar-23f145d560bb.js",
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js",
-        "dates-9d5bc15bcced.js",
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js",
+        "dates-a1e5c75f8c65.js",
         "menus-dffd26363290.js",
-        "split-a7d0a72f1705.js",
-        "keys-5d46c32edc7d.js",
-        "lazy-49a38fdb3228.js"
+        "split-cf0ec95ae061.js",
+        "keys-49b3218a2c25.js",
+        "lazy-ba1f5afc8f4f.js"
       ],
       "captions": [],
       "slots": [
@@ -46300,8 +47181,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-7eb84f4b3168.js",
-        "select-12f1764e414a.js"
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js"
       ],
       "captions": [],
       "slots": [
@@ -46474,6 +47355,1352 @@
               "tag": "div",
               "count": 1,
               "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/board-columns",
+      "component": "build-anything",
+      "slug": "board-columns",
+      "title": "A board of five columns",
+      "kind": "single",
+      "code": "/// One column as the board draws it: its cards, its count and limit, and what\n/// ends it: a button for the next cards, or a note at the cap.\npub fn column(\n    page: &ColumnPage,\n    people: &[Person],\n    viewer: &Person,\n    filters: &Filters,\n    today: NaiveDate,\n) -> SortList {\n    let column = page.column;\n    let shown = page.start + page.cards.len();\n    let mut list = SortList::new(column.key(), column.title())\n        .items(page.cards.iter().enumerate().map(|(at, card)| {\n            let item = SortItem::new(card.id.to_string(), card.title.clone())\n                .body(card_face(card, people, today));\n            // Under a filter, a card's move form counts in the whole column.\n            match page.places.get(at) {\n                Some(place) => item.position(*place),\n                None => item,\n            }\n        }))\n        .total(usize::try_from(page.total).unwrap_or(usize::MAX))\n        .from(page.start)\n        .empty(if filters.is_empty() {\n            \"No cards\"\n        } else {\n            \"No cards match\"\n        });\n    if let Some(cursor) = &page.next {\n        list = if shown >= CAP {\n            list.end_note(format!(\n                \"Showing the first {CAP}. Filter the board, or press Ctrl K, to find the rest.\"\n            ))\n        } else {\n            let mut fields = vec![\n                (\"after\".to_owned(), cursor.clone()),\n                (\"show\".to_owned(), (shown + PAGE).to_string()),\n            ];\n            fields.extend(filters.pairs());\n            list.more(format!(\"/columns/{}\", column.key()), fields)\n        };\n    }\n    if let Some(limit) = column.limit() {\n        list = list.limit(limit);\n    }\n    if column == Column::Done && !viewer.is_lead() {\n        list = list.refuse(\"Only a lead can move cards to Done.\");\n    }\n    list\n}\n\n/// One card as the board shows it: its labels, its title (which opens the drawer),\n/// who has it, when it is due, its checklist and its comments.\npub fn card_face(card: &Card, people: &[Person], today: NaiveDate) -> Node {\n    let labels = labels_of(&card.labels);\n    let mut facts = Vec::new();\n    if let Some(who) = person(people, card.assignee) {\n        let first = who.name.split(' ').next().unwrap_or_default().to_owned();\n        facts.push(Meta::new(first).start(Avatar::placeholder(who.name.clone()).size(Size::Sm)));\n    }\n    if card.checks_total > 0 {\n        facts.push(Meta::icon(\n            icons::LIST_CHECKS,\n            format!(\"{}/{}\", card.checks_done, card.checks_total),\n        ));\n    }\n    if card.comments > 0 {\n        facts.push(Meta::icon(icons::MESSAGE_SQUARE, card.comments.to_string()));\n    }\n    Stack::gap(2)\n        .children((\n            (!labels.is_empty() || card.due.is_some()).then(|| {\n                Row::gap(1).wrap().children((\n                    labels\n                        .iter()\n                        .map(|label| Badge::new(label.title()).tone(label.tone()).dot())\n                        .collect::<Vec<_>>(),\n                    card.due.map(|due| {\n                        let (text, tone) = due_label(due, today);\n                        Badge::new(text).variant(BadgeVariant::Outline).tone(tone)\n                    }),\n                ))\n            }),\n            open_card(card),\n            Meta::list(facts),\n        ))\n        .into()\n}",
+      "src": "/ui-preview/build-anything/board-columns.html",
+      "height": 900,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1440,
+      "scripts": [
+        "sidebar-b1d88beece46.js",
+        "overlay-6bca78094f80.js",
+        "select-2b8575f514e5.js",
+        "menus-dffd26363290.js",
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "kbd",
+                                  "tag": "kbd",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "dropdown-menu",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-header",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "menu-item",
+                                  "tag": "button",
+                                  "count": 8,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "menu-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "grid",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "combobox",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "combobox-control",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "combobox-input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "combobox-clear",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "combobox-toggle",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "select-native",
+                                  "tag": "select",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "select-popup",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "select-list",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "select-footer",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "select-note",
+                                          "tag": "p",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "select-status",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "native-select",
+                              "tag": "select",
+                              "count": 2,
+                              "children": []
+                            },
+                            {
+                              "slot": "row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "region",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "live-state",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "live-dot",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "sortable",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-help",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-status",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-lists",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sortable-list",
+                                          "tag": "section",
+                                          "count": 5,
+                                          "children": [
+                                            {
+                                              "slot": "sortable-list-header",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-list-title",
+                                                  "tag": "h2",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "sortable-count",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "sortable-items",
+                                              "tag": "ol",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-item",
+                                                  "tag": "li",
+                                                  "count": 20,
+                                                  "children": [
+                                                    {
+                                                      "slot": "sortable-handle",
+                                                      "tag": "button",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "icon",
+                                                          "tag": "svg",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "sortable-body",
+                                                      "tag": "div",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "stack",
+                                                          "tag": "div",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "row",
+                                                              "tag": "div",
+                                                              "count": 1,
+                                                              "children": [
+                                                                {
+                                                                  "slot": "badge",
+                                                                  "tag": "span",
+                                                                  "count": 1,
+                                                                  "children": [
+                                                                    {
+                                                                      "slot": "badge-dot",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": []
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "slot": "button",
+                                                              "tag": "button",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "meta",
+                                                              "tag": "ul",
+                                                              "count": 1,
+                                                              "children": [
+                                                                {
+                                                                  "slot": "meta-item",
+                                                                  "tag": "li",
+                                                                  "count": 2,
+                                                                  "children": [
+                                                                    {
+                                                                      "slot": "meta-start",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": [
+                                                                        {
+                                                                          "slot": "avatar",
+                                                                          "tag": "span",
+                                                                          "count": 1,
+                                                                          "children": [
+                                                                            {
+                                                                              "slot": "icon",
+                                                                              "tag": "svg",
+                                                                              "count": 1,
+                                                                              "children": []
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "slot": "meta-text",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": []
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "sortable-move",
+                                                      "tag": "details",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "sortable-move-summary",
+                                                          "tag": "summary",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "sortable-form",
+                                                          "tag": "form",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "sortable-move-field",
+                                                              "tag": "label",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "native-select",
+                                                              "tag": "select",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "sortable-move-field",
+                                                              "tag": "label",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "input",
+                                                              "tag": "input",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "button",
+                                                              "tag": "button",
+                                                              "count": 1,
+                                                              "children": []
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "sortable-empty",
+                                              "tag": "p",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "sortable-more",
+                                              "tag": "form",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "button",
+                                                  "tag": "button",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sheet",
+                      "tag": "dialog",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "dialog-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "dialog-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "dialog-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "dialog-close",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "command-dialog",
+                      "tag": "dialog",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "command",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "command-input-wrap",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "command-input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "command-list",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "command-recent",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "command-remote",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "select-note",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "select-status",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "build-anything/board-card",
+      "component": "build-anything",
+      "slug": "board-card",
+      "title": "A card: its checklist, comments and history",
+      "kind": "single",
+      "code": "/// What the drawer and the card's page hold: the work on the left, the facts and\n/// the history on the right; one column on a phone. `form` is the comment form as\n/// it came back with an error, if it did.\npub fn card_detail(\n    data: &CardData,\n    viewer: &Person,\n    today: NaiveDate,\n    form: Option<FormView<CommentForm>>,\n) -> Node {\n    Grid::cols(3)\n        .gap(6)\n        .children((\n            Stack::gap(6).span(2).children((\n                Stack::gap(2).children((\n                    Heading::h3(\"Description\"),\n                    Text::new(data.card.description.clone()),\n                )),\n                checklist(data),\n                comments(data, form),\n                history(data),\n            )),\n            Stack::gap(4).children((facts(data, today), move_form(&data.card, viewer))),\n        ))\n        .into()\n}\n\n/// The checklist: a bar for how much is done, and its lines, which tick and move.\npub fn checklist(data: &CardData) -> Node {\n    let done = data.checks.iter().filter(|check| check.done == 1).count();\n    let total = data.checks.len();\n    let id = data.card.id;\n    let lines = data.checks.iter().map(|check| {\n        SortItem::new(check.id.to_string(), check.text.clone()).body(\n            el(\"form\")\n                .attr(\"method\", \"post\")\n                .attr(\"action\", format!(\"/checks/{}/done\", check.id))\n                .attr(\"id\", format!(\"check-{}\", check.id))\n                .flag(\"data-ui-form\", true)\n                .uses(Uses::CORE)\n                .child(\n                    Row::gap(2).align(Align::Center).children((\n                        Checkbox::new(\"done\")\n                            .checked(check.done == 1)\n                            .id(format!(\"check-{}-box\", check.id))\n                            .on(Trigger::Change, Cmd::submit(format!(\"check-{}\", check.id))),\n                        el(\"label\")\n                            .attr(\"for\", format!(\"check-{}-box\", check.id))\n                            .child(check.text.clone()),\n                        el(\"noscript\").child(Button::ghost(\"Save\").size(Size::Xs).submit()),\n                    )),\n                ),\n        )\n    });\n    Stack::gap(3)\n        .id(\"checklist\")\n        .children((\n            Row::gap(2).align(Align::Center).children((\n                Heading::h3(\"Checklist\"),\n                (total > 0).then(|| Text::muted(format!(\"{done} of {total} done\"))),\n            )),\n            (total > 0).then(|| {\n                Progress::new(\n                    u32::try_from(done).unwrap_or(0),\n                    u32::try_from(total).unwrap_or(1),\n                    \"Checklist done\",\n                )\n            }),\n            Sortable::new(format!(\"checks-{id}\"), \"Checklist\")\n                .post(format!(\"/cards/{id}/checks/moves\"))\n                .heading(4)\n                .list(\n                    SortList::new(\"checks\", \"Checklist\")\n                        .hide_title()\n                        .empty(\"No checklist yet\")\n                        .items(lines),\n                ),\n        ))\n        .into()\n}",
+      "src": "/ui-preview/build-anything/board-card.html",
+      "height": 900,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "grid",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "heading",
+                                  "tag": "h3",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "text",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "progress",
+                              "tag": "progress",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sortable",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "sortable-help",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-status",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sortable-lists",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-list",
+                                      "tag": "section",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sortable-list-header",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "sortable-list-title",
+                                              "tag": "h4",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "sortable-count",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "sortable-items",
+                                          "tag": "ol",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "sortable-item",
+                                              "tag": "li",
+                                              "count": 3,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-handle",
+                                                  "tag": "button",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "icon",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "sortable-body",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "row",
+                                                      "tag": "div",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "checkbox",
+                                                          "tag": "input",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "button",
+                                                          "tag": "button",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "sortable-move",
+                                                  "tag": "details",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "sortable-move-summary",
+                                                      "tag": "summary",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "sortable-form",
+                                                      "tag": "form",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "sortable-move-field",
+                                                          "tag": "label",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "native-select",
+                                                          "tag": "select",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "sortable-move-field",
+                                                          "tag": "label",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "input",
+                                                          "tag": "input",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "button",
+                                                          "tag": "button",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "sortable-empty",
+                                          "tag": "p",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-anything/board-drag",
+      "component": "build-anything",
+      "slug": "board-drag",
+      "title": "A card part way through a move",
+      "kind": "single",
+      "code": "/// The columns. A move posts to `/board/moves`, where the server checks it\n/// against the board as it is then and gives the card a rank between its new\n/// neighbours'.\npub fn columns(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Sortable {\n    let mut pairs = filters.pairs();\n    pairs.extend(shown_pairs(data));\n    Sortable::new(\"columns\", format!(\"{PROJECT} board\"))\n        .board()\n        .post(moves_action(&pairs))\n        .lists(\n            data.columns\n                .iter()\n                .map(|page| column(page, &data.people, viewer, filters, today)),\n        )\n}",
+      "src": "/ui-preview/build-anything/board-drag.html",
+      "height": 900,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1440,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
+      "id": "build-anything/board-sync",
+      "component": "build-anything",
+      "slug": "board-sync",
+      "title": "Two people on one board",
+      "kind": "single",
+      "code": "/// The board in its region: redrawn by the filters, and fetched again whenever the\n/// event stream says the board changed, so other people's moves slide in. Its\n/// source asks for as many cards in each column as the page holds.\npub fn board(data: &BoardData, viewer: &Person, filters: &Filters, today: NaiveDate) -> Region {\n    let mut pairs = filters.pairs();\n    pairs.extend(shown_pairs(data));\n    Region::new(REGION)\n        .src(format!(\"/fragments/board{}\", query(&pairs)))\n        .live_from(\"/events\")\n        .children(Stack::gap(2).children((live_state(), columns(data, viewer, filters, today))))\n}",
+      "src": "/ui-preview/build-anything/board-sync.html",
+      "height": 520,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "sortable-93a3a8e67f6a.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "card-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "card-title",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "card-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sortable",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-help",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-status",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sortable-lists",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sortable-list",
+                              "tag": "section",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "sortable-list-header",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-list-title",
+                                      "tag": "h2",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-count",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "sortable-items",
+                                  "tag": "ol",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-item",
+                                      "tag": "li",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "sortable-handle",
+                                          "tag": "button",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "icon",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "sortable-body",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "stack",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "row",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 2,
+                                                      "children": [
+                                                        {
+                                                          "slot": "badge-dot",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "button",
+                                                  "tag": "button",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "meta",
+                                                  "tag": "ul",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "meta-item",
+                                                      "tag": "li",
+                                                      "count": 3,
+                                                      "children": [
+                                                        {
+                                                          "slot": "meta-start",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "avatar",
+                                                              "tag": "span",
+                                                              "count": 1,
+                                                              "children": [
+                                                                {
+                                                                  "slot": "icon",
+                                                                  "tag": "svg",
+                                                                  "count": 1,
+                                                                  "children": []
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "slot": "meta-text",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "sortable-move",
+                                          "tag": "details",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "sortable-move-summary",
+                                              "tag": "summary",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "sortable-form",
+                                              "tag": "form",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-move-field",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "native-select",
+                                                  "tag": "select",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "sortable-move-field",
+                                                  "tag": "label",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "input",
+                                                  "tag": "input",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "button",
+                                                  "tag": "button",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "sortable-empty",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
