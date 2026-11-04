@@ -331,7 +331,7 @@ max_size = 26214400
 
 [mail.inbound.ses]
 token = "..."            # SNS subscribes https://api.acme.test/api/mail/inbound/ses?token=...
-topic_arns = ["arn:aws:sns:eu-west-1:123456789012:inbound-mail"]
+topic_arns = ["arn:aws:sns:eu-west-1:123456789012:inbound-mail"]   # required with token
 disk = "ses-mail"        # the S3 disk the receipt rule writes to
 
 [mail.inbound.mailgun]
@@ -346,7 +346,7 @@ token = "..."            # Authorization: Bearer TOKEN
 
 | Route | Source | Checked with |
 |---|---|---|
-| `POST /api/mail/inbound/ses?token=..` | An SNS topic that SES receipt rules notify | The token, and the topic when `topic_arns` lists any. |
+| `POST /api/mail/inbound/ses?token=..` | An SNS topic that SES receipt rules notify | The SNS message signature, the topic (one of `topic_arns`), the message's age, and the token. |
 | `POST /api/mail/inbound/mailgun`, `/api/mail/inbound/mailgun/mime` | A Mailgun route's `forward()` | The HMAC-SHA256 of `timestamp` and `token`, at most 15 minutes old. |
 | `POST /api/mail/inbound/postmark` | A Postmark inbound stream | The token as the basic-auth password, or a `token` query parameter. |
 | `POST /api/mail/inbound/raw` | Raw MIME from your own server or script | `Authorization: Bearer <token>`, or a `token` query parameter. |
@@ -367,7 +367,7 @@ What is the provider's own report, and what is the message's, which the sender w
 
 | Source | Envelope sender | Envelope recipients | Verdicts | The request is checked with |
 |---|---|---|---|---|
-| Amazon SES | the notification's `mail.source` | the receipt rule's `recipients` | all five, from `receipt` | the URL token and the topic; the SNS signature is not checked |
+| Amazon SES | the notification's `mail.source` | the receipt rule's `recipients` | all five, from `receipt` | the SNS signature, the topic, the age and the URL token |
 | Mailgun | `sender` (`MAIL FROM`) | `recipient` | none | the HMAC of `timestamp` and `token` |
 | Postmark | none | `OriginalRecipient` | none | the token |
 | Raw MIME | `X-Envelope-From` | `X-Envelope-To` | none | the token |
@@ -386,7 +386,17 @@ Verify your receiving domain in SES and point its MX record at SES, then create 
 
 Subscribe `https://api.acme.test/api/mail/inbound/ses?token=...` to the topic over HTTPS, with raw message delivery off. The route confirms the subscription by fetching its `SubscribeURL` (only `https://sns.<region>.amazonaws.com`; with `confirm_subscriptions = false` it logs the URL for you to open). The envelope recipients are the receipt rule's recipients, and the five verdicts come from the rule.
 
-The route trusts the secret token in its URL and the topic list; it doesn't check the SNS message signature. To check that too, receive the topic with a [verified webhook](/docs/packages/webhooks/#verifying-incoming-webhooks) of your own and hand the notification to `Inbound::receive_ses`:
+The route receives a message only when Amazon SNS signed it. It checks, before the mail is read:
+
+1. the topic: `TopicArn` must be one of `topic_arns`. The list is required, because SNS signs every topic's messages with the same keys;
+2. the signing certificate's URL: HTTPS on `sns.<region>.amazonaws.com` (or `.amazonaws.com.cn`), a `.pem` file, no query;
+3. the age: `Timestamp` within `tolerance_secs` of now (3600 by default, the longest SNS retries a delivery);
+4. the signature, version 1 (SHA-1) or 2 (SHA-256), with the key of that certificate, which the route fetches once and keeps for a day;
+5. the `token` in the subscription URL, on top of the signature.
+
+A message that fails a check is a 401 `invalid_signature` and no mailbox sees it. When the certificate can't be fetched, the route answers 503 and SNS delivers the message again. These are the checks of the `AwsSns` [incoming webhook](/docs/packages/webhooks/#senders-that-sign-with-their-own-keys) source.
+
+To receive the topic on a route of your own instead, take it as a [verified webhook](/docs/packages/webhooks/#verifying-incoming-webhooks) and hand the notification to `Inbound::receive_ses`:
 
 ```rust title="src/modules/mail/ses_inbound.rs"
 use navree::mail::Inbound;
@@ -641,9 +651,10 @@ Watched mailboxes add `IntegrationsError::MailboxWatchNotFound` (404 `mailbox_wa
 | `mail.inbound.disk` | none | The disk that keeps raw messages. |
 | `mail.inbound.path` | `inbound` | The folder on that disk. |
 | `mail.inbound.reply_token_ttl_days` | `0` | Reply tokens older than this are refused; 0 never expires them. |
-| `mail.inbound.ses.token` | none | The SES route's secret; the route is mounted when set. |
-| `mail.inbound.ses.topic_arns` | `[]` | The SNS topics accepted (all when empty). |
+| `mail.inbound.ses.token` | none | The SES route's secret, checked on top of the SNS signature; the route is mounted when set. |
+| `mail.inbound.ses.topic_arns` | `[]` | The SNS topics accepted. Required with `token`. |
 | `mail.inbound.ses.disk` | none | The S3 disk of the receipt rule's bucket. |
+| `mail.inbound.ses.tolerance_secs` | `3600` | How far a message's `Timestamp` may be from now, in seconds. |
 | `mail.inbound.ses.confirm_subscriptions` | `true` | Fetch SNS `SubscribeURL`s. |
 | `mail.inbound.mailgun.signing_key` | `mail.webhooks.mailgun.signing_key` | Mailgun's HTTP webhook signing key. |
 | `mail.inbound.postmark.token` | none | The Postmark route's basic-auth password. |

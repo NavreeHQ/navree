@@ -37,7 +37,8 @@ their customers. All of it is in the `mail` facade feature.
    `MailScope::from(&workspace)`, `MailScope::workspace(id).with_organization(id)`).
 4. Provider webhooks: set a secret per provider and point the provider at
    `/api/mail/webhooks/<provider>`:
-   `mail.webhooks.ses.token` (+ `topic_arns`; URL `...?token=`),
+   `mail.webhooks.ses.token` and `topic_arns` (required; URL `...?token=`;
+   the SNS signature, topic and age are checked too),
    `mail.webhooks.mailgun.signing_key`, `mail.webhooks.postmark.token`
    (basic-auth password or `?token=`), `mail.webhooks.resend.secret`
    (`whsec_...`). Bad signature: 401 `invalid_signature`.

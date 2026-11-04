@@ -274,7 +274,7 @@ Providers report what happened to a message by calling a webhook. `MailModule` m
 ```toml title="config/app.toml"
 [mail.webhooks.ses]
 token = "..."              # SNS subscribes https://api.acme.test/api/mail/webhooks/ses?token=...
-topic_arns = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]
+topic_arns = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]   # required with token
 
 [mail.webhooks.mailgun]
 signing_key = "..."        # the HTTP webhook signing key
@@ -288,12 +288,29 @@ secret = "whsec_..."       # the webhook's signing secret
 
 | Route | Verified by |
 |---|---|
-| `POST /api/mail/webhooks/ses` | The `token` query parameter, and the SNS topic when `topic_arns` lists any. Subscription confirmations are confirmed by fetching their `SubscribeURL` (only `https://sns.<region>.amazonaws.com`; `confirm_subscriptions = false` logs the URL instead). |
+| `POST /api/mail/webhooks/ses` | The SNS message signature, the topic (one of `topic_arns`), the message's age (at most `tolerance_secs`, an hour by default), and the `token` query parameter. Subscription confirmations are confirmed by fetching their `SubscribeURL` (only `https://sns.<region>.amazonaws.com`; `confirm_subscriptions = false` logs the URL instead). |
 | `POST /api/mail/webhooks/mailgun` | The HMAC-SHA256 of `timestamp` and `token` with the signing key, at most 15 minutes old. |
 | `POST /api/mail/webhooks/postmark` | The token as the basic-auth password of the webhook URL, or a `token` query parameter. |
 | `POST /api/mail/webhooks/resend` | The `svix-signature` HMAC of the message id, timestamp and body, at most 15 minutes old. |
 
-Each answers 204 once the events are recorded, and 401 with code `invalid_signature` when verification fails. The routes need the pipeline (`mail.delivery.enabled`). Put their secrets in `.env`: `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY=...`. The SES route trusts the secret token in its URL and the topic; it does not check the SNS message signature, so keep the subscription URL private and list your topic in `topic_arns`.
+Each answers 204 once the events are recorded, and 401 with code `invalid_signature` when verification fails. The routes need the pipeline (`mail.delivery.enabled`). Put their secrets in `.env`: `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY=...`.
+
+The SES route trusts an event only when Amazon SNS signed it. For each message it checks, before anything is recorded:
+
+1. the topic: `TopicArn` must be one of `topic_arns`. The list is required, because SNS signs every topic's messages with the same keys, so a valid signature alone only says that some topic sent the message;
+2. the signing certificate's URL: HTTPS on `sns.<region>.amazonaws.com` (or `.amazonaws.com.cn`), a `.pem` file, no query;
+3. the age: `Timestamp` within `tolerance_secs` of now (3600 by default, the longest SNS retries a delivery);
+4. the signature, version 1 (SHA-1) or 2 (SHA-256), with the key of that certificate. The route fetches each certificate once and keeps it for a day;
+5. the `token` in the subscription URL, on top of the signature.
+
+A message that fails a check is a 401 and changes nothing. When the certificate can't be fetched, the route answers 503 and SNS delivers the message again. Subscribe the route with raw message delivery off: a raw message carries no signature. The check is the one [incoming webhooks](/docs/packages/webhooks/#senders-that-sign-with-their-own-keys) run for `AwsSns`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mail.webhooks.ses.token` | none | The secret in the subscription URL; the route is mounted when it is set. |
+| `mail.webhooks.ses.topic_arns` | `[]` | The SNS topics accepted. Required with `token`. |
+| `mail.webhooks.ses.tolerance_secs` | `3600` | How far a message's `Timestamp` may be from now, in seconds. |
+| `mail.webhooks.ses.confirm_subscriptions` | `true` | Fetch the `SubscribeURL` of a verified subscription confirmation. |
 
 Recording an event, with `Deliveries::record`:
 

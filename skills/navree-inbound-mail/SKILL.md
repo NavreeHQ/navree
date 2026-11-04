@@ -25,10 +25,11 @@ mail is in `navree-mail-and-notifications` and `navree-mail-delivery`.
    ```
 
 3. Pick a source and set its secret (`.env`: `APP_MAIL__INBOUND__RAW__TOKEN=...`):
-   - SES: `mail.inbound.ses.token` (+ `topic_arns`); subscribe
+   - SES: `mail.inbound.ses.token` and `topic_arns` (required); subscribe
      `https://api/.../api/mail/inbound/ses?token=...` to the receipt rule's
-     SNS topic (raw delivery off). S3 action: `mail.inbound.ses.disk` = an
-     S3 disk on the bucket.
+     SNS topic (raw delivery off). The route checks the SNS signature, the
+     topic and the age (`tolerance_secs`, 3600) on top of the token. S3
+     action: `mail.inbound.ses.disk` = an S3 disk on the bucket.
    - Mailgun: route `forward("https://.../api/mail/inbound/mailgun/mime")`;
      key `mail.inbound.mailgun.signing_key` (falls back to
      `mail.webhooks.mailgun.signing_key`).
