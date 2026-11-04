@@ -717,6 +717,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "board-demo"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "http",
+ "navree",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "bon"
 version = "3.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6177,6 +6190,7 @@ dependencies = [
  "navree-ui",
  "navree-ui-macros",
  "navree-validation",
+ "proptest",
  "rust_decimal",
  "serde",
  "serde_json",
