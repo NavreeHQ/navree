@@ -169,6 +169,9 @@ The new module is added to `src/app.rs` and declared in
 migrations run at boot in development (`database.migrate_on_boot = true`);
 run `navree migrate` explicitly elsewhere.
 
+For screens drawn in Rust on the server, load `navree-ui`: it adds the
+shell, a list page and a form page to the app.
+
 ## Add Navree to an existing package
 
 ```sh

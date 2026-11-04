@@ -122,6 +122,7 @@ navree list                                 # every command of the app
 | A Next.js web front end: sign-in through a BFF, server components, list screens, real time, the dark theme | `navree-frontend-next` |
 | A Nuxt or Vue web front end on the `@navree/nuxt` module | `navree-frontend-nuxt` |
 | Settings, environment variables, APP_KEY, config sections | `navree-config` |
+| Translating the app: Fluent files, `t!`, the request's locale, number and date formatting, translated validation messages, mail and notifications in the user's language | `navree-i18n` |
 | Writing or fixing tests, fakes | `navree-testing` |
 | Any `navree make:*` generator, console commands | `navree-cli-generators` |
 | Shipping to production | `navree-deployment` |
@@ -162,6 +163,7 @@ navree list                                 # every command of the app
 | CSV or Excel files: export buttons, big exports queued with a download link, importing users, contacts or other records from a spreadsheet, column mapping, import previews, error files, non-UTF-8 files from Excel | `navree-sheets` |
 | Work that waits days or for an event (onboarding sequences, reminders, trials, dunning, follow-ups), multi-step processes that must survive restarts, automations or rules your users build in an editor | `navree-workflows` |
 | Reverse engineering an old product (any stack, old data) into specs, a task list and tests, then rebuilding it in Navree; porting or migrating a legacy app and its data | `navree-reverse-engineering` |
+| Adding a page, a list page, a form, a table, a dashboard or a settings screen in Navree UI with no design to start from: the shell, page routes, forms and field errors, `DataTable` lists, regions, error pages, themes, dates and times, selects, drag and drop, `TestView` tests; finding which component fits | `navree-ui` |
 | Building navree-ui pages from a design: an HTML mock-up, a Figma or other design-tool export, a handoff bundle or screenshots; keeping an existing look; checking pages against a design; navree-ui forms with a select, a combobox searched on the server, a multi-select or a command palette | `navree-design-to-ui` |
 
 ## Common mistakes

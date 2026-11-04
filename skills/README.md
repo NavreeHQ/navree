@@ -85,6 +85,7 @@ conventions, and says which skill to load for each task.
 | [`navree-workflows`](navree-workflows/SKILL.md) | Durable workflows (`#[workflow]`, steps, sleeps, event waits, versions) and end-user automations (`#[trigger]`, `#[condition]`, `#[action]`, versioned definitions, enrollments, simulation) (feature `workflows`) |
 | [`navree-reverse-engineering`](navree-reverse-engineering/SKILL.md) | Turn an old product in any stack, with old and messy data, into specs with evidence, a task list and test cases, then rebuild it in Navree and verify it against the specs and the old product |
 | [`navree-design-to-ui`](navree-design-to-ui/SKILL.md) | Turn a design (an HTML and CSS mock-up, a design-tool export, a handoff bundle or screenshots) into navree-ui pages on the server, with the design kept where the owner wants it, and verify them beside the design at 1440 and 390 pixels; also the select, combobox, multi-select and command palette |
+| [`navree-ui`](navree-ui/SKILL.md) | Build Navree UI pages from scratch, with no design: the shell, page routes, forms and field errors, `DataTable` lists with filters, bulk actions and export, regions, error pages, themes, dates, selects, drag and drop, and `TestView` tests |
 
 ## Installing
 

@@ -18,6 +18,9 @@ SQLite is an opt-in feature, `navree = { .., features = ["sqlite"] }` there
 too (a new app has both). Without the feature the app stops at boot asking
 for it.
 
+Pages drawn with Navree UI also get plain tests with `TestView`, which reads
+a page with no browser (`navree-ui`).
+
 ## Where tests go
 
 - Module tests: `src/modules/<module>/tests/mod.rs` (declared

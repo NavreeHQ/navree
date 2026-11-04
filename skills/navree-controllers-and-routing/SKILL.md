@@ -98,7 +98,10 @@ impl PostController {
   controller prefix may hold parameters too:
   `#[controller("/deals/{deal_id}/notes")]`.
 - A path starting with `!` ignores the prefix, version and controller
-  prefix: `#[get("!/up")]` is `GET /up` (webhooks, probes).
+  prefix: `#[get("!/up")]` is `GET /up` (webhooks, probes, and the pages
+  of Navree UI: `#[get("!/contacts")]` returning an `AppPage`; see
+  `navree-ui`). `#[page]` and `#[json_only]` say whether a route's errors
+  are pages or JSON (`navree-errors-and-responses`).
 - Paths match exactly, never rewritten: `GET /api/v1/posts/` (trailing
   slash) and `//` are 404s; a `.`/`..` segment (also `%2e`) or a backslash
   is a 400; a `{id}` value with `%2F`, `%5C` or `%00`, or not UTF-8 once
@@ -158,7 +161,9 @@ or impl), `#[timeout("5s")]` (route only), `#[guard(Arc::new(MyGuard))]`
 count as an access declaration), `#[audit(action = "posts.exported")]`
 (writes an audit entry after a 2xx), `#[api(summary = "..", tag = "..",
 request = T, response = T, status = 201, responses(400, 404))]` (OpenAPI;
-see `navree-openapi`). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
+see `navree-openapi`), `#[page]` (route or impl: its errors are pages
+in an app with Navree UI) and `#[json_only]` (route or impl: its errors
+are always JSON). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
 
 ## Responses
 
