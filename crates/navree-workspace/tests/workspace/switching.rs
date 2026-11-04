@@ -170,8 +170,9 @@ async fn a_member_switches_and_the_session_names_the_workspace() {
     let globex = world.workspace(ada, "Globex").await;
     let client = world.as_user(ada);
 
-    let response = switch(&client, "acme", "/deals?stage=won").await;
-    response.assert_status(303);
+    let response = switch(&client, "acme", "/deals?stage=won")
+        .await
+        .assert_status(303);
     assert_eq!(response.header("location"), Some("/deals?stage=won"));
     current_of(&client)
         .await
@@ -224,8 +225,7 @@ async fn json_switches_answer_the_workspace_and_next_stays_on_the_site() {
         .assert_json_path("slug", json!("acme"))
         .assert_json_path("name", json!("Acme"));
     for next in ["//evil.test/", "https://evil.test/", "/\\evil.test"] {
-        let response = switch(&client, "acme", next).await;
-        response.assert_status(303);
+        let response = switch(&client, "acme", next).await.assert_status(303);
         assert_eq!(response.header("location"), Some("/"), "{next}");
     }
     // Nothing named: a 400 on `workspace`.
