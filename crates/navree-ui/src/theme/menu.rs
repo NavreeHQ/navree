@@ -35,6 +35,7 @@ pub struct ThemeMenu {
     csrf: Option<String>,
     id: String,
     modes: bool,
+    themes_shown: bool,
 }
 
 impl ThemeMenu {
@@ -48,6 +49,7 @@ impl ThemeMenu {
             csrf: None,
             id: "ui-theme-menu".to_owned(),
             modes: true,
+            themes_shown: true,
         }
     }
 
@@ -83,17 +85,25 @@ impl ThemeMenu {
         self
     }
 
+    /// Leaves the themes out: for a page whose workspace keeps its theme, where
+    /// the reader picks only the mode.
+    pub fn without_themes(mut self) -> Self {
+        self.themes_shown = false;
+        self
+    }
+
     /// The custom themes the menu draws, whose stylesheets the page must link.
     pub fn sheets(&self) -> Vec<Theme> {
         self.themes
             .iter()
+            .filter(|_| self.themes_shown)
             .filter(|theme| !theme.is_builtin())
             .cloned()
             .collect()
     }
 
     fn card(&self, theme: &Theme) -> Element {
-        let chosen = theme.key() == self.current.theme().key();
+        let chosen = theme.short_form() == self.current.theme().short_form();
         // The swatches stand in a scope of the theme itself, so they show its
         // real colours with no style attribute.
         let swatches = el("span")
@@ -128,7 +138,12 @@ impl ThemeMenu {
 
     fn into_node(self) -> Node {
         let form_id = format!("{}-form", self.id);
-        let cards: Vec<Element> = self.themes.iter().map(|theme| self.card(theme)).collect();
+        let cards = self.themes_shown.then(|| {
+            let cards: Vec<Element> = self.themes.iter().map(|theme| self.card(theme)).collect();
+            el("fieldset")
+                .slot("theme-cards")
+                .children((el("legend").slot("theme-menu-legend").child("Theme"), cards))
+        });
         let modes = self.modes.then(|| {
             el("fieldset").slot("theme-modes").children((
                 el("legend").slot("theme-menu-legend").child("Mode"),
@@ -172,9 +187,7 @@ impl ThemeMenu {
                         .attr("name", "back")
                         .attr("value", back)
                 }),
-                el("fieldset")
-                    .slot("theme-cards")
-                    .children((el("legend").slot("theme-menu-legend").child("Theme"), cards)),
+                cards,
                 modes,
                 Button::primary("Apply")
                     .size(Size::Sm)

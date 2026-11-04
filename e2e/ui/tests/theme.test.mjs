@@ -263,6 +263,20 @@ for (const name of NAMES) {
       }
     });
 
+    test("a theme chosen in the menu stays chosen on a page reached with ?theme= and ?mode=", async () => {
+      const page = await open("/themes?theme=ocean&mode=dark");
+      assert.equal((await look(page)).theme, "ocean");
+      await page.click("[popovertarget=ui-theme-menu]");
+      await page.waitFor(() => document.getElementById("ui-theme-menu")?.matches(":popover-open"));
+      // Picked in the page: the driver's own checks before a click stall Firefox for seconds at times.
+      await page.evaluate(() => [...document.querySelectorAll("#ui-theme-menu [data-slot=theme-card]")].find((card) => card.textContent.includes("Violet")).click());
+      await page.waitFor(() => document.documentElement.getAttribute("data-theme") === "violet");
+      assert.equal(new URL(page.url()).search, "", "the address it came back to doesn't undo the choice");
+      const cookie = (await page.context().cookies()).find((c) => c.name === "navree_ui_theme");
+      assert.equal(cookie?.value, "dark.violet");
+      await page.done();
+    });
+
     test("with JavaScript off, the chosen theme is in the page as served, with no script", async () => {
       const form = await acmeForm();
       const page = await open(null, { javaScriptEnabled: false });
@@ -613,6 +627,8 @@ for (const name of NAMES) {
       await page.goto(BASE + "/themes/scopes?theme=violet");
       seen = await look(page);
       assert.deepEqual([seen.theme, seen.mode], ["ocean", "light"], "locked: the workspace's theme, the user's mode");
+      assert.equal(await page.locator("#ui-theme-menu [data-slot=theme-card]").count(), 0, "locked: no theme to pick");
+      assert.equal(await page.locator("#ui-theme-menu input[name=mode]").count(), 3, "the mode is still the reader's");
       assert.deepEqual(await axe(page), [], "axe on the scopes page");
       await shot(page, "scopes-locked");
       await post("/themes/scopes/reset", "");

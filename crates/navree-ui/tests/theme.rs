@@ -485,3 +485,74 @@ fn a_shell_with_the_theme_menu_links_the_sheets_of_the_themes_it_offers() {
     let menu = render(&ThemeMenu::new(&Appearance::default(), &[Theme::NAVREE]).into());
     assert!(!menu.contains("style="));
 }
+
+/// The value of the menu's hidden `back` field in a page.
+fn back_of(html: &str) -> String {
+    let at = html
+        .find(r#"name="back" value=""#)
+        .expect("the menu has a back field")
+        + 19;
+    html[at..at + html[at..].find('"').unwrap()].replace("&amp;", "&")
+}
+
+#[test]
+fn a_choice_in_the_menu_is_not_undone_by_the_address_it_comes_back_to() {
+    let offered = shell().theme_menu().themes([Theme::NAVREE, Theme::OCEAN]);
+    let headers = HeaderMap::new();
+    for (address, back) in [
+        ("/deals?page=2&theme=ocean&mode=dark", "/deals?page=2"),
+        ("/deals?theme=ocean", "/deals"),
+        ("/deals?mode=light&q=a%20b", "/deals?q=a%20b"),
+        (
+            "/deals?th%65me=ocean&m%6Fde=dark&sort=name",
+            "/deals?sort=name",
+        ),
+        ("/deals?themes=2&modes=1", "/deals?themes=2&modes=1"),
+        ("/deals?", "/deals"),
+    ] {
+        let html = offered
+            .for_request(address, &headers)
+            .page("Deals")
+            .to_view()
+            .to_html();
+        assert_eq!(back_of(&html), back, "{address}");
+    }
+}
+
+#[test]
+fn under_a_locked_workspace_the_menu_offers_only_the_mode() {
+    let offered = shell().theme_menu().themes([Theme::NAVREE, Theme::OCEAN]);
+    let headers = HeaderMap::new();
+    let open = offered
+        .for_request("/deals", &headers)
+        .page("Deals")
+        .to_view()
+        .to_html();
+    assert!(
+        open.contains(r#"name="theme""#),
+        "a free reader picks a theme"
+    );
+    let locked = offered
+        .for_request("/deals", &headers)
+        .workspace(ThemeSetting::theme(Theme::OCEAN).locked())
+        .page("Deals")
+        .to_view()
+        .to_html();
+    assert!(
+        !locked.contains(r#"name="theme""#),
+        "no theme to pick: {locked:.200}"
+    );
+    assert!(!locked.contains(r#"data-slot="theme-cards""#));
+    assert!(
+        locked.contains(r#"name="mode" value="system""#),
+        "the mode is still the reader's"
+    );
+    // A workspace that chooses without locking leaves the reader free.
+    let chosen = offered
+        .for_request("/deals", &headers)
+        .workspace(ThemeSetting::theme(Theme::OCEAN))
+        .page("Deals")
+        .to_view()
+        .to_html();
+    assert!(chosen.contains(r#"name="theme""#));
+}

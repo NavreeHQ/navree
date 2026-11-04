@@ -52,7 +52,7 @@ pub fn shell() -> Shell {
 | User | Your store, or the cookie | `shell.user(ThemeSetting)` replaces the cookie |
 | URL | `?theme=ocean&mode=light` | That page only: for a preview or a shared link |
 
-A locked workspace keeps its theme; the reader still picks light or dark. A cookie or a URL can only pick a theme the shell offers: every built-in by default, or the list you give `Shell::themes`.
+A locked workspace keeps its theme; the reader still picks light or dark, and the theme menu offers only that. A cookie or a URL can only pick a theme the shell offers: every built-in by default, or the list you give `Shell::themes`.
 
 ```rust title="src/deals/pages.rs"
 async fn show(shell: AppShell, user: CurrentUser) -> AppPage {

@@ -826,6 +826,7 @@ pub struct AppPage {
     sheets: Vec<Theme>,
     density: Option<Density>,
     back: Option<String>,
+    theme_locked: bool,
 }
 
 impl AppPage {
@@ -852,6 +853,7 @@ impl AppPage {
             sheets: Vec::new(),
             density: None,
             back: None,
+            theme_locked: false,
             shell,
         }
     }
@@ -933,6 +935,10 @@ impl AppPage {
         let menu = shell.theme_menu.then(|| {
             let mut menu = ThemeMenu::new(&self.appearance, &shell.themes)
                 .back(self.back.clone().unwrap_or_else(|| self.path.clone()));
+            // A locked workspace keeps its theme: the reader picks only the mode.
+            if self.theme_locked {
+                menu = menu.without_themes();
+            }
             if let Some(token) = &self.csrf {
                 menu = menu.csrf(token.clone());
             }
@@ -1063,10 +1069,11 @@ impl AppShell {
             self.csrf.clone(),
         )
         .appearance(self.appearance());
-        page.back = Some(match &self.query {
-            Some(query) => format!("{}?{query}", self.path),
-            None => self.path.clone(),
+        page.back = Some(match self.query.as_deref().map(without_appearance) {
+            Some(query) if !query.is_empty() => format!("{}?{query}", self.path),
+            _ => self.path.clone(),
         });
+        page.theme_locked = self.workspace.locked;
         page
     }
 
@@ -1100,6 +1107,23 @@ impl AppShell {
         self.url.over(&mut appearance, locked);
         appearance
     }
+}
+
+/// `query` without `theme` and `mode`, however spelt: the theme menu comes back
+/// to this address, which would otherwise undo the choice just made.
+fn without_appearance(query: &str) -> String {
+    query
+        .split('&')
+        .filter(|pair| {
+            let key = pair.split_once('=').map_or(*pair, |(key, _)| key);
+            let key = urlencoded::parse(format!("{key}=").as_bytes())
+                .next()
+                .map(|(key, _)| key.into_owned())
+                .unwrap_or_default();
+            !pair.is_empty() && key != "theme" && key != "mode"
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 impl AppShell {
