@@ -199,7 +199,7 @@ impl Hub {
             "DROP TABLE IF EXISTS customers",
             "DROP TABLE IF EXISTS agents",
             "CREATE TABLE agents (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, team TEXT NOT NULL, active BOOLEAN NOT NULL)",
-            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL, plan TEXT NOT NULL, lifetime_cents INTEGER NOT NULL, seats INTEGER NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE, tags TEXT NOT NULL)",
+            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL, plan TEXT NOT NULL, lifetime_paise INTEGER NOT NULL, seats INTEGER NOT NULL, country TEXT NOT NULL, city TEXT NOT NULL, since DATE, tags TEXT NOT NULL)",
             "CREATE TABLE conversations (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, subject TEXT NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL, assignee_id INTEGER, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, sla_due INTEGER, sla_from INTEGER, snoozed_until DATE, unread INTEGER NOT NULL, preview TEXT NOT NULL, rev INTEGER NOT NULL, messages INTEGER NOT NULL, inbox TEXT NOT NULL)",
             "CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, kind TEXT NOT NULL, author TEXT NOT NULL, agent_id INTEGER, body TEXT NOT NULL, at INTEGER NOT NULL)",
             "CREATE TABLE attachments (id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL, conversation_id INTEGER NOT NULL, name TEXT NOT NULL, bytes INTEGER NOT NULL)",

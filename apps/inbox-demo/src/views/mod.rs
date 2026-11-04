@@ -248,7 +248,7 @@ pub fn written(at: i64, now: i64) -> String {
     }
 }
 
-/// `Priya` for `Priya Raman`.
+/// `Priya` for `Priya Verma`.
 pub fn only_first_name(name: &str) -> String {
     name.split_whitespace().next().unwrap_or(name).to_owned()
 }
@@ -281,8 +281,14 @@ pub fn ago(at: i64, now: i64) -> String {
     }
 }
 
-/// `Bristol, United Kingdom`.
+/// `Ludhiana, Punjab` for a city in India whose state the desk knows, otherwise the
+/// city and its country: `Delhi, India`.
 pub fn place(city: &str, code: &str) -> String {
+    if code == "IN"
+        && let Some(state) = crate::data::state_of(city)
+    {
+        return format!("{city}, {state}");
+    }
     let country = CountryCode::parse(code).map_or("Unknown", CountryCode::name);
     if city.is_empty() || city == country {
         country.to_owned()

@@ -1,6 +1,7 @@
 //! `inbox-demo`: an example app on Navree UI. It is the support desk of an invented
-//! software company, Fernway, whose customers are studios, clinics and schools that
-//! take bookings with its product.
+//! software company in Mohali, Sukhna Labs, whose customers are clinics, studios and
+//! academies across India that take bookings with its product. Times are in India
+//! Standard Time and money in rupees.
 //!
 //! ```text
 //! cargo run -p inbox-demo                        # http://127.0.0.1:8096

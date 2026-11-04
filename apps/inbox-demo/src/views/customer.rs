@@ -4,8 +4,7 @@
 use navree::ui::*;
 
 use crate::data::{
-    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Status, ZONE,
-    thousands_of_cents,
+    Conversation, Customer, CustomerEvent, EventKind, OFFSET, Plan, Status, ZONE, rupees,
 };
 use crate::views::inbox::CustomerView;
 use crate::views::{Filters, ago, place, thousands};
@@ -31,6 +30,7 @@ pub fn customer_head(customer: &Customer, back: &str) -> Node {
                     Heading::h2(customer.name.clone()).id("customer-name"),
                     Text::muted(format!("{} at {}", customer.role, customer.company)),
                     Text::muted(customer.email.clone()),
+                    Text::muted(customer.phone.clone()),
                 )),
             )),
         ))
@@ -41,7 +41,7 @@ pub fn customer_head(customer: &Customer, back: &str) -> Node {
 fn facts(view: &CustomerView) -> FactGrid {
     let customer = &view.customer;
     let plan = Plan::parse(&customer.plan);
-    let monthly = plan.seat_cents() * customer.seats;
+    let monthly = plan.seat_paise() * customer.seats;
     FactGrid::new().cards([
         FactCard::new("Plan", plan.label())
             .icon(icons::LAYERS)
@@ -53,13 +53,10 @@ fn facts(view: &CustomerView) -> FactGrid {
                     .since
                     .map_or_else(String::new, |day| day.format("%b %Y").to_string())
             )),
-        FactCard::new(
-            "Lifetime value",
-            format!("${}", thousands_of_cents(customer.lifetime_cents)),
-        )
-        .icon(icons::WALLET)
-        .tone(Tone::Success)
-        .detail(format!("${} a month", thousands_of_cents(monthly))),
+        FactCard::new("Lifetime value", rupees(customer.lifetime_paise))
+            .icon(icons::WALLET)
+            .tone(Tone::Success)
+            .detail(format!("{} a month", rupees(monthly))),
         FactCard::new("Open conversations", thousands(view.open))
             .icon(icons::MESSAGES_SQUARE)
             .tone(if view.overdue > 0 {

@@ -8,14 +8,14 @@ use chrono::{DateTime, NaiveDate};
 use navree::orm::Model;
 use navree::ui::{Tone, icons};
 
-/// The company whose support desk this is.
-pub const COMPANY: &str = "Fernway";
-/// What it sells: booking software for studios, clinics and schools.
-pub const PRODUCT: &str = "Fernway Bookings";
+/// The company whose support desk this is: a software company in Mohali.
+pub const COMPANY: &str = "Sukhna Labs";
+/// What it sells: booking software for clinics, studios and academies.
+pub const PRODUCT: &str = "Sukhna Bookings";
 /// The desk's own time zone, which every page shows its times in.
-pub const ZONE: &str = "Europe/London";
-/// That zone's offset from UTC in November, in seconds.
-pub const OFFSET: i32 = 0;
+pub const ZONE: &str = "Asia/Kolkata";
+/// India Standard Time's offset from UTC, in seconds: the same all year.
+pub const OFFSET: i32 = 19_800;
 /// The agent a visitor works as until they choose another.
 pub const DEFAULT_AGENT: i64 = 1;
 
@@ -37,12 +37,14 @@ pub struct Customer {
     pub id: i64,
     pub name: String,
     pub email: String,
+    /// A mobile number, made up: `+91 98765 4` and four digits.
+    pub phone: String,
     pub company: String,
     pub role: String,
     /// One of [`Plan`], as its key.
     pub plan: String,
-    /// Everything they have paid, in cents.
-    pub lifetime_cents: i64,
+    /// Everything they have paid, in paise.
+    pub lifetime_paise: i64,
     pub seats: i64,
     /// A two-letter country code.
     pub country: String,
@@ -410,13 +412,13 @@ impl Plan {
         }
     }
 
-    /// The monthly price per seat, in cents.
-    pub const fn seat_cents(self) -> i64 {
+    /// The monthly price per seat, in paise: ₹499, ₹999, ₹1,999 and ₹3,499.
+    pub const fn seat_paise(self) -> i64 {
         match self {
-            Self::Starter => 1_200,
-            Self::Growth => 2_900,
-            Self::Scale => 4_900,
-            Self::Enterprise => 7_900,
+            Self::Starter => 49_900,
+            Self::Growth => 99_900,
+            Self::Scale => 199_900,
+            Self::Enterprise => 349_900,
         }
     }
 
@@ -662,92 +664,104 @@ impl Dice {
 
 /// The team.
 pub const AGENTS: [(&str, &str); 24] = [
-    ("Sam Okafor", "Customer success"),
-    ("Priya Raman", "Billing"),
-    ("Jonah Lindqvist", "Technical"),
-    ("Mariana Costa", "Technical"),
-    ("Theo Brandt", "Onboarding"),
-    ("Aisha Bello", "Billing"),
-    ("Kenji Mori", "Technical"),
-    ("Freya Nilsen", "Customer success"),
-    ("Omar Haddad", "Onboarding"),
-    ("Lucía Ferrer", "Technical"),
-    ("Daniel Asante", "Billing"),
-    ("Ingrid Holm", "Customer success"),
-    ("Ravi Menon", "Technical"),
-    ("Chloé Laurent", "Onboarding"),
-    ("Tomasz Wójcik", "Technical"),
-    ("Grace Mwangi", "Customer success"),
-    ("Hugo Silva", "Billing"),
-    ("Mei Tanaka", "Onboarding"),
-    ("Felix Wagner", "Technical"),
-    ("Zainab Yusuf", "Customer success"),
-    ("Niamh Byrne", "Billing"),
-    ("Arjun Kapoor", "Technical"),
-    ("Elena Popescu", "Onboarding"),
-    ("Kwame Mensah", "Customer success"),
+    ("Gurpreet Singh", "Customer success"),
+    ("Priya Verma", "Billing"),
+    ("Harleen Kaur", "Technical"),
+    ("Manpreet Gill", "Technical"),
+    ("Rohit Malhotra", "Onboarding"),
+    ("Simran Sandhu", "Billing"),
+    ("Vikram Sethi", "Technical"),
+    ("Neha Kapoor", "Customer success"),
+    ("Amandeep Brar", "Onboarding"),
+    ("Ananya Mehra", "Technical"),
+    ("Jaspreet Dhillon", "Billing"),
+    ("Kavya Bhatia", "Customer success"),
+    ("Aditya Arora", "Technical"),
+    ("Ravneet Grewal", "Onboarding"),
+    ("Kulwinder Bains", "Technical"),
+    ("Pooja Agarwal", "Customer success"),
+    ("Siddharth Khanna", "Billing"),
+    ("Meera Joshi", "Onboarding"),
+    ("Ishaan Gupta", "Technical"),
+    ("Harpreet Sidhu", "Customer success"),
+    ("Rajveer Mann", "Billing"),
+    ("Tanvi Saxena", "Technical"),
+    ("Sukhjinder Cheema", "Onboarding"),
+    ("Ritika Bansal", "Customer success"),
 ];
 
-/// Businesses that book with the product, each with where it is.
+/// Businesses that book with the product: the business, the person who writes in, and
+/// the city. All in India.
 const BUSINESSES: [(&str, &str, &str); 24] = [
-    ("Lumen Yoga Studio", "GB", "Bristol"),
-    ("Harbour Physio", "IE", "Cork"),
-    ("Northgate Dental", "GB", "Leeds"),
-    ("Copperleaf Salon", "US", "Portland"),
-    ("Brightside Tutoring", "CA", "Halifax"),
-    ("Tidewater Climbing", "US", "Asheville"),
-    ("Juniper Vet Clinic", "AU", "Hobart"),
-    ("Orchard Pilates", "NZ", "Nelson"),
-    ("Saffron Cooking School", "IN", "Kochi"),
-    ("Kestrel Driving School", "GB", "Glasgow"),
-    ("Bluebell Massage", "NL", "Haarlem"),
-    ("Atlas Coworking", "DE", "Leipzig"),
-    ("Marigold Day Spa", "ZA", "Durban"),
-    ("Riverside Music Lessons", "US", "Savannah"),
-    ("Pebble Kids Swim", "SE", "Malmö"),
-    ("Ironwood Gym", "PL", "Gdańsk"),
-    ("Linden Counselling", "DK", "Aarhus"),
-    ("Cobalt Barbers", "PT", "Porto"),
-    ("Fable Photography", "ES", "Valencia"),
-    ("Willow Speech Therapy", "SG", "Singapore"),
-    ("Granite Martial Arts", "JP", "Sapporo"),
-    ("Meadow Fertility Clinic", "FR", "Nantes"),
-    ("Sundial Language School", "MX", "Guadalajara"),
-    ("Harbourlight Dance", "BR", "Recife"),
+    ("Sukoon Yoga Studio", "Jasleen Kaur", "Chandigarh"),
+    ("Doaba Physiotherapy", "Inderjit Randhawa", "Jalandhar"),
+    ("Ghuman Dental Care", "Gurleen Ghuman", "Ludhiana"),
+    ("Phulkari Hair and Beauty", "Mehak Chawla", "Amritsar"),
+    ("Gyan Path Tutorials", "Karan Bhalla", "Patiala"),
+    ("Shivalik Fitness Studio", "Baljeet Virk", "Mohali"),
+    ("Pashu Seva Vet Clinic", "Sukhpreet Chahal", "Bathinda"),
+    ("Kamal Pilates Studio", "Ritika Anand", "Gurugram"),
+    ("Rasoi Cooking School", "Varun Sabharwal", "Delhi"),
+    ("Surakshit Driving School", "Tejinder Aulakh", "Noida"),
+    ("Aaram Ayurveda Centre", "Shreya Mathur", "Jaipur"),
+    ("Chaupal Coworking", "Abhishek Srivastava", "Lucknow"),
+    ("Tulsi Day Spa", "Nidhi Rawat", "Dehradun"),
+    ("Sur Sangam Music Academy", "Gaurav Mishra", "Varanasi"),
+    ("Tarang Swimming Academy", "Ankita Tiwari", "Kanpur"),
+    ("Akhara Strength Gym", "Rohan Thakur", "Shimla"),
+    ("Manthan Counselling Centre", "Sneha Bhardwaj", "Pune"),
+    ("Kesh Kala Gents Salon", "Harjot Sekhon", "Mumbai"),
+    ("Chitra Photography Studio", "Divya Chaudhary", "Bengaluru"),
+    ("Vani Speech Therapy", "Prabhjot Toor", "Chandigarh"),
+    ("Veer Martial Arts Academy", "Mandeep Bajwa", "Mohali"),
+    ("Ankur Fertility Clinic", "Alka Goyal", "Ludhiana"),
+    ("Bhasha Language Institute", "Parminder Sohal", "Amritsar"),
+    (
+        "Bhangra Beats Dance Academy",
+        "Gagandeep Hundal",
+        "Jalandhar",
+    ),
 ];
 
-const FIRST: [&str; 24] = [
-    "Maya", "Tomás", "Aiko", "Lena", "Callum", "Noor", "Dev", "Sofia", "Kofi", "Hanne", "Mateo",
-    "Yara", "Oliver", "Amara", "Lukas", "Saoirse", "Diego", "Freya", "Emeka", "Nina", "Ren",
-    "Leila", "Marco", "Ines",
+/// The state of each city the desk's customers are in; none for a city that is its
+/// own state or territory, such as Delhi and Chandigarh.
+const STATES: [(&str, &str); 22] = [
+    ("Ludhiana", "Punjab"),
+    ("Amritsar", "Punjab"),
+    ("Jalandhar", "Punjab"),
+    ("Patiala", "Punjab"),
+    ("Mohali", "Punjab"),
+    ("Bathinda", "Punjab"),
+    ("Hoshiarpur", "Punjab"),
+    ("Moga", "Punjab"),
+    ("Kapurthala", "Punjab"),
+    ("Zirakpur", "Punjab"),
+    ("Gurugram", "Haryana"),
+    ("Panchkula", "Haryana"),
+    ("Noida", "Uttar Pradesh"),
+    ("Lucknow", "Uttar Pradesh"),
+    ("Varanasi", "Uttar Pradesh"),
+    ("Kanpur", "Uttar Pradesh"),
+    ("Jaipur", "Rajasthan"),
+    ("Dehradun", "Uttarakhand"),
+    ("Shimla", "Himachal Pradesh"),
+    ("Mumbai", "Maharashtra"),
+    ("Pune", "Maharashtra"),
+    ("Bengaluru", "Karnataka"),
 ];
 
-const LAST: [&str; 24] = [
-    "Whitfield",
-    "Ortega",
-    "Sato",
-    "Fischer",
-    "MacLeod",
-    "Rahimi",
-    "Iyer",
-    "Marino",
-    "Boateng",
-    "Jensen",
-    "Navarro",
-    "Haddad",
-    "Pryce",
-    "Okonkwo",
-    "Becker",
-    "Doyle",
-    "Ruiz",
-    "Andersen",
-    "Eze",
-    "Kowalska",
-    "Ito",
-    "Farouk",
-    "Bianchi",
-    "Duarte",
-];
+/// The state `city` is in, when it is one the desk knows.
+pub fn state_of(city: &str) -> Option<&'static str> {
+    STATES
+        .iter()
+        .find(|(name, _)| *name == city)
+        .map(|(_, state)| *state)
+}
+
+/// A customer's made-up mobile number: `+91 98765 4` and four digits of their id.
+pub fn phone_of(id: i64) -> String {
+    format!("+91 98765 4{:04}", id.rem_euclid(10_000))
+}
 
 const ROLES: [&str; 6] = [
     "Owner",
@@ -833,7 +847,7 @@ pub const TOPICS: [Topic; 16] = [
                 "Thanks for flagging this. I can see two attempts at 09:12 and 09:14, both answered \"do not honour\" by the card's issuer. That answer usually comes from a fraud check on the bank's side rather than from us.",
             ),
             n(
-                "Issuer answered 05 twice. No retries queued. If they try a third card, check the 3-D Secure step loads in their region.",
+                "Issuer answered 05 twice. No retries queued. If they try a third card, check the bank's OTP step loads for them.",
             ),
             cf(
                 "We called the bank again and they insist it's fine. Here's the screen we get.",
@@ -841,25 +855,25 @@ pub const TOPICS: [Topic; 16] = [
                 184_320,
             ),
             a(
-                "Thank you, that helps. The screenshot shows the 3-D Secure window closed before it finished. Could you try once more in a private window, so no extension blocks the bank's page?",
+                "Thank you, that helps. The screenshot shows the bank's OTP window closed before it finished. Could you try once more in a private window, so no extension blocks the bank's page?",
             ),
             c("That worked! We're on Growth now. Thanks for the patience."),
         ],
     },
     Topic {
-        subject: "Reminder texts go out an hour early since the clocks changed",
+        subject: "Reminder texts go out five and a half hours early",
         channel: Channel::Chat,
         priority: Priority::Urgent,
         team: "Technical",
         lines: &[
             c(
-                "Since Sunday every reminder text reaches clients an hour before it should. Three people turned up an hour early today. What changed?",
+                "Since Monday every reminder SMS reaches clients five and a half hours before it should. Two clients called at 5 in the morning about their 10:30 appointment. What changed?",
             ),
             n(
-                "Account still has the old fixed offset (+01:00) instead of a named zone. The clock change on Sunday exposed it. Fix is to set the zone in Settings > Locations.",
+                "Location zone is UTC, not Asia/Kolkata: it was reset when they merged accounts on Monday. Fix is to set the zone in Settings > Locations.",
             ),
             a(
-                "I'm sorry about the early arrivals. Your location's time zone is set as a fixed offset rather than a named zone, so it didn't follow the clock change. I've switched it to the named zone; reminders from now on go at the right time.",
+                "I'm sorry about the early messages. Your location's time zone was reset to UTC when the accounts were merged, so reminders went out on UTC time. I've set it to India Standard Time; reminders from now on go at the right time.",
             ),
             c("Thanks. Will the ones already queued for tomorrow be right too?"),
         ],
@@ -876,7 +890,7 @@ pub const TOPICS: [Topic; 16] = [
                 7_168,
             ),
             a(
-                "Thanks for the metadata. The audience your new provider sends is the old entity ID. In your provider's app settings, set the audience to the value shown on your Fernway SSO page, then try again.",
+                "Thanks for the metadata. The audience your new provider sends is the old entity ID. In your provider's app settings, set the audience to the value shown on your Sukhna SSO page, then try again.",
             ),
             c("Updated it, same error. Is there a cache on your side?"),
             n("Their SAML config is cached for 15 min per tenant. Cleared it by hand at 10:40."),
@@ -1007,13 +1021,13 @@ pub const TOPICS: [Topic; 16] = [
         team: "Billing",
         lines: &[
             c(
-                "Clients see prices in dollars on our booking page, but we charge in euros. Card payments are in euros, so people are confused.",
+                "Clients see prices in dollars on our booking page, but we charge in rupees. Card and UPI payments are in rupees, so people are confused.",
             ),
             n(
-                "Location currency is EUR but the booking page theme has a hard-coded $ from an old template.",
+                "Location currency is INR but the booking page theme has a hard-coded $ from an old template.",
             ),
             a(
-                "The prices are charged in euros; the dollar sign comes from your page's old theme, which writes it as text. I've switched you to the current theme, which shows each location's currency.",
+                "The prices are charged in rupees; the dollar sign comes from your page's old theme, which writes it as text. I've switched you to the current theme, which shows each location's currency.",
             ),
         ],
     },
@@ -1023,12 +1037,10 @@ pub const TOPICS: [Topic; 16] = [
         priority: Priority::Normal,
         team: "Customer success",
         lines: &[
-            c(
-                "We're closing the clinic in January and need to cancel. Our term ends on 31 December.",
-            ),
+            c("We're closing the clinic in April and need to cancel. Our term ends on 31 March."),
             n("Long-standing customer. Offer the pause option before cancelling."),
             a(
-                "I'm sorry to hear about the clinic. I can set the subscription to end on 31 December, so you keep everything until then. If you might reopen, we can also pause the account and keep your records for free for a year.",
+                "I'm sorry to hear about the clinic. I can set the subscription to end on 31 March, so you keep everything until then. If you might reopen, we can also pause the account and keep your records for free for a year.",
             ),
         ],
     },
@@ -1047,13 +1059,13 @@ pub const TOPICS: [Topic; 16] = [
         ],
     },
     Topic {
-        subject: "Our invoices need our VAT number",
+        subject: "Our invoices need our GSTIN",
         channel: Channel::HelpCentre,
         priority: Priority::Low,
         team: "Billing",
         lines: &[
             c(
-                "Can our VAT number be printed on the invoices you send us? Our accountant needs it for the reverse charge.",
+                "Can our GSTIN be printed on the invoices you send us? Our accountant needs it to claim the input tax credit.",
             ),
             a(
                 "Of course. Add it under Billing > Company details and every invoice from then on carries it. Would you like me to issue the last three again with it?",
@@ -1152,8 +1164,8 @@ pub fn seed(now: i64) -> Seed {
 
     let mut customers = Vec::with_capacity(BUSINESSES.len());
     let mut events = Vec::new();
-    for (at, (company, country, city)) in BUSINESSES.iter().enumerate() {
-        let name = format!("{} {}", FIRST[at], LAST[(at * 7) % LAST.len()]);
+    for (at, (company, person, city)) in BUSINESSES.iter().enumerate() {
+        let name = (*person).to_owned();
         let plan = Plan::ALL[(at * 5 + 1) % 4];
         let seats = match plan {
             Plan::Starter => 2 + dice.below(3) as i64,
@@ -1165,7 +1177,7 @@ pub fn seed(now: i64) -> Seed {
         let since = today
             .checked_sub_signed(chrono::Duration::days(months * 30))
             .unwrap_or(today);
-        let lifetime = plan.seat_cents() * seats * months;
+        let lifetime = plan.seat_paise() * seats * months;
         let mut tags: Vec<&str> = Vec::new();
         for _ in 0..1 + dice.below(3) {
             let tag = TAGS[dice.pick(TAGS.len())];
@@ -1178,12 +1190,13 @@ pub fn seed(now: i64) -> Seed {
             id,
             name: name.clone(),
             email: address(&name, at),
+            phone: phone_of(id),
             company: (*company).to_owned(),
             role: ROLES[at % ROLES.len()].to_owned(),
             plan: plan.key().to_owned(),
-            lifetime_cents: lifetime,
+            lifetime_paise: lifetime,
             seats,
-            country: (*country).to_owned(),
+            country: "IN".to_owned(),
             city: (*city).to_owned(),
             since: Some(since),
             tags: tags.join(","),
@@ -1222,7 +1235,7 @@ pub fn seed(now: i64) -> Seed {
             EventKind::InvoicePaid,
             now - (1 + dice.below(25) as i64) * 86_400,
             "Paid the monthly invoice".to_owned(),
-            format!("${}", thousands_of_cents(plan.seat_cents() * seats)),
+            format!("{} by UPI AutoPay", rupees(plan.seat_paise() * seats)),
         ));
         if dice.chance(45) {
             history.push((
@@ -1413,17 +1426,27 @@ pub fn seed(now: i64) -> Seed {
     }
 }
 
-/// `1,250.00` for 125000 cents.
-pub fn thousands_of_cents(cents: i64) -> String {
-    let whole = (cents / 100).to_string();
-    let mut out = String::with_capacity(whole.len() + 4);
-    for (at, digit) in whole.chars().enumerate() {
-        if at > 0 && (whole.len() - at).is_multiple_of(3) {
+/// `1,17,56,640`: digits grouped the Indian way, three then twos (lakh, crore).
+pub fn indian_digits(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 2 + 1);
+    let head = digits.len().saturating_sub(3);
+    for (at, digit) in digits[..head].chars().enumerate() {
+        if at > 0 && (head - at).is_multiple_of(2) {
             out.push(',');
         }
         out.push(digit);
     }
-    format!("{out}.{:02}", (cents % 100).abs())
+    if head > 0 {
+        out.push(',');
+    }
+    out.push_str(&digits[head..]);
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// `₹1,25,000` for 1,25,00,000 paise: whole rupees, grouped the Indian way.
+pub fn rupees(paise: i64) -> String {
+    format!("₹{}", indian_digits(paise / 100))
 }
 
 #[cfg(test)]
@@ -1483,8 +1506,14 @@ mod tests {
         assert!(clocks.iter().any(|sla| sla.breached()));
         assert!(clocks.iter().any(|sla| sla.at_risk()));
         assert!(clocks.iter().any(|sla| !sla.at_risk() && !sla.breached()));
-        // Addresses are on the documentation domains.
+        // Addresses are on the documentation domains; every customer is in India.
         for customer in &one.customers {
+            assert_eq!(customer.country, "IN");
+            assert!(
+                customer.phone.starts_with("+91 98765 4"),
+                "{}",
+                customer.phone
+            );
             assert!(
                 customer.email.ends_with(".example.com")
                     || customer.email.ends_with("@example.com")
@@ -1528,7 +1557,16 @@ mod tests {
         let long = "word ".repeat(40);
         let cut = preview_of(&long);
         assert!(cut.ends_with('…') && cut.chars().count() <= 121, "{cut}");
-        assert_eq!(thousands_of_cents(125_000), "1,250.00");
+        assert_eq!(rupees(49_900), "₹499");
+        assert_eq!(rupees(12_500_000), "₹1,25,000");
+        assert_eq!(rupees(1_175_664_000), "₹1,17,56,640");
+        assert_eq!(indian_digits(999), "999");
+        assert_eq!(indian_digits(1_000), "1,000");
+        assert_eq!(indian_digits(100_000), "1,00,000");
+        assert_eq!(indian_digits(10_000_000), "1,00,00,000");
+        assert_eq!(phone_of(7), "+91 98765 40007");
+        assert_eq!(state_of("Ludhiana"), Some("Punjab"));
+        assert_eq!(state_of("Delhi"), None);
         assert_eq!(short_span(30), "under 1 min");
         assert_eq!(short_span(90_000), "1 d 1 h");
     }

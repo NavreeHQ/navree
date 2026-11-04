@@ -30,7 +30,7 @@ const CUSTOMER_LINES: [&str; 24] = [
     "The calendar shows last week's hours after we changed them.",
     "A client paid twice for the same class. Can you refund one?",
     "We'd like to add a second payment method for the studio.",
-    "Clients in Portugal see the page in English. Can it follow their language?",
+    "Some clients would rather read the booking page in Hindi. Can it follow their language?",
     "The waiting list didn't offer the free place to anyone.",
     "Our export is missing the phone numbers column.",
     "Can a therapist have different hours at each location?",
@@ -60,7 +60,7 @@ const AGENT_LINES: [&str; 24] = [
     "I've added the column to your export; the next file has it.",
     "You can do that from the client's page: Add credit, then choose the session.",
     "I've reissued the invoice with your company address.",
-    "The page follows the browser's language once you switch on Portuguese under Languages.",
+    "The page follows the browser's language once you switch on Hindi and Punjabi under Languages.",
     "I've moved your widget to the new domain. It may take an hour to show everywhere.",
     "Bookings can close a set time before a class: Classes > Rules > Booking window.",
     "Thanks for your patience on this one.",
@@ -68,7 +68,7 @@ const AGENT_LINES: [&str; 24] = [
     "Glad that's sorted. I'll close this now; reply any time to open it again.",
     "The API has `DELETE /v2/bookings/{id}`; the docs link is in your dashboard.",
     "Spam filters dislike the old sender; I've switched you to a verified one.",
-    "Holidays can be blocked from Calendar > Closures, once a year for each country.",
+    "Holidays can be blocked from Calendar > Closures, with each state's list ready to add.",
     "Roles decide who sees reports; I've added it to the Manager role.",
     "Seats are counted when the invoice is made; I've corrected this one.",
     "Let me check with the team and come back to you today.",
@@ -136,89 +136,98 @@ const FILES: [(&str, i64); 10] = [
 ];
 
 const FIRST_NAMES: [&str; 32] = [
-    "Ada", "Bruno", "Carla", "Dmitri", "Elif", "Farah", "Gustav", "Hiro", "Ines", "Jamal", "Katya",
-    "Liam", "Mina", "Nils", "Olga", "Pablo", "Quinn", "Rosa", "Sven", "Tara", "Umar", "Vera",
-    "Wen", "Ximena", "Yusuf", "Zoe", "Anouk", "Bilal", "Chiara", "Dara", "Emil", "Fleur",
+    "Harleen",
+    "Manpreet",
+    "Jaspreet",
+    "Simran",
+    "Amandeep",
+    "Rajveer",
+    "Navdeep",
+    "Kulwinder",
+    "Ravneet",
+    "Sukhmani",
+    "Gurleen",
+    "Inderjit",
+    "Baljeet",
+    "Tejinder",
+    "Prabhjot",
+    "Jasleen",
+    "Harjot",
+    "Amrit",
+    "Ishaan",
+    "Ekta",
+    "Kunal",
+    "Meera",
+    "Tanvi",
+    "Ritika",
+    "Aditya",
+    "Kavya",
+    "Ananya",
+    "Nikhil",
+    "Shreya",
+    "Saurabh",
+    "Swati",
+    "Abhinav",
 ];
 
 const LAST_NAMES: [&str; 32] = [
-    "Abbott", "Brennan", "Castillo", "Demir", "Eriksen", "Fontaine", "Galloway", "Hartmann",
-    "Iqbal", "Janssen", "Kowal", "Lindgren", "Moreau", "Nakamura", "Oduya", "Petrov", "Quigley",
-    "Rossi", "Sandoval", "Toivonen", "Ueda", "Varga", "Whitlock", "Xu", "Yilmaz", "Zamora",
-    "Achebe", "Brandt", "Cerny", "Dlamini", "Esposito", "Falk",
+    "Sandhu", "Gill", "Dhillon", "Brar", "Grewal", "Bains", "Sidhu", "Cheema", "Randhawa", "Virk",
+    "Chahal", "Toor", "Sekhon", "Aulakh", "Ghuman", "Hundal", "Sohal", "Kahlon", "Malhotra",
+    "Mehra", "Arora", "Bhatia", "Gupta", "Agarwal", "Khanna", "Joshi", "Talwar", "Bansal", "Goyal",
+    "Chawla", "Anand", "Bhalla",
 ];
 
 const PREFIXES: [&str; 24] = [
-    "Alder",
-    "Beacon",
-    "Cedar",
-    "Driftwood",
-    "Ember",
-    "Fern",
-    "Garnet",
-    "Hazel",
-    "Indigo",
-    "Juniper",
-    "Kelp",
-    "Linen",
-    "Maple",
-    "Nimbus",
-    "Oak",
-    "Pine",
-    "Quarry",
-    "Rowan",
-    "Sage",
-    "Thistle",
-    "Umber",
-    "Violet",
-    "Willow",
-    "Yarrow",
+    "Sukoon", "Anand", "Shanti", "Prakash", "Sunehri", "Kesar", "Tulsi", "Chandan", "Gulmohar",
+    "Neem", "Amaltas", "Pipal", "Sarson", "Basant", "Jharna", "Kiran", "Mehak", "Nirmal", "Roshni",
+    "Bageecha", "Sangam", "Nadi", "Rangla", "Saanjh",
 ];
 
 const KINDS: [&str; 16] = [
-    "Yoga",
-    "Physio",
-    "Dental",
+    "Yoga Studio",
+    "Physiotherapy",
+    "Dental Care",
     "Salon",
-    "Tutoring",
-    "Climbing",
+    "Tutorials",
+    "Fitness Studio",
     "Vet Clinic",
     "Pilates",
-    "Barbers",
-    "Massage",
-    "Music School",
-    "Swim School",
+    "Gents Salon",
+    "Ayurveda Centre",
+    "Music Academy",
+    "Swimming Academy",
     "Counselling",
     "Gym",
     "Spa",
-    "Language School",
+    "Language Institute",
 ];
 
-const PLACES: [(&str, &str); 24] = [
-    ("GB", "York"),
-    ("IE", "Galway"),
-    ("US", "Boise"),
-    ("CA", "Victoria"),
-    ("AU", "Perth"),
-    ("NZ", "Dunedin"),
-    ("DE", "Bremen"),
-    ("NL", "Delft"),
-    ("FR", "Lille"),
-    ("ES", "Bilbao"),
-    ("PT", "Braga"),
-    ("IT", "Turin"),
-    ("SE", "Uppsala"),
-    ("NO", "Bergen"),
-    ("DK", "Odense"),
-    ("PL", "Wrocław"),
-    ("IN", "Mysuru"),
-    ("SG", "Singapore"),
-    ("JP", "Fukuoka"),
-    ("ZA", "Pretoria"),
-    ("BR", "Curitiba"),
-    ("MX", "Puebla"),
-    ("AR", "Rosario"),
-    ("KE", "Mombasa"),
+/// Cities, all in India.
+const PLACES: [&str; 24] = [
+    "Ludhiana",
+    "Amritsar",
+    "Jalandhar",
+    "Chandigarh",
+    "Patiala",
+    "Mohali",
+    "Bathinda",
+    "Delhi",
+    "Gurugram",
+    "Noida",
+    "Jaipur",
+    "Lucknow",
+    "Dehradun",
+    "Shimla",
+    "Varanasi",
+    "Kanpur",
+    "Mumbai",
+    "Pune",
+    "Bengaluru",
+    "Panchkula",
+    "Hoshiarpur",
+    "Moga",
+    "Kapurthala",
+    "Zirakpur",
 ];
 
 /// Text as an SQL literal: in single quotes, its quotes doubled.
@@ -375,9 +384,9 @@ fn word_tables() -> Vec<String> {
     for (a, prefix) in PREFIXES.iter().enumerate() {
         for (b, kind) in KINDS.iter().enumerate() {
             let n = a * KINDS.len() + b;
-            let (country, city) = PLACES[(a * 7 + b * 3) % PLACES.len()];
+            let city = PLACES[(a * 7 + b * 3) % PLACES.len()];
             companies.push(format!(
-                "{n}, {}, '{country}', {}",
+                "{n}, {}, 'IN', {}",
                 literal(&format!("{prefix} {kind}")),
                 literal(city)
             ));
@@ -408,9 +417,9 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
         .enumerate()
         .map(|(n, plan)| format!("WHEN {n} THEN '{}'", plan.key()))
         .collect();
-    let seat_cents: Vec<String> = Plan::ALL
+    let seat_paise: Vec<String> = Plan::ALL
         .iter()
-        .map(|plan| format!("WHEN '{}' THEN {}", plan.key(), plan.seat_cents()))
+        .map(|plan| format!("WHEN '{}' THEN {}", plan.key(), plan.seat_paise()))
         .collect();
     let targets: Vec<String> = Priority::ALL
         .iter()
@@ -426,11 +435,12 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
         "WITH RECURSIVE g(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM g WHERE i < {last}),
          h AS (SELECT i, (i * 2654435761 + 97) % 4294967296 AS a FROM g),
          p AS (SELECT i, a, CASE a % 4 {plans} END AS plan, 3 + (a / 5) % 40 AS months FROM h)
-         INSERT INTO customers (id, name, email, company, role, plan, lifetime_cents, seats, country, city, since, tags)
+         INSERT INTO customers (id, name, email, phone, company, role, plan, lifetime_paise, seats, country, city, since, tags)
          SELECT {FIRST_CUSTOMER} + p.i, s.first || ' ' || s.last, s.address || p.i || '@example.org',
+                '+91 98765 4' || printf('%04d', ({FIRST_CUSTOMER} + p.i) % 10000),
                 c.name, CASE p.a % 3 WHEN 0 THEN 'Owner' WHEN 1 THEN 'Front desk lead' ELSE 'Practice manager' END,
                 p.plan,
-                (CASE p.plan {seat_cents} END) * (2 + p.a % 20) * p.months,
+                (CASE p.plan {seat_paise} END) * (2 + p.a % 20) * p.months,
                 2 + p.a % 20, c.country, c.city,
                 date({today}, '-' || p.months || ' months'),
                 CASE p.a % 5 WHEN 0 THEN 'vip' WHEN 1 THEN 'multi-location,annual' WHEN 2 THEN 'api' WHEN 3 THEN '' ELSE 'migrating' END
@@ -438,7 +448,7 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
                 JOIN seed_company c ON c.n = (p.i * 11 + p.a % 7) % {companies}",
         last = customers - 1,
         plans = plans.join(" "),
-        seat_cents = seat_cents.join(" "),
+        seat_paise = seat_paise.join(" "),
     ))
     .await?;
     // The conversations: most long closed; a few days' worth open, pending or snoozed.
@@ -480,7 +490,7 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
     tx.execute_script(&format!(
         "INSERT INTO messages (conversation_id, kind, author, agent_id, body, at)
          SELECT c.id, k.kind,
-                CASE k.kind WHEN 'customer' THEN cu.name ELSE COALESCE(ag.name, 'Priya Raman') END,
+                CASE k.kind WHEN 'customer' THEN cu.name ELSE COALESCE(ag.name, 'Priya Verma') END,
                 CASE k.kind WHEN 'customer' THEN NULL ELSE COALESCE(c.assignee_id, 2) END,
                 l.body,
                 c.created_at + ((c.last_at - c.created_at) * (k.i - 1)) / MAX(c.messages - 1, 1)
@@ -511,7 +521,7 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
          SELECT id, 'plan_changed', CAST(strftime('%s', since) AS INTEGER) + 1209600, 'Moved to ' || upper(substr(plan, 1, 1)) || substr(plan, 2), seats || ' seats, paid monthly'
          FROM customers WHERE id >= {FIRST_CUSTOMER};
          INSERT INTO customer_events (customer_id, kind, at, title, detail)
-         SELECT id, 'invoice_paid', {now} - 86400 * (1 + id % 25), 'Paid the monthly invoice', 'Paid by card'
+         SELECT id, 'invoice_paid', {now} - 86400 * (1 + id % 25), 'Paid the monthly invoice', 'Paid by UPI AutoPay'
          FROM customers WHERE id >= {FIRST_CUSTOMER};
          INSERT INTO customer_events (customer_id, kind, at, title, detail)
          SELECT customer_id, 'ticket_opened', created_at, 'Wrote in: ' || subject, 'Through ' || replace(channel, '-', ' ')
@@ -650,7 +660,7 @@ pub fn generated(id: i64, now: i64) -> (crate::data::Conversation, Vec<crate::da
                 author: if kind == "customer" {
                     customer.clone()
                 } else {
-                    assignee.map_or("Priya Raman", |_| agent).to_owned()
+                    assignee.map_or("Priya Verma", |_| agent).to_owned()
                 },
                 agent_id: (kind != "customer").then_some(assignee.unwrap_or(2)),
                 body: line(k).to_owned(),

@@ -67,12 +67,12 @@ pub fn all() -> Vec<Example> {
 /// What the panes hold in these examples.
 fn rows(n: usize) -> Vec<Node> {
     [
-        ("Card declined on upgrade", "Maya Whitfield · 4 min"),
-        ("Reminder texts an hour early", "Mateo Bianchi · 21 min"),
-        ("Webhook answered 410", "Leila Fischer · 1 h"),
-        ("Second location", "Oliver Pryce · 2 h"),
-        ("Export every client", "Hanne Doyle · 3 h"),
-        ("Staff see each other's schedules", "Kofi Boateng · 5 h"),
+        ("Card declined on upgrade", "Jasleen Kaur · 4 min"),
+        ("Reminders 5½ hours early", "Inderjit Randhawa · 21 min"),
+        ("Webhook answered 410", "Gurleen Ghuman · 1 h"),
+        ("Second location", "Mehak Chawla · 2 h"),
+        ("Export every client", "Karan Bhalla · 3 h"),
+        ("Staff see each other's schedules", "Baljeet Virk · 5 h"),
     ]
     .iter()
     .take(n)
@@ -112,7 +112,7 @@ fn split_pane_default() -> SplitPane {
                 .header(Heading::h3("Card declined on upgrade"))
                 .body(
                     Message::new(BubbleSide::Start)
-                        .header("Maya Whitfield")
+                        .header("Jasleen Kaur")
                         .content(Bubble::new(
                             BubbleSide::Start,
                             "The card was declined twice this morning.",
@@ -131,7 +131,7 @@ fn split_pane_default() -> SplitPane {
                 .min(18)
                 .max(40)
                 .collapsible()
-                .header(Heading::h3("Maya Whitfield"))
+                .header(Heading::h3("Jasleen Kaur"))
                 .body(FactCard::new("Plan", "Growth").detail("9 seats")),
         )
         .current("desk-thread")
@@ -221,17 +221,17 @@ fn lazy_list_conversation() -> LazyList {
     let said = [
         (
             BubbleSide::Start,
-            "Maya Whitfield",
+            "Jasleen Kaur",
             "We tried to upgrade and the card was declined twice.",
         ),
         (
             BubbleSide::End,
-            "Priya Raman",
+            "Priya Verma",
             "I can see two attempts at 09:12 and 09:14.",
         ),
         (
             BubbleSide::Start,
-            "Maya Whitfield",
+            "Jasleen Kaur",
             "That worked! We're on Growth now.",
         ),
     ];
