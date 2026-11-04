@@ -296,6 +296,7 @@ export const sections: DocsSection[] = [
       "tooltip",
       "hover-card",
       // Layout
+      "split-pane",
       "accordion",
       "collapsible",
       "scroll-area",
@@ -315,6 +316,7 @@ export const sections: DocsSection[] = [
       "toolbar",
       // Data
       "table",
+      "lazy-list",
       "stat",
     ],
     groups: [
@@ -323,7 +325,7 @@ export const sections: DocsSection[] = [
       { title: "Display", from: "card" },
       { title: "Feedback", from: "alert" },
       { title: "Overlays", from: "dialog" },
-      { title: "Layout", from: "accordion" },
+      { title: "Layout", from: "split-pane" },
       { title: "Navigation", from: "breadcrumb" },
       { title: "Steps, ranges and trees", from: "stepper" },
       { title: "Data", from: "table" },

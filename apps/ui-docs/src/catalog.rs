@@ -104,6 +104,7 @@ pub const GROUPS: &[Group] = &[
         title: "Layout",
         components: &[
             "layout",
+            "split-pane",
             "accordion",
             "collapsible",
             "scroll-area",
@@ -125,7 +126,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "data",
         title: "Data",
-        components: &["table", "data-table", "stat"],
+        components: &["table", "data-table", "lazy-list", "stat"],
     },
 ];
 
@@ -421,6 +422,13 @@ pub const COMPONENTS: &[Component] = &[
     )
     .page("/docs/ui/layout/")
     .parts("stack"),
+    component(
+        "split-pane",
+        "SplitPane",
+        &["SplitPane", "Pane", "SplitWidth", "SplitHeight", "SplitSizes", "SplitSave"],
+        "thumb",
+    )
+    .parts("default"),
     component("accordion", "Accordion", &["Accordion"], "default").parts("default"),
     component("collapsible", "Collapsible", &["Collapsible"], "default").parts("default"),
     component(
@@ -535,6 +543,13 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .page("/docs/ui/data-table/")
+    .parts("default"),
+    component(
+        "lazy-list",
+        "LazyList",
+        &["LazyList", "LazyItem", "LazyOrder", "LazyEnd", "LazyLabels", "LazyQuery", "LazyPage"],
+        "thumb",
+    )
     .parts("default"),
     component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
     // Pages that aren't components

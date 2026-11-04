@@ -36,6 +36,8 @@ pub const FILES: &[&str] = &[
     "flow/number.rs",
     "flow/tree.rs",
     "flow/toolbar.rs",
+    "components/split.rs",
+    "components/lazy.rs",
     "shell.rs",
     "form.rs",
     "dates/calendar.rs",

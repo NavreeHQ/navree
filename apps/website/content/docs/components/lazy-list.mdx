@@ -1,0 +1,86 @@
+---
+title: "LazyList"
+description: "A long list that loads as it is read: pages by cursor at either end, the reader's place kept, a page that stays the same size, and live changes merged."
+---
+
+<UiPreview example="lazy-list/default" />
+
+`LazyList` is the default way to show a list that can grow without end: an inbox, a conversation, a feed, a log. The page draws its first page. When the reader nears either end, the `lazy` module asks your server for the next page, by the cursor of the item at that end. It never asks by offset, so a page deep in the list costs what the first does.
+
+```rust
+use navree::ui::*;
+
+LazyList::new("conversations", "Conversations", "/inbox/rows")
+    .items(first_page.iter().map(|row| LazyItem::new(row.id.to_string(), row.cursor(), draw(row))))
+    .more_after(format!("/inbox?after={}", last.cursor()))
+    .since(revision.to_string())
+    .live_from("/inbox/events", Some("conversations"), LazyEnd::Start)
+```
+
+## Lazy is the default
+
+Draw a long list with `LazyList` unless you have a reason not to:
+
+- **The first screen costs one page.** Fifty rows, or thirty messages, whatever the table holds.
+- **Every next page costs the same.** Answer it by keyset, `WHERE (last_at, id) < (?, ?)`, with an index that ends in the key.
+- **The page stays small.** Past `.max(...)` items (300 by default) the far end is dropped and fetched again on the way back, so the page holds the same few hundred nodes after the reader has scrolled through thousands.
+
+Choose a [DataTable](/docs/ui/data-table/) instead when people compare and act on rows: sort by any column, filter by many at once, select across pages, export. Choose a `LazyList` for a stream read in one order.
+
+## Your server's side
+
+The runtime asks the list's source with `dir=start` or `dir=end` and the `cursor` of the item at that end, or with `dir=live` and `since`. `LazyQuery` reads the question and never fails. `LazyPage` answers a page of items and whether more lie beyond:
+
+```rust
+async fn rows(ask: LazyQuery, uow: Uow) -> Result<LazyPage> {
+    let (rows, more) = match ask.ask() {
+        LazyAsk::After(cursor) => older_than(&uow, cursor, 50).await?,
+        LazyAsk::Before(cursor) => newer_than(&uow, cursor, 50).await?,
+        _ => first_page(&uow, 50).await?,
+    };
+    Ok(LazyPage::new(rows.iter().map(item), more))
+}
+```
+
+Cursors compare as text when a live item is placed, so make them sort: pad the numbers (`format!("{last_at:012}{id:012}")`).
+
+## Oldest first
+
+`.order(LazyOrder::Ascending)` runs the cursors the other way: a conversation, oldest message first, opened at its newest. Older messages load as the reader scrolls up, and the message they were reading stays where it was.
+
+<UiPreview example="lazy-list/conversation" />
+
+## Live
+
+With `.since(revision)` and `.live_from(stream, event, end)`, the list asks what changed whenever the stream speaks. Answer with `LazyPage::changes(items, new_revision, gone_keys)`: an item the list has is replaced, a new one goes where its cursor sorts, and a gone one goes. No item is ever in the list twice. The ask carries the cursors of the window the page holds, `LazyQuery::window()`, so you can draw again what changes with no write of its own, such as a clock counting down.
+
+`.view(...)` names what the list shows. A page drawn again for the same view, when someone opens a row, keeps the rows the reader loaded and where they scrolled. `.current(key)` marks the row the page is about.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The items are a list (`role="list"`) named by the label. Each end is a link, "Show more" by default: it is what loads with the keyboard, and what a page with JavaScript off follows.
+- A status line announces each page that arrives: "50 more loaded".
+- Items added above keep the reader's place, so focus and the reading position don't jump.
+- With JavaScript off each end goes to a page that holds the next part of the list.
+
+</UiA11y>
+
+## API
+
+### LazyList
+
+<UiProps type="LazyList" />
+
+### LazyItem
+
+<UiProps type="LazyItem" />
+
+### LazyQuery
+
+<UiProps type="LazyQuery" />
+
+### LazyPage
+
+<UiProps type="LazyPage" />

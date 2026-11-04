@@ -11,11 +11,13 @@ mod display;
 mod feedback;
 mod flow;
 mod icons;
+mod inbox;
 mod inputs;
 mod layout;
 mod menus;
 mod navigation;
 mod overlays;
+mod panes;
 mod patterns;
 mod phone;
 mod pickers;
@@ -37,6 +39,7 @@ pub fn all() -> Vec<Example> {
     all.extend(states::all());
     all.extend(overlays::all());
     all.extend(layout::all());
+    all.extend(panes::all());
     all.extend(navigation::all());
     all.extend(menus::all());
     all.extend(flow::all());
@@ -45,5 +48,6 @@ pub fn all() -> Vec<Example> {
     all.extend(themes::all());
     all.extend(icons::all());
     all.extend(store::all());
+    all.extend(inbox::all());
     all
 }
