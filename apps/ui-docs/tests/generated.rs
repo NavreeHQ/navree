@@ -36,6 +36,57 @@ fn no_preview_follows_a_stream() {
     assert!(seen > 100, "{seen} previews");
 }
 
+/// A preview links the stylesheets its parts use, as a page with those parts does: the
+/// theme builder's own sheet, without which its choices are plain text.
+#[test]
+fn a_preview_links_every_stylesheet_its_page_uses() {
+    let files = ui_docs::generate();
+    let sheet = navree::ui::assets::THEME_BUILDER_URL
+        .rsplit('/')
+        .next()
+        .expect("the builder's sheet has a file name");
+    let builder = &files["previews/theme-builder/default.html"];
+    assert!(
+        builder.contains(&format!("<link rel=\"stylesheet\" href=\"../_toolkit/{sheet}\">")),
+        "{builder}"
+    );
+    let button = &files["previews/button/variants.html"];
+    assert!(!button.contains(sheet), "{button}");
+}
+
+/// A page is drawn in its own look: the theme builder's page in its draft's theme and
+/// mode, as the app would send it.
+#[test]
+fn the_theme_builder_preview_is_drawn_in_its_draft() {
+    let files = ui_docs::generate();
+    let builder = &files["previews/theme-builder/default.html"];
+    assert!(
+        builder.starts_with("<!doctype html>\n<html lang=\"en\" data-theme=\"ocean\" data-mode=\"dark\">"),
+        "{builder}"
+    );
+    assert!(
+        builder.contains("<meta name=\"color-scheme\" content=\"dark\">"),
+        "{builder}"
+    );
+    // A theme of your own links its sheet, which is written next to the toolkit's files.
+    for (name, html) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
+    {
+        for link in html.split("<link ").filter(|link| link.contains("data-ui-theme")) {
+            let href = link
+                .split("href=\"../")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .expect("a theme link has an address");
+            assert!(
+                files.contains_key(&format!("previews/{href}")),
+                "{name} links {href}, which is not written"
+            );
+        }
+    }
+}
+
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.

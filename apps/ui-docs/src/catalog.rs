@@ -1,7 +1,7 @@
 //! What the docs show: the components, grouped the way people look for them,
 //! and every example, with the Rust code that produced it.
 
-use navree::ui::Node;
+use navree::ui::{LazyItem, Node, View};
 
 /// A group of components on the docs' landing page and in the sidebar.
 pub struct Group {
@@ -665,6 +665,9 @@ pub struct Entry {
 pub enum Kind {
     /// One tree.
     Single(fn() -> Node),
+    /// A whole page: its body, drawn in the page's look (its theme, mode and
+    /// density on `<html>`, and the stylesheets of its own themes).
+    Page(fn() -> View),
     /// Several trees, each with a caption.
     Gallery(fn() -> Vec<(&'static str, Node)>),
     /// Many cells and a search box that filters them. For galleries too long to scan.
@@ -675,6 +678,20 @@ pub enum Kind {
         noun: &'static str,
         draw: fn() -> Vec<Entry>,
     },
+}
+
+/// A page a list's source would answer with, drawn ahead of time. A preview has
+/// no server, so the preview script answers the list's requests from these, in
+/// order, and with an empty last page once they run out.
+pub struct Answer {
+    /// The source's path, as the list names it: `/desk/rows`.
+    pub src: &'static str,
+    /// The end the page is for: `start` or `end`.
+    pub dir: &'static str,
+    /// The items, in the list's order.
+    pub items: Vec<LazyItem>,
+    /// Whether more lies beyond them.
+    pub more: bool,
 }
 
 /// How the preview frame places what it shows.
@@ -752,6 +769,11 @@ pub struct Example {
     /// Drawn this many px wide and scaled to fit the column: for a whole page,
     /// whose layout changes below 768px.
     pub width: Option<u32>,
+    /// The frame grows to what it shows. Off for a page drawn edge to edge,
+    /// which fills a frame of its height, unless it asks for it again.
+    pub fit: bool,
+    /// What the sources of the lists in it would answer.
+    pub answers: fn() -> Vec<Answer>,
 }
 
 impl Example {
@@ -776,6 +798,8 @@ impl Example {
             live: false,
             streaming: None,
             width: None,
+            fit: true,
+            answers: Vec::new,
         }
     }
 
@@ -796,6 +820,14 @@ impl Example {
 
     pub fn fill(mut self) -> Self {
         self.layout = Layout::Fill;
+        self.fit = false;
+        self
+    }
+
+    /// A page drawn edge to edge that shows all of itself: the frame grows to
+    /// it, rather than showing its top.
+    pub fn fit(mut self) -> Self {
+        self.fit = true;
         self
     }
 
@@ -839,6 +871,12 @@ impl Example {
     /// Shows the live dot in `state`.
     pub fn streaming(mut self, state: &'static str) -> Self {
         self.streaming = Some(state);
+        self
+    }
+
+    /// Answers the requests of the lists in it from `answers`.
+    pub fn answers(mut self, answers: fn() -> Vec<Answer>) -> Self {
+        self.answers = answers;
         self
     }
 }
@@ -941,14 +979,15 @@ macro_rules! gallery {
 }
 
 /// `page!(component, slug, title, function)`: an example of a whole page in the
-/// app shell. The function returns an `AppPage`; the frame shows its body.
+/// app shell. The function returns an `AppPage`; the frame shows its body, in
+/// the page's look.
 macro_rules! page {
     ($component:literal, $slug:literal, $title:literal, $function:ident) => {
         $crate::catalog::Example::new(
             $component,
             $slug,
             $title,
-            $crate::catalog::Kind::Single(|| $function().to_view().body_node().clone()),
+            $crate::catalog::Kind::Page(|| $function().to_view()),
             $crate::catalog::body_of(SOURCE, stringify!($function)),
         )
     };

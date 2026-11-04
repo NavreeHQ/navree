@@ -4,7 +4,10 @@
 use std::collections::BTreeMap;
 
 use navree::ui::assets::{self, Asset};
-use navree::ui::{Input, Node, PAGE_CSP, components, el, icons, measure, render, tokens};
+use navree::ui::{
+    Input, LazyPage, Node, PAGE_CSP, Uses, View, components, el, icons, measure, render, tokens,
+};
+use navree::ui::theme::Theme;
 use serde::Serialize;
 
 use crate::api::TypeDoc;
@@ -119,15 +122,20 @@ fn escape(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// What an example draws, ready to render, and the captions of a gallery.
-fn stage(example: &Example) -> (Node, Vec<String>) {
+/// What an example draws, ready to render, and the captions of a gallery. A
+/// page's body comes from `page`, the page the example drew.
+fn stage(example: &Example, page: Option<&View>) -> (Node, Vec<String>) {
+    let single = |node: Node| -> Node {
+        el("div")
+            .flag("data-preview-stage", true)
+            .attr_opt("data-live", example.streaming)
+            .child(node)
+            .into()
+    };
     match &example.kind {
-        Kind::Single(draw) => (
-            el("div")
-                .flag("data-preview-stage", true)
-                .attr_opt("data-live", example.streaming)
-                .child(draw())
-                .into(),
+        Kind::Single(draw) => (single(draw()), Vec::new()),
+        Kind::Page(_) => (
+            single(page.map_or(Node::Empty, |view| view.body_node().clone())),
             Vec::new(),
         ),
         Kind::Search { label, noun, draw } => {
@@ -243,20 +251,69 @@ fn columns(cells: Cells, n: usize) -> i64 {
 /// core runtime unless the example runs commands, and less the live module,
 /// since no preview follows a stream. The core boosts links and forms, which
 /// go nowhere in a preview.
-fn scripts(example: &Example, node: &Node) -> Vec<String> {
-    assets::scripts(measure(node).uses)
+fn scripts(example: &Example, uses: Uses) -> Vec<String> {
+    assets::scripts(uses)
         .filter(|url| example.live || *url != assets::CORE_URL)
         .filter(|url| *url != assets::LIVE_URL)
         .map(|url| file_of(url).to_owned())
         .collect()
 }
 
+/// The module stylesheets a preview links after the toolkit's own, as a page
+/// with the same parts does: the theme builder's, say.
+fn sheets(uses: Uses) -> Vec<String> {
+    assets::stylesheets(uses)
+        .map(|url| file_of(url).to_owned())
+        .collect()
+}
+
+/// Where a preview finds the stylesheet of a theme of your own, under the
+/// previews: what an app serves at the theme's `stylesheet()`, named by the
+/// theme's key. The address an app uses names the theme by all its values, too
+/// long for a file's name.
+fn theme_sheet_path(theme: &Theme) -> String {
+    format!("_toolkit/theme/{}.css", theme.key())
+}
+
+/// The pages a preview's lists are answered from, as templates the preview
+/// script reads. Inert markup: nothing in a template runs or loads.
+fn answers(example: &Example) -> String {
+    let mut out = String::new();
+    for answer in (example.answers)() {
+        let html = LazyPage::new(answer.items, answer.more).to_html();
+        out.push_str(&format!(
+            "<template data-preview-answer data-src=\"{}\" data-dir=\"{}\" data-more=\"{}\">{html}</template>",
+            escape(answer.src),
+            escape(answer.dir),
+            if answer.more { "1" } else { "0" },
+        ));
+    }
+    out
+}
+
+/// What a preview needs besides its body: the page it draws, if it is one, and
+/// the module scripts and stylesheets its parts use.
+struct Parts<'a> {
+    page: Option<&'a View>,
+    scripts: &'a [String],
+    sheets: &'a [String],
+}
+
 /// The preview document of one example.
-fn document(example: &Example, stage: &Node, scripts: &[String], component: &Component) -> String {
+fn document(example: &Example, stage: &Node, parts: &Parts<'_>, component: &Component) -> String {
     let mut head = String::new();
-    head.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
+    head.push_str("<!doctype html>\n<html lang=\"en\"");
+    // The page's look, as the page writes it: a theme's key, a mode's id and a
+    // density's id, never text from outside.
+    for (name, value) in parts.page.map(View::look).unwrap_or_default() {
+        head.push_str(&format!(" {name}=\"{}\"", escape(&value)));
+    }
+    head.push_str(">\n<head>\n<meta charset=\"utf-8\">\n");
     head.push_str("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n");
-    head.push_str("<meta name=\"color-scheme\" content=\"dark\">\n");
+    head.push_str(&format!(
+        "<meta name=\"color-scheme\" content=\"{}\">\n",
+        parts.page.map_or("dark", View::color_scheme)
+    ));
     head.push_str(&format!(
         "<meta http-equiv=\"Content-Security-Policy\" content=\"{}\">\n",
         preview_csp()
@@ -275,9 +332,21 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
         "<link rel=\"stylesheet\" href=\"../_toolkit/{}\">\n",
         file_of(assets::NAVREE_UI_URL)
     ));
+    for sheet in parts.sheets {
+        head.push_str(&format!(
+            "<link rel=\"stylesheet\" href=\"../_toolkit/{sheet}\">\n"
+        ));
+    }
+    // A theme of your own: its sheet after the toolkit's, so its rules come later.
+    for theme in parts.page.map(View::own_themes).unwrap_or_default() {
+        head.push_str(&format!(
+            "<link rel=\"stylesheet\" href=\"../{}\" data-ui-theme>\n",
+            theme_sheet_path(theme)
+        ));
+    }
     head.push_str("<link rel=\"stylesheet\" href=\"../_frame/preview.css\">\n");
     head.push_str("<script type=\"module\" src=\"../_frame/preview.js\"></script>\n");
-    for script in scripts {
+    for script in parts.scripts {
         head.push_str(&format!(
             "<script type=\"module\" src=\"../_toolkit/{script}\"></script>\n"
         ));
@@ -292,8 +361,9 @@ fn document(example: &Example, stage: &Node, scripts: &[String], component: &Com
     // A static page has no server to stream from: a region that follows a stream would open
     // one, to an address the site does not have, and keep trying.
     let body = without_streams(&render(stage));
+    let answers = answers(example);
     format!(
-        "{head}<body data-preview=\"{}\"{show}>{body}</body>\n</html>\n",
+        "{head}<body data-preview=\"{}\"{show}>{body}{answers}</body>\n</html>\n",
         example.layout.as_str(),
     )
 }
@@ -337,6 +407,8 @@ struct ExampleJson<'a> {
     live: bool,
     /// Drawn this wide and scaled to fit.
     width: Option<u32>,
+    /// The frame grows to what it shows.
+    fit: bool,
     /// The toolkit modules the preview loads.
     scripts: Vec<String>,
     captions: Vec<String>,
@@ -478,14 +550,36 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             .iter()
             .find(|component| component.id == example.component)
             .unwrap_or_else(|| panic!("{}: no such component", example.id()));
-        let (node, captions) = stage(example);
-        let scripts = scripts(example, &node);
+        let page = match &example.kind {
+            Kind::Page(draw) => Some(draw()),
+            Kind::Single(_) | Kind::Gallery(_) | Kind::Search { .. } => None,
+        };
+        let (node, captions) = stage(example, page.as_ref());
+        let uses = measure(&node).uses;
+        let scripts = scripts(example, uses);
+        let sheets = sheets(uses);
+        // A page in a theme of your own links its sheet, which an app serves from
+        // the theme's values: here it is written next to the toolkit's files.
+        for theme in page.as_ref().map(View::own_themes).unwrap_or_default() {
+            if let Some(css) = theme.css() {
+                files.insert(format!("previews/{}", theme_sheet_path(theme)), css);
+            }
+        }
+        let parts = Parts {
+            page: page.as_ref(),
+            scripts: &scripts,
+            sheets: &sheets,
+        };
         files.insert(
             format!("previews/{}/{}.html", example.component, example.slug),
-            document(example, &node, &scripts, component),
+            document(example, &node, &parts, component),
         );
         let slots = match &example.kind {
             Kind::Single(draw) => slots(&draw()),
+            Kind::Page(_) => page
+                .as_ref()
+                .map(|view| slots(view.body_node()))
+                .unwrap_or_default(),
             Kind::Gallery(_) | Kind::Search { .. } => Vec::new(),
         };
         rendered.push(ExampleJson {
@@ -494,7 +588,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             slug: example.slug,
             title: example.title,
             kind: match example.kind {
-                Kind::Single(_) => "single",
+                Kind::Single(_) | Kind::Page(_) => "single",
                 Kind::Gallery(_) => "gallery",
                 Kind::Search { .. } => "search",
             },
@@ -507,6 +601,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             open: example.open,
             live: example.live,
             width: example.width,
+            fit: example.fit,
             scripts,
             captions,
             slots,
