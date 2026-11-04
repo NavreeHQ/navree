@@ -254,8 +254,9 @@ pub struct UsageReport {
     pub timestamp: DateTime<Utc>,
 }
 
-/// A webhook endpoint created by `billing:webhook`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A webhook endpoint created by `billing:webhook`. `Debug` never shows the
+/// signing secret.
+#[derive(Clone, PartialEq, Eq)]
 pub struct WebhookEndpoint {
     /// The provider's endpoint id.
     pub id: String,
@@ -263,6 +264,16 @@ pub struct WebhookEndpoint {
     pub secret: Option<String>,
     /// The events it receives.
     pub events: Vec<String>,
+}
+
+impl std::fmt::Debug for WebhookEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebhookEndpoint")
+            .field("id", &self.id)
+            .field("secret", &self.secret.as_ref().map(|_| "[redacted]"))
+            .field("events", &self.events)
+            .finish()
+    }
 }
 
 /// What a webhook event means for the local copy.
@@ -400,4 +411,21 @@ pub trait BillingProvider: Send + Sync + 'static {
 
     /// Parses a verified webhook body.
     fn parse_webhook(&self, body: &[u8]) -> Result<WebhookEvent, ProviderError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_created_webhook_endpoint_never_shows_its_secret_in_debug_output() {
+        let endpoint = WebhookEndpoint {
+            id: "we_1Q2w3E4r".to_owned(),
+            secret: Some("whsec_b1ll1ng5ecret".to_owned()),
+            events: vec!["invoice.paid".to_owned()],
+        };
+        let printed = format!("{endpoint:?}");
+        assert!(!printed.contains("b1ll1ng5ecret"), "{printed}");
+        assert!(printed.contains("we_1Q2w3E4r"), "{printed}");
+    }
 }
