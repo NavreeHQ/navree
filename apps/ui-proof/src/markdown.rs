@@ -16,7 +16,7 @@ use navree::ui::*;
 /// An answer as a model writes it.
 const REPLY: &str = "## Weekly summary\n\nUPI payments from **Amritsar** grew *12%* this week. Three things need you:\n\n1. Follow up with [Harleen Kaur](mailto:harleen.kaur@example.com) about the Patiala order.\n2. Read the [full report](/reports/weekly).\n3. Check the ₹1,00,000 refund for `order-1042`.\n\n> The next settlement runs on Monday at 10:30 IST.\n\n- [x] Send the invoices\n- [ ] Call Gurpreet Singh\n\n```sql\nSELECT city, SUM(total) AS revenue FROM orders GROUP BY city;\n```\n";
 
-const TABLE: &str = "| City | Orders | Revenue |\n|:--|--:|--:|\n| Ludhiana | 1,240 | ₹18,40,000 |\n| Jalandhar | 860 | ₹11,25,500 |\n| Patiala | 410 | ₹6,02,250 |\n| A very long city name that keeps going to make this table wider than a phone | 1 | ₹1 |\n";
+const TABLE: &str = "| City | State | Orders | Revenue | Refunds | Average order | Paid by UPI |\n|:--|:--|--:|--:|--:|--:|--:|\n| Ludhiana | Punjab | 1,240 | ₹18,40,000 | ₹42,300 | ₹1,484 | 61% |\n| Jalandhar | Punjab | 860 | ₹11,25,500 | ₹18,900 | ₹1,309 | 58% |\n| Patiala | Punjab | 410 | ₹6,02,250 | ₹9,750 | ₹1,469 | 64% |\n| A very long city name that keeps going | Punjab | 1 | ₹1 | ₹0 | ₹1 | 0% |\n";
 
 const LINKS: &str = "On this site: [the report](/reports/weekly). Another site: [GST portal](https://www.gst.gov.in/). A name that lies: [https://yourbank.example/login](https://attacker.example/login). A user name in the address: [bank](https://yourbank.example@attacker.example/login). A script: [click me](javascript:alert(1)). Mail: [write](mailto:gurpreet@example.com).";
 
@@ -107,7 +107,7 @@ fn page(shell: &AppShell) -> AppPage {
         section(
             "reply",
             "A reply",
-            Markdown::new(REPLY).heading_level(3).copy_code().attr_id("md-reply"),
+            Markdown::new(REPLY).heading_level(2).copy_code().attr_id("md-reply"),
         ),
         section("table", "A table", Markdown::new(TABLE).attr_id("md-table")),
         section("links", "Links", Markdown::new(LINKS).attr_id("md-links")),
