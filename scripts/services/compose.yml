@@ -169,8 +169,12 @@ services:
       MEILI_ENV: development
       MEILI_NO_ANALYTICS: "true"
 
+  # stripe-mock answers from the OpenAPI spec it was built with, so its release
+  # must match the Stripe API version the driver pins (STRIPE_API_VERSION in
+  # crates/navree-billing/src/provider/stripe.rs). v0.194.0 is the release
+  # built from 2025-03-31.basil; move the two together.
   stripe-mock:
-    image: ${STRIPE_MOCK_IMAGE:-stripe/stripe-mock:v0.206.0}
+    image: ${STRIPE_MOCK_IMAGE:-stripe/stripe-mock:v0.194.0}
     container_name: navree-ci-stripe-mock
     ports: ["127.0.0.1:12111:12111"]
 

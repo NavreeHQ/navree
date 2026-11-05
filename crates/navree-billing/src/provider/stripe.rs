@@ -35,7 +35,8 @@ use crate::subscription::{Proration, SubscriptionStatus};
 
 /// The Stripe API version every request is pinned to (`Stripe-Version`).
 /// Webhook endpoints created by `billing:webhook` use it too, so event
-/// payloads have the shape this client reads.
+/// payloads have the shape this client reads. The tests' stripe-mock is the
+/// release built from this version (`scripts/services/compose.yml`).
 pub const STRIPE_API_VERSION: &str = "2025-03-31.basil";
 
 const NAME: &str = "stripe";
