@@ -119,13 +119,14 @@ for (const name of NAMES) {
         followsTheBackoff(srv.sse.times, 3);
         // Typing brings no try of its own: no more tries came while typing than the backoff itself brings in that
         // time (at 1 s, 3 s, 7 s … after the first, less 10%). Typing is slower on a busy machine, so the window can
-        // reach a third.
+        // reach a third. The first try is the one typing waited for, so it is not counted, even when typing starts
+        // in the same millisecond.
         let due = 0;
         for (let k = 0, at = 0; k < 8; k++) {
           at += 1000 * 2 ** k;
           if (srv.sse.times[0] + at * 0.9 <= typingTo) due++;
         }
-        const whileTyping = srv.sse.times.filter((t) => t >= typingFrom && t <= typingTo).length;
+        const whileTyping = srv.sse.times.filter((t, i) => i > 0 && t <= typingTo).length;
         const at = (t) => t - srv.sse.times[0];
         assert.ok(
           whileTyping <= due,
