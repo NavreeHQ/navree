@@ -14,13 +14,15 @@ const SHOWN_ON_PHONES = 3;
 
 /** A line per group of the catalogue. A group added later shows without one until it gets its line here. */
 const blurbs: Record<string, string> = {
-  actions: "What a click does: buttons, groups of them and toggles.",
-  inputs: "Every field a form needs, with its label, help and error, and the form drawn from a struct.",
-  display: "Cards, badges, avatars, items, text and the parts of a conversation.",
+  actions: "What a click does: buttons, toggles and the menus that hold actions, from a dropdown to a menu bar.",
+  inputs: "Every field a form needs, from text to searchable choices, a phone number, a one-time code and an upload, and the form drawn from a struct.",
+  dates: "A calendar and pickers for a day, a range of days and a time, whose values the server checks.",
+  display: "Cards, badges, avatars, text, Markdown and code, timelines and feeds, and the parts of a conversation.",
   feedback: "Alerts, empty states, progress, skeletons and spinners.",
   overlays: "Dialogs, sheets, drawers, popovers, tooltips and hover cards, on the browser's own elements.",
-  layout: "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll and divide a page.",
-  navigation: "The app shell, breadcrumbs and pagination.",
+  layout: "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll, split and divide a page.",
+  navigation: "The app shell, tabs, navigation menus, breadcrumbs, pagination and the command palette.",
+  flow: "Steps and wizards that keep a form's progress, sliders, trees and toolbars.",
   data: "Tables, the server-side DataTable, lazy lists, sortable lists, stats and bars. Charts have a group of their own, below.",
   charts: "Line, area, bar, donut, sparkline and funnel charts drawn as SVG on the server, each with its data as a table.",
 };
