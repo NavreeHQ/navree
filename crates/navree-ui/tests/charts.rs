@@ -3,6 +3,7 @@
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use navree_ui::charts::*;
+use navree_ui::dates::{DatePreset, DateRules, RangeRules};
 use navree_ui::{Node, Stat, Tone, Uses, View, assets, render};
 
 fn day(d: u32) -> NaiveDate {
@@ -189,6 +190,18 @@ fn the_charts_sheet_is_linked_where_a_chart_is_drawn_and_nowhere_else() {
     ] {
         assert!(!page.to_html().contains(assets::CHARTS_STYLES_URL));
     }
+    // A report's grain switch is links, not a chart, and is drawn with the same sheet.
+    let today = day(4);
+    let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
+    let report = Report::from_query(
+        &ReportQuery::default(),
+        &limits,
+        today,
+        DatePreset::Last30Days,
+        &chrono::Utc,
+    );
+    let page = View::new("x").body(report.grain_links("/reports", "Grain"));
+    assert!(page.to_html().contains(assets::CHARTS_STYLES_URL));
 }
 
 /// The charts sheet keeps the rule of every module's own sheet, 3 KB gzip, and the toolkit's

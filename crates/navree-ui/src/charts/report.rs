@@ -444,9 +444,11 @@ impl Report {
                     .into()
             })
             .collect();
+        // The switch is drawn with the charts sheet, though it is not a chart.
         el("nav")
             .slot("chart-grains")
             .attr("aria-label", label.to_owned())
+            .uses(crate::node::Uses::CHARTS)
             .child(items)
             .into()
     }
