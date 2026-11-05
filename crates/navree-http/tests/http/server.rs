@@ -1,5 +1,6 @@
 //! The `serve` command against a real socket.
 
+use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -98,50 +99,154 @@ async fn serve_command_binds_and_shuts_down_gracefully() {
     );
 }
 
-#[tokio::test]
-async fn a_client_that_sends_a_body_over_the_limit_reads_the_413_not_a_reset() {
-    let app = Setup::new(vec![
-        RouteDef::on(Method::POST, "/photo", || async { "kept" })
-            .public()
-            .body_limit(1024),
-    ])
-    .options(HttpOptions {
-        addr: "127.0.0.1:0".to_owned(),
-        ..options()
-    })
-    .boot()
-    .await;
+/// Serves `routes` with `options` on a free port, runs `client` against it, then stops the
+/// server and returns what the client found.
+async fn against<F, Fut, T>(routes: Vec<RouteDef>, options: HttpOptions, client: F) -> T
+where
+    F: FnOnce(SocketAddr) -> Fut,
+    Fut: Future<Output = T>,
+{
+    let app = Setup::new(routes)
+        .options(HttpOptions {
+            addr: "127.0.0.1:0".to_owned(),
+            ..options
+        })
+        .boot()
+        .await;
     let server = app.app.ctx().get::<HttpServer>().await.unwrap();
-
     let serve = app.app.run_command("serve", vec![]);
-    let client = async {
+    let run = async {
         let addr = tokio::time::timeout(Duration::from_secs(10), server.wait_bound())
             .await
             .expect("serve binds within 10 s");
-        // Three megabytes, all sent before the answer is read, as a browser or curl sends them.
-        let body = vec![b'x'; 3 * 1024 * 1024];
-        let mut stream = TcpStream::connect(addr).await.expect("connects");
-        let head = format!(
-            "POST /api/photo HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        );
-        stream.write_all(head.as_bytes()).await.unwrap();
-        stream
-            .write_all(&body)
-            .await
-            .expect("the server reads the body to its end");
-        let mut response = Vec::new();
-        stream
-            .read_to_end(&mut response)
-            .await
-            .expect("the answer arrives, not a reset");
+        let found = client(addr).await;
         app.app.ctx().shutdown_token().cancel();
-        String::from_utf8_lossy(&response).into_owned()
+        found
     };
-    let (served, response) = tokio::join!(serve, client);
+    let (served, found) = tokio::join!(serve, run);
     served.expect("serve returns Ok after a graceful shutdown");
-    assert!(response.starts_with("HTTP/1.1 413"), "{response}");
-    assert!(response.contains("payload_too_large"), "{response}");
+    found
+}
+
+/// Bodies of at most 1 KB: `POST /api/photo`, which never reads its body, and `GET /api/fast`.
+fn photo_routes() -> Vec<RouteDef> {
+    vec![
+        RouteDef::on(Method::POST, "/photo", || async { "kept" })
+            .public()
+            .body_limit(1024),
+        RouteDef::on(Method::GET, "/fast", || async { "fast" }).public(),
+    ]
+}
+
+/// The head of a post to `/api/photo` that declares `length` bytes, with the header lines
+/// `extra`.
+fn photo_head(length: usize, extra: &str) -> Vec<u8> {
+    format!(
+        "POST /api/photo HTTP/1.1\r\nHost: localhost\r\nContent-Length: {length}\r\n{extra}\r\n"
+    )
+    .into_bytes()
+}
+
+/// Writes `bytes` on a new connection, all before reading as a browser does, then reads until
+/// the server closes the connection: the answers, as text.
+async fn exchange(addr: SocketAddr, bytes: &[u8]) -> String {
+    let mut stream = TcpStream::connect(addr).await.expect("connects");
+    stream
+        .write_all(bytes)
+        .await
+        .expect("the server reads what is sent");
+    let mut answer = Vec::new();
+    tokio::time::timeout(Duration::from_secs(20), stream.read_to_end(&mut answer))
+        .await
+        .expect("the server closes the connection")
+        .expect("the answer arrives, not a reset");
+    String::from_utf8_lossy(&answer).into_owned()
+}
+
+#[tokio::test]
+async fn a_client_that_sends_a_body_over_the_limit_reads_the_413_not_a_reset() {
+    let answer = against(photo_routes(), options(), |addr| async move {
+        // Three megabytes, all sent before the answer is read, as a browser or curl sends them.
+        let mut request = photo_head(3 * 1024 * 1024, "Connection: close\r\n");
+        request.extend(vec![b'x'; 3 * 1024 * 1024]);
+        exchange(addr, &request).await
+    })
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
+    assert!(answer.contains("payload_too_large"), "{answer}");
+}
+
+#[tokio::test]
+async fn after_a_refused_body_is_read_the_connection_answers_the_next_request() {
+    let answer = against(photo_routes(), options(), |addr| async move {
+        // One write: the post, its whole body, and a request after it on the same connection.
+        let mut requests = photo_head(2048, "");
+        requests.extend(vec![b'x'; 2048]);
+        requests.extend(b"GET /api/fast HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+        exchange(addr, &requests).await
+    })
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
+    let next = answer
+        .find("HTTP/1.1 200")
+        .expect("a second answer, on the same connection");
+    let (refused, fast) = answer.split_at(next);
+    assert!(
+        !refused.contains("connection: close"),
+        "the 413 keeps the connection: {refused}"
+    );
+    assert!(fast.ends_with("fast"), "{fast}");
+}
+
+#[tokio::test]
+async fn a_stalled_body_gets_the_413_and_then_the_connection_closes() {
+    // An app timeout of 1 s: the drain stops short of it, and the answer is still the 413.
+    let short = HttpOptions {
+        timeout_secs: 1,
+        ..options()
+    };
+    let (answer, waited) = against(photo_routes(), short, |addr| async move {
+        // A hundred bytes of the 2,048 it declares, and then nothing.
+        let mut request = photo_head(2048, "");
+        request.extend(vec![b'x'; 100]);
+        let began = std::time::Instant::now();
+        let answer = exchange(addr, &request).await;
+        (answer, began.elapsed())
+    })
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
+    assert!(answer.contains("connection: close"), "{answer}");
+    assert!(
+        waited < Duration::from_secs(5),
+        "the app's timeout bounds the drain, not its own 5 s: {waited:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_body_declared_over_8_mib_is_answered_at_once() {
+    let (answer, waited) = against(photo_routes(), options(), |addr| async move {
+        let began = std::time::Instant::now();
+        // Nine megabytes declared and none sent: the server does not wait for them.
+        let answer = exchange(addr, &photo_head(9 * 1024 * 1024, "")).await;
+        (answer, began.elapsed())
+    })
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
+    assert!(answer.contains("connection: close"), "{answer}");
+    assert!(
+        waited < Duration::from_secs(4),
+        "answered without waiting for the body: {waited:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_client_waiting_on_100_continue_gets_the_413_and_no_100_continue() {
+    let answer = against(photo_routes(), options(), |addr| async move {
+        exchange(addr, &photo_head(2048, "Expect: 100-continue\r\n")).await
+    })
+    .await;
+    assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
+    assert!(!answer.contains("100 Continue"), "{answer}");
 }
 
 #[tokio::test]
