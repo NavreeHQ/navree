@@ -41,8 +41,10 @@ fn png(len: usize) -> Vec<u8> {
 }
 
 fn memory_disk() -> Disk {
-    let mut options = StorageOptions::default();
-    options.default = "scratch".into();
+    let mut options = StorageOptions {
+        default: "scratch".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("scratch".into(), DiskConfig::Memory);
     Storage::new(&options, b"signing key")

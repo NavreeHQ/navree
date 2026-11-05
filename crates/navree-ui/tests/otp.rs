@@ -335,7 +335,7 @@ fn only_ascii_digits_are_digits() {
         "123\t456",
         "123\n456",
         "123456\0",
-        "\0123456",
+        "\x00123456",
         // Letters and signs.
         "12345a",
         "12345.",

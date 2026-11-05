@@ -896,12 +896,12 @@ mod tests {
     fn a_hostile_language_name_cannot_leave_its_attribute_or_its_caption() {
         let out = html("```\"><script>alert(1)</script>\ncode\n```\n");
         assert!(!out.contains("<script"), "{out}");
-        let out = CodeBlock::new("rust\" onmouseover=\"x", "1").to_html_for_test();
+        let out = CodeBlock::new("rust\" onmouseover=\"x", "1").into_html_for_test();
         assert!(!out.contains("onmouseover"), "{out}");
     }
 
     impl CodeBlock {
-        fn to_html_for_test(self) -> String {
+        fn into_html_for_test(self) -> String {
             render(&self.into_node())
         }
     }

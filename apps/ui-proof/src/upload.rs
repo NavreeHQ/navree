@@ -46,8 +46,10 @@ struct State {
 }
 
 static STATE: LazyLock<State> = LazyLock::new(|| {
-    let mut options = StorageOptions::default();
-    options.default = "scratch".into();
+    let mut options = StorageOptions {
+        default: "scratch".into(),
+        ..StorageOptions::default()
+    };
     options.disks.clear();
     options.disks.insert("scratch".into(), DiskConfig::Memory);
     let disk = Storage::new(&options, b"ui-proof signing key")
