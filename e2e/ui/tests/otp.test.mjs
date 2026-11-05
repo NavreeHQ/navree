@@ -30,8 +30,9 @@ async function paste(page, id, text) {
       field.focus();
       const data = new DataTransfer();
       data.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
-      if (!event.clipboardData) return false;
+      // Firefox fills a made-up paste from its own `dataType` and `data`, not from `clipboardData`.
+      const event = new ClipboardEvent("paste", { clipboardData: data, dataType: "text/plain", data: text, bubbles: true, cancelable: true });
+      if (!event.clipboardData?.getData("text/plain")) return false;
       field.dispatchEvent(event);
       return true;
     },
@@ -125,7 +126,8 @@ inBrowsers(({ open, browserName }) => {
       label: "Verification code",
     });
     assert.equal(await page.getByLabel("Verification code").count(), 1, "the label names the field");
-    const letters = await page.locator("#otp-voucher").evaluate((e) => [e.inputMode, e.pattern, e.autocapitalize]);
+    // The attribute: WebKit here has no `autocapitalize` property, which only a touch keyboard reads.
+    const letters = await page.locator("#otp-voucher").evaluate((e) => [e.inputMode, e.pattern, e.getAttribute("autocapitalize")]);
     assert.deepEqual(letters, ["text", "[0-9A-Za-z]{8}", "characters"]);
     await close();
   });
@@ -307,7 +309,8 @@ inBrowsers(({ open, browserName }) => {
     const readonly = page.locator("#otp-readonly");
     await readonly.click();
     await page.keyboard.type("999999");
-    await page.keyboard.press("Backspace");
+    // WebKit's Backspace in a field that cannot be edited goes back a page, as Safari's once did.
+    if (browserName !== "webkit") await page.keyboard.press("Backspace");
     assert.equal(await readonly.inputValue(), "482915");
     const invalid = await page.locator("#otp-invalid").evaluate((e) => ({
       invalid: e.getAttribute("aria-invalid"),
