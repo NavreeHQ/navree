@@ -264,13 +264,13 @@ export const sections: DocsSection[] = [
       "checkbox",
       "switch",
       "radio-group",
+      "phone-input",
+      "upload",
       // Date and time
       "calendar",
       "date-picker",
       "date-range-picker",
       "time-picker",
-      "phone-input",
-      "upload",
       // Display
       "card",
       "badge",
@@ -342,6 +342,7 @@ export const sections: DocsSection[] = [
     groups: [
       { title: "Actions", from: "button" },
       { title: "Inputs", from: "field" },
+      { title: "Date and time", from: "calendar" },
       { title: "Display", from: "card" },
       { title: "Feedback", from: "alert" },
       { title: "Overlays", from: "dialog" },
