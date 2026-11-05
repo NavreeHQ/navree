@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import * as playwright from "playwright";
 import { launch } from "./support/launch.mjs";
+import { lateBody } from "./support/late.mjs";
 
 const BASE = process.env.UI_TABLE_URL || "http://127.0.0.1:8097";
 const SHOTS = process.env.TABLE_SHOTS || "";
@@ -932,6 +933,34 @@ for (const browserName of browsers) {
       assert.deepEqual(await keys(page), before, "the rows stay until the user leaves");
       assert.ok(!/sort=amount/.test(page.url()));
       await shot(page, `${browserName}-lost-access`);
+      await post("/__t/permission/ok");
+      await close();
+    });
+
+    test("a refresh whose answer is read after a refused sort leaves the sort's alert as it is", async () => {
+      await reset();
+      const { page, close } = await open("/deals?per_page=10");
+      const before = await keys(page);
+      // The refresh's headers come and its body is held; the sort is then refused (403) and shows the alert;
+      // only then is the refresh's body let through.
+      const late = await lateBody(page, { header: "x-navree-region" });
+      await page.evaluate(() => {
+        const detail = {};
+        document.getElementById("deals").dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
+        window.__refresh = detail.done;
+      });
+      await late.arrived();
+      await post("/__t/permission/no-read");
+      await page.locator("thead th[data-col=amount] [data-slot=sort-link]").click();
+      const alert = page.locator("[data-slot=table-alert]");
+      await alert.waitFor();
+      assert.match(await alert.innerText(), /no longer have access/);
+      await late.release();
+      await page.evaluate(() => window.__refresh);
+      assert.equal(await alert.isVisible(), true, "the older refresh does not hide the alert again");
+      assert.match(await alert.innerText(), /no longer have access/);
+      assert.deepEqual(await keys(page), before);
+      assert.ok(!/sort=amount/.test(page.url()));
       await post("/__t/permission/ok");
       await close();
     });

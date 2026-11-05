@@ -19,6 +19,7 @@ import { after, afterEach, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
 import { launch } from "./support/launch.mjs";
+import { lateBody } from "./support/late.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -600,6 +601,31 @@ for (const name of NAMES) {
       assert.deepEqual(await shortfalls(page), [], "the derived colours read");
       assert.deepEqual(await axe(page), [], "axe after the change");
       await shot(page, "builder-blue");
+      await page.done();
+    });
+
+    test("the builder by keyboard: the page of the first accent, read after the second's was shown, leaves the address and the radios on the second", async () => {
+      const page = await open("/themes/builder?mode=dark");
+      const entries = await page.evaluate(() => history.length);
+      // The first choice's headers come and its body is held; the second is made, shown and answered; then the first is let through.
+      const late = await lateBody(page, { url: /accent=green/ });
+      await page.locator("input[name=accent][value=base]").focus();
+      await page.keyboard.press("ArrowRight");
+      await late.arrived();
+      await page.keyboard.press("ArrowRight");
+      await page.waitFor(() => new URL(location.href).searchParams.get("accent") === "blue");
+      await page.waitFor(() => {
+        const probe = document.createElement("span");
+        document.body.append(probe);
+        probe.style.color = "var(--accent)";
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour === "rgb(90, 162, 255)";
+      });
+      await late.release();
+      assert.equal(await page.evaluate(() => new URL(location.href).searchParams.get("accent")), "blue", "the address is the second choice's");
+      assert.equal(await page.evaluate(() => document.querySelector("input[name=accent]:checked")?.value), "blue", "the radio is on the second choice");
+      assert.equal(await page.evaluate(() => history.length), entries + 1, "only the second choice made an entry");
       await page.done();
     });
 

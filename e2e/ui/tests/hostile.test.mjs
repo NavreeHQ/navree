@@ -8,6 +8,7 @@ import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { CSP, page as doc, start } from "./support/fixture.mjs";
 import { launch } from "./support/launch.mjs";
+import { lateBody } from "./support/late.mjs";
 
 const PROOF = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 // The short waits are for something to have happened: room for a busy machine.
@@ -1059,6 +1060,132 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
         if (kind === "redirect") assert.equal(new URL(page.url()).pathname, `/${name}-login`);
         await context.close();
       }
+    });
+
+    // Answers that come out of order. The older request's body is held (tests/support/late.mjs) until the newer one
+    // has been shown, then let through: it must leave the page, the address and the history as the newer one made them.
+    /** Asks the region `id` to fetch again, as a module does. The promise is the fetch's end, kept on the page as `window[mark]` when it is not to be waited for. */
+    const ask = (page, id, mark) => page.evaluate(([target, name]) => {
+      const detail = {};
+      document.getElementById(target).dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
+      if (name) window[name] = detail.done;
+      else return detail.done;
+    }, [id, mark]);
+
+    test(`a region's older answer, read after a newer one was drawn, is not drawn over it (${engine})`, async () => {
+      const name = key("older");
+      route(`/${name}`, doc(`<div id="r" data-ui-region data-ui-src="/${name}-frag">start</div>`));
+      route(`/${name}-frag`, () => doc(`<div id="r" data-ui-region data-ui-src="/${name}-frag">answer ${hits(`/${name}-frag`).length}</div>`));
+      const { context, page, errors } = await fresh(`/${name}`);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-frag`) });
+      await ask(page, "r", "__first");
+      await late.arrived();
+      await ask(page, "r");
+      assert.equal(await page.textContent("#r"), "answer 2", "the newer answer is drawn");
+      await late.release();
+      await page.evaluate(() => window.__first);
+      assert.equal(await page.textContent("#r"), "answer 2", "the older one, read after it, leaves it as it is");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a region's link followed while a fetch of it is on its way is not undone by that fetch (${engine})`, async () => {
+      const name = key("followed");
+      const region = (text) => `<div id="r" data-ui-region data-ui-src="/${name}-frag"><span id="what">${text}</span><a id="next" href="/${name}-next" data-ui-in-region>next</a></div>`;
+      route(`/${name}`, doc(region("start")));
+      route(`/${name}-frag`, doc(region("refreshed")));
+      route(`/${name}-next`, doc(region("followed")));
+      const { context, page, errors } = await fresh(`/${name}`);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-frag`) });
+      await ask(page, "r", "__first");
+      await late.arrived();
+      await page.click("#next");
+      await page.waitForFunction(() => document.getElementById("what").textContent === "followed");
+      await late.release();
+      await page.evaluate(() => window.__first);
+      assert.equal(await page.textContent("#what"), "followed", "the fetch that began before the link was followed is out of date");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    /** A page with two links, `a` and `b`, which answer with `a` and `b` (`more` for the options of a's page); a's carries a toast. */
+    function twoLinks(more = {}) {
+      const name = key("twice");
+      route(`/${name}`, doc(`<a id="a" href="/${name}-a">a</a><a id="b" href="/${name}-b">b</a>`, { title: "start" }));
+      const toast = `<section data-slot="toaster" aria-label="Notifications" data-position="bottom-end" data-close="Dismiss"><div data-slot="toast" data-tone="info" data-duration="sticky" role="status"><div data-slot="toast-body"><p data-slot="toast-text">from a</p></div></div></section>`;
+      route(`/${name}-a`, doc(`<h1 id="h">page a</h1>${toast}`, { title: "a", ...more }));
+      route(`/${name}-b`, doc(`<h1 id="h">page b</h1>`, { title: "b" }));
+      return name;
+    }
+    /** Follows a, whose body is held, then b, which is shown. */
+    async function overtaken(page, late) {
+      await page.click("#a");
+      await late.arrived();
+      await page.click("#b");
+      await page.waitForFunction(() => document.title === "b");
+    }
+
+    test(`a page that a newer one overtook while its body was read leaves the address, the page and the history as the newer one made them (${engine})`, async () => {
+      const name = twoLinks();
+      const { context, page, errors } = await fresh(`/${name}`);
+      const entries = await page.evaluate(() => history.length);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-a`) });
+      await overtaken(page, late);
+      await late.release();
+      assert.equal(await page.evaluate(() => location.pathname), `/${name}-b`, "the address is the newer page's");
+      assert.equal(await page.textContent("#h"), "page b");
+      assert.equal(await page.title(), "b");
+      assert.equal(await page.evaluate(() => history.length), entries + 1, "only the newer page made an entry");
+      assert.deepEqual(await toasts(page), ["from a"], "the toast the older page brought is still shown");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a page from another build that a newer page overtook doesn't take the browser to itself (${engine})`, async () => {
+      const name = twoLinks({ build: "newer" });
+      const { context, page, errors } = await fresh(`/${name}`);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-a`) });
+      await page.evaluate(() => { window.__stays = true; });
+      await overtaken(page, late);
+      await late.release();
+      await sleep(300);
+      assert.equal(hits(`/${name}-a`).length, 1, "it was asked for once, by the boost, and not gone to");
+      assert.equal(await page.evaluate(() => window.__stays), true, "the page was not loaded again");
+      assert.equal(await page.evaluate(() => location.pathname), `/${name}-b`);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a feed answer that a newer fetch overtook doesn't take the page to where it was redirected (${engine})`, async () => {
+      const name = key("feedlate");
+      let asked = 0;
+      let release;
+      const held = new Promise((resolve) => (release = resolve));
+      route(`/${name}`, doc(`<div id="fd" data-ui-region data-ui-src="/${name}-feed" data-ui-feed="into" data-ui-after="0"><ul id="into"></ul></div>`));
+      route(`/${name}-login`, doc(`<h1 id="login">Sign in</h1>`));
+      f.routes.set(`/${name}-feed`, async (req, res) => {
+        // The first fetch waits at the server; the second is answered, then the first ends in a redirect.
+        if (++asked > 1) return f.html(res, `<li id="row-1">row</li>`, { "x-ui-cursor": "1" });
+        await held;
+        res.writeHead(303, { location: `/${name}-login` });
+        res.end();
+      });
+      const { context, page, errors } = await fresh(`/${name}`);
+      await ask(page, "fd", "__first");
+      await until(() => asked === 1);
+      // The cursor has moved on, so the newer fetch is for another address: no browser holds it back behind the first.
+      await page.evaluate(() => document.getElementById("fd").setAttribute("data-ui-after", "5"));
+      await ask(page, "fd");
+      assert.equal(await page.locator("#into #row-1").count(), 1, "the newer fetch's row is drawn");
+      release();
+      await until(() => hits(`/${name}-login`).length > 0);
+      await sleep(300);
+      const gone = hits(`/${name}-login`).filter((hit) => !hit.headers["x-navree-region"]);
+      assert.deepEqual(gone, [], "the page was not sent to the login page");
+      assert.equal(await page.evaluate(() => location.pathname), `/${name}`);
+      assert.equal(await page.locator("#into #row-1").count(), 1);
+      assert.deepEqual(errors, []);
+      await context.close();
     });
 
     test(`commands reach only state attributes (${engine})`, async () => {

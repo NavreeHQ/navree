@@ -190,6 +190,13 @@ export async function showPage(response, how = {}) {
   const url = how.url || response.url;
   const ticket = ++shows;
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+  // A page or region that began while this one's body was on its way is the newer: the address, the page and the
+  // title are its to make, and this one leaves them. A toast it brought is still shown.
+  if (ticket !== shows) {
+    clean(body(doc));
+    adoptToasts(doc);
+    return;
+  }
   const build = root(doc).getAttribute("data-build");
   // A page from another build, or one without the runtime, loads for real.
   if (build !== root().getAttribute("data-build")) {
@@ -265,6 +272,8 @@ export async function go(url, how = {}) {
   if (!sameOrigin(url)) return;
   const mine = ++generation;
   if (!how.region) swaps++;
+  // A fetch of the region that began before this is out of date.
+  else newest(how.region);
   const html = root();
   const region = how.region ? byId(how.region) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
@@ -310,6 +319,13 @@ export function setUrl(href, mode) {
 
 /** The newest fetch of each region: an older answer is dropped. @type {Map<string, number>} */
 const regions = new Map();
+
+/** Starts a fetch of region `id`, and numbers it: every older one is out of date. @param {string} id */
+const newest = (id) => {
+  const n = (regions.get(id) || 0) + 1;
+  regions.set(id, n);
+  return n;
+};
 
 /** Statuses of a door that stays shut: a poll stops knocking on it. */
 const SHUT = [401, 403, 404, 410];
@@ -443,8 +459,9 @@ async function feed(el, src, current) {
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
   const stale = () => !current() || el.getAttribute("data-ui-src") !== src;
   const response = await fetch(url, { headers: asking(el.id), signal: withinLimit() });
-  const taken = takes(response);
+  // Before anything is done for it, a redirect too: a newer fetch may have been answered since.
   if (stale()) return;
+  const taken = takes(response);
   // An error is not rows: it is not added to the feed, and a door that is shut stops the poll.
   if (!taken || response.headers.has("x-navree-state")) {
     if (!response.redirected) {
@@ -498,16 +515,16 @@ export async function refresh(id, polled = false) {
     el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
     return detail.done;
   }
-  const mine = (regions.get(id) || 0) + 1;
-  regions.set(id, mine);
+  const mine = newest(id);
   el.removeAttribute("data-ui-failed");
   const table = el.hasAttribute("data-ui-table") ? el : null;
+  // Whether a newer fetch of the region began, or the user moved on while this was on its way: it answers a state
+  // that's gone. Asked after the headers and again after the body, which a newer fetch can overtake.
+  const old = () => regions.get(id) !== mine || !!(table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending")));
   try {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
     const response = await fetch(src, { headers: asking(id), signal: withinLimit() });
-    if (regions.get(id) !== mine) return;
-    // The user moved on while this was on its way: it answers a state that's gone.
-    if (table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending"))) return;
+    if (old()) return;
     if (table && !response.ok) {
       troubled(table, response.status, response.headers.get("retry-after"));
       tableFailed(table, src, response.status);
@@ -521,6 +538,7 @@ export async function refresh(id, polled = false) {
       return;
     }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    if (old()) return;
     const build = root(doc).getAttribute("data-build");
     if (build && build !== root().getAttribute("data-build")) {
       location.reload();
