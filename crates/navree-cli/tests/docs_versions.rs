@@ -70,10 +70,6 @@ fn the_website_prints_the_current_version() {
     let version = env!("CARGO_PKG_VERSION");
     let series = series(version);
     must_contain(
-        "apps/website/src/components/home/hero-terminal.tsx",
-        &format!("navree-cli v{version}"),
-    );
-    must_contain(
         "apps/website/src/components/ecosystem/manifest.tsx",
         &format!("navree {series} "),
     );

@@ -1,13 +1,14 @@
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { GridPattern } from "@/components/magicui/grid-pattern";
 import { groups } from "@/components/ui-docs/data";
 import { ecosystem } from "@/content/ecosystem";
+import { film, lengthLabel, lengthSpoken } from "@/content/launch-film";
 import crates from "@/generated/crates.json";
 import { site } from "@site";
 
-import { HeroTerminal } from "./hero-terminal";
+import { FilmPlayer } from "./film-player";
 import { PrimaryCta, SecondaryCta } from "./parts";
 
 type Crate = { name: string; layer: number; module: string | null };
@@ -43,7 +44,7 @@ function facts() {
 export function Hero() {
   return (
     <section aria-labelledby="hero-title" className="relative overflow-hidden">
-      {/* Background: a hairline grid fading out from the top right, and one soft bloom behind the terminal. */}
+      {/* Background: a hairline grid fading out from the top right, and one soft bloom behind the film. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <GridPattern
           width={48}
@@ -59,7 +60,7 @@ export function Hero() {
         <div className="hero-bloom absolute top-[-14rem] right-[-12rem] h-[52rem] w-[60rem] max-xl:top-auto max-xl:right-[-20rem] max-xl:bottom-[-10rem] max-xl:h-[36rem] max-xl:w-[44rem]" />
       </div>
 
-      <div className="container-site relative grid items-center gap-x-10 gap-y-14 pt-14 pb-16 sm:pt-20 lg:pt-24 lg:pb-24 xl:grid-cols-[minmax(0,1fr)_27rem] xl:pt-28 min-[90rem]:grid-cols-[minmax(0,1fr)_33rem]">
+      <div className="container-site relative grid items-center gap-x-10 gap-y-14 pt-14 pb-16 sm:pt-20 lg:pt-24 lg:pb-24 xl:grid-cols-[minmax(0,1fr)_30rem] xl:pt-28 min-[90rem]:grid-cols-[minmax(0,1fr)_38rem]">
         <div className="min-w-0">
           <Link
             href="/docs/prologue/release-notes/"
@@ -93,11 +94,37 @@ export function Hero() {
           </div>
         </div>
 
-        <div className="relative min-w-0 max-w-[40rem] xl:max-w-none">
+        <figure className="relative min-w-0 max-w-[40rem] xl:max-w-none">
           <div className="bezel shadow-glow-lg">
-            <HeroTerminal />
+            <FilmPlayer
+              title={film.name}
+              poster={film.poster}
+              sources={film.sources}
+              phoneSources={film.phoneSources}
+              file={film.file.src}
+              length={lengthLabel(film.durationSeconds)}
+              spokenLength={lengthSpoken(film.durationSeconds)}
+              describedBy="hero-film-about"
+            />
           </div>
-        </div>
+          <figcaption id="hero-film-about" className="mt-5 text-sm leading-relaxed text-fg-2">
+            <p className="text-pretty">{film.description}</p>
+            <details className="group mt-3">
+              <summary className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-md font-medium text-fg-1 transition-colors marker:content-none hover:text-accent [&::-webkit-details-marker]:hidden">
+                <ChevronRightIcon aria-hidden className="size-4 transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none" />
+                What happens, scene by scene
+              </summary>
+              <ol className="mt-3 space-y-2 border-l border-line-2 pl-4">
+                {film.scenes.map((scene) => (
+                  <li key={scene.at} className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-baseline gap-x-2">
+                    <span className="font-mono text-xs leading-relaxed text-fg-3 tabular-nums">{lengthLabel(scene.at)}</span>
+                    <span className="text-pretty">{scene.text}</span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </figcaption>
+        </figure>
       </div>
 
       <div className="relative border-t border-line bg-ink-0">

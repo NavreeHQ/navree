@@ -26,7 +26,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The hero's light: one soft green bloom behind the terminal. */
+/* The hero's light: one soft green bloom behind the film. */
 .hero-bloom {
   background:
     radial-gradient(closest-side, rgb(61 255 143 / 0.13), rgb(61 255 143 / 0.04) 55%, transparent),
@@ -36,6 +36,20 @@
     140% 140%;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+/*
+ * The film player's poster and button sit straight in its frame (no box of
+ * their own). With JavaScript off they would do nothing, so a <noscript> video
+ * with native controls takes their place.
+ */
+.film-js {
+  display: contents;
+}
+@media (scripting: none) {
+  .film-js {
+    display: none;
+  }
 }
 
 /* The module graph: pulses travel the wiring, then rest. */
