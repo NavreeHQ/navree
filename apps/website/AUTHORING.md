@@ -367,9 +367,11 @@ fails when it is stale, so nothing on these pages is drawn by hand.
 - `<UiChoose name="overlay" current="Dialog" />`: a selection diagram from
   `src/components/ui-docs/choices.ts`.
 - `<UiA11y>` with a keyboard table and notes in Markdown inside.
-- `<UiGrid />`, `<UiAssets />`, `<UiTokens />` and `<UiCsp />`: the
-  components as a grid of previews, the toolkit's file sizes, its colour
-  tokens and its content security policy.
+- `<UiGrid />`, `<UiAssets />`, `<UiBudgets />`, `<UiTokens />` and
+  `<UiCsp />`: the components as a grid of previews, the toolkit's files and
+  their sizes, the size ceilings its tests hold (read from
+  `crates/navree-ui/tests/budgets.rs`, with the size now), its colour tokens
+  and its content security policy.
 
 To add an example, write the function, list it in its module's `all()`,
 run `cargo run -p ui-docs`, then use its id in a page.

@@ -72,6 +72,90 @@ export function uiBudgets(): Budget[] {
   ];
 }
 
+/** What a toolkit file weighs once compressed, as the build measured it. */
+export type AssetSize = { name: string; ext: string; gzip: number | null; brotli: number | null };
+
+/** One row of the docs' budget table. */
+export type BudgetRow = { label: string; ceiling: string; measured: string | null };
+
+const kbOf = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
+
+/**
+ * Every ceiling `budgets.rs` holds, as rows with the size now: one for each
+ * script and the stylesheet, one for the module stylesheets, the numbering plans,
+ * a typical CRUD page and all the modules together. A test added to the file
+ * shows here with no edit, and one that changes shape fails the site's build.
+ * Node runs this for the Markdown copies of the docs as well.
+ */
+export function uiBudgetRows(assets: AssetSize[]): BudgetRow[] {
+  const source = budgetsSource();
+  const find = (name: string) => assets.find((a) => a.name === name);
+  const gzip = (name: string) => find(name)?.gzip ?? 0;
+  const code = (names: string[]) => names.map((n) => `\`${n}\``).join(", ");
+  const rows: BudgetRow[] = [];
+
+  const files = [...source.matchAll(/assert!\(size\("([a-z0-9-]+)"\) <= (?:(\d+) \* )?1024/g)].map((m) => ({
+    name: m[1],
+    kbs: m[2] ? Number(m[2]) : 1,
+  }));
+  if (!files.length) throw new Error("ui-page: no per-file budgets in crates/navree-ui/tests/budgets.rs");
+  const row = (name: string, label: string, kbs: number) => rows.push({ label, ceiling: `${kbs} KB`, measured: kbOf(gzip(name)) });
+  for (const f of files.filter((x) => x.name === "navree-ui")) row(f.name, "The stylesheet", f.kbs);
+  for (const f of files.filter((x) => x.name === "core")) row(f.name, "The `core` runtime", f.kbs);
+  for (const f of files.filter((x) => x.name !== "navree-ui" && x.name !== "core")) row(f.name, `The \`${f.name}\` module`, f.kbs);
+
+  const styles = budgetTest(source, "the_modules_styles_are_at_most_3_kb_gzip_each");
+  const styleCeiling = /<= (\d+) \* 1024/.exec(styles)?.[1];
+  if (!styleCeiling) throw new Error("ui-page: no module stylesheet budget in crates/navree-ui/tests/budgets.rs");
+  const styleNames = budgetList(styles, "module stylesheets");
+  rows.push({
+    label: `Each module's stylesheet (${code(styleNames)})`,
+    ceiling: `${styleCeiling} KB`,
+    measured: `up to ${kbOf(Math.max(...styleNames.map(gzip)))}`,
+  });
+
+  const plans = /brotli <= (\d+) \* 1024/.exec(source)?.[1];
+  if (!plans) throw new Error("ui-page: no numbering plans budget in crates/navree-ui/tests/budgets.rs");
+  rows.push({
+    label: "The numbering plans the `phone` module loads on first use",
+    ceiling: `${plans} KB (brotli)`,
+    measured: kbOf(find("phone-data")?.brotli ?? 0),
+  });
+
+  for (const b of uiBudgets().filter((x) => x.label.startsWith("A typical") || x.label.startsWith("Every module"))) {
+    const names = b.files === "js" ? assets.filter((a) => a.ext === "js").map((a) => a.name) : b.files;
+    const total = names.reduce((n, name) => n + gzip(name), 0);
+    rows.push(
+      b.files === "js"
+        ? { label: "Every module together", ceiling: `under ${b.ceilingKb} KB`, measured: kbOf(total) }
+        : { label: `A typical CRUD page's script (${code(names)})`, ceiling: `${b.ceilingKb} KB`, measured: kbOf(total) },
+    );
+  }
+
+  if (!source.includes("fn a_page_with_nothing_interactive_ships_no_script(")) {
+    throw new Error("ui-page: no no-script test in crates/navree-ui/tests/budgets.rs");
+  }
+  rows.push({ label: "A page with nothing interactive", ceiling: "no `<script>` at all", measured: null });
+  return rows;
+}
+
+/**
+ * The names of the modules still to come, from the roadmap table: the words
+ * before the colon of every row that isn't Shipped. A sentence about what is
+ * still to come is written from these, so it can't outlive the row.
+ */
+export function uiPending(): string[] {
+  return uiRoadmap()
+    .filter((item) => item.status !== "Shipped")
+    .map((item) => item.text.split(":")[0].trim());
+}
+
+/** `Charts, rich text editing and islands`: names as a sentence lists them, only the first capitalised. */
+export function pendingSentence(names: string[]): string {
+  const shown = names.map((name, i) => (i === 0 || /^[A-Z]{2}/.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1)));
+  return shown.length < 2 ? (shown[0] ?? "") : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
+}
+
 /**
  * The render-time ceilings, in milliseconds, that the release tests in
  * `crates/navree-ui/tests/budgets.rs` assert: each test's

@@ -10,7 +10,9 @@ import path from "node:path";
 
 import { ownSlots } from "../components/ui-docs/anatomy.ts";
 import { choices, type Choose } from "../components/ui-docs/choices.ts";
+import { listedAssets, loadedWhen } from "../components/ui-docs/loaded.ts";
 import { flagWeightsText, type FlagWeights } from "../components/ui-docs/weights.ts";
+import { uiBudgetRows } from "./ui-page-data.ts";
 
 type Slot = { slot: string; tag: string; count: number; children: Slot[] };
 type Example = { id: string; title: string; code: string; slots: Slot[]; captions: string[] };
@@ -117,11 +119,17 @@ const kb = (n: number | null) => (n == null ? "n/a" : `${(n / 1024).toFixed(1)} 
 
 /** `<UiAssets>`: the toolkit's files and their sizes. */
 export function assetsMarkdown(): string {
-  const rows = ["| File | Brotli | Gzip | Raw |", "|---|---:|---:|---:|"];
-  for (const name of ["navree-ui", "core", "overlay", "sidebar", "table"]) {
-    const a = data().toolkit.assets.find((x) => x.name === name);
-    if (a) rows.push(`| \`${a.name}.${a.ext}\` | ${kb(a.brotli)} | ${kb(a.gzip)} | ${kb(a.bytes)} |`);
+  const rows = ["| File | Loaded by | Brotli | Gzip | Raw |", "|---|---|---:|---:|---:|"];
+  for (const a of listedAssets(data().toolkit.assets)) {
+    rows.push(`| \`${a.name}.${a.ext}\` | ${loadedWhen[a.name] ?? "A page that uses it"} | ${kb(a.brotli)} | ${kb(a.gzip)} | ${kb(a.bytes)} |`);
   }
+  return rows.join("\n");
+}
+
+/** `<UiBudgets>`: the size ceilings the toolkit's tests hold, with the size now. */
+export function budgetsMarkdown(): string {
+  const rows = ["| Budget | Ceiling, gzip | Now |", "|---|---:|---:|"];
+  for (const row of uiBudgetRows(data().toolkit.assets)) rows.push(`| ${cell(row.label)} | ${cell(row.ceiling)} | ${row.measured ?? ""} |`);
   return rows.join("\n");
 }
 

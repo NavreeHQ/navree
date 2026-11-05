@@ -25,7 +25,7 @@
  * | `<UiProps type>` | the type's table |
  * | `<UiAnatomy component>` | the parts as a nested list |
  * | `<UiChoose name>` | the question and a list of the answers |
- * | `<UiGrid>`, `<UiAssets>`, `<UiTokens>`, `<UiCsp>`, `<UiFlagWeights>` | lists, tables and a paragraph of the same data |
+ * | `<UiGrid>`, `<UiAssets>`, `<UiBudgets>`, `<UiTokens>`, `<UiCsp>`, `<UiFlagWeights>` | lists, tables and a paragraph of the same data |
  * | `<UiA11y>` | its Markdown |
  *
  * Links to other docs pages point at their `.md` files, and every other
@@ -47,6 +47,7 @@ import { fileTreeText } from "./file-tree-source.ts";
 import {
   anatomyMarkdown,
   assetsMarkdown,
+  budgetsMarkdown,
   chooseMarkdown,
   cspMarkdown,
   flagWeightsMarkdown,
@@ -658,6 +659,8 @@ function element(ctx: Ctx, node: MdNode, mode: "flow" | "text"): string {
       return absoluteLinks(gridMarkdown());
     case "UiAssets":
       return assetsMarkdown();
+    case "UiBudgets":
+      return budgetsMarkdown();
     case "UiTokens":
       return tokensMarkdown();
     case "UiFlagWeights":

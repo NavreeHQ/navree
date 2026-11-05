@@ -10,6 +10,7 @@
  * - `<UiA11y>`: keyboard and accessibility notes, written in Markdown inside.
  * - `<UiGrid />`: every component as a small live preview, by group.
  * - `<UiAssets />`: what ships to the browser, measured from the files.
+ * - `<UiBudgets />`: the size ceilings the toolkit's tests hold, with the size now.
  * - `<UiTokens />`: the colour tokens as swatches.
  * - `<UiFlagWeights />`: what the flags weigh, from the committed artwork.
  *
@@ -24,12 +25,12 @@ import type { DiagramEdge, DiagramNode } from "@/components/diagrams/kit";
 import { ArrowRightIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { highlight } from "@/lib/mdx";
+import { uiBudgetRows } from "@/lib/ui-page-data";
 import { cn } from "@/lib/utils";
 
 import { ownSlots } from "./anatomy";
 import { choices, type Choose, type ChooseName } from "./choices";
 import {
-  asset,
   component as findComponent,
   components,
   example as findExample,
@@ -42,6 +43,7 @@ import {
   type Slot,
   type TypeDoc,
 } from "./data";
+import { listedAssets, loadedWhen } from "./loaded";
 import { LiveDemo } from "./live-demo";
 import { PreviewCard } from "./preview-card";
 import { PreviewFrame } from "./preview-frame";
@@ -418,14 +420,6 @@ export const gridEntries = () => components.filter((c) => c.group);
 
 // ------------------------------------------------------------------- assets
 
-const loadedWhen: Record<string, string> = {
-  "navree-ui": "Every page",
-  core: "A form, a region or a command",
-  overlay: "A popover, tooltip or hover card",
-  sidebar: "The app shell",
-  table: "A data table",
-};
-
 /** `<UiFlagWeights />`: the weights of the flags, written from the measured numbers. */
 export function UiFlagWeights() {
   return <p>{flagWeightsText(toolkitInfo.flag_weights)}</p>;
@@ -433,7 +427,7 @@ export function UiFlagWeights() {
 
 /** `<UiAssets />`: the toolkit's files, measured from the files themselves. */
 export function UiAssets() {
-  const rows = ["navree-ui", "core", "overlay", "sidebar", "table"].map((name) => asset(name));
+  const rows = listedAssets(toolkitInfo.assets);
   return (
     <div className="table-wrap" role="region" aria-label="What ships to the browser" tabIndex={0}>
       <table>
@@ -460,10 +454,45 @@ export function UiAssets() {
                   {a.name}.{a.ext}
                 </code>
               </td>
-              <td>{loadedWhen[a.name]}</td>
+              <td>{loadedWhen[a.name] ?? "A page that uses it"}</td>
               <td className="numeric text-right">{kb(a.brotli)}</td>
               <td className="numeric text-right">{kb(a.gzip)}</td>
               <td className="numeric text-right text-fg-3">{kb(a.bytes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** `<UiBudgets />`: every ceiling the toolkit's budget tests hold, with the size now. */
+export function UiBudgets() {
+  const rows = uiBudgetRows(toolkitInfo.assets);
+  return (
+    <div className="table-wrap" role="region" aria-label="The toolkit's size budgets" tabIndex={0}>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Budget</th>
+            <th scope="col" className="text-right">
+              Ceiling, gzip
+            </th>
+            <th scope="col" className="text-right">
+              Now
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td>
+                <InlineMarkdown text={row.label} />
+              </td>
+              <td className="numeric text-right">
+                <InlineMarkdown text={row.ceiling} />
+              </td>
+              <td className="numeric text-right text-fg-3">{row.measured ?? ""}</td>
             </tr>
           ))}
         </tbody>
