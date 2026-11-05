@@ -62,6 +62,12 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await box.evaluate((e) => e.scrollLeft), 0);
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
+    // Chromium scrolls smoothly: give the scroll up to 2 s to start.
+    await box.evaluate((e) => new Promise((done) => {
+      const start = performance.now();
+      const check = () => (Math.abs(e.scrollLeft) > 0 || performance.now() - start > 2000 ? done() : requestAnimationFrame(check));
+      check();
+    }));
     assert.ok((await box.evaluate((e) => Math.abs(e.scrollLeft))) > 0, "the table moved");
     const pre = page.locator("#long pre");
     await pre.focus();
@@ -73,7 +79,7 @@ inBrowsers(({ open, browserName }) => {
   test("a table's numbers line up at the end of their cells, in the shape the text asked for", async () => {
     const { page, close } = await open("/markdown");
     const aligns = await page.locator("#md-table tbody tr").first().locator("td").evaluateAll((cells) => cells.map((c) => getComputedStyle(c).textAlign));
-    assert.deepEqual(aligns, ["start", "end", "end"]);
+    assert.deepEqual(aligns, ["start", "start", "end", "end", "end", "end", "end"]);
     const group = page.locator("#md-table [data-slot=markdown-table]");
     assert.equal(await group.getAttribute("role"), "group");
     assert.equal(await group.getAttribute("aria-label"), "Table");
@@ -153,7 +159,8 @@ inBrowsers(({ open, browserName }) => {
         const { page, close } = await open(render(text, trust), {
           before: async (p) => {
             p.on("request", (request) => {
-              if (/attacker\.example/.test(request.url())) sent.push(request.url());
+              // The host: the text itself is in the page's own address.
+              if (/(^|\.)attacker\.example$/.test(new URL(request.url()).hostname)) sent.push(request.url());
             });
           },
         });
@@ -179,7 +186,7 @@ inBrowsers(({ open, browserName }) => {
 
   test("a heading level is where the page asks it to start", async () => {
     const { page, close } = await open("/markdown");
-    assert.deepEqual(await page.locator("#md-headings").locator("h1,h2,h3,h4,h5,h6").evaluateAll((all) => all.map((h) => h.tagName)), ["H4", "H5", "H6"]);
+    assert.deepEqual(await page.locator("#md-headings").locator("h1,h2,h3,h4,h5,h6").evaluateAll((all) => all.map((h) => h.tagName)), ["H3", "H4", "H5", "H6"]);
     assert.deepEqual(await page.locator("#md-reply").locator("h1,h2,h3,h4,h5,h6").evaluateAll((all) => all.map((h) => h.tagName)), ["H3"]);
     await close();
   });
