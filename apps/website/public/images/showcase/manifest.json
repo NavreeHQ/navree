@@ -1,5 +1,5 @@
 {
-  "captured": "2026-11-04",
+  "captured": "2026-11-05",
   "note": "Written by scripts/showcase-images.ts from the apps running (cargo run --release) and the site's preview pages. Each width is an AVIF (4:4:4) and a WebP.",
   "images": [
     {
@@ -177,6 +177,181 @@
         {
           "src": "/images/showcase/store-dashboard-1440.webp",
           "width": 1440
+        }
+      ]
+    },
+    {
+      "key": "board-columns",
+      "alt": "Rangla Looms' board for its Taana 3.2 release: five columns, Backlog, Ready, In progress, Review and Done, each with its count and limit, and cards with their labels, due dates, checklists and assignees",
+      "captured": "2026-11-05",
+      "width": 1440,
+      "height": 900,
+      "avif": [
+        {
+          "src": "/images/showcase/board-columns-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/board-columns-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/board-columns-1440.avif",
+          "width": 1440
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/board-columns-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/board-columns-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/board-columns-1440.webp",
+          "width": 1440
+        }
+      ]
+    },
+    {
+      "key": "board-card",
+      "alt": "The same board with a card open in a drawer over it: its labels and due date, who has it, a checklist, its comments and what happened to it",
+      "captured": "2026-11-05",
+      "width": 2880,
+      "height": 1800,
+      "avif": [
+        {
+          "src": "/images/showcase/board-card-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/board-card-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/board-card-1440.avif",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/board-card-2880.avif",
+          "width": 2880
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/board-card-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/board-card-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/board-card-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/board-card-2880.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "board-card-phone",
+      "alt": "The same card on a phone, full width: its labels, assignee, checklist and comments stacked",
+      "captured": "2026-11-05",
+      "width": 780,
+      "height": 1688,
+      "avif": [
+        {
+          "src": "/images/showcase/board-card-phone-390.avif",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/board-card-phone-780.avif",
+          "width": 780
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/board-card-phone-390.webp",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/board-card-phone-780.webp",
+          "width": 780
+        }
+      ]
+    },
+    {
+      "key": "inbox-panes",
+      "alt": "Sukhna Labs' support inbox in three panes: the conversations with their channel, priority and time left to answer, an open conversation with an internal note and a file, and the customer's plan, history and tags",
+      "captured": "2026-11-05",
+      "width": 2880,
+      "height": 1800,
+      "avif": [
+        {
+          "src": "/images/showcase/inbox-panes-640.avif",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/inbox-panes-960.avif",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/inbox-panes-1440.avif",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/inbox-panes-2880.avif",
+          "width": 2880
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/inbox-panes-640.webp",
+          "width": 640
+        },
+        {
+          "src": "/images/showcase/inbox-panes-960.webp",
+          "width": 960
+        },
+        {
+          "src": "/images/showcase/inbox-panes-1440.webp",
+          "width": 1440
+        },
+        {
+          "src": "/images/showcase/inbox-panes-2880.webp",
+          "width": 2880
+        }
+      ]
+    },
+    {
+      "key": "inbox-phone",
+      "alt": "The same conversation on a phone: one pane at a time, with its messages, an internal note and a file, and a link back to the conversations",
+      "captured": "2026-11-05",
+      "width": 780,
+      "height": 1688,
+      "avif": [
+        {
+          "src": "/images/showcase/inbox-phone-390.avif",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/inbox-phone-780.avif",
+          "width": 780
+        }
+      ],
+      "webp": [
+        {
+          "src": "/images/showcase/inbox-phone-390.webp",
+          "width": 390
+        },
+        {
+          "src": "/images/showcase/inbox-phone-780.webp",
+          "width": 780
         }
       ]
     },
