@@ -113,6 +113,7 @@ export const showcases: Showcase[] = [
       "An order in a [Sheet](/docs/components/sheet/) 60% wide over its table, whose history [loads after it opens](/docs/ui/regions/)",
       "Refund, cancel and resend in [confirm dialogs](/docs/components/alert-dialog/), refused by the server once the order has moved on",
       "An [activity feed](/docs/components/activity-feed/) over server-sent events that fetches only what is new",
+      "[Charts](/docs/components/bar-chart/) of the last 30 days drawn on the server: revenue in lakh, orders by day in IST, how customers pay",
       `Stock for ${indian(store.rows.products)} products, with a restock form in each row`,
     ],
     facts: [
@@ -163,9 +164,9 @@ export const showcases: Showcase[] = [
       {
         example: "build-anything/store-dashboard",
         label: "Dashboard",
-        title: "The store's dashboard: today's figures, the order activity, low stock and top sellers",
+        title: "The store's dashboard: today's figures, charts of the last 30 days, the order activity, low stock and top sellers",
         caption:
-          "Replayed in your browser: the new rows were drawn by the app's Rust ahead of time. In the app, the server streams them over SSE, and the feed asks only for what came after its newest row.",
+          "The charts are SVG from the app's Rust, each with its numbers as a table. The feed is replayed in your browser; in the app, the server streams new rows over SSE, and today's bar grows as orders come in.",
         file: "src/views/dashboard.rs",
       },
       {

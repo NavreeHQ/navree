@@ -161,7 +161,8 @@ const components: { name: string; href: string; use: string }[] = [
   { name: "FactCard", href: "/docs/components/fact-card/", use: "The customer, the payment and both ends of the route, with flags" },
   { name: "Timeline", href: "/docs/components/timeline/", use: "An order's steps from placed to delivered, the ones to come drawn as rings" },
   { name: "ActivityFeed", href: "/docs/components/activity-feed/", use: "The order activity, live, fetching only what came after its newest row" },
-  { name: "Region", href: "/docs/ui/regions/", use: "The drawer's history and the customer's other orders, loaded after it opens; the figures, live" },
+  { name: "Chart and Donut", href: "/docs/components/bar-chart/", use: "The last 30 days of revenue and orders, a day at a time in IST with rupees in lakh, and how customers pay, counted by the database" },
+  { name: "Region", href: "/docs/ui/regions/", use: "The drawer's history and the customer's other orders, loaded after it opens; the figures and the charts, live" },
   { name: "Badge, Stat, Table, Toast, Flag", href: "/docs/components/badge/", use: "Statuses, today's figures, an order's lines, what each action did, and the countries" },
 ];
 
