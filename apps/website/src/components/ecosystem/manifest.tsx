@@ -14,7 +14,7 @@ const rows: { slug: string; what: string }[] = [
   { slug: "navigator", what: "MCP for your agent" },
   { slug: "workspaces", what: "Multi-tenancy" },
   { slug: "search", what: "Full text and vectors" },
-  { slug: "billing", what: "Stripe or Paddle" },
+  { slug: "billing", what: "Plans and payments" },
   { slug: "oauth", what: "OAuth 2.1 and OIDC" },
   { slug: "ai", what: "Agents and RAG" },
   { slug: "microservices", what: "NATS, Kafka, RabbitMQ" },
