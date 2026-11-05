@@ -2,9 +2,10 @@ import Link from "next/link";
 
 import { HomeSection, SectionHeading } from "@/components/home/parts";
 import { InlineMarkdown } from "@/components/inline-markdown";
+import { toolkitInfo } from "@/components/ui-docs/data";
 
-/** What every page can do, each as its docs page states it. */
-const features = [
+/** What every page can do, each as its docs page states it. The icon and flag counts are the toolkit's own, from its build. */
+const features = () => [
   {
     title: "Forms and server validation",
     text: "One struct is the form. Its doc comments are the labels, its field types pick the widgets, and its `#[validate]` rules run in the browser and again on the server. `Submit<T>` reads it back, or answers with the errors under the inputs.",
@@ -41,9 +42,27 @@ const features = [
     meta: "Direction",
     href: "/docs/components/direction/",
   },
+  {
+    title: "Themes",
+    text: "A theme is a typed Rust value: colours for light and dark, corners, density and a font. The server writes the reader's choice on `<html>`, so the first paint is right with no script. A theme builder page lets your developers or your admins make their own.",
+    meta: "Theme · Appearance",
+    href: "/docs/ui/themes/",
+  },
+  {
+    title: "Live updates",
+    text: "Say what changed as a topic, and who may hear it. A page listens to the topics it shows on one connection, and the parts that show them fetch themselves again. A change made in a queue worker or on another server reaches the page, and a page that comes back is told only what it missed.",
+    meta: "Live · LiveStream · Topic",
+    href: "/docs/ui/live-hub/",
+  },
+  {
+    title: "Icons and flags",
+    text: `Every Lucide icon (${toolkitInfo.icons.toLocaleString("en-US")}) is a constant that the compiler checks, and ${toolkitInfo.flags} flags are drawn as inline SVG. No request, no sprite, nothing to host, and only the icons your code names go into your binary.`,
+    meta: "icons::MAIL_OPEN · Flag",
+    href: "/docs/ui/icons/",
+  },
 ];
 
-/** "Built in": six short tiles, each linking to its docs page. */
+/** "Built in": a short tile for each, linking to its docs page. */
 export function UiFeatures() {
   return (
     <HomeSection id="built-in">
@@ -52,10 +71,10 @@ export function UiFeatures() {
         id="built-in"
         eyebrow="Built in"
         title="What every page can do."
-        lead={<p>The parts of a real app that sit between the components: input, actions, live data, the frame, the keyboard and the reading direction.</p>}
+        lead={<p>The parts of a real app that sit between the components: input, actions, live data, the frame, the keyboard, the look, the icons and the reading direction.</p>}
       />
       <ul className="mt-12 grid grid-cols-1 gap-3 md:grid-cols-2 lg:mt-14 xl:grid-cols-3">
-        {features.map((f) => (
+        {features().map((f) => (
           <li key={f.title} className="min-w-0">
             <Link
               href={f.href}
