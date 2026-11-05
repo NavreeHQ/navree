@@ -26,6 +26,9 @@
 :where([data-token=chart-3]){--token-bg:var(--chart-3)}
 :where([data-token=chart-4]){--token-bg:var(--chart-4)}
 :where([data-token=chart-5]){--token-bg:var(--chart-5)}
+:where([data-token=chart-6]){--token-bg:var(--chart-6)}
+:where([data-token=chart-7]){--token-bg:var(--chart-7)}
+:where([data-token=chart-8]){--token-bg:var(--chart-8)}
 :where([data-fg=ink-0]){color:var(--ink-0)}
 :where([data-fg=ink-1]){color:var(--ink-1)}
 :where([data-fg=ink-2]){color:var(--ink-2)}
@@ -54,6 +57,9 @@
 :where([data-fg=chart-3]){color:var(--chart-3)}
 :where([data-fg=chart-4]){color:var(--chart-4)}
 :where([data-fg=chart-5]){color:var(--chart-5)}
+:where([data-fg=chart-6]){color:var(--chart-6)}
+:where([data-fg=chart-7]){color:var(--chart-7)}
+:where([data-fg=chart-8]){color:var(--chart-8)}
 :where([data-swatch=green]){--swatch:light-dark(#0b7a3e,#3dff8f)}
 :where([data-swatch=blue]){--swatch:light-dark(#1f55d6,#5aa2ff)}
 :where([data-swatch=violet]){--swatch:light-dark(#6a2fd6,#ac8fff)}
@@ -90,6 +96,9 @@
 :where([data-tint=chart-3]){--tint:var(--chart-3)}
 :where([data-tint=chart-4]){--tint:var(--chart-4)}
 :where([data-tint=chart-5]){--tint:var(--chart-5)}
+:where([data-tint=chart-6]){--tint:var(--chart-6)}
+:where([data-tint=chart-7]){--tint:var(--chart-7)}
+:where([data-tint=chart-8]){--tint:var(--chart-8)}
 :where([data-pct="6"]){--pct:6%}
 :where([data-pct="9"]){--pct:9%}
 :where([data-pct="10"]){--pct:10%}
