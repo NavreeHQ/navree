@@ -425,8 +425,10 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
         .await
         .assert_error_code(403, "not_a_member");
 
-    // Replayed as Ada herself, it reaches Ada's workspaces only: a header
-    // naming Globex is refused, and so is switching the session into it.
+    // Replayed as Ada herself, it reaches Ada's workspaces only. The session's
+    // choice is the first resolver that names one, so a header naming Globex is
+    // not read and the request stays in Acme; switching the session into Globex
+    // is refused.
     let replay = world.as_user(ada);
     replay.set_cookie(&session_cookie(), &stolen);
     current_of(&replay)
@@ -437,7 +439,9 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
         .header("x-workspace", "globex")
         .send()
         .await
-        .assert_error_code(403, "not_a_member");
+        .assert_status(200)
+        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("resolver", json!("session"));
     replay.csrf_cookie().await;
     switch(&replay, &globex.id.to_string(), "/")
         .await
