@@ -126,7 +126,11 @@ for (const name of NAMES) {
           if (srv.sse.times[0] + at * 0.9 <= typingTo) due++;
         }
         const whileTyping = srv.sse.times.filter((t) => t >= typingFrom && t <= typingTo).length;
-        assert.ok(whileTyping <= due, `attempts while typing ${whileTyping}, the backoff brings ${due} in that time`);
+        const at = (t) => t - srv.sse.times[0];
+        assert.ok(
+          whileTyping <= due,
+          `attempts while typing ${whileTyping}, the backoff brings ${due} in that time (tries at ${srv.sse.times.map(at).join(", ")} ms; typing from ${at(typingFrom)} to ${at(typingTo)} ms)`,
+        );
         assert.equal(await live(page), "retry");
       });
     });
