@@ -231,7 +231,7 @@ fn the_simulation_sees_what_colour_blind_readers_see() {
 
 /// The share of `chart-1` in each of the funnel's steps, as the stylesheet writes them.
 fn funnel_steps() -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/38-charts.css");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/charts.css");
     let css = std::fs::read_to_string(path).unwrap();
     let mut steps = Vec::new();
     for line in css.lines() {
