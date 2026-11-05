@@ -168,7 +168,8 @@ const own: Record<string, (page: Page, frame: Frame, iframe: Locator, fail: (wha
   "theme-builder/default": async (_page, frame, iframe, fail) => {
     const styled = await frame.evaluate(() => {
       const choice = document.querySelector("[data-slot=theme-choice]");
-      return !!choice && Number.parseFloat(getComputedStyle(choice).paddingTop) > 0;
+      // The stylesheet pads a choice at its sides (`padding: 0 .5rem`); a label it doesn't reach has none.
+      return !!choice && Number.parseFloat(getComputedStyle(choice).paddingInlineStart) > 0;
     });
     if (!styled) fail("the builder is not styled: its stylesheet is not linked");
     const look = await frame.evaluate(() => [document.documentElement.dataset.theme, document.documentElement.dataset.mode].join(" "));
