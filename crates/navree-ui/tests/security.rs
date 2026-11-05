@@ -1322,11 +1322,17 @@ fn hrefs(html: &str) -> Vec<String> {
 fn assert_markdown_is_inert(text: &str, html: &str) {
     let lower = html.to_ascii_lowercase();
     for bad in [
-        "<script", "<iframe", "<object", "<embed", "<style", "<svg", "<math", "<form", "<base",
-        "<meta", "<link", "<video", "<audio", "srcdoc=", "style=",
+        "<script", "<iframe", "<object", "<embed", "<style", "<math", "<form", "<base", "<meta",
+        "<link", "<video", "<audio", "srcdoc=", "style=",
     ] {
         assert!(!lower.contains(bad), "{bad} from {text:?}: {html}");
     }
+    // The only pictures are the icons of the toolkit's own Copy buttons, one each.
+    assert_eq!(
+        lower.matches("<svg").count(),
+        lower.matches("aria-label=\"copy code\"").count(),
+        "<svg from {text:?}: {html}"
+    );
     // No attribute that runs code: ` on` and a name, then `=`, outside text.
     for at in lower.match_indices(" on").map(|(at, _)| at) {
         let name: String = lower[at + 1..]
@@ -1423,7 +1429,8 @@ fn markdown_in_untrusted_text_draws_no_image_whatever_the_syntax() {
     ] {
         let html = navree_ui::Markdown::new(text).to_html();
         assert!(!html.contains("<img"), "{text:?}: {html}");
-        assert!(!html.contains("src="), "{text:?}: {html}");
+        // No `src` attribute; raw HTML shown as text reads `src=&quot;`.
+        assert!(!html.contains("src=\""), "{text:?}: {html}");
     }
 }
 
