@@ -43,8 +43,8 @@ pub(crate) const DEFAULT_ENV_PREFIX: &str = "APP_";
 ///
 /// // What `ConfigSources::defaults()` builds, plus a test override:
 /// let sources = ConfigSources::new()
-///     .dotenv(".env")
 ///     .file("config/app.toml")
+///     .dotenv(".env")
 ///     .env()
 ///     .set("database.url", "sqlite://test.db?mode=rwc");
 /// ```
@@ -92,22 +92,21 @@ impl ConfigSources {
     /// [`defaults`](ConfigSources::defaults) (`true`), or below it (`false`).
     /// The real environment ranks above both either way.
     ///
-    /// This constant is the one place that sets the order: flipping it moves
-    /// `.env` over the config file in `defaults` and `defaults_in`, and the
-    /// warning about a `.env` value that a config file hides follows the
-    /// order by itself (it only exists while the file ranks higher).
-    pub const DOTENV_RANKS_ABOVE_FILES: bool = false;
+    /// This constant is the one place that sets the order of the two files
+    /// in `defaults` and `defaults_in`. The warning about a key that both
+    /// set with different values does not depend on it.
+    pub const DOTENV_RANKS_ABOVE_FILES: bool = true;
 
-    /// The conventional sources, relative to the working directory: `.env`
-    /// and `config/app.toml` (in the order of
-    /// [`DOTENV_RANKS_ABOVE_FILES`](ConfigSources::DOTENV_RANKS_ABOVE_FILES)),
+    /// The conventional sources, relative to the working directory:
+    /// `config/app.toml`, then `.env` (so `.env` wins; the order of the two
+    /// is [`DOTENV_RANKS_ABOVE_FILES`](ConfigSources::DOTENV_RANKS_ABOVE_FILES)),
     /// then `APP_` environment variables.
     pub fn defaults() -> Self {
         Self::defaults_in("")
     }
 
-    /// The conventional sources of the app in `dir`: `dir/.env` and
-    /// `dir/config/app.toml`, then `APP_` environment variables. What
+    /// The conventional sources of the app in `dir`: `dir/config/app.toml`,
+    /// then `dir/.env`, then `APP_` environment variables. What
     /// [`defaults`](ConfigSources::defaults) reads, for tools that look at
     /// an app from another directory (Navigator, `navree mcp`).
     pub fn defaults_in(dir: impl AsRef<std::path::Path>) -> Self {

@@ -1,8 +1,11 @@
-//! CONFIG-003: a config file that ranks above `.env` hides its values,
-//! and the boot says so, naming the key and both sources. Where the file
-//! ranks below `.env` nothing is hidden and there is nothing to say. The
-//! order of the default sources is one constant,
-//! `ConfigSources::DOTENV_RANKS_ABOVE_FILES`; these tests cover both orders.
+//! CONFIG-003: a key that `.env` and a config file both set with different
+//! values. One of the two is used and the other has no effect, and the boot
+//! says so, naming the key and both sources. `.env` ranks above the config
+//! file in `ConfigSources::defaults`; the loader also reads them the other way
+//! round when the sources are listed that way, and these tests cover both
+//! orders.
+
+use std::path::PathBuf;
 
 use navree_config::{Config, ConfigSources, Shadowed, ValueOrigin};
 use tempfile::TempDir;
@@ -14,191 +17,220 @@ fn dir() -> TempDir {
         .expect("tempdir")
 }
 
-fn write(dir: &TempDir, name: &str, contents: &str) -> std::path::PathBuf {
+fn write(dir: &TempDir, name: &str, contents: &str) -> PathBuf {
     let path = dir.path().join(name);
     std::fs::write(&path, contents).expect("write fixture");
     path
 }
 
-fn load(dir: &TempDir, env: &str, file: &str) -> Config {
+/// `.env` is read first and the file after it: the file wins.
+fn file_over_dotenv(dir: &TempDir, env: &str, file: &str) -> Config {
     let env = write(dir, ".env", env);
     let file = write(dir, "app.toml", file);
     Config::load(&ConfigSources::new().dotenv(env).file(file)).expect("load")
 }
 
-#[test]
-fn the_config_file_wins_when_it_is_read_after_dotenv() {
-    // Order 1: `.env`, then the file. The later source wins, and the `.env`
-    // value is the one that is hidden.
-    let dir = dir();
-    let config = load(
-        &dir,
-        "APP_DATABASE__URL=sqlite://from-dotenv.db\n",
-        "[database]\nurl = \"sqlite://from-file.db\"\n",
-    );
-    assert_eq!(
-        config.get_string("database.url").as_deref(),
-        Some("sqlite://from-file.db")
-    );
+/// The file is read first and `.env` after it: `.env` wins.
+fn dotenv_over_file(dir: &TempDir, env: &str, file: &str) -> Config {
+    let env = write(dir, ".env", env);
+    let file = write(dir, "app.toml", file);
+    Config::load(&ConfigSources::new().file(file).dotenv(env)).expect("load")
 }
 
+fn dotenv_origin(dir: &TempDir, line: usize, variable: &str) -> ValueOrigin {
+    ValueOrigin::DotEnv {
+        file: dir.path().join(".env").display().to_string(),
+        line,
+        variable: variable.to_owned(),
+    }
+}
+
+fn file_origin(dir: &TempDir) -> ValueOrigin {
+    ValueOrigin::File {
+        file: dir.path().join("app.toml").display().to_string(),
+    }
+}
+
+const ENV: &str = "APP_DATABASE__URL=sqlite://from-dotenv.db\n";
+const FILE: &str = "[database]\nurl = \"sqlite://from-file.db\"\n";
+
+// ---------------------------------------------------------------------------
+// The two orders
+// ---------------------------------------------------------------------------
+
 #[test]
-fn dotenv_wins_when_it_is_read_after_the_config_file_and_nothing_is_hidden() {
-    // Order 2: the file, then `.env`. The same two files, the other winner,
-    // and no warning: `.env` hiding a file value is the order people expect.
+fn dotenv_wins_when_it_is_read_after_the_config_file() {
     let dir = dir();
-    let env = write(&dir, ".env", "APP_DATABASE__URL=sqlite://from-dotenv.db\n");
-    let file = write(
-        &dir,
-        "app.toml",
-        "[database]\nurl = \"sqlite://from-file.db\"\n",
-    );
-    let config = Config::load(&ConfigSources::new().file(file).dotenv(env)).expect("load");
+    let config = dotenv_over_file(&dir, ENV, FILE);
     assert_eq!(
         config.get_string("database.url").as_deref(),
         Some("sqlite://from-dotenv.db")
     );
-    assert!(config.shadowed().is_empty(), "{:?}", config.shadowed());
     assert!(config.origin("database.url").unwrap().is_dotenv());
+    let shadows = config.shadowed();
+    assert_eq!(shadows.len(), 1, "{shadows:?}");
+    assert_eq!(shadows[0].key, "database.url");
+    assert_eq!(
+        shadows[0].winner,
+        dotenv_origin(&dir, 1, "APP_DATABASE__URL")
+    );
+    assert_eq!(shadows[0].hidden, file_origin(&dir));
 }
 
 #[test]
-fn the_default_sources_follow_the_declared_order() {
-    // `ConfigSources::DOTENV_RANKS_ABOVE_FILES` decides; flipping it flips
-    // the winner of `defaults_in` and removes the warning.
+fn the_config_file_wins_when_it_is_read_after_dotenv() {
+    let dir = dir();
+    let config = file_over_dotenv(&dir, ENV, FILE);
+    assert_eq!(
+        config.get_string("database.url").as_deref(),
+        Some("sqlite://from-file.db")
+    );
+    assert!(config.origin("database.url").unwrap().is_file());
+    let shadows = config.shadowed();
+    assert_eq!(shadows.len(), 1, "{shadows:?}");
+    assert_eq!(shadows[0].winner, file_origin(&dir));
+    assert_eq!(
+        shadows[0].hidden,
+        dotenv_origin(&dir, 1, "APP_DATABASE__URL")
+    );
+}
+
+#[test]
+fn the_default_sources_rank_dotenv_above_the_config_file() {
+    // `ConfigSources::DOTENV_RANKS_ABOVE_FILES` is the one switch; this test
+    // pins what it is set to.
+    assert!(ConfigSources::DOTENV_RANKS_ABOVE_FILES);
     let dir = dir();
     std::fs::create_dir_all(dir.path().join("config")).expect("config dir");
-    std::fs::write(
-        dir.path().join(".env"),
-        "APP_DATABASE__URL=sqlite://from-dotenv.db\n",
-    )
-    .expect("write");
-    std::fs::write(
-        dir.path().join("config/app.toml"),
-        "[database]\nurl = \"sqlite://from-file.db\"\n",
-    )
-    .expect("write");
+    std::fs::write(dir.path().join(".env"), ENV).expect("write");
+    std::fs::write(dir.path().join("config/app.toml"), FILE).expect("write");
     let config = Config::load(&ConfigSources::defaults_in(dir.path())).expect("load");
-    if ConfigSources::DOTENV_RANKS_ABOVE_FILES {
+    assert_eq!(
+        config.get_string("database.url").as_deref(),
+        Some("sqlite://from-dotenv.db")
+    );
+    let shadows = config.shadowed();
+    assert_eq!(shadows.len(), 1, "{shadows:?}");
+    assert!(shadows[0].winner.is_dotenv() && shadows[0].hidden.is_file());
+}
+
+#[test]
+fn the_real_environment_ranks_above_both() {
+    let dir = dir();
+    let env = write(&dir, ".env", ENV);
+    let file = write(&dir, "app.toml", FILE);
+    for sources in [
+        ConfigSources::new().file(&file).dotenv(&env),
+        ConfigSources::new().dotenv(&env).file(&file),
+    ] {
+        let config = Config::load(
+            &sources.env_vars("APP_", [("APP_DATABASE__URL", "sqlite://from-process.db")]),
+        )
+        .expect("load");
         assert_eq!(
             config.get_string("database.url").as_deref(),
-            Some("sqlite://from-dotenv.db")
+            Some("sqlite://from-process.db")
         );
-        assert!(config.shadowed().is_empty());
-    } else {
-        assert_eq!(
-            config.get_string("database.url").as_deref(),
-            Some("sqlite://from-file.db")
-        );
-        assert_eq!(config.shadowed().len(), 1);
+        // The process environment decides, so what the two files say about
+        // the key does not matter.
+        assert!(config.shadowed().is_empty(), "{:?}", config.shadowed());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// What is reported
+// ---------------------------------------------------------------------------
+
+#[test]
+fn several_keys_are_reported_in_key_order() {
+    let dir = dir();
+    let env = "APP_KEY=base64:abc\nAPP_DATABASE__URL=sqlite://a.db\nAPP_LOG__LEVEL=info\n";
+    let file = "[database]\nurl = \"sqlite://b.db\"\n\n[log]\nlevel = \"debug\"\n";
+    for config in [
+        dotenv_over_file(&dir, env, file),
+        file_over_dotenv(&dir, env, file),
+    ] {
+        let keys: Vec<&str> = config.shadowed().iter().map(|s| s.key.as_str()).collect();
+        assert_eq!(keys, ["database.url", "log.level"]);
     }
 }
 
 #[test]
-fn a_file_value_that_hides_a_dotenv_value_is_reported() {
+fn the_message_names_the_key_and_both_sources_and_no_value() {
     let dir = dir();
-    let config = load(
-        &dir,
-        "APP_KEY=base64:abc\nAPP_DATABASE__URL=sqlite://from-dotenv.db\nAPP_LOG__LEVEL=info\n",
-        "[database]\nurl = \"sqlite://from-file.db\"\n\n[log]\nlevel = \"debug\"\n",
-    );
-    let shadows = config.shadowed();
-    let keys: Vec<&str> = shadows.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, ["database.url", "log.level"]);
+    let env = "APP_DATABASE__URL=postgres://user:hunter2@db/acme\n";
+    let file = "[database]\nurl = \"sqlite://other-secret.db\"\n";
 
-    let first = &shadows[0];
-    assert_eq!(
-        first.hidden,
-        ValueOrigin::DotEnv {
-            file: dir.path().join(".env").display().to_string(),
-            line: 2,
-            variable: "APP_DATABASE__URL".to_owned(),
-        }
-    );
-    assert_eq!(
-        first.winner,
-        ValueOrigin::File {
-            file: dir.path().join("app.toml").display().to_string()
-        }
-    );
-}
-
-#[test]
-fn the_warning_names_the_key_and_both_sources_and_no_value() {
-    let dir = dir();
-    let config = load(
-        &dir,
-        "APP_DATABASE__URL=postgres://user:hunter2@db/acme\n",
-        "[database]\nurl = \"sqlite://other-secret.db\"\n",
-    );
+    let config = dotenv_over_file(&dir, env, file);
     let message = config.shadowed()[0].message();
     assert!(message.contains("`database.url`"), "{message}");
-    assert!(message.contains("APP_DATABASE__URL"), "{message}");
-    assert!(message.contains(".env:1"), "{message}");
+    assert!(message.contains("set in both places"), "{message}");
+    assert!(message.contains("the `.env` value is used"), "{message}");
+    assert!(message.contains(".env:1 (APP_DATABASE__URL)"), "{message}");
     assert!(message.contains("app.toml"), "{message}");
+
+    let config = file_over_dotenv(&dir, env, file);
+    let message = config.shadowed()[0].message();
+    assert!(message.contains("`database.url`"), "{message}");
+    assert!(message.contains("set in both places"), "{message}");
     assert!(
-        !message.contains("later release"),
-        "no promise about releases: {message}"
+        message.contains("the config file value is used"),
+        "{message}"
     );
-    assert!(!message.contains("hunter2"), "{message}");
-    assert!(!message.contains("other-secret"), "{message}");
-    assert!(!message.contains("postgres://"), "{message}");
+    assert!(message.contains(".env:1 (APP_DATABASE__URL)"), "{message}");
+
+    for config in [
+        dotenv_over_file(&dir, env, file),
+        file_over_dotenv(&dir, env, file),
+    ] {
+        let message = config.shadowed()[0].message();
+        assert!(!message.contains("hunter2"), "{message}");
+        assert!(!message.contains("other-secret"), "{message}");
+        assert!(!message.contains("postgres://"), "{message}");
+        assert!(!message.contains("later release"), "no promise: {message}");
+    }
 }
 
 #[test]
-fn equal_values_hide_nothing() {
+fn equal_values_conflict_with_nothing() {
     let dir = dir();
-    let config = load(
-        &dir,
-        "APP_HTTP__ADDR=127.0.0.1:8080\nAPP_QUEUE__WORKERS=4\nAPP_AUTH__REGISTRATION=true\n",
-        "[http]\naddr = \"127.0.0.1:8080\"\n[queue]\nworkers = 4\n[auth]\nregistration = true\n",
-    );
-    assert!(config.shadowed().is_empty(), "{:?}", config.shadowed());
+    let env = "APP_HTTP__ADDR=127.0.0.1:8080\nAPP_QUEUE__WORKERS=4\nAPP_AUTH__REGISTRATION=true\n";
+    let file =
+        "[http]\naddr = \"127.0.0.1:8080\"\n[queue]\nworkers = 4\n[auth]\nregistration = true\n";
+    assert!(dotenv_over_file(&dir, env, file).shadowed().is_empty());
+    assert!(file_over_dotenv(&dir, env, file).shadowed().is_empty());
 }
 
 #[test]
 fn keys_only_one_of_them_sets_are_not_reported() {
     let dir = dir();
-    let config = load(
-        &dir,
-        "APP_KEY=base64:abc\nAPP_MAIL__FROM=\"Acme <hello@acme.test>\"\n",
-        "[http]\naddr = \"127.0.0.1:8080\"\n[mail]\ntransport = \"log\"\n",
-    );
-    assert!(config.shadowed().is_empty());
+    let env = "APP_KEY=base64:abc\nAPP_MAIL__FROM=\"Acme <hello@acme.test>\"\n";
+    let file = "[http]\naddr = \"127.0.0.1:8080\"\n[mail]\ntransport = \"log\"\n";
+    assert!(dotenv_over_file(&dir, env, file).shadowed().is_empty());
+    assert!(file_over_dotenv(&dir, env, file).shadowed().is_empty());
 }
 
 #[test]
-fn a_value_that_the_environment_overrides_again_is_not_reported() {
-    // The real environment beats both: removing either leaves the value as
-    // it is, so there is nothing to warn about.
+fn a_plain_value_against_a_table_conflicts_in_both_orders() {
     let dir = dir();
-    let env = write(&dir, ".env", "APP_LOG__LEVEL=info\n");
-    let file = write(&dir, "app.toml", "[log]\nlevel = \"debug\"\n");
-    let config = Config::load(
-        &ConfigSources::new()
-            .dotenv(env)
-            .file(file)
-            .env_vars("APP_", [("APP_LOG__LEVEL", "error")]),
-    )
-    .expect("load");
-    assert!(config.shadowed().is_empty());
-}
+    let env = "APP_STORAGE=local\n";
+    let file = "[storage.disks.local]\nroot = \"storage\"\n";
 
-#[test]
-fn a_file_that_replaces_a_dotenv_value_with_a_table_hides_it() {
-    let dir = dir();
-    let config = load(
-        &dir,
-        "APP_STORAGE=local\n",
-        "[storage.disks.local]\nroot = \"storage\"\n",
-    );
+    // The file replaces the plain `.env` value with a table.
+    let config = file_over_dotenv(&dir, env, file);
     let keys: Vec<&str> = config.shadowed().iter().map(|s| s.key.as_str()).collect();
     assert_eq!(keys, ["storage"]);
+
+    // `.env` replaces the file's table with a plain value.
+    let config = dotenv_over_file(&dir, env, file);
+    let keys: Vec<&str> = config.shadowed().iter().map(|s| s.key.as_str()).collect();
+    assert_eq!(keys, ["storage.disks.local.root"]);
 }
 
 #[test]
-fn only_dotenv_values_are_shadowed_not_environment_values() {
-    // The real environment ranks above the file, so a file never hides it.
+fn only_dotenv_against_a_file_is_reported() {
+    // The real environment against a file, and a file against a file, are
+    // ordinary layering.
     let dir = dir();
     let file = write(&dir, "app.toml", "[log]\nlevel = \"debug\"\n");
     let config = Config::load(
@@ -208,11 +240,7 @@ fn only_dotenv_values_are_shadowed_not_environment_values() {
     )
     .expect("load");
     assert!(config.shadowed().is_empty());
-}
 
-#[test]
-fn a_second_file_over_a_first_file_is_not_a_dotenv_shadow() {
-    let dir = dir();
     let first = write(&dir, "a.toml", "[log]\nlevel = \"info\"\n");
     let second = write(&dir, "b.toml", "[log]\nlevel = \"debug\"\n");
     let config = Config::load(&ConfigSources::new().file(first).file(second)).expect("load");
@@ -220,63 +248,15 @@ fn a_second_file_over_a_first_file_is_not_a_dotenv_shadow() {
 }
 
 #[test]
-fn shadows_have_a_display_that_matches_their_message() {
-    let shadow = Shadowed {
-        key: "log.level".to_owned(),
-        hidden: ValueOrigin::DotEnv {
-            file: ".env".to_owned(),
-            line: 7,
-            variable: "APP_LOG__LEVEL".to_owned(),
-        },
-        winner: ValueOrigin::File {
-            file: "config/app.toml".to_owned(),
-        },
-    };
-    assert_eq!(shadow.to_string(), shadow.message());
-    assert!(shadow.message().contains(".env:7 (APP_LOG__LEVEL)"));
-    assert!(shadow.message().contains("config/app.toml"));
-}
+fn the_short_name_of_an_app_setting_is_the_same_key_as_app_dot_name() {
+    // `APP_URL` in `.env` is `app.url`; `[app] url` in the file is the same key.
+    let env = "APP_URL=https://from-dotenv.test\nAPP_NAME=acme\n";
+    let file = "[app]\nurl = \"https://from-file.test\"\nname = \"acme\"\n";
 
-#[test]
-fn the_generated_apps_do_not_hide_their_dotenv() {
-    // CONFIG-002: the `.env` and `config/app.toml` that `navree new` writes
-    // (frozen under tests/fixtures/rendered) hide nothing, in the order where
-    // the file ranks above `.env`.
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rendered");
-    let mut checked = 0;
-    for entry in std::fs::read_dir(&root).expect("fixtures") {
-        let case = entry.expect("entry").path();
-        if !case.join("config/app.toml").is_file() || !case.join(".env").is_file() {
-            continue;
-        }
-        let config = Config::load(
-            &ConfigSources::new()
-                .dotenv(case.join(".env"))
-                .file(case.join("config/app.toml")),
-        )
-        .expect("fixture loads");
-        assert!(
-            config.shadowed().is_empty(),
-            "{}: {:?}",
-            case.display(),
-            config.shadowed()
-        );
-        checked += 1;
-    }
-    assert!(checked >= 8, "rendered fixtures are missing: {checked}");
-}
-
-#[test]
-fn a_file_value_hides_the_short_dotenv_name_of_an_app_setting() {
-    // `APP_URL` in `.env` is `app.url`; `[app] url` in the file hides it.
     let dir = dir();
-    let config = load(
-        &dir,
-        "APP_URL=https://from-dotenv.test\nAPP_NAME=acme\n",
-        "[app]\nurl = \"https://from-file.test\"\nname = \"acme\"\n",
-    );
+    let config = file_over_dotenv(&dir, env, file);
     let shadows = config.shadowed();
-    assert_eq!(shadows.len(), 1, "{shadows:?}");
+    assert_eq!(shadows.len(), 1, "only `url` differs: {shadows:?}");
     assert_eq!(shadows[0].key, "app.url");
     assert!(
         matches!(&shadows[0].hidden, ValueOrigin::DotEnv { variable, line: 1, .. } if variable == "APP_URL"),
@@ -284,4 +264,64 @@ fn a_file_value_hides_the_short_dotenv_name_of_an_app_setting() {
         shadows[0].hidden
     );
     assert_eq!(config.app_url().as_deref(), Some("https://from-file.test"));
+
+    let dir = self::dir();
+    let config = dotenv_over_file(&dir, env, file);
+    let shadows = config.shadowed();
+    assert_eq!(shadows.len(), 1, "{shadows:?}");
+    assert_eq!(shadows[0].key, "app.url");
+    assert!(shadows[0].winner.is_dotenv() && shadows[0].hidden.is_file());
+    assert_eq!(
+        config.app_url().as_deref(),
+        Some("https://from-dotenv.test")
+    );
+}
+
+#[test]
+fn shadows_have_a_display_that_matches_their_message() {
+    let shadow = Shadowed {
+        key: "log.level".to_owned(),
+        hidden: ValueOrigin::File {
+            file: "config/app.toml".to_owned(),
+        },
+        winner: ValueOrigin::DotEnv {
+            file: ".env".to_owned(),
+            line: 7,
+            variable: "APP_LOG__LEVEL".to_owned(),
+        },
+    };
+    assert_eq!(shadow.to_string(), shadow.message());
+    assert!(shadow.message().contains(".env:7 (APP_LOG__LEVEL)"));
+    assert!(shadow.message().contains("config/app.toml"));
+    assert!(shadow.message().contains("the `.env` value is used"));
+}
+
+#[test]
+fn the_generated_apps_set_no_key_twice() {
+    // CONFIG-002: the `.env` and `config/app.toml` that `navree new` writes
+    // (frozen under tests/fixtures/rendered) never disagree, whichever of the
+    // two ranks higher.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rendered");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures") {
+        let case = entry.expect("entry").path();
+        if !case.join("config/app.toml").is_file() || !case.join(".env").is_file() {
+            continue;
+        }
+        let (env, file) = (case.join(".env"), case.join("config/app.toml"));
+        for sources in [
+            ConfigSources::new().dotenv(&env).file(&file),
+            ConfigSources::new().file(&file).dotenv(&env),
+        ] {
+            let config = Config::load(&sources).expect("fixture loads");
+            assert!(
+                config.shadowed().is_empty(),
+                "{}: {:?}",
+                case.display(),
+                config.shadowed()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked >= 8, "rendered fixtures are missing: {checked}");
 }

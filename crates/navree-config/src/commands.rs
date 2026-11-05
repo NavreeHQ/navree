@@ -37,7 +37,7 @@ pub(crate) fn show() -> CommandSpec {
 pub(crate) fn check() -> CommandSpec {
     CommandSpec::new(
         "config:check",
-        "Check the configuration: invalid sections, unknown keys, hidden .env values; --env production adds the production profile",
+        "Check the configuration: invalid sections, unknown keys, keys set in .env and in a config file; --env production adds the production profile",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
             let sources = ctx.get::<ConfigSources>().await?;

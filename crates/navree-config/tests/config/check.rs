@@ -156,7 +156,7 @@ fn a_section_with_a_registration_still_finds_typos_inside_it() {
 }
 
 #[test]
-fn hidden_dotenv_values_are_warnings_not_failures() {
+fn a_key_set_in_dotenv_and_in_a_file_is_a_warning_not_a_failure() {
     let dir: TempDir = tempfile::tempdir().expect("tempdir");
     let env = dir.path().join(".env");
     let file = dir.path().join("app.toml");
@@ -166,16 +166,28 @@ fn hidden_dotenv_values_are_warnings_not_failures() {
         "[queue]\nworkers = 2\n[database]\nmax_connections = 5\n",
     )
     .expect("write");
-    let report = check(ConfigSources::new().dotenv(&env).file(&file));
+    // `.env` ranks above the file, as in the default sources.
+    let report = check(ConfigSources::new().file(&file).dotenv(&env));
     assert_eq!(report.shadowed.len(), 1);
     assert!(report.is_ok(), "{}", report.render());
     assert_eq!(report.exit_code(), 0, "a warning does not fail the check");
     let text = report.render();
     assert!(
-        text.contains("warning  `queue.workers` is set in `.env` and in a config file"),
+        text.contains("warning  `queue.workers` is set in both places"),
         "{text}"
     );
+    assert!(text.contains("the `.env` value is used"), "{text}");
     assert!(!text.contains("config:check: 1 problem"), "{text}");
+
+    // The other order reports the same key, the other way round.
+    let report = check(ConfigSources::new().dotenv(&env).file(&file));
+    assert_eq!(report.shadowed.len(), 1);
+    assert_eq!(report.exit_code(), 0);
+    assert!(
+        report.render().contains("the config file value is used"),
+        "{}",
+        report.render()
+    );
 }
 
 #[test]

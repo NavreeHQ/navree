@@ -80,7 +80,7 @@ impl Project {
     }
 
     /// The sources the app reads its configuration from, from its
-    /// directory: `.env`, `config/app.toml`, then `APP_*` environment
+    /// directory: `config/app.toml`, `.env`, then `APP_*` environment
     /// variables, plus the settings of its `dock.toml` services that the
     /// environment doesn't set (what `navree dev` passes to the app).
     pub fn config_sources(&self) -> ConfigSources {

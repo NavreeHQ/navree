@@ -48,7 +48,7 @@ pub struct Config {
     /// The `app` table with the short names of its settings (`APP_URL`)
     /// resolved into it; reads of `app` and `app.*` go through it.
     app: Option<Arc<Value>>,
-    /// The `.env` values that a config file hides.
+    /// Keys that `.env` and a config file both set with different values.
     shadows: Arc<Vec<Shadowed>>,
     /// Which keys have been read so far.
     usage: Arc<Usage>,
@@ -155,11 +155,11 @@ impl Config {
         keys
     }
 
-    /// The `.env` values that a config file hides: the key, the `.env` entry
-    /// and the file. A file that ranks above `.env` (the order of
-    /// [`ConfigSources::defaults`]) wins, so these `.env` values have no
-    /// effect. Pairs that hold the same value are not listed, and nothing is
-    /// listed when `.env` ranks above the file.
+    /// The keys that `.env` and a config file both set, with different
+    /// values: the key, the source that is used and the one that has no
+    /// effect. Which of the two wins follows the order of the sources
+    /// ([`ConfigSources::defaults`] puts `.env` above the file). Pairs that
+    /// hold the same value are not listed.
     pub fn shadowed(&self) -> &[Shadowed] {
         &self.shadows
     }

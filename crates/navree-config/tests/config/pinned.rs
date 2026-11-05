@@ -52,7 +52,7 @@ fn error_of<T: serde::de::DeserializeOwned + std::fmt::Debug>(
 // ---------------------------------------------------------------------------
 
 #[test]
-fn dotenv_does_not_override_app_toml_but_the_environment_overrides_both() {
+fn a_file_read_after_dotenv_overrides_it_and_the_environment_overrides_both() {
     let dir = tempfile::Builder::new()
         .prefix("navree-test-")
         .tempdir()
@@ -74,6 +74,37 @@ fn dotenv_does_not_override_app_toml_but_the_environment_overrides_both() {
         Some("127.0.0.1:2")
     );
     // A key only `.env` has is kept; the environment is read last.
+    assert_eq!(config.get_string("key").as_deref(), Some("from-dotenv"));
+    assert_eq!(config.get_string("http.port").as_deref(), Some("3"));
+}
+
+#[test]
+fn dotenv_beats_files_and_loses_to_the_environment() {
+    // The order of `ConfigSources::defaults`: the file, then `.env`, then the
+    // environment.
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
+    write(
+        &dir,
+        ".env",
+        "APP_HTTP__ADDR=0.0.0.0:1\nAPP_HTTP__PORT=1\nAPP_KEY=from-dotenv\n",
+    );
+    write(
+        &dir,
+        "config/app.toml",
+        "[http]\naddr = \"127.0.0.1:2\"\nworkers = 7\n",
+    );
+    let sources = ConfigSources::new()
+        .file(dir.path().join("config/app.toml"))
+        .dotenv(dir.path().join(".env"))
+        .env_vars("APP_", [("APP_HTTP__PORT", "3")]);
+    let config = Config::load(&sources).expect("load");
+    // `.env` is read after the TOML file, so its key wins.
+    assert_eq!(config.get_string("http.addr").as_deref(), Some("0.0.0.0:1"));
+    // A key only the file has is kept; the environment is read last.
+    assert_eq!(config.get_string("http.workers").as_deref(), Some("7"));
     assert_eq!(config.get_string("key").as_deref(), Some("from-dotenv"));
     assert_eq!(config.get_string("http.port").as_deref(), Some("3"));
 }

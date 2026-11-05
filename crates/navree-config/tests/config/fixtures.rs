@@ -13,7 +13,9 @@
 //! A fixture directory holds the files its sources read, an optional
 //! `fixture.json` (`{"sources": ["dotenv:.env", "file:config/app.toml",
 //! "file:config/production.toml", "env"]}`, the conventional three when
-//! absent) and an optional `env.json`: the environment variables overlaid by
+//! absent: the config file and `.env` in the order of
+//! `ConfigSources::DOTENV_RANKS_ABOVE_FILES`, then the environment) and an
+//! optional `env.json`: the environment variables overlaid by
 //! the `env` source (a directory without one uses its parent's). Each fixture
 //! records two trees:
 //!
@@ -85,11 +87,19 @@ fn sources(dir: &Path, env: Option<&[(String, String)]>) -> ConfigSources {
             .iter()
             .map(|v| v.as_str().expect("string").to_owned())
             .collect(),
-        None => vec![
-            "dotenv:.env".to_owned(),
-            "file:config/app.toml".to_owned(),
-            "env".to_owned(),
-        ],
+        None => {
+            let (dotenv, file) = ("dotenv:.env", "file:config/app.toml");
+            let files = if ConfigSources::DOTENV_RANKS_ABOVE_FILES {
+                [file, dotenv]
+            } else {
+                [dotenv, file]
+            };
+            files
+                .into_iter()
+                .chain(["env"])
+                .map(str::to_owned)
+                .collect()
+        }
     };
     let mut sources = ConfigSources::new();
     for item in spec {

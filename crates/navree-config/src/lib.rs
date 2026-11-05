@@ -25,8 +25,9 @@
 //!   `std::env::set_var` (unsafe in edition 2024): `.env` entries are a
 //!   configuration source, not process environment.
 //! - The loader records where every value came from ([`Config::origin`],
-//!   [`ValueOrigin`]), notes `.env` values that a config file hides
-//!   ([`Config::shadowed`]) and the keys and sections that nothing reads
+//!   [`ValueOrigin`]), notes the keys that `.env` and a config file both set
+//!   with different values ([`Config::shadowed`]) and the keys and sections
+//!   that nothing reads
 //!   ([`Config::unused`]). `ConfigModule` reports both at boot.
 //! - The `app` section is typed: [`AppOptions`] and [`Environment`].
 //! - `navree config:show` and `navree config:check` (see [`show`] and

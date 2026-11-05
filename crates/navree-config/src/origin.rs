@@ -153,19 +153,20 @@ impl From<&str> for Origin {
     }
 }
 
-/// A `.env` value hidden by a config file.
+/// A key that a `.env` file and a config file both set, with different
+/// values.
 ///
-/// It exists while the file ranks above `.env` (see
-/// [`ConfigSources::DOTENV_RANKS_ABOVE_FILES`](crate::ConfigSources::DOTENV_RANKS_ABOVE_FILES)):
-/// the file wins and the `.env` value has no effect. Each shadow names the key
-/// and both sources, never a value.
+/// The source that ranks higher wins and the other has no effect (see
+/// [`ConfigSources::DOTENV_RANKS_ABOVE_FILES`](crate::ConfigSources::DOTENV_RANKS_ABOVE_FILES);
+/// the real environment ranks above both). Each entry names the key and both
+/// sources, never a value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shadowed {
     /// The configuration key (`database.url`).
     pub key: String,
-    /// The `.env` entry that has no effect.
+    /// The source whose value has no effect.
     pub hidden: ValueOrigin,
-    /// The file that sets the same key and wins.
+    /// The source whose value is used.
     pub winner: ValueOrigin,
 }
 
@@ -173,11 +174,16 @@ impl Shadowed {
     /// The warning shown at boot and by `config:check`: the key, both
     /// sources and what to do.
     pub fn message(&self) -> String {
+        let (used, unused) = if self.winner.is_dotenv() {
+            ("`.env`", "config file")
+        } else {
+            ("config file", "`.env`")
+        };
         format!(
-            "`{key}` is set in `.env` and in a config file: {hidden} is hidden by {winner}, so the file value is used and the `.env` value has no effect. Remove one of the two.",
+            "`{key}` is set in both places, `.env` and a config file; the {used} value is used ({winner}) and the {unused} value has no effect ({hidden}). Remove one of the two.",
             key = self.key,
-            hidden = self.hidden,
             winner = self.winner,
+            hidden = self.hidden,
         )
     }
 }

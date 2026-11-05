@@ -27,7 +27,7 @@ pub(crate) struct Loaded {
     pub(crate) root: Value,
     /// The `app` table with its short names resolved (see [`app_view`]).
     pub(crate) app: Option<Value>,
-    /// `.env` values that a config file hides.
+    /// Keys that `.env` and a config file both set with different values.
     pub(crate) shadows: Vec<Shadowed>,
 }
 
@@ -41,7 +41,8 @@ pub(crate) struct Limits {
 }
 
 /// Loads and stacks every source of `sources`, then its `set` values, and
-/// notes the `.env` values that a config file hides.
+/// notes the keys that `.env` and a config file both set with different
+/// values.
 pub(crate) fn load(sources: &ConfigSources) -> Result<Loaded, ConfigError> {
     let limits = sources.limits();
     let mut root = Value::empty_table();
@@ -49,8 +50,10 @@ pub(crate) fn load(sources: &ConfigSources) -> Result<Loaded, ConfigError> {
     for (rank, source) in sources.sources.iter().enumerate() {
         let rank = u32::try_from(rank).unwrap_or(u32::MAX - 1);
         if let Some(layer) = source_layer(source, &limits, rank)? {
-            if matches!(source, Source::File(_)) {
-                find_shadows(&root, &layer, &mut shadows);
+            match source {
+                Source::File(_) => find_shadows(&root, &layer, Other::Dotenv, &mut shadows),
+                Source::Dotenv(_) => find_shadows(&root, &layer, Other::File, &mut shadows),
+                _ => {}
             }
             merge(&mut root, layer);
         }
@@ -61,10 +64,15 @@ pub(crate) fn load(sources: &ConfigSources) -> Result<Loaded, ConfigError> {
         }
     }
     let app = app_view(&root);
-    // A file value that a later source overrides again hides nothing that
-    // matters: keep the shadows whose file still decides the key.
+    // A value that a later source (the real environment, `set`) overrides
+    // again leaves nothing to say about the two files: keep the entries whose
+    // winner still decides the key.
     shadows.retain(|shadow| {
-        root.lookup(&shadow.key).is_none_or(|value| {
+        let decided = match (&app, shadow.key.strip_prefix("app.")) {
+            (Some(app), Some(rest)) => app.lookup(rest),
+            _ => root.lookup(&shadow.key),
+        };
+        decided.is_none_or(|value| {
             value.is_table()
                 || value
                     .origin
@@ -161,19 +169,37 @@ pub(crate) fn app_view(root: &Value) -> Option<Value> {
     found.then_some(view)
 }
 
-/// Notes the `.env` values that `layer` (a config file) hides: for each key
-/// the file sets, a value of the tree so far that came from a `.env` file
-/// and differs. A file that turns a plain value into a table (or the other
-/// way round) hides the `.env` values it replaces too. Equal values hide
+/// Which kind of source the earlier value of a conflict came from.
+#[derive(Clone, Copy)]
+enum Other {
+    Dotenv,
+    File,
+}
+
+impl Other {
+    fn matches(self, origin: &ValueOrigin) -> bool {
+        match self {
+            Other::Dotenv => origin.is_dotenv(),
+            Other::File => origin.is_file(),
+        }
+    }
+}
+
+/// Notes the keys that `layer` (a config file or a `.env` file, merged over
+/// the tree so far) sets with a different value than an earlier source of the
+/// `other` kind: the earlier value has no effect and the layer's wins. A
+/// layer that turns a plain value into a table (or the other way round)
+/// replaces the values it covers too, and a short name of an app setting
+/// (`APP_URL`) is the same key as `app.url`. Equal values conflict with
 /// nothing, so they are not reported. Values are compared, never kept.
-fn find_shadows(root: &Value, layer: &Value, shadows: &mut Vec<Shadowed>) {
+fn find_shadows(root: &Value, layer: &Value, other: Other, shadows: &mut Vec<Shadowed>) {
     layer.for_each_leaf("", &mut |key, leaf| {
         let Some(winner) = leaf.origin.as_ref().map(|o| o.source().clone()) else {
             return;
         };
         let mut note = |hidden_key: &str, hidden: &Value| {
             if let Some(origin) = hidden.origin.as_ref().map(|o| o.source())
-                && origin.is_dotenv()
+                && other.matches(origin)
             {
                 shadows.push(Shadowed {
                     key: hidden_key.to_owned(),
@@ -182,7 +208,7 @@ fn find_shadows(root: &Value, layer: &Value, shadows: &mut Vec<Shadowed>) {
                 });
             }
         };
-        // At the key, or below it when the file replaces a table.
+        // At the key, or below it when the layer replaces a table.
         if let Some(existing) = root.lookup(key) {
             existing.for_each_leaf(key, &mut |hidden_key, hidden| {
                 if hidden_key != key || !same_value(hidden, leaf) {
@@ -190,7 +216,7 @@ fn find_shadows(root: &Value, layer: &Value, shadows: &mut Vec<Shadowed>) {
                 }
             });
         }
-        // A file's `app.<name>` against the short `.env` name (`APP_URL`).
+        // `app.<name>` against the short name (`APP_URL`), either way round.
         if let Some(alias) = key.strip_prefix("app.")
             && APP_ALIASES.contains(&alias)
             && let Some(hidden) = root.lookup(alias)
@@ -199,7 +225,14 @@ fn find_shadows(root: &Value, layer: &Value, shadows: &mut Vec<Shadowed>) {
         {
             note(key, hidden);
         }
-        // Above it, when the file turns a plain value into a table.
+        if APP_ALIASES.contains(&key)
+            && let Some(hidden) = root.lookup(&format!("app.{key}"))
+            && !hidden.is_table()
+            && !same_value(hidden, leaf)
+        {
+            note(&format!("app.{key}"), hidden);
+        }
+        // Above it, when the layer turns a plain value into a table.
         let segments: Vec<&str> = key.split('.').collect();
         for end in 1..segments.len() {
             let above = segments[..end].join(".");

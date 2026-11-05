@@ -33,8 +33,9 @@ use crate::{AppOptions, Config, ConfigSources, commands};
 ///
 /// - provides [`AppOptions`] (the `app` section, validated at boot) and the
 ///   [`ConfigSources`] the app loads from;
-/// - warns at boot about a `.env` value that a config file hides
-///   ([`Config::shadowed`]) and about a key or section that nothing reads
+/// - warns at boot about a key that `.env` and a config file both set with
+///   different values ([`Config::shadowed`]) and about a key or section that
+///   nothing reads
 ///   ([`Config::unused`]);
 /// - lists the problems of every registered section when the boot fails on
 ///   one of them;
@@ -111,7 +112,8 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
 }
 
 /// Reports, once the app has booted, what loading the configuration noticed:
-/// `.env` values that a config file hides, and keys and sections that
+/// keys that `.env` and a config file both set with different values, and
+/// keys and sections that
 /// nothing reads. It waits until every module has built its sections (and so
 /// read its keys), and for the logger to be installed.
 struct ConfigDiagnostics {

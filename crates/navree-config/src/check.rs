@@ -2,9 +2,10 @@
 //!
 //! The check loads the app's sources, reads every registered section as the
 //! boot does (collecting each error instead of stopping at the first), names
-//! the keys and sections that nothing reads, lists the `.env` values that a
-//! config file hides, and, for a production environment, applies a short
-//! profile of settings that are unsafe there. It never starts the app.
+//! the keys and sections that nothing reads, lists the keys that `.env` and a
+//! config file both set with different values, and, for a production
+//! environment, applies a short profile of settings that are unsafe there. It
+//! never starts the app.
 
 use std::fmt::Write as _;
 
@@ -65,7 +66,8 @@ pub struct CheckReport {
     pub errors: Vec<ConfigError>,
     /// Keys and sections that nothing reads.
     pub unknown: Vec<UnusedKey>,
-    /// `.env` values that a config file hides (a warning, not a failure).
+    /// Keys that `.env` and a config file both set with different values (a
+    /// warning, not a failure).
     pub shadowed: Vec<Shadowed>,
     /// The environment the check ran for, when the sources or `--env` name one.
     pub environment: Option<Environment>,
@@ -112,8 +114,8 @@ impl CheckReport {
     }
 
     /// How many things fail the check: invalid sections, unknown keys and
-    /// failing profile settings. Shadowed `.env` values and notes are
-    /// warnings and do not count.
+    /// failing profile settings. Keys set in both `.env` and a config file,
+    /// and notes, are warnings and do not count.
     pub fn problems(&self) -> usize {
         self.errors.len() + self.unknown.len() + self.profile.iter().filter(|f| f.fail).count()
     }
