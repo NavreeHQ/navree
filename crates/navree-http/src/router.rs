@@ -655,7 +655,7 @@ async fn discard(parts: &Parts, mut body: crate::body::Body, deadline: Option<In
             .headers
             .get_all(EXPECT)
             .iter()
-            .last()
+            .next_back()
             .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"100-continue"));
     let Some(mut left) = declared_length(parts).filter(|length| *length <= DISCARD_AT_MOST) else {
         return false;
