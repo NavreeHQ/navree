@@ -298,8 +298,8 @@ fn distance(a: &str, b: &str) -> usize {
     for (i, row) in table.iter_mut().enumerate() {
         row[0] = i;
     }
-    for j in 0..=b.len() {
-        table[0][j] = j;
+    for (j, cell) in table[0].iter_mut().enumerate() {
+        *cell = j;
     }
     for i in 1..=a.len() {
         for j in 1..=b.len() {

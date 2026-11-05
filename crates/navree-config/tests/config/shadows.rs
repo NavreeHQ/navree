@@ -99,7 +99,7 @@ fn the_config_file_wins_when_it_is_read_after_dotenv() {
 fn the_default_sources_rank_dotenv_above_the_config_file() {
     // `ConfigSources::DOTENV_RANKS_ABOVE_FILES` is the one switch; this test
     // pins what it is set to.
-    assert!(ConfigSources::DOTENV_RANKS_ABOVE_FILES);
+    const { assert!(ConfigSources::DOTENV_RANKS_ABOVE_FILES) };
     let dir = dir();
     std::fs::create_dir_all(dir.path().join("config")).expect("config dir");
     std::fs::write(dir.path().join(".env"), ENV).expect("write");

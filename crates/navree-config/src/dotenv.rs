@@ -25,11 +25,13 @@ pub fn parse_dotenv(src: &str) -> Result<Vec<(String, String)>, ConfigError> {
     parse_with_lines(src).map(|(entries, _)| entries)
 }
 
+/// The entries of a `.env` file, and the 1-based line each starts on (same
+/// order as the entries).
+pub(crate) type EntriesWithLines = (Vec<(String, String)>, Vec<usize>);
+
 /// Like [`parse_dotenv`], with the 1-based line each entry starts on (same
 /// order as the entries).
-pub(crate) fn parse_with_lines(
-    src: &str,
-) -> Result<(Vec<(String, String)>, Vec<usize>), ConfigError> {
+pub(crate) fn parse_with_lines(src: &str) -> Result<EntriesWithLines, ConfigError> {
     let src = src.strip_prefix('\u{feff}').unwrap_or(src);
     let lines: Vec<&str> = src.lines().collect();
     let mut entries: Vec<(String, String)> = Vec::new();
