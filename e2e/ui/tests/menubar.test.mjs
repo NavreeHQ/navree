@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { axe, inBrowsers, shot } from "./support/flow.mjs";
+import { axe, inBrowsers, shot, tab } from "./support/flow.mjs";
 
 const PHONE = { width: 390, height: 844 };
 const PATH = "/menubar";
@@ -45,19 +45,6 @@ const focusOn = (page, text) =>
     .catch(() => {});
 
 inBrowsers(({ open, browserName }) => {
-  /**
-   * Moves focus on, as Tab does. WebKit's Tab leaves links out unless the reader turns that on,
-   * so there focus is moved along the page's order after a key press, as the pages suite does.
-   */
-  const tab = async (page) => {
-    if (browserName !== "webkit") return page.keyboard.press("Tab");
-    await page.keyboard.press("Shift");
-    await page.evaluate(() => {
-      const list = [...document.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,summary,[tabindex]:not([tabindex='-1'])")].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
-      list[list.indexOf(document.activeElement) + 1]?.focus();
-    });
-  };
-
   // ---- Context menu -------------------------------------------------------
 
   /** Right clicks the middle of the order card. */
@@ -529,12 +516,12 @@ inBrowsers(({ open, browserName }) => {
     const { page, close } = await open(PATH);
     await page.locator("#site-nav-p1-trigger").focus();
     await page.keyboard.press("Enter");
-    await tab(page);
+    await tab(page, browserName);
     assert.equal((await focused(page)).text.startsWith("Invoices"), true);
-    await tab(page);
-    await tab(page);
+    await tab(page, browserName);
+    await tab(page, browserName);
     assert.equal((await focused(page)).text, "Payroll");
-    await tab(page);
+    await tab(page, browserName);
     assert.equal((await focused(page)).text.startsWith("Company"), true, "on to the next top-level item");
     assert.ok(!(await isOpen(page, "#site-nav-p1")), "its panel closed behind");
     await page.keyboard.press("Shift+Tab");

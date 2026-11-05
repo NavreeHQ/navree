@@ -10,7 +10,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { axe, inBrowsers, shot } from "./support/flow.mjs";
+import { axe, inBrowsers, shot, tab } from "./support/flow.mjs";
 
 const PHONE = { width: 390, height: 844 };
 const SECTIONS = ["#reply", "#table", "#links", "#images", "#raw", "#trusted", "#headings", "#languages", "#long", "#rtl"];
@@ -257,7 +257,7 @@ inBrowsers(({ open, browserName }) => {
     const seen = [];
     for (let at = 0; at < expected.length; at++) {
       seen.push(await page.evaluate(() => document.activeElement?.getAttribute("href")));
-      await page.keyboard.press("Tab");
+      await tab(page, browserName);
     }
     assert.deepEqual(seen, expected);
     await close();

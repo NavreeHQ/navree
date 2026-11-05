@@ -43,6 +43,19 @@ export async function axe(page, selector) {
   }, selector || null);
 }
 
+/**
+ * Moves focus on, as Tab does. WebKit's Tab leaves links out unless the reader turns that on,
+ * so there focus is moved along the page's order after a key press, as the pages suite does.
+ */
+export async function tab(page, browserName) {
+  if (browserName !== "webkit") return page.keyboard.press("Tab");
+  await page.keyboard.press("Shift");
+  await page.evaluate(() => {
+    const list = [...document.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,summary,[tabindex]:not([tabindex='-1'])")].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
+    list[list.indexOf(document.activeElement) + 1]?.focus();
+  });
+}
+
 /** One `describe` per browser, with `open`, whose result ends by asserting nothing was reported. */
 export function inBrowsers(body) {
   for (const browserName of NAMES) {
