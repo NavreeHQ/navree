@@ -7,7 +7,7 @@ import { ArrowLink, HomeSection, SectionHeading } from "./parts";
 
 type Crate = { name: string; layer: number; module: string | null; description: string };
 
-/** Where each crate is documented. */
+/** Where each crate is documented. A crate with no line here (the glob matcher, the bounded cache) links to the crate hierarchy, which describes every crate. */
 const docs: Record<string, string> = {
   "navree-kernel": "/docs/architecture/modules/",
   "navree-macros": "/docs/basics/routing/",
@@ -41,6 +41,16 @@ const docs: Record<string, string> = {
   "navree-workspace": "/docs/workspaces/introduction/",
   "navree-redis": "/docs/digging-deeper/redis/",
   "navree-mongo": "/docs/orm/mongodb/",
+  "navree-ui": "/ui/",
+  "navree-ui-macros": "/docs/ui/forms/",
+  "navree-phone": "/docs/basics/phone-numbers/",
+  "navree-pdf": "/docs/packages/documents/",
+  "navree-template": "/docs/digging-deeper/views/",
+  "navree-openapi": "/docs/digging-deeper/openapi/",
+  "navree-telemetry": "/docs/digging-deeper/health-and-metrics/",
+  "navree-orm-macros": "/docs/orm/models/",
+  "navree-validation-macros": "/docs/basics/validation/",
+  "navree-i18n-macros": "/docs/packages/localization/",
   "navree-time": "/docs/digging-deeper/time-zones/",
   "navree-browser": "/docs/packages/browser-testing/",
   "navree-i18n": "/docs/packages/localization/",
