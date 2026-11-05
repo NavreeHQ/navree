@@ -511,6 +511,51 @@
     ],
     "shared": []
   },
+  "Annotation": {
+    "name": "Annotation",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/cartesian.rs",
+    "summary": "Something written on a chart beside the data.",
+    "constructors": [
+      {
+        "name": "target",
+        "generics": "",
+        "args": "value: impl IntoValue, label: impl Into<String>",
+        "doc": "A dashed line across the chart at `value`."
+      },
+      {
+        "name": "event",
+        "generics": "",
+        "args": "at: impl Into<At>, label: impl Into<String>",
+        "doc": "A line up the chart at `at`."
+      },
+      {
+        "name": "band",
+        "generics": "",
+        "args": "from: impl Into<At>, to: impl Into<At>, label: impl Into<String>",
+        "doc": "A shaded stretch from `from` to `to`."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Target",
+        "doc": "A level across the chart: a target, a limit.",
+        "default": false
+      },
+      {
+        "name": "Event",
+        "doc": "A moment: \"Reminder sent\".",
+        "default": false
+      },
+      {
+        "name": "Band",
+        "doc": "A stretch of the x axis: \"Holiday\".",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "AppPage": {
     "name": "AppPage",
     "kind": "struct",
@@ -736,6 +781,37 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "At": {
+    "name": "At",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/cartesian.rs",
+    "summary": "A place on the x axis, for an annotation.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Index",
+        "doc": "The row at this index.",
+        "default": false
+      },
+      {
+        "name": "Time",
+        "doc": "A time.",
+        "default": false
+      },
+      {
+        "name": "Number",
+        "doc": "A number.",
+        "default": false
+      },
+      {
+        "name": "Category",
+        "doc": "A category, by its name.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Attachment": {
     "name": "Attachment",
@@ -1226,6 +1302,42 @@
       {
         "name": "End",
         "doc": "Yours.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Bucket": {
+    "name": "Bucket",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/report.rs",
+    "summary": "One period of a report: the instants it covers, `[start, end)`, and its start on the zone's wall clock, which names it.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "Bucketing": {
+    "name": "Bucketing",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/report_orm.rs",
+    "summary": "How the periods are found.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Auto",
+        "doc": "TimescaleDB's `time_bucket` where it can be used, bound comparisons otherwise.",
+        "default": true
+      },
+      {
+        "name": "Exact",
+        "doc": "Bound comparisons, on any SQL database.",
+        "default": false
+      },
+      {
+        "name": "TimeBucket",
+        "doc": "TimescaleDB's `time_bucket`; an error where it can't be used.",
         "default": false
       }
     ],
@@ -2135,6 +2247,294 @@
         "generics": "",
         "args": "title: impl Into<String>",
         "doc": "Names the slide's picker, in place of \"Slide 2\"."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Chart": {
+    "name": "Chart",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/cartesian.rs",
+    "summary": "A chart of lines, areas or bars over one x: categories, times or numbers.",
+    "constructors": [
+      {
+        "name": "line",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Lines: change over time, several series side by side."
+      },
+      {
+        "name": "area",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Areas: a line with a wash under it; stacked, parts of a total over time."
+      },
+      {
+        "name": "bar",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Bars from one baseline: compare amounts. Several series sit side by side."
+      }
+    ],
+    "methods": [
+      {
+        "name": "horizontal",
+        "generics": "",
+        "args": "",
+        "doc": "Bars lie along rows, a label on each: for long names and ranked lists."
+      },
+      {
+        "name": "stacked",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the series: bars on bars, areas on areas."
+      },
+      {
+        "name": "stacked_percent",
+        "generics": "",
+        "args": "",
+        "doc": "Stacks the series as shares of each x's total, to 100%."
+      },
+      {
+        "name": "smooth",
+        "generics": "",
+        "args": "",
+        "doc": "Draws lines as a monotone curve, which never overshoots a value."
+      },
+      {
+        "name": "categories",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Named categories along x."
+      },
+      {
+        "name": "times",
+        "generics": "",
+        "args": "times: impl IntoIterator<Item = NaiveDateTime>",
+        "doc": "Times along x, as wall-clock times in the zone the data was counted in."
+      },
+      {
+        "name": "days",
+        "generics": "",
+        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "doc": "Days along x."
+      },
+      {
+        "name": "numbers",
+        "generics": "<V: IntoValue>",
+        "args": "values: impl IntoIterator<Item = V>",
+        "doc": "Numbers along x."
+      },
+      {
+        "name": "grain",
+        "generics": "",
+        "args": "grain: Grain",
+        "doc": "The period each time stands for, which sets how it reads: an hour reads `14:00`, a month `Nov 2026`. Found from the spacing of the times when not set."
+      },
+      {
+        "name": "x_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "The table's first column: what x is."
+      },
+      {
+        "name": "series",
+        "generics": "",
+        "args": "series: Series",
+        "doc": "Adds a series. Colours follow the order series are added in."
+      },
+      {
+        "name": "series_list",
+        "generics": "",
+        "args": "series: impl IntoIterator<Item = Series>",
+        "doc": "Adds several series."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written: on the axis, in the tooltip and in the table."
+      },
+      {
+        "name": "y_min",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "The value axis starts here at most."
+      },
+      {
+        "name": "y_max",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "The value axis ends here at least."
+      },
+      {
+        "name": "y_zero",
+        "generics": "",
+        "args": "zero: bool",
+        "doc": "Whether a line's value axis starts at zero (it does by default; bars always do)."
+      },
+      {
+        "name": "y_ticks",
+        "generics": "",
+        "args": "count: u8",
+        "doc": "About how many ticks the value axis writes."
+      },
+      {
+        "name": "annotation",
+        "generics": "",
+        "args": "annotation: Annotation",
+        "doc": "Adds a target, an event or a band."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The plot's height in pixels, 60 to 800 (200 by default). The x labels add 22."
+      },
+      {
+        "name": "max_points",
+        "generics": "",
+        "args": "most: usize",
+        "doc": "The most points a line or an area draws (640 by default, at least 16): more are reduced with largest-triangle-three-buckets."
+      },
+      {
+        "name": "max_bars",
+        "generics": "",
+        "args": "most: usize",
+        "doc": "The most bars (120 by default, at least 4): times and numbers past it merge their neighbours, categories fold their tail into Other."
+      },
+      {
+        "name": "merge",
+        "generics": "",
+        "args": "merge: Merge",
+        "doc": "How merged bars combine."
+      },
+      {
+        "name": "toggles",
+        "generics": "",
+        "args": "",
+        "doc": "Makes the legend a set of switches that hide and show each series, with or without JavaScript. Not for stacked charts, whose stacks would lose a layer."
+      },
+      {
+        "name": "no_dots",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the dot at the end of each line."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The first day of a week, for weekly ticks (Monday by default)."
+      },
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "",
+        "doc": "Mirrors the chart for a right-to-left page: time runs right to left and the value axis stands on the right."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
       }
     ],
     "variants": [],
@@ -4292,6 +4692,174 @@
       }
     ]
   },
+  "Donut": {
+    "name": "Donut",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/donut.rs",
+    "summary": "One whole split into parts: at most six and Other, read at a glance, each named with its value and share in the legend. To compare parts with each other, ranked bars read better.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A donut called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "part",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl IntoValue",
+        "doc": "Adds a part."
+      },
+      {
+        "name": "part_tone",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl IntoValue, tone: Tone",
+        "doc": "Adds a part coloured by what it means."
+      },
+      {
+        "name": "parts",
+        "generics": "<S: Into<String>, V: IntoValue>",
+        "args": "parts: impl IntoIterator<Item =(S, V)>",
+        "doc": "Adds parts from `(name, value)` pairs."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written."
+      },
+      {
+        "name": "pie",
+        "generics": "",
+        "args": "",
+        "doc": "A pie: no hole, no total in the middle."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The drawing's width and height in pixels, 96 to 320 (168 by default)."
+      },
+      {
+        "name": "max_parts",
+        "generics": "",
+        "args": "most: usize",
+        "doc": "The most parts drawn (6 by default, 2 to 8): the smallest of the rest fold into Other."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "What the middle says: a value and the words under it. The total, by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Draft": {
     "name": "Draft",
     "kind": "struct",
@@ -5586,6 +6154,222 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Funnel": {
+    "name": "Funnel",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/funnel.rs",
+    "summary": "Stages of an ordered process as bars from one baseline, each as wide as its share of the first stage, with its count, that share and the share of the stage before. An ordered list, so it reads in order without the picture; the stages step through one hue, faintest first.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A funnel called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "stage",
+        "generics": "",
+        "args": "stage: Stage",
+        "doc": "Adds a stage."
+      },
+      {
+        "name": "stages",
+        "generics": "",
+        "args": "stages: impl IntoIterator<Item = Stage>",
+        "doc": "Adds stages."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How counts are written."
+      },
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "",
+        "doc": "Bars grow from the right, for a right-to-left page."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Grain": {
+    "name": "Grain",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/scale.rs",
+    "summary": "A period a time series is counted in.",
+    "constructors": [
+      {
+        "name": "from_key",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "The grain called `key`."
+      },
+      {
+        "name": "for_days",
+        "generics": "",
+        "args": "days: i64",
+        "doc": "The grain a window of `days` days is drawn in."
+      }
+    ],
+    "methods": [
+      {
+        "name": "key",
+        "generics": "",
+        "args": "",
+        "doc": "The name a URL carries: `hour`, `day`, `week`, `month`."
+      },
+      {
+        "name": "seconds",
+        "generics": "",
+        "args": "",
+        "doc": "About how long one period is, in seconds."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Minute",
+        "doc": "One minute.",
+        "default": false
+      },
+      {
+        "name": "Hour",
+        "doc": "One hour.",
+        "default": false
+      },
+      {
+        "name": "Day",
+        "doc": "One day.",
+        "default": true
+      },
+      {
+        "name": "Week",
+        "doc": "One week, from the locale's first day.",
+        "default": false
+      },
+      {
+        "name": "Month",
+        "doc": "One calendar month.",
+        "default": false
+      },
+      {
+        "name": "Quarter",
+        "doc": "Three calendar months, from January, April, July and October.",
+        "default": false
+      },
+      {
+        "name": "Year",
+        "doc": "One calendar year.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Grid": {
@@ -7339,6 +8123,32 @@
     "variants": [],
     "shared": []
   },
+  "Merge": {
+    "name": "Merge",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/cartesian.rs",
+    "summary": "How bars that are merged to fit combine their values.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Sum",
+        "doc": "Added up: counts, amounts.",
+        "default": true
+      },
+      {
+        "name": "Mean",
+        "doc": "Averaged: rates, temperatures.",
+        "default": false
+      },
+      {
+        "name": "Max",
+        "doc": "The largest.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Message": {
     "name": "Message",
     "kind": "struct",
@@ -7464,6 +8274,47 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Metric": {
+    "name": "Metric",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/report_orm.rs",
+    "summary": "What a report adds up in each period.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Count",
+        "doc": "How many rows. A period with none is 0.",
+        "default": false
+      },
+      {
+        "name": "CountDistinct",
+        "doc": "How many distinct values of a column (SQL databases).",
+        "default": false
+      },
+      {
+        "name": "Sum",
+        "doc": "The sum of a column. A period with no rows is 0.",
+        "default": false
+      },
+      {
+        "name": "Average",
+        "doc": "The mean of a column. A period with no rows has no value.",
+        "default": false
+      },
+      {
+        "name": "Min",
+        "doc": "The least value of a column.",
+        "default": false
+      },
+      {
+        "name": "Max",
+        "doc": "The greatest value of a column.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Mode": {
@@ -7994,6 +8845,96 @@
         "generics": "",
         "args": "columns: usize",
         "doc": "A table row that says this row is gone, in one cell across `columns`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "NumberFormat": {
+    "name": "NumberFormat",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/format.rs",
+    "summary": "How a chart writes its values.",
+    "constructors": [
+      {
+        "name": "number",
+        "generics": "",
+        "args": "",
+        "doc": "A plain number: whole numbers as they are, others with up to two decimals."
+      },
+      {
+        "name": "integer",
+        "generics": "",
+        "args": "",
+        "doc": "A count: whole numbers, rounded."
+      },
+      {
+        "name": "decimals",
+        "generics": "",
+        "args": "places: u8",
+        "doc": "Up to `places` decimals, trailing zeros dropped (see `fixed`)."
+      },
+      {
+        "name": "percent",
+        "generics": "",
+        "args": "",
+        "doc": "A fraction as a percentage: `0.125` is `12.5%`. One decimal at most unless set."
+      },
+      {
+        "name": "percent_of_100",
+        "generics": "",
+        "args": "",
+        "doc": "A value already from 0 to 100, written with `%`."
+      },
+      {
+        "name": "currency",
+        "generics": "",
+        "args": "symbol: impl Into<Cow<'static, str>>",
+        "doc": "Money: `symbol` before the number, two decimals at most."
+      }
+    ],
+    "methods": [
+      {
+        "name": "fixed",
+        "generics": "",
+        "args": "",
+        "doc": "Writes exactly the set number of decimals, keeping trailing zeros."
+      },
+      {
+        "name": "max_decimals",
+        "generics": "",
+        "args": "places: u8",
+        "doc": "Sets the most decimal places."
+      },
+      {
+        "name": "prefix",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Text before the number, after any sign: `$`."
+      },
+      {
+        "name": "suffix",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Text after the number: ` ms`, ` GB`."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "compact: Compact",
+        "doc": "Sets when the number is written short."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "value: f64, locale: &NumberLocale",
+        "doc": "`value` in full."
+      },
+      {
+        "name": "format_compact",
+        "generics": "",
+        "args": "value: f64, locale: &NumberLocale",
+        "doc": "`value` short: `1.2K`, `12K`, `120K`, `1.2M`."
       }
     ],
     "variants": [],
@@ -9269,6 +10210,203 @@
     "variants": [],
     "shared": []
   },
+  "Report": {
+    "name": "Report",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/report.rs",
+    "summary": "A report's window and periods.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<Tz: ReportZone>",
+        "args": "range: DateRange, grain: Grain, zone: &Tz",
+        "doc": "A report over `range` at `grain`, in `zone`. A grain that would cut the window into more than `MAX_BUCKETS` periods gives way to the finest one that doesn't (`grain` says which), and a window too long even for years keeps its last 400 (`cut` says so)."
+      },
+      {
+        "name": "from_query",
+        "generics": "<Tz: ReportZone>",
+        "args": "query: &ReportQuery, limits: &RangeRules, today: NaiveDate, default: DatePreset, zone: &Tz",
+        "doc": "The report a request asks for: its window when `limits` allow it, `default` counted from `today` when the URL has none or one they refuse (which `refused` then says), and its grain when it fits."
+      },
+      {
+        "name": "from_query_starting",
+        "generics": "<Tz: ReportZone>",
+        "args": "query: &ReportQuery, limits: &RangeRules, today: NaiveDate, default: DatePreset, week_start: Weekday, zone: &Tz",
+        "doc": "`from_query` with weeks starting on `week_start`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "zone",
+        "generics": "",
+        "args": "",
+        "doc": "The IANA name of the zone the periods are in, from the zone itself; `None` for a fixed offset other than UTC."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "",
+        "doc": "The window counted: the one asked for, or its last 400 years when it was longer than that (see `cut`)."
+      },
+      {
+        "name": "cut",
+        "generics": "",
+        "args": "",
+        "doc": "The window asked for, when it was too long to count by years and was cut to its last 400: the page should say so."
+      },
+      {
+        "name": "grain",
+        "generics": "",
+        "args": "",
+        "doc": "The period the window is cut into: the grain asked for, or a coarser one when that would have made more than `MAX_BUCKETS` periods."
+      },
+      {
+        "name": "asked_grain",
+        "generics": "",
+        "args": "",
+        "doc": "The grain asked for, before the limit on periods."
+      },
+      {
+        "name": "auto_grain",
+        "generics": "",
+        "args": "",
+        "doc": "The grain the window's length picks."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "",
+        "doc": "The first day of a week."
+      },
+      {
+        "name": "buckets",
+        "generics": "",
+        "args": "",
+        "doc": "The periods, in order."
+      },
+      {
+        "name": "bounds",
+        "generics": "",
+        "args": "",
+        "doc": "The instants the window covers, `[start, end)`: what a query filters on."
+      },
+      {
+        "name": "refused",
+        "generics": "",
+        "args": "",
+        "doc": "Why the window in the URL was not used, when it was refused."
+      },
+      {
+        "name": "from_url",
+        "generics": "",
+        "args": "",
+        "doc": "Whether the window came from the URL (not the default)."
+      },
+      {
+        "name": "grains",
+        "generics": "",
+        "args": "",
+        "doc": "The grains a person may switch to: those that draw between 2 and `MAX_BUCKETS` periods of this window."
+      },
+      {
+        "name": "params",
+        "generics": "",
+        "args": "",
+        "doc": "The URL's parameters for this window and grain: what a link keeps. The grain is left out when it is the one the window picks by itself."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "path: &str, grain: Option<Grain>",
+        "doc": "`path` with this report's parameters, and `grain` instead of its own when given."
+      },
+      {
+        "name": "picker",
+        "generics": "",
+        "args": "",
+        "doc": "The range picker for this window, named `from` and `to`, with the report's rules and today: put it in a GET form with the grain as a hidden field, and give the form `autocomplete=\"off\"`, or Back brings the dates back as they were typed rather than as the page was drawn."
+      },
+      {
+        "name": "times",
+        "generics": "",
+        "args": "",
+        "doc": "The periods' starts, for `Chart::times`."
+      },
+      {
+        "name": "chart",
+        "generics": "",
+        "args": "chart: Chart",
+        "doc": "A chart over this report's periods: `chart` with its times and grain set."
+      },
+      {
+        "name": "bucket_of",
+        "generics": "",
+        "args": "at: DateTime<Utc>",
+        "doc": "The period an instant falls in."
+      },
+      {
+        "name": "count",
+        "generics": "",
+        "args": "instants: impl IntoIterator<Item = DateTime<Utc>>",
+        "doc": "How many of `instants` fall in each period: for data already in memory."
+      },
+      {
+        "name": "sum",
+        "generics": "",
+        "args": "values: impl IntoIterator<Item =(DateTime<Utc>, f64)>",
+        "doc": "The sum of the values in each period: for data already in memory."
+      },
+      {
+        "name": "series",
+        "generics": "",
+        "args": "name: impl Into<String>, counts: &[u64]",
+        "doc": "A series over the periods, from counts."
+      },
+      {
+        "name": "grain_links",
+        "generics": "",
+        "args": "path: &str, label: &str",
+        "doc": "The grain switch: a link per grain this window can take, the current one marked."
+      },
+      {
+        "name": "measure",
+        "generics": "<M, E>",
+        "args": "query: Builder<M>, time: impl Into<TimeColumn>, metric: Metric, exec: &E",
+        "doc": "`metric` in each period of the report, over `query` (the app's scoped query) with its rows' instants in `time`. A column of seconds or milliseconds since 1970 is named with `TimeColumn::UnixSeconds` or `TimeColumn::UnixMillis`."
+      },
+      {
+        "name": "measure_with",
+        "generics": "<M, E>",
+        "args": "query: Builder<M>, time: impl Into<TimeColumn>, metric: Metric, bucketing: Bucketing, exec: &E",
+        "doc": "`measure`, choosing how the periods are found."
+      },
+      {
+        "name": "measure_by",
+        "generics": "<M, E>",
+        "args": "query: Builder<M>, time: impl Into<TimeColumn>, group: &'static str, groups: &[&str], metric: Metric, exec: &E",
+        "doc": "`metric` per value of `group` in each period: one series per name in `groups`, in that order, and one more for every other value, NULL included (Other). At most seven names are counted on their own, as a chart draws eight series: the rest are counted in Other. On an SQL database this is one grouped query."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ReportQuery": {
+    "name": "ReportQuery",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/report.rs",
+    "summary": "What a report reads from its URL: `from` and `to` (the window, both days included) and `grain` (`hour`, `day`, `week`, `month`). A key that comes twice keeps its first value; anything else is ignored.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "window",
+        "generics": "",
+        "args": "",
+        "doc": "The window, as the range picker's query reads it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "ReturnTo": {
     "name": "ReturnTo",
     "kind": "struct",
@@ -9777,6 +10915,36 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Series": {
+    "name": "Series",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/cartesian.rs",
+    "summary": "One series: a name and a value for each x.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<V: IntoValue>",
+        "args": "name: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "A series called `name`. A value that is `None`, NaN or infinite is a gap."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the series by what it means: `Tone::Success` for a good outcome, `Tone::Danger` for failures. The legend adds the tone's icon."
+      },
+      {
+        "name": "color",
+        "generics": "",
+        "args": "slot: u8",
+        "doc": "Pins the series to categorical colour `slot` (1 to 8), so it keeps its colour when other series come and go."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "SessionEnded": {
     "name": "SessionEnded",
@@ -10837,6 +12005,156 @@
     "variants": [],
     "shared": []
   },
+  "Sparkline": {
+    "name": "Sparkline",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/sparkline.rs",
+    "summary": "A small line with no axes: the shape of a series beside its figure. It is a picture for assistive technology, named by its title and described by its summary, with the values in a table only a screen reader reads.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<V: IntoValue>",
+        "args": "title: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "A sparkline of `values`, named `title` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "names",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "What each value is called in the table: `14:00`, `Nov 3`. Counted from 1 when not given."
+      },
+      {
+        "name": "area",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a wash under the line."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the line by what it means."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written in the summary and the table."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The height in pixels, 16 to 120 (32 by default)."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Spinner": {
     "name": "Spinner",
     "kind": "struct",
@@ -11200,6 +12518,36 @@
       }
     ]
   },
+  "Stage": {
+    "name": "Stage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/funnel.rs",
+    "summary": "One stage of a funnel.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl IntoValue",
+        "doc": "A stage called `name` that `value` reached."
+      }
+    ],
+    "methods": [
+      {
+        "name": "rate",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "The rate as the server worded it (`95% of delivered`), shown instead of the share the funnel works out."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the stage by what it means, such as the last stage as a success."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Stat": {
     "name": "Stat",
     "kind": "struct",
@@ -11214,6 +12562,12 @@
       }
     ],
     "methods": [
+      {
+        "name": "chart",
+        "generics": "",
+        "args": "chart: impl Into<Node>",
+        "doc": "Puts a small chart under the figure, such as a `Sparkline` of its last periods."
+      },
       {
         "name": "trend",
         "generics": "",
@@ -12076,6 +13430,32 @@
       }
     ]
   },
+  "TableMode": {
+    "name": "TableMode",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/mod.rs",
+    "summary": "Where the table of a chart sits.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Switch",
+        "doc": "Hidden from sight, read by screen readers, shown by a switch: the default.",
+        "default": true
+      },
+      {
+        "name": "Shown",
+        "doc": "Shown under the drawing.",
+        "default": false
+      },
+      {
+        "name": "ScreenReader",
+        "doc": "Read by screen readers only, with no switch: for a sparkline in a row.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "TableRowEl": {
     "name": "TableRowEl",
     "kind": "struct",
@@ -12734,6 +14114,32 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "TimeColumn": {
+    "name": "TimeColumn",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/report_orm.rs",
+    "summary": "How a column holds its instants.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Timestamp",
+        "doc": "A timestamp column.",
+        "default": false
+      },
+      {
+        "name": "UnixSeconds",
+        "doc": "Seconds since 1970 in an integer column.",
+        "default": false
+      },
+      {
+        "name": "UnixMillis",
+        "doc": "Milliseconds since 1970 in an integer column.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "TimePicker": {
@@ -13758,6 +15164,21 @@
       {
         "name": "Chart5",
         "doc": "The fifth series.",
+        "default": false
+      },
+      {
+        "name": "Chart6",
+        "doc": "The sixth series.",
+        "default": false
+      },
+      {
+        "name": "Chart7",
+        "doc": "The seventh series.",
+        "default": false
+      },
+      {
+        "name": "Chart8",
+        "doc": "The eighth series.",
         "default": false
       }
     ],
