@@ -169,7 +169,8 @@ inBrowsers(({ open, browserName }) => {
         assert.equal(found.bad, 0, `${text} made an element`);
         assert.equal(found.handlers, 0, `${text} made a handler`);
         assert.ok(found.hrefs.every((href) => !/^\s*(javascript|data|vbscript):/i.test(href)), `${text}: ${found.hrefs}`);
-        assert.ok(!found.base.includes("attacker.example"), `${text} moved the base`);
+        // The text is in the page's own address, so the base is read as an origin.
+        assert.equal(new URL(found.base).origin, new URL(page.url()).origin, `${text} moved the base`);
         assert.deepEqual(sent, [], `${text} sent a request to another site`);
         await close();
       }
