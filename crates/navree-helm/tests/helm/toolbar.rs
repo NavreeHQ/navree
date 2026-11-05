@@ -557,10 +557,21 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
         html.contains("href=\"/admin/resources/deals?filter%5Bstage%5D%5Bin%5D=won%2Clost&amp;sort=title&amp;search=Deal\""),
         "{html}"
     );
-    // So is a column header's sort link.
+    // So is a column header's sort link, on a page with rows (no deal is won or lost
+    // above, so that page draws no table).
+    let listed = plain(
+        page(
+            &manager,
+            "/admin/resources/deals?filter%5Bopen%5D=1&search=Deal&sort=title",
+        )
+        .await
+        .assert_status(200),
+    );
     assert!(
-        html.contains("href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;filter%5Bstage%5D%5Bin%5D=won%2Clost&amp;sort=-title&amp;search=Deal\""),
-        "{html}"
+        listed.contains(
+            "href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;sort=-title&amp;search=Deal\""
+        ),
+        "{listed}"
     );
     let rows = plain(
         page(&manager, "/admin/resources/deals?filter%5Bstage%5D=won")
