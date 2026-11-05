@@ -9,6 +9,19 @@ use std::net::TcpListener;
 
 use navree_dock::{Dock, ProcessExecutor, status_table};
 
+/// The State column of `service`'s row in a status table, whatever the
+/// columns' widths (they follow the longest name in the table).
+fn state<'a>(table: &'a str, service: &str) -> Option<&'a str> {
+    table.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        if words.next() == Some(service) {
+            words.next()
+        } else {
+            None
+        }
+    })
+}
+
 /// A port nothing listens on right now.
 fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -54,8 +67,8 @@ fn redis_and_mailpit_start_answer_and_go_away() {
     let env = std::fs::read_to_string(dir.path().join(".env")).unwrap();
     assert!(env.contains("REDIS_URL=redis://127.0.0.1:"), "{env}");
     let table = status_table(&statuses.unwrap());
-    assert!(table.contains("redis        running"), "{table}");
-    assert!(table.contains("mailpit      running"), "{table}");
+    assert_eq!(state(&table, "redis"), Some("running"), "{table}");
+    assert_eq!(state(&table, "mailpit"), Some("running"), "{table}");
     let after = status_table(&dock.status().unwrap());
-    assert!(after.contains("redis        stopped"), "{after}");
+    assert_eq!(state(&after, "redis"), Some("stopped"), "{after}");
 }
