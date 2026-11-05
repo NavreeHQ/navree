@@ -264,10 +264,8 @@ fn read_filters<R: TableRow>(list: &ListQuery) -> Vec<ActiveFilter> {
                 }
             }
             // `null=false` ("is not NULL") is a filter a table does not have.
-            (_, Op::Null) if column.nullable => {
-                if condition.null_flag() == Some(true) {
-                    empties[at] = true;
-                }
+            (_, Op::Null) if column.nullable && condition.null_flag() == Some(true) => {
+                empties[at] = true;
             }
             _ => {}
         }

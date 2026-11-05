@@ -765,11 +765,11 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
             let mut end = i + 1;
             while end < bytes.len() {
                 let b = bytes[end];
-                if b.is_ascii_alphanumeric() || b == b'_' {
-                    end += 1;
-                } else if b == b'.' && bytes.get(end + 1).is_some_and(u8::is_ascii_digit) {
-                    end += 1;
-                } else if b == b'%' && lang.css {
+                if b.is_ascii_alphanumeric()
+                    || b == b'_'
+                    || (b == b'.' && bytes.get(end + 1).is_some_and(u8::is_ascii_digit))
+                    || (b == b'%' && lang.css)
+                {
                     end += 1;
                 } else {
                     break;
@@ -829,19 +829,18 @@ fn lex(lang: &Lang, code: &str) -> Vec<Token> {
             let kind = if byte == b'-' {
                 // A flag: `-v`, `--release`.
                 Kind::Type
-            } else if lang.keys
+            } else if (lang.keys
                 && at_line_start(code, line_begin, i)
                 && next_on_line(code, end).is_some_and(|(at, b)| {
                     (b == b':' || b == b'=')
                         && bytes.get(at + 1) != Some(&b'=')
                         && bytes.get(at + 1) != Some(&b':')
-                })
+                }))
+                || (lang.css
+                    && depth > 0
+                    && next_on_line(code, end).is_some_and(|(_, b)| b == b':'))
             {
-                Kind::Type
-            } else if lang.css
-                && depth > 0
-                && next_on_line(code, end).is_some_and(|(_, b)| b == b':')
-            {
+                // A key (`name:` at the start of a line) or a CSS property.
                 Kind::Type
             } else if contains(lang.keywords, word, lang.insensitive) {
                 Kind::Keyword
@@ -879,8 +878,8 @@ fn html(code: &str) -> Vec<Token> {
     let mut i = 0;
     while i < bytes.len() {
         let rest = &code[i..];
-        if rest.starts_with("<!--") {
-            let end = rest[4..].find("-->").map_or(code.len(), |n| i + 4 + n + 3);
+        if let Some(body) = rest.strip_prefix("<!--") {
+            let end = body.find("-->").map_or(code.len(), |n| i + 4 + n + 3);
             out.push(Kind::Comment, i, end);
             i = end;
         } else if rest.starts_with("{%") || rest.starts_with("{{") || rest.starts_with("{#") {
