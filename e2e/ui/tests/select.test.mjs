@@ -1148,6 +1148,95 @@ for (const browserName of browsers) {
       await close();
     });
 
+    /** What a person sees in the palette: the box, the rows shown, the row on, and where the focus is. */
+    const inPalette = (page) =>
+      page.evaluate(() => {
+        const dialog = document.getElementById("palette"), input = dialog.querySelector("[data-slot=command-input]"), row = dialog.querySelector("[data-active]");
+        return {
+          open: dialog.open,
+          value: input.value,
+          rows: [...dialog.querySelectorAll("[role=option]:not([hidden])")].map((o) => o.textContent.trim()),
+          active: row ? row.textContent.trim() : null,
+          inRecent: !!row?.closest("[data-slot=command-recent]"),
+          pointed: !!row && input.getAttribute("aria-activedescendant") === row.id,
+          focused: document.activeElement === input,
+        };
+      });
+    const swap = (page) => page.evaluate(() => document.dispatchEvent(new Event("ui:swap")));
+
+    test("A palette that is open keeps the text typed in it, the rows it shows and the row on it when the page swaps; the next open starts empty", async () => {
+      const { page, close } = await open("/select");
+      await page.keyboard.press("Control+k");
+      const fresh = await inPalette(page);
+      assert.deepEqual([fresh.open, fresh.value, fresh.focused, fresh.active], [true, "", true, null]);
+      await swap(page);
+      assert.deepEqual(await inPalette(page), fresh, "no row was on, and none is");
+      // A swap between two keys, as a live region's answer comes: the first letters are not lost.
+      await page.keyboard.type("d");
+      await swap(page);
+      await page.keyboard.type("eal");
+      let now = await inPalette(page);
+      assert.equal(now.value, "deal");
+      assert.match(now.rows[0], /^Deals/);
+      assert.match(now.rows[1], /^New deal/);
+      assert.match(now.active, /^Deals/);
+      // The row moved to by hand stays on, with the text, the rows shown and the focus.
+      await page.keyboard.press("ArrowDown");
+      now = await inPalette(page);
+      assert.match(now.active, /^New deal/);
+      assert.equal(now.pointed, true);
+      await swap(page);
+      assert.deepEqual(await inPalette(page), now);
+      // A palette that was closed starts again, whatever swapped while it was open.
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Control+k");
+      assert.deepEqual(await inPalette(page), fresh);
+      // And Enter goes where the row was, not where the text would have led had its first letters gone.
+      await page.keyboard.type("deal");
+      await page.keyboard.press("ArrowDown");
+      await swap(page);
+      await page.keyboard.press("Enter");
+      await page.waitForURL("**/deals/new");
+      await close();
+    });
+
+    test("A morph of the page draws an open palette's Recent group again with the row on it still on, and a palette the swap replaced starts as a new page's does", async () => {
+      const { page, close } = await open("/select");
+      await page.evaluate(() => localStorage.setItem("navree-ui:recent:palette", JSON.stringify(["/gallery", "/deals/new"])));
+      await page.reload();
+      await page.keyboard.press("Control+k");
+      const recent = page.locator("#palette [data-slot=command-recent]");
+      assert.match(await recent.innerText(), /Recent[\s\S]*Gallery[\s\S]*New deal/);
+      // Nothing is on until a key moves it; the second press lands on the second Recent row.
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      const now = await inPalette(page);
+      assert.match(now.active, /^New deal/);
+      assert.deepEqual([now.open, now.inRecent, now.pointed], [true, true, true]);
+      // The page is fetched and morphed into itself, as a link to it does. The server draws the Recent group
+      // empty and the rows as they were first, so the swap that follows has to fill and sort them again.
+      await page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            document.addEventListener("ui:swap", resolve, { once: true });
+            document.querySelector('a[href="/select"]').dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+          }),
+      );
+      assert.deepEqual(await inPalette(page), now);
+      assert.match(await recent.innerText(), /Recent[\s\S]*Gallery[\s\S]*New deal/);
+      // A swap that puts a new palette in the place of the open one: the new one is made ready.
+      await page.evaluate(async () => {
+        const doc = new DOMParser().parseFromString(await (await fetch("/select")).text(), "text/html");
+        document.getElementById("palette").replaceWith(document.adoptNode(doc.getElementById("palette")));
+      });
+      await swap(page);
+      assert.match(await recent.innerText(), /Recent[\s\S]*Gallery[\s\S]*New deal/);
+      await page.keyboard.press("Control+k");
+      const next = await inPalette(page);
+      assert.deepEqual([next.open, next.value, next.focused, next.active], [true, "", true, null]);
+      await close();
+    });
+
     test("The select module reads the page through the prototype: a named element can't stop it", async () => {
       const { page, problems, close } = await open("/select");
       // Elements named like the properties the module reads would shadow them on the document.

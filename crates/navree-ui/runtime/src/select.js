@@ -934,7 +934,7 @@ function recents(dlg) {
 }
 
 /** Fills the Recent group from what was chosen before. @param {Element} dlg */
-function prepare(dlg) {
+function fill(dlg) {
   const box = $(dlg, "[data-slot=command-recent]");
   const n = Number(dlg.getAttribute("data-ui-recent")) || 0;
   const ids = n ? [.../** @type {Set<string>} */ (recents(dlg))].slice(0, n) : [];
@@ -960,11 +960,31 @@ function prepare(dlg) {
   const apple = /Mac|iPhone|iPad/.test(navigator.platform || "");
   if (apple) for (const k of dlg.querySelectorAll("[data-slot=command-shortcut]")) k.textContent = (k.textContent || "").replace(/Ctrl\+/g, "⌘").replace(/Alt\+/g, "⌥").replace(/Shift\+/g, "⇧").replace(/Meta\+/g, "⌘");
   stateOf(dlg).index = null;
+}
+
+/** Makes a closed palette ready to open: the Recent group filled, no text, no row on. @param {Element} dlg */
+function prepare(dlg) {
+  fill(dlg);
   stateOf(dlg).q = "";
   const input = parts(dlg).control;
   if (input) input.value = "";
   view(dlg);
   activate(dlg, null, false);
+}
+
+/**
+ * A swap while the palette is open: what the server drew is filled and filtered again, and the text
+ * typed and the row on stay. The Recent group is made again, so the row is found again by its value.
+ * @param {Element} dlg
+ */
+function refresh(dlg) {
+  const s = stateOf(dlg), was = s.active, input = parts(dlg).control;
+  if (input) s.q = input.value;
+  fill(dlg);
+  view(dlg);
+  const rows = live(dlg), row = was && (rows.find((o) => o === was) || rows.find((o) => valueOf(o) === valueOf(was)));
+  // With no row on, none is: only typing or the arrows put one there.
+  if (row || !was) activate(dlg, row || null, false);
 }
 
 /** Remembers an item as the latest chosen. @param {Element} dlg @param {Element} item */
@@ -1187,7 +1207,11 @@ on(document, "close", (e) => {
 /** Starts what a page's pickers need: the values the browser restored, the palettes. */
 function boot() {
   for (const root of every("[data-ui-picker]")) sync(root);
-  for (const dlg of every("dialog[data-ui-palette]")) prepare(dlg);
+  // An open palette keeps what was typed in it and its row: a swap changes the rows, not where the person is.
+  for (const dlg of /** @type {NodeListOf<HTMLDialogElement>} */ (every("dialog[data-ui-palette]"))) {
+    if (dlg.open) refresh(dlg);
+    else prepare(dlg);
+  }
 }
 boot();
 on(window, "pageshow", boot);
