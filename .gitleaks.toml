@@ -50,6 +50,15 @@ paths = ['''(^|/)bench/tools/fixtures\.mjs$''']
 
 [[allowlists]]
 description = """
+The navree.com IndexNow key in the deploy script. IndexNow confirms that a host
+owns its key by fetching https://navree.com/<key>.txt, which the website
+publishes (apps/website/public/<key>.txt), so the key is public by design. It
+lets its holder only tell IndexNow that pages of navree.com changed."""
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)deploy/navree\.com/indexnow\.sh$''']
+
+[[allowlists]]
+description = """
 Documentation examples: sample responses and configuration in the docs show
 truncated or made-up tokens (`eyJ0eXAi...`, `nva_...`), a placeholder PEM
 body, and a sample TOTP secret. They are not issued by any system."""
