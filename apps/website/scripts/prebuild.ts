@@ -27,6 +27,7 @@ import MiniSearch from "minisearch";
 import remarkGfm from "remark-gfm";
 
 import { sections, links } from "../content/docs/manifest.ts";
+import { site } from "../site.config.ts";
 import type { CpuSet, PerfData, StackRow, TestInfo, TestKey, TestResult } from "../src/lib/bench-types.ts";
 import { searchOptions, type SearchDoc } from "../src/lib/search-options.ts";
 
@@ -526,6 +527,23 @@ function buildCrates(): CrateInfo[] {
   return crates;
 }
 
+// -------------------------------------------------------------------- facts
+
+/**
+ * The Rust version the site states (`site.rustVersion`, which the pages, the
+ * structured data and `llms.txt` repeat) is the workspace's `rust-version`.
+ * `site.config.ts` stays plain data, because client components import it, so
+ * the build compares the two instead of reading the file there.
+ */
+function checkRustVersion(): void {
+  const toml = fs.readFileSync(path.join(REPO, "Cargo.toml"), "utf8");
+  const declared = /\[workspace\.package\][^[]*?\brust-version\s*=\s*"([^"]+)"/.exec(toml)?.[1];
+  if (!declared) fail("no [workspace.package] rust-version in the repository's Cargo.toml");
+  if (declared !== site.rustVersion) {
+    fail(`site.config.ts says Rust ${site.rustVersion}, the workspace's rust-version is ${declared}: change rustVersion in site.config.ts`);
+  }
+}
+
 // --------------------------------------------------------------- ui previews
 
 const UI = path.join(WEBSITE, "content/ui");
@@ -555,6 +573,7 @@ function buildUiPreviews(): number {
 // --------------------------------------------------------------------- main
 
 const started = performance.now();
+checkRustVersion();
 const perf = buildPerformance();
 writeFile(path.join(GENERATED, "performance.json"), JSON.stringify(perf, null, 2));
 const crates = buildCrates();
