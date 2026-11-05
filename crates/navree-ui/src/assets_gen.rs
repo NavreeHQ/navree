@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "b870ead5fb64";
+pub const BUILD: &str = "a6e44f157c92";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-cc12f762b83e.js";
@@ -80,7 +80,7 @@ pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-e2a3d75a1a00.css";
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 
 /// The URL of `theme-builder.css`.
-pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-bb19cd8e3d6e.css";
+pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-b526443e9626.css";
 
 /// The URL of `markdown.css`.
 pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
@@ -332,7 +332,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "theme-builder",
         ext: "css",
-        hash: "bb19cd8e3d6e",
+        hash: "b526443e9626",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/theme-builder.css"),
         gzip: Some(include_bytes!("../dist/theme-builder.css.gz")),
