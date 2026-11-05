@@ -93,7 +93,15 @@ export async function UiPreview({
       src={example.src}
       codeText={example.code}
       preview={live ? <LiveDemo live={live} title={title} picture={picture} /> : picture}
-      code={<div dangerouslySetInnerHTML={{ __html: html }} />}
+      code={
+        <div
+          // Shiki's output for the example's Rust code, which the UI docs read from content/ui/
+          // in this repository and highlight at build time (Shiki escapes the code it highlights).
+          // The MDX prop only picks the example; an unknown id throws.
+          // nosemgrep: navree-raw-html, react-dangerouslysetinnerhtml
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      }
     />
   );
 }
@@ -472,7 +480,12 @@ export async function UiCsp() {
       <figcaption className="code-block-bar">
         <span className="code-block-title">Content-Security-Policy</span>
       </figcaption>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        // Shiki's output for the toolkit's own policy, read from content/ui/ in this repository
+        // and highlighted at build time (Shiki escapes the text it highlights).
+        // nosemgrep: navree-raw-html
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </figure>
   );
 }

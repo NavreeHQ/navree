@@ -630,6 +630,10 @@ const SLOTS = /^(option-(body|text|description|avatar|group-label|separator|page
  */
 function tidy(html) {
   const t = /** @type {HTMLTemplateElement} */ (make("template"));
+  // The first step of the sanitizer below: a template's content is inert (no script runs, no
+  // picture loads), and nothing in it reaches the page but the elements and attributes that
+  // survive the allowlist.
+  // nosemgrep: navree-raw-html
   t.innerHTML = html;
   clean(t.content);
   for (const e of [...t.content.querySelectorAll("*")]) {

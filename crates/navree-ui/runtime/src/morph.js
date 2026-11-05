@@ -296,6 +296,9 @@ export function morph(from, to, how = {}) {
 export function pieces(html) {
   if (typeof html !== "string") throw new TypeError("not markup");
   const template = /** @type {HTMLTemplateElement} */ (make("template"));
+  // The server's own rendered markup (an op's html, a feed's rows), whose values the server
+  // escaped as it does for a whole page. A template's content stays inert until it is placed.
+  // nosemgrep: navree-raw-html
   template.innerHTML = html;
   clean(template.content);
   return template.content;

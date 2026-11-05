@@ -521,10 +521,15 @@ function render(root) {
 function drawMonths(box, months) {
   const now = /** @type {Element[]} */ ([...all(box, "[data-slot=calendar-month]")]);
   const tpl = /** @type {HTMLTemplateElement} */ (make("template"));
+  // Markup from monthHtml and cellHtml only: each value in it is a number worked out from day
+  // numbers, or text (the locale's names and labels, the calendar's id) escaped by esc().
+  // nosemgrep: navree-raw-html
   tpl.innerHTML = months.join("");
   const fresh = /** @type {Element[]} */ ([...DocumentFragment.prototype.querySelectorAll.call(tpl.content, "[data-slot=calendar-month]")]);
   const caption = (/** @type {Element} */ m) => q(m, "[data-slot=calendar-caption]");
   if (now.length !== fresh.length || now.some((m, i) => !caption(m) || attr(caption(m), "data-layout") !== attr(caption(fresh[i]), "data-layout"))) {
+    // The same markup as above.
+    // nosemgrep: navree-raw-html
     box.innerHTML = months.join("");
     return;
   }
@@ -1166,6 +1171,9 @@ function fillList(h) {
   /** @type {number[]} */
   const opts = [];
   for (let m = 0; m < 1440; m += T.st) if (!timeBlocked(T, m * 60)) opts.push(m * 60);
+  // Each value is a number of seconds (m * 60), or text escaped by esc(): the list's id and the
+  // time as the locale writes it.
+  // nosemgrep: navree-raw-html
   ul.innerHTML = opts.map((t) => `<li role="option" id="${esc(ul.id)}-${t}" data-t="${t}" aria-selected="${t === cur}">${esc(fmtTime(L, t, secs))}</li>`).join("");
   let at = opts.findIndex((t) => t === cur);
   if (at < 0) at = Math.max(0, opts.findIndex((t) => cur !== null && t >= cur));
