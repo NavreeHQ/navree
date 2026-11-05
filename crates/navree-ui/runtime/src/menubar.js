@@ -238,10 +238,11 @@ on(document, "pointerout", (e) => {
 }, { passive: true });
 
 // A press on a button the pointer just opened keeps its panel open, instead of closing it.
+// hoveredAt is 0 until a pointer opens one: in a page's first 700 ms a press still closes.
 on(document, "click", (e) => {
   const t = closest(e.target, TOP);
   const pop = t && closest(t, NAV) && named(t, "popovertarget");
-  if (pop && e.timeStamp - hoveredAt < 700 && matches(pop, ":popover-open")) {
+  if (pop && hoveredAt && e.timeStamp - hoveredAt < 700 && matches(pop, ":popover-open")) {
     hoveredAt = 0;
     e.preventDefault();
   }

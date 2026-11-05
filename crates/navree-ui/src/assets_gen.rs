@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a27c3bcf75d4";
+pub const BUILD: &str = "502e432aad37";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-f11bb7046e31.js";
@@ -60,7 +60,7 @@ pub const OTP_URL: &str = "/_navree/ui/otp-523b23fe3e49.js";
 pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-781d59437d91.js";
 
 /// The URL of `menubar.js`.
-pub const MENUBAR_URL: &str = "/_navree/ui/menubar-6216c9b7b301.js";
+pub const MENUBAR_URL: &str = "/_navree/ui/menubar-de3ea7f09f0c.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
@@ -270,7 +270,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menubar",
         ext: "js",
-        hash: "6216c9b7b301",
+        hash: "de3ea7f09f0c",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/menubar.js"),
         gzip: Some(include_bytes!("../dist/menubar.js.gz")),
