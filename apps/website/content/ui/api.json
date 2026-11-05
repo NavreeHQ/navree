@@ -212,8 +212,8 @@
       {
         "name": "in_region",
         "generics": "",
-        "args": "region_id: &str, src: impl Into<Href>, stream: impl Into<Href>, cursor: impl Into<String>",
-        "doc": "Wraps the feed in a `Region` that fetches new rows from `src` (with `after=<cursor>`) whenever the server-sent event stream at `stream` speaks, and adds them at the top. `cursor` is the newest row's cursor. The feed shows its live dot."
+        "args": "region_id: &str, src: impl Into<Href>, stream: impl Into<super::Live>, cursor: impl Into<String>",
+        "doc": "Wraps the feed in a `Region` that fetches new rows from `src` (with `after=<cursor>`) whenever `stream` speaks, and adds them at the top: a stream's address, or names on the app's live hub (`LiveStream::on`). `cursor` is the newest row's cursor. The feed shows its live dot."
       }
     ],
     "variants": [],
@@ -2008,6 +2008,138 @@
       }
     ]
   },
+  "Carousel": {
+    "name": "Carousel",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/carousel.rs",
+    "summary": "Slides that scroll and snap.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A carousel named `label` for assistive technology. `id` ties its parts together and must be unique on the page."
+      }
+    ],
+    "methods": [
+      {
+        "name": "slide",
+        "generics": "",
+        "args": "slide: CarouselSlide",
+        "doc": "Adds a slide."
+      },
+      {
+        "name": "slides",
+        "generics": "",
+        "args": "slides: impl IntoIterator<Item = CarouselSlide>",
+        "doc": "Adds slides."
+      },
+      {
+        "name": "per_view",
+        "generics": "",
+        "args": "count: u8",
+        "doc": "Shows `count` slides at once, 1 to 4. A narrow screen shows fewer."
+      },
+      {
+        "name": "vertical",
+        "generics": "",
+        "args": "",
+        "doc": "Runs the slides from top to bottom instead of side by side."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "height: CarouselHeight",
+        "doc": "Sets how tall a vertical carousel is."
+      },
+      {
+        "name": "pickers",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a picker for each slide under the track: tabs that go to their slide. They are links with no script. They need one slide at a time, so with `per_view` above 1 there are none."
+      },
+      {
+        "name": "loop_around",
+        "generics": "",
+        "args": "",
+        "doc": "Makes the buttons go round: next on the last slide goes to the first."
+      },
+      {
+        "name": "autoplay",
+        "generics": "",
+        "args": "every: Duration",
+        "doc": "Moves to the next slide every `every`, held between 2 and 60 seconds, once the `carousel` module has loaded. A pause button comes with it, and rotation also stops while the pointer or focus is on the carousel, and for a reader who asks their device for less motion. It goes round at the end."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: CarouselLabels",
+        "doc": "Sets the words, for another language."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CarouselHeight": {
+    "name": "CarouselHeight",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/carousel.rs",
+    "summary": "How tall a vertical carousel is.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Short",
+        "doc": "12rem.",
+        "default": false
+      },
+      {
+        "name": "Medium",
+        "doc": "18rem: the default.",
+        "default": true
+      },
+      {
+        "name": "Tall",
+        "doc": "26rem.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "CarouselLabels": {
+    "name": "CarouselLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/carousel.rs",
+    "summary": "The words a carousel says to assistive technology. `{n}` stands for a slide's number and `{total}` for how many there are.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "CarouselSlide": {
+    "name": "CarouselSlide",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/carousel.rs",
+    "summary": "One slide of a `Carousel`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "A slide holding `content`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Names the slide's picker, in place of \"Slide 2\"."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Checkbox": {
     "name": "Checkbox",
     "kind": "struct",
@@ -2445,6 +2577,36 @@
     ],
     "shared": []
   },
+  "CodeBlock": {
+    "name": "CodeBlock",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/markdown/mod.rs",
+    "summary": "Code, drawn with its colours in the markup.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "language: impl AsRef<str>, code: impl Into<String>",
+        "doc": "A block of `code` in `language` (an empty name is plain code)."
+      }
+    ],
+    "methods": [
+      {
+        "name": "copy_button",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a button that copies the code (short blocks only). It needs the core runtime."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: MarkdownLabels",
+        "doc": "Sets the words."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "CodeKind": {
     "name": "CodeKind",
     "kind": "enum",
@@ -2879,6 +3041,84 @@
     ],
     "shared": []
   },
+  "ContextMenu": {
+    "name": "ContextMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/context_menu.rs",
+    "summary": "A region and the menu its right click opens.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A context menu with the id `id`, named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "content",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Adds what the right click opens the menu on: any content."
+      },
+      {
+        "name": "focusable",
+        "generics": "",
+        "args": "",
+        "doc": "Lets the keyboard reach the region: it takes one tab stop, and Shift+F10 or the menu key opens the menu from it. Leave it off when the region holds links, buttons or fields of its own: the keys work from any of them."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when any item is chosen."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl Into<Node>",
+        "doc": "Adds something before the items that is not one: a name and an address."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: MenuItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a line between items."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "group: MenuGroup",
+        "doc": "Adds a group of items under a heading."
+      },
+      {
+        "name": "checkbox",
+        "generics": "",
+        "args": "checkbox: MenuCheckbox",
+        "doc": "Adds a choice that is on or off."
+      },
+      {
+        "name": "radios",
+        "generics": "",
+        "args": "radios: MenuRadios",
+        "doc": "Adds a set of choices of which one is on."
+      },
+      {
+        "name": "submenu",
+        "generics": "",
+        "args": "sub: MenuSub",
+        "doc": "Adds a submenu."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "CountryCode": {
     "name": "CountryCode",
     "kind": "struct",
@@ -2982,6 +3222,12 @@
         "generics": "",
         "args": "name: &'static str",
         "doc": "Listens for the stream's events called `name` instead of its unnamed ones. See `Region::live_event`."
+      },
+      {
+        "name": "live_on",
+        "generics": "",
+        "args": "live: impl Into<crate::components::Live>",
+        "doc": "Refetches the table whenever its stream says one of its names: the app's live hub (`LiveStream::on`) or any stream on this site. See `Region::live_on`."
       },
       {
         "name": "refreshable",
@@ -5861,6 +6107,108 @@
     ],
     "shared": []
   },
+  "InputOtp": {
+    "name": "InputOtp",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/input_otp.rs",
+    "summary": "A field for a one-time code, such as the six digits a text message carries.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, length: u8",
+        "doc": "A field of `length` digits posting as `name`. A length below 3 or above 12 is held to it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "kind: OtpKind",
+        "doc": "Sets what the characters are (digits by default)."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "size: u8",
+        "doc": "Draws a heavier line after every `size` boxes, 2 to 4 of them, as in 482-915. A size that does not divide the code into groups is ignored."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl AsRef<str>",
+        "doc": "Sets the code the field starts with. Only the characters the code can have are kept, and only as many as it has room for."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the field for assistive technology when no visible label does."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a code."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the code and keeps it still."
+      },
+      {
+        "name": "autofocus",
+        "generics": "",
+        "args": "",
+        "doc": "Focuses it when the page loads."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "submit_when_complete",
+        "generics": "",
+        "args": "",
+        "doc": "Sends the form as soon as the code is whole and the form is valid. The form still works with a button, and with no script."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "",
+        "doc": "The rules this field draws, for the server to check a posted code against."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the input's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the input."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Item": {
     "name": "Item",
     "kind": "struct",
@@ -6311,6 +6659,12 @@
         "doc": "Merges what changed whenever this server-sent event stream speaks (its event `event`, or its unnamed ones): `src` with `dir=live&since=`. New items arrive at `new_at`'s end or in their place, changed ones move, gone ones go. The stream is a nudge: its payload is never read."
       },
       {
+        "name": "live_on",
+        "generics": "",
+        "args": "live: impl Into<super::Live>, new_at: LazyEnd",
+        "doc": "Merges what changed whenever its stream says one of its names: the app's live hub (`LiveStream::on`) or any stream on this site. See `live_from`."
+      },
+      {
         "name": "empty",
         "generics": "",
         "args": "empty: impl Into<Node>",
@@ -6447,6 +6801,109 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Markdown": {
+    "name": "Markdown",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/markdown/mod.rs",
+    "summary": "Text written in Markdown, drawn as HTML that cannot hold anything the text did not say.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Markdown from a source you do not control. Use `trusted` for text your own authors wrote."
+      },
+      {
+        "name": "trusted",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Markdown your own authors wrote: images from this site are drawn."
+      }
+    ],
+    "methods": [
+      {
+        "name": "trust",
+        "generics": "",
+        "args": "trust: MarkdownTrust",
+        "doc": "Sets how far the text is trusted."
+      },
+      {
+        "name": "heading_level",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Sets which heading level `#` becomes, 1 to 6 (1 by default). Deeper headings follow: at 3, `#` is an `h3` and `##` an `h4`. None goes past `h6`. A chat message in a page that has its own `h1` and `h2` starts at 3."
+      },
+      {
+        "name": "links_in_new_tab",
+        "generics": "",
+        "args": "",
+        "doc": "Opens links to other sites in a new tab."
+      },
+      {
+        "name": "copy_code",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a copy button to every code block (short ones only). It needs the core runtime."
+      },
+      {
+        "name": "max_bytes",
+        "generics": "",
+        "args": "bytes: usize",
+        "doc": "Sets the most bytes of text that is read (never more than `MAX_BYTES`)."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: MarkdownLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "to_fragment_html",
+        "generics": "",
+        "args": "",
+        "doc": "The text drawn as a fragment of HTML with no element around it. Use it where the HTML goes somewhere that is not a toolkit page, such as an e-mail or an API reply."
+      },
+      {
+        "name": "to_html",
+        "generics": "",
+        "args": "",
+        "doc": "The text and the element that holds it, as HTML."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MarkdownLabels": {
+    "name": "MarkdownLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/markdown/mod.rs",
+    "summary": "The words Markdown and code blocks write, for translation.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "MarkdownTrust": {
+    "name": "MarkdownTrust",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/markdown/mod.rs",
+    "summary": "How far the text is trusted.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Untrusted",
+        "doc": "Text from a model, a visitor or anyone you do not control. No image is drawn, and a link to another site is marked with its host and given `nofollow`.",
+        "default": true
+      },
+      {
+        "name": "Trusted",
+        "doc": "Text your own authors wrote. Images from this site are drawn, and links to other sites are not marked beyond `noopener noreferrer`.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Marker": {
@@ -6775,6 +7232,108 @@
         "generics": "",
         "args": "disabled: bool",
         "doc": "Disables it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Menubar": {
+    "name": "Menubar",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/menubar.rs",
+    "summary": "A bar of menus.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A menu bar with the id `id`, named `label` for assistive technology. The id also starts the ids of its menus."
+      }
+    ],
+    "methods": [
+      {
+        "name": "menu",
+        "generics": "",
+        "args": "menu: MenubarMenu",
+        "doc": "Adds a menu."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "Adds a button in the bar that has no menu: a link to a page."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MenubarMenu": {
+    "name": "MenubarMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/menubar.rs",
+    "summary": "One menu of a `Menubar`: a button and the entries it opens.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A menu opened by a button reading `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it: the button stays in the bar, the arrow keys still reach it, and it opens nothing."
+      },
+      {
+        "name": "keep_open",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the menu open when any item is chosen."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl Into<Node>",
+        "doc": "Adds something before the items that is not one: a name and an address."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: MenuItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a line between items."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "group: MenuGroup",
+        "doc": "Adds a group of items under a heading."
+      },
+      {
+        "name": "checkbox",
+        "generics": "",
+        "args": "checkbox: MenuCheckbox",
+        "doc": "Adds a choice that is on or off."
+      },
+      {
+        "name": "radios",
+        "generics": "",
+        "args": "radios: MenuRadios",
+        "doc": "Adds a set of choices of which one is on."
+      },
+      {
+        "name": "submenu",
+        "generics": "",
+        "args": "sub: MenuSub",
+        "doc": "Adds a submenu."
       }
     ],
     "variants": [],
@@ -7201,6 +7760,12 @@
         "generics": "",
         "args": "id: impl Into<String>, src: impl Into<Href>, stream: impl Into<Href>, event: Option<&'static str>",
         "doc": "Keeps the group's counts current: the group is a region named `id` that fetches `src` again whenever the server-sent event stream `stream` says `event` (or anything, with `None`), and takes the element with the same id from the answer. Any page of the app with this group answers; a page with nothing else in it is cheap. As with every live region, the stream is only a nudge."
+      },
+      {
+        "name": "live_on",
+        "generics": "",
+        "args": "id: impl Into<String>, src: impl Into<Href>, live: impl Into<crate::components::Live>",
+        "doc": "`live` on the app's live hub (`LiveStream::on`) or any stream, listening for one name or several."
       }
     ],
     "variants": [],
@@ -7261,6 +7826,102 @@
         "generics": "",
         "args": "item: NavItem",
         "doc": "Adds an item below this one."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "NavMenuItem": {
+    "name": "NavMenuItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/navigation_menu.rs",
+    "summary": "One top-level item of a `NavigationMenu`: a link, or a button that opens a panel of links.",
+    "constructors": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A link reading `label` to `href`."
+      },
+      {
+        "name": "panel",
+        "generics": "",
+        "args": "label: impl Into<Node>",
+        "doc": "A button reading `label` that opens a panel. Add its links with `entry`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Marks a link as the page the reader is on. A panel is marked by its own current link, so this changes nothing on one."
+      },
+      {
+        "name": "entry",
+        "generics": "",
+        "args": "link: NavMenuLink",
+        "doc": "Adds a link to a panel. A plain link takes none."
+      },
+      {
+        "name": "featured",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "Adds a block of any content before the links of a panel: a promotion or a summary."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "NavMenuLink": {
+    "name": "NavMenuLink",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/navigation_menu.rs",
+    "summary": "A link in a panel of a `NavigationMenu`: its name, an optional line about where it goes, and whether it is the page the reader is on.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<Href>",
+        "doc": "A link reading `label` to `href`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Adds a short line under the name."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "current: bool",
+        "doc": "Marks it as the page the reader is on."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "NavigationMenu": {
+    "name": "NavigationMenu",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/navigation_menu.rs",
+    "summary": "The links of a site, with panels of more links.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A navigation menu with the id `id`, named `label` for assistive technology. The id also starts the ids of its panels."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: NavMenuItem",
+        "doc": "Adds an item."
       }
     ],
     "variants": [],
@@ -7563,6 +8224,96 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "OtpError": {
+    "name": "OtpError",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/input_otp.rs",
+    "summary": "Why a posted code is refused.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "message",
+        "generics": "",
+        "args": "",
+        "doc": "The refusal in words for a person."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Empty",
+        "doc": "Nothing was posted, or only spaces and dashes.",
+        "default": false
+      },
+      {
+        "name": "WrongLength",
+        "doc": "The code has too few or too many characters.",
+        "default": false
+      },
+      {
+        "name": "BadCharacter",
+        "doc": "The code has a character that a code of this kind never has.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "OtpKind": {
+    "name": "OtpKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/input_otp.rs",
+    "summary": "What the characters of a code are.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Digits",
+        "doc": "The digits 0 to 9: the default.",
+        "default": true
+      },
+      {
+        "name": "Alphanumeric",
+        "doc": "The digits and the letters A to Z. A small letter is read as its capital.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "OtpRules": {
+    "name": "OtpRules",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/input_otp.rs",
+    "summary": "How long a code is and what it is made of: what the field draws and what the server checks a posted code against.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "length: u8, kind: OtpKind",
+        "doc": "Rules for a code of `length` characters of `kind`. A length below 3 or above 12 is held to it, in the field and in the check alike."
+      }
+    ],
+    "methods": [
+      {
+        "name": "length",
+        "generics": "",
+        "args": "",
+        "doc": "The number of characters."
+      },
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "",
+        "doc": "What the characters are."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "posted: &str",
+        "doc": "Reads a posted code: ASCII spaces and dashes inside it are dropped, and so is any white space around it. What is left must be exactly the right length of ASCII digits (or ASCII letters and digits, as capitals, for `OtpKind::Alphanumeric`)."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "PagesOptions": {
@@ -8413,10 +9164,16 @@
         "doc": "Refetches the region whenever this server-sent event stream says something, or, with a feed, asks the source for what is new. Needs `src`."
       },
       {
+        "name": "live_on",
+        "generics": "",
+        "args": "live: impl Into<Live>",
+        "doc": "Refetches the region, or with a feed asks for what is new, whenever its stream says one of its names: the app's live hub (`LiveStream::on`) or any stream on this site. Everything `live_from` says holds; use one or the other. With the hub, a stream that comes back after it dropped is told only what it missed, so the region fetches only if it missed something."
+      },
+      {
         "name": "live_event",
         "generics": "",
         "args": "name: &'static str",
-        "doc": "Listens for the stream's events called `name` instead of its unnamed ones (`event: name` on the wire), so one stream can feed several regions. A name of letters, digits and `_ . : -`, at most 64 long; any other is ignored. `open` and `error` are the connection's own events, so they are ignored too."
+        "doc": "Listens for the stream's events called `name` instead of its unnamed ones (`event: name` on the wire), so one stream can feed several regions. A name of letters, digits and `_ . : -`, at most 64 long; any other is ignored. `open` and `error` are the connection's own events, so they are ignored too. `live_on` takes names made at run time, and several."
       },
       {
         "name": "when_failed",
@@ -8796,6 +9553,12 @@
         "generics": "",
         "args": "glyph: Icon",
         "doc": "Adds an icon."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Shows it in the menu but doesn't let it be taken: the arrow keys still reach it, and it has no address to go to. The handler checks again: this is courtesy."
       }
     ],
     "variants": [],
@@ -13604,6 +14367,352 @@
         "generics": "",
         "args": "id: &str",
         "doc": "The address with `id` opened, or closed if it was open."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Upload": {
+    "name": "Upload",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/upload/component.rs",
+    "summary": "A file field with a drop area, a list of the files and, in a form of its own, progress.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, label: impl Into<Node>",
+        "doc": "A field posting its files as `name`, called `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the id (`upload-{name}` otherwise). The file input's is `{id}-input`."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the upload a form of its own that posts to `href`."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's CSRF token in the form as the field `_csrf`, which a post with no script sends. The module sends the token it finds in the `XSRF-TOKEN` cookie. A field inside a form of yours leaves the token to that form."
+      },
+      {
+        "name": "limits",
+        "generics": "",
+        "args": "limits: UploadLimits",
+        "doc": "Sets what is accepted. The default is ten megabytes, one file, any kind."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: UploadLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "manual",
+        "generics": "",
+        "args": "",
+        "doc": "Waits for the Send button instead of sending a file as soon as it is chosen."
+      },
+      {
+        "name": "chunks",
+        "generics": "",
+        "args": "url: impl AsRef<str>",
+        "doc": "Sends large files in chunks through `url`, an address on this site that is served by `Uploads::begin` and its companions. Anything that is not an address on this site is ignored."
+      },
+      {
+        "name": "chunk_from",
+        "generics": "",
+        "args": "bytes: u64",
+        "doc": "Sets how large a file must be to go in chunks (8 MB by default)."
+      },
+      {
+        "name": "refresh",
+        "generics": "",
+        "args": "region: impl Into<String>",
+        "doc": "Names a region (by its id) to fetch again when files have been sent, so the list it draws shows them."
+      },
+      {
+        "name": "hint",
+        "generics": "",
+        "args": "hint: impl Into<Node>",
+        "doc": "Adds a line after the limits."
+      },
+      {
+        "name": "error",
+        "generics": "",
+        "args": "error: impl Into<String>",
+        "doc": "Shows an error under the drop area and marks the field invalid."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Marks the field required."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables the field."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "A smaller drop area, for a form with little room."
+      },
+      {
+        "name": "file",
+        "generics": "",
+        "args": "file: UploadedFile",
+        "doc": "Lists a file the server already has."
+      },
+      {
+        "name": "files",
+        "generics": "",
+        "args": "files: impl IntoIterator<Item = UploadedFile>",
+        "doc": "Lists the files the server already has."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "UploadLabels": {
+    "name": "UploadLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/upload/labels.rs",
+    "summary": "Every word an upload says: on the page, in the browser module and in the server's refusals. The defaults are English. A word with `{name}`, `{max}`, `{types}` or `{count}` in it gets that value; a word without one is plain text.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "UploadLimits": {
+    "name": "UploadLimits",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/upload/limits.rs",
+    "summary": "What an upload accepts. The page shows these as hints and the server holds every file to them, so a browser that ignores the hints, or is not a browser, gets the same answer.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "max_bytes: u64",
+        "doc": "Files of at most `max_bytes` bytes (at least one), one file, any kind."
+      },
+      {
+        "name": "size_text",
+        "generics": "",
+        "args": "bytes: u64",
+        "doc": "A size in words: `800 B`, `1.5 KB`, `10 KB`, `2 MB`, `1.5 GB`. Binary units, and no `.0`. The browser module writes sizes the same way."
+      }
+    ],
+    "methods": [
+      {
+        "name": "max_files",
+        "generics": "",
+        "args": "files: usize",
+        "doc": "Allows `files` files in one send: at least one, at most 100."
+      },
+      {
+        "name": "accept",
+        "generics": "",
+        "args": "types: impl IntoIterator<Item = impl AsRef<str>>",
+        "doc": "Adds the kinds of file that are accepted: MIME types such as `image/png` and wildcards such as `image/*`. An entry that is neither is dropped. With none, any kind is accepted. The kind is read from the file's first bytes, never from its name or from what the client says it is."
+      },
+      {
+        "name": "bytes",
+        "generics": "",
+        "args": "",
+        "doc": "The largest file, in bytes."
+      },
+      {
+        "name": "files",
+        "generics": "",
+        "args": "",
+        "doc": "The most files in one send."
+      },
+      {
+        "name": "types",
+        "generics": "",
+        "args": "",
+        "doc": "The accepted kinds, lower case. Empty means any."
+      },
+      {
+        "name": "allows",
+        "generics": "",
+        "args": "mime: &str",
+        "doc": "Whether a file of type `mime` is accepted."
+      },
+      {
+        "name": "types_text",
+        "generics": "",
+        "args": "labels: &UploadLabels",
+        "doc": "The kinds in words: `PNG or JPG`, `PDF, images or CSV`. Empty when any kind is accepted."
+      },
+      {
+        "name": "sentence",
+        "generics": "",
+        "args": "labels: &UploadLabels",
+        "doc": "The limits as one sentence for the hint: `PNG or JPG, up to 2 MB, up to 5 files`."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "",
+        "doc": "The same limits as navree-storage's upload rules, which hold a file to them while it is written."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "UploadedFile": {
+    "name": "UploadedFile",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/upload/component.rs",
+    "summary": "A file the server already has, as a row of the list: its name, its size, a link to it and, when you give an address for it, a button that removes it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A file called `name`. The name is text to show and nothing else."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "bytes: u64",
+        "doc": "Shows its size."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Links the name to the file."
+      },
+      {
+        "name": "remove",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a Remove button that posts to `href`, through the page's one post form. It works with no script, and the page then loads the core runtime for the post."
+      },
+      {
+        "name": "row",
+        "generics": "",
+        "args": "labels: &UploadLabels",
+        "doc": "The row, in `labels`' words."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Uploads": {
+    "name": "Uploads",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/upload/server.rs",
+    "summary": "Receives the files an `Upload` sends, into a directory of a navree-storage disk, holding every file to its `UploadLimits`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "disk: Disk, dir: impl Into<String>, limits: UploadLimits",
+        "doc": "Files go to `dir` on `disk`, under random names, and are held to `limits`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: UploadLabels",
+        "doc": "Sets the words of the refusals."
+      },
+      {
+        "name": "chunk_bytes",
+        "generics": "",
+        "args": "bytes: u64",
+        "doc": "Sets the size of a part: between 64 KB and 16 MB, and large enough that the largest file has at most 4,096 parts."
+      },
+      {
+        "name": "chunk_ttl",
+        "generics": "",
+        "args": "ttl: Duration",
+        "doc": "Sets how long an unfinished chunked upload is kept (a day by default)."
+      },
+      {
+        "name": "limits",
+        "generics": "",
+        "args": "",
+        "doc": "The limits."
+      },
+      {
+        "name": "body_limit",
+        "generics": "",
+        "args": "",
+        "doc": "The body limit for the route that `receive`s: the largest file and a little more for the rest of the form."
+      },
+      {
+        "name": "chunk_body_limit",
+        "generics": "",
+        "args": "",
+        "doc": "The body limit for the route that takes a part: the size of a part."
+      },
+      {
+        "name": "receive",
+        "generics": "",
+        "args": "form: &mut Multipart",
+        "doc": "Reads the files of `form` and stores the ones inside the limits. A file that breaks a limit is refused by name and the rest go on; a form that cannot be read at all, or that is larger than the route allows, is an error, and what the request stored is taken back."
+      },
+      {
+        "name": "receive_into",
+        "generics": "",
+        "args": "form: &mut Multipart, room: usize",
+        "doc": "Like `receive`, keeping at most `room` files: for an app that counts the files a person has stored and allows more only while there is room."
+      },
+      {
+        "name": "respond",
+        "generics": "",
+        "args": "received: Received, headers: &HeaderMap, back: impl Into<LocalHref>",
+        "doc": "The answer to a request: JSON for the browser module, and for a post with no script a redirect to `back` with a toast, in this upload's words."
+      },
+      {
+        "name": "begin",
+        "generics": "",
+        "args": "owner: &str, start: ChunkStart",
+        "doc": "Starts a chunked upload for `owner`, who is whoever the app says is sending: a user's id. Only that owner can send its parts and finish it. The file's size is held to the limit here, before a byte is sent."
+      },
+      {
+        "name": "put_chunk",
+        "generics": "",
+        "args": "owner: &str, id: &str, index: u32, body: Bytes",
+        "doc": "Keeps part number `index` (from 0) of the upload `id`. Parts may come in any order and a part may come twice: the last one sent stays. Every part but the last is exactly the size `begin` named; the last is what is left."
+      },
+      {
+        "name": "finish",
+        "generics": "",
+        "args": "owner: &str, id: &str",
+        "doc": "Puts the parts of the upload `id` together, once every one is here, and stores the file. The kind is read from the file's first bytes with the sniffer a plain post uses, and a file of a kind that is not accepted is thrown away with its parts."
+      },
+      {
+        "name": "abort",
+        "generics": "",
+        "args": "owner: &str, id: &str",
+        "doc": "Stops the upload `id` and removes its parts."
+      },
+      {
+        "name": "sweep",
+        "generics": "",
+        "args": "",
+        "doc": "Removes the parts of uploads that were not finished in time, and returns how many uploads that was. `begin` does this, a few hundred at a time; an app with many uploads can also run it from a schedule."
       }
     ],
     "variants": [],
