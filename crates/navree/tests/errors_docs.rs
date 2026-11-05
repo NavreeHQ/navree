@@ -399,6 +399,7 @@ fn the_documented_api_exists() {
         codes::LIMIT_REACHED,
         codes::PAYLOAD_TOO_LARGE,
         codes::UNSUPPORTED_MEDIA_TYPE,
+        codes::PAGE_EXPIRED,
         codes::TOO_MANY_REQUESTS,
         codes::INTERNAL_ERROR,
         codes::SERVICE_UNAVAILABLE,
@@ -410,7 +411,7 @@ fn the_documented_api_exists() {
             "{code}"
         );
     }
-    assert_eq!(codes::ALL.len(), 20, "the page's table lists every code");
+    assert_eq!(codes::ALL.len(), 21, "the page's table lists every code");
     assert!(codes::is_valid("campaign_already_running"));
 
     // `http.errors.code`.
