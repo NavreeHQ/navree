@@ -287,6 +287,9 @@ impl LighthouseStore {
                 ),
                 chunk.iter().map(|name| name.as_str().into()),
             );
+            // `column` is one of two column names this module passes as literals, and
+            // `places` holds only `?` placeholders: every release name is bound.
+            // nosemgrep: navree-sql-built-from-strings
             for row in self.db.fetch_all(&statement).await? {
                 let name: String = row.get("name")?;
                 *counts.entry(name).or_default() += row.get::<i64>("issues")?;
