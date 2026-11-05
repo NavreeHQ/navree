@@ -27,6 +27,7 @@ export const loadedWhen: Record<string, string> = {
   upload: "An upload",
   otp: "A one-time code field",
   carousel: "A carousel",
+  charts: "A line, area, bar, donut or funnel chart",
   menubar: "A menu bar or a context menu",
   phone: "A phone input",
   "phone-data": "The first focus of a phone input",
@@ -36,6 +37,7 @@ export const loadedWhen: Record<string, string> = {
   "upload-styles": "An upload",
   "otp-styles": "A one-time code field",
   "carousel-styles": "A carousel",
+  "charts-styles": "A line, area, bar, donut or funnel chart",
   "menubar-styles": "A menu bar or a context menu",
 };
 
