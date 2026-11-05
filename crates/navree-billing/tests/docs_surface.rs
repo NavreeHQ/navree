@@ -370,6 +370,8 @@ fn the_names_the_page_mentions_in_passing() {
 /// "One-time payments", "Payment links", "Refunds", "Retries and
 /// idempotency" and "Your own provider" (CONN-101, CONN-103).
 #[allow(dead_code)]
+// The docs write rupee amounts in paise with Indian digit grouping (`2_50_000`).
+#[allow(clippy::inconsistent_digit_grouping)]
 async fn the_documented_payment_methods(billing: &Billing, workspace: &Workspace) {
     use navree_billing::{
         Capability, Money, PaymentAction, PaymentMethod, PaymentUpdated, ProviderPayment,

@@ -672,6 +672,8 @@ mod tests {
 
     // CONN-101
     #[test]
+    // Rupees in lakh grouping, then the paise: `1_00_000_00` is ₹1,00,000.00.
+    #[allow(clippy::inconsistent_digit_grouping)]
     fn amounts_are_integers_in_the_smallest_unit() {
         assert_eq!(Money::inr(149_900).major(), "1499.00");
         assert_eq!(Money::inr(5).major(), "0.05");
