@@ -183,7 +183,7 @@ async fn app() -> TestApp {
 async fn a_valid_list_query_reaches_the_handler() {
     let app = app().await;
     let response = app
-        .get("/deals?filter[stage][in]=lead,won&filter[amount_cents][gte]=100&sort=-amount_cents&page=2")
+        .get("/api/deals?filter[stage][in]=lead,won&filter[amount_cents][gte]=100&sort=-amount_cents&page=2")
         .await;
     assert_eq!(response.status, StatusCode::OK);
     let body = response.json();
@@ -195,7 +195,7 @@ async fn a_valid_list_query_reaches_the_handler() {
 async fn an_unknown_field_is_a_400_that_names_the_parameter() {
     let app = app().await;
     let body = app
-        .get("/deals?filter[password][contains]=x&per_page=1000")
+        .get("/api/deals?filter[password][contains]=x&per_page=1000")
         .await
         .assert_error(400);
     assert_eq!(body["code"], "validation_failed");
@@ -217,11 +217,13 @@ async fn hostile_queries_in_a_router_end_in_a_400_not_a_panic() {
         "page=99999999999999999999",
         "filter[a][b][c]=1",
     ] {
-        app.get(&format!("/deals?{query}")).await.assert_error(400);
+        app.get(&format!("/api/deals?{query}"))
+            .await
+            .assert_error(400);
     }
     // Parameters that are not the list query's are left alone.
     assert_eq!(
-        app.get("/deals?utm_source=x&owner=3").await.status,
+        app.get("/api/deals?utm_source=x&owner=3").await.status,
         StatusCode::OK
     );
 }
