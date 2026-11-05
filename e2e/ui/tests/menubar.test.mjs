@@ -128,6 +128,8 @@ inBrowsers(({ open, browserName }) => {
     await page.keyboard.press("Shift+F10");
     assert.ok(await isOpen(page, "#ctx-order"));
     assert.equal((await focused(page)).text, "Open order");
+    // Its box once the opening has ended, as a right click's is read: the opening scales it.
+    await settled(page, "#ctx-order");
     const region = await box(page, "[data-ui-context=ctx-order]");
     const menu = await box(page, "#ctx-order");
     assert.ok(Math.abs(menu.x - region.x) <= 2 && menu.y >= region.y, "under the focused region");
