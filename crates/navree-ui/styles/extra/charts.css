@@ -54,7 +54,8 @@
 [data-slot=chart] svg [data-slot=chart-target] text,[data-slot=chart] svg [data-slot=chart-event] text,[data-slot=chart] svg [data-slot=chart-target-label]{fill:var(--fg-2)}
 [data-slot=chart-event] line{stroke:var(--fg-3);stroke-width:1px}
 [data-slot=chart-band] rect{fill:var(--fg);fill-opacity:.05}
-@container (max-width:480px){[data-slot=chart] svg text[data-minor]{display:none}}
+@container (301px<=width<=480px){[data-slot=chart] svg text[data-minor]{display:none}}
+@container (max-width:300px){[data-slot=chart] svg text[data-tight]{display:none}}
 
 /* Bars along rows: a label, the bar, the value. */
 [data-slot=chart-rows]{display:grid;grid-template-columns:fit-content(40%) minmax(0,1fr) max-content;column-gap:.75rem;direction:ltr}

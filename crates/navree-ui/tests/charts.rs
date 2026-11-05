@@ -223,6 +223,41 @@ fn the_charts_sheet_is_at_most_3_kb_gzip_and_the_toolkits_holds_only_a_sparkline
     );
 }
 
+/// A crowded axis marks the labels a very narrow chart (a card of a dashboard) drops, and
+/// the first label stays.
+#[test]
+fn a_crowded_axis_marks_the_labels_a_very_narrow_chart_drops() {
+    let days: Vec<NaiveDate> = (0..30).map(|i| day(1) + Duration::days(i)).collect();
+    let out = html(
+        Chart::bar("Orders")
+            .days(days)
+            .series(Series::new("Orders", (0..30).collect::<Vec<i32>>())),
+    );
+    let axis = out
+        .split("data-slot=\"chart-x-axis\"")
+        .nth(1)
+        .and_then(|rest| rest.split("</g>").next())
+        .expect("the x axis");
+    let labels: Vec<&str> = axis.split("<text").skip(1).collect();
+    let dropped = labels
+        .iter()
+        .filter(|text| text.contains("data-tight"))
+        .count();
+    assert!(labels.len() > 6, "{axis}");
+    assert!(
+        dropped > 0 && dropped < labels.len(),
+        "{dropped} of {}",
+        labels.len()
+    );
+    assert!(!labels[0].contains("data-tight"), "the first label stays");
+    let few = html(
+        Chart::line("x")
+            .categories(["a", "b", "c"])
+            .series(Series::new("x", [1, 2, 3])),
+    );
+    assert!(!few.contains("data-tight"), "three labels fit anywhere");
+}
+
 #[test]
 fn a_legend_comes_with_two_series_and_mirrors_the_mark() {
     let one = html(

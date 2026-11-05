@@ -1666,8 +1666,10 @@ impl Chart {
                 }
             }
         }
-        // On a narrow chart every other label goes, when there are enough to crowd.
+        // On a narrow chart every other label goes, when there are enough to crowd, and on a
+        // very narrow one (a card of a dashboard) all but every other, or every third.
         let many = labels.len() > 6;
+        let crowded = labels.len() > 3;
         let texts: Vec<Node> = labels
             .into_iter()
             .enumerate()
@@ -1684,6 +1686,10 @@ impl Chart {
                     .attr("y", y.clone())
                     .attr("text-anchor", anchor)
                     .attr_opt("data-minor", (many && j % 2 == 1).then_some(""))
+                    .attr_opt(
+                        "data-tight",
+                        (crowded && if many { j % 3 != 0 } else { j % 2 == 1 }).then_some(""),
+                    )
                     .child(text)
                     .into()
             })
