@@ -106,7 +106,7 @@ Each module is its own crate, and the `navree` crate re-exports all of them, one
 
 ### Navree UI
 
-[Navree UI](/docs/ui/overview/) is the `ui` feature of `navree`, on by default. A handler returns typed components and the toolkit renders them to HTML, with one stylesheet, a small runtime that loads only what a page uses, and a strict content security policy. It brings [forms](/docs/ui/forms/) from a validated struct, the [app shell](/docs/ui/app-shell/), a server-side [DataTable](/docs/ui/data-table/) and the [components](/docs/components/overview/), each with a live preview. It grows one module at a time: [Coming next](/docs/ui/coming-next/) lists what is still to come, in order. For a React or Vue front end, see [Next.js](/docs/frontend/nextjs/) and [Nuxt](/docs/frontend/nuxt/).
+[Navree UI](/docs/ui/overview/) is the `ui` feature of `navree`, on by default. A handler returns typed components and the toolkit renders them to HTML, with one stylesheet, a small runtime that loads only what a page uses, and a strict content security policy. It brings [forms](/docs/ui/forms/) from a validated struct, the [app shell](/docs/ui/app-shell/), a server-side [DataTable](/docs/ui/data-table/), [dates and times](/docs/ui/dates/), [themes](/docs/ui/themes/), a [live hub](/docs/ui/live-hub/) that tells pages what changed, and the [components](/docs/components/overview/), each with a live preview. It grows one module at a time: [Coming next](/docs/ui/coming-next/) lists what is still to come, in order. For a React or Vue front end, see [Next.js](/docs/frontend/nextjs/) and [Nuxt](/docs/frontend/nuxt/).
 
 ### The ecosystem
 
@@ -128,7 +128,7 @@ Everything else a production application needs is first-party too: open source u
 | [Microservices](/docs/microservices/introduction/), [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/) | Services over NATS, Kafka, RabbitMQ, Redis Streams, MQTT and TCP, gRPC and Connect, and GraphQL, all sharing your modules |
 | [AI SDK](/docs/ai/ai-sdk/) and [MCP servers](/docs/ai/mcp-servers/) | Text, structured output, agents with tools, embeddings and RAG; your app's tools exposed to AI clients |
 | [Search](/docs/packages/search/) | Full-text and vector search over your entities |
-| [Billing](/docs/packages/billing/) | Subscriptions, usage metering and invoices with Stripe or Paddle |
+| [Billing](/docs/packages/billing/) | Subscriptions, payments, usage metering and invoices with Stripe, Paddle or your own provider |
 | [Feature flags](/docs/packages/feature-flags/) | Roll features out per user, workspace or percentage |
 | [OAuth server](/docs/packages/oauth-server/) and [Social sign-in](/docs/packages/social-sign-in/) | OAuth 2.1 and OpenID Connect for third parties; sign-in with Google, GitHub, Apple and Microsoft |
 | [Webhooks](/docs/packages/webhooks/) | Signed outgoing webhooks with retries, and verified incoming ones |
@@ -136,7 +136,7 @@ Everything else a production application needs is first-party too: open source u
 | [Browser testing](/docs/packages/browser-testing/) | Drive a real browser from your tests |
 | [All packages](/docs/packages/) | Documents, media, imports and exports, workflows, directory sync, custom domains, integrations and settings, too |
 
-The repository also holds a reference application: a CRM with an API built on Navree and front ends in Next.js and Nuxt. The [CRM tour](/docs/example-app/crm-tour/) walks through it.
+The repository also holds a reference application: a CRM with an API built on Navree and front ends in Next.js and Nuxt. The [CRM tour](/docs/example-app/crm-tour/) walks through it. Three example apps drawn with Navree UI show its screens at work: [a store's back office](/showcase/store/), [a support inbox](/showcase/inbox/) and [a team's board](/showcase/board/).
 
 ## Who Navree is for
 
