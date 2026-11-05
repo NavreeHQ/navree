@@ -60,19 +60,22 @@ inBrowsers(({ open, browserName }) => {
     const box = page.locator("#md-table [data-slot=markdown-table]");
     await box.focus();
     assert.equal(await box.evaluate((e) => e.scrollLeft), 0);
+    // Chromium scrolls smoothly, from the keys as well: give a scroll up to 2 s to start.
+    const scrolled = (locator) =>
+      locator.evaluate((e) => new Promise((done) => {
+        const start = performance.now();
+        const check = () => (Math.abs(e.scrollLeft) + e.scrollTop > 0 || performance.now() - start > 2000 ? done() : requestAnimationFrame(check));
+        check();
+      }));
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
-    // Chromium scrolls smoothly: give the scroll up to 2 s to start.
-    await box.evaluate((e) => new Promise((done) => {
-      const start = performance.now();
-      const check = () => (Math.abs(e.scrollLeft) > 0 || performance.now() - start > 2000 ? done() : requestAnimationFrame(check));
-      check();
-    }));
+    await scrolled(box);
     assert.ok((await box.evaluate((e) => Math.abs(e.scrollLeft))) > 0, "the table moved");
     const pre = page.locator("#long pre");
     await pre.focus();
     await page.keyboard.press("End");
-    assert.ok((await pre.evaluate((e) => e.scrollTop + e.scrollLeft)) > 0, "the code moved");
+    await scrolled(pre);
+    assert.ok((await pre.evaluate((e) => e.scrollTop + Math.abs(e.scrollLeft))) > 0, "the code moved");
     await close();
   });
 
