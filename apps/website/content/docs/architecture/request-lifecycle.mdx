@@ -139,7 +139,7 @@ Each matched route runs its own small pipeline before the handler. It puts the r
 <Steps>
 <Step title="Body length">
 
-A `Content-Length` larger than the route's body limit (its own, or `http.body_limit_bytes`) is a 413 with the message `"The request body must not exceed N bytes."`, before any byte of the body is read.
+A `Content-Length` larger than the route's body limit (its own, or `http.body_limit_bytes`) is a 413 with the message `"The request body must not exceed N bytes."`, and nothing after this step runs. On HTTP/1 a body of at most 8 MiB is read and thrown away first, for at most 5 seconds, so a client that sends it whole before reading gets the 413 and not a reset connection.
 
 </Step>
 <Step title="Authentication">

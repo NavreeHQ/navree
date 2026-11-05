@@ -671,6 +671,63 @@ async fn body_limit_returns_413() {
     assert_eq!(app.send(upload).await.text(), "100");
 }
 
+#[tokio::test]
+async fn a_body_a_little_over_the_limit_is_read_and_thrown_away_before_the_413() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let app = Setup::new(vec![
+        RouteDef::on(Method::POST, "/ignore", || async { "ignored the body" }).public(),
+    ])
+    .options(HttpOptions {
+        body_limit_bytes: 16,
+        ..options()
+    })
+    .boot()
+    .await;
+    // Ten chunks of 10 bytes, counting the ones the server reads.
+    let counted = || {
+        let read = Arc::new(AtomicUsize::new(0));
+        let seen = read.clone();
+        let chunks = futures_util::stream::iter((0..10).map(move |_| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok::<_, std::io::Error>(bytes(10))
+        }));
+        (Body::from_stream(chunks), read)
+    };
+    let post = |length: &str| Request::post("/api/ignore").header("content-length", length);
+
+    // Over the limit: still answered 413, after the body was read to its end.
+    let (body, read) = counted();
+    let body = app
+        .send(post("100").body(body).unwrap())
+        .await
+        .assert_error(413);
+    assert_eq!(body["code"], "payload_too_large");
+    assert_eq!(read.load(Ordering::SeqCst), 10, "the whole body was read");
+
+    // Far over, waiting on 100 Continue, or on HTTP/2: answered without a byte read.
+    let (body, read) = counted();
+    app.send(post("9000000").body(body).unwrap())
+        .await
+        .assert_error(413);
+    assert_eq!(read.load(Ordering::SeqCst), 0, "far over");
+    let (body, read) = counted();
+    let waiting = post("100")
+        .header("expect", "100-continue")
+        .body(body)
+        .unwrap();
+    app.send(waiting).await.assert_error(413);
+    assert_eq!(read.load(Ordering::SeqCst), 0, "waiting on 100 Continue");
+    let (body, read) = counted();
+    let two = post("100")
+        .version(http::Version::HTTP_2)
+        .body(body)
+        .unwrap();
+    app.send(two).await.assert_error(413);
+    assert_eq!(read.load(Ordering::SeqCst), 0, "HTTP/2");
+}
+
 #[test]
 fn client_ip_of_a_request_follows_the_proxy_settings() {
     use std::net::{IpAddr, SocketAddr};

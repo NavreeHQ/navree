@@ -9,9 +9,10 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use http::header::{CONTENT_LENGTH, HeaderName};
+use http::header::{CONTENT_LENGTH, EXPECT, HeaderName};
 use http::request::Parts;
-use http::{Method, StatusCode};
+use http::{Method, StatusCode, Version};
+use http_body_util::BodyExt;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
@@ -462,16 +463,15 @@ enum ThrottleKey {
 }
 
 impl RouteRuntime {
+    /// Whether the request declares a body over the route's limit.
+    fn too_large(&self, parts: &Parts) -> bool {
+        declared_length(parts).is_some_and(|length| length > self.body_limit as u64)
+    }
+
     /// Body limit, authentication, throttle, guards, authorization.
     async fn admit(&self, parts: &mut Parts) -> Result<Option<Uuid>, AppError> {
         let meta = &self.meta;
-        if let Some(length) = parts
-            .headers
-            .get(CONTENT_LENGTH)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<u64>().ok())
-            && length > self.body_limit as u64
-        {
+        if self.too_large(parts) {
             return Err(AppError::payload_too_large(self.body_limit));
         }
 
@@ -609,6 +609,41 @@ impl RouteRuntime {
     }
 }
 
+/// The longest body over its route's limit that is still read, and thrown away, before the 413
+/// goes back. A client sends its whole body before it reads the answer: answered at once, the
+/// connection closes with the body unread, and the client sees a reset where the 413 should be.
+/// A body declared longer than this is answered at once.
+const DISCARD_AT_MOST: u64 = 8 * 1024 * 1024;
+
+/// How long reading such a body may take before the 413 goes back anyway.
+const DISCARD_FOR: Duration = Duration::from_secs(5);
+
+/// The body length a request declares.
+fn declared_length(parts: &Parts) -> Option<u64> {
+    parts
+        .headers
+        .get(CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+}
+
+/// Reads the body of a request refused for its size and throws it away, a frame at a time, so
+/// the client reads the 413. Only on HTTP/1 (HTTP/2 ends the stream on its own), only for a
+/// body declared at most [`DISCARD_AT_MOST`] bytes, for at most [`DISCARD_FOR`], and never for
+/// a client waiting on `100 Continue`: it has sent nothing, and sends nothing after a 413.
+async fn discard(parts: &Parts, mut body: crate::body::Body) {
+    let waits = parts
+        .headers
+        .get(EXPECT)
+        .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"100-continue"));
+    let short = declared_length(parts).is_some_and(|length| length <= DISCARD_AT_MOST);
+    if parts.version > Version::HTTP_11 || waits || !short {
+        return;
+    }
+    let read = async { while body.frame().await.is_some_and(|frame| frame.is_ok()) {} };
+    let _ = tokio::time::timeout(DISCARD_FOR, read).await;
+}
+
 fn client_ip(parts: &Parts) -> IpAddr {
     parts
         .extensions
@@ -667,7 +702,12 @@ async fn route_pipeline(
     }
 
     let mut response = match runtime.admit(&mut parts).await {
-        Err(error) => error.into_response(),
+        Err(error) => {
+            if runtime.too_large(&parts) {
+                discard(&parts, body).await;
+            }
+            error.into_response()
+        }
         Ok(user) => {
             let audit = runtime.audit_entry(&parts, user);
             // A 403 the handler returns itself (an ownership rule, a

@@ -99,6 +99,52 @@ async fn serve_command_binds_and_shuts_down_gracefully() {
 }
 
 #[tokio::test]
+async fn a_client_that_sends_a_body_over_the_limit_reads_the_413_not_a_reset() {
+    let app = Setup::new(vec![
+        RouteDef::on(Method::POST, "/photo", || async { "kept" })
+            .public()
+            .body_limit(1024),
+    ])
+    .options(HttpOptions {
+        addr: "127.0.0.1:0".to_owned(),
+        ..options()
+    })
+    .boot()
+    .await;
+    let server = app.app.ctx().get::<HttpServer>().await.unwrap();
+
+    let serve = app.app.run_command("serve", vec![]);
+    let client = async {
+        let addr = tokio::time::timeout(Duration::from_secs(10), server.wait_bound())
+            .await
+            .expect("serve binds within 10 s");
+        // Three megabytes, all sent before the answer is read, as a browser or curl sends them.
+        let body = vec![b'x'; 3 * 1024 * 1024];
+        let mut stream = TcpStream::connect(addr).await.expect("connects");
+        let head = format!(
+            "POST /api/photo HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(head.as_bytes()).await.unwrap();
+        stream
+            .write_all(&body)
+            .await
+            .expect("the server reads the body to its end");
+        let mut response = Vec::new();
+        stream
+            .read_to_end(&mut response)
+            .await
+            .expect("the answer arrives, not a reset");
+        app.app.ctx().shutdown_token().cancel();
+        String::from_utf8_lossy(&response).into_owned()
+    };
+    let (served, response) = tokio::join!(serve, client);
+    served.expect("serve returns Ok after a graceful shutdown");
+    assert!(response.starts_with("HTTP/1.1 413"), "{response}");
+    assert!(response.contains("payload_too_large"), "{response}");
+}
+
+#[tokio::test]
 async fn serve_reports_an_address_it_cannot_bind() {
     let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = taken.local_addr().unwrap();
