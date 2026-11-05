@@ -3,17 +3,27 @@ import Link from "next/link";
 import { ArrowLink, HomeSection, SectionHeading } from "@/components/home/parts";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { UiChoose } from "@/components/ui-docs";
+import { pendingSentence, uiPending } from "@/lib/ui-page-data";
+
+/**
+ * What Navree UI does not have yet, as a sentence read from the roadmap table (the
+ * "Coming next" docs page), so it can't name a module that has shipped. Empty
+ * when nothing is left.
+ */
+function stillToCome(): string {
+  const names = uiPending();
+  return names.length ? ` ${pendingSentence(names)} ${names.length === 1 ? "is" : "are"} still to come.` : "";
+}
 
 /** The three ways to draw screens, as the docs' "Choosing a UI" page states them. No ranking: same weight, same fields. */
-const options = [
+const options = () => [
   {
     name: "Navree UI",
     start: "UiModule::from_config()",
     when: "You want one language, one binary and one deploy, and your screens are forms, tables and dashboards.",
     gives:
       "Forms from a validated struct, a server-side DataTable, the app shell, and pages that work with JavaScript off. No Node at run time or in `cargo build`.",
-    costs:
-      "Interactions that need data go to the server and back, so they wait on the network. Charts and rich text are still to come.",
+    costs: `Interactions that need data go to the server and back, so they wait on the network.${stillToCome()}`,
     href: "/docs/ui/overview/",
     link: "Navree UI overview",
   },
@@ -63,7 +73,7 @@ export function ChooseFrontEnd() {
       </div>
 
       <ul className="mt-6 grid gap-3 md:grid-cols-3">
-        {options.map((o) => (
+        {options().map((o) => (
           <li key={o.name} className="flex min-w-0 flex-col rounded-2xl border border-line bg-ink-1 p-6 shadow-bezel">
             <h3 className="font-display text-display-sm font-semibold text-fg">{o.name}</h3>
             <p className="mt-2 font-mono text-[0.8125rem] break-words text-fg-3">{o.start}</p>

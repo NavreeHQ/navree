@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { groups } from "@/components/ui-docs/data";
 import { TableShowcase } from "@/components/ui-docs/table-showcase";
+import { pendingSentence, uiPending } from "@/lib/ui-page-data";
 
 import { ArrowLink, HomeSection, SectionHeading } from "./parts";
 
@@ -35,6 +36,8 @@ const choices = [
  */
 export function UiSection() {
   const count = groups.reduce((n, g) => n + g.components.length, 0);
+  // What is still to come comes from the roadmap table, so it never names a module that has shipped.
+  const pending = uiPending();
   return (
     <HomeSection id="navree-ui">
       <SectionHeading
@@ -79,13 +82,13 @@ export function UiSection() {
       </div>
 
       <p className="mt-8 max-w-3xl text-[0.9375rem] leading-relaxed text-pretty text-fg-3">
-        Navree UI is new, and it grows module by module. Charts are still
-        to come, and{" "}
+        Navree UI is new, and it grows module by module.
+        {pending.length ? ` ${pendingSentence(pending)} ${pending.length === 1 ? "is" : "are"} still to come, and ` : " "}
         <Link href="/ui/#coming-next" className="link">
-          Coming next
+          {pending.length ? "Coming next" : "The roadmap"}
         </Link>{" "}
-        lists them in order. Until they land, a Next.js or Nuxt front end beside the same API can draw what Navree UI can&apos;t
-        yet.
+        {pending.length ? "lists them in order. Until they land, a" : "lists what comes next. For anything else, a"} Next.js or Nuxt front end
+        beside the same API can draw what Navree UI can&apos;t yet.
       </p>
     </HomeSection>
   );
