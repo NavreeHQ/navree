@@ -18,6 +18,8 @@ import { navreeVersion } from "./version.ts";
  * - every page: a `WebPage` (or `CollectionPage` for a page that lists
  *   others, `AboutPage` for `/about/`) and its `BreadcrumbList`
  *   (`PageSchema`);
+ * - a page with a film (the homepage): the film as a `VideoObject` that the
+ *   page node points at (`PageSchema`'s `video`);
  * - docs pages: a `TechArticle` with `dateModified` from git, its
  *   breadcrumb and a link to its Markdown copy (`docData`), and a `HowTo`
  *   where the page is a list of steps (`howToData`);
@@ -199,13 +201,33 @@ function plainTitle(title: Metadata["title"]): string {
   return site.name;
 }
 
+/** A film on a page, as `PageSchema` turns it into a `VideoObject`. Paths start with a slash. */
+export type PageVideo = {
+  /** The node's fragment: `<page url>#<id>`. */
+  id: string;
+  name: string;
+  description: string;
+  /** The picture shown before it plays. */
+  thumbnail: string;
+  /** The film's file, and its media type. */
+  file: string;
+  encodingFormat: string;
+  /** The day it was made, `YYYY-MM-DD`. */
+  uploadDate: string;
+  /** ISO 8601, `PT1M5S`. */
+  duration: string;
+  width: number;
+  height: number;
+};
+
 /**
  * The graph every non-docs page carries: the page itself (`WebPage`, or
  * `CollectionPage` where the registry in `site-pages.ts` says it lists
  * others), when it last changed (from git), its image and its breadcrumb.
  * Title and description come from the page's own `metadata` export, so they
  * can't differ from the tags in the head. `mainEntity` names the node the
- * page is mainly about (the about page: its founder).
+ * page is mainly about (the about page: its founder). `video` is a film the
+ * page plays, described as a `VideoObject` the page node points at.
  *
  *     <PageSchema path="/ui/" metadata={metadata} />
  */
@@ -215,6 +237,7 @@ export function PageSchema({
   kind,
   mainEntity,
   list,
+  video,
 }: {
   path: string;
   metadata: Metadata;
@@ -222,6 +245,8 @@ export function PageSchema({
   mainEntity?: string;
   /** Pages this page shows a card for, as an `ItemList` (`/ui/`: the example apps). */
   list?: { id: string; name: string; items: { name: string; description: string; path: string }[] };
+  /** A film the page plays (the homepage: the launch film). */
+  video?: PageVideo;
 }) {
   const info = infoFor(path);
   const url = abs(path);
@@ -246,6 +271,26 @@ export function PageSchema({
         },
       ]
     : [];
+  const videoNode: Json[] = video
+    ? [
+        {
+          "@type": "VideoObject",
+          "@id": `${url}#${video.id}`,
+          name: video.name,
+          description: video.description,
+          thumbnailUrl: abs(video.thumbnail),
+          contentUrl: abs(video.file),
+          encodingFormat: video.encodingFormat,
+          uploadDate: video.uploadDate,
+          duration: video.duration,
+          width: video.width,
+          height: video.height,
+          isAccessibleForFree: true,
+          about: { "@id": SOFTWARE_ID },
+          publisher: { "@id": ORGANIZATION_ID },
+        },
+      ]
+    : [];
   const data: Json = {
     "@context": "https://schema.org",
     "@graph": [
@@ -266,10 +311,12 @@ export function PageSchema({
           width: ogImage.width,
           height: ogImage.height,
         },
+        ...(video ? { video: { "@id": `${url}#${video.id}` } } : {}),
         breadcrumb: { "@id": `${url}#breadcrumb` },
       },
       breadcrumb(`${url}#breadcrumb`, trailFor(path, home ? undefined : info.name)),
       ...itemList,
+      ...videoNode,
     ],
   };
   return <JsonLd data={data} />;

@@ -41,6 +41,7 @@ const required: Record<string, string[]> = {
   BreadcrumbList: ["itemListElement"],
   ListItem: ["position", "name", "item"],
   ImageObject: ["url"],
+  VideoObject: ["name", "description", "thumbnailUrl", "contentUrl", "uploadDate", "duration"],
   FAQPage: ["mainEntity", "url"],
   Question: ["name", "acceptedAnswer"],
   Answer: ["text"],
@@ -53,8 +54,8 @@ const required: Record<string, string[]> = {
 };
 
 /** Properties whose values are URLs and must be absolute https URLs on a real host. */
-const urlProps = new Set(["url", "item", "contentUrl", "codeRepository", "installUrl", "releaseNotes", "image", "sameAs", "license", "mainEntityOfPage"]);
-const dateProps = new Set(["dateModified", "datePublished"]);
+const urlProps = new Set(["url", "item", "contentUrl", "thumbnailUrl", "codeRepository", "installUrl", "releaseNotes", "image", "sameAs", "license", "mainEntityOfPage"]);
+const dateProps = new Set(["dateModified", "datePublished", "uploadDate"]);
 
 const isNode = (v: unknown): v is Jsonld => typeof v === "object" && v !== null && !Array.isArray(v);
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined ? [] : [v]);
@@ -102,6 +103,8 @@ function checkNode(node: Jsonld, where: string, problems: string[], ids: Map<str
       if (isNode(item)) checkNode(item, `${where}.${key}`, problems, ids);
       else if (urlProps.has(key) && typeof item === "string" && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$|\?|#)/i.test(item)) {
         problems.push(`${where}.${key}: "${item.slice(0, 80)}" is not an absolute https URL`);
+      } else if (key === "duration" && !/^PT(\d+H)?(\d+M)?(\d+(\.\d+)?S)?$/.test(String(item))) {
+        problems.push(`${where}.duration: "${String(item)}" is not an ISO 8601 duration such as PT1M5S`);
       } else if (dateProps.has(key)) {
         const when = typeof item === "string" ? Date.parse(item) : NaN;
         if (Number.isNaN(when) || !/^\d{4}-\d{2}-\d{2}/.test(String(item))) problems.push(`${where}.${key}: "${String(item)}" is not an ISO 8601 date`);

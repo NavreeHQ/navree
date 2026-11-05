@@ -18,6 +18,7 @@ import { TwoWays } from "@/components/home/two-ways";
 import { UiSection } from "@/components/home/ui-section";
 import { WhatIs } from "@/components/home/what-is";
 import { Workspaces } from "@/components/home/workspaces";
+import { film, lengthIso } from "@/content/launch-film";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 import { site } from "@site";
@@ -96,7 +97,22 @@ export default function Home() {
       <Part>
         <Faq name="home" />
       </Part>
-      <PageSchema path="/" metadata={metadata} />
+      <PageSchema
+        path="/"
+        metadata={metadata}
+        video={{
+          id: "film",
+          name: film.name,
+          description: film.description,
+          thumbnail: film.poster.jpg,
+          file: film.file.src,
+          encodingFormat: film.file.type,
+          uploadDate: film.uploadDate,
+          duration: lengthIso(film.durationSeconds),
+          width: film.width,
+          height: film.height,
+        }}
+      />
     </>
   );
 }
