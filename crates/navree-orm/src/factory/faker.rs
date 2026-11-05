@@ -622,7 +622,7 @@ const FIRST_NAMES: &[&str] = &[
     "Chen", "Chiara", "Dalia", "Daniel", "Diego", "Elena", "Elif", "Emeka", "Farah", "Felix",
     "Freya", "Grace", "Hana", "Hugo", "Ines", "Isaac", "Ivan", "Jamal", "Jana", "Jonas", "Kai",
     "Kavya", "Kenji", "Lara", "Leila", "Liam", "Lucia", "Malik", "Maya", "Mei", "Mila", "Nadia",
-    "Navraj", "Navreet", "Nia", "Noah", "Olga", "Omar", "Priya", "Rafael", "Rosa", "Sana", "Sofia",
+    "Navdeep", "Neha", "Nia", "Noah", "Olga", "Omar", "Priya", "Rafael", "Rosa", "Sana", "Sofia",
     "Tariq", "Theo", "Uma", "Vera", "Wen", "Yara", "Yusuf", "Zara",
 ];
 

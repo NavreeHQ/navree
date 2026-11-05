@@ -3,15 +3,8 @@ import { execFileSync } from "node:child_process";
 import { site } from "../../site.config.ts";
 
 /**
- * The changelog, written from the commit history at build time: every
- * `feat` and `fix` commit of the branch the site is built from (`main` on
- * the server), grouped by day, newest first. Nothing is typed in, so every
- * deploy shows what changed since the last one.
- *
- * A subject is kept as the commit wrote it (conventional commits:
- * `feat(ui): ...`), without its type and scope, which become the entry's
- * label. Subjects that name internal tooling are left out, and so are changes
- * to an app or crate that is no longer in the repository (`RETIRED_SCOPES`).
+ * The changelog: one entry per release, newest first. Navree 1.0 is the
+ * first release, so it is the only entry; later releases add theirs here.
  */
 export type Change = {
   /** Full commit id. */
@@ -32,71 +25,31 @@ export type Change = {
 
 export type Day = { day: string; changes: Change[]; updated: string };
 
-const SUBJECT = /^(feat|fix)(?:\(([^)]*)\))?(!)?:\s+(.+)$/;
-/**
- * Subjects that name how the project was run, not what it does, or a name the
- * project no longer uses, are left out. The words are written in pieces so
- * that this file never spells them.
- */
-const INTERNAL = new RegExp(
-  ["wi" + "p", "work" + "tree", "navree-" + "internal", "hf" + "v3", "ke" + "el", "na" + "vis", "super" + "dev"].join("|"),
-  "i",
-);
-/**
- * The scopes of apps and crates that have left the repository. History keeps their
- * commits, but a changelog that lists work on something a reader can no longer find
- * only confuses. `scripts/check-fresh.ts` fails when a scope listed here is still in
- * the tree or still on the page, so the list cannot go stale. The names are written
- * in pieces, like those above, so that searching the repository for a removed name
- * finds only history.
- */
-export const RETIRED_SCOPES: readonly string[] = ["campaign-" + "demo"];
-const MAX_SUBJECT = 240;
+/** Scopes of apps and crates that have left the repository; none so far. */
+export const RETIRED_SCOPES: readonly string[] = [];
 
-/** A subject cut at a word boundary to at most `MAX_SUBJECT` characters. */
-function shorten(subject: string): string {
-  if (subject.length <= MAX_SUBJECT) return subject;
-  return `${subject.slice(0, MAX_SUBJECT - 1).replace(/[\s,;:]+\S*$/, "")}…`;
-}
+/** Every release, newest first. */
+const RELEASES: Change[] = [
+  {
+    hash: "124d1fa8b90db30def87d0e1dd4c6d57c43a89f7",
+    type: "feat",
+    scope: "",
+    subject: "Navree 1.0, the first release.",
+    date: "2026-11-03T19:31:00+05:30",
+    day: "2026-11-03",
+    breaking: false,
+  },
+];
 
-/** Every `feat` and `fix` commit reachable from `HEAD`, newest first. Empty where there is no git history. */
-export function changes(cwd: string = process.cwd()): Change[] {
-  let log = "";
-  try {
-    log = execFileSync("git", ["log", "--no-merges", "--format=%H%x1f%cI%x1f%s", "HEAD"], {
-      cwd,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    return [];
-  }
-  const out: Change[] = [];
-  for (const line of log.split("\n")) {
-    const [hash, date, subject] = line.split("\x1f");
-    if (!hash || !date || !subject) continue;
-    const m = SUBJECT.exec(subject);
-    if (!m || INTERNAL.test(subject)) continue;
-    const scope = m[2] ?? "";
-    if (RETIRED_SCOPES.includes(scope)) continue;
-    out.push({
-      hash,
-      type: m[1] as "feat" | "fix",
-      scope,
-      subject: shorten(m[4]),
-      date,
-      day: date.slice(0, 10),
-      breaking: m[3] === "!",
-    });
-  }
-  return out;
+/** Every release's entries, newest first. */
+export function changes(): Change[] {
+  return RELEASES;
 }
 
 /** The changes grouped by day, newest day first. */
-export function changelog(cwd?: string): Day[] {
+export function changelog(): Day[] {
   const days = new Map<string, Change[]>();
-  for (const change of changes(cwd)) days.set(change.day, [...(days.get(change.day) ?? []), change]);
+  for (const change of changes()) days.set(change.day, [...(days.get(change.day) ?? []), change]);
   return [...days]
     .sort(([a], [b]) => (a < b ? 1 : -1))
     .map(([day, list]) => ({ day, changes: list, updated: list.reduce((a, b) => (a.date > b.date ? a : b)).date }));

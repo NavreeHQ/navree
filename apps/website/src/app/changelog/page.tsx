@@ -2,50 +2,34 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { InlineMarkdown } from "@/components/inline-markdown";
-import { buildInfo, changelog, commitUrl, formatDay } from "@/lib/changelog";
+import { changelog, commitUrl, formatDay } from "@/lib/changelog";
 import { changelogFeed, pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Changelog: every new feature and fix",
-  description: `Every new feature and fix in ${site.name}, newest first, listed by day from the commit history of the main branch and rebuilt with every deploy.`,
+  title: "Changelog: every Navree release",
+  description: `Every ${site.name} release, newest first, with a link to its release notes. ${site.name} 1.0 is the first release.`,
   path: "/changelog/",
 });
 
 const label = { feat: "Feature", fix: "Fix" } as const;
 
-/**
- * `/changelog/`: the `feat` and `fix` commits of the branch the site is built
- * from, by day, newest first (`src/lib/changelog.ts`). Nothing is typed in,
- * so each deploy shows what changed since the one before.
- */
+/** `/changelog/`: every release, newest first (`src/lib/changelog.ts`). */
 export default function ChangelogPage() {
   const days = changelog();
   const total = days.reduce((n, day) => n + day.changes.length, 0);
-  const build = buildInfo();
   return (
     <>
       <header className="container-site pt-14 pb-10 sm:pt-20 lg:pt-24">
         <p className="eyebrow">Changelog</p>
         <h1 className="mt-7 max-w-[18ch] text-display-xl font-semibold text-balance text-fg">What changed in {site.name}.</h1>
         <p className="mt-7 max-w-[40rem] text-lg leading-relaxed text-pretty text-fg-2">
-          Every new feature and fix on the main branch, newest first. The list is written from the commit history when the
-          site is built, so each deploy adds what changed. Each entry links to its commit on GitHub.
+          Every release, newest first. {site.name} 1.0 is the first release; each release from now on is listed here with
+          what it adds and fixes.
         </p>
         <p className="mt-5 max-w-[40rem] text-[0.9375rem] leading-relaxed text-fg-3">
-          {total} changes on {days.length} days.
-          {build.sha ? (
-            <>
-              {" "}
-              Built from commit{" "}
-              <a href={commitUrl(build.sha)} className="link font-mono text-[0.8125rem]">
-                {build.sha}
-              </a>{" "}
-              of{" "}
-              <time dateTime={build.date}>{formatDay(build.date.slice(0, 10))}</time>.
-            </>
-          ) : null}{" "}
+          {total} {total === 1 ? "release" : "releases"} so far.{" "}
           <a href={changelogFeed.url} className="link">
             Follow it with the Atom feed
           </a>

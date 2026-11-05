@@ -232,7 +232,7 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
     "",
     `- [Every docs page in one file](${site.url}/llms-full.txt): the whole documentation as Markdown, in the order of the sidebar.`,
     `- [Sitemap](${site.url}/sitemap.xml): every page of the site with the date it last changed.`,
-    `- [Changelog feed](${site.url}/changelog/feed.xml): every new feature and fix, by day, as an Atom feed.`,
+    `- [Changelog feed](${site.url}/changelog/feed.xml): every release, as an Atom feed.`,
   );
   if (skills.length) {
     out.push(

@@ -39,7 +39,7 @@ export function GET() {
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>${site.url}/changelog/</id>
   <title>${escape(`${site.name} changelog`)}</title>
-  <subtitle>${escape(`Every new feature and fix in ${site.name}, by day.`)}</subtitle>
+  <subtitle>${escape(`Every ${site.name} release, newest first.`)}</subtitle>
   <link rel="self" type="application/atom+xml" href="${site.url}/changelog/feed.xml"/>
   <link rel="alternate" type="text/html" href="${site.url}/changelog/"/>
   <updated>${updated}</updated>

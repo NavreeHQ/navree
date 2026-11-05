@@ -53,6 +53,6 @@ export const mainPages: { title: string; path: string; summary: string }[] = [
   { title: "Performance", path: "/performance/", summary: "Measured results on a CRM-style API, with the workload, the method and how to repeat the run." },
   { title: "Showcase", path: "/showcase/", summary: "The reference CRM with its Next.js and Nuxt front ends, example apps drawn with Navree UI, and the first-party tools built on Navree." },
   { title: "A store's back office", path: "/showcase/store/", summary: "An example app on Navree UI at 200,000 orders: cursor pages, an order drawer, refunds checked on the server, a live feed, and its measured speed." },
-  { title: "Changelog", path: "/changelog/", summary: "Every new feature and fix, by day, written from the commit history at each deploy." },
+  { title: "Changelog", path: "/changelog/", summary: "Every release, newest first; Navree 1.0 is the first." },
   { title: "About", path: "/about/", summary: "Who built Navree, where the name comes from, and the lessons of fifteen years and six startups behind each part of it." },
 ];

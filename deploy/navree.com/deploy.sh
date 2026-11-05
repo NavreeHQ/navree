@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Deploys navree.com (the website and docs) on the production server, the
-# same way twofoldvault.com is laid out there:
+# Deploys navree.com (the website and docs) on the production server:
 #
 #   /home/forge/navree.com/repo        a clone of NavreeHQ/navree (build workspace)
 #   /home/forge/navree.com/releases/   one directory per deploy (the static export)
