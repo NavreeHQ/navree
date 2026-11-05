@@ -14,6 +14,8 @@ export default defineNuxtPlugin({
   dependsOn: ["navree-query"],
   setup(nuxtApp) {
     const router = useRouter();
+    // Taken here, inside the plugin's setup: the handler below runs outside Nuxt's context.
+    const auth = useNavreeAuth();
     apiEvents.onUnauthorized = () => {
       nuxtApp.$queryClient.setQueryData(keys.auth.user, null);
       const { pathname, search } = window.location;
@@ -21,7 +23,7 @@ export default defineNuxtPlugin({
       const next = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
       // The module's sign-in state still holds the user: asking again ends it (the session is gone) and drops
       // their abilities, so the next person to sign in does not start with them.
-      void nuxtApp.$navree.auth
+      void auth
         .load()
         .catch(() => undefined)
         .finally(() => router.replace(`/login${next}`));

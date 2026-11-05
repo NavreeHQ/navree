@@ -19,7 +19,10 @@ type Call = { route: string; body: Record<string, unknown> };
  * abilities the module loads after a sign-in, which are empty.
  */
 function stubBff(scripted: Record<string, (body: Record<string, unknown>) => Response>): Call[] {
-  const routes = { "GET /api/me/abilities": () => Response.json([]), ...scripted };
+  const routes: Record<string, (body: Record<string, unknown>) => Response> = {
+    "GET /api/me/abilities": () => Response.json([]),
+    ...scripted,
+  };
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
