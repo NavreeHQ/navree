@@ -5,14 +5,20 @@
  * sizes and alt texts (`public/images/showcase/manifest.json`).
  *
  *   cargo run --release -p store-demo        # the store, on http://127.0.0.1:8095
+ *   BOARD_SIMULATOR=off cargo run -p board-demo             # the board, on http://127.0.0.1:8097
+ *   INBOX_SIMULATOR=off cargo run --release -p inbox-demo   # the inbox, on http://127.0.0.1:8096
+ *                                            # (it writes its 100,000 conversations first)
  *   pnpm build && pnpm serve                 # the preview pages, on http://127.0.0.1:3211
  *   node scripts/showcase-images.ts          # every picture
  *   node scripts/showcase-images.ts store-drawer tile-phone   # only these
+ *   node scripts/showcase-images.ts board-columns board-card board-card-phone   # the board's
+ *   node scripts/showcase-images.ts inbox-panes inbox-phone                     # the inbox's
  *
- * `STORE_URL` and `SITE_URL` point it at other addresses. The full-size PNGs
- * stay in `target/showcase-raw/` (git-ignored). Look at every picture before
- * you commit it: the store's simulator places orders while it runs, so a
- * second run draws other orders.
+ * `STORE_URL`, `BOARD_URL`, `INBOX_URL` and `SITE_URL` point it at other
+ * addresses. The full-size PNGs stay in `target/showcase-raw/` (git-ignored).
+ * Look at every picture before you commit it: the store's simulator places
+ * orders while it runs, so a second run draws other orders. Each picture keeps
+ * the day it was captured, which the pages print under it.
  */
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -26,6 +32,8 @@ const OUT = path.join(WEBSITE, "public", "images", "showcase");
 const RAW = path.join(REPO, "target", "showcase-raw");
 const MANIFEST = path.join(OUT, "manifest.json");
 const STORE = process.env.STORE_URL ?? "http://127.0.0.1:8095";
+const BOARD = process.env.BOARD_URL ?? "http://127.0.0.1:8097";
+const INBOX = process.env.INBOX_URL ?? "http://127.0.0.1:8096";
 const SITE = process.env.SITE_URL ?? "http://127.0.0.1:3211";
 
 // sharp ships with Next; resolve it from there rather than adding a dependency.
@@ -72,6 +80,8 @@ export type ManifestImage = {
   width: number;
   height: number;
   alt: string;
+  /** The day it was captured (`2026-11-04`). */
+  captured?: string;
   avif: { src: string; width: number }[];
   webp: { src: string; width: number }[];
 };
@@ -89,6 +99,21 @@ const twoDays = () => `${STORE}/orders?filter%5Bplaced_on%5D%5Bgte%5D=${istDate(
 async function openFirstOrder(page: Page) {
   await page.locator("table tbody tr").first().locator("button").first().click();
   await page.locator('[data-slot="timeline"]').first().waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+}
+
+/** Opens the card "Fix the sign-in redirect on Android" (card 10 of the seed) in its drawer, and waits for the drawer to stand still. */
+async function openBoardCard(page: Page) {
+  await page.getByRole("button", { name: "Fix the sign-in redirect on Android", exact: true }).click();
+  await page.locator("dialog#card[open]").waitFor();
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    ),
+  );
   await page.waitForTimeout(400);
 }
 
@@ -165,6 +190,49 @@ const captures: Capture[] = [
     viewport: { width: 1440, height: 900 },
     scale: 2,
     widths: [640, 960, 1440],
+  },
+  {
+    key: "board-columns",
+    alt: "Rangla Looms' board for its Taana 3.2 release: five columns, Backlog, Ready, In progress, Review and Done, each with its count and limit, and cards with their labels, due dates, checklists and assignees",
+    url: () => `${BOARD}/`,
+    viewport: { width: 1440, height: 900 },
+    scale: 2,
+    widths: [640, 960, 1440],
+  },
+  {
+    key: "board-card",
+    alt: "The same board with a card open in a drawer over it: its labels and due date, who has it, a checklist, its comments and what happened to it",
+    url: () => `${BOARD}/`,
+    viewport: { width: 1440, height: 900 },
+    scale: 2,
+    prepare: openBoardCard,
+    widths: [640, 960, 1440, 2880],
+  },
+  {
+    key: "board-card-phone",
+    alt: "The same card on a phone, full width: its labels, assignee, checklist and comments stacked",
+    url: () => `${BOARD}/`,
+    viewport: { width: 390, height: 844 },
+    scale: 3,
+    prepare: openBoardCard,
+    widths: [390, 780],
+  },
+  {
+    key: "inbox-panes",
+    alt: "Sukhna Labs' support inbox in three panes: the conversations with their channel, priority and time left to answer, an open conversation with an internal note and a file, and the customer's plan, history and tags",
+    // Conversation 19 is one of the hand-written ones, with a note, a file and a few turns.
+    url: () => `${INBOX}/inbox/19`,
+    viewport: { width: 1440, height: 900 },
+    scale: 2,
+    widths: [640, 960, 1440, 2880],
+  },
+  {
+    key: "inbox-phone",
+    alt: "The same conversation on a phone: one pane at a time, with its messages, an internal note and a file, and a link back to the conversations",
+    url: () => `${INBOX}/inbox/19`,
+    viewport: { width: 390, height: 844 },
+    scale: 3,
+    widths: [390, 780],
   },
   {
     key: "crm-pipeline",
@@ -301,7 +369,12 @@ async function main() {
         await page.screenshot({ path: png, clip: capture.clip ? await capture.clip(page) : undefined, animations: "disabled" });
         await context.close();
       }
-      images.set(capture.key, { key: capture.key, alt: capture.alt, ...(await encode(capture.key, png, capture.widths)) });
+      images.set(capture.key, {
+        key: capture.key,
+        alt: capture.alt,
+        captured: istDate(0),
+        ...(await encode(capture.key, png, capture.widths)),
+      });
     }
   } finally {
     await browser.close();

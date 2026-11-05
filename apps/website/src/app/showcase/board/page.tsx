@@ -4,9 +4,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
+import { boardNumbers } from "@/components/showcase/board-numbers";
 import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
 import { example } from "@/components/ui-docs/data";
 import { PreviewFrame } from "@/components/ui-docs/preview-frame";
+import { indian } from "@/lib/format";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
@@ -16,8 +18,7 @@ const APP = "apps/board-demo";
 
 export const metadata: Metadata = pageMetadata({
   title: "A team's board, built on Navree",
-  description:
-    "A product board of 20,000 cards: drag, touch and keyboard moves checked by the server, live for every viewer over server-sent events, columns loaded a page at a time.",
+  description: `A product board of ${indian(boardNumbers.cards)} cards: drag, touch and keyboard moves checked by the server, live for every viewer over server-sent events, columns loaded a page at a time.`,
   path: "/showcase/board/",
 });
 
@@ -43,12 +44,30 @@ function Screen({ id, title, caption }: { id: string; title: string; caption: Re
   );
 }
 
-/** The figures measured on the running app. */
+const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
+
+/** The figures measured on the running app, from `board-numbers.ts`. */
 const numbers = [
-  { value: "20,000", label: "cards", text: "with 40,000 comments and 92,000 lines of history, written at start in about 2 s" },
-  { value: "7.6 KB", label: "first page, brotli", text: "155 KB of HTML: the first 20 cards of each column" },
-  { value: "5.5 KB", label: "sortable module, brotli", text: "loaded only by pages that have a sortable" },
-  { value: "22,651", label: "DOM nodes", text: "after scrolling two columns of thousands to their cap of 200 cards each" },
+  {
+    value: indian(boardNumbers.cards),
+    label: "cards",
+    text: `with ${indian(boardNumbers.comments)} comments and ${indian(boardNumbers.history)} lines of history, written at start in about ${boardNumbers.seedSeconds} s`,
+  },
+  {
+    value: `${boardNumbers.firstPage.brotliKb} KB`,
+    label: "first page, brotli",
+    text: `${kb(boardNumbers.firstPage.htmlBytes)} of HTML: the first ${boardNumbers.page} cards of each column`,
+  },
+  {
+    value: `${(boardNumbers.sortableBrotli / 1024).toFixed(1)} KB`,
+    label: "sortable module, brotli",
+    text: "loaded only by pages that have a sortable",
+  },
+  {
+    value: indian(boardNumbers.nodes),
+    label: "DOM nodes",
+    text: `after scrolling two columns of thousands to their cap of ${boardNumbers.cap} cards each`,
+  },
 ];
 
 const plans = [
@@ -91,7 +110,7 @@ export default function BoardShowcasePage() {
             </div>
             <div className="lg:col-span-5 lg:pb-2">
               <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-                A product team plans a release on five columns of 20,000 cards. You move a card with a mouse, a finger or the
+                A product team plans a release on five columns of {indian(boardNumbers.cards)} cards. You move a card with a mouse, a finger or the
                 keys and it lands at once; your server checks the move against the board as it is now, and every other open board
                 slides the card into place. It is one Rust crate on SQLite, in the repository.
               </p>
@@ -166,7 +185,7 @@ export default function BoardShowcasePage() {
           title="Twenty thousand cards, read a page at a time."
           lead={
             <p>
-              Each column draws its first 20 cards and loads more as it is scrolled, by a cursor on an index, up to 200 in the page. A
+              Each column draws its first {boardNumbers.page} cards and loads more as it is scrolled, by a cursor on an index, up to {boardNumbers.cap} in the page. A
               drop below the last card drawn lands right after it, wherever that is in the column. Measured on a laptop, a debug build,
               over loopback.
             </p>

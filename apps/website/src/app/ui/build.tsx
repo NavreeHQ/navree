@@ -8,7 +8,7 @@ import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
 import { BrowserFrame, PhoneFrame } from "@/components/showcase/frames";
 import { Preview } from "@/components/showcase/preview";
 import { RichText } from "@/components/showcase/rich-text";
-import { ShowcaseImage } from "@/components/showcase/showcase-image";
+import { ShowcaseImage, showcaseCaptured } from "@/components/showcase/showcase-image";
 import { example } from "@/components/ui-docs/data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cut, excerpt } from "@/lib/excerpt";
@@ -125,7 +125,7 @@ function AppBlock({ app, n }: { app: Showcase; n: number }) {
           {app.screenshot.closeUp ? (
             <div className="absolute -bottom-10 left-[3.5%] hidden w-[11.5rem] lg:block xl:w-[13rem]">
               <PhoneFrame className="shadow-float">
-                <ShowcaseImage name={app.screenshot.closeUp} sizes="208px" />
+                <ShowcaseImage name={app.screenshot.closeUp.image} sizes="208px" />
               </PhoneFrame>
             </div>
           ) : null}
@@ -137,8 +137,8 @@ function AppBlock({ app, n }: { app: Showcase; n: number }) {
           )}
         >
           {app.name} running on a laptop with <code className="inline-code">{app.run}</code>
-          {app.screenshot.closeUp ? <span className="max-lg:hidden">, and the same drawer on a phone</span> : null}. A
-          screenshot, taken on {longDate(app.numbers.date)}.
+          {app.screenshot.closeUp ? <span className="max-lg:hidden">, and {app.screenshot.closeUp.what}</span> : null}. A
+          screenshot, taken on {longDate(showcaseCaptured(app.screenshot.image))}.
         </figcaption>
       </figure>
 

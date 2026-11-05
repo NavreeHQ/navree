@@ -13,6 +13,8 @@ export type ShowcaseImageData = {
   width: number;
   height: number;
   alt: string;
+  /** The day it was captured (`2026-11-04`); the manifest's own date for a picture captured before this was kept. */
+  captured?: string;
   avif: { src: string; width: number }[];
   webp: { src: string; width: number }[];
 };
@@ -24,6 +26,11 @@ export function showcaseImage(key: string): ShowcaseImageData {
   const image = images.get(key);
   if (!image) throw new Error(`showcase image "${key}" is not in public/images/showcase/manifest.json; run scripts/showcase-images.ts`);
   return image;
+}
+
+/** The day the picture with this key was captured, as `2026-11-04`. */
+export function showcaseCaptured(key: string): string {
+  return showcaseImage(key).captured ?? manifest.captured;
 }
 
 const srcSet = (list: { src: string; width: number }[]) => list.map((v) => `${v.src} ${v.width}w`).join(", ");

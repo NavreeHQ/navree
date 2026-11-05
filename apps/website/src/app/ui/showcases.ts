@@ -6,7 +6,10 @@
  *
  * - `showcases`: apps drawn with Navree UI. Each gets a card at the top of
  *   "Build anything" and a block below it: its screenshot, the code of its
- *   hardest part, what it proves, its numbers and its screens to try.
+ *   hardest part, what it proves, its numbers and its screens to try. The same
+ *   entries make the cards on `/showcase/` and on the homepage, the answer
+ *   about what you can build in the Navree UI questions, and the page list of
+ *   `llms.txt`.
  * - `otherFrontEnds`: apps whose screens another front end draws. Each gets a
  *   card only.
  *
@@ -16,6 +19,9 @@
 import store from "@content/showcase/store.json";
 import toolkit from "@content/ui/toolkit.json";
 
+import { appConstant } from "@/components/showcase/app-constants";
+import { boardNumbers } from "@/components/showcase/board-numbers";
+import { inboxNumbers } from "@/components/showcase/inbox-numbers";
 import type { Excerpt, ExcerptPart } from "@/lib/excerpt";
 import { indian } from "@/lib/format";
 import { uiRenderCeilings } from "@/lib/ui-page-data";
@@ -68,8 +74,8 @@ export type Showcase = AppCard & {
   facts: { label: string; value: string }[];
   /** One line of measured numbers, the file they come from and when they were taken. */
   numbers: { text: string; source: string; date: string };
-  /** The app running, as captured, and an optional close-up (keys of the picture manifest). */
-  screenshot: { image: string; address: string; closeUp?: string };
+  /** The app running, as captured, and an optional close-up on a phone (keys of the picture manifest, and what the close-up shows). */
+  screenshot: { image: string; address: string; closeUp?: { image: string; what: string } };
   /** The code of its hardest part, with a sentence on what it does. */
   code: Excerpt & { caption: string };
   /** One to four ui-docs examples drawn from its views; the first shows before anyone clicks. */
@@ -79,7 +85,12 @@ export type Showcase = AppCard & {
 };
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
+const ms = (n: number) => `${Math.round(n)} ms`;
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
+/** A count the numbers file writes for reading (`5,499,392`), as a number. */
+const count = (text: string) => Number(text.replace(/,/g, ""));
+/** Conversations on the inbox's full desk: the app's own constant. */
+const conversations = appConstant("apps/inbox-demo/src/scale.rs", "FULL");
 
 const orders = store.pages.find((p) => p.name === "Orders");
 if (!orders) throw new Error("showcases: content/showcase/store.json has no Orders page");
@@ -115,7 +126,11 @@ export const showcases: Showcase[] = [
       source: "content/showcase/store.json",
       date: store.measured_on,
     },
-    screenshot: { image: "store-drawer", address: "127.0.0.1:8095/orders", closeUp: "store-drawer-phone" },
+    screenshot: {
+      image: "store-drawer",
+      address: "127.0.0.1:8095/orders",
+      closeUp: { image: "store-drawer-phone", what: "the same drawer on a phone" },
+    },
     code: {
       file: "apps/store-demo/src/views/order.rs",
       parts: [
@@ -160,6 +175,168 @@ export const showcases: Showcase[] = [
         caption:
           "Each row has a form of its own. In the app, the server adds the units, refuses a number out of range, and the stream redraws the row.",
         file: "src/views/inventory.rs",
+      },
+    ],
+  },
+  {
+    id: "board",
+    slug: "board",
+    app: "board-demo",
+    name: "Rangla Looms",
+    kind: "A team's board",
+    ui: "Navree UI",
+    hardest: `${indian(boardNumbers.cards)} cards moved by mouse, touch or keys, every move checked on the server`,
+    still: "board-columns",
+    title: `A board your whole team moves cards on, at ${indian(boardNumbers.cards)} cards`,
+    lead: `The product team of an invented fabric exporter in Ludhiana plans its next release on five columns of ${indian(boardNumbers.cards)} cards. You move a card with a mouse, a finger or the keys and it lands at once; the server checks the move against the board as it is now, and every other open board slides the card into place.`,
+    summary: `A product team's board for an invented fabric exporter in Ludhiana: five columns of ${indian(boardNumbers.cards)} cards moved by mouse, touch or keys, every move checked by the server, and every open board following it live.`,
+    proves: [
+      "A [Sortable](/docs/components/sortable/) board: a card moves by mouse, finger or keys, and every step is said to screen readers",
+      "Moves [checked by the server](/docs/ui/drag-and-drop/) in a transaction the toolkit begins: a stale move, a full column or a card a member may not close is refused and put back",
+      `Columns of thousands load a page at a time by a cursor: ${boardNumbers.page} cards first, up to ${boardNumbers.cap} in the page`,
+      "Other people's moves arrive live over [server-sent events](/docs/ui/regions/), and each open board slides the card into place",
+      "A card opens in a [drawer](/docs/components/sheet/) over the board, with its checklist, comments and history loading as you scroll",
+    ],
+    facts: [
+      { label: "Data", value: `SQLite, ${indian(boardNumbers.cards)} cards` },
+      { label: "Live", value: "Server-sent events" },
+      { label: "Input", value: "Mouse, touch and keys" },
+      { label: "Screens", value: "Board, card drawer, palette" },
+    ],
+    numbers: {
+      text: `The first page is ${boardNumbers.firstPage.brotliKb} KB with brotli (${Math.round(boardNumbers.firstPage.htmlBytes / 1024)} KB of HTML: the first ${boardNumbers.page} cards of each column), the sortable module ${kb(boardNumbers.sortableBrotli)}, and two columns scrolled to their cap of ${boardNumbers.cap} cards hold ${indian(boardNumbers.nodes)} nodes.`,
+      source: "src/components/showcase/board-numbers.ts",
+      date: boardNumbers.measured,
+    },
+    screenshot: {
+      image: "board-card",
+      address: "127.0.0.1:8097/",
+      closeUp: { image: "board-card-phone", what: "the same card on a phone" },
+    },
+    code: {
+      file: "apps/board-demo/src/pages.rs",
+      parts: [
+        { from: "/// `POST /board/moves`", to: "async fn moves(" },
+        { from: "// The toolkit's transaction", to: "let reply = mv.refused" },
+      ],
+      more: true,
+      caption:
+        "The page moves the card; this handler decides. A drop posts a `Move`, and `Move::transaction` begins it at READ COMMITTED with the two columns locked first, so a stale move, a full column or a card a member may not close is refused in the transaction that would have written it. A refusal puts the card back.",
+    },
+    run: "cargo run -p board-demo",
+    views: [
+      {
+        example: "build-anything/board-columns",
+        label: "Board",
+        title: "A product team's board: five columns of cards with labels, due dates, assignees and limits, rendered by navree-ui",
+        caption:
+          "The app's own page, drawn from its seed. Replayed in your browser: two cards a teammate moves slide into new columns. In the app, the server streams every move over SSE.",
+        file: "src/views/board.rs",
+      },
+      {
+        example: "build-anything/board-card",
+        label: "Card",
+        title: "A card's details: description, checklist, comments, a move control and its history, rendered by navree-ui",
+        caption: "What the drawer shows. Its checklist lines move the same way the cards do, and older comments load as you scroll.",
+        file: "src/views/card.rs",
+        interactive: true,
+      },
+      {
+        example: "build-anything/board-drag",
+        label: "Mid-move",
+        title: "A card picked up with the keys and carried into Review, the board saying where it is, rendered by navree-ui",
+        caption:
+          "Part way through a move. With the keys, each step is said: “Position 2 of 2 in Review.” With a mouse or a finger, a copy follows you and the cards make room.",
+        file: "src/views/board.rs",
+      },
+      {
+        example: "build-anything/board-sync",
+        label: "Two screens",
+        title: "Two people's screens of one board, a card arriving on the second, rendered by navree-ui",
+        caption:
+          "Two viewers. Gurpreet moves a card to Review; on Harleen's screen it slides in, replayed here. In the app, a server-sent event tells her board to fetch itself again.",
+        file: "src/views/board.rs",
+      },
+    ],
+  },
+  {
+    id: "inbox",
+    slug: "inbox",
+    app: "inbox-demo",
+    name: "Sukhna Labs",
+    kind: "A support inbox",
+    ui: "Navree UI",
+    hardest: `${indian(conversations)} conversations, loaded as they are read and live over a stream`,
+    still: "inbox-panes",
+    title: `A support inbox that stays fast at ${indian(conversations)} conversations`,
+    lead: "The help desk of an invented software company in Mohali, in three panes you resize: a thread with notes and files, the customer beside it, and new messages arriving while you type. Every list loads as it is read, so the first screen costs one page whatever the desk holds.",
+    summary: `The support desk of an invented software company in Mohali: three panes you resize, a thread with notes and files, the customer beside it, new messages arriving while you type, and ${indian(conversations)} conversations read a page at a time.`,
+    proves: [
+      "A [SplitPane](/docs/components/split-pane/) dragged or moved with the keys, its sizes kept for each agent on the server",
+      "A [LazyList](/docs/components/lazy-list/) that pages by cursor: fifty conversations, thirty messages, older ones above",
+      "Live over server-sent events: only what changed is sent, and a row changes where it stands, so your focus stays",
+      "Assign through a [Combobox](/docs/components/combobox/) searched on the server, snooze with a [DatePicker](/docs/components/date-picker/), act from the [command palette](/docs/components/command/)",
+      "Single keys you can turn off, and every action as a link or a form with JavaScript off",
+    ],
+    facts: [
+      { label: "Data", value: `SQLite, ${indian(conversations)} conversations` },
+      { label: "Live", value: "Server-sent events" },
+      { label: "Input", value: "Reply, assign, snooze, keys" },
+      { label: "Screens", value: "Three panes, thread, palette" },
+    ],
+    numbers: {
+      text: `The first screen paints in ${ms(inboxNumbers.firstScreen.largest_paint_ms)} from ${kb(inboxNumbers.firstScreen.bytes_total)}, a 100-message conversation opens in ${ms(inboxNumbers.openThread.largest_paint_ms)}, and scrolling to ${indian(inboxNumbers.flat.heldTo)} conversations never keeps more than ${indian(inboxNumbers.flat.maxRows)} rows in the page, on a desk of ${indian(count(inboxNumbers.messages))} messages.`,
+      source: "src/components/showcase/inbox-numbers.ts",
+      date: inboxNumbers.measured,
+    },
+    screenshot: {
+      image: "inbox-panes",
+      address: "127.0.0.1:8096/inbox/19",
+      closeUp: { image: "inbox-phone", what: "the same conversation on a phone" },
+    },
+    code: {
+      file: "apps/inbox-demo/src/views/list.rs",
+      parts: [
+        { from: "/// The list: lazy, live", to: ") -> LazyList {" },
+        { from: "let mut list = LazyList::new(LIST", to: ".max(300)" },
+        { from: "if page.more_after", to: "}" },
+      ],
+      more: true,
+      caption: `The list is a \`LazyList\` that is lazy and live. \`since\` and \`live_from\` say which revision it holds and which stream to follow, \`max(300)\` lets the far end leave the page, and the cursors of its first and last rows ask for the next page, so page 400 costs what page 1 does, with ${indian(conversations)} conversations behind it.`,
+    },
+    run: "cargo run --release -p inbox-demo",
+    views: [
+      {
+        example: "build-anything/inbox-panes",
+        label: "Inbox",
+        title:
+          "The support inbox: the conversations, an open conversation with an internal note and a file, and the customer's plan, history and tags, rendered by navree-ui",
+        caption:
+          "Replayed in your browser: a new conversation joins the top and the customer writes again. In the app, the server streams them over SSE.",
+        file: "src/views/inbox.rs",
+      },
+      {
+        example: "build-anything/inbox-thread",
+        label: "100 messages",
+        title: "A conversation of 100 messages opened at its newest thirty, with a link to earlier messages, rendered by navree-ui",
+        caption:
+          "A long conversation opens at its newest thirty messages; older ones load as you scroll up, and you keep your place. Replayed in your browser: in the app each page comes from the server by cursor.",
+        file: "src/views/thread.rs",
+      },
+      {
+        example: "build-anything/inbox-phone",
+        label: "On a phone",
+        title: "The inbox on a phone: one pane at a time, with a link back to the conversations, rendered by navree-ui",
+        caption: "On a phone the panes show one at a time, with links between them.",
+        file: "src/views/inbox.rs",
+      },
+      {
+        example: "build-anything/inbox-palette",
+        label: "Command palette",
+        title: "The command palette: actions on the open conversation, saved replies and places to go, rendered by navree-ui",
+        caption: "Ctrl+K: assign, close, snooze, change the priority, or drop a saved reply into what you are writing.",
+        file: "src/views/inbox.rs",
+        interactive: true,
       },
     ],
   },
