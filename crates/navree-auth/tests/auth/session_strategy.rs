@@ -64,20 +64,19 @@ async fn token(client: &TestClient) -> String {
     client.cookie(XSRF).expect("the XSRF-TOKEN cookie")
 }
 
-/// Posts the sign-in form as a browser without JavaScript does.
+/// Posts the sign-in form as a browser without JavaScript does: an unchecked
+/// "remember me" box is left out of the post.
 async fn sign_in(client: &TestClient, email: &str, password: &str, remember: bool) -> TestResponse {
     let csrf = token(client).await;
-    let remember = if remember { "true" } else { "" };
+    let mut fields = vec![("email", email), ("password", password)];
+    if remember {
+        fields.push(("remember", "true"));
+    }
+    fields.extend([("next", "/deals/42"), ("_csrf", csrf.as_str())]);
     client
         .post("/sign-in")
         .header("accept", "text/html")
-        .form(&[
-            ("email", email),
-            ("password", password),
-            ("remember", remember),
-            ("next", "/deals/42"),
-            ("_csrf", csrf.as_str()),
-        ])
+        .form(&fields)
         .send()
         .await
 }
