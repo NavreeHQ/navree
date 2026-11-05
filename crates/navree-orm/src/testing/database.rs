@@ -1080,16 +1080,18 @@ mod tests {
     // CONN-100
     #[test]
     #[should_panic(
-        expected = "NAVREE_TEST_POSTGRES_URL is not set (NAVREE_TEST_REQUIRE_SERVICES=1)"
+        expected = "NAVREE_TEST_EXAMPLE_URL is not set (NAVREE_TEST_REQUIRE_SERVICES=1)"
     )]
     fn a_test_that_would_skip_fails_when_the_servers_are_required() {
-        skip_unless(true, "NAVREE_TEST_POSTGRES_URL is not set");
+        skip_unless(true, "NAVREE_TEST_EXAMPLE_URL is not set");
     }
 
     // CONN-100
     #[test]
     fn a_test_that_would_skip_skips_when_they_are_not() {
-        skip_unless(false, "NAVREE_TEST_POSTGRES_URL is not set");
+        // A variable no suite reads, so the notice this prints is never a real
+        // server's (scripts/services/skips.allow lists it).
+        skip_unless(false, "NAVREE_TEST_EXAMPLE_URL is not set");
     }
 
     #[test]
