@@ -355,7 +355,9 @@ start() {
     curl --fail --silent --show-error --location --output "$PEBBLE_CA" \
       https://raw.githubusercontent.com/letsencrypt/pebble/main/test/certs/pebble.minica.pem
   fi
-  ready pebble navree-ci-pebble curl --fail --silent --cacert "$PEBBLE_CA" https://localhost:14000/dir
+  # --ssl-no-revoke: curl on Windows (Schannel) cannot check a private authority's
+  # revocation list and refuses the certificate; other TLS backends ignore it.
+  ready pebble navree-ci-pebble curl --fail --silent --ssl-no-revoke --cacert "$PEBBLE_CA" https://localhost:14000/dir
   ready nats navree-ci-nats tcp 4222
   ready mqtt navree-ci-mqtt tcp 1883
   ready kafka navree-ci-kafka docker exec navree-ci-kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server 127.0.0.1:9092
