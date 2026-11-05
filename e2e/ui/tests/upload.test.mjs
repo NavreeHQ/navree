@@ -55,9 +55,10 @@ inBrowsers(({ open, browserName }) => {
     // The module is ready: the native control lies over the drop area and takes the click.
     await page.waitForSelector("#up-photo[data-ready]");
     const covers = await page.evaluate(() => {
-      const zone = document.querySelector("#up-photo [data-slot=upload-zone]").getBoundingClientRect();
+      // The input fills the area inside the zone's border.
+      const zone = document.querySelector("#up-photo [data-slot=upload-zone]");
       const box = document.getElementById("up-photo-input").getBoundingClientRect();
-      return Math.abs(zone.width - box.width) < 2 && Math.abs(zone.height - box.height) < 2;
+      return Math.abs(zone.clientWidth - box.width) < 2 && Math.abs(zone.clientHeight - box.height) < 2;
     });
     assert.ok(covers, "the input covers the whole drop area");
     assert.equal(await page.locator("#up-photo [data-slot=upload-actions]").isVisible(), false, "no Send button while files go at once");

@@ -103,7 +103,8 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await page.locator("[data-slot=input-otp]:has(#otp-six) input").count(), 1);
     const read = await field.evaluate((e) => ({
       type: e.type,
-      autocomplete: e.autocomplete,
+      // The attribute: Firefox's property is empty for a token it does not fill itself.
+      autocomplete: e.getAttribute("autocomplete"),
       mode: e.inputMode,
       max: e.maxLength,
       min: e.minLength,
