@@ -348,10 +348,13 @@ impl Carousel {
                     .map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)),
             )
             .uses(Uses::CAROUSEL)
+            // The pause button has a place of its own before the slides: over them, it would
+            // cover a slide's corner and, on a short slide, the next button.
             .children((
+                rotation,
                 el("div")
                     .slot("carousel-viewport")
-                    .children((rotation, previous, next, track)),
+                    .children((previous, next, track)),
                 tabs,
             ))
             .into()

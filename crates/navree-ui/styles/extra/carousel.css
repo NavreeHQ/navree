@@ -35,7 +35,8 @@
 [data-slot=carousel][data-orientation=vertical] [data-carousel=prev],[data-slot=carousel][data-orientation=vertical] [data-carousel=next]{inset-inline:auto;left:50%;translate:-50% 0}
 [data-slot=carousel][data-orientation=vertical] [data-carousel=prev]{inset-block-start:.5rem}
 [data-slot=carousel][data-orientation=vertical] [data-carousel=next]{inset-block-start:auto;inset-block-end:.5rem}
-[data-slot=carousel] [data-carousel=rotation]{inset-block-start:.5rem;inset-inline-end:.5rem}
+/* The pause button is not over the track: it sits before it, at the end of the line. */
+[data-slot=carousel] > [data-carousel=rotation]{position:static;align-self:flex-end}
 [data-slot=carousel] [data-carousel=prev]:dir(rtl) svg,[data-slot=carousel] [data-carousel=next]:dir(rtl) svg{scale:-1 1}
 
 /* The pause button shows a pause until it has been pressed, then a play. */
