@@ -5,17 +5,17 @@ description: "How many reach each stage of an ordered process, with each stage's
 
 <UiPreview example="funnel/default" />
 
-`Funnel` shows how many reach each stage of a process that has an order: delivered, opened, clicked, converted. Each stage is a bar as wide as its share of the first stage, with its count and that share beside it. From the third stage on, a line under the bar says what share of the stage before it reached this one.
+`Funnel` shows how many reach each stage of a process that has an order: viewed, added to the cart, started checkout, paid. Each stage is a bar as wide as its share of the first stage, with its count and that share beside it. From the third stage on, a line under the bar says what share of the stage before it reached this one.
 
 ```rust
 use navree::ui::charts::*;
 use navree::ui::*;
 
-Funnel::new("Campaign funnel")
-    .stage(Stage::new("Delivered", 9_412))
-    .stage(Stage::new("Opened", 4_120))
-    .stage(Stage::new("Clicked", 812))
-    .stage(Stage::new("Converted", 96).tone(Tone::Success))
+Funnel::new("Checkout funnel")
+    .stage(Stage::new("Viewed a product", 9_412))
+    .stage(Stage::new("Added to cart", 4_120))
+    .stage(Stage::new("Started checkout", 2_204))
+    .stage(Stage::new("Paid", 1_460).tone(Tone::Success))
 ```
 
 It is an ordered list, so it reads in order without the picture. The stages step through one hue, faintest first, so the order is also in the color; the faintest still reaches 2:1 on the page or card under it. `Stage::tone(Tone)` colors a stage by what it means, such as the last as a success.

@@ -11,18 +11,18 @@ description: "One whole split into a few parts, with the total in the middle and
 use navree::ui::charts::*;
 use navree::ui::*;
 
-Donut::new("Delivery")
-    .part("Delivered", 9_412)
-    .part_tone("Bounced", 188, Tone::Danger)
-    .part("Deferred", 40)
-    .part("Rejected", 12)
+Donut::new("Payments")
+    .part("Succeeded", 9_412)
+    .part_tone("Failed", 188, Tone::Danger)
+    .part("Pending", 40)
+    .part("Refunded", 12)
 ```
 
 `.parts([("Desktop", 5_200), ("Phone", 3_800)])` adds parts from name and value pairs. `.part_tone(name, value, tone)` colors a part by what it means, and the legend adds the tone's icon.
 
 ## When to use it
 
-Use a donut for a few parts of one whole, read at a glance: how messages were delivered, which plans people are on. Reading a donut is reading angles, and people judge angles less well than lengths. When the parts are close in size, or there are more than a handful, use ranked [horizontal bars](/docs/components/bar-chart/#horizontal-bars). To show one share, use a [Stat](/docs/components/stat/) or a [Progress](/docs/components/progress/). For parts over time, use a stacked [area](/docs/components/area-chart/) or stacked [bars](/docs/components/bar-chart/).
+Use a donut for a few parts of one whole, read at a glance: how payments ended, which plans people are on. Reading a donut is reading angles, and people judge angles less well than lengths. When the parts are close in size, or there are more than a handful, use ranked [horizontal bars](/docs/components/bar-chart/#horizontal-bars). To show one share, use a [Stat](/docs/components/stat/) or a [Progress](/docs/components/progress/). For parts over time, use a stacked [area](/docs/components/area-chart/) or stacked [bars](/docs/components/bar-chart/).
 
 <UiChoose name="chart" current="Donut chart" />
 

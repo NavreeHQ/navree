@@ -11,10 +11,10 @@ description: "Change over time: lines on a shared axis, drawn on the server as S
 use navree::ui::charts::*;
 use navree::ui::*;
 
-Chart::line("Opens and clicks")
+Chart::line("Orders and returns")
     .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
-    .series(Series::new("Opens", [412, 530, 498, 610, 584, 233, 198]))
-    .series(Series::new("Clicks", [96, 141, 120, 168, 152, 51, 44]))
+    .series(Series::new("Orders", [412, 530, 498, 610, 584, 233, 198]))
+    .series(Series::new("Returns", [96, 141, 120, 168, 152, 51, 44]))
 ```
 
 Each series gives one value for each x. The title names the chart for everyone, including screen readers. The chart's id is made from its title, in any script, with a short hash of the whole title, so charts with different titles never share one. Two charts on a page with the same title each need their own `.id("...")`: the table switch and the names inside the chart are built from it.
@@ -53,7 +53,7 @@ Leave out a reading that was never taken. Writing it as zero draws a drop that d
 
 <UiPreview example="line-chart/annotations" />
 
-The labels go into the summary too: "Marked: Holiday, Reminder sent, Target (80)." A reader who can't see the lines still hears them.
+The labels go into the summary too: "Marked: Weekend sale, Offer sent, Target (80)." A reader who can't see the lines still hears them.
 
 ## Hiding series, and colors that mean something
 
@@ -91,7 +91,7 @@ The reduction is also a function. `lttb(&xs, &ys, most)` returns the indices to 
 | `NumberFormat::number()` | `0.125` | `0.13` |
 | `NumberFormat::decimals(1)` | `2.0` | `2` |
 | `NumberFormat::decimals(1).fixed()` | `2.0` | `2.0` |
-| `NumberFormat::currency("$")` | `-1200.5` | `-$1,200.5` |
+| `NumberFormat::currency("₹")` | `-1200.5` | `-₹1,200.5` |
 | `NumberFormat::number().suffix(" ms")` | `85` | `85 ms` |
 | `NumberFormat::percent()` | `0.125` | `12.5%` |
 
@@ -110,7 +110,7 @@ The reduction is also a function. `lttb(&xs, &ys, most)` returns the indices to 
 
 The marks are built in for English, Hindi, Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam and Punjabi (grouped as 12,34,567), German, French, Spanish, Italian, Portuguese, Dutch, Russian, Ukrainian, Polish, Swedish, Norwegian, Danish, Finnish, Turkish, Arabic, Persian, Urdu, Hebrew, Japanese, Chinese and Korean. A tag the table doesn't have writes English marks. Month and day names come from the same tag, for the languages the [date pickers](/docs/ui/dates/#languages) know. `.number_locale(NumberLocale)` and `.date_locale(DateLocale)` set the two apart.
 
-The words a chart writes are fields of `ChartLabels`, in English by default. Change the ones you need and pass the struct to `.labels(...)`, as the German chart above does. A blank in braces is filled in.
+The words a chart writes are fields of `ChartLabels`, in English by default. Change the ones you need and pass the struct to `.labels(...)`, as the Hindi chart above does. A blank in braces is filled in.
 
 | Field | Holds | Blanks |
 |---|---|---|
@@ -135,7 +135,7 @@ A chart can say what state its data is in, and keeps its place on the page while
 
 <UiPreview example="line-chart/states" />
 
-`.loading()` shows a placeholder as tall as the chart, with `aria-busy` on the chart and "Loading Opens by hour" for a screen reader. `.failed(reason)` says the data could not be loaded and shows the reason when there is one. It never draws zeros. `.retry(href)` adds a link that asks again. A chart with no rows, or with only gaps, is empty: it shows a heading and a line, which `.empty(title, text)` words for your page.
+`.loading()` shows a placeholder as tall as the chart, with `aria-busy` on the chart and "Loading Orders by hour" for a screen reader. `.failed(reason)` says the data could not be loaded and shows the reason when there is one. It never draws zeros. `.retry(href)` adds a link that asks again. A chart with no rows, or with only gaps, is empty: it shows a heading and a line, which `.empty(title, text)` words for your page.
 
 Put a chart in a [Region](/docs/ui/regions/) to load it after the page paints, or to refresh it.
 
@@ -166,7 +166,7 @@ The switch is a checkbox, so it works with JavaScript off.
 | `Page Down`, `Page Up` | Moves about a tenth of the way on or back. |
 | `Esc` | Hides the tooltip. |
 
-- The chart is a group named by its title ("Opens and clicks, chart"), described by its summary and by "Use the arrow keys to move between values."
+- The chart is a group named by its title ("Orders and returns, chart"), described by its summary and by "Use the arrow keys to move between values."
 - Each move by key is announced in a polite live region: the row's name, then the name and value of each series that shows.
 - The summary is written from the data: each series' first and last value, and its highest and lowest with where they fall. `.summary(text)` replaces it, and `.show_summary()` prints it under the drawing for everyone.
 - The table twin holds every value, so nothing depends on seeing the drawing or using a pointer.

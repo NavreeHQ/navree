@@ -11,10 +11,10 @@ description: "A small line with no axes, beside a figure: the shape of a series 
 use navree::ui::charts::*;
 use navree::ui::*;
 
-Stat::new("Opened", "4,120")
+Stat::new("Orders", "4,120")
     .trend("+12% on last week", true)
     .chart(
-        Sparkline::new("Opens, last 12 hours", [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24])
+        Sparkline::new("Orders, last 12 hours", [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24])
             .area()
             .tone(Tone::Info),
     )
@@ -63,7 +63,7 @@ The states work as on a [line chart](/docs/components/line-chart/#loading-failed
 <UiA11y>
 
 - A sparkline is not a tab stop and has no tooltip, so a row of figures with a sparkline each adds nothing to the tab order.
-- It is an image named by its title ("Opens, last 12 hours, chart") and described by its summary: the first and the last value, the highest and the lowest, and where each falls.
+- It is an image named by its title ("Orders, last 12 hours, chart") and described by its summary: the first and the last value, the highest and the lowest, and where each falls.
 - Its values are in a table that only a screen reader reads. A gap is read as "No value".
 - The title is not shown, since the figure beside the line names it. Write it so it makes sense alone.
 - Give each sparkline on a page its own `.id(...)`: the names inside the chart are built from it.

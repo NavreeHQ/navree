@@ -23,6 +23,7 @@ inbox-demo = { path = "../inbox-demo" }
 # The example board, whose views its showcase page shows.
 board-demo = { path = "../board-demo" }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }

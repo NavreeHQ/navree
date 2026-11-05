@@ -15,10 +15,10 @@ use navree::ui::*;
 let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
 let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
 
-let opened = report.count(opens);   // one number for each period
+let placed = report.count(orders);   // one number for each period
 let chart = report
-    .chart(Chart::area("Opens over the window").id("opens"))
-    .series(report.series("Opens", &opened));
+    .chart(Chart::area("Orders over the window").id("orders"))
+    .series(report.series("Orders", &placed));
 ```
 
 `query` is the `ReportQuery` a handler reads from the address, `today` is the day in the zone the report is counted in, and `zone` is that zone. The sections below take these in turn.
@@ -81,7 +81,7 @@ Periods are wall-clock periods in the zone you pass: a day is a day, a week star
 When the rows are already in memory, such as a response from another service, count them into the periods:
 
 ```rust
-let opened: Vec<u64> = report.count(events.iter().map(|event| event.opened_at));
+let placed: Vec<u64> = report.count(orders.iter().map(|order| order.placed_at));
 let revenue: Vec<f64> = report.sum(orders.iter().map(|order| (order.paid_at, order.amount)));
 ```
 
@@ -208,7 +208,8 @@ async fn report(
             .series(Series::new("Deals", created)),
         report
             .chart(Chart::area("Pipeline value").id("deals-value"))
-            .format(NumberFormat::currency("$").max_decimals(0))
+            .locale("en-IN")
+            .format(NumberFormat::currency("₹").max_decimals(0))
             .series(Series::new("Value", value))
             .table(TableMode::Shown),
     ))))

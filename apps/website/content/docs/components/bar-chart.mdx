@@ -11,10 +11,12 @@ description: "Bars from one baseline to compare amounts: grouped, stacked, negat
 use navree::ui::charts::*;
 use navree::ui::*;
 
-Chart::bar("Sent per day")
+Chart::bar("Revenue per day")
+    .locale("en-IN")
+    .format(NumberFormat::currency("₹").max_decimals(0))
     .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
-    .series(Series::new("Sent", [1_204, 1_480, 990, 1_610, 1_820, 410, 302]))
-    .annotation(Annotation::target(1_500, "Goal"))
+    .series(Series::new("Revenue", [12_04_000, 14_80_000, 9_90_000, 16_10_000, 18_20_000, 4_10_000, 3_02_000]))
+    .annotation(Annotation::target(15_00_000, "Goal"))
 ```
 
 The x values, series, annotations, formats, languages and states are those of a [line chart](/docs/components/line-chart/). This page covers what bars add.
