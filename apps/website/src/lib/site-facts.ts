@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { site } from "../../site.config.ts";
+import { appConstant } from "../components/showcase/app-constants.ts";
+import { indian } from "./format.ts";
 import { latestCommit } from "./last-modified.ts";
 import { navreeVersion } from "./version.ts";
 
@@ -43,16 +48,29 @@ export function keyFactsMarkdown(): string {
     .join("\n");
 }
 
+/** The example apps' sizes, read where they are owned: the store's measured rows, the board's and the inbox's seeds. */
+const exampleApps = (() => {
+  const store = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content", "showcase", "store.json"), "utf8")) as { rows: { orders: number } };
+  return {
+    orders: indian(store.rows.orders),
+    cards: indian(appConstant("apps/board-demo/src/data.rs", "CARD_COUNT")),
+    conversations: indian(appConstant("apps/inbox-demo/src/scale.rs", "FULL")),
+  };
+})();
+
 /** The site's main pages that are not docs pages, with one line each, for `llms.txt`. */
 export const mainPages: { title: string; path: string; summary: string }[] = [
   { title: "Home", path: "/", summary: `What ${site.name} is, what comes in the box, and how to start.` },
-  { title: "Navree UI", path: "/ui/", summary: "Typed Rust components rendered on the server: a store's back office built with them and the code of its hardest parts, every component with a live preview, how it works and what comes next." },
+  { title: "Navree UI", path: "/ui/", summary: "Typed Rust components rendered on the server: a store's back office, a team's board and a support inbox built with them and the code of their hardest parts, every component with a live preview, how it works and what comes next." },
   { title: "Navree for AI", path: "/ai/", summary: "Agent skills, the Navigator MCP server and docs for models, and the AI SDK for your product." },
   { title: "Architecture", path: "/architecture/", summary: "The system shapes you can build with one framework, from a modular monolith to microservices; how each draws its screens; and the rules every Navree app follows, each with its test." },
   { title: "Ecosystem", path: "/ecosystem/", summary: "The first-party packages and tools: monitoring, admin, queues, debugging, deployment and more." },
   { title: "Performance", path: "/performance/", summary: "Measured results on a CRM-style API, with the workload, the method and how to repeat the run." },
-  { title: "Showcase", path: "/showcase/", summary: "The reference CRM with its Next.js and Nuxt front ends, example apps drawn with Navree UI, and the first-party tools built on Navree." },
-  { title: "A store's back office", path: "/showcase/store/", summary: "An example app on Navree UI at 200,000 orders: cursor pages, an order drawer, refunds checked on the server, a live feed, and its measured speed." },
+  { title: "Showcase", path: "/showcase/", summary: "The reference CRM with its Next.js and Nuxt front ends, example apps drawn with Navree UI (a store's back office, a team's board and a support inbox), and the first-party tools built on Navree." },
+  { title: "The reference CRM", path: "/showcase/crm/", summary: "A sales team's CRM on one Navree API with Next.js and Nuxt front ends: roles, an audit trail and real-time updates, with every screen of both." },
+  { title: "A store's back office", path: "/showcase/store/", summary: `An example app on Navree UI at ${exampleApps.orders} orders: cursor pages, an order drawer, refunds checked on the server, a live feed, and its measured speed.` },
+  { title: "A team's board", path: "/showcase/board/", summary: `An example app on Navree UI with ${exampleApps.cards} cards: moves by mouse, touch or keys that the server checks, and every open board following them live over server-sent events.` },
+  { title: "A support inbox", path: "/showcase/inbox/", summary: `An example app on Navree UI at ${exampleApps.conversations} conversations: three resizable panes, lists loaded as they are read, live updates, and its measured speed.` },
   { title: "Changelog", path: "/changelog/", summary: "Every release, newest first; Navree 1.0 is the first." },
   { title: "About", path: "/about/", summary: "Who built Navree, where the name comes from, and the lessons of fifteen years and six startups behind each part of it." },
 ];

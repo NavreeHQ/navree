@@ -21,6 +21,7 @@ import path from "node:path";
 import GithubSlugger from "github-slugger";
 
 import { sections } from "@content/docs/manifest";
+import { boardNumbers } from "@/components/showcase/board-numbers";
 import { lessonId, lessons } from "@/content/about";
 import { indian } from "@/lib/format";
 
@@ -123,6 +124,18 @@ function storeProof(): Proof | null {
   if (!page) throw new Error(`architecture: ${file} has no Orders page`);
   const paint = numberAt(page, "desktop.lcp_ms", file);
   return { what: `The store: ${indian(orders)} orders, and the orders page paints in ${indian(paint)}\u00a0ms`, file, note: measuredOn(data.measured_on) };
+}
+
+/** The board example app at scale (`board-numbers.ts`: its seed's constants and what its browser suite measured). */
+function boardProof(): Proof | null {
+  const file = "apps/website/src/components/showcase/board-numbers.ts";
+  if (read(file) === null) return null;
+  const { cards, page, cap, nodes, measured } = boardNumbers;
+  return {
+    what: `The board: ${indian(cards)} cards, each column drawing ${page} at a time by cursor and keeping ${cap} in the page, so two columns scrolled to their cap hold ${indian(nodes)}\u00a0nodes`,
+    file,
+    note: measuredOn(measured),
+  };
 }
 
 /**
@@ -233,7 +246,7 @@ function lazyByDefault(): Built {
     () => docsLacking(docs.href),
   );
   if (missing) return { id, missing };
-  const scale = [storeProof(), inboxProof()].filter((proof): proof is Proof => proof !== null);
+  const scale = [storeProof(), boardProof(), inboxProof()].filter((proof): proof is Proof => proof !== null);
   return {
     id,
     title: scale.length ? "Lazy by default, at real scale" : "Lazy by default",

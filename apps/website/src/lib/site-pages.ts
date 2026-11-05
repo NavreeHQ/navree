@@ -32,7 +32,7 @@ export type PageInfo = {
 export const pageInfo: Record<string, PageInfo> = {
   "/": {
     name: "Navree",
-    sources: ["src/components/home", "src/content", "site.config.ts"],
+    sources: ["src/components/home", "src/content", "site.config.ts", "src/app/ui/showcases.ts"],
   },
   "/docs/": { name: "Docs", kind: "CollectionPage", sources: ["content/docs/manifest.ts"] },
   "/ecosystem/": {
@@ -58,7 +58,11 @@ export const pageInfo: Record<string, PageInfo> = {
     ],
   },
   "/performance/": { name: "Performance", sources: ["src/components/bench", "src/lib/bench.ts"] },
-  "/showcase/": { name: "Showcase", kind: "CollectionPage" },
+  "/showcase/": {
+    name: "Showcase",
+    kind: "CollectionPage",
+    sources: ["src/app/ui/showcases.ts", "src/components/showcase", "public/images/showcase"],
+  },
   "/showcase/crm/": {
     name: "CRM",
     parent: "/showcase/",
@@ -67,17 +71,29 @@ export const pageInfo: Record<string, PageInfo> = {
   "/showcase/store/": {
     name: "Store",
     parent: "/showcase/",
-    sources: ["src/app/ui/showcases.ts", "content/showcase/store.json", "content/ui/catalog.json"],
+    sources: ["src/app/ui/showcases.ts", "src/components/showcase/more-apps.tsx", "content/showcase/store.json", "content/ui/catalog.json"],
   },
   "/showcase/inbox/": {
     name: "Support inbox",
     parent: "/showcase/",
-    sources: ["src/app/showcase/inbox", "src/components/showcase/inbox-numbers.ts", "content/ui/catalog.json"],
+    sources: [
+      "src/app/showcase/inbox",
+      "src/app/ui/showcases.ts",
+      "src/components/showcase/inbox-numbers.ts",
+      "src/components/showcase/more-apps.tsx",
+      "content/ui/catalog.json",
+    ],
   },
   "/showcase/board/": {
     name: "Board",
     parent: "/showcase/",
-    sources: ["src/app/showcase/board", "content/ui/previews/build-anything"],
+    sources: [
+      "src/app/showcase/board",
+      "src/app/ui/showcases.ts",
+      "src/components/showcase/board-numbers.ts",
+      "src/components/showcase/more-apps.tsx",
+      "content/ui/previews/build-anything",
+    ],
   },
   "/changelog/": { name: "Changelog", kind: "CollectionPage", sources: ["src/lib/changelog.ts"] },
   "/about/": { name: "About", kind: "AboutPage", sources: ["src/components/about", "src/content/about.ts", "src/content/faq.ts"] },
