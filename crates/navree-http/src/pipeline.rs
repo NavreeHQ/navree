@@ -59,9 +59,31 @@ pub(crate) struct LoggedUser(pub(crate) Uuid);
 #[derive(Clone, Debug)]
 pub(crate) struct RequestSpan(pub(crate) tracing::Span);
 
-/// Set by a route with its own timeout, so the global timeout waits for it.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct TimeoutOverride(pub(crate) Arc<OnceLock<Duration>>);
+/// The app-wide timeout as a request sees it: when it started and how long it is, and the
+/// route's own timeout, which a route with one sets so the global timeout waits for it.
+#[derive(Clone, Debug)]
+pub(crate) struct TimeoutOverride {
+    /// The route's own timeout, set by a route that has one.
+    pub(crate) route: Arc<OnceLock<Duration>>,
+    start: Instant,
+    default: Duration,
+}
+
+impl TimeoutOverride {
+    fn new(start: Instant, default: Duration) -> Self {
+        Self {
+            route: Arc::default(),
+            start,
+            default,
+        }
+    }
+
+    /// When the request runs out of time: at the route's timeout when it has one (a shorter
+    /// one ends its handler, a longer one moves the app's timeout to it), else at the app's.
+    pub(crate) fn deadline(&self) -> Instant {
+        self.start + self.route.get().copied().unwrap_or(self.default)
+    }
+}
 
 /// The error returned when a request runs out of time.
 pub(crate) fn timeout_error() -> AppError {
@@ -485,9 +507,9 @@ where
 {
     let request_id = request_id_of(&request);
     let context = pages.and_then(|_| error_context_of(&request));
-    let route_timeout = TimeoutOverride::default();
-    request.extensions_mut().insert(route_timeout.clone());
     let start = Instant::now();
+    let route_timeout = TimeoutOverride::new(start, default);
+    request.extensions_mut().insert(route_timeout.clone());
     let mut deadline = start + default;
     let run = next(request);
     tokio::pin!(run);
@@ -498,7 +520,7 @@ where
             biased;
             response = &mut run => return response,
             () = tokio::time::sleep_until(deadline) => {
-                if let Some(route) = route_timeout.0.get() {
+                if let Some(route) = route_timeout.route.get() {
                     let extended = start + *route;
                     if extended > deadline {
                         deadline = extended;

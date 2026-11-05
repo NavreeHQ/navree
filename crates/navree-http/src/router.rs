@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use http::header::{CONTENT_LENGTH, EXPECT, HeaderName};
+use http::header::{CONNECTION, CONTENT_LENGTH, EXPECT, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, StatusCode, Version};
 use http_body_util::BodyExt;
@@ -17,6 +17,7 @@ use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
+use tokio::time::Instant;
 use tower::Service;
 use tower::util::BoxCloneSyncService;
 use uuid::Uuid;
@@ -618,6 +619,10 @@ const DISCARD_AT_MOST: u64 = 8 * 1024 * 1024;
 /// How long reading such a body may take before the 413 goes back anyway.
 const DISCARD_FOR: Duration = Duration::from_secs(5);
 
+/// The time kept back from the request's own deadline, to answer in: the reading stops this
+/// long before the request would time out. With less than this left, nothing is read.
+const DISCARD_MARGIN: Duration = Duration::from_millis(250);
+
 /// The body length a request declares.
 fn declared_length(parts: &Parts) -> Option<u64> {
     parts
@@ -627,21 +632,60 @@ fn declared_length(parts: &Parts) -> Option<u64> {
         .and_then(|v| v.parse::<u64>().ok())
 }
 
+/// When the request runs out of time: the app's timeout, moved by the route's own when it has
+/// one, or, outside the app's timeout, the route's own from when the route began.
+fn deadline(parts: &Parts, meta: &RouteMeta, started: Instant) -> Option<Instant> {
+    parts
+        .extensions
+        .get::<TimeoutOverride>()
+        .map(TimeoutOverride::deadline)
+        .or_else(|| meta.timeout.map(|route| started + route))
+}
+
 /// Reads the body of a request refused for its size and throws it away, a frame at a time, so
-/// the client reads the 413. Only on HTTP/1 (HTTP/2 ends the stream on its own), only for a
-/// body declared at most [`DISCARD_AT_MOST`] bytes, for at most [`DISCARD_FOR`], and never for
-/// a client waiting on `100 Continue`: it has sent nothing, and sends nothing after a 413.
-async fn discard(parts: &Parts, mut body: crate::body::Body) {
-    let waits = parts
-        .headers
-        .get(EXPECT)
-        .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"100-continue"));
-    let short = declared_length(parts).is_some_and(|length| length <= DISCARD_AT_MOST);
-    if parts.version > Version::HTTP_11 || waits || !short {
-        return;
+/// the client reads the 413, and says whether the body was read to its end. It reads only on
+/// HTTP/1 (HTTP/2 ends the stream on its own), only a body declared at most
+/// [`DISCARD_AT_MOST`] bytes and no more bytes than declared, for at most [`DISCARD_FOR`] and
+/// never past the request's `deadline` less [`DISCARD_MARGIN`], and never for a client waiting
+/// on `100 Continue`: it has sent nothing, and sends nothing after a 413.
+async fn discard(parts: &Parts, mut body: crate::body::Body, deadline: Option<Instant>) -> bool {
+    // As hyper reads it: the last `Expect`, from an HTTP/1.1 client.
+    let waits = parts.version == Version::HTTP_11
+        && parts
+            .headers
+            .get_all(EXPECT)
+            .iter()
+            .last()
+            .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"100-continue"));
+    let Some(mut left) = declared_length(parts).filter(|length| *length <= DISCARD_AT_MOST) else {
+        return false;
+    };
+    let now = Instant::now();
+    let window = deadline.map_or(DISCARD_FOR, |deadline| {
+        deadline
+            .saturating_duration_since(now)
+            .saturating_sub(DISCARD_MARGIN)
+            .min(DISCARD_FOR)
+    });
+    if parts.version > Version::HTTP_11 || waits || window.is_zero() {
+        return left == 0;
     }
-    let read = async { while body.frame().await.is_some_and(|frame| frame.is_ok()) {} };
-    let _ = tokio::time::timeout(DISCARD_FOR, read).await;
+    let read = async {
+        while left > 0 {
+            match body.frame().await {
+                Some(Ok(frame)) => {
+                    if let Some(data) = frame.data_ref() {
+                        left = left.saturating_sub(data.len() as u64);
+                    }
+                    // A body that is always ready still lets the timer run.
+                    tokio::task::coop::consume_budget().await;
+                }
+                Some(Err(_)) | None => break,
+            }
+        }
+    };
+    let _ = tokio::time::timeout(window, read).await;
+    left == 0
 }
 
 fn client_ip(parts: &Parts) -> IpAddr {
@@ -688,6 +732,7 @@ async fn route_pipeline(
     request: Request,
     handler: BoxedService,
 ) -> Response {
+    let started = Instant::now();
     let meta = runtime.meta.clone();
     let (mut parts, body) = request.into_parts();
     if let Some(slot) = parts.extensions.get::<pipeline::MatchedRoute>() {
@@ -698,15 +743,22 @@ async fn route_pipeline(
     if let (Some(route_timeout), Some(cell)) =
         (meta.timeout, parts.extensions.get::<TimeoutOverride>())
     {
-        let _ = cell.0.set(route_timeout);
+        let _ = cell.route.set(route_timeout);
     }
 
     let mut response = match runtime.admit(&mut parts).await {
         Err(error) => {
-            if runtime.too_large(&parts) {
-                discard(&parts, body).await;
+            let mut refused = error.into_response();
+            if runtime.too_large(&parts)
+                && !discard(&parts, body, deadline(&parts, &meta, started)).await
+                && parts.version <= Version::HTTP_11
+            {
+                // The rest of the body is still on its way: no other request can follow it.
+                refused
+                    .headers_mut()
+                    .insert(CONNECTION, HeaderValue::from_static("close"));
             }
-            error.into_response()
+            refused
         }
         Ok(user) => {
             let audit = runtime.audit_entry(&parts, user);
