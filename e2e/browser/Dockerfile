@@ -6,7 +6,10 @@ FROM mcr.microsoft.com/playwright:v1.56.0-noble
 WORKDIR /runner
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
-# A throwaway screenshot-runner container for local end-to-end runs, never deployed.
-# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
+# The runner works as the image's own unprivileged user. It reads /runner and
+# the browsers in /ms-playwright, which every user can read, keeps Chromium's
+# profile in /tmp, and writes only to the /out mount, as the k6 container
+# does as its own user.
+USER pwuser
 ENTRYPOINT ["node"]
 CMD ["/runner/src/crawl.mjs"]
