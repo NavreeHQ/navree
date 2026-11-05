@@ -21,7 +21,7 @@ import { appCards } from "./showcases";
 export const metadata: Metadata = pageMetadata({
   title: "Navree UI: your app's screens in Rust",
   description:
-    "Typed Rust components rendered on the server: a store's back office built with them, the code of its hardest parts, and a live preview of every component.",
+    "Typed Rust components rendered on the server: a store, a board and a support inbox built with them, the code of their hardest parts, and every component live.",
   path: "/ui/",
 });
 

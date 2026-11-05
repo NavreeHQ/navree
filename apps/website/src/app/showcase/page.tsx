@@ -5,18 +5,23 @@ import Link from "next/link";
 import { ArrowLink, HomeSection, PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
 import { CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
+import { ExampleAppCard } from "@/components/showcase/example-app-card";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
-import { ShowcaseImage } from "@/components/showcase/showcase-image";
 import { entry } from "@/content/ecosystem";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
-import { showcases } from "../ui/showcases";
+import { appCards, showcases } from "../ui/showcases";
+
+/** `a store's back office, a team's board and a support inbox`: what the apps drawn with Navree UI are, for a sentence. */
+const drawn = (() => {
+  const kinds = showcases.map((app) => app.kind.charAt(0).toLowerCase() + app.kind.slice(1));
+  return kinds.length < 2 ? kinds.join("") : `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1)}`;
+})();
 
 export const metadata: Metadata = pageMetadata({
   title: "Showcase: apps and tools built on Navree",
-  description:
-    "Apps built on Navree, with code in the repository: the reference CRM with Next.js and Nuxt front ends, example apps in Navree UI, and tools such as Logbook.",
+  description: `Real apps built on Navree, with their code: the reference CRM, ${drawn} in Navree UI, and tools like Logbook.`,
   path: "/showcase/",
 });
 
@@ -49,9 +54,9 @@ export default function ShowcasePage() {
               Real apps, built on Navree.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
-              Applications built with the framework and tested with it: a complete CRM, example apps drawn with Navree UI,
-              and the first-party tools that run inside your own app. Their code lives in the repository, next to the
-              crates they use.
+              Applications built with the framework and tested with it: a complete CRM, example apps drawn with Navree UI
+              ({drawn}), and the first-party tools that run inside your own app. Their code lives in the repository,
+              next to the crates they use.
             </p>
           </div>
         </div>
@@ -154,44 +159,12 @@ export default function ShowcasePage() {
           }
           action={<ArrowLink href="/ui/#build-anything">See them on the UI page</ArrowLink>}
         />
-        <ul className="mt-12 grid grid-cols-1 gap-3 lg:mt-14 lg:grid-cols-2">
-          {showcases.map((app) => {
-            return (
-              <li key={app.slug} className="min-w-0">
-                <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-ink-1 shadow-bezel transition-colors duration-200 hover:border-line-2">
-                  <div className="border-b border-line">
-                    <ShowcaseImage
-                      name={app.screenshot.image}
-                      sizes="(min-width: 1440px) 680px, (min-width: 1024px) 48vw, calc(100vw - 32px)"
-                    />
-                  </div>
-                  <div className="flex flex-1 flex-col p-6 sm:p-8">
-                    <h3 className="font-display text-display-sm font-semibold text-fg transition-colors group-hover:text-accent">
-                      <Link href={`/showcase/${app.slug}/`} className="after:absolute after:inset-0 after:content-['']">
-                        {app.kind}
-                      </Link>
-                    </h3>
-                    <p className="mt-3 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{app.summary}</p>
-                    <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line">
-                      {app.facts.map((f) => (
-                        <div key={f.label} className="bg-ink-1 px-4 py-3">
-                          <dt className="text-xs text-fg-3">{f.label}</dt>
-                          <dd className="mt-1 text-[0.9375rem] font-medium text-fg-1">{f.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <span
-                      aria-hidden
-                      className="mt-auto inline-flex items-center gap-1.5 pt-6 text-[0.9375rem] font-medium text-fg-1 transition-colors group-hover:text-accent"
-                    >
-                      See the screens, the scale and how it is built
-                      <ArrowRightIcon className="size-4 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5" />
-                    </span>
-                  </div>
-                </article>
-              </li>
-            );
-          })}
+        <ul className="mt-12 grid grid-cols-1 gap-3 lg:mt-14 xl:grid-cols-3">
+          {showcases.map((app) => (
+            <li key={app.slug} className="min-w-0">
+              <ExampleAppCard app={app} />
+            </li>
+          ))}
         </ul>
       </HomeSection>
 
@@ -233,7 +206,19 @@ export default function ShowcasePage() {
           ))}
         </ul>
       </HomeSection>
-      <PageSchema path="/showcase/" metadata={metadata} />
+      <PageSchema
+        path="/showcase/"
+        metadata={metadata}
+        list={{
+          id: "apps",
+          name: "Apps built on Navree",
+          items: appCards.map((card) => ({
+            name: `${card.name}, ${card.kind.charAt(0).toLowerCase()}${card.kind.slice(1)}`,
+            description: card.hardest,
+            path: `/showcase/${card.slug}/`,
+          })),
+        }}
+      />
     </>
   );
 }
