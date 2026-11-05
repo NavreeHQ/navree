@@ -197,10 +197,11 @@ test("the keyboard reaches everything in order, with a visible focus ring", { ti
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   await page.goto(URL_BASE + "/deals/new");
-  const seen = [];
-  for (let i = 0; i < 40; i++) {
-    await page.keyboard.press("Tab");
-    const state = await page.evaluate(() => {
+  // The title field has autofocus, which the browser applies once the page has rendered, sometimes after goto
+  // returns: the walk starts from the title once it has focus, so it doesn't matter which comes first.
+  await page.waitForFunction(() => document.activeElement?.getAttribute("name") === "title");
+  const read = () =>
+    page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body) return null;
       // An input in a group shows its ring on the group.
@@ -210,15 +211,28 @@ test("the keyboard reaches everything in order, with a visible focus ring", { ti
       if (picker) return { name: el.getAttribute("name"), ring: true };
       return { name: el.getAttribute("name") || el.textContent.trim() || el.getAttribute("aria-label"), ring: style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0 };
     });
-    if (!state) break;
+  // Every stop once: from the title to the end of the page, where a Tab leaves it and the next starts again at its
+  // top, and on round to the title.
+  const seen = [];
+  let left = false;
+  for (let i = 0; i < 80; i++) {
+    await page.keyboard.press("Tab");
+    const state = await read();
+    if (!state) {
+      if (left) break;
+      left = true;
+      continue;
+    }
     seen.push(state);
+    if (state.name === "title") break;
   }
   await context.close();
   const names = seen.map((s) => s.name);
   for (const expected of ["Toggle sidebar", "title", "company_id", "amount", "currency", "Create deal"]) {
     assert.ok(names.includes(expected), `${expected} is reachable: ${names}`);
   }
-  assert.ok(names.indexOf("title") < names.indexOf("company_id"), String(names));
+  assert.equal(names[0], "company_id", `the title comes before company_id: ${names}`);
+  assert.equal(names.at(-1), "title", `the walk comes round to the title: ${names}`);
   assert.deepEqual(seen.filter((s) => !s.ring), [], "every stop shows a ring");
 });
 
