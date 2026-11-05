@@ -70,6 +70,9 @@ jobs:
         working-directory: apps/website
         env:
           CHROME_PATH: /usr/bin/google-chrome
+          # The launch film and its poster are not in git. The build downloads
+          # them from the live site and checks each against content/media.json.
+          NAVREE_MEDIA_URL: https://navree.com/media/
         run: node scripts/site-daily.ts
 
       - name: Keep the reports

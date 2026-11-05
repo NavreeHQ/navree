@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "media": "node scripts/media.ts sync",
     "generate": "node scripts/prebuild.ts && node scripts/agent-files.ts",
     "dev": "node scripts/prebuild.ts && node scripts/agent-files.ts && next dev --port 3210",
     "build": "node scripts/prebuild.ts && node scripts/agent-files.ts && next build && node scripts/postbuild.ts",

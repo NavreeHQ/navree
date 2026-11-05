@@ -1,0 +1,30 @@
+{
+  "note": "The launch film and its poster. They are large, so they are not in git: the live site serves them from /home/forge/navree.com/shared/media/ at /media/, and a developer's machine from public/media/ (scripts/media.ts copies them there from NAVREE_MEDIA_DIR). Every check of these files reads this list.",
+  "files": [
+    {
+      "name": "navree-launch-1080p.av1.webm",
+      "bytes": 17646175,
+      "sha256": "f0344661b0f57be23007a52d1643d120bf780bb38e377e52a3febd5784bd25af"
+    },
+    {
+      "name": "navree-launch-1080p.mp4",
+      "bytes": 26119240,
+      "sha256": "0e57ed6038afd20ad09cf7c33afe4e00cc4a2d306721122df34e5fffd29d364f"
+    },
+    {
+      "name": "navree-launch-720p.mp4",
+      "bytes": 9712315,
+      "sha256": "7e09cae24e307136c81d07746d4d195c38c7806426301ef8b026852fa1ae2e0c"
+    },
+    {
+      "name": "navree-launch-poster.jpg",
+      "bytes": 59503,
+      "sha256": "27d7e13bdbcc5137c20d7e2aa6bec6f3e6dff683a1e325922528e1be59086f93"
+    },
+    {
+      "name": "navree-launch-poster.webp",
+      "bytes": 27172,
+      "sha256": "099425b1db8abf4449aac3e4645179058289d47e9b8f5947ad195473059e86cc"
+    }
+  ]
+}

@@ -15,6 +15,10 @@
  *
  * It also checks that every page in `content/docs/manifest.ts` exists and
  * has a title and a description, and fails the build if one doesn't.
+ *
+ * With NAVREE_MEDIA_DIR set, it copies the launch film's files from that
+ * folder to `public/media/`; with NAVREE_MEDIA_URL set instead, it downloads
+ * them from there (`scripts/media.ts`). The files are not in git.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +34,7 @@ import { sections, links } from "../content/docs/manifest.ts";
 import { site } from "../site.config.ts";
 import type { CpuSet, PerfData, StackRow, TestInfo, TestKey, TestResult } from "../src/lib/bench-types.ts";
 import { searchOptions, type SearchDoc } from "../src/lib/search-options.ts";
+import { fetchMedia, syncMedia } from "./lib/media.ts";
 
 const WEBSITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = path.resolve(WEBSITE, "../..");
@@ -574,6 +579,15 @@ function buildUiPreviews(): number {
 
 const started = performance.now();
 checkRustVersion();
+if (process.env.NAVREE_MEDIA_DIR || process.env.NAVREE_MEDIA_URL) {
+  try {
+    const dir = process.env.NAVREE_MEDIA_DIR;
+    const { added, kept } = dir ? syncMedia(path.resolve(dir)) : await fetchMedia(process.env.NAVREE_MEDIA_URL!);
+    console.log(`prebuild: public/media/ has the launch film's ${added.length + kept.length} files (${added.length} added)`);
+  } catch (error) {
+    fail((error as Error).message);
+  }
+}
 const perf = buildPerformance();
 writeFile(path.join(GENERATED, "performance.json"), JSON.stringify(perf, null, 2));
 const crates = buildCrates();

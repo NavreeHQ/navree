@@ -503,6 +503,27 @@ URL, the install commands) are in `site.config.ts`.
 `pnpm screenshots` saves full-page screenshots of the key pages at 1440 and
 390 px to `screenshots/` (run `pnpm serve` first).
 
+### The launch film (`/media/`)
+
+The homepage plays the launch film. The film and its poster are large, so they
+are never in git: `content/media.json` lists each file with its size and
+SHA-256, and the live site serves them from
+`/home/forge/navree.com/shared/media/` (`deploy/navree.com/deploy.sh` links
+every release's `media/` to that folder, and stops before it builds if a file
+is missing or differs).
+
+- **On your machine:** `NAVREE_MEDIA_DIR=<folder with the files> pnpm dev` (or
+  `pnpm build`, `pnpm typecheck`) copies them to `public/media/`, which is
+  git-ignored. `pnpm media` does only the copy. With `NAVREE_MEDIA_URL` set
+  instead (the daily check in CI uses `https://navree.com/media/`), the files
+  are downloaded and checked.
+- **`pnpm check:links`** reads every `/media/` link against the manifest, and
+  needs the files in `out/media/` with exactly the listed bytes.
+- **When a file changes:** `node scripts/media.ts manifest <folder>` rewrites
+  the manifest from the folder; commit it, then copy the files to the server.
+- The words, the sources and the length are in `src/content/launch-film.ts`;
+  the player is `src/components/home/film-player.tsx`.
+
 ## Search, AI answers and freshness
 
 Titles, descriptions, structured data, `robots.txt`, `llms.txt`, the sitemap
