@@ -782,7 +782,8 @@ for (const name of NAMES) {
           const el = document.createElement("div");
           el.id = "oddly";
           el.setAttribute("data-ui-live-src", "/display/events");
-          el.setAttribute("data-ui-live-event", "a b\"<c>");
+          // A part may listen for several names, each checked: none of these is one.
+          el.setAttribute("data-ui-live-event", "a\"b <c>");
           document.querySelector("main").append(el);
           document.dispatchEvent(new Event("ui:swap"));
         });
