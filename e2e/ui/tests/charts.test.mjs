@@ -119,7 +119,8 @@ const view = (page, fig) =>
     return {
       open,
       head: tip.querySelector("[data-tip=head]")?.textContent ?? null,
-      rows: [...tip.querySelectorAll("[data-tip=row]")].map((r) => ({ value: r.querySelector("strong").textContent, name: r.lastElementChild.textContent })),
+      // The server writes a line for every column; the legend's switches hide those of the series they hide.
+      rows: [...tip.querySelectorAll("[data-tip=row]")].filter((r) => r.checkVisibility()).map((r) => ({ value: r.querySelector("strong").textContent, name: r.lastElementChild.textContent })),
       markup: tip.querySelectorAll("img,script,iframe").length,
       say: f.querySelector("[data-slot=chart-announce]").textContent,
       inside: !open || (tb.left >= bb.left - 0.5 && tb.right <= bb.right + 0.5 && tb.top >= bb.top - 0.5 && tb.bottom <= bb.bottom + 0.5),

@@ -28,14 +28,14 @@
 [data-slot=chart-toggle]{position:absolute;width:1px;height:1px;margin:0;opacity:0}
 [data-slot=chart-toggle]:focus-visible + label{outline:2px solid var(--accent);outline-offset:1px}
 [data-slot=chart-toggle]:not(:checked) + label{color:var(--fg-3);text-decoration:line-through;& [data-slot=chart-key]{background:transparent;box-shadow:inset 0 0 0 1px var(--c)}}
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="0"]:not(:checked)) [data-s="0"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="1"]:not(:checked)) [data-s="1"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="2"]:not(:checked)) [data-s="2"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="3"]:not(:checked)) [data-s="3"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="4"]:not(:checked)) [data-s="4"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="5"]:not(:checked)) [data-s="5"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="6"]:not(:checked)) [data-s="6"]:is(path,rect,circle),
-[data-slot=chart]:has([data-slot=chart-toggle][data-s="7"]:not(:checked)) [data-s="7"]:is(path,rect,circle){display:none}
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="0"]:not(:checked)) [data-s="0"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="1"]:not(:checked)) [data-s="1"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="2"]:not(:checked)) [data-s="2"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="3"]:not(:checked)) [data-s="3"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="4"]:not(:checked)) [data-s="4"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="5"]:not(:checked)) [data-s="5"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="6"]:not(:checked)) [data-s="6"]:is(path,rect,circle,[data-tip]),
+[data-slot=chart]:has([data-slot=chart-toggle][data-s="7"]:not(:checked)) [data-s="7"]:is(path,rect,circle,[data-tip]){display:none}
 
 /* The drawing. */
 [data-slot=chart-body]:focus-visible{outline:2px solid var(--accent);outline-offset:4px}

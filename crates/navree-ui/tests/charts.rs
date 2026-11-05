@@ -99,6 +99,31 @@ fn every_chart_type_draws_a_figure_with_its_table() {
             "{kind}: one table row per value drawn"
         );
         assert!(!out.contains("style="), "{kind}: no style attribute");
+        // The tooltip the module fills in has a line for each value column of the table, and
+        // every row of the table has a cell for each: the module reads the one from the other.
+        let columns = out.matches("<th scope=\"col\"").count() - 1;
+        let tip = out.contains("data-slot=\"chart-tip\"");
+        assert_eq!(
+            tip,
+            kind != "sparkline",
+            "{kind}: only a chart with keys has a tooltip"
+        );
+        if tip {
+            assert_eq!(
+                out.matches("data-tip=\"row\"").count(),
+                columns,
+                "{kind}: a line for each column"
+            );
+            assert_eq!(out.matches("data-tip=\"head\"").count(), 1, "{kind}");
+        }
+        let body = out.split("<tbody>").nth(1).unwrap_or_default();
+        for row in body.split("<tr>").skip(1) {
+            assert_eq!(
+                row.matches("<td").count(),
+                columns,
+                "{kind}: a cell for each column in {row}"
+            );
+        }
     }
 }
 

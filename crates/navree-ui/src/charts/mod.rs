@@ -574,6 +574,34 @@ pub(crate) struct TableData {
     pub note: Option<String>,
 }
 
+/// The tooltip the module fills in: a head for the row's name, and a line for each column of
+/// the table (a colour key, a value, the column's name). The module writes the values as
+/// text; the legend's switches hide the line of a series they hide.
+fn tip_node(head: &[(String, Option<Color>)]) -> Node {
+    let lines: Vec<Node> = head
+        .iter()
+        .skip(1)
+        .enumerate()
+        .map(|(at, (name, color))| {
+            let key = el("span").slot("chart-key").attr("data-key", "line");
+            let key = match color {
+                Some(color) => color.on(key),
+                None => key,
+            };
+            el("div")
+                .attr("data-tip", "row")
+                .attr("data-s", at as i64)
+                .children((key, el("strong"), el("span").child(name.clone())))
+                .into()
+        })
+        .collect();
+    el("div")
+        .slot("chart-tip")
+        .attr("aria-hidden", "true")
+        .children((el("div").attr("data-tip", "head"), lines))
+        .into()
+}
+
 fn table_node(caption: &str, data: TableData) -> Node {
     let head: Vec<Node> = data
         .head
@@ -768,6 +796,7 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                 body = body.attr(name, value);
             }
             let switch_id = format!("{id}-table-switch");
+            let tip = drawn.interactive.then(|| tip_node(&drawn.table.head));
             let table = table_node(&common.title, drawn.table);
             let data = match common.table {
                 TableMode::Switch => el("div").slot("chart-data").children((
@@ -797,12 +826,7 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
             Node::list((
                 header,
                 drawn.legend,
-                body.children((
-                    drawn.body,
-                    drawn
-                        .interactive
-                        .then(|| el("div").slot("chart-tip").attr("aria-hidden", "true")),
-                )),
+                body.children((drawn.body, tip)),
                 drawn.note.map(|n| el("p").slot("chart-note").child(n)),
                 el("p")
                     .slot("chart-summary")
