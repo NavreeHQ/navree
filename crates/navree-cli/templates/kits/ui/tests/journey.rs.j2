@@ -18,6 +18,9 @@ use {{ crate_name }}::ui::auth::{DEMO_EMAIL, DEMO_PASSWORD};
 
 /// What a browser asks pages with.
 const HTML: &str = "text/html";
+/// The session cookie as these settings name it: `session.secure` is on (its
+/// default), so the name carries the `__Host-` prefix browsers check.
+const SESSION_COOKIE: &str = "__Host-navree_session";
 
 /// Hermetic settings, as in `tests/app.rs`, plus the page settings of
 /// `config/app.toml`: guests are sent to sign in, and sessions live in the
@@ -198,7 +201,7 @@ async fn signing_in_starts_a_session_and_goes_where_the_visitor_was_going() {
         Some("/customers?search=ludhiana")
     );
     let cookie = response
-        .set_cookie("navree_session")
+        .set_cookie(SESSION_COOKIE)
         .expect("signing in sets the session cookie");
     assert_eq!(cookie.http_only(), Some(true));
     assert!(response.set_cookie("XSRF-TOKEN").is_some());
@@ -547,7 +550,7 @@ async fn signing_out_ends_the_session_for_good() {
     let client = signed_in(&app).await;
     page(&client, "/customers").send().await.assert_status(200);
     let before = client
-        .cookie("navree_session")
+        .cookie(SESSION_COOKIE)
         .expect("a session cookie after signing in");
 
     let out = client
@@ -570,7 +573,7 @@ async fn signing_out_ends_the_session_for_good() {
 
     // The cookie the browser had before is worth nothing now.
     let replay = app.client();
-    replay.set_cookie("navree_session", &before);
+    replay.set_cookie(SESSION_COOKIE, &before);
     let response = page(&replay, "/customers").send().await;
     assert_eq!(response.status(), 303);
 }
