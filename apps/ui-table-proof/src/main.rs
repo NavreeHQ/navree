@@ -1136,9 +1136,20 @@ impl Controller for Pages {
                 Method::POST,
                 "!/deal/{id}/archive",
                 |uow: Uow, Path(id): Path<i64>| async move {
+                    // As the bulk archive does: a new version, so `/__t/archived` tells it from a
+                    // deal seeded inactive.
                     Deal::query()
                         .where_(col("id").eq(Value::I64(id)))
-                        .update(&uow, [col("active").set(Value::Bool(false))])
+                        .update(
+                            &uow,
+                            [
+                                col("active").set(Value::Bool(false)),
+                                Deal::VERSION.set_expr(navree::orm::Expr::raw(
+                                    "version + 1",
+                                    Vec::<Value>::new(),
+                                )),
+                            ],
+                        )
                         .await?;
                     Ok::<_, AppError>(
                         Reply::ops_or_redirect("/deals")
