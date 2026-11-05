@@ -186,7 +186,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm your identity (step-up)
-         * @description Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in.
+         * @description Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in. A browser signed in on the session cookie gets 204 No Content: its sign-in counts as recent from now.
          */
         post: operations["auth.confirm"];
         delete?: never;
@@ -275,7 +275,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out: revoke a session, or every session */
+        /**
+         * Sign out: revoke a session, or every session
+         * @description A browser signed in on the session cookie is signed out of it (and, with `all`, every other session ends too); it sends its CSRF token.
+         */
         post: operations["auth.logout"];
         delete?: never;
         options?: never;
@@ -314,7 +317,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the password (signs out every other session; returns a new token pair) */
+        /**
+         * Change the password (signs out every other session; returns a new token pair)
+         * @description A browser signed in on the session cookie stays signed in on a new session and gets 204 No Content instead of tokens.
+         */
         patch: operations["auth.password.change"];
         trace?: never;
     };
@@ -1196,7 +1202,7 @@ export interface paths {
         };
         /**
          * List contacts
-         * @description Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.
+         * @description Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]`, `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.
          */
         get: {
             parameters: {
@@ -1313,7 +1319,7 @@ export interface paths {
         };
         /**
          * Export contacts as CSV
-         * @description `text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search` (see `ContactFilters`), in list order.
+         * @description `text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search`, in list order.
          */
         get: {
             parameters: {
@@ -2082,7 +2088,7 @@ export interface paths {
         };
         /**
          * List users
-         * @description Query: `search` (part of the name or email, case-insensitive), `sort` (a leading `-` sorts descending; default `name`), `page`, `per_page` (default 15, at most 100).
+         * @description Query: `search` (part of the name or email, case-insensitive), `sort` (`name`, `email`, `created_at`; `-` in front for descending; default `name`), `page`, `per_page` (default 15, at most 100).
          */
         get: {
             parameters: {
@@ -2313,6 +2319,23 @@ export interface paths {
         put?: never;
         /** Authorize a private or presence channel subscription */
         post: operations["realtime.auth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/broadcasting/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live updates for a page: a server-sent event stream of topics and channels */
+        get: operations["realtime.stream"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2709,22 +2732,6 @@ export interface components {
             open_deals_count: number;
         };
         /**
-         * @description The query of `GET /api/v1/companies` (besides `page` and `per_page`). `owner_id` and `industry` are sent as `filter[owner_id]` and `filter[industry]`; `search` and `sort` are sent as they are.
-         *     Blank values count as left out.
-         */
-        CompanyFilters: {
-            /** @description Only companies in this industry (case-insensitive). */
-            industry?: string | null;
-            /**
-             * Format: uuid
-             * @description Only companies this user owns.
-             */
-            owner_id?: string | null;
-            /** @description Part of the name or domain (case-insensitive). */
-            search?: string | null;
-            sort?: components["schemas"]["CompanySort"] | null;
-        };
-        /**
          * @description The body of `POST /api/v1/companies`. Text fields are trimmed; blank
          *     optional fields are stored as `null`.
          */
@@ -2794,12 +2801,6 @@ export interface components {
          * @enum {string}
          */
         CompanySize: "1-10" | "11-50" | "51-200" | "201-1000" | "1000+";
-        /**
-         * @description The order of `GET /api/v1/companies` (default `name`): by name
-         *     (case-insensitive) or creation time, `-` for descending.
-         * @enum {string}
-         */
-        CompanySort: "name" | "-name" | "created_at" | "-created_at";
         /**
          * @description The body of `PATCH /api/v1/companies/{id}`: only the fields sent
          *     change; `null` (or a blank string) clears an optional field.
@@ -2921,28 +2922,6 @@ export interface components {
              * @description When it last changed (UTC).
              */
             updated_at: string;
-        };
-        /**
-         * @description The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and
-         *     of `GET /api/v1/contacts/export`. `company_id`, `status` and `owner_id` are sent as `filter[company_id]`, `filter[status]` and `filter[owner_id]`; `search` is sent as it is. Blank values count as left out.
-         */
-        ContactFilters: {
-            /**
-             * Format: uuid
-             * @description Only contacts at this company.
-             */
-            company_id?: string | null;
-            /**
-             * Format: uuid
-             * @description Only contacts this user owns.
-             */
-            owner_id?: string | null;
-            /**
-             * @description Words that must each appear in the first name, last name, email or
-             *     title (case-insensitive).
-             */
-            search?: string | null;
-            status?: components["schemas"]["ContactStatus"] | null;
         };
         /**
          * @description The body of `POST /api/v1/contacts`. Text fields are trimmed; blank
@@ -3365,7 +3344,7 @@ export interface components {
              */
             statusCode: number;
         };
-        /** @description `POST /auth/login`. */
+        /** @description `POST /auth/login`. `Debug` never shows the password. */
         LoginInput: {
             /** @description The email address. */
             email: string;
@@ -3386,7 +3365,7 @@ export interface components {
          *     authentication, so generated clients see both shapes.
          */
         LoginResult: components["schemas"]["LoginResponse"] | components["schemas"]["TwoFactorChallenge"];
-        /** @description `POST /auth/logout` (an optional body). */
+        /** @description `POST /auth/logout` (an optional body). `Debug` never shows the token. */
         LogoutInput: {
             /** @description End every session of the user. */
             all?: boolean;
@@ -3655,7 +3634,7 @@ export interface components {
             /** @description Single-use codes that replace an authenticator code at login. */
             recovery_codes: string[];
         };
-        /** @description `POST /auth/refresh`. */
+        /** @description `POST /auth/refresh`. `Debug` never shows the token. */
         RefreshInput: {
             /** @description The refresh token of the last token pair. */
             refresh_token: string;
@@ -5697,6 +5676,60 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "realtime.stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

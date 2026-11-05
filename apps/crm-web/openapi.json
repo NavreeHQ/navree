@@ -646,45 +646,6 @@
         ],
         "description": "`GET /api/v1/companies/{id}`: the company plus its live contacts and\nopen (not won or lost) deals."
       },
-      "CompanyFilters": {
-        "description": "The query of `GET /api/v1/companies` (besides `page` and `per_page`). `owner_id` and `industry` are sent as `filter[owner_id]` and `filter[industry]`; `search` and `sort` are sent as they are.\nBlank values count as left out.",
-        "properties": {
-          "industry": {
-            "description": "Only companies in this industry (case-insensitive).",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "owner_id": {
-            "description": "Only companies this user owns.",
-            "format": "uuid",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "search": {
-            "description": "Part of the name or domain (case-insensitive).",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sort": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/CompanySort",
-                "description": "The order."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object"
-      },
       "CompanyInput": {
         "description": "The body of `POST /api/v1/companies`. Text fields are trimmed; blank\noptional fields are stored as `null`.",
         "properties": {
@@ -836,16 +797,6 @@
           "51-200",
           "201-1000",
           "1000+"
-        ],
-        "type": "string"
-      },
-      "CompanySort": {
-        "description": "The order of `GET /api/v1/companies` (default `name`): by name\n(case-insensitive) or creation time, `-` for descending.",
-        "enum": [
-          "name",
-          "-name",
-          "created_at",
-          "-created_at"
         ],
         "type": "string"
       },
@@ -1086,46 +1037,6 @@
           "created_at",
           "updated_at"
         ],
-        "type": "object"
-      },
-      "ContactFilters": {
-        "description": "The query of `GET /api/v1/contacts` (besides `page` and `per_page`) and\nof `GET /api/v1/contacts/export`. `company_id`, `status` and `owner_id` are sent as `filter[company_id]`, `filter[status]` and `filter[owner_id]`; `search` is sent as it is. Blank values count as left out.",
-        "properties": {
-          "company_id": {
-            "description": "Only contacts at this company.",
-            "format": "uuid",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "owner_id": {
-            "description": "Only contacts this user owns.",
-            "format": "uuid",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "search": {
-            "description": "Words that must each appear in the first name, last name, email or\ntitle (case-insensitive).",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ContactStatus",
-                "description": "Only contacts with this status."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
         "type": "object"
       },
       "ContactInput": {
@@ -1968,7 +1879,7 @@
         "type": "object"
       },
       "LoginInput": {
-        "description": "`POST /auth/login`.",
+        "description": "`POST /auth/login`. `Debug` never shows the password.",
         "properties": {
           "email": {
             "description": "The email address.",
@@ -2021,7 +1932,7 @@
         ]
       },
       "LogoutInput": {
-        "description": "`POST /auth/logout` (an optional body).",
+        "description": "`POST /auth/logout` (an optional body). `Debug` never shows the token.",
         "properties": {
           "all": {
             "description": "End every session of the user.",
@@ -2701,7 +2612,7 @@
         "type": "object"
       },
       "RefreshInput": {
-        "description": "`POST /auth/refresh`.",
+        "description": "`POST /auth/refresh`. `Debug` never shows the token.",
         "properties": {
           "refresh_token": {
             "description": "The refresh token of the last token pair.",
@@ -3862,7 +3773,7 @@
     },
     "/api/auth/confirm": {
       "post": {
-        "description": "Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in.",
+        "description": "Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in. A browser signed in on the session cookie gets 204 No Content: its sign-in counts as recent from now.",
         "operationId": "auth.confirm",
         "requestBody": {
           "content": {
@@ -4143,6 +4054,7 @@
     },
     "/api/auth/logout": {
       "post": {
+        "description": "A browser signed in on the session cookie is signed out of it (and, with `all`, every other session ends too); it sends its CSRF token.",
         "operationId": "auth.logout",
         "requestBody": {
           "content": {
@@ -4311,6 +4223,7 @@
     },
     "/api/auth/me/password": {
       "patch": {
+        "description": "A browser signed in on the session cookie stays signed in on a new session and gets 204 No Content instead of tokens.",
         "operationId": "auth.password.change",
         "requestBody": {
           "content": {
@@ -6023,7 +5936,7 @@
     },
     "/api/v1/contacts": {
       "get": {
-        "description": "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]` (see `ContactFilters`), `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
+        "description": "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]`, `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
         "responses": {
           "200": {
             "content": {
@@ -6148,7 +6061,7 @@
     },
     "/api/v1/contacts/export": {
       "get": {
-        "description": "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search` (see `ContactFilters`), in list order.",
+        "description": "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search`, in list order.",
         "responses": {
           "200": {
             "description": "OK"
@@ -6983,7 +6896,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "Query: `search` (part of the name or email, case-insensitive), `sort` (a leading `-` sorts descending; default `name`), `page`, `per_page` (default 15, at most 100).",
+        "description": "Query: `search` (part of the name or email, case-insensitive), `sort` (`name`, `email`, `created_at`; `-` in front for descending; default `name`), `page`, `per_page` (default 15, at most 100).",
         "responses": {
           "200": {
             "content": {
@@ -7319,6 +7232,60 @@
           }
         ],
         "summary": "Authorize a private or presence channel subscription",
+        "tags": [
+          "realtime"
+        ]
+      }
+    },
+    "/broadcasting/stream": {
+      "get": {
+        "operationId": "realtime.stream",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Live updates for a page: a server-sent event stream of topics and channels",
         "tags": [
           "realtime"
         ]
