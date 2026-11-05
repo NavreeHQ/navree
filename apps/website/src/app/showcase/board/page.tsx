@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
 import { boardNumbers } from "@/components/showcase/board-numbers";
 import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
+import { MoreApps } from "@/components/showcase/more-apps";
 import { example } from "@/components/ui-docs/data";
 import { PreviewFrame } from "@/components/ui-docs/preview-frame";
 import { indian } from "@/lib/format";
@@ -235,6 +236,7 @@ export default function BoardShowcasePage() {
           </p>
         </div>
       </Section>
+      <MoreApps current="board" />
       <PageSchema path="/showcase/board/" metadata={metadata} />
     </>
   );

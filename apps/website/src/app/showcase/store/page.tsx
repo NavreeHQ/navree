@@ -11,6 +11,7 @@ import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 import { repoTree } from "@site";
 
+import { MoreApps } from "@/components/showcase/more-apps";
 import { Preview } from "@/components/showcase/preview";
 import { showcases } from "../../ui/showcases";
 
@@ -372,6 +373,7 @@ export default function StorePage() {
       <Built />
       <Scale />
       <Run />
+      <MoreApps current="store" />
       <PageSchema path="/showcase/store/" metadata={metadata} />
     </>
   );

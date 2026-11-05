@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { ArrowLink, PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
 import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
+import { MoreApps } from "@/components/showcase/more-apps";
 import { inboxNumbers as numbers } from "@/components/showcase/inbox-numbers";
 import { example } from "@/components/ui-docs/data";
 import { PreviewFrame } from "@/components/ui-docs/preview-frame";
@@ -406,6 +407,7 @@ export default function InboxShowcase() {
       <Built />
       <Scale />
       <Run />
+      <MoreApps current="inbox" />
     </>
   );
 }
