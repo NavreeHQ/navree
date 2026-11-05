@@ -9,6 +9,7 @@ import { MoreApps } from "@/components/showcase/more-apps";
 import { inboxNumbers as numbers } from "@/components/showcase/inbox-numbers";
 import { example } from "@/components/ui-docs/data";
 import { PreviewFrame } from "@/components/ui-docs/preview-frame";
+import { indian } from "@/lib/format";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
@@ -16,10 +17,12 @@ import { repoTree } from "@site";
 
 const APP = "apps/inbox-demo";
 
+/** The desk the app seeds, and the page measures. */
+const CONVERSATIONS = 100_000;
+
 export const metadata: Metadata = pageMetadata({
-  title: "A support inbox with 100,000 conversations",
-  description:
-    "An example app on Navree UI: a support inbox in three resizable panes, live over server-sent events, proven at 100,000 conversations and 5.5 million messages.",
+  title: `A support inbox with ${indian(CONVERSATIONS)} conversations`,
+  description: `An example app on Navree UI: a support inbox in three resizable panes, live over server-sent events, proven at ${indian(CONVERSATIONS)} conversations and 5.5 million messages.`,
   path: "/showcase/inbox/",
 });
 
@@ -85,14 +88,14 @@ function excerpt(id: string, start: string): string {
 const ms = (n: number) => `${Math.round(n)} ms`;
 const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
 const mb = (kib: number) => (kib / 1024).toFixed(1);
-const count = (n: number) => n.toLocaleString("en-US");
+const count = indian;
 
 /* ------------------------------------------------------------------ hero */
 
 function Hero() {
   const facts = [
-    { value: "100,000", label: "conversations", text: "Of 10 to 100 messages each, on SQLite" },
-    { value: numbers.messages, label: "messages", text: "Written by the app's own seed, the same on every run" },
+    { value: indian(CONVERSATIONS), label: "conversations", text: "Of 10 to 100 messages each, on SQLite" },
+    { value: indian(Number(numbers.messages.replaceAll(",", ""))), label: "messages", text: "Written by the app's own seed, the same on every run" },
     { value: ms(numbers.firstScreen.largest_paint_ms), label: "to the first screen", text: `${kb(numbers.firstScreen.bytes_total)} sent, the median of ${numbers.firstScreen.runs} cold loads` },
     { value: count(numbers.flat.maxNodes), label: "nodes at most", text: `The most the page held while scrolling from ${count(numbers.flat.heldFrom)} to ${count(numbers.flat.heldTo)} conversations` },
   ];
@@ -119,7 +122,7 @@ function Hero() {
             <p className="eyebrow">Example app</p>
             <h1 id="inbox-heading" className="mt-5 text-display-xl font-semibold text-balance text-fg">
               <span className="block">A support inbox,</span>
-              <span className="block text-fg-2">at 100,000 conversations.</span>
+              <span className="block text-fg-2">at {indian(CONVERSATIONS)} conversations.</span>
             </h1>
           </div>
           <div className="lg:col-span-5 lg:pb-2">
@@ -305,7 +308,7 @@ function Scale() {
         split
         id="scale-heading"
         eyebrow="Proven at scale"
-        title="100,000 conversations, 5.5 million messages, measured."
+        title={`${indian(CONVERSATIONS)} conversations, 5.5 million messages, measured.`}
         lead={
           <p>
             Measured on one developer machine, release build, SQLite, Chromium. Past {numbers.flat.maxRows} rows the list
@@ -376,7 +379,7 @@ function Run() {
         }
       />
       <div className="mt-10 grid max-w-3xl gap-3">
-        <CommandLine command="cargo run --release -p inbox-demo" comment="100,000 conversations" />
+        <CommandLine command="cargo run --release -p inbox-demo" comment={`${indian(CONVERSATIONS)} conversations`} />
         <CommandLine command="INBOX_SCALE=2000 cargo run -p inbox-demo" comment="a small desk, quicker to start" />
       </div>
       <p className="mt-8 max-w-3xl text-[0.9375rem] leading-relaxed text-pretty text-fg-3">

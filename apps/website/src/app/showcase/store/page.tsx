@@ -6,6 +6,7 @@ import measured from "@content/showcase/store.json";
 import { PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
 import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
 import { example } from "@/components/ui-docs/data";
+import { indian } from "@/lib/format";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
@@ -17,8 +18,7 @@ import { showcases } from "../../ui/showcases";
 
 export const metadata: Metadata = pageMetadata({
   title: "A store's back office, built on Navree",
-  description:
-    "An example app on Navree UI: 200,000 orders on SQLite paged by cursor, an order drawer over its page, refunds checked on the server, a live feed. Measured.",
+  description: `An example app on Navree UI: ${indian(measured.rows.orders)} orders on SQLite paged by cursor, an order drawer over its page, refunds checked on the server, a live feed. Measured.`,
   path: "/showcase/store/",
 });
 
@@ -36,7 +36,7 @@ const data = measured as Measured;
 const store = showcases.find((s) => s.id === "store")!;
 const SOURCE = "apps/store-demo";
 
-const number = (n: number) => n.toLocaleString("en-US");
+const number = indian;
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
 const page = (name: string) => data.pages.find((p) => p.name === name)!;
