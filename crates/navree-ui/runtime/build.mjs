@@ -8,7 +8,7 @@ import { build } from "esbuild";
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { brotliCompressSync, gzipSync, constants } from "node:zlib";
+import { brotliCompressSync, gunzipSync, gzipSync, constants } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const crate = join(here, "..");
@@ -179,7 +179,15 @@ if (check) {
   const stale = [];
   for (const [file, bytes] of outputs) {
     const path = join(dist, file);
-    if (!existsSync(path) || !readFileSync(path).equals(bytes)) stale.push(`dist/${file}`);
+    if (!existsSync(path)) {
+      stale.push(`dist/${file}`);
+      continue;
+    }
+    const committed = readFileSync(path);
+    // Node's gzip output depends on the zlib its machine runs, so a .gz is checked by
+    // what it holds: the file's own bytes. Every other output is compared byte for byte.
+    const current = file.endsWith(".gz") ? gunzipSync(committed).equals(outputs.get(file.slice(0, -3))) : committed.equals(bytes);
+    if (!current) stale.push(`dist/${file}`);
   }
   if (!existsSync(gen) || readFileSync(gen, "utf8") !== rust) stale.push("src/assets_gen.rs");
   if (stale.length) {
