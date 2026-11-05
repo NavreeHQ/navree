@@ -502,7 +502,6 @@ function tidy() {
 /** @type {IntersectionObserver | null} */
 let seer = null;
 function watch() {
-  if (typeof IntersectionObserver !== "function") return;
   seer ||= new IntersectionObserver((seen) => {
     for (const entry of seen) {
       const form = /** @type {HTMLFormElement} */ (entry.target);
