@@ -750,7 +750,8 @@ for (const browserName of browsers) {
       await page.locator("#deals [name=search]").fill("globex");
       await page.getByRole("button", { name: "Apply" }).click();
       await page.waitForURL(/search=globex/);
-      assert.ok(!/page=2/.test(page.url()));
+      // The page number itself: the address also holds `per_page=25`.
+      assert.notEqual(new URL(page.url()).searchParams.get("page"), "2", "a new search starts from the first page");
       const titles = await rows(page).locator("td[data-truncate]").allInnerTexts();
       assert.ok(titles.length > 0 && titles.every((text) => /globex/i.test(text)));
       await shot(page, `${browserName}-no-js`);
