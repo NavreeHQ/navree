@@ -1,6 +1,7 @@
 /**
- * What the board example app measured at its full size, on one laptop, a debug
- * build, over loopback, in Chromium (4 November 2026). One place for the
+ * What the board example app measured at its full size, on one laptop, over
+ * loopback, in Chromium (the first page and the nodes on 5 November 2026, on a
+ * release build; the seed's time on 4 November, on a debug build). One place for the
  * figures, so `/showcase/board/`, the board's block on `/ui/` and its cards
  * say the same.
  *
@@ -20,7 +21,7 @@ if (!sortable?.brotli) throw new Error("board-numbers: content/ui/toolkit.json h
 
 export const boardNumbers = {
   /** The day the figures below were measured. */
-  measured: "2026-11-04",
+  measured: "2026-11-05",
   /** Cards the seed writes. */
   cards: appConstant("apps/board-demo/src/data.rs", "CARD_COUNT"),
   /** Comments and lines of history the seed writes with them, to the nearest thousand. */
@@ -29,7 +30,7 @@ export const boardNumbers = {
   /** About how long the seed takes to write at start. */
   seedSeconds: 2,
   /** The first page of the board: its HTML in bytes, and the same compressed with brotli in KB of 1,024 bytes. */
-  firstPage: { htmlBytes: 158_681, brotliKb: 7.6 },
+  firstPage: { htmlBytes: 158_756, brotliKb: 7.6 },
   /** The sortable module compressed with brotli, in bytes. */
   sortableBrotli: sortable.brotli,
   /** DOM nodes after scrolling two columns of thousands of cards to their cap of 200 each. */
