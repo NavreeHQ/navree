@@ -33,10 +33,10 @@ use std::marker::PhantomData;
 
 use http::request::Parts;
 use navree_http::extract::{FromRequestParts, urlencoded};
+pub(crate) use navree_http::list::Op;
 use navree_http::list::{
     Condition, ListQuery, MAX_PARAMS, MAX_QUERY_BYTES, MAX_SORTS, encode_component,
 };
-pub(crate) use navree_http::list::Op;
 use serde::de::DeserializeOwned;
 
 use super::{
@@ -865,7 +865,10 @@ mod tests {
     #[test]
     fn a_filter_is_named_the_way_the_grammar_names_it() {
         assert_eq!(filter_param("stage", Op::Eq), "filter[stage]");
-        assert_eq!(filter_param("title", Op::Contains), "filter[title][contains]");
+        assert_eq!(
+            filter_param("title", Op::Contains),
+            "filter[title][contains]"
+        );
         assert_eq!(filter_param("stage", Op::In), "filter[stage][in]");
         assert_eq!(filter_param("amount", Op::Gte), "filter[amount][gte]");
         assert_eq!(filter_param("amount", Op::Lte), "filter[amount][lte]");

@@ -36,7 +36,10 @@ async fn a_post_with_an_idempotency_key_is_retried_with_the_same_key_and_body() 
     let recorded = server.recorded();
     assert_eq!(recorded.len(), 3, "two retries");
     for request in &recorded {
-        assert_eq!(request.header("idempotency-key"), Some("order-42-attempt-1"));
+        assert_eq!(
+            request.header("idempotency-key"),
+            Some("order-42-attempt-1")
+        );
         assert_eq!(
             request.json::<serde_json::Value>().unwrap(),
             json!({ "amount": 149_900, "currency": "inr" })
@@ -192,7 +195,10 @@ async fn an_invalid_idempotency_key_fails_the_request_before_sending() {
             .send()
             .await
             .unwrap_err();
-        assert!(matches!(error, HttpClientError::Build(_)), "{key:?}: {error:?}");
+        assert!(
+            matches!(error, HttpClientError::Build(_)),
+            "{key:?}: {error:?}"
+        );
     }
     server.assert_nothing_sent();
 }
@@ -314,7 +320,11 @@ async fn retry_after_as_a_date_is_read() {
     );
     let started = Instant::now();
 
-    let past = client.get("https://past.example.com/").send().await.unwrap();
+    let past = client
+        .get("https://past.example.com/")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(past.status(), StatusCode::OK);
     assert!(started.elapsed() < Duration::from_millis(400));
     let future = client

@@ -549,7 +549,11 @@ async fn four_companies(crm: &TestCrm, rep1: &CrmClient, rep2: &CrmClient) {
     )
     .await;
     tick(crm);
-    create_company(rep2, json!({ "name": "Beas Traders", "industry": "Logistics" })).await;
+    create_company(
+        rep2,
+        json!({ "name": "Beas Traders", "industry": "Logistics" }),
+    )
+    .await;
     tick(crm);
     create_company(rep2, json!({ "name": "Ravi Foods", "industry": "Food" })).await;
     tick(crm);
@@ -579,7 +583,12 @@ async fn owner_and_industry_filters_take_their_operators() {
     );
     assert_eq!(
         names(&[("filter[owner_id][in]", &format!("{one},{two}"))]).await,
-        ["Beas Traders", "Chenab Textiles", "Ravi Foods", "Sutlej Supply"]
+        [
+            "Beas Traders",
+            "Chenab Textiles",
+            "Ravi Foods",
+            "Sutlej Supply"
+        ]
     );
     assert_eq!(
         names(&[("filter[owner_id][ne]", &one)]).await,
@@ -633,11 +642,21 @@ async fn sort_takes_the_names_of_the_allow_list_and_several_fields() {
 
     assert_eq!(
         names(&[("sort", "name,-created_at")]).await,
-        ["Beas Traders", "Chenab Textiles", "Ravi Foods", "Sutlej Supply"]
+        [
+            "Beas Traders",
+            "Chenab Textiles",
+            "Ravi Foods",
+            "Sutlej Supply"
+        ]
     );
     assert_eq!(
         names(&[("sort", "-created_at")]).await,
-        ["Chenab Textiles", "Ravi Foods", "Beas Traders", "Sutlej Supply"]
+        [
+            "Chenab Textiles",
+            "Ravi Foods",
+            "Beas Traders",
+            "Sutlej Supply"
+        ]
     );
     // A repeated `sort` adds terms; with a filter.
     assert_eq!(
@@ -673,7 +692,11 @@ async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
     for (sent, value, param) in [
         ("filter[name]", "Acme", "filter[name]"),
         ("filter[x]", "1", "filter[x]"),
-        ("filter[password][contains]", "x", "filter[password][contains]"),
+        (
+            "filter[password][contains]",
+            "x",
+            "filter[password][contains]",
+        ),
         ("filter[owner_id]", "nope", "filter[owner_id]"),
         ("filter[owner_id][gt]", "a", "filter[owner_id][gt]"),
         ("filter[owner_id][null]", "maybe", "filter[owner_id][null]"),
@@ -769,8 +792,7 @@ async fn hostile_values_are_just_values() {
     )
     .await;
     create_company(&rep, acme()).await;
-    let names =
-        async |query: &[(&str, &str)]| list(&rep, "/api/v1/companies", query, "name").await;
+    let names = async |query: &[(&str, &str)]| list(&rep, "/api/v1/companies", query, "name").await;
 
     // The industry and the search are plain values, found or not.
     assert_eq!(

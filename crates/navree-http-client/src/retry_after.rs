@@ -54,7 +54,10 @@ mod tests {
     #[test]
     fn seconds_are_read_as_given() {
         let now = at(0);
-        assert_eq!(parse_retry_after("120", now), Some(Duration::from_secs(120)));
+        assert_eq!(
+            parse_retry_after("120", now),
+            Some(Duration::from_secs(120))
+        );
         assert_eq!(parse_retry_after(" 0 ", now), Some(Duration::ZERO));
         assert_eq!(
             parse_retry_after("99999999999999999999999", now),

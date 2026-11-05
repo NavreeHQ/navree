@@ -41,9 +41,9 @@ use http::header::{CONTENT_TYPE, HOST, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, StatusCode};
 use navree_contracts::{AuthState, Principal, ZoneLevel, ZoneRequest, ZoneSource};
+use navree_http::AppError;
 use navree_http::response::sse::{Event, KeepAlive, Sse};
 use navree_http::response::{IntoResponse, Response};
-use navree_http::AppError;
 use navree_kernel::AppContext;
 use serde::Deserialize;
 use tokio::sync::Notify;
@@ -91,7 +91,9 @@ impl EventId {
     /// `<ms>-<seq>`; `None` for anything else.
     pub(crate) fn parse(text: &str) -> Option<EventId> {
         let (ms, seq) = text.trim().split_once('-')?;
-        let digits = |part: &str| !part.is_empty() && part.len() <= 20 && part.bytes().all(|b| b.is_ascii_digit());
+        let digits = |part: &str| {
+            !part.is_empty() && part.len() <= 20 && part.bytes().all(|b| b.is_ascii_digit())
+        };
         if !digits(ms) || !digits(seq) {
             return None;
         }
@@ -112,7 +114,9 @@ impl fmt::Display for EventId {
 fn unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .map_or(0, |elapsed| {
+            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        })
 }
 
 /// One broadcast, as a stream that comes back may need it.
@@ -188,7 +192,11 @@ impl Recent {
     /// stream that was on another process saw another order). When it is no
     /// longer kept, everything from five seconds before it on, if all of that
     /// still is.
-    fn missed(&self, last: EventId, name_of: impl Fn(&str) -> Option<String>) -> Option<Vec<Nudge>> {
+    fn missed(
+        &self,
+        last: EventId,
+        name_of: impl Fn(&str) -> Option<String>,
+    ) -> Option<Vec<Nudge>> {
         if !self.recording {
             return None;
         }
@@ -387,7 +395,9 @@ impl Streams {
 
     /// The streams listening on `channel`.
     pub(crate) fn listeners(&self, channel: &str) -> usize {
-        self.by_channel.get(channel).map_or(0, |listeners| listeners.len())
+        self.by_channel
+            .get(channel)
+            .map_or(0, |listeners| listeners.len())
     }
 
     /// Keeps the broadcast for streams that come back, then queues a nudge
@@ -537,11 +547,10 @@ impl Streams {
             return;
         }
         for (channel, _) in &listener.channels {
-            self.by_channel
-                .remove_if_mut(channel, |_, listeners| {
-                    listeners.remove(&listener.id);
-                    listeners.is_empty()
-                });
+            self.by_channel.remove_if_mut(channel, |_, listeners| {
+                listeners.remove(&listener.id);
+                listeners.is_empty()
+            });
         }
         self.release(listener.user.as_deref());
     }
@@ -647,7 +656,11 @@ fn header<K: http::header::AsHeaderName>(parts: &Parts, name: K) -> Option<Strin
         .map(str::to_owned)
 }
 
-async fn open(realtime: &Realtime, ctx: &AppContext, parts: &mut Parts) -> Result<Opened, AppError> {
+async fn open(
+    realtime: &Realtime,
+    ctx: &AppContext,
+    parts: &mut Parts,
+) -> Result<Opened, AppError> {
     let origin = header(parts, ORIGIN);
     if !realtime.origin_allowed(origin.as_deref(), header(parts, HOST).as_deref()) {
         tracing::warn!(
@@ -680,7 +693,9 @@ async fn open(realtime: &Realtime, ctx: &AppContext, parts: &mut Parts) -> Resul
     let bad_topics: Vec<String> = topics
         .iter()
         .filter(|topic| !is_topic_name(topic))
-        .map(|topic| format!("`{topic}` is not a topic: use 1 to 64 letters, digits, `_`, `.` and `-`"))
+        .map(|topic| {
+            format!("`{topic}` is not a topic: use 1 to 64 letters, digits, `_`, `.` and `-`")
+        })
         .collect();
     if !bad_topics.is_empty() {
         errors.insert("topics".to_owned(), bad_topics);
@@ -734,16 +749,20 @@ async fn open(realtime: &Realtime, ctx: &AppContext, parts: &mut Parts) -> Resul
         }
     }
 
-    let user = principal.as_ref().map(|principal| principal.user_id.to_string());
+    let user = principal
+        .as_ref()
+        .map(|principal| principal.user_id.to_string());
     if parts.headers.contains_key(PROBE_HEADER) {
         return Ok(Opened::Probe);
     }
     let streams = realtime.stream_hub();
     if !streams.admit(user.as_deref()) {
-        return Err(AppError::from_status(StatusCode::TOO_MANY_REQUESTS).with_detail(format!(
-            "A user may hold at most {} live streams at once",
-            options.per_user
-        )));
+        return Err(
+            AppError::from_status(StatusCode::TOO_MANY_REQUESTS).with_detail(format!(
+                "A user may hold at most {} live streams at once",
+                options.per_user
+            )),
+        );
     }
     let last = header(parts, "last-event-id")
         .or(query.last_event_id)
@@ -834,7 +853,17 @@ mod tests {
         let written = id(1_730_000_000_000, 7);
         assert_eq!(written.to_string(), "1730000000000-7");
         assert_eq!(EventId::parse(&written.to_string()), Some(written));
-        for bad in ["", "-", "1-", "-1", "1-2-3", "a-1", "1 -2", "1-+2", &"9".repeat(21)] {
+        for bad in [
+            "",
+            "-",
+            "1-",
+            "-1",
+            "1-2-3",
+            "a-1",
+            "1 -2",
+            "1-+2",
+            &"9".repeat(21),
+        ] {
             assert_eq!(EventId::parse(bad), None, "{bad}");
         }
     }
@@ -862,7 +891,10 @@ mod tests {
         recent.record(id(11, 1), &channels(&["a"]), "changed");
         assert_eq!(recent.entries.len(), 1);
         // A resume from an id kept here: nothing came after it.
-        assert_eq!(recent.missed(id(11, 1), |c| Some(c.to_owned())), Some(Vec::new()));
+        assert_eq!(
+            recent.missed(id(11, 1), |c| Some(c.to_owned())),
+            Some(Vec::new())
+        );
         // One from before the start, never kept here, can't be sure: fresh.
         assert_eq!(recent.missed(id(9, 0), |c| Some(c.to_owned())), None);
     }
@@ -886,8 +918,16 @@ mod tests {
         assert_eq!(
             missed,
             vec![
-                Nudge { name: "b".into(), id: id(t + 10, 2), event: "two".into() },
-                Nudge { name: "topic".into(), id: id(t + 20, 3), event: "three".into() },
+                Nudge {
+                    name: "b".into(),
+                    id: id(t + 10, 2),
+                    event: "two".into()
+                },
+                Nudge {
+                    name: "topic".into(),
+                    id: id(t + 20, 3),
+                    event: "three".into()
+                },
             ]
         );
     }
@@ -903,14 +943,20 @@ mod tests {
         recent.record(id(t - 6_000, 9), &channels(&["b"]), "too far back");
         recent.record(id(t - 3_000, 9), &channels(&["a"]), "late clock");
         recent.record(id(t, 1), &channels(&["a"]), "seen");
-        recent.record(id(t - 9_000, 4), &channels(&["c"]), "after, however late its clock");
+        recent.record(
+            id(t - 9_000, 4),
+            &channels(&["c"]),
+            "after, however late its clock",
+        );
         let missed = recent.missed(id(t, 1), |c| Some(c.to_owned())).unwrap();
         let events: Vec<&str> = missed.iter().map(|n| n.event.as_str()).collect();
         assert_eq!(events, ["late clock", "after, however late its clock"]);
 
         // An id from another process that never reached this one: the five
         // seconds before it on, all kept (one nudge per name, the newest).
-        let missed = recent.missed(id(t - 2_000, 77), |c| Some(c.to_owned())).unwrap();
+        let missed = recent
+            .missed(id(t - 2_000, 77), |c| Some(c.to_owned()))
+            .unwrap();
         let events: Vec<&str> = missed.iter().map(|n| n.event.as_str()).collect();
         assert_eq!(events, ["too far back", "seen"]);
     }
@@ -933,13 +979,18 @@ mod tests {
         let mut recent = Recent::new(2);
         recent.start(0);
         let t = 1_000_000;
-        for (n, at) in [t, t + 10_000, t + 20_000, t + 30_000].into_iter().enumerate() {
+        for (n, at) in [t, t + 10_000, t + 20_000, t + 30_000]
+            .into_iter()
+            .enumerate()
+        {
             recent.record(id(at, n as u64), &channels(&["a"]), "changed");
         }
         // The first two are gone: a reader last told about the first may have missed the second.
         assert_eq!(recent.missed(id(t, 0), |c| Some(c.to_owned())), None);
         // A reader told about the third missed only the fourth, which is kept.
-        let missed = recent.missed(id(t + 20_000, 2), |c| Some(c.to_owned())).unwrap();
+        let missed = recent
+            .missed(id(t + 20_000, 2), |c| Some(c.to_owned()))
+            .unwrap();
         assert_eq!(missed.len(), 1);
         assert_eq!(missed[0].id, id(t + 30_000, 3));
         // Replay off: never resumed.
@@ -972,7 +1023,11 @@ mod tests {
             ("navree-live.stats", "stats"),
         ]);
         for seq in 0..10_000 {
-            let channel = if seq % 2 == 0 { "navree-live.orders" } else { "private-navree-live.user.u.orders" };
+            let channel = if seq % 2 == 0 {
+                "navree-live.orders"
+            } else {
+                "private-navree-live.user.u.orders"
+            };
             listener.mark(channel, id(1, seq), "changed");
         }
         listener.mark("navree-live.stats", id(2, 10_000), "changed");
@@ -1019,7 +1074,10 @@ mod tests {
         assert!(names(None).is_empty());
         assert!(is_listenable_channel("private-crm.deals"));
         assert!(!is_listenable_channel("private-a=b"), "not an event name");
-        assert!(!is_listenable_channel(&format!("private-{}", "x".repeat(60))));
+        assert!(!is_listenable_channel(&format!(
+            "private-{}",
+            "x".repeat(60)
+        )));
     }
 
     #[test]
@@ -1033,7 +1091,10 @@ mod tests {
         assert!(streams.admit(Some("ada")));
         assert!(!streams.admit(Some("ada")));
         assert!(streams.admit(Some("bob")));
-        assert!(streams.admit(None), "guests are held by the server's limits");
+        assert!(
+            streams.admit(None),
+            "guests are held by the server's limits"
+        );
         streams.release(Some("ada"));
         assert!(streams.admit(Some("ada")));
     }

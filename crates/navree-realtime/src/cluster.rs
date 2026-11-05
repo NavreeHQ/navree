@@ -319,7 +319,8 @@ mod tests {
         );
         assert_eq!(Envelope::decode(b"not json"), None);
         // MOD-004: a broadcast without an id (an older sender) still reads.
-        let without = br#"{"v":1,"node":"n","type":"broadcast","channels":["a"],"event":"e","data":"{}"}"#;
+        let without =
+            br#"{"v":1,"node":"n","type":"broadcast","channels":["a"],"event":"e","data":"{}"}"#;
         assert!(matches!(
             Envelope::decode(without).map(|e| e.message),
             Some(Message::Broadcast { id: None, .. })

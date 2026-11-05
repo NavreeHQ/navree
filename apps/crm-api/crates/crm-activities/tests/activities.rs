@@ -820,7 +820,13 @@ async fn five_activities(crm: &crm_testkit::TestCrm) -> (Uuid, Uuid, Uuid) {
     let rep2 = crm.user_id(Role::Rep2);
     let acme = company(crm, rep1, "Acme").await;
     let ada = contact(crm, rep1, "Ada", "Lovelace").await;
-    let renewal = deal(crm, rep1, acme.id, NewDeal::open("Renewal", Stage::Lead, 100)).await;
+    let renewal = deal(
+        crm,
+        rep1,
+        acme.id,
+        NewDeal::open("Renewal", Stage::Lead, 100),
+    )
+    .await;
     let start = crm_testkit::TestCrm::start();
     let minutes = |n: i64| start + chrono::Duration::minutes(n);
     for new in [
@@ -887,8 +893,11 @@ async fn filters_take_their_operators() {
         ["Email Acme"]
     );
     assert_eq!(
-        found(&[("filter[subject_type]", "deal"), ("filter[subject_id]", &renewal.to_string())])
-            .await,
+        found(&[
+            ("filter[subject_type]", "deal"),
+            ("filter[subject_id]", &renewal.to_string())
+        ])
+        .await,
         ["Plain note", "Book demo", "Send deck"]
     );
     assert_eq!(

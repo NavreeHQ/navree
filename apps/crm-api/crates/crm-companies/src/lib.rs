@@ -28,8 +28,8 @@ mod contacts;
 
 pub use common::PageInfo;
 pub use companies::{
-    CompaniesController, CompaniesModule, CompanyDetail, CompanyList, CompanyPage,
-    CompanyResource, CompanyService, CompanyType, CreateCompany, UpdateCompany,
+    CompaniesController, CompaniesModule, CompanyDetail, CompanyList, CompanyPage, CompanyResource,
+    CompanyService, CompanyType, CreateCompany, UpdateCompany,
 };
 pub use contacts::{
     CSV_CONTENT_TYPE, CSV_HEADER, ContactList, ContactPage, ContactResource, ContactService,

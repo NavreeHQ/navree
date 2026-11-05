@@ -97,17 +97,14 @@ impl ListQuery {
         let mut filters: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for condition in &syntax.filter {
             if matches!(condition.op, Op::Eq | Op::In) {
-                filters
-                    .entry(condition.field.clone())
-                    .or_default()
-                    .extend(
-                        condition
-                            .values
-                            .iter()
-                            .map(|value| value.trim())
-                            .filter(|value| !value.is_empty())
-                            .map(str::to_owned),
-                    );
+                filters.entry(condition.field.clone()).or_default().extend(
+                    condition
+                        .values
+                        .iter()
+                        .map(|value| value.trim())
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_owned),
+                );
             } else if mode == Mode::Api {
                 refuse(
                     &mut errors,
@@ -328,9 +325,18 @@ mod tests {
         assert_eq!(keys(ListQuery::parse("page=abc").unwrap_err()), ["page"]);
         let error = ListQuery::parse("per_page=1000").unwrap_err();
         assert!(error.errors.unwrap().contains_key("per_page"));
-        assert_eq!(keys(ListQuery::parse("per_page=0").unwrap_err()), ["per_page"]);
-        assert_eq!(keys(ListQuery::parse_api("per_page=101").unwrap_err()), ["per_page"]);
-        assert_eq!(ListQuery::parse("per_page=100").unwrap().per_page, Some(100));
+        assert_eq!(
+            keys(ListQuery::parse("per_page=0").unwrap_err()),
+            ["per_page"]
+        );
+        assert_eq!(
+            keys(ListQuery::parse_api("per_page=101").unwrap_err()),
+            ["per_page"]
+        );
+        assert_eq!(
+            ListQuery::parse("per_page=100").unwrap().per_page,
+            Some(100)
+        );
     }
 
     #[test]
@@ -409,7 +415,10 @@ mod tests {
             q.to_query(None, Some("-title")),
             "filter%5Bstage%5D=won&sort=-title&search=a+b"
         );
-        assert_eq!(q.to_query(Some(1), None), "filter%5Bstage%5D=won&sort=title&search=a+b");
+        assert_eq!(
+            q.to_query(Some(1), None),
+            "filter%5Bstage%5D=won&sort=title&search=a+b"
+        );
     }
 
     #[test]

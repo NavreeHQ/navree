@@ -517,7 +517,6 @@ impl Hub {
             }
         }
     }
-
 }
 
 /// Now, in unix seconds.

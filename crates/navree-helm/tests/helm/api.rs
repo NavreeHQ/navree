@@ -213,7 +213,12 @@ async fn lists_search_sort_and_paginate() {
         .json_value();
     assert_eq!(
         titles(&body),
-        ["GLOBEX expansion", "Globex renewal", "Initech upgrade", "Hooli pilot"]
+        [
+            "GLOBEX expansion",
+            "Globex renewal",
+            "Initech upgrade",
+            "Hooli pilot"
+        ]
     );
     // The search is `search`; `q` is not the list query's and searches nothing.
     let body = rep

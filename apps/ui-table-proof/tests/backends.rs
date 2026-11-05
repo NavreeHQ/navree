@@ -286,10 +286,17 @@ fn check_expectations(results: &Results) {
     assert_eq!(get("per_page=100&search=%25wild").0, ["7"]);
     assert_eq!(get("per_page=100&search=_card").0, ["7"]);
     assert_eq!(get("per_page=100&search=%5C").0, ["7"]);
-    assert_eq!(get("per_page=100&search=école").0, ["8"], "case ignored past ASCII");
+    assert_eq!(
+        get("per_page=100&search=école").0,
+        ["8"],
+        "case ignored past ASCII"
+    );
     assert_eq!(get("per_page=100&search=مرحبا").0, ["9"]);
     assert_eq!(get("per_page=100&search=DROP").0, ["10"]);
-    assert_eq!(get("per_page=100&filter[title][contains]=nothing-matches-this").1, "0");
+    assert_eq!(
+        get("per_page=100&filter[title][contains]=nothing-matches-this").1,
+        "0"
+    );
     assert_eq!(get("per_page=100&filter[amount][null]=true").1, "12");
     // A page past the end is the last page.
     assert_eq!(get("page=999").2, 6);
@@ -379,7 +386,10 @@ async fn views_sql(db: &Db, label: &str) {
         .execute_script("DROP TABLE IF EXISTS navree_ui_table_views")
         .await;
     db.pool().execute_script("CREATE TABLE navree_ui_table_views (id VARCHAR(64) PRIMARY KEY, owner VARCHAR(64) NOT NULL, table_id VARCHAR(64) NOT NULL, name VARCHAR(200) NOT NULL, query TEXT NOT NULL, is_default BOOLEAN NOT NULL)").await.unwrap();
-    let query = TableQuery::<SqlDeal, NoFilter>::parse("/d", "filter[stage][in]=won&sort=title&page=3&per_page=5");
+    let query = TableQuery::<SqlDeal, NoFilter>::parse(
+        "/d",
+        "filter[stage][in]=won&sort=title&page=3&per_page=5",
+    );
     let first = navree::ui::table::save_view(db, "me", "t", "Won", &query, true)
         .await
         .unwrap();

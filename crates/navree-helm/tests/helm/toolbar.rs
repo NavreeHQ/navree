@@ -548,7 +548,9 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     assert!(!html.contains("name=\"q\""), "{html}");
     // A chip's Clear link is the list without that filter, written the same way.
     assert!(
-        html.contains("href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;sort=title&amp;search=Deal\""),
+        html.contains(
+            "href=\"/admin/resources/deals?filter%5Bopen%5D=1&amp;sort=title&amp;search=Deal\""
+        ),
         "{html}"
     );
     assert!(
@@ -585,7 +587,10 @@ async fn the_pages_read_the_list_query_and_leave_the_rest() {
     // `filter[stage][in]=a,b` and `filter[stage]=a` filter.
     for (query, shown) in [
         ("filter%5Bstage%5D%5Bin%5D=lead%2Cwon", true),
-        ("filter%5Bstage%5D%5Bin%5D=lead&filter%5Bstage%5D%5Bin%5D=won", true),
+        (
+            "filter%5Bstage%5D%5Bin%5D=lead&filter%5Bstage%5D%5Bin%5D=won",
+            true,
+        ),
         ("filter%5Bstage%5D=lead", true),
         ("filter%5Bstage%5D%5Bin%5D=won%2Clost", false),
         ("filter%5Bstage%5D=won", false),
@@ -618,9 +623,12 @@ async fn the_pages_read_the_list_query_and_leave_the_rest() {
     }
     // `search` searches.
     let html = plain(
-        page(&manager, "/admin/resources/deals?search=nothing-matches-this")
-            .await
-            .assert_status(200),
+        page(
+            &manager,
+            "/admin/resources/deals?search=nothing-matches-this",
+        )
+        .await
+        .assert_status(200),
     );
     assert!(html.contains("No deals match these filters"), "{html}");
     // A page that is not a number is a 400 on a page too.
@@ -697,7 +705,10 @@ async fn a_link_of_the_list_opens_the_same_list() {
             .await
             .assert_status(200),
     );
-    assert!(second.contains("Beta") && !second.contains("Alpha"), "{second}");
+    assert!(
+        second.contains("Beta") && !second.contains("Alpha"),
+        "{second}"
+    );
 }
 
 #[tokio::test]

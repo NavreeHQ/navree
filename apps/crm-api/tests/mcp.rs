@@ -170,7 +170,10 @@ async fn list_deals_filters_by_stage_title_and_owner() {
         .json::<Vec<Value>>();
     assert_eq!(blank.len(), 2);
     let combined = mcp
-        .call_tool("list_deals", json!({ "query": "acme", "stage": "lead", "mine": true }))
+        .call_tool(
+            "list_deals",
+            json!({ "query": "acme", "stage": "lead", "mine": true }),
+        )
         .await
         .json::<Vec<Value>>();
     assert_eq!(combined.len(), 1);

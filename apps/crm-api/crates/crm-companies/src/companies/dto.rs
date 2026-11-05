@@ -205,7 +205,9 @@ mod tests {
 
     #[test]
     fn industry_is_checked_but_left_to_the_service() {
-        let field = CompanyList::SPEC.field("industry").expect("an industry filter");
+        let field = CompanyList::SPEC
+            .field("industry")
+            .expect("an industry filter");
         assert!(field.by_app);
         assert_eq!(field.allowed_ops(), [Op::Eq]);
         // `contains` would be accepted and then ignored: it is refused.

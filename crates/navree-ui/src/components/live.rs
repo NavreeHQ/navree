@@ -254,7 +254,10 @@ mod tests {
         assert_eq!(live.event_attr().as_deref(), Some("conversation.42 clock"));
         assert_eq!(live.src(), &stream.href());
         // The connection's own names, and bad ones, are not heard.
-        let live = Live::new("/events").event("open").event("error").event("a b");
+        let live = Live::new("/events")
+            .event("open")
+            .event("error")
+            .event("a b");
         assert!(live.events().is_empty());
         assert_eq!(live.event_attr(), None);
     }

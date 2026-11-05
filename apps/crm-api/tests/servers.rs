@@ -202,10 +202,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
             "search electricite.example",
             json!({ "search": "electricite.example" }),
         ),
-        (
-            "industry énergie",
-            json!({ "filter[industry]": "énergie" }),
-        ),
+        ("industry énergie", json!({ "filter[industry]": "énergie" })),
         (
             "industry SOFTWARE",
             json!({ "filter[industry]": "SOFTWARE" }),

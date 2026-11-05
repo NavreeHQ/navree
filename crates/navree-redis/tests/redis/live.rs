@@ -89,8 +89,13 @@ impl Page {
                 }
                 let mut buffer = [0u8; 4096];
                 let read = self.socket.read(&mut buffer).await.unwrap();
-                assert!(read > 0, "the stream ended before `{needle}`: {}", self.seen);
-                self.seen.push_str(&String::from_utf8_lossy(&buffer[..read]));
+                assert!(
+                    read > 0,
+                    "the stream ended before `{needle}`: {}",
+                    self.seen
+                );
+                self.seen
+                    .push_str(&String::from_utf8_lossy(&buffer[..read]));
             }
         })
         .await

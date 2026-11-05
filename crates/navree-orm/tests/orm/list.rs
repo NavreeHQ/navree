@@ -79,18 +79,28 @@ async fn equality_and_the_comparison_operators() {
         names(&t, "filter[employees]=75").await,
         ["Ganga Mills", "Jhelum Tools"]
     );
-    assert_eq!(names(&t, "filter[employees][gt]=120").await, ["Chenab Textiles"]);
+    assert_eq!(
+        names(&t, "filter[employees][gt]=120").await,
+        ["Chenab Textiles"]
+    );
     assert_eq!(
         names(&t, "filter[employees][gte]=120").await,
         ["Chenab Textiles", "Sutlej Supply"]
     );
-    assert_eq!(names(&t, "filter[employees][lt]=9").await, Vec::<String>::new());
+    assert_eq!(
+        names(&t, "filter[employees][lt]=9").await,
+        Vec::<String>::new()
+    );
     assert_eq!(
         names(&t, "filter[employees][lte]=40").await,
         ["Beas Traders", "Ravi Foods"]
     );
     assert_eq!(
-        names(&t, "filter[employees][gte]=40&filter[employees][lte]=75&filter[active]=true").await,
+        names(
+            &t,
+            "filter[employees][gte]=40&filter[employees][lte]=75&filter[active]=true"
+        )
+        .await,
         ["Beas Traders", "Jhelum Tools"]
     );
     assert_eq!(
@@ -120,7 +130,10 @@ async fn in_and_not_in() {
 #[tokio::test]
 async fn null_and_not_null() {
     let t = companies().await;
-    assert_eq!(names(&t, "filter[country][null]=true").await, ["Chenab Textiles"]);
+    assert_eq!(
+        names(&t, "filter[country][null]=true").await,
+        ["Chenab Textiles"]
+    );
     assert_eq!(
         names(&t, "filter[country][null]=false&filter[active]=false").await,
         ["Ganga Mills", "Ravi Foods"]
@@ -138,10 +151,17 @@ async fn contains_and_starts_with_ignore_case() {
         names(&t, "filter[name][starts_with]=ra").await,
         ["Ravi Foods"]
     );
-    assert_eq!(names(&t, "filter[name][starts_with]=raders").await, Vec::<String>::new());
+    assert_eq!(
+        names(&t, "filter[name][starts_with]=raders").await,
+        Vec::<String>::new()
+    );
     // A wildcard is refused by the list's check, and again by `list` if a
     // query that skipped the check reaches it.
-    assert!(Companies::SPEC.parse("filter[name][starts_with]=r_").is_err());
+    assert!(
+        Companies::SPEC
+            .parse("filter[name][starts_with]=r_")
+            .is_err()
+    );
     let (list, _) = ListQuery::parse_lenient("filter[name][starts_with]=r_");
     assert!(Company::query().list(&list, &Companies::SPEC).is_err());
 }
@@ -154,8 +174,16 @@ async fn a_date_stands_for_its_whole_day() {
         6,
         "everything created before the end of 2999-12-31"
     );
-    assert!(names(&t, "filter[created_at][gte]=2999-01-01").await.is_empty());
-    assert!(names(&t, "filter[created_at][lt]=2000-01-01T00:00:00Z").await.is_empty());
+    assert!(
+        names(&t, "filter[created_at][gte]=2999-01-01")
+            .await
+            .is_empty()
+    );
+    assert!(
+        names(&t, "filter[created_at][lt]=2000-01-01T00:00:00Z")
+            .await
+            .is_empty()
+    );
     assert_eq!(
         names(&t, "filter[created_at][gt]=2000-01-01").await.len(),
         6,
@@ -171,7 +199,11 @@ async fn search_looks_in_the_declared_columns_only() {
     // `country` is searched too: three companies are in PK or have a "pk"
     // in a name column.
     assert_eq!(names(&t, "search=PK").await, ["Jhelum Tools"]);
-    assert_eq!(names(&t, "search=%20").await.len(), 6, "a blank search is no search");
+    assert_eq!(
+        names(&t, "search=%20").await.len(),
+        6,
+        "a blank search is no search"
+    );
 }
 
 #[tokio::test]
@@ -179,7 +211,14 @@ async fn the_sort_is_the_clients_inside_the_allow_list() {
     let t = companies().await;
     assert_eq!(
         names(&t, "sort=-employees").await,
-        ["Chenab Textiles", "Sutlej Supply", "Ganga Mills", "Jhelum Tools", "Beas Traders", "Ravi Foods"],
+        [
+            "Chenab Textiles",
+            "Sutlej Supply",
+            "Ganga Mills",
+            "Jhelum Tools",
+            "Beas Traders",
+            "Ravi Foods"
+        ],
         "equal employees (75) keep the primary key's order, in the sort's direction"
     );
     assert_eq!(
@@ -188,7 +227,11 @@ async fn the_sort_is_the_clients_inside_the_allow_list() {
     );
     // A field outside the allow-list never reaches SQL.
     assert!(Companies::SPEC.parse("sort=country").is_err());
-    assert!(Companies::SPEC.parse("sort=name;drop table companies").is_err());
+    assert!(
+        Companies::SPEC
+            .parse("sort=name;drop table companies")
+            .is_err()
+    );
     assert!(Companies::SPEC.parse("sort=updated_at").is_err());
 }
 
@@ -200,8 +243,16 @@ async fn an_unknown_field_is_an_error_not_sql() {
     let error = Companies::SPEC.parse("filter[password]=x").unwrap_err();
     assert_eq!(error.problems[0].param, "filter[password]");
     // Quotes and SQL in a value are values.
-    assert!(names(&t, "filter[name]=x'%20OR%201=1%20--").await.is_empty());
-    assert!(names(&t, "filter[name][contains]=%27;DROP%20TABLE%20companies;--").await.is_empty());
+    assert!(
+        names(&t, "filter[name]=x'%20OR%201=1%20--")
+            .await
+            .is_empty()
+    );
+    assert!(
+        names(&t, "filter[name][contains]=%27;DROP%20TABLE%20companies;--")
+            .await
+            .is_empty()
+    );
     assert_eq!(names(&t, "").await.len(), 6, "the table is still there");
 }
 
@@ -216,7 +267,11 @@ async fn the_query_renders_as_parameters() {
         .to_sql(Dialect::Postgres)
         .unwrap();
     assert!(sql.sql.contains("ORDER BY"), "{}", sql.sql);
-    assert!(!sql.sql.contains("tools"), "values are bound, not written: {}", sql.sql);
+    assert!(
+        !sql.sql.contains("tools"),
+        "values are bound, not written: {}",
+        sql.sql
+    );
     assert!(!sql.sql.contains("40"), "{}", sql.sql);
 }
 
@@ -232,10 +287,16 @@ async fn numbered_pages_use_the_lists_size() {
         .unwrap();
     // The list's page size is 3; the default order is by name.
     assert_eq!(
-        page.data.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        page.data
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
         ["Jhelum Tools", "Ravi Foods", "Sutlej Supply"]
     );
-    assert_eq!((page.meta.total, page.meta.per_page, page.meta.last_page), (6, 3, 2));
+    assert_eq!(
+        (page.meta.total, page.meta.per_page, page.meta.last_page),
+        (6, 3, 2)
+    );
     assert!(Companies::SPEC.parse("per_page=11").is_err());
 }
 
@@ -243,8 +304,17 @@ async fn numbered_pages_use_the_lists_size() {
 async fn cursor_pages_walk_the_whole_list() {
     let t = companies().await;
     let mut seen: Vec<String> = Vec::new();
-    let mut request = Companies::SPEC.parse("limit=4").unwrap().cursor_request(&Companies::SPEC);
-    assert_eq!(request, CursorRequest { cursor: None, limit: Some(4) });
+    let mut request = Companies::SPEC
+        .parse("limit=4")
+        .unwrap()
+        .cursor_request(&Companies::SPEC);
+    assert_eq!(
+        request,
+        CursorRequest {
+            cursor: None,
+            limit: Some(4)
+        }
+    );
     loop {
         let list = ListQuery::default();
         let page = Company::query()
@@ -262,5 +332,8 @@ async fn cursor_pages_walk_the_whole_list() {
     assert_eq!(seen.len(), 6);
     let mut sorted = seen.clone();
     sorted.sort();
-    assert_eq!(seen, sorted, "the default order is by name, page after page");
+    assert_eq!(
+        seen, sorted,
+        "the default order is by name, page after page"
+    );
 }

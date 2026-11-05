@@ -26,7 +26,12 @@ use crate::support::{ORIGIN, Server, app, options};
 const QUIET: Duration = Duration::from_millis(300);
 
 async fn live(server: &Server) -> Arc<Live> {
-    server.app.ctx().get::<Live>().await.expect("RealtimeModule provides Live")
+    server
+        .app
+        .ctx()
+        .get::<Live>()
+        .await
+        .expect("RealtimeModule provides Live")
 }
 
 fn with_streams(streams: StreamOptions) -> RealtimeOptions {
@@ -43,12 +48,24 @@ async fn a_public_topic_reaches_a_guest_with_its_name_and_never_the_data() {
     // MOD-004
     let server = Server::start().await;
     let (mut guest, first) = server.listen("topics=orders", None, &[]).await;
-    assert_eq!(first.event, "ui:live", "a stream that resumes nothing starts fresh");
+    assert_eq!(
+        first.event, "ui:live",
+        "a stream that resumes nothing starts fresh"
+    );
     assert!(first.id.is_some(), "every event carries an id: {first:?}");
     assert_eq!(server.realtime.streams(), 1);
-    assert_eq!(server.realtime.listeners(&Topic::public("orders").channel()), 1);
+    assert_eq!(
+        server
+            .realtime
+            .listeners(&Topic::public("orders").channel()),
+        1
+    );
 
-    live(&server).await.nudge([Topic::public("orders")]).await.unwrap();
+    live(&server)
+        .await
+        .nudge([Topic::public("orders")])
+        .await
+        .unwrap();
     let nudge = guest.expect("orders").await;
     assert_eq!(nudge.data, "changed");
     assert!(nudge.id.is_some());
@@ -84,7 +101,11 @@ async fn the_stream_is_an_unbuffered_event_stream() {
     };
     assert_eq!(header("content-type"), "text/event-stream");
     assert_eq!(header("cache-control"), "no-cache");
-    assert_eq!(header("x-accel-buffering"), "no", "proxies must not hold nudges back");
+    assert_eq!(
+        header("x-accel-buffering"),
+        "no",
+        "proxies must not hold nudges back"
+    );
 }
 
 // ---- Scoping: the user and their workspace ----------------------------------
@@ -149,7 +170,9 @@ async fn a_workspace_topic_reaches_only_the_members_of_that_workspace() {
         page.expect_silence(QUIET).await;
     }
 
-    live.nudge([Topic::workspace(globex, "deals")]).await.unwrap();
+    live.nudge([Topic::workspace(globex, "deals")])
+        .await
+        .unwrap();
     bob_in_globex.expect("deals").await;
     for page in [&mut ada_in_acme, &mut cy_in_acme, &mut guest_in_acme] {
         page.expect_silence(QUIET).await;
@@ -162,9 +185,21 @@ async fn a_page_cannot_name_the_channel_of_another_scope() {
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
     for (query, user) in [
-        (format!("channels={}", Topic::user(bob, "inbox").channel()), Some(ada)),
-        (format!("channels={}", Topic::user(ada, "inbox").channel()), Some(ada)),
-        (format!("channels={}", Topic::workspace(Uuid::now_v7(), "deals").channel()), Some(ada)),
+        (
+            format!("channels={}", Topic::user(bob, "inbox").channel()),
+            Some(ada),
+        ),
+        (
+            format!("channels={}", Topic::user(ada, "inbox").channel()),
+            Some(ada),
+        ),
+        (
+            format!(
+                "channels={}",
+                Topic::workspace(Uuid::now_v7(), "deals").channel()
+            ),
+            Some(ada),
+        ),
         ("channels=navree-live.orders".to_owned(), None),
     ] {
         let refused = server.stream(&query, user, &[]).await;
@@ -192,14 +227,26 @@ async fn private_channels_follow_the_channel_authorizers() {
 
     let (mut ada_page, first) = server.listen(&query, Some(ada), &[]).await;
     assert_eq!(first.event, "ui:live");
-    assert_eq!(server.stream(&query, Some(bob), &[]).await.status, StatusCode::FORBIDDEN);
-    assert_eq!(server.stream(&query, None, &[]).await.status, StatusCode::UNAUTHORIZED);
     assert_eq!(
-        server.stream("channels=private-broken", Some(ada), &[]).await.status,
+        server.stream(&query, Some(bob), &[]).await.status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        server.stream(&query, None, &[]).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        server
+            .stream("channels=private-broken", Some(ada), &[])
+            .await
+            .status,
         StatusCode::INTERNAL_SERVER_ERROR
     );
     assert_eq!(
-        server.stream("channels=private-nobody.listens", Some(ada), &[]).await.status,
+        server
+            .stream("channels=private-nobody.listens", Some(ada), &[])
+            .await
+            .status,
         StatusCode::FORBIDDEN,
         "no authorizer matches: 403, as for a WebSocket"
     );
@@ -209,7 +256,11 @@ async fn private_channels_follow_the_channel_authorizers() {
     server.join(&mut socket, ada, &own).await;
     server
         .realtime
-        .broadcast([own.as_str()], "notification.created", json!({ "title": "Deal assigned" }))
+        .broadcast(
+            [own.as_str()],
+            "notification.created",
+            json!({ "title": "Deal assigned" }),
+        )
         .unwrap();
     assert_eq!(
         socket.expect("notification.created").await.data,
@@ -224,8 +275,13 @@ async fn a_presence_channel_is_heard_without_joining_it() {
     // MOD-004
     let server = Server::start().await;
     let ada = Uuid::now_v7();
-    let (mut page, _) = server.listen("channels=presence-room.7", Some(ada), &[]).await;
-    assert!(server.realtime.members("presence-room.7").is_empty(), "a stream is no member");
+    let (mut page, _) = server
+        .listen("channels=presence-room.7", Some(ada), &[])
+        .await;
+    assert!(
+        server.realtime.members("presence-room.7").is_empty(),
+        "a stream is no member"
+    );
     server
         .realtime
         .broadcast(["presence-room.7"], "room.renamed", json!({}))
@@ -237,10 +293,19 @@ async fn a_presence_channel_is_heard_without_joining_it() {
 async fn public_channels_and_topics_share_one_stream() {
     // MOD-004
     let server = Server::start().await;
-    let (mut page, _) = server.listen("topics=orders&channels=news", None, &[]).await;
-    server.realtime.broadcast(["news"], "posted", json!({})).unwrap();
+    let (mut page, _) = server
+        .listen("topics=orders&channels=news", None, &[])
+        .await;
+    server
+        .realtime
+        .broadcast(["news"], "posted", json!({}))
+        .unwrap();
     assert_eq!(page.expect("news").await.data, "posted");
-    live(&server).await.nudge([Topic::public("orders")]).await.unwrap();
+    live(&server)
+        .await
+        .nudge([Topic::public("orders")])
+        .await
+        .unwrap();
     page.expect("orders").await;
 }
 
@@ -251,12 +316,16 @@ async fn the_probe_answers_what_the_stream_would_and_opens_nothing() {
     // MOD-004: the runtime asks with `x-ui-probe` what a stream that failed answers.
     let server = Server::start().await;
     let probe = [("x-ui-probe", "1")];
-    let refused = server.stream("channels=private-crm.deals", None, &probe).await;
+    let refused = server
+        .stream("channels=private-crm.deals", None, &probe)
+        .await;
     assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
     let mut fine = server.stream("topics=orders", None, &probe).await;
     assert_eq!(fine.status, StatusCode::OK);
     assert_eq!(
-        fine.headers.get("content-type").and_then(|v| v.to_str().ok()),
+        fine.headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
         Some("text/event-stream")
     );
     fine.expect_end().await;
@@ -268,7 +337,11 @@ async fn a_stream_that_names_nothing_is_a_204() {
     // MOD-004: the runtime does not try a 204 again.
     let server = Server::start().await;
     for query in ["", "topics=", "topics=,%20,&channels="] {
-        assert_eq!(server.stream(query, None, &[]).await.status, StatusCode::NO_CONTENT, "{query}");
+        assert_eq!(
+            server.stream(query, None, &[]).await.status,
+            StatusCode::NO_CONTENT,
+            "{query}"
+        );
     }
 }
 
@@ -284,16 +357,28 @@ async fn names_are_checked_and_capped() {
     assert_eq!(too_many.status, StatusCode::BAD_REQUEST);
 
     let bad = server
-        .stream("topics=has%20space,ui:live&channels=private-a%3Db", None, &[])
+        .stream(
+            "topics=has%20space,ui:live&channels=private-a%3Db",
+            None,
+            &[],
+        )
         .await;
     assert_eq!(bad.status, StatusCode::BAD_REQUEST);
     let body = bad.json().await;
-    assert!(body["errors"]["topics"].as_array().is_some_and(|e| e.len() == 2), "{body}");
+    assert!(
+        body["errors"]["topics"]
+            .as_array()
+            .is_some_and(|e| e.len() == 2),
+        "{body}"
+    );
     assert!(body["errors"]["channels"].is_array(), "{body}");
 
     let long = "x".repeat(65);
     assert_eq!(
-        server.stream(&format!("topics={long}"), None, &[]).await.status,
+        server
+            .stream(&format!("topics={long}"), None, &[])
+            .await
+            .status,
         StatusCode::BAD_REQUEST
     );
     assert_eq!(server.realtime.streams(), 0);
@@ -307,7 +392,9 @@ async fn a_page_from_a_disallowed_origin_is_refused() {
         .stream("topics=orders", None, &[("origin", "https://evil.example")])
         .await;
     assert_eq!(refused.status, StatusCode::FORBIDDEN);
-    let allowed = server.stream("topics=orders", None, &[("origin", ORIGIN)]).await;
+    let allowed = server
+        .stream("topics=orders", None, &[("origin", ORIGIN)])
+        .await;
     assert_eq!(allowed.status, StatusCode::OK);
 }
 
@@ -430,7 +517,10 @@ async fn a_stream_that_cannot_be_resumed_starts_fresh() {
     let (_, first) = server
         .listen("topics=orders", None, &[("last-event-id", &last)])
         .await;
-    assert_eq!(first.event, "ui:live", "what it missed is no longer all kept");
+    assert_eq!(
+        first.event, "ui:live",
+        "what it missed is no longer all kept"
+    );
 
     // Resuming turned off: always fresh.
     let off = Server::start_with(with_streams(StreamOptions {
@@ -439,9 +529,15 @@ async fn a_stream_that_cannot_be_resumed_starts_fresh() {
     }))
     .await;
     let (mut page, _) = off.listen("topics=orders", None, &[]).await;
-    live(&off).await.nudge([Topic::public("orders")]).await.unwrap();
+    live(&off)
+        .await
+        .nudge([Topic::public("orders")])
+        .await
+        .unwrap();
     let last = page.expect("orders").await.id.unwrap();
-    let (_, first) = off.listen("topics=orders", None, &[("last-event-id", &last)]).await;
+    let (_, first) = off
+        .listen("topics=orders", None, &[("last-event-id", &last)])
+        .await;
     assert_eq!(first.event, "ui:live");
 }
 
@@ -460,7 +556,11 @@ async fn a_page_that_does_not_read_never_holds_a_broadcaster_up() {
             .broadcast([channel.as_str()], "changed", json!({ "n": n }))
             .unwrap();
     }
-    live(&server).await.nudge([Topic::public("stats")]).await.unwrap();
+    live(&server)
+        .await
+        .nudge([Topic::public("stats")])
+        .await
+        .unwrap();
 
     assert_eq!(page.expect("ui:live").await.data, "live");
     page.expect("orders").await;
@@ -496,7 +596,11 @@ async fn ending_a_users_subscriptions_ends_their_streams() {
     let broadcaster: Arc<dyn Broadcaster> = server.realtime.clone();
     broadcaster.end_user_subscriptions(ada).await.unwrap();
     ada_page.expect_end().await;
-    live(&server).await.nudge([Topic::user(bob, "inbox")]).await.unwrap();
+    live(&server)
+        .await
+        .nudge([Topic::user(bob, "inbox")])
+        .await
+        .unwrap();
     bob_page.expect("inbox").await;
 
     server.realtime.disconnect_user(bob);
@@ -521,7 +625,9 @@ async fn a_nudge_from_a_queue_worker_reaches_the_page() {
     // MOD-004: the worker relays to the serving process, which tells its streams.
     let server = Server::start().await;
     let ada = Uuid::now_v7();
-    let (mut page, _) = server.listen("topics=orders,notifications", Some(ada), &[]).await;
+    let (mut page, _) = server
+        .listen("topics=orders,notifications", Some(ada), &[])
+        .await;
     let worker = app(RealtimeOptions {
         relay_url: format!("http://{}", server.addr),
         ..options()
@@ -529,7 +635,11 @@ async fn a_nudge_from_a_queue_worker_reaches_the_page() {
     .boot()
     .await
     .expect("the worker app boots");
-    let worker_live = worker.ctx().get::<Live>().await.expect("Live in the worker");
+    let worker_live = worker
+        .ctx()
+        .get::<Live>()
+        .await
+        .expect("Live in the worker");
     worker_live
         .nudge([Topic::public("orders"), Topic::user(ada, "notifications")])
         .await
@@ -581,7 +691,10 @@ struct Recording(Mutex<Vec<(Vec<String>, String)>>);
 
 impl Recording {
     fn sent(&self) -> Vec<(Vec<String>, String)> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -614,13 +727,20 @@ async fn a_nudge_in_a_unit_of_work_waits_for_its_commit_and_never_follows_a_roll
     let workspace = Uuid::now_v7();
 
     let uow = db.uow(None, None).await;
-    uow.scope(async { live.nudge([Topic::workspace(workspace, "deals")]).await.unwrap() })
-        .await;
+    uow.scope(async {
+        live.nudge([Topic::workspace(workspace, "deals")])
+            .await
+            .unwrap()
+    })
+    .await;
     assert!(recording.sent().is_empty(), "nothing before the commit");
     uow.commit().await.expect("the commit");
     assert_eq!(
         recording.sent(),
-        [(vec![Topic::workspace(workspace, "deals").channel()], "changed".to_owned())]
+        [(
+            vec![Topic::workspace(workspace, "deals").channel()],
+            "changed".to_owned()
+        )]
     );
 
     let uow = db.uow(None, None).await;
@@ -630,9 +750,13 @@ async fn a_nudge_in_a_unit_of_work_waits_for_its_commit_and_never_follows_a_roll
     assert_eq!(recording.sent().len(), 1, "nothing after a rollback");
 
     // Outside a unit of work nothing waits; each channel goes once.
-    live.nudge([Topic::public("orders"), Topic::public("orders"), Topic::public("stats")])
-        .await
-        .unwrap();
+    live.nudge([
+        Topic::public("orders"),
+        Topic::public("orders"),
+        Topic::public("stats"),
+    ])
+    .await
+    .unwrap();
     assert_eq!(
         recording.sent()[1].0,
         ["navree-live.orders", "navree-live.stats"]
@@ -640,7 +764,11 @@ async fn a_nudge_in_a_unit_of_work_waits_for_its_commit_and_never_follows_a_roll
 
     // A name that is not a topic sends nothing.
     assert!(live.nudge([Topic::public("not a topic")]).await.is_err());
-    assert!(live.nudge([Topic::public("ok"), Topic::public("ui:live")]).await.is_err());
+    assert!(
+        live.nudge([Topic::public("ok"), Topic::public("ui:live")])
+            .await
+            .is_err()
+    );
     assert_eq!(recording.sent().len(), 2);
 }
 
@@ -659,14 +787,25 @@ async fn an_app_without_an_authenticator_serves_public_topics_and_no_auth_route(
     )
     .await;
     let (mut page, _) = server.listen("topics=orders", None, &[]).await;
-    live(&server).await.nudge([Topic::public("orders")]).await.unwrap();
+    live(&server)
+        .await
+        .nudge([Topic::public("orders")])
+        .await
+        .unwrap();
     page.expect("orders").await;
     assert_eq!(
-        server.stream("channels=private-crm.deals", None, &[]).await.status,
+        server
+            .stream("channels=private-crm.deals", None, &[])
+            .await
+            .status,
         StatusCode::UNAUTHORIZED
     );
     let reply = server.auth(None, "1234.5678", "private-crm.deals").await;
-    assert_eq!(reply.status, StatusCode::NOT_FOUND, "nobody could be authorized");
+    assert_eq!(
+        reply.status,
+        StatusCode::NOT_FOUND,
+        "nobody could be authorized"
+    );
 }
 
 fn allow(

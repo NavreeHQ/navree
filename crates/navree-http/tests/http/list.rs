@@ -199,7 +199,10 @@ async fn an_unknown_field_is_a_400_that_names_the_parameter() {
         .await
         .assert_error(400);
     assert_eq!(body["code"], "validation_failed");
-    assert!(body["errors"]["filter[password][contains]"].is_array(), "{body}");
+    assert!(
+        body["errors"]["filter[password][contains]"].is_array(),
+        "{body}"
+    );
     assert!(body["errors"]["per_page"].is_array(), "{body}");
 }
 
@@ -217,5 +220,8 @@ async fn hostile_queries_in_a_router_end_in_a_400_not_a_panic() {
         app.get(&format!("/deals?{query}")).await.assert_error(400);
     }
     // Parameters that are not the list query's are left alone.
-    assert_eq!(app.get("/deals?utm_source=x&owner=3").await.status, StatusCode::OK);
+    assert_eq!(
+        app.get("/deals?utm_source=x&owner=3").await.status,
+        StatusCode::OK
+    );
 }

@@ -341,7 +341,10 @@ fn the_next_steps_start_the_database_first() {
         ..app_on("lite", Ui::Next, Database::Sqlite)
     };
     let message = created_message(&published, &dir.path().join("lite"));
-    assert!(message.contains("  pnpm --dir web install     # the front end"), "{message}");
+    assert!(
+        message.contains("  pnpm --dir web install     # the front end"),
+        "{message}"
+    );
     assert!(!message.contains("packages/js"), "{message}");
 
     let mysql = app_on("my-shop", Ui::None, Database::Mysql);
@@ -589,7 +592,12 @@ fn ui_next_adds_the_web_front_end() {
     )
     .expect("package.json is valid JSON");
     assert_eq!(package["name"], "blog-web");
-    assert!(package["packageManager"].as_str().unwrap().starts_with("pnpm@"));
+    assert!(
+        package["packageManager"]
+            .as_str()
+            .unwrap()
+            .starts_with("pnpm@")
+    );
     let gitignore = std::fs::read_to_string(root.join(".gitignore")).unwrap();
     assert!(gitignore.contains("/web/node_modules/"), "{gitignore}");
 }
@@ -604,7 +612,8 @@ fn ui_next_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     let root = create_app(dir.path(), &app("blog", Ui::Next), now()).unwrap();
 
     // The packages are linked from the checkout `navree` comes from.
-    let package: serde_json::Value = serde_json::from_str(&read(&root, "web/package.json")).unwrap();
+    let package: serde_json::Value =
+        serde_json::from_str(&read(&root, "web/package.json")).unwrap();
     assert_eq!(
         package["dependencies"]["@navree/next"],
         "link:/opt/navree/packages/js/next"
@@ -634,7 +643,13 @@ fn ui_next_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     // No file keeps tokens or cookies itself.
     for file in tree(&root).into_iter().filter(|p| p.starts_with("web/")) {
         let text = read(&root, &file);
-        for needle in ["ACCESS_COOKIE", "REFRESH_COOKIE", "createBff", "navree_at", "Set-Cookie"] {
+        for needle in [
+            "ACCESS_COOKIE",
+            "REFRESH_COOKIE",
+            "createBff",
+            "navree_at",
+            "Set-Cookie",
+        ] {
             assert!(!text.contains(needle), "{file} mentions {needle}");
         }
     }
@@ -658,12 +673,18 @@ fn ui_next_from_a_published_navree_asks_npm_for_the_packages() {
     };
     let root = create_app(dir.path(), &published, now()).unwrap();
 
-    let package: serde_json::Value = serde_json::from_str(&read(&root, "web/package.json")).unwrap();
+    let package: serde_json::Value =
+        serde_json::from_str(&read(&root, "web/package.json")).unwrap();
     assert_eq!(package["dependencies"]["@navree/next"], "^1.0.0");
     assert_eq!(package["dependencies"]["@navree/client"], "^1.0.0");
     // Nothing is linked, so Next needs no settings for files outside the app.
     let config = read(&root, "web/next.config.ts");
-    for needle in ["turbopack", "outputFileTracingRoot", "transpilePackages", "node:path"] {
+    for needle in [
+        "turbopack",
+        "outputFileTracingRoot",
+        "transpilePackages",
+        "node:path",
+    ] {
         assert!(!config.contains(needle), "{needle} in\n{config}");
     }
     // The README says the packages install from a checkout until they are published.

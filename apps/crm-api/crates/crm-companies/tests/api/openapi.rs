@@ -197,7 +197,9 @@ async fn every_route_is_documented_with_its_schemas() {
             ["filter[...]", "search"].as_slice(),
         ),
     ] {
-        let description = paths[path]["get"]["description"].as_str().unwrap_or_default();
+        let description = paths[path]["get"]["description"]
+            .as_str()
+            .unwrap_or_default();
         for parameter in parameters {
             assert!(
                 description.contains(parameter),

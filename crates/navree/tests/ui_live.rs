@@ -137,7 +137,9 @@ impl Stream {
                 }
                 continue;
             }
-            let frame = tokio::time::timeout_at(deadline, self.body.frame()).await.ok()??;
+            let frame = tokio::time::timeout_at(deadline, self.body.frame())
+                .await
+                .ok()??;
             if let Ok(data) = frame.ok()?.into_data() {
                 self.buffer.push_str(&String::from_utf8_lossy(&data));
             }
@@ -158,7 +160,13 @@ fn the_page_and_the_hub_agree_on_where_the_stream_is() {
 async fn a_page_on_the_hub_hears_a_job_a_queue_worker_ran() {
     // MOD-004: the worker-to-page path.
     let app = builder().build().await;
-    let html = app.client().get("/deals").send().await.assert_status(200).text();
+    let html = app
+        .client()
+        .get("/deals")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
     assert!(
         html.contains(r#"data-ui-live-src="/broadcasting/stream?topics=deals""#),
         "{html}"
@@ -216,12 +224,16 @@ async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_reso
     }
 
     let live = app.get::<Live>().await;
-    live.nudge([Topic::workspace(acme.id, "deals")]).await.unwrap();
+    live.nudge([Topic::workspace(acme.id, "deals")])
+        .await
+        .unwrap();
     assert_eq!(ada_in_acme.next(WAIT).await.as_deref(), Some("deals"));
     assert_eq!(bob_in_globex.next(QUIET).await, None);
     assert_eq!(bob_in_acme.next(QUIET).await, None);
 
-    live.nudge([Topic::workspace(globex.id, "deals")]).await.unwrap();
+    live.nudge([Topic::workspace(globex.id, "deals")])
+        .await
+        .unwrap();
     assert_eq!(bob_in_globex.next(WAIT).await.as_deref(), Some("deals"));
     assert_eq!(ada_in_acme.next(QUIET).await, None);
 }

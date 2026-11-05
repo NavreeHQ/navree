@@ -787,8 +787,15 @@ impl Kind {
                 let ok = !whole.is_empty()
                     && !fraction.is_empty()
                     && whole.len() + fraction.len() <= 38
-                    && whole.bytes().chain(fraction.bytes()).all(|b| b.is_ascii_digit());
-                if ok { Ok(()) } else { wrong("a decimal number") }
+                    && whole
+                        .bytes()
+                        .chain(fraction.bytes())
+                        .all(|b| b.is_ascii_digit());
+                if ok {
+                    Ok(())
+                } else {
+                    wrong("a decimal number")
+                }
             }
             Kind::Bool => match text {
                 "true" | "false" => Ok(()),
@@ -819,7 +826,11 @@ impl Kind {
                 if words.contains(&text) {
                     Ok(())
                 } else {
-                    Err(format!("`{}` is not one of: {}", clip(text, 40), words.join(", ")))
+                    Err(format!(
+                        "`{}` is not one of: {}",
+                        clip(text, 40),
+                        words.join(", ")
+                    ))
                 }
             }
         }
@@ -1070,7 +1081,10 @@ impl ListSpec {
                 continue;
             }
             if condition.op == Op::StartsWith
-                && condition.values.iter().any(|v| v.contains(['%', '_', '\\']))
+                && condition
+                    .values
+                    .iter()
+                    .any(|v| v.contains(['%', '_', '\\']))
             {
                 problems.push(Problem::new(
                     param,
@@ -1190,7 +1204,10 @@ impl From<ListError> for AppError {
     fn from(error: ListError) -> Self {
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for problem in error.problems {
-            errors.entry(problem.param).or_default().push(problem.message);
+            errors
+                .entry(problem.param)
+                .or_default()
+                .push(problem.message);
         }
         AppError::validation(errors)
     }
@@ -1360,14 +1377,26 @@ mod tests {
         let error = strict("filter[password][contains]=x&filter[stage]=won").unwrap_err();
         assert_eq!(error.problems.len(), 1);
         assert_eq!(error.problems[0].param, "filter[password][contains]");
-        assert!(error.problems[0].message.contains("use one of: stage"), "{error}");
+        assert!(
+            error.problems[0].message.contains("use one of: stage"),
+            "{error}"
+        );
     }
 
     #[test]
     fn an_operator_the_field_does_not_take_is_refused() {
-        assert_eq!(params(strict("filter[hot][gte]=true").unwrap_err()), ["filter[hot][gte]"]);
-        assert_eq!(params(strict("filter[code][contains]=x").unwrap_err()), ["filter[code][contains]"]);
-        assert_eq!(params(strict("filter[stage][starts_with]=l").unwrap_err()), ["filter[stage][starts_with]"]);
+        assert_eq!(
+            params(strict("filter[hot][gte]=true").unwrap_err()),
+            ["filter[hot][gte]"]
+        );
+        assert_eq!(
+            params(strict("filter[code][contains]=x").unwrap_err()),
+            ["filter[code][contains]"]
+        );
+        assert_eq!(
+            params(strict("filter[stage][starts_with]=l").unwrap_err()),
+            ["filter[stage][starts_with]"]
+        );
         assert!(strict("filter[title][starts_with]=Su").is_ok());
         // A prefix is matched with LIKE, so its wildcards are not allowed.
         assert!(strict("filter[title][starts_with]=Su%25").is_err());
@@ -1385,9 +1414,15 @@ mod tests {
             ("filter[hot]=yes", "filter[hot]"),
             ("filter[closes_on]=2026-13-01", "filter[closes_on]"),
             ("filter[closes_on]=2026-1-1", "filter[closes_on]"),
-            ("filter[created_at][gte]=yesterday", "filter[created_at][gte]"),
+            (
+                "filter[created_at][gte]=yesterday",
+                "filter[created_at][gte]",
+            ),
             ("filter[owner_id]=not-a-uuid", "filter[owner_id]"),
-            ("filter[owner_id]=00000000000000000000000000000000", "filter[owner_id]"),
+            (
+                "filter[owner_id]=00000000000000000000000000000000",
+                "filter[owner_id]",
+            ),
             ("filter[stage]=won,lost", "filter[stage]"),
             ("filter[stage]=archived", "filter[stage]"),
         ] {
@@ -1418,16 +1453,16 @@ mod tests {
         impl ListResource for Quiet {
             const SPEC: ListSpec = ListSpec::new(&[]);
         }
-        assert_eq!(params(Quiet::SPEC.parse("search=x").unwrap_err()), ["search"]);
+        assert_eq!(
+            params(Quiet::SPEC.parse("search=x").unwrap_err()),
+            ["search"]
+        );
     }
 
     #[test]
     fn every_problem_is_reported_at_once() {
         let error = strict("filter[x]=1&sort=y&page=0&filter[hot]=maybe").unwrap_err();
-        assert_eq!(
-            params(error),
-            ["page", "filter[x]", "filter[hot]", "sort"]
-        );
+        assert_eq!(params(error), ["page", "filter[x]", "filter[hot]", "sort"]);
     }
 
     #[test]

@@ -433,7 +433,11 @@ fn page_sizes_are_only_those_offered() {
     assert_eq!(q("per_page=0").per_page(), 25);
     assert_eq!(q("per_page=50").per_page(), 50);
     assert_eq!(q("per_page=10").per_page(), 10);
-    assert_eq!(q("limit=50").per_page(), 25, "a numbered table has no limit");
+    assert_eq!(
+        q("limit=50").per_page(),
+        25,
+        "a numbered table has no limit"
+    );
     assert_eq!(q("per=50").per_page(), 25, "per was the old name");
     assert_eq!(q("page=0").page(), 1);
     assert_eq!(q("page=abc").page(), 1);
@@ -538,7 +542,10 @@ fn a_cursor_table_reads_cursor_before_and_limit() {
     assert_eq!(query.per_page(), 25, "per_page is the numbered pages' size");
     // A cursor of 1,024 bytes is whole; one past the limit is ignored.
     let whole = "c".repeat(1024);
-    assert_eq!(feed(&format!("cursor={whole}")).after(), Some(whole.as_str()));
+    assert_eq!(
+        feed(&format!("cursor={whole}")).after(),
+        Some(whole.as_str())
+    );
     assert_eq!(feed(&format!("cursor={whole}c")).after(), None);
     // Written the way a list query is: the page size after the cursor.
     assert_eq!(
@@ -567,11 +574,15 @@ fn a_cursor_tables_links_and_page_size_use_the_same_names() {
     let html = render(&DataTable::new("feed", &query, &page).into());
     let links = hrefs(&html);
     assert!(
-        links.iter().any(|href| href == "/feed?search=ada&cursor=n1&limit=50"),
+        links
+            .iter()
+            .any(|href| href == "/feed?search=ada&cursor=n1&limit=50"),
         "next: {links:?}"
     );
     assert!(
-        links.iter().any(|href| href == "/feed?search=ada&before=p1&limit=50"),
+        links
+            .iter()
+            .any(|href| href == "/feed?search=ada&before=p1&limit=50"),
         "previous: {links:?}"
     );
     assert!(
@@ -581,7 +592,10 @@ fn a_cursor_tables_links_and_page_size_use_the_same_names() {
     assert!(html.contains(r#"name="limit""#), "the page size: {html}");
     assert!(!html.contains(r#"name="per_page""#), "{html}");
     assert!(!html.contains(r#"name="per""#), "{html}");
-    assert!(!links.iter().any(|href| href.contains("after=")), "{links:?}");
+    assert!(
+        !links.iter().any(|href| href.contains("after=")),
+        "{links:?}"
+    );
 }
 
 fn draw(query: &Q, rows: &[Deal], total: u64) -> String {
@@ -884,10 +898,7 @@ fn a_select_filter_is_a_select_named_by_its_column() {
     assert!(html.contains(r#"name="filter[stage]""#), "{html}");
     assert!(!html.contains(r#"name="filter[stage][in]""#), "{html}");
     assert!(!html.contains(r#"name="f.stage""#), "{html}");
-    assert!(
-        html.contains(r#"<option value="won" selected>"#),
-        "{html}"
-    );
+    assert!(html.contains(r#"<option value="won" selected>"#), "{html}");
     assert!(
         hrefs(&html)
             .iter()

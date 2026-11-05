@@ -58,7 +58,9 @@ impl SseClient {
             if self.ended {
                 return Some(None);
             }
-            let frame = tokio::time::timeout_at(deadline, self.body.frame()).await.ok()?;
+            let frame = tokio::time::timeout_at(deadline, self.body.frame())
+                .await
+                .ok()?;
             match frame {
                 Some(Ok(frame)) => {
                     if let Ok(data) = frame.into_data() {
@@ -142,7 +144,12 @@ impl SseClient {
 impl Server {
     /// Opens `GET /broadcasting/stream?{query}` as `user` (a guest when
     /// `None`) with `headers` (name, value).
-    pub async fn stream(&self, query: &str, user: Option<Uuid>, headers: &[(&str, &str)]) -> SseClient {
+    pub async fn stream(
+        &self,
+        query: &str,
+        user: Option<Uuid>,
+        headers: &[(&str, &str)],
+    ) -> SseClient {
         let mut request = Request::get(format!("/broadcasting/stream?{query}"))
             .header("accept", "text/event-stream");
         if let Some(user) = user {
@@ -169,7 +176,12 @@ impl Server {
     }
 
     /// Opens a stream that must be served (200), and reads its first event.
-    pub async fn listen(&self, query: &str, user: Option<Uuid>, headers: &[(&str, &str)]) -> (SseClient, SseEvent) {
+    pub async fn listen(
+        &self,
+        query: &str,
+        user: Option<Uuid>,
+        headers: &[(&str, &str)],
+    ) -> (SseClient, SseEvent) {
         let mut stream = self.stream(query, user, headers).await;
         assert_eq!(stream.status, StatusCode::OK, "{query}");
         let first = stream.next().await.expect("a first event");

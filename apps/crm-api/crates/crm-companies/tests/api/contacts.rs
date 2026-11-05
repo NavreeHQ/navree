@@ -347,10 +347,7 @@ async fn search_and_filters() {
         names(&[("filter[status]", "churned")]).await,
         ["alan Turing"]
     );
-    assert_eq!(
-        names(&[("filter[status]", "lead")]).await,
-        ["Grace Hopper"]
-    );
+    assert_eq!(names(&[("filter[status]", "lead")]).await, ["Grace Hopper"]);
     let rep2_id = crm.user_id(Role::Rep2).to_string();
     assert_eq!(
         names(&[("filter[owner_id]", &rep2_id)]).await,
@@ -607,15 +604,15 @@ async fn contact_filters_take_their_operators() {
     );
     // A search narrows the filtered list; every word must match.
     assert_eq!(
-        names(&[
-            ("search", "a"),
-            ("filter[status][in]", "customer,churned")
-        ])
-        .await,
+        names(&[("search", "a"), ("filter[status][in]", "customer,churned")]).await,
         ["Ada Lovelace", "alan Turing"]
     );
     assert_eq!(
-        names(&[("search", "katherine johnson"), ("filter[company_id]", &acme)]).await,
+        names(&[
+            ("search", "katherine johnson"),
+            ("filter[company_id]", &acme)
+        ])
+        .await,
         ["Katherine Johnson"]
     );
     // The list has no `sort`: contacts always come by last name.
@@ -699,7 +696,11 @@ async fn what_the_contact_list_does_not_allow_is_a_400_naming_the_parameter() {
     // (the parameter sent, its value, the parameter the 400 names)
     for (sent, value, param) in [
         ("filter[email]", "ada@acme.com", "filter[email]"),
-        ("filter[last_name][contains]", "love", "filter[last_name][contains]"),
+        (
+            "filter[last_name][contains]",
+            "love",
+            "filter[last_name][contains]",
+        ),
         ("filter[status]", "vip", "filter[status]"),
         ("filter[status][gt]", "lead", "filter[status][gt]"),
         ("filter[company_id]", "acme", "filter[company_id]"),

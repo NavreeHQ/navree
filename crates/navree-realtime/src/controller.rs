@@ -14,8 +14,7 @@ use navree_http::body::Bytes;
 use navree_http::response::Response;
 use navree_http::ws::WebSocketUpgrade;
 use navree_http::{
-    ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Extension, Json, Path,
-    RouteDef,
+    ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Extension, Json, Path, RouteDef,
 };
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::Deserialize;

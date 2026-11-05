@@ -62,7 +62,8 @@ pub fn run() {
             .to_html()
     });
     time("1,000-row page, sort and all", 300, || {
-        let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per_page=1000&sort=-amount");
+        let sorted =
+            TableQuery::<DealRow, DealFilter>::parse("/deals", "per_page=1000&sort=-amount");
         let (found, count) = select(&sorted, &deals);
         shell
             .page("Deals", "/deals")

@@ -292,7 +292,10 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
         "web/app/api/auth/refresh/route.ts",
         "web/app/api/auth/2fa/verify/route.ts",
     ] {
-        assert!(!files.iter().any(|file| file == gone), "{gone} is still written");
+        assert!(
+            !files.iter().any(|file| file == gone),
+            "{gone} is still written"
+        );
     }
     assert!(files.iter().all(|file| !file.starts_with("web/lib/bff/")));
 
@@ -307,7 +310,10 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
     assert!(read(&root, "web/lib/navree.ts").contains("createNavree()"));
     // The admin panel is behind sign-in in the proxy, and the sign-in page is the kit's.
     let proxy = read(&root, "web/proxy.ts");
-    assert!(proxy.contains("navree.proxy({ loginPath: \"/sign-in\" })"), "{proxy}");
+    assert!(
+        proxy.contains("navree.proxy({ loginPath: \"/sign-in\" })"),
+        "{proxy}"
+    );
     assert!(proxy.contains("matcher: [\"/admin/:path*\"]"), "{proxy}");
     // Live updates and abilities use the packages' entry points.
     assert!(
@@ -349,9 +355,17 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
         let Ok(text) = std::fs::read_to_string(root.join(file)) else {
             continue;
         };
-        for needle in ["ACCESS_COOKIE", "REFRESH_COOKIE", "createBff(", "originAllowed"] {
+        for needle in [
+            "ACCESS_COOKIE",
+            "REFRESH_COOKIE",
+            "createBff(",
+            "originAllowed",
+        ] {
             let allowed = file == "web/lib/social.test.ts" && needle == "createBff(";
-            assert!(allowed || !text.contains(needle), "{file} mentions {needle}");
+            assert!(
+                allowed || !text.contains(needle),
+                "{file} mentions {needle}"
+            );
         }
         if file != "web/lib/social.ts" && file != "web/lib/social.test.ts" {
             assert!(!text.contains("navree_at"), "{file} mentions navree_at");
@@ -377,7 +391,12 @@ fn the_saas_kits_web_app_from_a_published_navree_asks_npm_for_the_packages() {
     assert_eq!(package["dependencies"]["@navree/next"], "^1.0.0");
     assert_eq!(package["dependencies"]["@navree/client"], "^1.0.0");
     let config = read(&root, "web/next.config.ts");
-    for needle in ["turbopack", "outputFileTracingRoot", "transpilePackages", "node:path"] {
+    for needle in [
+        "turbopack",
+        "outputFileTracingRoot",
+        "transpilePackages",
+        "node:path",
+    ] {
         assert!(!config.contains(needle), "{needle} in\n{config}");
     }
     assert!(config.contains("cacheComponents: false"));
@@ -405,7 +424,11 @@ fn no_template_carries_a_backend_for_frontend_of_its_own() {
         let Ok(text) = std::fs::read_to_string(&file) else {
             continue;
         };
-        let name = file.strip_prefix(&templates).unwrap().to_string_lossy().replace('\\', "/");
+        let name = file
+            .strip_prefix(&templates)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         // The only tests that name `createBff` give the social routes a BFF with a scripted API.
         let test_of_social = name == "kits/web/lib/social.test.ts";
         for implementation in [
@@ -417,9 +440,15 @@ fn no_template_carries_a_backend_for_frontend_of_its_own() {
             "REFRESH_COOKIE",
             "originAllowed",
         ] {
-            assert!(!text.contains(implementation), "{name} contains {implementation}");
+            assert!(
+                !text.contains(implementation),
+                "{name} contains {implementation}"
+            );
         }
-        assert!(test_of_social || !text.contains("createBff("), "{name} calls createBff");
+        assert!(
+            test_of_social || !text.contains("createBff("),
+            "{name} calls createBff"
+        );
     }
 }
 

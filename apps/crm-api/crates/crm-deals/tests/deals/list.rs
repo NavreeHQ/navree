@@ -48,10 +48,42 @@ async fn four_deals(crm: &crm_testkit::TestCrm, rep: &CrmClient, manager: &CrmCl
     let beas = company(crm, "Beas", rep.id()).await;
     let rep2 = crm.user_id(Role::Rep2);
     for (client, title, company, amount, stage, closes, owner) in [
-        (rep, "Sutlej renewal", sutlej, 300, "lead", "2026-12-01", None),
-        (rep, "Beas expansion", beas, 100, "proposal", "2026-11-15", None),
-        (manager, "Ravi upsell", sutlej, 200, "won", "2026-12-20", Some(rep2)),
-        (manager, "Chenab pilot", beas, 400, "lead", "2026-11-30", Some(rep2)),
+        (
+            rep,
+            "Sutlej renewal",
+            sutlej,
+            300,
+            "lead",
+            "2026-12-01",
+            None,
+        ),
+        (
+            rep,
+            "Beas expansion",
+            beas,
+            100,
+            "proposal",
+            "2026-11-15",
+            None,
+        ),
+        (
+            manager,
+            "Ravi upsell",
+            sutlej,
+            200,
+            "won",
+            "2026-12-20",
+            Some(rep2),
+        ),
+        (
+            manager,
+            "Chenab pilot",
+            beas,
+            400,
+            "lead",
+            "2026-11-30",
+            Some(rep2),
+        ),
     ] {
         let mut input = new_deal(title, company, amount);
         input["stage"] = json!(stage);
@@ -61,11 +93,7 @@ async fn four_deals(crm: &crm_testkit::TestCrm, rep: &CrmClient, manager: &CrmCl
         }
         create_deal(client, input).await;
     }
-    Fixture {
-        sutlej,
-        beas,
-        rep2,
-    }
+    Fixture { sutlej, beas, rep2 }
 }
 
 #[tokio::test]
@@ -95,7 +123,11 @@ async fn the_stage_filter_takes_equality_and_lists() {
     );
     // The key may repeat.
     assert_eq!(
-        stages(&[("filter[stage][in]", "won"), ("filter[stage][in]", "proposal")]).await,
+        stages(&[
+            ("filter[stage][in]", "won"),
+            ("filter[stage][in]", "proposal")
+        ])
+        .await,
         ["Beas expansion", "Ravi upsell"]
     );
     assert_eq!(
@@ -141,7 +173,9 @@ async fn owner_and_company_filters_combine_with_search() {
         ["Ravi upsell"]
     );
     assert_eq!(
-        found(&[("filter[company_id][in]", &format!("{sutlej},{beas}"))]).await.len(),
+        found(&[("filter[company_id][in]", &format!("{sutlej},{beas}"))])
+            .await
+            .len(),
         4
     );
     assert_eq!(
@@ -160,7 +194,11 @@ async fn owner_and_company_filters_combine_with_search() {
     // Filters narrow the total, and pages keep them.
     let page = list(
         &rep,
-        &[("filter[stage][in]", "lead,won"), ("per_page", "2"), ("page", "2")],
+        &[
+            ("filter[stage][in]", "lead,won"),
+            ("per_page", "2"),
+            ("page", "2"),
+        ],
     )
     .await;
     assert_eq!(page["data"].as_array().map(Vec::len), Some(1));
@@ -181,23 +219,48 @@ async fn sort_orders_by_the_fields_of_the_allow_list() {
     let sorted = async |sort: &str| titles(&list(&rep, &[("sort", sort)]).await);
     assert_eq!(
         sorted("amount_cents").await,
-        ["Beas expansion", "Ravi upsell", "Sutlej renewal", "Chenab pilot"]
+        [
+            "Beas expansion",
+            "Ravi upsell",
+            "Sutlej renewal",
+            "Chenab pilot"
+        ]
     );
     assert_eq!(
         sorted("-amount_cents").await,
-        ["Chenab pilot", "Sutlej renewal", "Ravi upsell", "Beas expansion"]
+        [
+            "Chenab pilot",
+            "Sutlej renewal",
+            "Ravi upsell",
+            "Beas expansion"
+        ]
     );
     assert_eq!(
         sorted("title").await,
-        ["Beas expansion", "Chenab pilot", "Ravi upsell", "Sutlej renewal"]
+        [
+            "Beas expansion",
+            "Chenab pilot",
+            "Ravi upsell",
+            "Sutlej renewal"
+        ]
     );
     assert_eq!(
         sorted("expected_close_date").await,
-        ["Beas expansion", "Chenab pilot", "Sutlej renewal", "Ravi upsell"]
+        [
+            "Beas expansion",
+            "Chenab pilot",
+            "Sutlej renewal",
+            "Ravi upsell"
+        ]
     );
     assert_eq!(
         sorted("-expected_close_date").await,
-        ["Ravi upsell", "Sutlej renewal", "Chenab pilot", "Beas expansion"]
+        [
+            "Ravi upsell",
+            "Sutlej renewal",
+            "Chenab pilot",
+            "Beas expansion"
+        ]
     );
     // Several fields, and a repeated `sort` adds terms: lead deals first by
     // amount, then the rest.
@@ -212,7 +275,12 @@ async fn sort_orders_by_the_fields_of_the_allow_list() {
     let repeated = titles(&list(&rep, &[("sort", "-title"), ("sort", "amount_cents")]).await);
     assert_eq!(
         repeated,
-        ["Sutlej renewal", "Ravi upsell", "Chenab pilot", "Beas expansion"]
+        [
+            "Sutlej renewal",
+            "Ravi upsell",
+            "Chenab pilot",
+            "Beas expansion"
+        ]
     );
     // Without `sort`, the newest deal comes first.
     let newest = titles(&list(&rep, &[]).await);
@@ -231,12 +299,24 @@ async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
     for (sent, value, param) in [
         // A field the list does not declare, or a column that is not a filter.
         ("filter[x]", "1", "filter[x]"),
-        ("filter[password][contains]", "1", "filter[password][contains]"),
+        (
+            "filter[password][contains]",
+            "1",
+            "filter[password][contains]",
+        ),
         ("filter[title]", "1", "filter[title]"),
-        ("filter[amount_cents][gte]", "1", "filter[amount_cents][gte]"),
+        (
+            "filter[amount_cents][gte]",
+            "1",
+            "filter[amount_cents][gte]",
+        ),
         // An operator the field does not take.
         ("filter[stage][gt]", "lead", "filter[stage][gt]"),
-        ("filter[owner_id][contains]", "a", "filter[owner_id][contains]"),
+        (
+            "filter[owner_id][contains]",
+            "a",
+            "filter[owner_id][contains]",
+        ),
         // A value of the wrong type.
         ("filter[stage]", "closed", "filter[stage]"),
         ("filter[owner_id]", "nope", "filter[owner_id]"),

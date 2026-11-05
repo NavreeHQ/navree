@@ -55,12 +55,19 @@ fn a_region_listens_for_one_name_or_several_on_one_stream() {
             .live_on(stream.on("conversation.42").event("clock"))
             .into(),
     );
-    assert_eq!(attr(&list, "data-ui-live-src"), attr(&heading, "data-ui-live-src"), "one connection");
+    assert_eq!(
+        attr(&list, "data-ui-live-src"),
+        attr(&heading, "data-ui-live-src"),
+        "one connection"
+    );
     assert_eq!(
         attr(&list, "data-ui-live-src").as_deref(),
         Some(stream.href().as_str())
     );
-    assert_eq!(attr(&list, "data-ui-live-event").as_deref(), Some("conversations"));
+    assert_eq!(
+        attr(&list, "data-ui-live-event").as_deref(),
+        Some("conversations")
+    );
     assert_eq!(
         attr(&heading, "data-ui-live-event").as_deref(),
         Some("conversation.42 clock")
@@ -98,17 +105,29 @@ fn every_live_part_loads_the_live_module() {
     let query = TableQuery::<Row>::parse("/orders", "");
     let page = |body: Node| View::new("x").body(body);
 
-    let region = page(Region::new("r").src("/r").live_on(stream.on("orders")).into());
+    let region = page(
+        Region::new("r")
+            .src("/r")
+            .live_on(stream.on("orders"))
+            .into(),
+    );
     assert_eq!(region.uses(), Uses::CORE.with(Uses::LIVE));
     assert!(region.to_html().contains(assets::LIVE_URL));
 
-    let table = page(DataTable::new("orders", &query, &rows).live_on(stream.on("orders")).into());
+    let table = page(
+        DataTable::new("orders", &query, &rows)
+            .live_on(stream.on("orders"))
+            .into(),
+    );
     for module in [Uses::CORE, Uses::TABLE, Uses::LIVE] {
         assert!(table.uses().has(module));
     }
     let html = table.to_html();
     assert_eq!(attr(&html, "data-ui-live-event").as_deref(), Some("orders"));
-    assert_eq!(attr(&html, "data-ui-live-src").as_deref(), Some(stream.href().as_str()));
+    assert_eq!(
+        attr(&html, "data-ui-live-src").as_deref(),
+        Some(stream.href().as_str())
+    );
 
     let list = page(
         LazyList::new("thread", "Messages", "/thread/42")
@@ -118,16 +137,30 @@ fn every_live_part_loads_the_live_module() {
     );
     assert_eq!(list.uses(), Uses::LAZY.with(Uses::LIVE));
     let html = list.to_html();
-    assert_eq!(attr(&html, "data-ui-live-event").as_deref(), Some("activity"));
+    assert_eq!(
+        attr(&html, "data-ui-live-event").as_deref(),
+        Some("activity")
+    );
     assert_eq!(attr(&html, "data-ui-live-at").as_deref(), Some("end"));
 
     let feed = render(
         &ActivityFeed::new("activity", "Recent activity")
-            .in_region("activity-region", "/fragments/activity", stream.on("activity"), "0")
+            .in_region(
+                "activity-region",
+                "/fragments/activity",
+                stream.on("activity"),
+                "0",
+            )
             .into(),
     );
-    assert_eq!(attr(&feed, "data-ui-live-event").as_deref(), Some("activity"));
-    assert_eq!(attr(&feed, "data-ui-live-src").as_deref(), Some(stream.href().as_str()));
+    assert_eq!(
+        attr(&feed, "data-ui-live-event").as_deref(),
+        Some("activity")
+    );
+    assert_eq!(
+        attr(&feed, "data-ui-live-src").as_deref(),
+        Some(stream.href().as_str())
+    );
 }
 
 #[test]
@@ -142,6 +175,12 @@ fn a_sidebar_group_keeps_its_counts_on_the_hub() {
     let page = shell.page("Inbox", "/inbox").to_view();
     assert!(page.uses().has(Uses::LIVE));
     let html = page.to_html();
-    assert_eq!(attr(&html, "data-ui-live-event").as_deref(), Some("conversations"));
-    assert_eq!(attr(&html, "data-ui-live-src").as_deref(), Some(stream.href().as_str()));
+    assert_eq!(
+        attr(&html, "data-ui-live-event").as_deref(),
+        Some("conversations")
+    );
+    assert_eq!(
+        attr(&html, "data-ui-live-src").as_deref(),
+        Some(stream.href().as_str())
+    );
 }

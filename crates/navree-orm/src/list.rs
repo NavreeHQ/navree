@@ -167,10 +167,7 @@ impl ListQueryExt for ListQuery {
 }
 
 fn invalid(field: &Field, text: &str, what: &str) -> OrmError {
-    OrmError::InvalidQuery(format!(
-        "`{text}` is not {what} (filter `{}`)",
-        field.name
-    ))
+    OrmError::InvalidQuery(format!("`{text}` is not {what} (filter `{}`)", field.name))
 }
 
 /// A value from a query string, bound as what the field holds.
@@ -195,9 +192,9 @@ fn bind(field: &Field, text: &str) -> Result<Value> {
             Ok(at) => Value::Timestamp(at.with_timezone(&Utc)),
             Err(_) => Value::Timestamp(start_of(date(field, text)?)),
         },
-        Kind::Uuid => Value::Uuid(
-            Uuid::parse_str(text).map_err(|_| invalid(field, text, "a UUID"))?,
-        ),
+        Kind::Uuid => {
+            Value::Uuid(Uuid::parse_str(text).map_err(|_| invalid(field, text, "a UUID"))?)
+        }
     })
 }
 
