@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "d28bc06b3266";
+pub const BUILD: &str = "a27c3bcf75d4";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-f11bb7046e31.js";
@@ -86,10 +86,10 @@ pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
 pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-151746b6ed76.css";
 
 /// The URL of `otp-styles.css`.
-pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-db3883e37237.css";
+pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-bb2761698471.css";
 
 /// The URL of `carousel-styles.css`.
-pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-7ef22b1c5a47.css";
+pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-b75b29f68c27.css";
 
 /// The URL of `menubar-styles.css`.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
@@ -344,7 +344,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "otp-styles",
         ext: "css",
-        hash: "db3883e37237",
+        hash: "bb2761698471",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/otp-styles.css"),
         gzip: Some(include_bytes!("../dist/otp-styles.css.gz")),
@@ -353,7 +353,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel-styles",
         ext: "css",
-        hash: "7ef22b1c5a47",
+        hash: "b75b29f68c27",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/carousel-styles.css"),
         gzip: Some(include_bytes!("../dist/carousel-styles.css.gz")),

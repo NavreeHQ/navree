@@ -5672,6 +5672,19 @@
           "count": 1,
           "children": [
             {
+              "slot": "button",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
               "slot": "carousel-viewport",
               "tag": "div",
               "count": 1,
@@ -5679,12 +5692,12 @@
                 {
                   "slot": "button",
                   "tag": "button",
-                  "count": 3,
+                  "count": 2,
                   "children": [
                     {
                       "slot": "icon",
                       "tag": "svg",
-                      "count": 2,
+                      "count": 1,
                       "children": []
                     }
                   ]
