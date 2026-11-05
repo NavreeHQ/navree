@@ -273,16 +273,13 @@ waits.
 | Module | Covers in a design | Interim form, if the owner accepts one |
 |---|---|---|
 | Rich text | a formatted text editor | a textarea |
-| ContextMenu, Menubar, NavigationMenu | those | none |
 | Islands | a client-side widget of the app's own | none |
 
 Also not there yet:
 
-- Browser sign-in for server-rendered pages (a cookie session with
-  two-factor), a workspace switcher in the shell, and live updates
-  connected to `navree-realtime`. Until they land: a sign-in page is a form
-  you write, `UserMenu::action` posts a button of your own, and a `Region`
-  follows a server-sent event stream you write, or polls.
+- A workspace switcher in the shell's sidebar header:
+  `navree_workspace::WorkspaceSwitcher` goes in the page or in the shell's
+  search slot.
 - A date and a time in one control: use a date picker and a time picker.
 - An app's own stylesheet or static files: the toolkit serves one
   stylesheet, and the content security policy loads styles, scripts,

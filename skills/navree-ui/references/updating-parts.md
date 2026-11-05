@@ -46,8 +46,10 @@ pub fn dashboard() -> Stack {
   the server drew, keeps its card and offers Try again. A polling region
   stops on a 401, 403, 404 or 410 and backs off on a 429 or 5xx.
 - A stream is any endpoint that answers `text/event-stream`. One connection
-  serves every region and table of the page that names it. Wiring a stream
-  to `navree-realtime` is coming: today you write the stream yourself.
+  serves every region and table of the page that names it. With
+  `RealtimeModule` in the app, `LiveStream::topics([..]).on(name)` gives a
+  part the app's live hub (`Region::live_on`, and `live_on` on `DataTable`,
+  `LazyList` and `NavGroup`), and a service tells it with `navree::realtime::Live::nudge`.
 - A `DataTable` has its own `.live(every)` and `.live_from(url)`.
 
 ## Actions: what runs in the browser and what the server sends back

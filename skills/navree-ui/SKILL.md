@@ -670,15 +670,11 @@ Tell the owner they are coming.
 - **Charts** (line, bar, area and similar, with a shared palette, and reports
   with a date window). Until then use `Stat` and `Bars`, or a front end in
   React or Vue.
-- **Browser sign-in for server-rendered pages**: a cookie session with
-  two-factor, so a page route behind `#[authenticated]` knows the browser.
-  Until it lands, a page route needs an authenticator of your own.
-- **A workspace switcher in the shell.** `UserMenu::action` posts, so a
-  button of your own can switch.
-- **Live updates connected to `navree-realtime`.** A region follows a
-  server-sent event stream you write, or polls.
-- **ContextMenu, Menubar, NavigationMenu, rich text editing and islands**
-  (a part of a page with its own JavaScript component).
+- **A workspace switcher in the shell's sidebar header.**
+  `navree_workspace::WorkspaceSwitcher` draws one; put it in the page or in
+  the shell's search slot.
+- **Rich text editing and islands** (a part of a page with its own
+  JavaScript component).
 - **An app's own stylesheet or static files.** The toolkit serves one
   stylesheet, and the content security policy loads styles, scripts, fonts
   and images only from the app's own origin. A theme picks Geist or a system
@@ -696,14 +692,14 @@ come from the component catalog of the docs
 
 | Group | Components |
 |---|---|
-| Actions | `Button`, `ButtonGroup`, `Toggle`, `ToggleGroup`, `DropdownMenu` |
-| Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, and Forms (`FormView`, `Submit`) |
+| Actions | `Button`, `ButtonGroup`, `Toggle`, `ToggleGroup`, `DropdownMenu`, `ContextMenu`, `Menubar` |
+| Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, `InputOtp`, `Upload`, and Forms (`FormView`, `Submit`) |
 | Date and time | `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker` |
-| Display | `Card`, `Badge`, `Avatar`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, FactCard and FactGrid |
+| Display | `Card`, `Badge`, `Avatar`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
 | Feedback | `Alert`, `Toast`, `Empty`, `EmptyState`, `ErrorPage`, `Forbidden`, `NotFound`, `SignInRequired`, `Progress`, `Skeleton`, `Spinner` |
 | Overlays | `Dialog`, `AlertDialog`, `Sheet`, `Drawer`, `Popover`, `Tooltip`, `HoverCard` |
-| Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction` |
-| Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command` |
+| Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction`, `Carousel` |
+| Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command`, `NavigationMenu` |
 | Steps, ranges and trees | `Stepper`, `Wizard`, `Slider`, `TreeView`, `Toolbar` |
 | Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
