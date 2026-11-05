@@ -161,7 +161,11 @@ for (const browserName of browsers) {
         `javascript:window.__pwn=1`,
         `{{7*7}} \${7*7} %s %n`,
         `(`, `[`, `\\`, `.*`, `+`, `?`, `^$`, `(?<x>a)`, `*`,
-        `\u0000`, "‮", "😀".repeat(500), "a".repeat(100_000),
+        `\u0000`,
+        // A right-to-left override, written as the character itself: hostile input on purpose.
+        // nosemgrep: contains-bidirectional-characters
+        "‮",
+        "😀".repeat(500), "a".repeat(100_000),
       ];
       for (const text of hostile) {
         await type(page, text);
