@@ -33,9 +33,26 @@ export function uiRoadmap(): RoadmapItem[] {
 /** A ceiling and the toolkit files it covers (`"js"` is every script). */
 export type Budget = { label: string; files: string[] | "js"; ceilingKb: number };
 
+const budgetsSource = () => fs.readFileSync(path.join(WEBSITE, "../../crates/navree-ui/tests/budgets.rs"), "utf8");
+
+/** The body of the test named `test` in `budgets.rs`, up to the next test. */
+function budgetTest(source: string, test: string): string {
+  const start = source.indexOf(`fn ${test}(`);
+  if (start < 0) throw new Error(`ui-page: no test ${test} in crates/navree-ui/tests/budgets.rs`);
+  const next = source.indexOf("#[test]", start);
+  return source.slice(start, next < 0 ? undefined : next);
+}
+
+/** The names in the first `[...]` list of a test, as `["core", "sidebar"]`. */
+function budgetList(body: string, what: string): string[] {
+  const list = /\[([^\]]+)\]/.exec(body)?.[1];
+  if (!list) throw new Error(`ui-page: no file list in the ${what} budget in crates/navree-ui/tests/budgets.rs`);
+  return [...list.matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]);
+}
+
 /** The size ceilings (gzip) that `crates/navree-ui/tests/budgets.rs` asserts. */
 export function uiBudgets(): Budget[] {
-  const source = fs.readFileSync(path.join(WEBSITE, "../../crates/navree-ui/tests/budgets.rs"), "utf8");
+  const source = budgetsSource();
   const ceiling = (pattern: RegExp, what: string) => {
     const m = pattern.exec(source);
     if (!m) throw new Error(`ui-page: no ${what} budget in crates/navree-ui/tests/budgets.rs`);
@@ -47,7 +64,8 @@ export function uiBudgets(): Budget[] {
     { label: "The table module", files: ["table"], ceilingKb: ceiling(/size\("table"\) <= (\d+) \* 1024/, "table") },
     {
       label: "A typical CRUD page's script",
-      files: ["core", "sidebar", "overlay", "table"],
+      // The files the test adds up, read from it: the page's script grows when the test's list does.
+      files: budgetList(budgetTest(source, "a_typical_crud_page_loads_at_most_30_kb_gzip_of_script"), "CRUD page"),
       ceilingKb: ceiling(/total <= (\d+) \* 1024/, "CRUD page"),
     },
     { label: "Every module together", files: "js", ceilingKb: ceiling(/total < (\d+) \* 1024/, "all modules") },
