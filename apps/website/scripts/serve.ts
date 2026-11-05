@@ -9,6 +9,10 @@
  * not compress would measure the site 15 to 20 points low. `COMPRESS=0`
  * turns it off.
  *
+ * Files are sent with `Accept-Ranges: bytes` and a `Range` request gets its
+ * bytes with 206, as nginx answers it: a browser can only seek in the
+ * launch film (`/media/`, see `scripts/media.ts`) that way.
+ *
  *   pnpm build && pnpm serve            # http://127.0.0.1:3211
  *   PORT=4000 pnpm serve
  *   DEMO_UI=http://127.0.0.1:8095 pnpm serve    # with the live theme demo (`cargo run -p theme-demo`)
@@ -62,10 +66,36 @@ const types: Record<string, string> = {
   ".md": "text/markdown; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".webmanifest": "application/manifest+json",
 };
+
+/**
+ * The bytes a `Range: bytes=a-b` header asks for in a file of `size` bytes: the first range of a
+ * list, as nginx answers one; `null` when there is no (usable) header, "unsatisfiable" when it
+ * lies beyond the file.
+ */
+function byteRange(header: string | undefined, size: number): { start: number; end: number } | "unsatisfiable" | null {
+  const match = /^bytes=(\d*)-(\d*)/.exec(header ?? "");
+  if (!match || (match[1] === "" && match[2] === "")) return null;
+  let start: number;
+  let end: number;
+  if (match[1] === "") {
+    // The last N bytes.
+    start = Math.max(0, size - Number(match[2]));
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === "" ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+  return start >= size || start > end ? "unsatisfiable" : { start, end };
+}
 
 function resolve(urlPath: string): string | null {
   const clean = decodeURIComponent(urlPath.split("?")[0]);
@@ -136,8 +166,21 @@ http
       res.end(req.method === "HEAD" ? undefined : bytes);
       return;
     }
-    res.writeHead(status, headers);
-    fs.createReadStream(body).pipe(res);
+    const size = fs.statSync(body).size;
+    headers["Accept-Ranges"] = "bytes";
+    const range = status === 200 ? byteRange(req.headers.range, size) : null;
+    if (range === "unsatisfiable") {
+      res.writeHead(416, { ...headers, "Content-Range": `bytes */${size}` });
+      res.end();
+    } else if (range) {
+      res.writeHead(206, { ...headers, "Content-Range": `bytes ${range.start}-${range.end}/${size}`, "Content-Length": range.end - range.start + 1 });
+      if (req.method === "HEAD") res.end();
+      else fs.createReadStream(body, range).pipe(res);
+    } else {
+      res.writeHead(status, { ...headers, "Content-Length": size });
+      if (req.method === "HEAD") res.end();
+      else fs.createReadStream(body).pipe(res);
+    }
   })
   .listen(PORT, HOST, () => {
     console.log(`Serving out/ at http://${HOST}:${PORT}`);

@@ -9,9 +9,17 @@
  * links inside `llms.txt`, `llms-full.txt` and the Markdown copies of the
  * docs are checked the same way (a `.md` link's anchor against its page).
  * Exits with 1 and lists each broken link with the pages it is on.
+ *
+ * The launch film's files (`/media/`) are not in git, so a link to one is
+ * checked against `content/media.json`, which lists every file with its size
+ * and SHA-256: the name must be listed, and every listed file must be in
+ * `out/media/` with exactly those bytes (build with NAVREE_MEDIA_DIR set, or
+ * NAVREE_MEDIA_URL, so `scripts/prebuild.ts` copies them in).
  */
 import fs from "node:fs";
 import path from "node:path";
+
+import { MEDIA_URL, problemWith, readManifest } from "./lib/media.ts";
 
 const OUT = path.resolve(import.meta.dirname, "..", "out");
 const SITE = "https://navree.com";
@@ -42,6 +50,9 @@ function resolveFile(urlPath: string): string | null {
   return fs.existsSync(index) ? index : null;
 }
 
+const media = readManifest();
+const mediaNames = new Set(media.map((file) => file.name));
+
 const idCache = new Map<string, Set<string>>();
 function idsOf(file: string): Set<string> {
   let ids = idCache.get(file);
@@ -71,6 +82,11 @@ function check(from: string, raw: string) {
   checked++;
   const [beforeHash, hash] = link.split("#");
   const urlPath = beforeHash.split("?")[0];
+  if (urlPath.startsWith(MEDIA_URL)) {
+    // The files themselves are checked once, against the manifest, below.
+    if (!mediaNames.has(decodeURIComponent(urlPath.slice(MEDIA_URL.length)))) report(from, link, "not in content/media.json");
+    return;
+  }
   let target: string | null = from;
   if (urlPath !== "") {
     const absolute = urlPath.startsWith("/") ? urlPath : path.posix.join(`/${rel(path.dirname(from))}`, urlPath);
@@ -105,6 +121,12 @@ for (const file of html) {
   for (const m of text.matchAll(/\ssrcset="([^"]*)"/g)) for (const part of m[1].split(",")) check(file, part.trim().split(/\s+/)[0]);
 }
 
+// The export holds exactly the files the manifest lists, byte for byte.
+for (const file of media) {
+  const problem = problemWith(file, path.join(OUT, "media"));
+  if (problem) report(path.join(OUT, "media"), `${MEDIA_URL}${file.name}`, problem.endsWith(" is missing") ? `${problem}; build with NAVREE_MEDIA_DIR set` : problem);
+}
+
 const markdown = files.filter((f) => f.endsWith(".md") || f.endsWith("llms.txt") || f.endsWith("llms-full.txt"));
 for (const file of markdown) {
   const text = fs.readFileSync(file, "utf8");
@@ -114,7 +136,7 @@ for (const file of markdown) {
   }
 }
 
-console.log(`check-links: ${html.length} HTML pages, ${previews.length} UI previews and ${markdown.length} Markdown files, ${checked} internal links (${anchors} with an anchor)`);
+console.log(`check-links: ${html.length} HTML pages, ${previews.length} UI previews and ${markdown.length} Markdown files, ${checked} internal links (${anchors} with an anchor), ${media.length} /media/ files against content/media.json`);
 if (problems.size === 0) {
   console.log("OK: every internal link resolves");
 } else {
