@@ -21,3 +21,11 @@ SKIPPED: set NAVREE_TEST_KIT_WEB=1
 
 # The docs and skills are not next to a crate that is built from a package.
 SKIPPED: the (docs page|skill)
+
+# The skip rule's own test (navree-orm testing::database) prints a notice for a
+# variable no suite reads.
+skipped: NAVREE_TEST_EXAMPLE_URL is not set
+
+# navree-search's import command reports documents its filter left out; it is
+# not a test skipping itself.
+Imported [0-9]+ documents \([0-9]+ skipped by the document filter\)
