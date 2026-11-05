@@ -125,7 +125,7 @@ fn page(shell: &AppShell) -> AppPage {
         section(
             "headings",
             "Headings",
-            Markdown::new("# one\n\n## two\n\n###### six").heading_level(4).attr_id("md-headings"),
+            Markdown::new("# one\n\n## two\n\n### three\n\n###### six").heading_level(3).attr_id("md-headings"),
         ),
         section("languages", "Code in each language", languages()),
         section(
