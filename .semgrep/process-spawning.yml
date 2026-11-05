@@ -9,12 +9,18 @@
 # 2. navree-process-outside-tooling: a library or server crate has no business
 #    starting processes. The crates that do (the CLI, deploy tooling, container
 #    and browser drivers, media and document converters, the worker fleet, the
-#    agent-facing Navigator, the test kit) are exempt by path (clap's own `Command` builder lives in
-#    navree-cli, so a bare `Command::new` outside it is a process). A new
-#    spawn anywhere else should be a conscious decision, so it needs a
+#    agent-facing Navigator, the test kit) are exempt by path. A new spawn
+#    anywhere else should be a conscious decision, so it needs a
 #    `// nosemgrep: navree-process-outside-tooling` with the reason (for
 #    example, a CLI command that lives next to its module), or a move into one
 #    of the tooling crates.
+#
+#    A process is the standard library's or Tokio's `Command`: written out
+#    (`std::process::Command::new`), through `use std::process;`
+#    (`process::Command::new`), or as a bare `Command::new` where a `use`
+#    brought in one of the two, which Semgrep resolves. Other types named
+#    `Command`, such as the UI kit's command palette and clap's builder, start
+#    nothing and do not match.
 rules:
   - id: navree-shell-command-string
     languages: [rust]
@@ -70,6 +76,8 @@ rules:
         - "**/examples/**"
         - "**/build.rs"
     pattern-either:
-      - pattern: Command::new(...)
+      # The first two also match a bare `Command::new(..)` where a `use`
+      # brought that type in.
       - pattern: std::process::Command::new(...)
       - pattern: tokio::process::Command::new(...)
+      - pattern: process::Command::new(...)

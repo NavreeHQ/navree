@@ -1,3 +1,4 @@
+use std::process;
 use std::process::Command;
 
 fn shells(user: &str) {
@@ -28,4 +29,19 @@ fn spawns() {
     let _ = tokio::process::Command::new("git").output();
     // ruleid: navree-process-outside-tooling, navree-shell-command-string
     let _ = Command::new("sh").output();
+}
+
+// The module imported on its own.
+fn through_the_module() {
+    // ruleid: navree-process-outside-tooling
+    let _ = process::Command::new("git").output();
+}
+
+// Types that share the name and start nothing: the UI kit's command palette and
+// clap's argument parser.
+fn not_processes() {
+    // ok: navree-process-outside-tooling
+    let _ = navree::ui::Command::new("jump").title("Find a card");
+    // ok: navree-process-outside-tooling
+    let _ = clap::Command::new("navree").about("The Navree command line");
 }
