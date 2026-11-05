@@ -35,13 +35,13 @@
  *   DEMO_UI=http://127.0.0.1:8095 DEMO=live PAGES=/docs/ui/theme-builder/ pnpm check:previews
  *   DEMO=down PAGES=/docs/ui/theme-builder/ pnpm check:previews      with the demo stopped
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import http from "node:http";
 import path from "node:path";
 
 import { chromium, type Frame, type Locator, type Page } from "playwright";
 
+import { serveOut } from "./lib/serve-out.ts";
 import { OUT, WEBSITE, htmlFiles, requireOut } from "./lib/site-html.ts";
 
 const MEASURE = process.argv.includes("--measure");
@@ -88,16 +88,6 @@ function docsPages(): string[] {
     .filter((url) => url.endsWith("/") && (url.startsWith("/docs/components/") || url.startsWith("/docs/ui/")))
     .sort();
 }
-
-const ready = (url: string) =>
-  new Promise<boolean>((resolve) => {
-    http
-      .get(url, (res) => {
-        res.resume();
-        resolve((res.statusCode ?? 500) < 500);
-      })
-      .on("error", () => resolve(false));
-  });
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -254,10 +244,7 @@ async function main() {
   let base = process.env.BASE_URL ?? "";
   if (!base) {
     requireOut("check-previews");
-    const port = String(30000 + Math.floor(Math.random() * 20000));
-    base = `http://127.0.0.1:${port}`;
-    server = spawn(process.execPath, [path.join(WEBSITE, "scripts", "serve.ts")], { env: { ...process.env, PORT: port }, stdio: "ignore" });
-    for (let i = 0; i < 50 && !(await ready(`${base}/`)); i++) await wait(200);
+    ({ base, server } = await serveOut("check-previews"));
   }
   const pages = process.env.PAGES
     ? process.env.PAGES.split(",")

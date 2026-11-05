@@ -22,11 +22,12 @@
  * run). The scores, LCP, blocking time and transfer size of every page are
  * printed and written to `report/lighthouse.md`.
  */
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { serveOut } from "./lib/serve-out.ts";
 import { WEBSITE, finish } from "./lib/site-html.ts";
 
 /** Lighthouse version, pinned. Update it on purpose, not by a floating tag. */
@@ -38,16 +39,6 @@ const MAX_CLS = 0.1;
 const pagesToCheck = (process.env.PAGES ?? DEFAULT_PAGES.join(",")).split(",").map((p) => p.trim()).filter(Boolean);
 const REPORT = path.join(WEBSITE, "report");
 fs.mkdirSync(REPORT, { recursive: true });
-
-const ready = (url: string) =>
-  new Promise<boolean>((resolve) => {
-    http
-      .get(url, (res) => {
-        res.resume();
-        resolve((res.statusCode ?? 500) < 500);
-      })
-      .on("error", () => resolve(false));
-  });
 
 /** The `Content-Encoding` the server answers with when the client accepts Brotli and gzip ("none" when it sends the file as is). */
 const encodingOf = (url: string) =>
@@ -63,15 +54,7 @@ const encodingOf = (url: string) =>
 let server: ChildProcess | null = null;
 let base = process.env.BASE_URL ?? "";
 if (!base) {
-  const port = String(30000 + Math.floor(Math.random() * 20000));
-  base = `http://127.0.0.1:${port}`;
-  server = spawn(process.execPath, [path.join(WEBSITE, "scripts", "serve.ts")], { env: { ...process.env, PORT: port }, stdio: "ignore" });
-  for (let i = 0; i < 50 && !(await ready(`${base}/`)); i++) await new Promise((r) => setTimeout(r, 200));
-  if (!(await ready(`${base}/`))) {
-    server.kill();
-    console.error("lighthouse: the static server did not start; run `pnpm build` first");
-    process.exit(1);
-  }
+  ({ base, server } = await serveOut("lighthouse"));
 }
 
 const encoding = await encodingOf(`${base}/`);
