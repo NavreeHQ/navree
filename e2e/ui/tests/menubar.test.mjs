@@ -26,8 +26,38 @@ const focused = (page) =>
 const isOpen = (page, selector) => page.locator(selector).evaluate((e) => e.matches(":popover-open"));
 const box = (page, selector) => page.locator(selector).boundingBox();
 const expanded = (page, selector) => page.locator(selector).getAttribute("aria-expanded");
+/**
+ * Waits for a popup to finish opening. The suite runs with reduced motion, whose rule leaves every
+ * change a transition of one frame, and the popup its scale-in: a box read in that frame is where
+ * the popup was before it was placed, a little scaled.
+ */
+const settled = (page, selector) => page.waitForFunction((sel) => document.querySelector(sel).getAnimations().every((a) => a.playState === "finished"), selector);
+/** Waits for the overlay module to place a popup: it does when the browser reports the popup open, a frame after it shows. */
+const placed = (page, selector) => page.waitForFunction((sel) => document.querySelector(sel).style.top !== "", selector);
+/** Waits for focus to reach the item `text`: a menu a button opens takes focus when the browser reports it open, as the dropdown's does. */
+const focusOn = (page, text) =>
+  page
+    .waitForFunction((t) => {
+      const e = document.activeElement;
+      const item = e?.closest?.("[data-slot=menu-item]");
+      return (item?.querySelector("[data-slot=menu-text]")?.textContent || e?.textContent || "").trim() === t;
+    }, text, { timeout: 2000 })
+    .catch(() => {});
 
 inBrowsers(({ open, browserName }) => {
+  /**
+   * Moves focus on, as Tab does. WebKit's Tab leaves links out unless the reader turns that on,
+   * so there focus is moved along the page's order after a key press, as the pages suite does.
+   */
+  const tab = async (page) => {
+    if (browserName !== "webkit") return page.keyboard.press("Tab");
+    await page.keyboard.press("Shift");
+    await page.evaluate(() => {
+      const list = [...document.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,summary,[tabindex]:not([tabindex='-1'])")].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
+      list[list.indexOf(document.activeElement) + 1]?.focus();
+    });
+  };
+
   // ---- Context menu -------------------------------------------------------
 
   /** Right clicks the middle of the order card. */
@@ -43,6 +73,7 @@ inBrowsers(({ open, browserName }) => {
     const { page, close } = await open(PATH);
     const at = await rightClick(page);
     assert.ok(await isOpen(page, "#ctx-order"));
+    await settled(page, "#ctx-order");
     const menu = await box(page, "#ctx-order");
     assert.ok(Math.abs(menu.x - at.x) <= 2 && Math.abs(menu.y - at.y) <= 2, `at the pointer: ${JSON.stringify(menu)} ${JSON.stringify(at)}`);
     assert.equal(await page.locator("#ctx-order").getAttribute("role"), "menu");
@@ -171,6 +202,7 @@ inBrowsers(({ open, browserName }) => {
     // Right click as near the bottom right corner of the window as the card reaches.
     const area = await box(page, "#ctx-order-area");
     await page.mouse.click(Math.min(area.x + area.width - 4, 795), Math.min(area.y + area.height - 4, 595), { button: "right" });
+    await settled(page, "#ctx-order");
     const menu = await box(page, "#ctx-order");
     assert.ok(menu.x >= 0 && menu.y >= 0 && menu.x + menu.width <= 800 && menu.y + menu.height <= 600, JSON.stringify(menu));
     await close();
@@ -188,11 +220,14 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a second right click moves the menu, and a scroll closes it", async () => {
-    const { page, close } = await open(PATH);
+    // A window shorter than the page, so that the page scrolls.
+    const { page, close } = await open(PATH, { viewport: { width: 1440, height: 600 } });
     const area = await box(page, "#ctx-order-area");
     await rightClick(page, "#ctx-order-area", { x: area.x + 400, y: area.y + 30 });
+    await settled(page, "#ctx-order");
     const first = await box(page, "#ctx-order");
     await rightClick(page, "#ctx-order-area", { x: area.x + 20, y: area.y + 30 });
+    await settled(page, "#ctx-order");
     const second = await box(page, "#ctx-order");
     assert.ok(second.x < first.x - 100, `it moved with the pointer: ${first.x} ${second.x}`);
     await page.mouse.move(1380, 300);
@@ -316,10 +351,13 @@ inBrowsers(({ open, browserName }) => {
     await page.keyboard.press("ArrowUp");
     assert.equal((await focused(page)).text, "Export", "the last item");
     await page.keyboard.press("Escape");
+    // Enter and Space press the button, and the browser opens the menu: focus follows.
     await page.keyboard.press("Enter");
+    await focusOn(page, "New invoice");
     assert.equal((await focused(page)).text, "New invoice");
     await page.keyboard.press("Escape");
     await page.keyboard.press(" ");
+    await focusOn(page, "New invoice");
     assert.equal((await focused(page)).text, "New invoice");
     await close();
   });
@@ -463,11 +501,14 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a button shows and hides its panel, Escape hides it and returns to the button", async () => {
-    const { page, close } = await open(PATH);
+    // Room under the menu for its panel: with none, the overlay opens a panel above its button.
+    const { page, close } = await open(PATH, { viewport: { width: 1440, height: 1100 } });
     await page.locator("#site-nav-p1-trigger").focus();
     await page.keyboard.press("Enter");
     assert.ok(await isOpen(page, "#site-nav-p1"));
     assert.equal(await expanded(page, "#site-nav-p1-trigger"), "true");
+    await placed(page, "#site-nav-p1");
+    await settled(page, "#site-nav-p1");
     const trigger = await box(page, "#site-nav-p1-trigger");
     const panel = await box(page, "#site-nav-p1");
     assert.ok(panel.y >= trigger.y + trigger.height - 1 && Math.abs(panel.x - trigger.x) <= 2, "under its button");
@@ -488,12 +529,12 @@ inBrowsers(({ open, browserName }) => {
     const { page, close } = await open(PATH);
     await page.locator("#site-nav-p1-trigger").focus();
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Tab");
+    await tab(page);
     assert.equal((await focused(page)).text.startsWith("Invoices"), true);
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
+    await tab(page);
+    await tab(page);
     assert.equal((await focused(page)).text, "Payroll");
-    await page.keyboard.press("Tab");
+    await tab(page);
     assert.equal((await focused(page)).text.startsWith("Company"), true, "on to the next top-level item");
     assert.ok(!(await isOpen(page, "#site-nav-p1")), "its panel closed behind");
     await page.keyboard.press("Shift+Tab");
@@ -558,6 +599,8 @@ inBrowsers(({ open, browserName }) => {
     const xs = await tops(page).evaluateAll((all) => all.map((e) => Math.round(e.getBoundingClientRect().x)));
     assert.equal(new Set(xs).size, 1, `stacked: ${xs}`);
     await tops(page).nth(1).click();
+    await placed(page, "#site-nav-p2");
+    await settled(page, "#site-nav-p2");
     const panel = await box(page, "#site-nav-p2");
     assert.ok(panel.x >= 0 && panel.x + panel.width <= 390, JSON.stringify(panel));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -572,6 +615,8 @@ inBrowsers(({ open, browserName }) => {
     assert.equal((await focused(page)).text, "الأسعار");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
+    await placed(page, "#site-nav-rtl-p1");
+    await settled(page, "#site-nav-rtl-p1");
     const trigger = await box(page, "#site-nav-rtl-p1-trigger");
     const panel = await box(page, "#site-nav-rtl-p1");
     assert.ok(Math.abs(panel.x + panel.width - (trigger.x + trigger.width)) <= 2, `aligned at the end: ${JSON.stringify([trigger, panel])}`);
