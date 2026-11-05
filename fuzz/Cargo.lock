@@ -2221,6 +2221,7 @@ dependencies = [
 name = "navree-config"
 version = "1.0.0"
 dependencies = [
+ "navree-contracts",
  "navree-kernel",
  "serde",
  "serde_json",
@@ -2263,6 +2264,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
  "zeroize",
 ]
 
@@ -2540,6 +2542,7 @@ name = "navree-http-client"
 version = "1.0.0"
 dependencies = [
  "bytes",
+ "chrono",
  "futures-util",
  "http",
  "ipnet",
@@ -2913,11 +2916,13 @@ version = "1.0.0"
 dependencies = [
  "bytes",
  "dashmap",
+ "futures-util",
  "hex",
  "http",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
+ "navree-db",
  "navree-http",
  "navree-kernel",
  "rand 0.10.3",
@@ -3159,6 +3164,7 @@ dependencies = [
  "navree-kernel",
  "navree-ui-macros",
  "navree-validation",
+ "pulldown-cmark",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -3710,6 +3716,24 @@ dependencies = [
  "ar_archive_writer",
  "cc",
 ]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3db2be46835f013dd3f4fa7f5f7402c537787b54ebb6fe2b94bbdd7e2669bb7b"
+dependencies = [
+ "bitflags",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "quick-xml"
