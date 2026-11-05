@@ -141,7 +141,7 @@ export function uiFaq({ groups, roadmap, apps }: UiFaqInput): FaqSet {
       },
       {
         question: "Is Navree UI finished?",
-        answer: `Not yet. The components in the catalogue work today. Of the ${roadmap.length} modules planned, ${shipped.length} ${shipped.length === 1 ? "has" : "have"} shipped, ${by("Building")} are being built, ${by("Next")} are next and ${by("Later")} come later. Shipped so far: ${shipped.map((item) => item.text.split(":")[0]).join("; ")}.`,
+        answer: `Not yet. The components in the catalogue work today. Of the ${roadmap.length} modules planned, ${shipped.length} ${shipped.length === 1 ? "has" : "have"} shipped, ${by("Building")} are being built, ${by("Next")} are next and ${by("Later")} come later. The latest to ship: ${shipped.slice(-4).map((item) => item.text.split(":")[0]).join("; ")}.`,
         link: { href: "/docs/ui/coming-next/", label: "Read Coming next" },
       },
       {
