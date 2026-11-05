@@ -667,9 +667,6 @@ read-only and forbidden states show; nothing scrolls sideways at 390 pixels.
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
-- **Charts** (line, bar, area and similar, with a shared palette, and reports
-  with a date window). Until then use `Stat` and `Bars`, or a front end in
-  React or Vue.
 - **A workspace switcher in the shell's sidebar header.**
   `navree_workspace::WorkspaceSwitcher` draws one; put it in the page or in
   the shell's search slot.
@@ -702,6 +699,7 @@ come from the component catalog of the docs
 | Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command`, `NavigationMenu` |
 | Steps, ranges and trees | `Stepper`, `Wizard`, `Slider`, `TreeView`, `Toolbar` |
 | Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable` |
+| Charts | `Chart` (`Chart::line`, `area`, `bar`), `Donut` (and a pie), `Funnel`, `Sparkline`, and `Report` for a date window; in `navree::ui::charts` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
@@ -709,7 +707,10 @@ Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`
 puts page links under a static list; `Stat` shows a figure with its change
-and `Bars` a small bar chart drawn on the server.
+and `Bars` a small bar chart drawn on the server. A real chart is a
+`Chart` (line, area or bar, with series, stacks and a table of the same
+numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
+reads its window from the address and counts per period.
 
 ## Common mistakes
 

@@ -55,6 +55,11 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Inline message, banner | `Alert::new(AlertTone::Neutral \| Success \| Warning \| Danger).title(..).body(..)` |
 | Figure with label and change | `Stat::new(label, value).trend(text, good)` |
 | Small bar chart | `Bars::new(description, &[values])`: SVG on the server |
+| Line, area or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
+| Donut, pie | `Donut::new(title).part(name, value)`, `.pie()`, `.center(big, small)` |
+| Funnel | `Funnel::new(title).stage(Stage::new(name, count))` |
+| Trend beside a figure | `Stat::new(..).chart(Sparkline::new(title, values))` |
+| A report over a date window | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
 | Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
 | File tile | `Attachment::new(name).meta(..).icon(..).href(..).action(..)` |
@@ -257,12 +262,6 @@ answers a browser with a page; a route marked `#[json_only]`
 does a route under `http.api_prefix` that is not marked. The states inside
 a page (`Forbidden`, `NotFound`, `SignInRequired`, `EmptyState`) are in
 "Text and display".
-
-## Coming in the next release
-
-| Module | Covers in a design | Interim form, if the owner accepts one |
-|---|---|---|
-| Charts | line, bar, area and similar charts with a shared palette, and reports with a date window | `Stat` and `Bars` |
 
 ## Coming
 
