@@ -129,6 +129,7 @@ Keep never means copying the design's markup. Pages are always built from compon
 - **Navree's rules win, and you decide.** Controls have 4 px corners and surfaces 6 px. There are no pills, letter tiles or glows. No inline script and no `style=""`: the [content security policy](/docs/ui/overview/#security) refuses them. Where the design breaks a rule, the row records a deviation, and you approve it with a picture of both.
 - **One token table.** Navree UI has one table of tokens and the dark theme. A design value with no token becomes a gap or a deviation. The agent checks the contrast of every text pair with `navree::ui::tokens::contrast`.
 - **The data comes from the server.** Lists page, sort, filter and search on the server; options come from the backend; every rule runs on the server. A design that shows otherwise is a known mistake, not a requirement. The design's ten sample rows say nothing about ten thousand.
+- **Charts are components.** A design's line, area, bar, pie and funnel charts and its sparklines are drawn on the server as SVG, each with its numbers as a table and a summary for screen readers: a [line chart](/docs/components/line-chart/), an [area chart](/docs/components/area-chart/), a [bar chart](/docs/components/bar-chart/) (stacked, to 100%, horizontal), a [donut or pie](/docs/components/donut-chart/), a [funnel](/docs/components/funnel/) and a [sparkline](/docs/components/sparkline/) under a [Stat](/docs/components/stat/). A chart over a date window is a [report](/docs/ui/reports/). The colors come from the eight chart tokens, not from the design, and a design color that has no token is a deviation.
 - **The states the design forgot.** Every page gets its empty, loading, error, read-only and forbidden states, and works at 390 pixels and right to left.
 
 ## What is coming
@@ -139,7 +140,6 @@ When no component fits an element, the agent records a gap instead of improvisin
 |---|---|---|
 | Themes and a theme builder | a light theme, brand colors, other radii or fonts, other sidebar layouts | Navree's dark theme and tokens |
 | Error and sign-in pages | HTML sign-in and error screens for page routes | none: a page route's 401, 403 and 404 come back as Navree's JSON errors |
-| Charts | line, area, pie and stacked charts | `Stat` and `Bars` |
 | Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
 | Toolbar, TreeView and Slider | those | none |
 | ContextMenu, Menubar and NavigationMenu | those | none |

@@ -21,7 +21,7 @@ const blurbs: Record<string, string> = {
   overlays: "Dialogs, sheets, drawers, popovers, tooltips and hover cards, on the browser's own elements.",
   layout: "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll and divide a page.",
   navigation: "The app shell, breadcrumbs and pagination.",
-  data: "Tables, the server-side DataTable, stats and bars.",
+  data: "Tables, the server-side DataTable, lazy lists, sortable lists, stats and bars. Charts have a group of their own, below.",
   charts: "Line, area, bar, donut, sparkline and funnel charts drawn as SVG on the server, each with its data as a table.",
 };
 
