@@ -256,7 +256,9 @@ async fn the_project_list_reads_the_list_query() {
         ["Mobile app"]
     );
     assert_eq!(
-        names(&[("filter[status][in]", "active,archived")]).await.len(),
+        names(&[("filter[status][in]", "active,archived")])
+            .await
+            .len(),
         3
     );
     assert_eq!(
