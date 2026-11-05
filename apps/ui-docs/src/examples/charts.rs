@@ -1,4 +1,7 @@
 //! Line, area and bar charts, donut and pie, sparkline, funnel, and reports.
+//!
+//! The rupee amounts are written in lakh grouping (`12_50_000`), as the pages print them.
+#![allow(clippy::inconsistent_digit_grouping)]
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Asia::Kolkata;
