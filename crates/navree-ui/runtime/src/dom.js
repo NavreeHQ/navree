@@ -5,11 +5,18 @@
 // goes through the prototype, so no name in a page can change what it does.
 
 export const D = Document.prototype, E = Element.prototype, T = EventTarget.prototype;
-/** @param {object} proto @param {string} name */
-const getter = (proto, name) => /** @type {(this: any) => any} */ (Object.getOwnPropertyDescriptor(proto, name)?.get);
-const gBody = /* @__PURE__ */ getter(D, "body"), gHead = /* @__PURE__ */ getter(D, "head"), gRoot = /* @__PURE__ */ getter(D, "documentElement"), gActive = /* @__PURE__ */ getter(D, "activeElement");
-const gCookie = /* @__PURE__ */ getter(D, "cookie"), gTitle = /* @__PURE__ */ getter(D, "title"), gHidden = /* @__PURE__ */ getter(D, "hidden");
-const sTitle = /* @__PURE__ */ Object.getOwnPropertyDescriptor(D, "title")?.set, sCookie = /* @__PURE__ */ Object.getOwnPropertyDescriptor(D, "cookie")?.set;
+/** @param {object} proto @param {string} name @param {"get" | "set"} kind @returns {(this: any, ...args: any[]) => any} */
+const accessor = (proto, name, kind) => /** @type {any} */ (Object.getOwnPropertyDescriptor(proto, name)?.[kind]);
+// One statement for each, marked pure: a module that doesn't use one doesn't carry it.
+const gBody = /* @__PURE__ */ accessor(D, "body", "get");
+const gHead = /* @__PURE__ */ accessor(D, "head", "get");
+const gRoot = /* @__PURE__ */ accessor(D, "documentElement", "get");
+const gActive = /* @__PURE__ */ accessor(D, "activeElement", "get");
+const gCookie = /* @__PURE__ */ accessor(D, "cookie", "get");
+const gTitle = /* @__PURE__ */ accessor(D, "title", "get");
+const gHidden = /* @__PURE__ */ accessor(D, "hidden", "get");
+const sTitle = /* @__PURE__ */ accessor(D, "title", "set");
+const sCookie = /* @__PURE__ */ accessor(D, "cookie", "set");
 
 /** @param {Document} [doc] @returns {HTMLElement} */
 export const body = (doc = document) => gBody.call(doc);
@@ -18,7 +25,7 @@ export const head = (doc = document) => gHead.call(doc);
 /** @param {Document} [doc] @returns {HTMLElement} */
 export const root = (doc = document) => gRoot.call(doc);
 /** The element that scrolls the page. @returns {HTMLElement} */
-export const scrolling = () => getter(D, "scrollingElement").call(document) || gRoot.call(document);
+export const scrolling = () => accessor(D, "scrollingElement", "get").call(document) || gRoot.call(document);
 /** A deep copy of `node`, made a node of this document. @param {Node} node @returns {any} */
 export const adopt = (node) => D.importNode.call(document, node, true);
 /** @returns {Element | null} */
@@ -129,9 +136,8 @@ export const unset = (el, name) => E.removeAttribute.call(el, name);
 export const toggle = (el, name, force) => E.toggleAttribute.call(el, name, force);
 /** @param {Element} el @param {string} selector */
 export const all = (el, selector) => E.querySelectorAll.call(el, selector);
-const elements = /** @type {(this: HTMLFormElement) => HTMLFormControlsCollection} */ (getter(HTMLFormElement.prototype, "elements"));
 /** The field called `name` in `form`: one element, the first of a radio group. @param {HTMLFormElement} form @param {string} name */
 export const field = (form, name) => {
-  const found = elements.call(form).namedItem(name);
+  const found = accessor(HTMLFormElement.prototype, "elements", "get").call(form).namedItem(name);
   return found instanceof RadioNodeList ? found[0] : found;
 };
