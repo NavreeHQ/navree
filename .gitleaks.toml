@@ -93,13 +93,15 @@ regexes = ['''GEZDGNBVGY3TQOJQ(GEZDGNBVGY3TQOJQ)?''']
 description = """
 Obviously fake values in unit tests: a sequential-digit Stripe key, a
 placeholder JWT, a long literal used as a test signing secret, Paddle key
-prefixes cut off after the prefix, and repeating-hex mail-webhook tokens."""
+prefixes cut off after the prefix, repeating-hex mail-webhook tokens, and the
+SCIM token of the directory's Debug-output test (a word after the prefix)."""
 regexes = [
   '''sk_live_0123456789''',
   '''hunter2\.jwt\.sig''',
   '''a-very-long-jwt-secret-of-at-least-32-bytes''',
   '''pdl_(live|sdbx)_apikey_01j8?''',
   '''0123456789abcdef0123456789abcdef0123456789abcdef50''',
+  '''nvscim_c0ffee42''',
 ]
 
 [[allowlists]]
@@ -141,6 +143,14 @@ is base64 for the word SECRET): malformed keys on purpose, to test the error
 path and that errors never echo the input."""
 targetRules = ["private-key"]
 paths = ['''(^|/)crates/navree-crypto/tests/crypto/jose/keys\.rs$''']
+
+[[allowlists]]
+description = """
+The OAuth key reader's documentation (crates/navree-oauth/src/keys.rs), which
+names the two PEM armor lines it accepts, PKCS#8 and PKCS#1: prose, not a key.
+The pattern is a piece of that sentence, with its backticks, which no key holds."""
+targetRules = ["private-key"]
+regexes = ['''-----BEGIN PRIVATE KEY-----` or `-----BEGIN RSA''']
 
 [[allowlists]]
 description = """
