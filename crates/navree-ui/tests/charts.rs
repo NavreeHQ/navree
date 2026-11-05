@@ -116,18 +116,73 @@ fn a_chart_loads_the_charts_module_and_nothing_else() {
         !out.contains(assets::CORE_URL),
         "a chart needs no core runtime"
     );
-    // A sparkline is a picture with no keys: it ships no script at all.
+    // A sparkline is a picture with no keys: it ships no script, and the toolkit's own sheet
+    // draws it.
     let page =
         View::new("x").body(Stat::new("Opened", "4").chart(Sparkline::new("Trend", [1, 2, 3])));
     assert!(page.uses().is_none(), "{:?}", page.uses());
-    // So do the states, which have nothing to point at.
+    let out = page.to_html();
+    assert!(!out.contains("<script"), "{out}");
+    assert!(!out.contains(assets::CHARTS_STYLES_URL), "{out}");
+    // The states have nothing to point at, but they are drawn with the charts sheet and the
+    // chart that replaces one needs the module.
     for chart in [
         Chart::line("x").loading(),
         Chart::line("x").failed(None),
         Chart::line("x").series(Series::new("a", Vec::<f64>::new())),
     ] {
-        assert!(View::new("x").body(chart).uses().is_none());
+        assert_eq!(View::new("x").body(chart).uses(), Uses::CHARTS);
     }
+    let state = View::new("x")
+        .body(Stat::new("Opened", "4").chart(Sparkline::new("Trend", [1, 2, 3]).loading()));
+    assert_eq!(state.uses(), Uses::CHARTS);
+}
+
+/// The charts' styles are a sheet of their own, linked after the toolkit's own on a page that
+/// draws a chart, and on no other.
+#[test]
+fn the_charts_sheet_is_linked_where_a_chart_is_drawn_and_nowhere_else() {
+    let chart = View::new("x").body(
+        Chart::bar("Sent")
+            .categories(["a"])
+            .series(Series::new("Sent", [1])),
+    );
+    let out = chart.to_html();
+    let toolkit = out
+        .find(assets::NAVREE_UI_URL)
+        .expect("the toolkit's own sheet");
+    let charts = out
+        .find(assets::CHARTS_STYLES_URL)
+        .expect("the charts sheet");
+    assert!(
+        toolkit < charts,
+        "the charts sheet comes after the toolkit's: {out}"
+    );
+    for page in [
+        View::new("x").body(Stat::new("Opened", "4").chart(Sparkline::new("Trend", [1, 2, 3]))),
+        View::new("x").body(navree_ui::el("p").child("No chart here")),
+    ] {
+        assert!(!page.to_html().contains(assets::CHARTS_STYLES_URL));
+    }
+}
+
+/// The charts sheet keeps the rule of every module's own sheet, 3 KB gzip, and the toolkit's
+/// sheet holds only what a sparkline is drawn with.
+#[test]
+fn the_charts_sheet_is_at_most_3_kb_gzip_and_the_toolkits_holds_only_a_sparklines() {
+    let asset = assets::get("charts-styles").expect("the charts sheet");
+    let size = asset.gzip.map_or(asset.bytes.len(), <[u8]>::len);
+    assert!(size <= 3 * 1024, "{size}");
+    let toolkit = assets::get("navree-ui").expect("the toolkit's sheet");
+    let css = std::str::from_utf8(toolkit.bytes).expect("text");
+    assert!(
+        css.contains("chart-line"),
+        "a sparkline is drawn by the toolkit's sheet"
+    );
+    assert!(
+        !css.contains("chart-legend"),
+        "the rest of the charts' styles are in their own sheet"
+    );
 }
 
 #[test]

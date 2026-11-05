@@ -103,8 +103,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A toast | `core`: the toaster, its time, pause and swipe are a CSS animation and a few lines. |
 | A data table | `core`, `table`, `overlay`. |
 | A live region, or a table that follows a stream | `core` and `live`: the stream, its reconnects and the fetches. |
-| A line, area, bar, donut or funnel chart | `charts`: the tooltip, the crosshair and the keys. |
-| A sparkline, or a chart that is loading, failed or empty | None. |
+| A line, area, bar, donut or funnel chart, or one that is loading, failed or empty | `charts` and its stylesheet: the tooltip, the crosshair and the keys. |
+| A sparkline | None: the toolkit's own sheet draws it. |
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | A phone input | `phone`, `overlay`; the numbering plans on first focus. |

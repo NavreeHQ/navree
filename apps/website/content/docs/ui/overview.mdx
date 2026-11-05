@@ -39,7 +39,7 @@ Navree::app()
 
 ## What ships to the browser
 
-Every page loads one stylesheet. Script loads only for what a page's markup uses, and the toolkit works out which from the tree as it renders.
+Every page loads one stylesheet. A component with styles of its own, such as a chart, adds its own small sheet, and only on the pages that draw it. Script loads only for what a page's markup uses, and the toolkit works out which from the tree as it renders.
 
 | A page with | Loads |
 |---|---|
@@ -49,8 +49,8 @@ Every page loads one stylesheet. Script loads only for what a page's markup uses
 | A form, a region or a command | `core`: delegation, commands, ops, morphing, boosted links, pending states. |
 | A select, a combobox, a multi-select or a command palette | `overlay` and `select`: the keys, the search, the chips and the palette. |
 | A data table | `core`, `table` and `overlay`. |
-| A line, area, bar, donut or funnel chart | `charts`: the tooltip, the crosshair and the keys. |
-| A sparkline, or a chart that is loading, failed or empty | No script. |
+| A line, area, bar, donut or funnel chart, or one that is loading, failed or empty | `charts` and the charts' stylesheet: the tooltip, the crosshair and the keys. |
+| A sparkline | No script and no sheet of its own: the toolkit's stylesheet draws it. |
 | A live region, or a table that follows an event stream | `core` and `live`: one connection per stream, its reconnects and the fetches. |
 | A phone input | `phone` and `overlay`; the numbering plans (`phone-data`) the first time someone focuses one. |
 | The app shell | `core` and `sidebar`. |

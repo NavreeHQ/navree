@@ -126,6 +126,7 @@ const FILES = [
   ["otp-styles", "css", "text/css; charset=utf-8", await extraCss(["otp.css"])],
   ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
   ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
+  ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
 ];
 
 /** Files kept byte for byte: no compression gain, or already compressed. */

@@ -240,7 +240,8 @@ impl Uses {
     /// page that draws the builder.
     pub const THEME_BUILDER: Self = Self(1 << 9);
     /// The charts module: tooltips, the crosshair and the keys that move through a
-    /// chart's values.
+    /// chart's values. Its stylesheet comes with it, and with a chart that is loading,
+    /// failed or empty.
     pub const CHARTS: Self = Self(1 << 11);
     /// The slider module: the filled part, the value as text, a gap between the
     /// two thumbs of a range and a click on its track.

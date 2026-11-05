@@ -678,6 +678,10 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
         figure = figure.attr(name, value);
     }
     let named = fill(&labels.chart, &[("title", &common.title)]);
+    // A state is drawn with the charts sheet, and the chart that replaces it needs the module.
+    if !matches!(common.state, State::Ready) || drawn.is_none() {
+        figure = figure.uses(Uses::CHARTS);
+    }
     let content: Node = match (&common.state, drawn) {
         (State::Loading, _) => {
             figure = figure.attr("aria-busy", "true");
