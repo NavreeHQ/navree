@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "AcceptInvitationInput": {
-        "description": "The body of `POST /invitations/accept`.",
+        "description": "The body of `POST /invitations/accept`. `Debug` never shows the token.",
         "properties": {
           "token": {
             "description": "The token from the invitation mail.",
@@ -732,7 +732,7 @@
         "type": "object"
       },
       "LoginInput": {
-        "description": "`POST /auth/login`.",
+        "description": "`POST /auth/login`. `Debug` never shows the password.",
         "properties": {
           "email": {
             "description": "The email address.",
@@ -785,7 +785,7 @@
         ]
       },
       "LogoutInput": {
-        "description": "`POST /auth/logout` (an optional body).",
+        "description": "`POST /auth/logout` (an optional body). `Debug` never shows the token.",
         "properties": {
           "all": {
             "description": "End every session of the user.",
@@ -1738,7 +1738,7 @@
         "type": "object"
       },
       "RefreshInput": {
-        "description": "`POST /auth/refresh`.",
+        "description": "`POST /auth/refresh`. `Debug` never shows the token.",
         "properties": {
           "refresh_token": {
             "description": "The refresh token of the last token pair.",
@@ -1751,7 +1751,7 @@
         "type": "object"
       },
       "RegisterInput": {
-        "description": "`POST /auth/register`.",
+        "description": "`POST /auth/register`. `Debug` never shows the password.",
         "properties": {
           "email": {
             "description": "The email address.",
@@ -4659,7 +4659,7 @@
     },
     "/api/auth/confirm": {
       "post": {
-        "description": "Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in.",
+        "description": "Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in. A browser signed in on the session cookie gets 204 No Content: its sign-in counts as recent from now.",
         "operationId": "auth.confirm",
         "requestBody": {
           "content": {
@@ -4940,6 +4940,7 @@
     },
     "/api/auth/logout": {
       "post": {
+        "description": "A browser signed in on the session cookie is signed out of it (and, with `all`, every other session ends too); it sends its CSRF token.",
         "operationId": "auth.logout",
         "requestBody": {
           "content": {
@@ -5108,6 +5109,7 @@
     },
     "/api/auth/me/password": {
       "patch": {
+        "description": "A browser signed in on the session cookie stays signed in on a new session and gets 204 No Content instead of tokens.",
         "operationId": "auth.password.change",
         "requestBody": {
           "content": {
@@ -9277,6 +9279,60 @@
         ]
       }
     },
+    "/broadcasting/stream": {
+      "get": {
+        "operationId": "realtime.stream",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Live updates for a page: a server-sent event stream of topics and channels",
+        "tags": [
+          "realtime"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health.live",
@@ -9316,6 +9372,81 @@
         "summary": "Prometheus metrics",
         "tags": [
           "Observability"
+        ]
+      }
+    },
+    "/workspace/switch": {
+      "post": {
+        "operationId": "workspace.switch",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Switch this browser to a workspace",
+        "tags": [
+          "Workspaces"
         ]
       }
     }

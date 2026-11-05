@@ -586,7 +586,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm your identity (step-up)
-         * @description Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in.
+         * @description Confirms the password or a two-factor code and returns a new access token whose `auth_time` is now, for routes that need a recent sign-in. A browser signed in on the session cookie gets 204 No Content: its sign-in counts as recent from now.
          */
         post: operations["auth.confirm"];
         delete?: never;
@@ -675,7 +675,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out: revoke a session, or every session */
+        /**
+         * Sign out: revoke a session, or every session
+         * @description A browser signed in on the session cookie is signed out of it (and, with `all`, every other session ends too); it sends its CSRF token.
+         */
         post: operations["auth.logout"];
         delete?: never;
         options?: never;
@@ -714,7 +717,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the password (signs out every other session; returns a new token pair) */
+        /**
+         * Change the password (signs out every other session; returns a new token pair)
+         * @description A browser signed in on the session cookie stays signed in on a new session and gets 204 No Content instead of tokens.
+         */
         patch: operations["auth.password.change"];
         trace?: never;
     };
@@ -2216,6 +2222,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/broadcasting/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live updates for a page: a server-sent event stream of topics and channels */
+        get: operations["realtime.stream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -2267,11 +2290,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspace/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Switch this browser to a workspace */
+        post: operations["workspace.switch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description The body of `POST /invitations/accept`. */
+        /** @description The body of `POST /invitations/accept`. `Debug` never shows the token. */
         AcceptInvitationInput: {
             /** @description The token from the invitation mail. */
             token: string;
@@ -2580,7 +2620,7 @@ export interface components {
             /** @description The provider's display name (`GitHub`, or the configured `name`). */
             provider_name: string;
         };
-        /** @description `POST /auth/login`. */
+        /** @description `POST /auth/login`. `Debug` never shows the password. */
         LoginInput: {
             /** @description The email address. */
             email: string;
@@ -2601,7 +2641,7 @@ export interface components {
          *     authentication, so generated clients see both shapes.
          */
         LoginResult: components["schemas"]["LoginResponse"] | components["schemas"]["TwoFactorChallenge"];
-        /** @description `POST /auth/logout` (an optional body). */
+        /** @description `POST /auth/logout` (an optional body). `Debug` never shows the token. */
         LogoutInput: {
             /** @description End every session of the user. */
             all?: boolean;
@@ -2994,12 +3034,12 @@ export interface components {
             /** @description Single-use codes that replace an authenticator code at login. */
             recovery_codes: string[];
         };
-        /** @description `POST /auth/refresh`. */
+        /** @description `POST /auth/refresh`. `Debug` never shows the token. */
         RefreshInput: {
             /** @description The refresh token of the last token pair. */
             refresh_token: string;
         };
-        /** @description `POST /auth/register`. */
+        /** @description `POST /auth/register`. `Debug` never shows the password. */
         RegisterInput: {
             /** @description The email address. */
             email: string;
@@ -8057,6 +8097,60 @@ export interface operations {
             };
         };
     };
+    "realtime.stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
     "health.live": {
         parameters: {
             query?: never;
@@ -8108,6 +8202,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    "workspace.switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
             };
         };
     };
