@@ -87,7 +87,7 @@ impl SnsVerifier {
         ) {
             return Err(SnsRefusal::Unverified("the SNS message type is unknown"));
         }
-        if !topics.iter().any(|topic| *topic == message.topic_arn) {
+        if !topics.contains(&message.topic_arn) {
             return Err(SnsRefusal::Unverified("the topic is not in topic_arns"));
         }
         let certificate_url = message.signing_cert_url.trim();
