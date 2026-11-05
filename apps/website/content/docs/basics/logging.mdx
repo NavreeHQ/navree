@@ -62,7 +62,7 @@ keep_days = 14
 
 Level, format and rotation names are case-insensitive. Invalid values (an unknown level, a target with spaces, `keep_days = 0`) stop the boot with a message naming the key.
 
-Environment variables are strings, so the lists have a string form. A new app's `config/app.toml` sets `log.level`, and [`.env` doesn't override the TOML file](/docs/getting-started/configuration/#where-settings-come-from), so set `APP_LOG__LEVEL` as a real environment variable (or change `config/app.toml`); the other keys work from `.env` too:
+Environment variables are strings, so the lists have a string form. A new app's `config/app.toml` sets `log.level`; [`.env` and real environment variables override the TOML file](/docs/getting-started/configuration/#where-settings-come-from), so all of these work from `.env`:
 
 ```env
 APP_LOG__FORMAT=json

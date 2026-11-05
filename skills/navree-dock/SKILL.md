@@ -102,8 +102,8 @@ They reach the app three ways:
   already set in the shell wins). Env vars beat `config/app.toml`.
 - `navree dock up` writes them into `.env` between `# dock:start ...` and
   `# dock:end` (replaced each run; `write_env = false` turns it off). `.env`
-  loses to `config/app.toml`, so this block alone does not override
-  `database.url` set in the TOML file.
+  overrides `config/app.toml`, so the block applies even when the TOML file
+  sets the same key; real environment variables override both.
 - `navree dock env` prints `NAME=value` lines (`--export` for a shell).
 
 ## Commands

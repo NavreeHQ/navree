@@ -174,7 +174,7 @@ APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025
 
 The block holds the settings of every service in `dock.toml`, also when you start only some of them. When `.env` sets one of these keys again below the block, the later line wins, and `navree dock up` says so.
 
-Navree reads `.env` before `config/app.toml`, so a key that the TOML file also sets keeps the TOML value (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). When you start the binary without the CLI, with `cargo run` or from your editor, either remove those keys from `config/app.toml` or load the variables first:
+Navree reads `.env` after `config/app.toml`, so the block wins over the TOML file even when the file sets the same key (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). That is why the app finds its services when you start the binary without the CLI, with `cargo run` or from your editor. To load the variables into a shell instead:
 
 ```sh
 eval "$(navree dock env --export)"

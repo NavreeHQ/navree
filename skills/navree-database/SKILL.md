@@ -256,8 +256,8 @@ write are 16 bytes, for `BINARY(16)` columns (the schema builder's
 isolation is query scoping only (no row-level security): every workspace
 query must go through `WorkspaceRepo` or a `#[model(workspace)]` model.
 
-Override in production with `APP_DATABASE__URL` (an environment variable,
-not `.env`, since `config/app.toml` sets it). `Arc<Db>` is injectable
+Override in production with `APP_DATABASE__URL` (an environment variable;
+`.env` also overrides the TOML value). `Arc<Db>` is injectable
 anywhere (`DatabaseModule` is global).
 
 ## Time series

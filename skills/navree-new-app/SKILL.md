@@ -227,9 +227,9 @@ cargo test --workspace && navree micro:patterns                   # micro, at th
 ## Common mistakes
 
 - `navree help` prints the CLI's help; `navree list` prints the app's commands.
-- Setting `APP_DATABASE__URL` or `APP_HTTP__ADDR` in `.env` has no effect:
-  `config/app.toml` sets those keys and `.env` only fills missing ones. Edit
-  the TOML file or use a real environment variable.
+- Setting `APP_DATABASE__URL` or `APP_HTTP__ADDR` in `.env` while
+  `config/app.toml` sets the same key: `.env` wins and the boot warns. Keep
+  each key in one place.
 - Every app command boots the app, so `key:generate`, `migrate` and
   `routes` need a working configuration and a running database: run
   `navree dock up` first ("cannot connect to postgres://navree:***@127.0.0.1:5432/..."
@@ -238,8 +238,8 @@ cargo test --workspace && navree micro:patterns                   # micro, at th
   the same migrations run there (hypertables become regular tables).
 - Leaving `migrate_on_boot = true` in production: turn it off with
   `APP_DATABASE__MIGRATE_ON_BOOT=false` and run `migrate` as a deploy step.
-- Kits keep the database URL out of `config/app.toml`, so `.env` (Dock's
-  settings) fills it: PostgreSQL must be up (`navree dock up`) before
+- Kits keep the database URL out of `config/app.toml`; `.env` (Dock's
+  settings) sets it: PostgreSQL must be up (`navree dock up`) before
   `navree migrate`, `key:generate` or `dev`. Their tests need no services:
   each boots on its own SQLite file (and `MicroFake` in `micro`).
 - In the `micro` workspace, run `navree dev`, `check`, `migrate` and

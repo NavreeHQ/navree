@@ -13,24 +13,24 @@ stops the boot with a message naming the section (never the value).
 
 `src/main.rs` passes `ConfigSources::defaults()`, which reads, in order:
 
-1. `.env` (this machine's secrets; never committed; commit `.env.example`),
-2. `config/app.toml` (shared settings; committed; no secrets),
+1. `config/app.toml` (shared settings; committed; no secrets),
+2. `.env` (this machine's secrets; never committed; commit `.env.example`),
 3. the process's `APP_*` environment variables.
 
-**Later sources win.** So `.env` only fills keys that `config/app.toml`
-leaves out: a new app's TOML sets `http.addr`, `http.api_prefix`, `database.url`,
-`database.migrate_on_boot`, `log.level`, `mail.transport`, `queue.driver`,
-`auth.registration` and `api.title`, and changing those in `.env` has no
-effect. Edit the TOML file, remove the key from it, or use a real
-environment variable. When a key is set in both with different values, the
-boot logs a warning that names the key, the `.env` entry and the file.
-Paths are relative to the working directory: run the app from its root.
+**Later sources win.** So a key in `.env` overrides the same key in
+`config/app.toml`, and a real environment variable overrides both. Set each
+key in one place: a new app's `.env` holds only `APP_KEY` and `APP_MAIL__FROM`
+and leaves the TOML keys (`http.addr`, `database.url`, `log.level`,
+`mail.transport` and the rest) in the TOML file. When a key is set in both
+with different values, the boot logs a warning that names the key, the `.env`
+entry and the file, and says the `.env` value is used. Paths are relative to
+the working directory: run the app from its root.
 
 Look at the result with `navree config:show [section] [--defaults]
 [--origin] [--json]` (secrets are masked, there is no option to show them)
 and check it with `navree config:check [--env production]`: all invalid
 sections at once, keys and sections that nothing reads (usually typos; the
-boot warns about them too), hidden `.env` values, and for production the
+boot warns about them too), keys set in both `.env` and a file, and for production the
 unsafe settings (no `app.key`, a SQLite `database.url`, `mail.transport =
 "log"`). Both run without booting the app.
 
@@ -150,9 +150,9 @@ use navree::config::ConfigSources;
 pub fn sources() -> ConfigSources {
     let env = std::env::var("APP_ENV").unwrap_or_else(|_| "local".to_owned());
     ConfigSources::new()
-        .dotenv(".env")
         .file("config/app.toml")
         .file(format!("config/{env}.toml")) // skipped when missing
+        .dotenv(".env")
         .env()
 }
 ```
@@ -193,7 +193,8 @@ To boot the whole app, build sources with `ConfigSources::new().set(..)`
 
 ## Common mistakes
 
-- Expecting `.env` to override `config/app.toml`.
+- Setting a key in both `.env` and `config/app.toml`: `.env` wins and the
+  boot warns; keep each key in one place.
 - A typo in a key or section name: it is not an error, only a boot warning
   (`navree config:check` fails on it).
 - Secrets in `config/app.toml` (committed): use `.env` or the environment,

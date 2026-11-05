@@ -99,8 +99,8 @@ transport = "log"        # log | array | smtps://user:pass@host | ses://.. | mai
 SMTP: `smtps://user:pass@smtp.example.com` (TLS, 465) or
 `smtp://user:pass@host?tls=required` (STARTTLS, 587); percent-encode `@` in
 user names (`%40`). Put the URL in the environment
-(`APP_MAIL__TRANSPORT=smtps://...`), not in `config/app.toml`, and remember
-a new app's TOML sets `transport`, so `.env` alone won't override it. The
+(`APP_MAIL__TRANSPORT=smtps://...`) or in `.env`, not in `config/app.toml`;
+`.env` overrides the TOML `transport` that a new app sets. The
 `log` transport logs bodies only with `APP_LOG__LEVELS=navree::mail::body=debug`.
 Point it at a local catcher (Mailpit) with `smtp://localhost:1025`.
 
@@ -218,7 +218,8 @@ and `.temp_database()` (SQLite: the `sqlite` feature of `navree` in
 - `MailModule` without `ViewModule` (boot error), or a template name with a
   typo (render error at send/queue time).
 - Calling `mailer.send` inside a request for slow SMTP: use `queue`.
-- Expecting `.env` to change `mail.transport` when `config/app.toml` sets it.
+- Setting `mail.transport` in both `.env` and `config/app.toml`: `.env` wins
+  and the boot warns.
 - Notification routes in an app without `AuthModule`: set `notify.routes = false`.
 - Slack, Teams, SMS, WhatsApp and web push channels: see
   `navree-notification-channels`.

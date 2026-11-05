@@ -849,7 +849,7 @@ refresh_ttl_secs = 2592000      # 30 days
 
 Related settings: `app.key` (see [Encryption and hashing](/docs/security/encryption-and-hashing/)), the `hashing` section for password hashes, `http.trusted_proxies` for client addresses, and `http.signing_key` for the signed verification links.
 
-From the environment, prefix the key with `APP_` and use `__` between levels: `APP_AUTH__JWT__SECRET`, `APP_AUTH__REGISTRATION=false`. Keep secrets in `.env`, never in `config/app.toml`. A new app's `config/app.toml` sets `auth.registration`, and [`.env` doesn't override it](/docs/getting-started/configuration/#where-settings-come-from), so change that one in the TOML file or with a real environment variable.
+From the environment, prefix the key with `APP_` and use `__` between levels: `APP_AUTH__JWT__SECRET`, `APP_AUTH__REGISTRATION=false`. Keep secrets in `.env`, never in `config/app.toml`. A new app's `config/app.toml` sets `auth.registration`; [`.env` and real environment variables override it](/docs/getting-started/configuration/#where-settings-come-from), so you can change that one from either.
 
 To configure the module in code instead, pass `AuthOptions` to `AuthModule::for_root`:
 

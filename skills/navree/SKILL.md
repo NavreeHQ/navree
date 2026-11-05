@@ -179,8 +179,8 @@ navree list                                 # every command of the app
 - Reading a relation inside a loop over records: eager load it with
   `with("relation")`; in development the ORM refuses the lazy load.
 - Using `Utc::now()` where tests need a fixed time: inject `Arc<dyn Clock>`.
-- Setting a key in `.env` that `config/app.toml` also sets: `.env` only
-  fills keys the TOML file leaves out. Real environment variables win.
+- Setting a key in both `.env` and `config/app.toml`: `.env` wins over the
+  TOML file and the boot warns. Real environment variables win over both.
 - Writing a model with a mass update to get audited: `query.update(..)` and
   bulk inserts record no change events; create or save records through the
   unit of work.
