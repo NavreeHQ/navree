@@ -53,7 +53,9 @@ for (const browserName of browsers) {
   describe(browserName, () => {
     let browser;
     before(async () => {
-      browser = await playwright[browserName].launch();
+      // One Firefox process keeps every context's idle keep-alive connections open, so over this suite they pile up
+      // against the server's max_connections_per_ip as real users' connections don't; it closes idle ones after 5 s.
+      browser = await playwright[browserName].launch(browserName === "firefox" ? { firefoxUserPrefs: { "network.http.keep-alive.timeout": 5 } } : {});
     });
     after(() => browser?.close());
 
