@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BASE, axe, inBrowsers, shot } from "./support/flow.mjs";
+import { BASE, axe, inBrowsers, screenshotting, shot } from "./support/flow.mjs";
 import { decodePng } from "./support/png.mjs";
 
 const PHONE = { width: 390, height: 844 };
@@ -66,7 +66,7 @@ async function ink(page, id, length) {
       left: Math.round((bounds.width - el.clientWidth) / 2),
     };
   });
-  const picture = decodePng(await wrapper.screenshot());
+  const picture = decodePng(await screenshotting(page, () => wrapper.screenshot()));
   const read = (x, y) => {
     const at = (y * picture.width + x) * picture.channels;
     const [r, g, b] = [picture.data[at], picture.data[at + 1], picture.data[at + 2]];
