@@ -15,7 +15,10 @@ Chart::bar("Revenue per day")
     .locale("en-IN")
     .format(NumberFormat::currency("₹").max_decimals(0))
     .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
-    .series(Series::new("Revenue", [12_04_000, 14_80_000, 9_90_000, 16_10_000, 18_20_000, 4_10_000, 3_02_000]))
+    .series(Series::new(
+        "Revenue",
+        [12_04_000, 14_80_000, 9_90_000, 16_10_000, 18_20_000, 4_10_000, 3_02_000],
+    ))
     .annotation(Annotation::target(15_00_000, "Goal"))
 ```
 
