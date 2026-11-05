@@ -238,8 +238,7 @@ pub fn sales_charts(report: &Report, sales: &Sales) -> Grid {
 pub fn live_sales(report: &Report, sales: &Sales) -> Region {
     Region::new("sales")
         .src("/fragments/sales")
-        .live_from("/events")
-        .live_event("stats")
+        .live_on(crate::live::stream().on("stats"))
         .children(sales_charts(report, sales))
 }
 
