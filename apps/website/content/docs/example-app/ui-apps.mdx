@@ -13,15 +13,16 @@ Beside the [CRM](/docs/example-app/crm-tour/), the repository holds apps whose s
 
 ## The store
 
-Orders, refunds, stock and a live feed. It shows what a back office needs from a screen toolkit:
+Orders, refunds, stock, a live feed and a dashboard. It shows what a back office needs from a screen toolkit:
 
 - a [DataTable](/docs/ui/data-table/) over lakhs of orders, with its search, filters, sort and keyset pages all answered by the server;
 - an order in a [Sheet](/docs/components/sheet/) over its table, whose history and the customer's other orders [load after it opens](/docs/ui/regions/);
 - refund, cancel and resend in [confirm dialogs](/docs/components/alert-dialog/), each checked again on the server, which refuses them once the order has moved on;
 - an [activity feed](/docs/components/activity-feed/) that asks only for what is new after a server-sent event;
-- a restock form in each row of the inventory.
+- a restock form in each row of the inventory;
+- a dashboard of today's figures and charts of the shop's days, drawn on the server as SVG: revenue by day in an [area chart](/docs/components/area-chart/), orders by day in a [bar chart](/docs/components/bar-chart/) and how customers pay in a [donut chart](/docs/components/donut-chart/). Rupees are written in lakh, the days run on India's clock, each chart has its numbers as a table behind a switch, and the charts follow the live hub, so today's bar grows as orders come in.
 
-Read `src/views/` for the screens as plain functions of the data, `src/pages.rs` for the routes and `src/live.rs` for the live hub.
+Read `src/views/` for the screens as plain functions of the data (`dashboard.rs` for the charts), `src/pages.rs` for the routes and `src/live.rs` for the live hub. The toolkit has three more charts that this dashboard does not use: a [line chart](/docs/components/line-chart/), a [funnel](/docs/components/funnel/) and a [sparkline](/docs/components/sparkline/).
 
 ## The board
 
