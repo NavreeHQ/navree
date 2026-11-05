@@ -101,7 +101,7 @@ mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "htt
 ## a `storage` disk (in `full`). With `integrations` on too, Gmail and
 ## Microsoft 365 mailboxes watched through their connections.
 mail-inbound = ["mail", "storage", "navree-mail/inbound", "navree-integrations?/mail"]
-realtime = ["dep:navree-realtime", "http", "crypto"]
+realtime = ["dep:navree-realtime", "http", "crypto", "db"]
 storage = ["dep:navree-storage", "http", "crypto", "navree-ui?/storage"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
 ## Spaces), on rustls with ring (in `full`).
@@ -537,6 +537,7 @@ helm = [
     "access",
     "auth",
     "orm",
+    "ui",
 ]
 ## L7 (opt-in, not in `full`: the image codecs, resvg and the document
 ## readers add to the build)
