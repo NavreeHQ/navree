@@ -56,7 +56,7 @@ The CLI keeps a few commands for itself: `new`, `make:*`, `dev`, `check`, `gate`
 ## Layout
 
 ```text
-config/app.toml        settings (APP_* environment variables override them)
+config/app.toml        settings (.env and APP_* environment variables override them)
 {% if dock %}
 dock.toml              the local services `navree dock up` runs
 {% endif %}

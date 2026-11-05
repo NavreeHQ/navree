@@ -140,10 +140,10 @@ snake_case; module names are plural. Generators never overwrite a file.
   `[dev-dependencies]` turns `sqlite` on for the tests, so a release build
   compiles no SQLite.
 {% endif %}
-- **Configuration.** `config/app.toml` holds shared settings; `APP_*`
-  environment variables override it (`APP_DATABASE__URL` sets
-  `database.url`). `.env` only fills keys that config/app.toml leaves out.
-  Never commit `.env` or put secrets in config/app.toml.
+- **Configuration.** `config/app.toml` holds shared settings; `.env` (this
+  machine's settings and secrets) overrides it, and `APP_*` environment
+  variables override both (`APP_DATABASE__URL` sets `database.url`). Set a
+  key in one place. Never commit `.env` or put secrets in config/app.toml.
 - **Tests.** Every change comes with tests. Module tests boot the module
   with `navree::testing::TestApp::builder().temp_database()`; call routes
   with `app.client()` (a guest) or `app.acting_as(principal(user_id))`,

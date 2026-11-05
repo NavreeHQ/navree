@@ -155,8 +155,8 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         main.contains("my_shop::app(ConfigSources::defaults()).run()"),
         "{main}"
     );
-    // The URL is set in config/app.toml; `.env` does not repeat it, because a
-    // config file ranks above `.env` and the second copy would do nothing
+    // The URL is set in config/app.toml; `.env` does not repeat it, because
+    // `.env` ranks above the config file and the TOML copy would do nothing
     // (CONFIG-002).
     let env = std::fs::read_to_string(root.join(".env.example")).unwrap();
     assert!(!env.contains("APP_DATABASE__URL"), "{env}");

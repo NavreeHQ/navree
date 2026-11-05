@@ -88,9 +88,9 @@ fn toml_keys(table: &toml::Table, prefix: &str, out: &mut Vec<String>) {
     }
 }
 
-/// CONFIG-002: a config file ranks above `.env`, so a key written in both
-/// would ignore the `.env` copy. The files `navree new` writes set no key in
-/// both.
+/// CONFIG-002: `.env` ranks above `config/app.toml`, so a key written in
+/// both is set twice and the TOML copy does nothing. The files `navree new`
+/// writes set no key in both.
 #[test]
 fn no_generated_key_is_set_in_both_dotenv_and_config_app_toml() {
     for (kit, database) in CASES {

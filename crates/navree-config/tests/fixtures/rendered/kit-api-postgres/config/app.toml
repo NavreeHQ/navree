@@ -1,8 +1,9 @@
 # Acme cloud: settings for every environment.
 #
-# `.env` fills the keys this file leaves out (the database and mail settings
-# Dock writes, secrets), and APP_* environment variables override any key:
-# APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr. Secrets never go here.
+# `.env` ranks above this file and holds the settings of one machine (the
+# database and mail settings Dock writes, secrets), and APP_* environment
+# variables override any key: APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
+# Secrets never go here.
 
 [app]
 # The URL links in mail point at: your front end's, once you have one.

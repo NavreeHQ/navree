@@ -6,6 +6,6 @@
 use navree::config::ConfigSources;
 
 fn main() -> Result<(), navree::kernel::BoxError> {
-    // `.env`, then `config/app.toml`, then `APP_*` environment variables.
+    // `config/app.toml`, then `.env`, then `APP_*` environment variables.
     {{ crate_name }}::app(ConfigSources::defaults()).run()
 }
