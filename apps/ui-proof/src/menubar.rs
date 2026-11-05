@@ -78,12 +78,16 @@ fn mixed_menu() -> ContextMenu {
     ContextMenu::new("ctx-mixed", "Contact actions")
         .content(
             Card::titled("Harleen Kaur").body((
-                el("p").child(
+                // The link is in a sentence, as a link in text is: a lone one this small,
+                // just above a field, would be too small a target.
+                el("p").children((
+                    "Harleen Kaur runs the Amritsar branch. ",
                     el("a")
                         .attr("id", "ctx-link")
                         .href("/menubar/go?to=profile")
                         .child("Open the profile"),
-                ),
+                    " to see her orders.",
+                )),
                 Input::text("notes")
                     .attr("id", "ctx-input")
                     .attr("aria-label", "Notes"),
