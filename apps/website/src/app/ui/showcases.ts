@@ -231,7 +231,7 @@ export const hardParts: HardPart[] = [
       file: "apps/store-demo/src/views/dashboard.rs",
       parts: [
         { from: 'ActivityFeed::new("activity", "Order activity")', to: ".live()" },
-        { from: ".in_region(", to: '.live_event("activity")' },
+        { from: ".in_region(", to: ")" },
       ],
     },
   },
