@@ -466,11 +466,15 @@ export function UiAssets() {
   );
 }
 
+/** A size with a no-break space before its unit, so a narrow column never leaves `KB` alone on a line. */
+const keepUnit = (text: string) => text.replace(/ KB/g, "\u00a0KB");
+
 /** `<UiBudgets />`: every ceiling the toolkit's budget tests hold, with the size now. */
 export function UiBudgets() {
   const rows = uiBudgetRows(toolkitInfo.assets);
+  // Three short columns: on a phone they share the width, instead of each cell keeping the minimum a wide table's cells get.
   return (
-    <div className="table-wrap" role="region" aria-label="The toolkit's size budgets" tabIndex={0}>
+    <div className="table-wrap max-sm:[&_td]:min-w-0" role="region" aria-label="The toolkit's size budgets" tabIndex={0}>
       <table>
         <thead>
           <tr>
@@ -489,10 +493,10 @@ export function UiBudgets() {
               <td>
                 <InlineMarkdown text={row.label} />
               </td>
-              <td className="numeric text-right">
-                <InlineMarkdown text={row.ceiling} />
+              <td className="numeric text-right sm:whitespace-nowrap">
+                <InlineMarkdown text={keepUnit(row.ceiling)} />
               </td>
-              <td className="numeric text-right text-fg-3">{row.measured ?? ""}</td>
+              <td className="numeric text-right text-fg-3 sm:whitespace-nowrap">{keepUnit(row.measured ?? "")}</td>
             </tr>
           ))}
         </tbody>
