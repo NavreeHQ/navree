@@ -8,10 +8,12 @@
  * starts half a gap in from the wrapper's edge, which puts each character in the middle
  * of its box (the space after a character is on its right), and it is wider than the
  * wrapper by that half gap and 2px, which the wrapper clips: the caret after the last
- * character then has room, and the text never scrolls. A code is read left to right
- * whatever the page's direction.
+ * character then has room, and the text never scrolls. The wrapper clips with
+ * `overflow: clip`: a box that hides its overflow can still be scrolled, and a browser
+ * scrolls it to show the caret after the last character, which moves every character off
+ * its box. A code is read left to right whatever the page's direction.
  */
-[data-slot=input-otp]{--otp-n:6;--otp-gap:2.4ch;--otp-w:calc(1ch + var(--otp-gap));position:relative;display:inline-block;box-sizing:content-box;vertical-align:top;width:calc(var(--otp-n) * var(--otp-w));height:2.5rem;overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius);background-color:var(--ink-1);color:var(--fg);font-family:var(--font-mono);font-size:1.25rem;line-height:1;direction:ltr;text-align:left;transition:border-color .1s;
+[data-slot=input-otp]{--otp-n:6;--otp-gap:2.4ch;--otp-w:calc(1ch + var(--otp-gap));position:relative;display:inline-block;box-sizing:content-box;vertical-align:top;width:calc(var(--otp-n) * var(--otp-w));height:2.5rem;overflow:clip;border:1px solid var(--line-2);border-radius:var(--radius);background-color:var(--ink-1);color:var(--fg);font-family:var(--font-mono);font-size:1.25rem;line-height:1;direction:ltr;text-align:left;transition:border-color .1s;
   background-image:repeating-linear-gradient(to right,transparent 0,transparent calc(var(--otp-w) - 1px),var(--line-2) calc(var(--otp-w) - 1px),var(--line-2) var(--otp-w));
   background-size:calc(var(--otp-n) * var(--otp-w) - 1px) 100%;
   background-repeat:no-repeat;
