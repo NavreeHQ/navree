@@ -198,6 +198,9 @@ impl Crypt {
             self.key.clone()
         } else {
             // Algorithm 1: the file key, the object's number and generation.
+            // The standard security handler (ISO 32000-1, 7.6.3) derives the keys of RC4
+            // and AES-128 files with MD5; reading such a file needs it, nothing else uses it.
+            // nosemgrep: insecure-hashes
             let mut hasher = Md5::new();
             hasher.update(&self.key);
             hasher.update(&number.to_le_bytes()[..3]);
@@ -299,6 +302,9 @@ fn rc4_key(
     length: usize,
     metadata: bool,
 ) -> Vec<u8> {
+    // The standard security handler (ISO 32000-1, 7.6.3) derives the keys of RC4
+    // and AES-128 files with MD5; reading such a file needs it, nothing else uses it.
+    // nosemgrep: insecure-hashes
     let mut hasher = Md5::new();
     hasher.update(password);
     hasher.update(owner.get(..32).unwrap_or(owner));
@@ -322,6 +328,8 @@ fn user_valid(key: &[u8], revision: i64, user: &[u8], id: &[u8]) -> bool {
     if revision == 2 {
         return user.get(..32).is_some_and(|user| rc4(key, &PAD) == user);
     }
+    // ISO 32000-1 (7.6.3) checks the password of RC4 and AES-128 files with MD5.
+    // nosemgrep: insecure-hashes
     let mut hasher = Md5::new();
     hasher.update(PAD);
     hasher.update(id);
