@@ -1,0 +1,55 @@
+---
+title: "The Navree UI example apps"
+description: "Whole apps in the repository drawn with Navree UI: a store's back office, a team's board and a support inbox, with what each shows, where to read its code and how to run it."
+---
+
+Beside the [CRM](/docs/example-app/crm-tour/), the repository holds apps whose screens Navree UI draws: a store, a board and an inbox. Each is one Rust crate on SQLite, seeded with demo data (Indian names and cities, times in IST) that it writes afresh at every start, with live updates over server-sent events and a suite that runs it in real browsers. Each has a page on this site with its screens, the code of its hardest part and its measured speed, and all of them are on the [UI page](/ui/#build-anything).
+
+| App | What it is | Run it | Its page |
+| --- | --- | --- | --- |
+| `apps/store-demo` | A store's back office: Charkha Supply Co., an invented shop in Punjab | `cargo run --release -p store-demo` on port 8095 | [The store](/showcase/store/) |
+| `apps/board-demo` | A team's board: Rangla Looms, an invented fabric exporter in Ludhiana | `cargo run -p board-demo` on port 8097 | [The board](/showcase/board/) |
+| `apps/inbox-demo` | A support inbox: Sukhna Labs, an invented software company in Mohali | `cargo run --release -p inbox-demo` on port 8096 | [The inbox](/showcase/inbox/) |
+
+## The store
+
+Orders, refunds, stock and a live feed. It shows what a back office needs from a screen toolkit:
+
+- a [DataTable](/docs/ui/data-table/) over lakhs of orders, with its search, filters, sort and keyset pages all answered by the server;
+- an order in a [Sheet](/docs/components/sheet/) over its table, whose history and the customer's other orders [load after it opens](/docs/ui/regions/);
+- refund, cancel and resend in [confirm dialogs](/docs/components/alert-dialog/), each checked again on the server, which refuses them once the order has moved on;
+- an [activity feed](/docs/components/activity-feed/) that asks only for what is new after a server-sent event;
+- a restock form in each row of the inventory.
+
+Read `src/views/` for the screens as plain functions of the data, `src/pages.rs` for the routes and `src/live.rs` for the live hub.
+
+## The board
+
+Five columns of cards that move by mouse, finger or keys. It shows what a drag-and-drop screen needs from the server:
+
+- a [Sortable](/docs/components/sortable/) board, with every step said to screen readers, as the [drag and drop guide](/docs/ui/drag-and-drop/) describes;
+- moves that the server places by rank and checks in a transaction the toolkit begins, so a stale move, a full column or a card a member may not close is refused and put back;
+- columns of thousands of cards that load a page at a time by a cursor;
+- other people's moves that arrive over server-sent events, so every open board slides the card into place;
+- a card in a [drawer](/docs/components/sheet/) over the board, with its checklist, comments and history.
+
+Read `src/pages.rs` for the move handler and `src/views/board.rs` for the board.
+
+## The inbox
+
+Three panes you resize, and a desk of a lakh of conversations that loads as it is read. It shows what a long, live list needs:
+
+- a [SplitPane](/docs/components/split-pane/) dragged or moved with the keys, its sizes kept for each agent on the server;
+- a [LazyList](/docs/components/lazy-list/) that pages by cursor, so page 400 costs what page 1 does, and keeps the row you are on when a live change arrives;
+- assigning through a [Combobox](/docs/components/combobox/) searched on the server, snoozing with a date picker and acting from the [command palette](/docs/components/command/);
+- single keys that each agent can turn off, and every action a link or a form with JavaScript off.
+
+Read `src/views/list.rs` for the list, `src/queries.rs` for the cursor queries and `src/live.rs` for how every write takes its revision where it commits.
+
+The inbox has no sign-in: a visitor works as one of the team, named by a cookie the server signs. A real app puts it behind [navree-auth](/docs/security/authentication/) and checks on every route that the person may see and change the conversation it names.
+
+## Running them
+
+Each app prints its address when it starts. A simulator makes people and teammates act while it runs, and each app turns it off with its own variable (`STORE_SIMULATOR=off`, `BOARD_SIMULATOR=off` and `INBOX_SIMULATOR=off`). The inbox writes its desk at the start, which takes a little while at full size; `INBOX_SCALE=2000 cargo run -p inbox-demo` writes a small one.
+
+The suites that run them in real browsers are in `e2e/ui/tests` (`store.test.mjs`, `board.test.mjs`, `inbox.test.mjs` and `inbox-scale.test.mjs`), and the head of each says how to start its app for them. For an app whose screens two other front ends draw, see the [CRM tour](/docs/example-app/crm-tour/).

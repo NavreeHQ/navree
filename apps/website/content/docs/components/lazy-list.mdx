@@ -5,7 +5,7 @@ description: "A long list that loads as it is read: pages by cursor at either en
 
 <UiPreview example="lazy-list/default" />
 
-`LazyList` is the default way to show a list that can grow without end: an inbox, a conversation, a feed, a log. The page draws its first page. When the reader nears either end, the `lazy` module asks your server for the next page, by the cursor of the item at that end. It never asks by offset, so a page deep in the list costs what the first does.
+`LazyList` is the default way to show a list that can grow without end: an inbox, a conversation, a feed, a log. The page draws its first page. When the reader nears either end, the `lazy` module asks your server for the next page, by the cursor of the item at that end. It never asks by offset, so a page deep in the list costs what the first does. The [support inbox example app](/showcase/inbox/) draws its conversations and its threads with it.
 
 ```rust
 use navree::ui::*;

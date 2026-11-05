@@ -5,7 +5,7 @@ description: "One Rust definition drives the URL, the query, the drawing, the ex
 
 <UiPreview example="data-table/default" />
 
-`DataTable` draws rows from a query, and `#[derive(TableRow)]` on one struct says what can be done with each column. The same definition parses the URL into a `TableQuery`, builds the query through navree-orm with an allow-list, draws the table, exports CSV and checks bulk actions. Sort, filters, the page, the page size, hidden columns, widths and density live in the URL, so back, forward, reload and a shared link restore them, and it all works with JavaScript off.
+`DataTable` draws rows from a query, and `#[derive(TableRow)]` on one struct says what can be done with each column. The same definition parses the URL into a `TableQuery`, builds the query through navree-orm with an allow-list, draws the table, exports CSV and checks bulk actions. Sort, filters, the page, the page size, hidden columns, widths and density live in the URL, so back, forward, reload and a shared link restore them, and it all works with JavaScript off. The [store example app](/showcase/store/) pages lakhs of orders with one.
 
 ```rust title="src/deals/table.rs"
 #[derive(Clone, TableRow)]
