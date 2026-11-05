@@ -44,6 +44,14 @@
 //!   a conversation rather than an upload lifts this with [`BodyReadLimit`]:
 //!   gRPC does for client and bidirectional streams, once a call has passed
 //!   its access check.
+//! - **A body over its route's limit.** An HTTP/1 request that declares more
+//!   than its route's body limit is answered 413 before any handler runs. A
+//!   body of at most 8 MiB is first read and thrown away, so a client that
+//!   sends it whole before reading gets the 413 and not a reset: for at most
+//!   5 s, and never past the request's own timeout (`http.timeout_secs`, or the
+//!   route's) less 250 ms. No more bytes are read than the request declares;
+//!   a body not read to its end gets `Connection: close` on the 413. A larger
+//!   body, and one from a client waiting on `100 Continue`, is answered at once.
 //! - **Heads.** [`max_header_bytes`](ServerOptions::max_header_bytes) and
 //!   [`max_headers`](ServerOptions::max_headers) (431).
 //! - **Responses.** A response its client stops taking ends after
