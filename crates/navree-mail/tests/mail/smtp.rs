@@ -149,7 +149,6 @@ async fn smtp_transport_delivers_to_a_local_server() {
 // CONN-102
 #[tokio::test]
 async fn smtp_transport_sends_attachments_as_multipart_mixed() {
-    use base64::Engine as _;
     let (port, server) = fake_smtp_server().await;
     let transport = SmtpTransport::from_url(&format!("smtp://127.0.0.1:{port}")).expect("url");
     let pdf = b"%PDF-1.7 INV-2026-0042".to_vec();
@@ -175,12 +174,16 @@ async fn smtp_transport_sends_attachments_as_multipart_mixed() {
         "Your invoice is attached.",
         "Content-Disposition: attachment; filename=\"INV-2026-0042.pdf\"",
         "Content-Type: application/pdf",
-        &base64::engine::general_purpose::STANDARD.encode(&pdf),
         "filename=\"invite.ics\"",
         "text/calendar; method=REQUEST",
     ] {
         assert!(data.contains(expected), "missing {expected} in:\n{data}");
     }
+    // The file arrives whole, in whatever transfer encoding its part declares.
+    assert_eq!(
+        crate::support::attachment_bytes(&data, "INV-2026-0042.pdf"),
+        pdf
+    );
 }
 
 // CONN-102

@@ -118,10 +118,14 @@ async fn ses_sends_a_message_with_attachments_as_raw_mime() {
         "X-Campaign: invoices",
         "INV-2026-0042.pdf",
         "application/pdf",
-        &STANDARD.encode(PDF),
     ] {
         assert!(raw.contains(expected), "missing {expected} in:\n{raw}");
     }
+    // The file arrives whole, in whatever transfer encoding its part declares.
+    assert_eq!(
+        crate::support::attachment_bytes(&raw, "INV-2026-0042.pdf"),
+        PDF
+    );
     assert!(
         !raw.contains("audit@grewal.example.in"),
         "Bcc leaked:\n{raw}"
