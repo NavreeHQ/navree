@@ -43,6 +43,20 @@ const focusedText = (page) =>
     return (e?.closest?.("[data-slot=menu-item]")?.querySelector("[data-slot=menu-text]")?.textContent || e?.id || e?.tagName || "").trim();
   });
 
+/** Waits for focus to reach `text` (an item's words, or an id): a menu takes focus when the browser reports it open, a frame after it shows, as the dropdown suite waits for. */
+const focusOn = (page, text) =>
+  page
+    .waitForFunction((t) => {
+      const e = document.activeElement;
+      return (e?.closest?.("[data-slot=menu-item]")?.querySelector("[data-slot=menu-text]")?.textContent || e?.id || e?.tagName || "").trim() === t;
+    }, text, { timeout: 2000 })
+    .catch(() => {});
+/** Waits for the overlay module to place a popup, and for its opening to end (reduced motion leaves it one frame of transition and scale). */
+const placed = async (page, selector) => {
+  await page.waitForFunction((sel) => document.querySelector(sel).style.top !== "", selector);
+  await page.waitForFunction((sel) => document.querySelector(sel).getAnimations().every((a) => a.playState === "finished"), selector);
+};
+
 const browsers = (process.env.TABLE_BROWSERS || "chromium firefox").split(" ");
 
 for (const browserName of browsers) {
@@ -74,18 +88,19 @@ for (const browserName of browsers) {
       };
     }
 
-    /** Opens the first row's menu with the keyboard and returns the row's key. */
+    /** Opens the first row's menu with the keyboard, once focus is on its first item, and returns the row's key. */
     async function firstMenu(page) {
       const key = (await keys(page))[0];
       await page.locator(`#deals-a-${key}-t`).focus();
       await page.keyboard.press("Enter");
+      await focusOn(page, "View");
       return key;
     }
 
     // UI-GENUI-012
     test("a row's button names its row and opens a menu with the roles of a menu", async () => {
       await post("/__t/reset");
-      const { page, close } = await open("/deals?sort=title&per=10");
+      const { page, close } = await open("/deals?sort=title&per_page=10");
       const key = (await keys(page))[0];
       const trigger = page.locator(`#deals-a-${key}-t`);
       assert.equal(await trigger.getAttribute("aria-haspopup"), "menu");
@@ -105,7 +120,7 @@ for (const browserName of browsers) {
     // UI-GENUI-012
     test("the keys of a menu: arrows, Home, End, type-ahead, Escape back to the button, Tab out", async () => {
       await post("/__t/reset");
-      const { page, close } = await open("/deals?sort=title&per=10");
+      const { page, close } = await open("/deals?sort=title&per_page=10");
       const key = await firstMenu(page);
       assert.ok(await isOpen(page, `#deals-a-${key}`));
       assert.equal(await focusedText(page), "View", "the keyboard opens it on the first item");
@@ -136,16 +151,14 @@ for (const browserName of browsers) {
     // UI-GENUI-012
     test("View is a link, Archive posts, Delete posts and is marked, each from the keyboard", async () => {
       await post("/__t/reset");
-      const { page, close } = await open("/deals?sort=title&per=10");
+      const { page, close } = await open("/deals?sort=title&per_page=10");
       let key = await firstMenu(page);
       await page.keyboard.press("Enter");
       await page.waitForURL(new RegExp(`/deal/${key}$`));
       await page.goBack();
       await page.waitForSelector("#deals");
 
-      key = (await keys(page))[0];
-      await page.locator(`#deals-a-${key}-t`).focus();
-      await page.keyboard.press("Enter");
+      key = await firstMenu(page);
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
       await page.locator("[data-slot=toast]").first().waitFor();
@@ -164,9 +177,10 @@ for (const browserName of browsers) {
 
     // UI-GENUI-012
     test("a pointer opens it with focus on the menu, and hover lights an item", async () => {
-      const { page, close } = await open("/deals?sort=title&per=10");
+      const { page, close } = await open("/deals?sort=title&per_page=10");
       const key = (await keys(page))[0];
       await page.locator(`#deals-a-${key}-t`).click();
+      await focusOn(page, `deals-a-${key}`);
       assert.equal(await page.evaluate(() => document.activeElement.id), `deals-a-${key}`);
       await page.locator(`#deals-a-${key}`).getByRole("menuitem", { name: "Archive" }).hover();
       assert.equal(await focusedText(page), "Archive");
@@ -177,7 +191,7 @@ for (const browserName of browsers) {
 
     // UI-GENUI-012
     test("a thousand rows: a menu each, no control tied to a form, and the first opens at once", async () => {
-      const { page, close } = await open("/thousand?per=1000");
+      const { page, close } = await open("/thousand?per_page=1000");
       assert.equal(await page.locator("#thousand [role=menu]").count(), 1000);
       assert.equal(await page.locator('[form="ui-post"]').count(), 0, "nothing is tied to the page's post form");
       const owned = await page.evaluate(() => [...document.querySelectorAll("#thousand tbody [form]")].length);
@@ -192,10 +206,11 @@ for (const browserName of browsers) {
 
     // UI-GENUI-012
     test("a menu on the last visible row opens above its button when there is no room below", async () => {
-      const { page, close } = await open("/deals?per=100", { viewport: { width: 1440, height: 700 } });
+      const { page, close } = await open("/deals?per_page=100", { viewport: { width: 1440, height: 700 } });
       const key = (await keys(page)).at(-1);
       await page.locator(`#deals-a-${key}-t`).scrollIntoViewIfNeeded();
       await page.locator(`#deals-a-${key}-t`).click();
+      await placed(page, `#deals-a-${key}`);
       const menu = await page.locator(`#deals-a-${key}`).boundingBox();
       assert.ok(menu.y >= 0 && menu.y + menu.height <= 700, JSON.stringify(menu));
       await close();
@@ -212,7 +227,7 @@ for (const browserName of browsers) {
     // UI-GENUI-012
     test("with JavaScript off the button opens the menu, a post is a form that works, and Escape closes it", async () => {
       await post("/__t/reset");
-      const { page, close } = await open("/deals?sort=title&per=10", { js: false });
+      const { page, close } = await open("/deals?sort=title&per_page=10", { js: false });
       const key = (await keys(page))[0];
       await page.locator(`#deals-a-${key}-t`).click();
       assert.ok(await isOpen(page, `#deals-a-${key}`));
@@ -234,7 +249,7 @@ for (const browserName of browsers) {
       // UI-GENUI-012
       test(`axe finds nothing with a row's menu open (${label})`, async () => {
         await post("/__t/reset");
-        const { page, close } = await open("/deals?sort=title&per=10", options);
+        const { page, close } = await open("/deals?sort=title&per_page=10", options);
         const key = (await keys(page))[0];
         await page.locator(`#deals-a-${key}-t`).click();
         await page.keyboard.press("ArrowDown");
