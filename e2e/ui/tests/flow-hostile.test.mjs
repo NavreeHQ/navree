@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { CSP, start } from "./support/fixture.mjs";
+import { launch } from "./support/launch.mjs";
 
 const ENGINES = { chromium, firefox, webkit };
 const NAMES = (process.env.UI_BROWSERS || "chromium,firefox").split(/[ ,]+/).filter((n) => ENGINES[n]);
@@ -35,7 +36,7 @@ for (const name of NAMES) {
   describe(name, { concurrency: false }, () => {
     let browser, f;
     before(async () => {
-      browser = await ENGINES[name].launch();
+      browser = await launch(ENGINES[name]);
       f = await start();
     });
     after(async () => {

@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { after, afterEach, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.STORE_URL || "http://127.0.0.1:8095";
 const require = createRequire(import.meta.url);
@@ -133,7 +134,7 @@ for (const name of NAMES) {
     let browser;
     before(async () => {
       // Firefox slows a background tab's network while another load (an open event stream) runs.
-      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(ENGINES[name], name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser?.close());
     const contexts = [];

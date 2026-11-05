@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as playwright from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const previews = join(root, "apps/website/content/ui/previews");
@@ -50,7 +51,7 @@ for (const browserName of browsers) {
     let server;
     let base;
     before(async () => {
-      browser = await playwright[browserName].launch();
+      browser = await launch(playwright[browserName]);
       server = serve();
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
       base = `http://127.0.0.1:${server.address().port}`;

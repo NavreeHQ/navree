@@ -28,6 +28,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { after, afterEach, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.PLATFORM_URL || "http://127.0.0.1:8080";
 const EMAIL = process.env.PLATFORM_EMAIL || "harpreet.singh@example.com";
@@ -64,7 +65,7 @@ for (const name of NAMES) {
     let browser;
     before(async () => {
       // Firefox slows a background tab's network while another load (an open event stream) runs.
-      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(ENGINES[name], name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser?.close());
     const contexts = [];

@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 import { gaps, page as shell, sleep, start, until } from "./support/stream.mjs";
 
 const ENGINES = { chromium, firefox, webkit };
@@ -41,7 +42,7 @@ for (const name of NAMES) {
     let browser;
     before(async () => {
       // Firefox slows the network of a tab it thinks is in the background while a stream is open.
-      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(ENGINES[name], name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser.close());
 

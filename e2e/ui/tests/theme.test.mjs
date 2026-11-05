@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { after, afterEach, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -54,7 +55,7 @@ for (const name of NAMES) {
   describe(name, { concurrency: false }, () => {
     let browser;
     before(async () => {
-      browser = await ENGINES[name].launch();
+      browser = await launch(ENGINES[name]);
       await fetch(BASE + "/themes/scopes/reset", { method: "POST" });
     });
     after(async () => {

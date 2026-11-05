@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { page as doc, start } from "./support/fixture.mjs";
+import { launch } from "./support/launch.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const until = async (done, ms = 5000) => {
@@ -23,7 +24,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
   describe(engine, () => {
     let browser, f;
     before(async () => {
-      browser = await launcher.launch();
+      browser = await launch(launcher);
       f = await start();
     });
     after(async () => {

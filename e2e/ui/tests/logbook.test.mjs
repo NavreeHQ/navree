@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const LOGBOOK = process.env.UI_LOGBOOK_URL;
 const require = createRequire(import.meta.url);
@@ -70,7 +71,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
   let browser;
   after(() => browser?.close());
   const withPage = async (viewport, fn, contextOptions = {}) => {
-    browser ||= await launcher.launch();
+    browser ||= await launch(launcher);
     const context = await browser.newContext({ viewport, reducedMotion: "reduce", ...contextOptions });
     const page = await context.newPage();
     const problems = watch(page);

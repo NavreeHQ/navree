@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const runtime = join(here, "../../../crates/navree-ui/runtime/src");
@@ -274,7 +275,7 @@ for (const [name, engine, options] of [
   ["firefox", firefox, {}],
 ]) {
   test(`random morphs reach the target and keep identity (${name})`, { timeout: 300000 }, async () => {
-    const browser = await engine.launch(options);
+    const browser = await launch(engine, options);
     const page = await browser.newPage();
     await page.goto(origin);
     const failures = await page.evaluate(properties.toString().replace(/^async function properties/, "async function") .replace(/^/, "(") + ")(1," + ROUNDS + ")");
@@ -283,7 +284,7 @@ for (const [name, engine, options] of [
   });
 
   test(`focus, caret, selection and typed values survive (${name})`, { timeout: 60000 }, async () => {
-    const browser = await engine.launch(options);
+    const browser = await launch(engine, options);
     const page = await browser.newPage();
     await page.goto(origin);
     const out = await page.evaluate(focusProperties);
@@ -297,7 +298,7 @@ for (const [name, engine, options] of [
 }
 
 test("an IME composition survives a morph (chromium)", { timeout: 60000 }, async () => {
-  const browser = await chromium.launch();
+  const browser = await launch(chromium);
   const page = await browser.newPage();
   await page.goto(origin);
   await page.evaluate(async () => {
@@ -337,7 +338,7 @@ test("an IME composition survives a morph (chromium)", { timeout: 60000 }, async
 // "id"). Every name below is one a real form might have, or an attacker might pick.
 for (const [name, engine] of [["chromium", chromium], ["firefox", firefox]]) {
   test(`a form whose fields are named like its properties still morphs (${name})`, { timeout: 60000 }, async () => {
-    const browser = await engine.launch();
+    const browser = await launch(engine);
     const page = await browser.newPage();
     await page.goto(origin);
     const out = await page.evaluate(async () => {

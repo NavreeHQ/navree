@@ -12,6 +12,7 @@ import { createRequire } from "node:module";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { page as doc, start } from "./support/fixture.mjs";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -34,7 +35,7 @@ for (const name of NAMES) {
   describe(name, { concurrency: false }, () => {
     let browser;
     before(async () => {
-      browser = await ENGINES[name].launch();
+      browser = await launch(ENGINES[name]);
       // The first page of a browser that has just started can take long on a busy machine: it is not what a test measures.
       const warm = await browser.newContext();
       await (await warm.newPage()).goto(BASE + "/menus", { timeout: 120000 });

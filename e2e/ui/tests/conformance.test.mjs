@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, before, test } from "node:test";
 import { chromium, firefox } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const URL_BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -15,7 +16,7 @@ const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8")
 
 let browser;
 before(async () => {
-  browser = await chromium.launch();
+  browser = await launch(chromium);
 });
 after(() => browser.close());
 
@@ -257,7 +258,7 @@ test("radio buttons, switches and toggles use the browser's keyboard", { timeout
 });
 
 test("firefox: dialogs, popovers and forms work the same", { timeout: 120000 }, async () => {
-  const engine = await firefox.launch();
+  const engine = await launch(firefox);
   const problems = [];
   // A failed step must not leave a browser running, or the suite never ends.
   try {

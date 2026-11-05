@@ -19,6 +19,7 @@ import { after, afterEach, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
 import { page as doc, start } from "./support/fixture.mjs";
+import { launch } from "./support/launch.mjs";
 import { decodePng } from "./support/png.mjs";
 
 const BASE = process.env.CHARTS_URL || "http://127.0.0.1:8132";
@@ -285,7 +286,7 @@ for (const name of NAMES) {
   describe(name, { concurrency: false, skip: reachable ? false : `needs the proof app at ${BASE}` }, () => {
     let browser;
     before(async () => {
-      browser = await ENGINES[name].launch();
+      browser = await launch(ENGINES[name]);
     });
     after(() => browser?.close());
     /** Every context a test opened: closed after it. */

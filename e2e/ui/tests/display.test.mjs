@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -67,7 +68,7 @@ for (const name of NAMES) {
       // Firefox keeps its first tab in front, so a page under test is "in the background" and its
       // fetches stall for seconds. Measured with a plain Node server too: 4 stalls in 10 runs with the
       // default, 1 with the throttle off. A reader's own tab in front is not throttled.
-      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(ENGINES[name], name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser.close());
     /** Every context a test opened: closed after it, so a failed test leaves no stream behind. */

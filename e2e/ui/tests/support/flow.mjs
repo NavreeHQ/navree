@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, before, describe } from "node:test";
 import * as playwright from "playwright";
+import { launch } from "./launch.mjs";
 
 export const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -62,7 +63,7 @@ export function inBrowsers(body) {
     describe(browserName, { concurrency: false }, () => {
       let browser;
       before(async () => {
-        browser = await playwright[browserName].launch();
+        browser = await launch(playwright[browserName]);
         // The first page of a browser that has just started can take long on a busy machine: it is not what a test measures.
         const warm = await browser.newContext();
         await (await warm.newPage()).goto(BASE + "/flow", { timeout: 120000 });

@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.BASE_URL_BOARD || process.env.BOARD_URL || "http://127.0.0.1:8097";
 const require = createRequire(import.meta.url);
@@ -83,7 +84,7 @@ for (const name of NAMES) {
   describe(`board app in ${name}`, { concurrency: false, skip: reachable ? false : `the app isn't serving at ${BASE}` }, () => {
     let browser;
     before(async () => {
-      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(ENGINES[name], name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser?.close());
     const contexts = [];

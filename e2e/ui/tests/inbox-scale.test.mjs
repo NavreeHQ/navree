@@ -14,6 +14,7 @@ import { writeFileSync } from "node:fs";
 import { brotliCompressSync } from "node:zlib";
 import { after, before, describe, test } from "node:test";
 import { chromium } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.INBOX_SCALE_URL;
 const NUMBERS = process.env.INBOX_NUMBERS;
@@ -40,7 +41,7 @@ if (BASE) {
 describe("inbox at full size", { concurrency: false, skip: size ? false : "INBOX_SCALE_URL isn't serving 100,000 conversations" }, () => {
   let browser;
   before(async () => {
-    browser = await chromium.launch({ args: ["--enable-precise-memory-info"] });
+    browser = await launch(chromium, { args: ["--enable-precise-memory-info"] });
   });
   after(async () => {
     await browser?.close();

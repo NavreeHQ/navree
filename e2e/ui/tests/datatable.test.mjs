@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import * as playwright from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const BASE = process.env.UI_TABLE_URL || "http://127.0.0.1:8097";
 const SHOTS = process.env.TABLE_SHOTS || "";
@@ -55,7 +56,7 @@ for (const browserName of browsers) {
     before(async () => {
       // One Firefox process keeps every context's idle keep-alive connections open, so over this suite they pile up
       // against the server's max_connections_per_ip as real users' connections don't; it closes idle ones after 5 s.
-      browser = await playwright[browserName].launch(browserName === "firefox" ? { firefoxUserPrefs: { "network.http.keep-alive.timeout": 5 } } : {});
+      browser = await launch(playwright[browserName]);
     });
     after(() => browser?.close());
 

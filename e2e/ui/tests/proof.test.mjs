@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
+import { launch } from "./support/launch.mjs";
 
 const URL_BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 
@@ -13,7 +14,7 @@ const ENGINE = { chromium, firefox, webkit }[process.env.UI_BROWSER || "chromium
 
 let browser;
 before(async () => {
-  browser = await ENGINE.launch();
+  browser = await launch(ENGINE);
 });
 after(() => browser.close());
 

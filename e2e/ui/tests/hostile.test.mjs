@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { CSP, page as doc, start } from "./support/fixture.mjs";
+import { launch } from "./support/launch.mjs";
 
 const PROOF = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 // The short waits are for something to have happened: room for a busy machine.
@@ -27,7 +28,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
 
     before(async () => {
       // Firefox slows a page's requests while another load runs; the saves here are timed.
-      browser = await launcher.launch(engine === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
+      browser = await launch(launcher, engine === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
       f = await start();
     });
     after(async () => {
