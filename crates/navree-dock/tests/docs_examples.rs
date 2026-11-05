@@ -82,7 +82,14 @@ fn the_services_table() {
     assert_eq!(setting(&file, "AWS_ACCESS_KEY_ID"), "navree");
     assert_eq!(setting(&file, "AWS_SECRET_ACCESS_KEY"), "navree-secret");
     assert_eq!(setting(&file, "AWS_REGION"), "us-east-1");
-    assert_eq!(setting(&file, "APP_MICRO__TRANSPORT"), "nats");
+    // The broker's address only: the transport kind is the app's shape and
+    // stays in config/app.toml.
+    assert!(
+        file.env()
+            .iter()
+            .all(|(key, _)| key != "APP_MICRO__TRANSPORT"),
+        "Dock sets APP_MICRO__TRANSPORT"
+    );
     assert_eq!(setting(&file, "APP_MICRO__URL"), "nats://127.0.0.1:4222");
 
     let ports: Vec<Vec<u16>> = file
@@ -266,7 +273,7 @@ fn the_env_command() {
     let file = parse("[services.postgres]\n[services.nats]\n");
     assert_eq!(
         env_lines(&file.env(), false),
-        "APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api\nAPP_MICRO__TRANSPORT=nats\nAPP_MICRO__URL=nats://127.0.0.1:4222\n"
+        "APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api\nAPP_MICRO__URL=nats://127.0.0.1:4222\n"
     );
     assert!(
         env_lines(&file.env(), true).starts_with(

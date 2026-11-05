@@ -796,10 +796,7 @@ mod tests {
         );
         assert_eq!(
             env(file.service("nats").unwrap()),
-            [
-                ("APP_MICRO__TRANSPORT", "nats"),
-                ("APP_MICRO__URL", "nats://127.0.0.1:4222"),
-            ]
+            [("APP_MICRO__URL", "nats://127.0.0.1:4222")]
         );
         let minio = file.service("minio").unwrap();
         assert_eq!(
@@ -1126,7 +1123,7 @@ env = { CRM_UPLOADS_ENDPOINT = "http://{host}:{port}", CRM_UPLOADS_BUCKET = "{bu
                 .to_string()
                 .contains("unknown service")
         );
-        assert_eq!(file.env().len(), 4);
+        assert_eq!(file.env().len(), 3);
     }
 
     #[test]

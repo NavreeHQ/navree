@@ -6,6 +6,6 @@
 # APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/<service>
 [services.postgres]
 
-# APP_MICRO__TRANSPORT=nats and APP_MICRO__URL=nats://127.0.0.1:4222, with
-# JetStream for durable events; monitoring at http://localhost:8222
+# APP_MICRO__URL=nats://127.0.0.1:4222 (config/app.toml names the transport),
+# with JetStream for durable events; monitoring at http://localhost:8222
 [services.nats]

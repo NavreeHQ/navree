@@ -131,10 +131,9 @@ impl Service {
                 ("AWS_SECRET_ACCESS_KEY", "{password}"),
                 ("AWS_REGION", "us-east-1"),
             ],
-            Service::Nats => &[
-                ("APP_MICRO__TRANSPORT", "nats"),
-                ("APP_MICRO__URL", "nats://{host}:{port}"),
-            ],
+            // The broker's address only: the transport kind is the app's shape and stays in
+            // config/app.toml.
+            Service::Nats => &[("APP_MICRO__URL", "nats://{host}:{port}")],
         }
     }
 

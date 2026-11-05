@@ -36,10 +36,9 @@ url = "nats://127.0.0.1:4222"
 stream = "CRM"
 ```
 
-In production, set the connection from the environment:
+The transport is part of the app's shape, so it stays in `config/app.toml`. What changes from one environment to the next, the broker's address and its credentials, goes in `.env`:
 
 ```env title=".env"
-APP_MICRO__TRANSPORT=nats
 APP_MICRO__URL=tls://nats.internal:4222
 APP_MICRO__NATS__TOKEN=change-me
 ```

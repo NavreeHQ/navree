@@ -105,7 +105,9 @@ Navree::app()
     .module(DealsModule)
 ```
 
-5. Configure (`config/app.toml`, or `APP_MICRO__SERVICE`, `APP_MICRO__TRANSPORT`, `APP_MICRO__URL`):
+5. Configure in `config/app.toml` (service, transport, defaults); `.env` holds
+   what changes per environment, the address and credentials (`APP_MICRO__URL`,
+   `APP_MICRO__NATS__TOKEN`; Dock writes only the URL):
 
 ```toml
 [micro]

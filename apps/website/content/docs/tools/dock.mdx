@@ -101,7 +101,7 @@ error: dock.toml: [services.redis]: unknown key `bucket`; redis takes image, ver
 | `meilisearch` | `getmeili/meilisearch:v1.55` | 7700 | `APP_SEARCH__ENGINE=meilisearch`, `APP_SEARCH__URL=http://127.0.0.1:7700`, `APP_SEARCH__KEY` |
 | `mailpit` | `axllent/mailpit:v1.31` | 1025 (SMTP), 8025 (inbox) | `APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | 9000 (S3 API), 9001 (console) | `AWS_ENDPOINT_URL=http://127.0.0.1:9000`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1` |
-| `nats` | `nats:2.14` | 4222, 8222 (monitoring) | `APP_MICRO__TRANSPORT=nats`, `APP_MICRO__URL=nats://127.0.0.1:4222` |
+| `nats` | `nats:2.14` | 4222, 8222 (monitoring) | `APP_MICRO__URL=nats://127.0.0.1:4222` (the transport, `nats`, is set in `config/app.toml`) |
 
 Each image is pinned, so everyone on the team runs the same version, and `navree dock up` prints the one it uses. Set `version` (the image tag; for TimescaleDB, the PostgreSQL major version) or `image` (any image, with or without a tag) to choose another. MinIO no longer publishes container images, so the `minio` service runs `pgsty/minio`, a maintained build of the MinIO server with the same S3 API, console and `mc` client.
 

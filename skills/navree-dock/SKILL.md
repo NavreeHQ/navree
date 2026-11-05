@@ -83,7 +83,7 @@ services are errors naming the table and the allowed keys.
 | meilisearch | `APP_SEARCH__ENGINE=meilisearch`, `APP_SEARCH__URL=http://127.0.0.1:7700`, `APP_SEARCH__KEY` |
 | mailpit | `APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025` (inbox on :8025) |
 | minio | `AWS_ENDPOINT_URL=http://127.0.0.1:9000`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1` |
-| nats | `APP_MICRO__TRANSPORT=nats`, `APP_MICRO__URL=nats://127.0.0.1:4222` |
+| nats | `APP_MICRO__URL=nats://127.0.0.1:4222` (`micro.transport = "nats"` stays in `config/app.toml`) |
 
 A service's `env` table **replaces** its defaults; values take `{host}`,
 `{port}` and the service's own placeholders (postgres `{user}`
