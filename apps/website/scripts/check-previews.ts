@@ -372,8 +372,11 @@ async function main() {
             const trigger = hovers.nth(k);
             if (!(await trigger.isVisible())) continue;
             await frame.evaluate(() => {
-              const state = window as unknown as { previewOpens: number };
+              // One listener for the frame, so a second trigger's openings are counted once.
+              const state = window as unknown as { previewOpens: number; previewCounting?: boolean };
               state.previewOpens = 0;
+              if (state.previewCounting) return;
+              state.previewCounting = true;
               document.addEventListener("toggle", (event) => {
                 if ((event as ToggleEvent).newState === "open") state.previewOpens++;
               }, true);
