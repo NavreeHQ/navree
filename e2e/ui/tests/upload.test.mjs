@@ -33,14 +33,15 @@ function multipart(parts) {
 
 inBrowsers(({ open, browserName }) => {
   const reset = (page) => page.request.post(BASE + "/upload/reset");
+  // The page is drawn after the server forgets its files, so no row is left from the test before.
+  const fresh = (options = {}) => open("/upload", { ...options, before: reset });
   const stored = async (page) => (await page.request.get(BASE + "/upload/stored.json")).json();
   const row = (page, id, state = "") => page.locator(`#${id} [data-slot=upload-item]${state ? `[data-state=${state}]` : ""}`);
   const said = (page, id) => page.locator(`#${id} [data-slot=upload-status]`).innerText();
 
   // UI-GENUI-021
   test("an upload is a multipart form around a native file input that the label names and the limits describe", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     const form = page.locator("#up-photo");
     assert.equal(await form.evaluate((e) => [e.tagName, e.method, e.enctype, e.getAttribute("action")]).then((a) => a.join(" ")), "FORM post multipart/form-data /upload/photo");
     const input = page.locator("#up-photo-input");
@@ -66,8 +67,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a file chosen is sent at once, listed as sent, announced, and kept by the server", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.locator("#up-photo-input").setInputFiles(png("Simran-Kaur.png", 3000));
     await row(page, "up-photo", "done").waitFor();
     assert.equal((await row(page, "up-photo").locator("[data-slot=attachment-title]").innerText()).trim(), "Simran-Kaur.png");
@@ -82,8 +82,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("the server reads the kind from the bytes: a program renamed to a picture is refused in words", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.locator("#up-photo-input").setInputFiles(exe("photo.png"));
     await row(page, "up-photo", "failed").waitFor();
     assert.equal((await row(page, "up-photo").locator("[data-slot=attachment-description]").innerText()).trim(), "photo.png is not an accepted kind of file. Accepted: PNG or JPG.");
@@ -97,8 +96,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a file over the limit is refused by the page without a request, and by the server when the page is skipped", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     const posts = [];
     page.on("request", (request) => request.method() === "POST" && posts.push(new URL(request.url()).pathname));
     await page.locator("#up-photo-input").setInputFiles(png("big.png", 2 * 1024 * 1024));
@@ -120,8 +118,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("an empty file is refused in words", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.locator("#up-photo-input").setInputFiles({ name: "blank.png", mimeType: "image/png", buffer: Buffer.alloc(0) });
     await row(page, "up-photo", "failed").waitFor();
     assert.equal((await row(page, "up-photo").locator("[data-slot=attachment-description]").innerText()).trim(), "blank.png is empty.");
@@ -129,8 +126,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a file dropped on the area is sent, and the area lights up while a file is over it", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.waitForSelector("#up-photo[data-ready]");
     const zone = page.locator("#up-photo [data-slot=upload-zone]");
     const bytes = [...png("x", 2000).buffer];
@@ -175,8 +171,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a file on its way shows progress, can be stopped, and the list says so", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.locator("#up-slow-input").setInputFiles({ name: "rates.csv", mimeType: "text/csv", buffer: Buffer.from("शहर,दर\nਲੁਧਿਆਣਾ,120\n") });
     const sending = row(page, "up-slow", "sending");
     await sending.waitFor();
@@ -193,8 +188,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a file that could not be sent says so, and Try again sends it", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     let tries = 0;
     await page.route("**/upload/photo", (route) => (tries++ === 0 ? route.abort("connectionreset") : route.continue()));
     await page.locator("#up-photo-input").setInputFiles(png("retry.png"));
@@ -208,8 +202,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a large file goes in parts, each tried again, and arrives whole", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     const body = Buffer.concat([PDF_HEAD, randomBytes(12 * 1024 * 1024)]);
     const calls = [];
     page.on("request", (request) => {
@@ -231,8 +224,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a large file of a kind that is not accepted is refused when it is put together, and leaves nothing", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.locator("#up-docs-input").setInputFiles({ name: "evil.pdf", mimeType: "application/pdf", buffer: Buffer.concat([EXE_HEAD, randomBytes(5 * 1024 * 1024)]) });
     await row(page, "up-docs", "failed").waitFor({ timeout: 60000 });
     assert.match(await row(page, "up-docs").locator("[data-slot=attachment-description]").innerText(), /evil\.pdf is not an accepted kind of file/);
@@ -241,8 +233,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("the server refuses a made-up upload id, a file larger than the limit at the start, and a count past the room", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     const forged = await page.request.put(BASE + "/upload/chunks/0123456789abcdef0123456789abcdef/0", { data: Buffer.alloc(10), headers: { accept: "application/json" } });
     assert.equal(forged.status(), 404);
     assert.equal((await forged.json()).refused[0].code, "unknown");
@@ -260,8 +251,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("hostile names stay text on the page, in the list the server drew and in the one the module draws", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.evaluate(() => { window.__xss = 0; });
     const drawn = await page.locator("#up-hostile [data-slot=attachment-title]").evaluateAll((els) => els.map((e) => [e.textContent, e.querySelector("img") === null]));
     assert.deepEqual(drawn[0], ["<img src=x onerror=alert(1)>.pdf", true]);
@@ -276,8 +266,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("words from a hostile server are written as text", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     const evil = "<img src=x onerror=window.__xss=1><b>bold</b>";
     await page.route("**/upload/photo", (route) => route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ refused: [{ message: evil }] }) }));
     await page.locator("#up-photo-input").setInputFiles(png("a.png"));
@@ -289,8 +278,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a form sent by hand lists the files and sends them one by one with the Send button", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.waitForSelector("#up-manual[data-ready]");
     assert.ok(await page.locator("#up-manual [data-slot=upload-actions] button").isVisible(), "Send shows");
     await page.locator("#up-manual-input").setInputFiles({ name: "prices.csv", mimeType: "text/csv", buffer: Buffer.from("naam,keemat\nghee,650\n") });
@@ -304,8 +292,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("a field in a form lists the chosen files, takes one out, and sends the rest with the form", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.waitForSelector("#up-field[data-ready]");
     await page.locator("#up-field-input").setInputFiles([pdf("Aadhaar.pdf"), pdf("PAN.pdf")]);
     assert.equal(await row(page, "up-field", "chosen").count(), 2);
@@ -316,16 +303,17 @@ inBrowsers(({ open, browserName }) => {
     const sent = page.waitForRequest((request) => new URL(request.url()).pathname === "/upload/docs" && request.method() === "POST");
     await page.locator("#up-form button[type=submit]").click();
     const request = await sent;
-    const post = request.postDataBuffer().toString("latin1");
-    assert.ok(post.includes("PAN.pdf") && !post.includes("Aadhaar.pdf"), "only the file left in the list was sent");
+    // Chromium reports no body for a post that holds a file; the files the server kept, below,
+    // say the same in every browser.
+    const post = request.postDataBuffer()?.toString("latin1");
+    if (post !== undefined) assert.ok(post.includes("PAN.pdf") && !post.includes("Aadhaar.pdf"), "only the file left in the list was sent");
     await page.waitForURL(/\/upload#documents/);
     assert.deepEqual((await stored(page)).map((f) => f.name), ["PAN.pdf"]);
     await close();
   });
 
   test("keys: Delete on the button of a listed file takes it out and says so, and focus goes back to the control", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.waitForSelector("#up-field[data-ready]");
     await page.locator("#up-field-input").setInputFiles([pdf("Salary-slip.pdf")]);
     const remove = row(page, "up-field", "chosen").locator("[data-ui-remove]");
@@ -362,8 +350,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("right to left: the list and its buttons follow the page's direction", async () => {
-    const { page, close } = await open("/upload");
-    await reset(page);
+    const { page, close } = await fresh();
     await page.waitForSelector("#up-rtl-field[data-ready]");
     await page.locator("#up-rtl-field-input").setInputFiles(exe("ملف.png"));
     await row(page, "up-rtl-field", "failed").waitFor();
@@ -380,8 +367,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("no sideways scroll at 390 px, even for a very long name", async () => {
-    const { page, close } = await open("/upload", { viewport: PHONE });
-    await reset(page);
+    const { page, close } = await fresh({ viewport: PHONE });
     await page.waitForSelector("#up-photo[data-ready]");
     await page.locator("#up-photo-input").setInputFiles(exe(`${"Gurpreet-Singh-".repeat(14)}.png`));
     await row(page, "up-photo", "failed").waitFor();
@@ -397,15 +383,20 @@ inBrowsers(({ open, browserName }) => {
     ["light on a phone", { viewport: PHONE, light: true }],
   ]) {
     test(`axe finds nothing in any state of the upload (${label})`, async () => {
-      const { page, close } = await open("/upload", options);
-      await reset(page);
+      // A file the server already has, which the page draws with its Remove button.
+      const keep = async (page) => {
+        await reset(page);
+        const kept = multipart([["docs", "Voter-ID-Harpreet-Kaur.pdf", pdf("x").buffer]]);
+        await page.request.post(BASE + "/upload/docs", { data: kept.data, headers: kept.headers });
+      };
+      const { page, close } = await open("/upload", { ...options, before: keep });
       await page.waitForSelector("#up-field[data-ready]");
-      // Every state on show at once: a failed file, a chosen one, and the stored ones.
+      // Every state on show at once: a failed file, a chosen one, a sent one, and a stored one.
       await page.locator("#up-photo-input").setInputFiles(exe("not-a-photo.png"));
       await row(page, "up-photo", "failed").waitFor();
       await page.locator("#up-field-input").setInputFiles([pdf("Salary-slip-October.pdf")]);
       await page.locator("#up-docs-input").setInputFiles(pdf("Aadhaar-Gurpreet-Singh.pdf"));
-      await row(page, "up-docs", "done").waitFor();
+      await row(page, "up-docs", "done").filter({ hasText: "Aadhaar-Gurpreet-Singh.pdf" }).waitFor();
       for (const id of ["photo", "documents", "manual", "field", "states", "rtl"]) {
         assert.deepEqual(await axe(page, `#${id}`), [], id);
       }
@@ -414,8 +405,7 @@ inBrowsers(({ open, browserName }) => {
   }
 
   test("JavaScript off: choose a file, press Send, and the page comes back with the file listed and a toast", async () => {
-    const { page, close } = await open("/upload", { js: false });
-    await reset(page);
+    const { page, close } = await fresh({ js: false });
     assert.equal(await page.locator("#up-photo[data-ready]").count(), 0);
     assert.ok(await page.locator("#up-photo [data-slot=upload-actions] button").isVisible(), "Send shows");
     assert.ok(await page.locator("#up-photo-input").isVisible(), "the native control shows");
@@ -428,8 +418,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("JavaScript off: Send with no file says to choose one, and a stored file removes itself with a post", async () => {
-    const { page, close } = await open("/upload", { js: false });
-    await reset(page);
+    const { page, close } = await fresh({ js: false });
     await Promise.all([page.waitForURL(/\/upload#photo/), page.locator("#up-photo [data-slot=upload-actions] button").click()]);
     assert.match(await page.locator("body").innerText(), /Choose a file to send\./);
     await page.locator("#up-photo-input").setInputFiles(png("Rajveer-Brar.png"));
@@ -440,8 +429,7 @@ inBrowsers(({ open, browserName }) => {
   });
 
   test("JavaScript off: a file the server refuses is told in words after the redirect", async () => {
-    const { page, close } = await open("/upload", { js: false });
-    await reset(page);
+    const { page, close } = await fresh({ js: false });
     await page.locator("#up-photo-input").setInputFiles(exe("photo.png"));
     await Promise.all([page.waitForURL(/\/upload#photo/), page.locator("#up-photo [data-slot=upload-actions] button").click()]);
     assert.match(await page.locator("body").innerText(), /photo\.png is not an accepted kind of file/);
