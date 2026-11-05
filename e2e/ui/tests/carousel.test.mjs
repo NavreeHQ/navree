@@ -99,7 +99,8 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await index(page, "c-basic"), 3, "next at the end does nothing");
     await prev.click();
     await until(() => index(page, "c-basic"), 2, "previous goes back one");
-    assert.equal((await state(page, "c-basic")).next, "false");
+    // The buttons follow the scroll's end, a moment after the slide is in place.
+    await until(() => state(page, "c-basic").then((s) => s.next), "false", "next is enabled again");
     await close();
   });
 
