@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a041836e73c4";
+pub const BUILD: &str = "ef299f302e48";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-f11bb7046e31.js";
@@ -48,7 +48,7 @@ pub const KEYS_URL: &str = "/_navree/ui/keys-49b3218a2c25.js";
 pub const LAZY_URL: &str = "/_navree/ui/lazy-ba1f5afc8f4f.js";
 
 /// The URL of `sortable.js`.
-pub const SORTABLE_URL: &str = "/_navree/ui/sortable-ea3fea82027d.js";
+pub const SORTABLE_URL: &str = "/_navree/ui/sortable-86556b751a3b.js";
 
 /// The URL of `upload.js`.
 pub const UPLOAD_URL: &str = "/_navree/ui/upload-215076f0486b.js";
@@ -234,7 +234,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable",
         ext: "js",
-        hash: "ea3fea82027d",
+        hash: "86556b751a3b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sortable.js"),
         gzip: Some(include_bytes!("../dist/sortable.js.gz")),

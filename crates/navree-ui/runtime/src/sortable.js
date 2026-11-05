@@ -806,6 +806,11 @@ on(document, "dragstart", (e) => {
   if (item && closest(item, ROOT)) e.preventDefault();
 });
 
+// A press on an item is a drag in the making, not the start of a text selection. WebKit keeps its
+// selection going under the held pointer and, at the board's side, nudges the board along with it;
+// the phone's snap points pull each nudge back, and with them the drag's own steps.
+on(document, "selectstart", (e) => press && e.preventDefault());
+
 // A drag on touch holds the page still; a long press opens no menu.
 on(document, "touchmove", (e) => {
   if (drag?.mode === "pointer" || (press?.touch && press.handle)) e.preventDefault();

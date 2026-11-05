@@ -534,6 +534,22 @@ for (const name of NAMES) {
       await page.done();
     });
 
+    // WebKit keeps a text selection going under a held mouse and, at the board's side, scrolls the board
+    // a step at a time for it; the phone's snap points pull each step back and the drag never gets off the first column.
+    test("a card dragged by the mouse starts no text selection", async () => {
+      const page = await open("/", { viewport: { width: 390, height: 844 } });
+      const from = await page.locator("#columns-item-1 [data-slot=sortable-body]").boundingBox();
+      await page.mouse.move(from.x + 20, from.y + 12);
+      await page.mouse.down();
+      await page.mouse.move(from.x + 30, from.y + 20, { steps: 2 });
+      await page.mouse.move(from.x + 120, from.y + 60, { steps: 6 });
+      assert.ok(await page.evaluate(() => document.querySelector("[data-ghost]")), "the card is lifted");
+      await page.keyboard.press("Escape");
+      await page.mouse.up();
+      assert.deepEqual(await page.evaluate(() => [getSelection().isCollapsed, getSelection().toString()]), [true, ""]);
+      await page.done();
+    });
+
     test("a checklist line ticked in the drawer is saved", async () => {
       const page = await open();
       await page.getByRole("button", { name: "Fix the sign-in redirect on Android", exact: true }).click();
