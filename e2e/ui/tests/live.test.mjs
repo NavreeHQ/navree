@@ -117,8 +117,16 @@ for (const name of NAMES) {
         await until(() => srv.count("/clock") >= 8, "eight polls of the other region");
         assert.ok(srv.sse.attempts <= 5, `attempts ${srv.sse.attempts}`);
         followsTheBackoff(srv.sse.times, 3);
+        // Typing brings no try of its own: no more tries came while typing than the backoff itself brings in that
+        // time (at 1 s, 3 s, 7 s … after the first, less 10%). Typing is slower on a busy machine, so the window can
+        // reach a third.
+        let due = 0;
+        for (let k = 0, at = 0; k < 8; k++) {
+          at += 1000 * 2 ** k;
+          if (srv.sse.times[0] + at * 0.9 <= typingTo) due++;
+        }
         const whileTyping = srv.sse.times.filter((t) => t >= typingFrom && t <= typingTo).length;
-        assert.ok(whileTyping <= 2, `attempts while typing ${whileTyping}`);
+        assert.ok(whileTyping <= due, `attempts while typing ${whileTyping}, the backoff brings ${due} in that time`);
         assert.equal(await live(page), "retry");
       });
     });
