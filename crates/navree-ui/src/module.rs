@@ -14,7 +14,9 @@ use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
-use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef};
+use navree_http::{
+    ApiMeta, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef,
+};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Module,
     ModuleBuilder, ModuleId, ProviderKey, Resolver,
@@ -398,7 +400,13 @@ impl Controller for Assets {
                 },
             )
             .name("ui.assets")
-            .public(),
+            .public()
+            .api(api(
+                "A toolkit asset (script, stylesheet, font or icon)",
+                "Named by its content hash: cached for good under the current hash, checked \
+                 again under an older one. Brotli or gzip when the client takes it.",
+                &[304, 404],
+            )),
             // An island's script, of the app's own: by its name and content hash.
             RouteDef::on(
                 Method::GET,
@@ -412,7 +420,13 @@ impl Controller for Assets {
                 },
             )
             .name("ui.islands")
-            .public(),
+            .public()
+            .api(api(
+                "An island script of the app",
+                "A script one of the app's modules contributed, by its name and content hash; \
+                 under an older hash it is still served, uncached.",
+                &[304, 404],
+            )),
             // A theme of your own: the file's name is the theme, read by a strict parser.
             RouteDef::on(
                 Method::GET,
@@ -422,7 +436,13 @@ impl Controller for Assets {
                 },
             )
             .name("ui.theme")
-            .public(),
+            .public()
+            .api(api(
+                "The stylesheet of a theme of your own",
+                "The file's name is the theme's short form, then a dash and the build; a name \
+                 that is not a theme is not found.",
+                &[304, 404],
+            )),
             // The theme menu's post: sets the reader's cookie and goes back.
             RouteDef::on(
                 Method::POST,
@@ -432,8 +452,30 @@ impl Controller for Assets {
                 },
             )
             .name("ui.appearance")
-            .public(),
+            .public()
+            .api(ApiMeta {
+                success_status: 303,
+                ..api(
+                    "Sets the reader's theme and mode",
+                    "The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie \
+                     and goes back to `back`, so it works with JavaScript off. A post from \
+                     another site is refused.",
+                    &[400, 403],
+                )
+            }),
         ]
+    }
+}
+
+/// The documentation of a route of the toolkit. Its answers are files or a
+/// redirect, so it has no response schema.
+fn api(summary: &str, description: &str, responses: &[u16]) -> ApiMeta {
+    ApiMeta {
+        summary: Some(summary.to_owned()),
+        description: Some(description.to_owned()),
+        tags: vec!["UI".to_owned()],
+        responses: responses.to_vec(),
+        ..ApiMeta::default()
     }
 }
 
@@ -521,5 +563,27 @@ mod tests {
         assert_eq!(json["status"], 303);
         assert_eq!(json["location"], "/deals");
         assert_eq!(json["html"], serde_json::Value::Null);
+    }
+
+    // `navree check` asks every route for its API documentation, the
+    // toolkit's own included.
+    #[tokio::test]
+    async fn every_route_of_the_toolkit_is_documented() {
+        let app = app().await;
+        let routes = navree_http::route_table(app.ctx()).await.unwrap();
+        let mut toolkit = 0;
+        for route in routes.iter().filter(|route| {
+            route
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("ui."))
+        }) {
+            toolkit += 1;
+            let label = format!("{} {}", route.method, route.full_path);
+            let api = route.api.as_ref().unwrap_or_else(|| panic!("{label}"));
+            assert!(api.summary.is_some(), "{label}");
+            assert_eq!(api.tags, ["UI"], "{label}");
+        }
+        assert_eq!(toolkit, 4);
     }
 }
