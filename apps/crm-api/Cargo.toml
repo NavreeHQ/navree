@@ -20,6 +20,9 @@ default = ["sqlite"]
 ## The PostgreSQL driver: `postgres://` database URLs (with TimescaleDB, the
 ## activity timeline is a hypertable). Also runs tests/servers.rs there.
 postgres = ["navree/postgres"]
+## The MySQL driver: `mysql://` database URLs. Also runs tests/servers.rs
+## there.
+mysql = ["navree/mysql"]
 ## The SQLite driver: `sqlite://` database URLs (the default in config/app.toml,
 ## and what the tests run on).
 sqlite = ["navree/sqlite"]

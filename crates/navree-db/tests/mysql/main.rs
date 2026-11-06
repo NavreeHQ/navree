@@ -22,3 +22,4 @@ mod paginate;
 mod text;
 mod time_series;
 mod uow;
+mod uuids;

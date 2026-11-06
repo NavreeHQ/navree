@@ -402,13 +402,10 @@ pub(crate) fn type_sql(column: &ColumnDefinition, ctx: &Context<'_>) -> SchemaRe
             Some(n) => format!("VARBINARY({n})"),
             None => "BLOB".to_owned(),
         },
-        ColumnType::Uuid => {
-            if target.is_mariadb() && target.at_least((10, 7)) {
-                "UUID".to_owned()
-            } else {
-                "CHAR(36)".to_owned()
-            }
-        }
+        // The 16 bytes navree-db binds a `Uuid` as, on MySQL and MariaDB
+        // alike (MariaDB 10.7's own `UUID` type would not take a foreign key
+        // to a `BINARY(16)` key).
+        ColumnType::Uuid => "BINARY(16)".to_owned(),
         ColumnType::IpAddress => "VARCHAR(45)".to_owned(),
         ColumnType::MacAddress => "VARCHAR(17)".to_owned(),
         ColumnType::Geometry { subtype, srid } => geometry(subtype.as_deref(), *srid, ctx),

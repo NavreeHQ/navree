@@ -1,18 +1,20 @@
-//! The CRM on the databases it runs on: SQLite and PostgreSQL with
-//! TimescaleDB (where the activity timeline is a hypertable). Each seeds
-//! the demo data and goes through a day of CRM work over the API: sorting
-//! and searching beyond ASCII, a company's counts and sums, the board and
-//! its moves, tasks by due date on the timeline, the dashboard, the
-//! contacts export, soft deletes, users and their roles. PostgreSQL must
-//! answer every question exactly as SQLite does.
+//! The CRM on the databases it runs on: SQLite, PostgreSQL with
+//! TimescaleDB (where the activity timeline is a hypertable) and MySQL
+//! (where its UUID keys are 16-byte binaries, the users table's included).
+//! Each seeds the demo data and goes through a day of CRM work over the API:
+//! sorting and searching beyond ASCII, a company's counts and sums, the
+//! board and its moves, tasks by due date on the timeline, the dashboard,
+//! the contacts export, soft deletes, users and their roles. PostgreSQL and
+//! MySQL must answer every question exactly as SQLite does.
 //!
-//! The PostgreSQL test needs the driver and a server whose user may create
-//! databases: `NAVREE_TEST_POSTGRES_URL`, or the test servers of
-//! `pwsh -File scripts/dev-databases.ps1 start`. Without them it skips with
-//! a notice. It works in a database of its own, dropped afterwards:
+//! The server tests need the driver and a server whose user may create
+//! databases: `NAVREE_TEST_POSTGRES_URL` and `NAVREE_TEST_MYSQL_URL`, or the
+//! test servers of `pwsh -File scripts/dev-databases.ps1 start`. Without
+//! them they skip with a notice. Each works in a database of its own,
+//! dropped afterwards:
 //!
 //! ```text
-//! cargo test -p crm-api --features postgres --test servers
+//! cargo test -p crm-api --features postgres,mysql --test servers
 //! ```
 
 use crm_testkit::{CrmClient, Role, TestCrm};
@@ -131,6 +133,21 @@ async fn timescaledb_answers_as_sqlite_does() {
     );
     let answers = day_of_work(&crm).await;
     drop(db);
+    crm.shutdown().await;
+    database
+        .close()
+        .await
+        .expect("the test database is dropped");
+    assert_same(&answers, &on_sqlite().await);
+}
+
+#[tokio::test]
+async fn mysql_answers_as_sqlite_does() {
+    let Some(database) = TestDb::mysql().await.expect("a MySQL test database") else {
+        return;
+    };
+    let crm = crm(Some(database.url())).await;
+    let answers = day_of_work(&crm).await;
     crm.shutdown().await;
     database
         .close()

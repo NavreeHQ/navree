@@ -20,13 +20,13 @@ CREATE INDEX "events_occurred_at_index" ON "events" ("occurred_at" DESC);
 -- notice: TimescaleDB is not installed in this PostgreSQL database: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped
 
 -- mysql
-CREATE TABLE `events` (`id` CHAR(36) NOT NULL, `workspace_id` CHAR(36) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
+CREATE TABLE `events` (`id` BINARY(16) NOT NULL, `workspace_id` BINARY(16) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
 ALTER TABLE `events` ADD INDEX `events_workspace_id_occurred_at_index`(`workspace_id`, `occurred_at`);
 ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
 -- notice: MySQL does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped
 
 -- mariadb
-CREATE TABLE `events` (`id` UUID NOT NULL, `workspace_id` UUID NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
+CREATE TABLE `events` (`id` BINARY(16) NOT NULL, `workspace_id` BINARY(16) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
 ALTER TABLE `events` ADD INDEX `events_workspace_id_occurred_at_index`(`workspace_id`, `occurred_at`);
 ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
 -- notice: MariaDB does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped

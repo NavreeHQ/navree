@@ -32,8 +32,7 @@ async fn old_rows_are_deleted_and_counted() {
         db.execute(&Statement::portable(
             "INSERT INTO events (id, occurred_at, at_ms) VALUES (?, ?, ?)",
             [
-                // `uuid_primary()` is CHAR(36) on MySQL.
-                uuid::Uuid::now_v7().to_string().into(),
+                uuid::Uuid::now_v7().into(),
                 day(n).into(),
                 day(n).timestamp_millis().into(),
             ],
