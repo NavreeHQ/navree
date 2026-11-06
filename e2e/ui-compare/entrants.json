@@ -1,0 +1,24 @@
+{
+  "navree": {
+    "label": "Navree UI",
+    "short": "Navree",
+    "serves": "The ui-proof app (apps/ui-proof, pages in src/compare.rs). Set NAVREE_UI_URL to use a server that is already running; otherwise run.mjs builds and starts the app itself.",
+    "routes": {
+      "table": "/compare/table",
+      "select": "/compare/select",
+      "dates": "/compare/dates",
+      "tabs": "/compare/tabs"
+    }
+  },
+  "react": {
+    "label": "React with shadcn/ui",
+    "short": "React",
+    "serves": "The built pages of react/ (vite build), served by run.mjs from react/dist.",
+    "routes": {
+      "table": "/table.html",
+      "select": "/select.html",
+      "dates": "/dates.html",
+      "tabs": "/tabs.html"
+    }
+  }
+}

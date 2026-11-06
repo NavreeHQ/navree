@@ -31,6 +31,7 @@
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
+//! | `/compare/{screen}` | the four screens the speed comparison measures: `table`, `select`, `dates` and `tabs` |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -47,6 +48,7 @@ use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, ico
 mod acme_theme;
 mod bench;
 mod charts;
+mod compare;
 mod dashboard;
 mod dates;
 mod deal_form;
@@ -144,7 +146,8 @@ impl Module for ProofModule {
             .controller::<upload::UploadPages>()
             .controller::<markdown::MarkdownPages>()
             .controller::<charts::ChartPages>()
-            .controller::<islands::IslandPages>();
+            .controller::<islands::IslandPages>()
+            .controller::<compare::ComparePages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
     }

@@ -1,0 +1,15 @@
+{
+  "name": "navree-ui-compare",
+  "private": true,
+  "type": "module",
+  "description": "Speed comparison of four screens built with Navree UI and with React and shadcn/ui, in Chromium. Run with: node run.mjs, see README.md.",
+  "scripts": {
+    "compare": "node run.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

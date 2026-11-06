@@ -1,0 +1,8 @@
+node_modules/
+react/node_modules/
+react/dist/
+
+# Each run writes results/<date>.json and copies it to results/latest.json. Only the
+# newest, latest.json, and the report, latest.md, are kept in the repository.
+results/*.json
+!results/latest.json
