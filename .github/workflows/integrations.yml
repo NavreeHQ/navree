@@ -83,6 +83,9 @@ jobs:
       - name: SMTP over TLS to Mailpit
         run: cargo test --locked -p navree-mail --test mail real_servers -- --ignored --nocapture
 
+      - name: SES against LocalStack
+        run: cargo test --locked -p navree-mail --test mail localstack -- --ignored --nocapture
+
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}
         run: |

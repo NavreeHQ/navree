@@ -21,7 +21,7 @@
 #
 # The groups (all of them when none is named), one per job of the workflow:
 #
-#   mail      Mailpit over TLS
+#   mail      Mailpit over TLS, LocalStack (SES)
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -71,7 +71,7 @@ SMTP_PASSWORD=navree-secret
 # The services of a group.
 group_services() {
   case "$1" in
-    mail) echo "mailpit-starttls mailpit-tls" ;;
+    mail) echo "mailpit-starttls mailpit-tls localstack" ;;
     *) return 1 ;;
   esac
 }
@@ -141,6 +141,7 @@ NAVREE_TEST_TLS_SMTP_STARTTLS_URL=smtp://$SMTP_USER:$SMTP_PASSWORD@localhost:130
 NAVREE_TEST_TLS_SMTP_STARTTLS_API=http://127.0.0.1:18027
 NAVREE_TEST_TLS_SMTP_TLS_URL=smtps://$SMTP_USER:$SMTP_PASSWORD@localhost:13465
 NAVREE_TEST_TLS_SMTP_TLS_API=http://127.0.0.1:18465
+NAVREE_TEST_LOCALSTACK_URL=http://127.0.0.1:14566
 EOF
 }
 
@@ -170,6 +171,11 @@ ready() {
 }
 
 tcp() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+# LocalStack has run its start-up scripts and answers.
+localstack_ready() {
+  curl --fail --silent http://127.0.0.1:14566/_localstack/init/ready | grep -Eq '"READY": ?true'
+}
 
 # Retries a pull that fails (a registry hiccup) twice more.
 pull() {
@@ -212,6 +218,7 @@ start() {
   for mailpit in mailpit-starttls mailpit-tls; do
     ready "$mailpit" "navree-int-$mailpit" docker exec "navree-int-$mailpit" /mailpit readyz
   done
+  ready localstack navree-int-localstack localstack_ready
 
   variables
   if [ -n "${GITHUB_ENV:-}" ]; then

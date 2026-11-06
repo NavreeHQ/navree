@@ -56,3 +56,16 @@ services:
       - --smtp-tls-key
       - /certs/key.pem
       - --smtp-require-tls
+
+  # SES (and SES v2) from LocalStack. The community line stops at 4.x: newer
+  # LocalStack images need an account token (set LOCALSTACK_AUTH_TOKEN and
+  # LOCALSTACK_IMAGE=localstack/localstack:latest to use one). The emulator
+  # keeps what it was sent, readable at /_aws/ses.
+  localstack:
+    image: ${LOCALSTACK_IMAGE:-localstack/localstack:4.12.0}
+    container_name: navree-int-localstack
+    ports: ["127.0.0.1:14566:4566"]
+    environment:
+      SERVICES: ses,sesv2
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+      DEBUG: "0"

@@ -10,6 +10,7 @@ mod domains;
 mod harness;
 mod inbound;
 mod ingest;
+mod localstack;
 mod log;
 mod mailer;
 mod mailpit;
