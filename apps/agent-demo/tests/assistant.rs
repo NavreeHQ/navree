@@ -16,7 +16,7 @@ use navree::ai::ui::{Acted, Assistant};
 use navree::ai::{Ai, AiFake, FakeReply};
 use navree::auth::AuthService;
 use navree::contracts::{AuthVia, Principal};
-use navree::db::Db;
+use navree::db::{Db, ExecutorExt as _, Statement, Value};
 use navree::orm::Model as _;
 use navree::testing::TestApp;
 use navree::ui::LazyAsk;
@@ -77,17 +77,25 @@ async fn fake(app: &TestApp) -> AiFake {
     app.get::<Ai>().await.fake().expect("the demo runs AiFake")
 }
 
-/// The conversation once nothing in it is being written.
+/// Whether the conversation's run has ended. Between two steps (a tool's call and its
+/// component, or its approval) nothing on the page is being written, but the run goes on;
+/// its end is written after its last item.
+async fn run_ended(app: &TestApp, id: Uuid) -> bool {
+    app.get::<Db>()
+        .await
+        .fetch_scalar::<String>(&Statement::portable(
+            "SELECT status FROM ai_runs WHERE conversation_id = ?",
+            [Value::from(id)],
+        ))
+        .await
+        .is_ok_and(|status| status != "running")
+}
+
+/// The conversation once its run has ended.
 async fn settled(app: &TestApp, access: &Arc<PrincipalAccess>, id: Uuid) -> String {
     let assistant = assistant(app).await;
     for _ in 0..400 {
-        let html = assistant
-            .items(access.clone(), id, &LazyAsk::First, Some("tok"))
-            .await
-            .unwrap()
-            .to_html();
-        if !html.contains(r#"aria-busy="true""#) {
-            tokio::time::sleep(Duration::from_millis(30)).await;
+        if run_ended(app, id).await {
             return assistant
                 .items(access.clone(), id, &LazyAsk::First, Some("tok"))
                 .await
