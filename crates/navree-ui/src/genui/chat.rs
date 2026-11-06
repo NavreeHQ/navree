@@ -26,7 +26,7 @@ use crate::form::csrf_field;
 use crate::html::{Href, LocalHref};
 use crate::icons;
 use crate::markdown::Markdown;
-use crate::node::{AttrValue, Element, IntoNodes, Node, el, into_node};
+use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el, into_node};
 
 /// The longest message the composer takes, in characters.
 pub const MAX_MESSAGE: u32 = 4000;
@@ -844,6 +844,7 @@ impl PromptInput {
         )
         .id(id_part(&self.id))
         .attr("data-genui", "composer")
+        .uses(Uses::GENUI)
         .into()
     }
 }
@@ -1076,6 +1077,7 @@ impl Conversation {
         }
         el("div")
             .attr("data-genui", "conversation")
+            .uses(Uses::GENUI)
             .child(list)
             .into()
     }

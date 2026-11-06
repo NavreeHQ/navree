@@ -374,6 +374,11 @@ fn the_parts_module_is_at_most_2_kb_gzip() {
     assert!(size("parts") <= 2 * 1024, "{}", size("parts"));
 }
 
+#[test]
+fn the_conversation_module_is_at_most_2_kb_gzip() {
+    assert!(size("genui") <= 2 * 1024, "{}", size("genui"));
+}
+
 /// Each of these components links a stylesheet of its own instead of growing the one every
 /// page loads, so the one stays where it was. The theme builder's sheet is one of them.
 #[test]
@@ -535,6 +540,7 @@ fn no_two_modules_share_a_bit() {
         Uses::ISLAND,
         Uses::PARTS,
         Uses::PARTS_STYLES,
+        Uses::GENUI,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

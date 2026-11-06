@@ -290,6 +290,9 @@ impl Uses {
     /// as an avatar group, a trace, a questionnaire, an alert's close button and actions,
     /// and a sparkline in a table cell.
     pub const PARTS_STYLES: Self = Self(1 << 29);
+    /// The conversation module: Enter sends from a composer, and a conversation the
+    /// reader is at the end of stays there while an answer grows.
+    pub const GENUI: Self = Self(1 << 24);
 
     /// Both sets together.
     #[must_use]
@@ -902,6 +905,7 @@ mod tests {
             Uses::MENUBAR,
             Uses::PARTS,
             Uses::PARTS_STYLES,
+            Uses::GENUI,
         ];
         for (at, module) in newer.iter().enumerate() {
             assert_eq!(module.0.count_ones(), 1);

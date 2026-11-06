@@ -88,6 +88,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::MENUBAR, MENUBAR_URL),
         (Uses::ISLAND, ISLANDS_URL),
         (Uses::PARTS, PARTS_URL),
+        (Uses::GENUI, GENUI_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]
