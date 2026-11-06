@@ -80,6 +80,9 @@ async fn the_other_modules_select_the_redis_drivers_by_name() {
     let redis = ctx.get::<Redis>().await.unwrap();
     assert_eq!(redis.prefix(), "navree:");
     ctx.get::<RateLimiter>().await.unwrap();
+    ctx.get_named::<dyn navree_http::RateLimitStore>(DRIVER)
+        .await
+        .unwrap();
     app.shutdown().await.unwrap();
 }
 

@@ -1,8 +1,11 @@
-//! [`RateLimiter`]: named rate limits shared by every process, on Redis.
+//! [`RateLimiter`]: named rate limits shared by every process, on Redis,
+//! and [`RedisRateLimitStore`], where the HTTP server's limits count.
 
 use std::fmt;
 use std::time::Duration;
 
+use navree_http::{Limited, RateLimitStore, StoreVerdict};
+use navree_kernel::BoxFuture;
 use redis::Script;
 
 use crate::{RedisConnection, RedisError};
@@ -30,6 +33,38 @@ if ahead > period then
 end
 redis.call('SET', KEYS[1], string.format('%d', next), 'PX', math.ceil(ahead / 1000))
 return {1, math.floor((period - ahead) / interval)}
+";
+
+/// [`HIT`] for the HTTP server's limits, which also say whether a refusal is
+/// the first of its window, so a flood is audited once. One hash per key:
+/// `tat` as in [`HIT`], and `reported`, when a refusal was last reported.
+///
+/// KEYS and ARGV as for [`HIT`]. Returns {1, 0, 0}, or {0, retry after in
+/// microseconds, 1 when this refusal is to be reported}.
+const HTTP_HIT: &str = r"
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000000 + tonumber(time[2])
+local interval = tonumber(ARGV[1])
+local period = tonumber(ARGV[2])
+local state = redis.call('HMGET', KEYS[1], 'tat', 'reported')
+local tat = tonumber(state[1]) or now
+if tat < now then
+  tat = now
+end
+local next = tat + interval
+local ahead = next - now
+if ahead > period then
+  local reported = tonumber(state[2])
+  if reported and now - reported < period then
+    return {0, ahead - period, 0}
+  end
+  redis.call('HSET', KEYS[1], 'reported', string.format('%d', now))
+  redis.call('PEXPIRE', KEYS[1], math.ceil(ahead / 1000))
+  return {0, ahead - period, 1}
+end
+redis.call('HSET', KEYS[1], 'tat', string.format('%d', next))
+redis.call('PEXPIRE', KEYS[1], math.ceil(ahead / 1000))
+return {1, 0, 0}
 ";
 
 /// The answer of [`RateLimiter::hit`].
@@ -100,8 +135,7 @@ impl RateLimiter {
     /// Counts a request against `key`: at most `limit` (at least 1) per
     /// `per`, as a burst. A refused request does not count.
     pub async fn hit(&self, key: &str, limit: u32, per: Duration) -> Result<RateLimit, RedisError> {
-        let period = u64::try_from(per.as_micros()).unwrap_or(u64::MAX).max(1);
-        let interval = (period / u64::from(limit.max(1))).max(1);
+        let (interval, period) = micros(limit, per);
         let (allowed, value): (i64, i64) = self
             .hit
             .key(self.redis_key(key))
@@ -130,6 +164,77 @@ impl RateLimiter {
             .await
             .map(drop)
             .map_err(|source| self.connection.error(source))
+    }
+}
+
+/// The microseconds of a limit of `limit` per `per`: the interval between
+/// requests and the period.
+fn micros(limit: u32, per: Duration) -> (u64, u64) {
+    let period = u64::try_from(per.as_micros()).unwrap_or(u64::MAX).max(1);
+    let interval = (period / u64::from(limit.max(1))).max(1);
+    (interval, period)
+}
+
+/// Where the HTTP server's per-IP limit and route throttles count, so every
+/// process of the app counts them together: registered by `RedisModule` as
+/// the [`RateLimitStore`] named `redis`, which `http.rate_limit_store =
+/// "redis"` selects. It uses the connection named `rate_limiter` when there
+/// is one, and keys under `<prefix>limit:http:`.
+///
+/// It counts as [`RateLimiter`] does, on Redis's clock, in one round trip
+/// per request.
+#[derive(Clone)]
+pub struct RedisRateLimitStore {
+    connection: RedisConnection,
+    namespace: String,
+    hit: Script,
+}
+
+impl RedisRateLimitStore {
+    /// The store on `connection`, with keys under `<prefix>limit:`.
+    pub fn new(connection: RedisConnection, prefix: &str) -> Self {
+        Self {
+            connection,
+            namespace: format!("{prefix}limit:"),
+            hit: Script::new(HTTP_HIT),
+        }
+    }
+
+    /// Where the limit `key` is counted.
+    pub fn redis_key(&self, key: &str) -> String {
+        format!("{}{key}", self.namespace)
+    }
+
+    async fn count(&self, key: &str, limit: u32, per: Duration) -> StoreVerdict {
+        let (interval, period) = micros(limit, per);
+        let (allowed, retry_after, report): (i64, i64, i64) = self
+            .hit
+            .key(self.redis_key(key))
+            .arg(interval)
+            .arg(period)
+            .invoke_async(&mut self.connection.manager())
+            .await
+            .map_err(|source| self.connection.error(source))?;
+        if allowed == 1 {
+            return Ok(Ok(()));
+        }
+        let retry_after = Duration::from_micros(u64::try_from(retry_after).unwrap_or_default());
+        Ok(Err(Limited::new(retry_after, report == 1)))
+    }
+}
+
+impl RateLimitStore for RedisRateLimitStore {
+    fn hit<'a>(&'a self, key: &'a str, limit: u32, per: Duration) -> BoxFuture<'a, StoreVerdict> {
+        Box::pin(self.count(key, limit, per))
+    }
+}
+
+impl fmt::Debug for RedisRateLimitStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RedisRateLimitStore")
+            .field("connection", &self.connection.name())
+            .field("namespace", &self.namespace)
+            .finish_non_exhaustive()
     }
 }
 

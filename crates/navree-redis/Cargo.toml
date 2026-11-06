@@ -17,6 +17,8 @@ futures-util = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# The HTTP server's rate limit store.
+navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-queue = { workspace = true }
 navree-realtime = { workspace = true }
@@ -37,5 +39,4 @@ navree-crypto = { workspace = true }
 # A unit of work for the queue's after-commit dispatch, on SQLite files (the
 # driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
-navree-http = { workspace = true }
 tokio-tungstenite = { workspace = true }

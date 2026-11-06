@@ -26,7 +26,7 @@ use crate::error::ErrorFormat;
 use crate::error_pages::RouteFinder;
 use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
-use crate::limiter::KeyedRateLimiter;
+use crate::limiter::{Limiter, RateLimitStore};
 use crate::middleware::from_fn_with_state;
 use crate::network::rate_limit_key;
 use crate::pipeline::{
@@ -66,12 +66,14 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     // Audit actions, and security events (rate limiting, denials no
     // `RouteAuthorizer` saw).
     let audit = ctx.try_get::<dyn AuditSink>().await;
+    let rate_limits = rate_limit_store(ctx).await?;
 
     let shared = Shared {
         authorizer,
         audit,
         body_limit: options.body_limit_bytes,
         ipv6_prefix: options.rate_limit_ipv6_prefix,
+        rate_limits,
     };
     // The module that answers errors with pages, if any.
     let pages = ctx
@@ -128,7 +130,12 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
                 except: options.maintenance_except.clone(),
             },
             per_ip: options.per_ip_rate_limit.map(|limit| pipeline::PerIpLimit {
-                limiter: KeyedRateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+                limiter: Limiter::new(
+                    "http:ip".to_owned(),
+                    limit,
+                    Duration::from_secs(60),
+                    shared.rate_limits.clone(),
+                ),
                 ipv6_prefix: options.rate_limit_ipv6_prefix,
                 audit: shared.audit.clone(),
             }),
@@ -167,6 +174,29 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     });
     router = with_stages(router, &mut stages);
     apply_edge(ctx, router)
+}
+
+/// The store `http.rate_limit_store` names, where the per-IP limit and route
+/// throttles count when every process must count them together. Unset, or
+/// `memory`, each process counts on its own.
+async fn rate_limit_store(ctx: &AppContext) -> Result<Option<Arc<dyn RateLimitStore>>, BoxError> {
+    let Some(config) = ctx.try_get::<Config>().await else {
+        return Ok(None);
+    };
+    let Some(name) = config.get_string("http.rate_limit_store") else {
+        return Ok(None);
+    };
+    let name = name.trim();
+    if name.is_empty() || name == "memory" {
+        return Ok(None);
+    }
+    match ctx.get_named::<dyn RateLimitStore>(name).await {
+        Ok(store) => Ok(Some(store)),
+        Err(error) => Err(format!(
+            "http.rate_limit_store = \"{name}\": no rate limit store of that name ({error}); `redis` comes with RedisModule"
+        )
+        .into()),
+    }
 }
 
 /// Wraps `router` in one middleware running `stages`, which are left empty
@@ -390,6 +420,8 @@ struct Shared {
     audit: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
     ipv6_prefix: u8,
+    /// Where the limits count, when not in this process.
+    rate_limits: Option<Arc<dyn RateLimitStore>>,
 }
 
 /// Mounts a route on `router` behind its per-route pipeline.
@@ -401,7 +433,10 @@ fn mount(
 ) -> Result<(), String> {
     let meta = Arc::new(route.meta);
     let runtime = Arc::new(RouteRuntime {
-        throttle: meta.throttle.map(|t| KeyedRateLimiter::new(t.limit, t.per)),
+        throttle: meta.throttle.map(|t| {
+            let name = format!("http:route:{} {}", meta.method, meta.full_path);
+            Limiter::new(name, t.limit, t.per, shared.rate_limits.clone())
+        }),
         authorizer: if meta.access.needs_authorizer() {
             shared.authorizer.clone()
         } else {
@@ -445,7 +480,7 @@ fn mount(
 /// The per-route state: metadata, throttle, authorizer, audit sink.
 struct RouteRuntime {
     meta: Arc<RouteMeta>,
-    throttle: Option<KeyedRateLimiter<ThrottleKey>>,
+    throttle: Option<Limiter<ThrottleKey>>,
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
     /// Where the route's audit action goes (only with an audit action).
     audit: Option<Arc<dyn AuditSink>>,
@@ -460,6 +495,15 @@ struct RouteRuntime {
 enum ThrottleKey {
     User(Uuid),
     Ip(IpAddr),
+}
+
+impl fmt::Display for ThrottleKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::User(user) => write!(f, "user:{user}"),
+            Self::Ip(ip) => write!(f, "ip:{ip}"),
+        }
+    }
 }
 
 impl RouteRuntime {
@@ -489,7 +533,7 @@ impl RouteRuntime {
                 Some(user) => ThrottleKey::User(user),
                 None => ThrottleKey::Ip(rate_limit_key(client_ip(parts), self.ipv6_prefix)),
             };
-            if let Err(limited) = limiter.check(&key) {
+            if let Err(limited) = limiter.check(&key).await {
                 tracing::warn!(
                     target: "navree::security",
                     route = %meta.full_path,

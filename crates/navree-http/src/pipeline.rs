@@ -38,7 +38,7 @@ use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
 use crate::error_pages::{self, ErrorContext, ErrorPagesHandle, RouteFinder, RouteKind};
 use crate::extract::{ProxyTrust, Request};
-use crate::limiter::KeyedRateLimiter;
+use crate::limiter::Limiter;
 use crate::maintenance::MaintenanceMode;
 use crate::middleware::{Next, State};
 use crate::network::rate_limit_key;
@@ -828,7 +828,7 @@ where
 
 /// The per-IP limit and where its refusals are audited.
 pub(crate) struct PerIpLimit {
-    pub(crate) limiter: KeyedRateLimiter<IpAddr>,
+    pub(crate) limiter: Limiter<IpAddr>,
     /// `http.rate_limit_ipv6_prefix`: IPv6 clients are counted by network.
     pub(crate) ipv6_prefix: u8,
     pub(crate) audit: Option<Arc<dyn AuditSink>>,
@@ -849,6 +849,7 @@ where
     match limit
         .limiter
         .check(&rate_limit_key(ip.0, limit.ipv6_prefix))
+        .await
     {
         Ok(()) => next(request).await,
         Err(limited) => {

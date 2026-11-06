@@ -20,7 +20,10 @@
 //!   `realtime.backplane = "redis"` ([`RedisBackplane`]). Each uses the
 //!   connection named after it (`cache`, `queue`, `session`, `realtime`)
 //!   when one is configured, the default connection otherwise.
-//! - [`RateLimiter`]: named rate limits shared by every process.
+//! - [`RateLimiter`]: named rate limits shared by every process, and
+//!   `http.rate_limit_store = "redis"` ([`RedisRateLimitStore`]): the HTTP
+//!   server's per-IP limit and route throttles, counted together by every
+//!   process.
 //! - Every key starts with `redis.prefix` (default `navree:`): the cache
 //!   under `cache:`, locks under `locks:`, jobs under `queue:`, sessions
 //!   under `session:`, rate limits under `limit:`, and the backplane's
@@ -71,7 +74,7 @@ pub use backplane::RedisBackplane;
 pub use cache::{RedisCacheStore, RedisLockStore};
 pub use connection::{Redis, RedisConnection};
 pub use error::RedisError;
-pub use limiter::{RateLimit, RateLimiter};
+pub use limiter::{RateLimit, RateLimiter, RedisRateLimitStore};
 pub use module::{DRIVER, RedisModule};
 pub use options::{DEFAULT_CONNECTION, RedisConnectionOptions, RedisOptions, URL_ENV};
 pub use queue::RedisQueueStore;

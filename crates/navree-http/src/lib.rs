@@ -137,7 +137,7 @@ pub use extract::{
     ClientIp, Extension, Form, Json, Multipart, MultipartLimits, Path, Query, RawQuery, Scoped,
 };
 pub use handler::Handler;
-pub use limiter::{KeyedRateLimiter, Limited};
+pub use limiter::{KeyedRateLimiter, Limited, MemoryRateLimitStore, RateLimitStore, StoreVerdict};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};
 pub use network::{DEFAULT_IPV6_PREFIX, rate_limit_key};

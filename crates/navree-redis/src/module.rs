@@ -6,13 +6,14 @@ use futures_util::future::join_all;
 use navree_cache::{CacheStore, LockStore};
 use navree_config::Config;
 use navree_contracts::{BoxFuture, Clock, HealthCheck, HealthStatus, SessionStore};
+use navree_http::RateLimitStore;
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 use navree_queue::QueueStore;
 use navree_realtime::Backplane;
 
 use crate::{
     RateLimiter, Redis, RedisBackplane, RedisCacheStore, RedisLockStore, RedisOptions,
-    RedisQueueStore, RedisSessionStore,
+    RedisQueueStore, RedisRateLimitStore, RedisSessionStore,
 };
 
 /// The name of every driver this module registers.
@@ -29,6 +30,7 @@ pub const DRIVER: &str = "redis";
 /// | `queue.driver = "redis"` | `dyn QueueStore` | [`RedisQueueStore`] |
 /// | `session.store = "redis"` | `dyn SessionStore` | [`RedisSessionStore`] |
 /// | `realtime.backplane = "redis"` | `dyn Backplane` | [`RedisBackplane`] |
+/// | `http.rate_limit_store = "redis"` | `dyn RateLimitStore` | [`RedisRateLimitStore`] |
 ///
 /// ```no_run
 /// use navree_cache::CacheModule;
@@ -206,7 +208,20 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
             .named(DRIVER)
             .deps(vec![redis_key]),
         )
-        .export_key(ProviderKey::named::<dyn Backplane>(DRIVER));
+        .export_key(ProviderKey::named::<dyn Backplane>(DRIVER))
+        .factory(
+            Factory::<dyn RateLimitStore>::new(|r: Resolver| async move {
+                let redis = r.get::<Redis>().await?;
+                let store = RedisRateLimitStore::new(
+                    redis.connection_for("rate_limiter").clone(),
+                    redis.prefix(),
+                );
+                Ok(Arc::new(store) as Arc<dyn RateLimitStore>)
+            })
+            .named(DRIVER)
+            .deps(vec![ProviderKey::of::<Redis>()]),
+        )
+        .export_key(ProviderKey::named::<dyn RateLimitStore>(DRIVER));
 }
 
 /// Readiness: every connection answers `PING`.
