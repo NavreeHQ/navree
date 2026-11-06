@@ -420,6 +420,25 @@ impl AppProbe {
         {
             return Ok(value.clone());
         }
+        let value = self.run(&binary, args, expect)?;
+        if let Some(stamp) = stamp {
+            self.answers
+                .lock()
+                .expect("answers")
+                .insert(key, (stamp, value.clone()));
+        }
+        Ok(value)
+    }
+
+    /// Runs `binary` with `args` (never cached) and returns the first JSON
+    /// value in its output that `expect` accepts.
+    fn run(
+        &self,
+        binary: &Path,
+        args: &[&str],
+        expect: fn(&Value) -> bool,
+    ) -> Result<Value, AppError> {
+        let key = args.join(" ");
         let mut env = self.env.clone();
         env.extend(
             PROBE_ENV
@@ -427,7 +446,7 @@ impl AppProbe {
                 .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
         );
         let call = ProcessCall {
-            program: binary.clone(),
+            program: binary.to_path_buf(),
             args: args.iter().map(|a| (*a).to_owned()).collect(),
             dir: self.project.root.clone(),
             env,
@@ -454,20 +473,13 @@ impl AppProbe {
                 output: printed.to_owned(),
             });
         }
-        let value = find_json(&output.stdout, expect).ok_or_else(|| AppError::Output {
+        find_json(&output.stdout, expect).ok_or_else(|| AppError::Output {
             command: command.clone(),
             message: format!(
                 "got:\n{}",
                 output.stdout.chars().take(2000).collect::<String>()
             ),
-        })?;
-        if let Some(stamp) = stamp {
-            self.answers
-                .lock()
-                .expect("answers")
-                .insert(key, (stamp, value.clone()));
-        }
-        Ok(value)
+        })
     }
 
     /// `introspect --json`: the module graph, providers and commands.
@@ -485,6 +497,19 @@ impl AppProbe {
     /// `migrate:status --json`: every registered migration with its state.
     pub fn migration_status(&self) -> Result<Value, AppError> {
         self.ask(&["migrate:status", "--json"], Value::is_array)
+    }
+
+    /// `ui:render <path> --json`: what the app's router answers to a guest's
+    /// `GET` of `path` (`path`, `status`, `content_type`, `location` and the
+    /// `html` of a page). Asked every time: a page changes with the data
+    /// behind it, not with the binary.
+    pub fn render(&self, path: &str) -> Result<Value, AppError> {
+        let binary = self.binary()?;
+        self.run(
+            &binary,
+            &[crate::ui::RENDER_COMMAND, path, "--json"],
+            crate::ui::is_rendered,
+        )
     }
 
     /// `rustc --version` in the app's directory (its toolchain file applies).
