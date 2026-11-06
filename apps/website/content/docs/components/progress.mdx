@@ -42,6 +42,16 @@ The value is held to the maximum, and the maximum is at least 1.
 
 <UiPreview example="progress/states" />
 
+## Tone and figure
+
+`.tone(Tone)` colours the bar by what it means (`Tone::Success`, `Tone::Warning`, `Tone::Danger`). The colour never carries the meaning alone: the label says it. `.show_value()` writes the percentage beside the bar; a screen reader gets it from the bar itself, so the text is hidden from it. An indeterminate bar has no percentage to write.
+
+```rust
+Progress::new(640, 1000, "Importing contacts")
+    .tone(Tone::Success)
+    .show_value()
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

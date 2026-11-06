@@ -5,7 +5,7 @@ description: "Headings whose level is the document's, and paragraphs in four loo
 
 <UiPreview example="typography/thumb" />
 
-`Heading` writes `<h1>` to `<h4>`; its look follows its level. `Text` writes a paragraph, or a `<span>` with `.inline()`. The body text is 14 px Geist; secondary text is 13 px.
+`Heading` writes `<h1>` to `<h6>`; its look follows its level. `Text` writes a paragraph, or a `<span>` with `.inline()`. The body text is 14 px Geist; secondary text is 13 px.
 
 ```rust
 use navree::ui::*;
@@ -25,6 +25,12 @@ Stack::gap(1).children((
 Pick the level from the page's outline, not from the size you want. In the [app shell](/docs/ui/app-shell/) the page title is the `<h1>`.
 
 <UiPreview example="typography/headings" />
+
+`Heading::h5` and `Heading::h6` are for the small headings inside a card or a panel. They link the parts stylesheet, which sizes them.
+
+```rust
+Heading::h5("Billing address")
+```
 
 ## Text
 

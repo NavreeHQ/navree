@@ -220,6 +220,30 @@ async fn report(
 
 The page says why when `report.refused()` has an answer, and shows the default window under the message. `Count` and `Sum` give 0 for a quiet period, so a window with no deals draws zeros, not an empty chart. Give each chart on the page its own `.id(...)`, and set `.table(TableMode::Shown)` on the chart a reader may want to copy from.
 
+## The numbers as a file, links to the rows, and the period before
+
+A report's numbers can leave the page, point at the rows behind them and sit beside the period before.
+
+`report.table("Day", &[("Sales", sales)])` makes a `ReportTable`: a row for each period and a column for each series, holding what the chart's own table holds, so a file and the page cannot differ. `.csv()` writes it with a byte-order mark so a spreadsheet reads UTF-8, no grouping in the numbers and no text read as a formula, and `.csv_response("sales.csv")` answers it as a download. `head()`, `periods()` and `values()` give the parts to write another format.
+
+`report.drill_links("/deals", "created_at")` makes a link for each period to the page that lists the rows behind it, in the filter grammar a [DataTable](/docs/ui/data-table/) reads (`/deals?filter[created_at][gte]=2026-11-02&filter[created_at][lte]=2026-11-08`). Give them to `Chart::drill`, and each bar of a vertical bar chart, and the period's name in the chart's table, becomes a link. A link must stay on your site.
+
+`report.previous(&zone)` is the window just before this one, as many days long, in the same zone and grain. Measure it as you measured the window, and `report.previous_series("Last week", &before)` lays it on this report's periods, drawn in the quiet ink, beside the series on show.
+
+```rust
+let sales = report.measure(Deal::query(), "created_at", Metric::Sum("amount"), &uow).await?;
+let before = report.previous(&zone.tz());
+let earlier = before.measure(Deal::query(), "created_at", Metric::Sum("amount"), &uow).await?;
+
+let chart = report
+    .chart(Chart::bar("Sales").drill(report.drill_links("/deals", "created_at")))
+    .series(Series::new("This window", sales.clone()))
+    .series(report.previous_series("The window before", &earlier));
+
+// The export route:
+report.table("Day", &[("Sales", &sales)]).csv_response("sales.csv")
+```
+
 ## Refreshing a report
 
 Put the charts in a [Region](/docs/ui/regions/) whose source is the report's own address, and tell it which stream to follow. Here `created_chart` and `value_chart` are the two charts of the page above:

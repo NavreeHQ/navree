@@ -46,6 +46,24 @@ A sparkline in a table cell fills the free width of its column.
 
 <UiPreview example="sparkline/table" />
 
+`.cell()` draws the sparkline for a table cell: the picture alone in a small box, named by its summary, with no figure, no heading and no table behind it, so fifty rows hold fifty small pictures and no nested tables. A reader hears the summary (first, last, highest and lowest value); the full values are the page's own table. It keeps at most 16 points and is 24 pixels high unless `.height(px)` says otherwise.
+
+To get the series of every row on a page in one query and not one per row, `Report::measure_rows` counts a metric in each period for each of a list of keys, such as the ids of the rows on the page (at most 500):
+
+```rust
+use navree::orm::Value;
+use navree::ui::charts::{Metric, Sparkline};
+
+let ids = [Value::I64(7), Value::I64(9)];
+let rows = report
+    .measure_rows(Deal::query(), "created_at", "account_id", &ids, Metric::Count, &db)
+    .await?;
+let cells: Vec<Sparkline> = rows
+    .into_iter()
+    .map(|series| Sparkline::new("Deals created", series).cell())
+    .collect();
+```
+
 ## Values, names and gaps
 
 `Sparkline::new(title, values)` takes integers and floats of any width and an `Option` of either. A `None`, NaN or infinite value is a gap, and the line breaks there. `.names(["14:00", "15:00"])` says what each value is called in the table. Without names the values are counted from 1. `.format(NumberFormat)` writes the values in the summary and the table, and `.locale(tag)` does so for a language, as on a [line chart](/docs/components/line-chart/#formats-and-languages).

@@ -126,6 +126,21 @@ When a page holds every row of its result (the first page, with nothing after it
 
 The browser sorts only what it can order exactly as the database does: numbers and dates whose cells show the value the column holds, empty cells first, ties by key in the column's direction. Every cell of such a column carries its value, so a cell drawn with `.cell(name, fn)` sorts by the value, not by what it shows. Text asks the server, since a database orders it by its own collation (case, accents), and so does a column that shows something other than what it sorts by, such as a company's name for a company id. An order by several columns, filters and search always ask the server. If the server can't answer, the rows, the headings and the table's form go back to the last order it confirmed.
 
+## Several sticky columns at the end
+
+`sticky` keeps a column at the start while the table scrolls sideways, and `sticky_end` keeps one at the end. A table can hold several of each (the stylesheet places up to four of each from its own edge), and the row's menu, when the table has one, is the last of the end columns. A column is `sticky` or `sticky_end`, not both.
+
+## Searching words in a big table
+
+The search box matches the text anywhere in a column marked `search` (`SearchMode::Contains`, the default). It works on every database with no index, and no index can serve it, so the whole table is read: fine to some tens of thousands of rows, and about eight seconds at a million on MySQL. `SearchMode::Words` matches the words of the text in any order through the database's full-text index and answers a million rows in milliseconds. It finds words, not fragments (`renew` does not find `renewal`), and SQLite has no full-text condition, so there it is an error at load.
+
+```rust
+let query = TableQuery::<Customer>::parse("/customers", raw_query)
+    .search_mode(SearchMode::Words);
+```
+
+Create the index in a migration. On PostgreSQL it is a text-search index. On MySQL and MariaDB it is a `FULLTEXT` index over exactly the `#[col(search)]` columns, in the same order: `FULLTEXT (title, notes)` for `title` and `notes`.
+
 ## Typing and choosing
 
 A tick in a filter's list, a radio and a select apply at once. The search box and text filters wait for a pause in the typing: 100 ms, or what `.debounce(wait)` says, up to 5 s, for a search the database is slow to answer.

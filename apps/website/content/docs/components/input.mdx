@@ -35,6 +35,14 @@ A password input takes no value: `.value` does nothing on one, so a page never h
 
 <UiPreview example="input/states" />
 
+## Size and clearing
+
+`.size(Size)` sets the height and type size: the same four sizes as a button (`Xs`, `Sm`, `Md`, the default, and `Lg`). `.clearable(label)` adds a button, named `label` for assistive technology, that empties the field and puts the caret back in it. It shows while the field holds something, and only where a script runs; without one the field is a plain input. The field is drawn inside an [InputGroup](/docs/components/input-group/)'s frame.
+
+```rust
+Input::search("q").size(Size::Sm).clearable("Clear search")
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

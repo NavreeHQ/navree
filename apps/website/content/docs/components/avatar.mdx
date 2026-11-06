@@ -29,6 +29,14 @@ Avatars take the controls' sizes, with 4 px corners.
 
 <UiPreview example="avatar/sizes" />
 
+## When the picture fails
+
+`.fallback()` shows the person icon when the picture does not load. It needs the parts script, so a page with one loads a small script; without it a picture that fails shows the browser's own broken-image mark.
+
+```rust
+Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh").fallback()
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

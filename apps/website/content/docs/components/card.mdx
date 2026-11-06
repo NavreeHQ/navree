@@ -36,6 +36,17 @@ A card carries no outer margin: put cards in a [Grid](/docs/ui/layout/) and the 
 
 <UiPreview example="card/plain" />
 
+## Variants
+
+`.variant(CardVariant)` changes how the card is drawn. The default is a line around a surface; `Muted` is a filled surface with no line, for a quiet group; `Ghost` has no line and no fill, only the card's spacing, for content that stands alone; `Dashed` has a dashed line, for a place to add something.
+
+```rust
+Card::new()
+    .variant(CardVariant::Dashed)
+    .body(Text::muted("No saved views yet."))
+    .footer(Button::outline("Add a view"))
+```
+
 ## Headings
 
 The title is an `<h2>`, which suits a card under a page's `<h1>`. Under a section's heading, `.heading(3)` makes it an `<h3>`, and so on, so the outline of the page stays in order.

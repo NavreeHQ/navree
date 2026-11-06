@@ -25,6 +25,20 @@ Use a breadcrumb on pages deep in a hierarchy, so readers can step back up.
 
 <UiAnatomy component="breadcrumb" />
 
+## Long trails
+
+`.max_items(n)` keeps a long trail short. With more than `n` items (3 or more), the first item and the last `n - 2` show, and the ones between fold into an ellipsis that opens a list of them. It opens and closes natively, so it needs no script. `.hidden_label(text)` names the ellipsis for assistive technology (`Show hidden pages` by default).
+
+```rust
+Breadcrumb::new()
+    .max_items(4)
+    .link("Home", "/")
+    .link("Accounts", "/accounts")
+    .link("Punjab", "/accounts/punjab")
+    .link("Ludhiana", "/accounts/punjab/ludhiana")
+    .current("Sutlej Supply")
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

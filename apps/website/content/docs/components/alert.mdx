@@ -35,6 +35,18 @@ Use an alert for something about the page the reader is on: an archived record, 
 
 `.icon(icon)` replaces the tone's icon.
 
+## Actions and closing
+
+`.actions(...)` adds buttons or links under the description: what the reader can do about it. `.dismissible(id, label)` adds a close button, named `label` for assistive technology, that hides the alert in the browser with no request; the alert takes the id `id`. With no script the close button is not drawn and the alert stays.
+
+```rust
+Alert::new(AlertTone::Warning)
+    .title("Payment failed")
+    .body("The card ending 4242 was declined.")
+    .actions(Button::outline("Update card").href("/billing"))
+    .dismissible("payment-alert", "Close")
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

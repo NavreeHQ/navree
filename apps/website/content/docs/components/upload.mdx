@@ -91,7 +91,16 @@ let uploads = Uploads::new(disk, "photos", limits).labels(UploadLabels {
 
 <UiPreview example="upload/files" />
 
-The browser module does not draw a preview of a file a person has chosen. The page's content security policy allows images only from your own site and as `data:` URLs, and a preview needs a `blob:` URL. Once the server has stored an image, show it from its own address.
+`UploadedFile::thumbnail(src)` shows a small picture of the file before its name: an address on your site that serves a picture (the page's content security policy allows no other). Anything that is not an address on your site is ignored.
+
+```rust
+UploadedFile::new("shop-front.jpg")
+    .size(240 * 1024)
+    .href("/files/17")
+    .thumbnail("/files/17/thumb")
+```
+
+`Upload::previews()` shows a small picture of each chosen file that is a picture (PNG, JPEG, GIF, WebP or AVIF, up to 2 MB) before it is sent. The browser reads the file into a `data:` address, which the page's content security policy allows where it allows no `blob:`; a larger file, or one of another kind, is listed with its name only.
 
 ## Large files
 

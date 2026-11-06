@@ -27,6 +27,16 @@ Use a switch for a setting read as on or off. For agreeing to something, or pick
 
 <UiPreview example="switch/states" />
 
+## A line under the label
+
+`.description(text)` adds a line under the label that says more and ties it to the switch, so a screen reader reads it after the label.
+
+```rust
+Switch::new("notify")
+    .label("Email me when a deal closes")
+    .description("One email a day at most.")
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

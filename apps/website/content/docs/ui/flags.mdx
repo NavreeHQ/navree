@@ -49,6 +49,25 @@ Not every flag is a country's. `CodeKind` says which: `Country`, `Region` (a nat
 
 <UiPreview example="flags/places" />
 
+## In a select
+
+`Choice::flag(code)` puts a country's flag before a choice's label, in the list and in the control. The flag is hidden from assistive technology, so the label should be the country's name. `Choice::lead(node)` takes any small node in its place: a coloured dot, a logo.
+
+```rust
+Select::new("country")
+    .choice(Choice::new("IN", "India").flag(flags::IN))
+    .choice(Choice::new("NP", "Nepal").flag(flags::NP))
+```
+
+## Many flags, one definition
+
+A heavy flag is tens of kilobytes (Serbia's is 179 KB), and a table of a hundred rows would repeat it a hundred times. `Flag::sprite()` draws a flag as a pointer, about a hundred bytes, to a definition made once on the page by a `FlagSprite`. Put the sprite on the page once, anywhere (it draws nothing and is hidden from assistive technology), with the codes the page shows; a flag whose code is missing from it is drawn empty. `FlagSprite::with_squares()` also defines the square art, for a square or round flag.
+
+```rust
+FlagSprite::new([flags::IN, flags::RS, flags::IN]) // each flag is defined once
+Flag::new(flags::RS).sprite()
+```
+
 ## Beside other things
 
 A flag is a node, so it goes wherever a node does: a badge, a table cell, a row of text. Where a component has a slot for a node, the flag goes in it.
