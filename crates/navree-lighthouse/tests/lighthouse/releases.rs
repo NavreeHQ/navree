@@ -18,12 +18,6 @@ async fn boom(app: &TestApp, n: u32) {
         .assert_status(500);
 }
 
-/// The CSRF token a signed-in page carries.
-pub fn csrf_of(html: &str) -> String {
-    let start = html.find("data-csrf=\"").expect("a signed-in page") + 11;
-    html[start..start + html[start..].find('"').unwrap()].to_owned()
-}
-
 async fn operators(app: &TestApp) {
     user(
         app,

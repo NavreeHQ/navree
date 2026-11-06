@@ -340,11 +340,13 @@ async fn ignored_routes_and_the_dashboard_itself_are_not_recorded() {
         .send()
         .await
         .assert_status(500);
+    // A guest's request to the dashboard is answered and not recorded.
     client
-        .get("/_lighthouse/login")
+        .get("/_lighthouse/issues")
+        .header("accept", "text/html")
         .send()
         .await
-        .assert_status(200);
+        .assert_status(401);
     let store = flushed(&app).await;
     assert!(store.issues(&all()).await.unwrap().data.is_empty());
     assert!(store.routes(Period::Hour).await.unwrap().is_empty());

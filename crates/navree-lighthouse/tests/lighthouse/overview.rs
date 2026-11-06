@@ -1,13 +1,13 @@
-//! The overview's additions: sparklines in the figure tiles, time labels,
-//! the release line, the top issues and the live panel; and that no page
-//! needs an inline style or script.
+//! The overview's additions: a line in the figure tiles, the chart with the
+//! deploys on it, the top issues and the live panel; and that no page needs
+//! an inline style or script.
 
 use chrono::{TimeDelta, Utc};
 use navree_lighthouse::ReleaseReport;
 use navree_testing::TestApp;
 use serde_json::Value;
 
-use crate::dashboard::sign_in;
+use crate::dashboard::{html, sign_in};
 use crate::support::{builder, flushed, lighthouse, token, user};
 
 async fn boom(app: &TestApp) {
@@ -19,7 +19,7 @@ async fn boom(app: &TestApp) {
 }
 
 #[tokio::test]
-async fn the_tiles_carry_sparklines_the_chart_time_labels_and_the_deploy() {
+async fn the_tiles_carry_the_figures_the_chart_and_the_deploy() {
     let app = builder().build().await;
     user(&app, "ops@acme.test", Some("ops"), &["lighthouse.view"]).await;
     for _ in 0..3 {
@@ -38,23 +38,23 @@ async fn the_tiles_carry_sparklines_the_chart_time_labels_and_the_deploy() {
         .unwrap();
     let client = sign_in(&app, "ops@acme.test").await;
 
-    let page = client.get("/_lighthouse?period=24h").send().await.text();
-    assert_eq!(
-        page.matches("class=\"tile-spark\"").count(),
-        4,
-        "requests, error rate, p95 and failed jobs have a history; open issues do not"
-    );
-    assert!(page.contains("id=\"spark-requests\" d=\"M0 "), "{page}");
-    assert!(page.contains("<div class=\"axis\">"), "{page}");
-    assert!(page.contains(">Now</span>"), "{page}");
-    assert!(page.contains("class=\"release-line\""), "{page}");
-    assert!(
-        page.contains("Release <span class=\"mono\">r2</span> deployed"),
-        "{page}"
-    );
+    let page = html(&client, "/_lighthouse?period=24h").await.text();
+    for figure in [
+        "Requests per minute",
+        "Error rate",
+        "p95 latency",
+        "Failed jobs",
+        "Open issues",
+        "Pool wait",
+        "Sampled out",
+    ] {
+        assert!(page.contains(figure), "{figure}: {page}");
+    }
+    assert!(page.contains("Requests and exceptions"), "{page}");
     assert!(page.contains("Times are UTC."));
-    assert!(page.contains("p50 <span id=\"fig-p50\">"));
     assert!(page.contains("new in 24h"));
+    // The deploy is on the chart, with its name.
+    assert!(page.contains("Release r2"), "{page}");
 
     // The series are real: a bucket per timeline point, with the traffic in the last.
     let token = token(&app, "ops@acme.test").await;
@@ -90,7 +90,6 @@ async fn the_tiles_carry_sparklines_the_chart_time_labels_and_the_deploy() {
         assert_eq!(overview["new_issues"], 1);
         assert!(overview["p50_ms"].is_number());
     }
-    // A deploy older than the period is not on the 1 hour chart's line.
     app.shutdown().await.unwrap();
 }
 
@@ -98,16 +97,19 @@ async fn the_tiles_carry_sparklines_the_chart_time_labels_and_the_deploy() {
 async fn a_deploy_outside_the_period_draws_no_line() {
     let app = builder().config("lighthouse.release", "").build().await;
     user(&app, "ops@acme.test", Some("ops"), &["lighthouse.view"]).await;
+    // Something recorded, so the chart has a timeline to put a deploy on.
+    boom(&app).await;
+    flushed(&app).await;
     lighthouse(&app)
         .await
         .report_release(ReleaseReport::new("old").deployed_at(Utc::now() - TimeDelta::days(3)))
         .await
         .unwrap();
     let client = sign_in(&app, "ops@acme.test").await;
-    let day = client.get("/_lighthouse?period=24h").send().await.text();
-    assert!(!day.contains("class=\"release-line\""));
-    let week = client.get("/_lighthouse?period=7d").send().await.text();
-    assert!(week.contains("class=\"release-line\""));
+    let day = html(&client, "/_lighthouse?period=24h").await.text();
+    assert!(!day.contains("Release old"), "{day}");
+    let week = html(&client, "/_lighthouse?period=7d").await.text();
+    assert!(week.contains("Release old"), "{week}");
     app.shutdown().await.unwrap();
 }
 
@@ -118,29 +120,19 @@ async fn the_live_panel_and_the_top_issues_show_what_just_happened() {
     boom(&app).await;
     flushed(&app).await;
     let client = sign_in(&app, "ops@acme.test").await;
-    let page = client.get("/_lighthouse").send().await.text();
-    assert!(page.contains("aria-label=\"New occurrences\""));
-    assert!(page.contains("id=\"feed\""));
-    assert!(page.contains("id=\"stream-text\">Streaming"));
-    assert!(page.contains("class=\"live-title\"") || page.contains("live-title"));
+    let page = html(&client, "/_lighthouse").await.text();
+    assert!(page.contains("New occurrences"));
+    assert!(page.contains("Open issues"));
     assert!(page.contains("invoice inv_7 not found"));
-    assert!(
-        page.contains("GET /api/demo/boom/{n}")
-            || page.contains("GET &#x2f;api&#x2f;demo&#x2f;boom")
-    );
+    assert!(page.contains("GET /api/demo/boom/{n}"), "{page}");
     // The top issues are a table of the open ones, with their kind.
+    assert!(page.contains("Exception"), "{page}");
+    // The figures and the feed ask the server again on a timer.
+    assert!(page.contains("data-ui-poll=\"10000\""), "{page}");
     assert!(
-        page.contains("<span class=\"kind error\"><i></i>Exception</span>"),
+        page.contains("data-ui-src=\"/_lighthouse/overview/live?period=24h\""),
         "{page}"
     );
-    // The script polls the overview's JSON for more.
-    let script = client
-        .get("/_lighthouse/assets/lighthouse.js")
-        .send()
-        .await
-        .text();
-    assert!(script.contains("/api/overview?period="));
-    assert!(script.contains("setInterval(refresh, 10000)"));
     app.shutdown().await.unwrap();
 }
 
@@ -149,7 +141,7 @@ async fn an_empty_overview_says_so() {
     let app = builder().build().await;
     user(&app, "ops@acme.test", Some("ops"), &["lighthouse.view"]).await;
     let client = sign_in(&app, "ops@acme.test").await;
-    let page = client.get("/_lighthouse").send().await.text();
+    let page = html(&client, "/_lighthouse").await.text();
     assert!(page.contains("Nothing yet. New occurrences appear here"));
     assert!(page.contains("No open issues."));
     app.shutdown().await.unwrap();
@@ -175,17 +167,20 @@ async fn no_page_needs_an_inline_style_or_script() {
         "/_lighthouse/releases",
         "/_lighthouse/settings",
         "/_lighthouse/issues",
+        "/_lighthouse/requests",
+        "/_lighthouse/queries",
+        "/_lighthouse/jobs",
+        "/_lighthouse/outgoing",
     ] {
-        let html = client.get(path).send().await.assert_status(200).text();
-        assert!(!html.contains(" style=\""), "{path} has a style attribute");
-        assert!(!html.contains("<style"), "{path} has a style element");
-        for script in html.split("<script").skip(1) {
-            assert!(
-                script.trim_start().starts_with("src="),
-                "{path} has inline script"
-            );
+        let page = html(&client, path).await.assert_status(200);
+        let body = page.text();
+        assert!(!body.contains(" style=\""), "{path} has a style attribute");
+        assert!(!body.contains("<style"), "{path} has a style element");
+        for script in body.split("<script").skip(1) {
+            let tag = script.split('>').next().unwrap_or_default();
+            assert!(tag.contains(" src="), "{path} has inline script: {tag}");
         }
-        assert!(!html.contains(" onclick="), "{path} has an inline handler");
+        assert!(!body.contains(" onclick="), "{path} has an inline handler");
     }
     app.shutdown().await.unwrap();
 }

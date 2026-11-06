@@ -8,8 +8,7 @@ use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Value, json};
 
-use crate::dashboard::sign_in;
-use crate::releases::csrf_of;
+use crate::dashboard::{html, post_form, sign_in};
 use crate::support::{builder, flushed, token, user};
 
 const SLACK: &str = "https://hooks.slack.test/services/T000/B000/XXXX";
@@ -92,9 +91,7 @@ async fn the_page_lists_the_channels_with_their_kinds_and_the_delivery_history()
     boom(&app, 1).await;
     flushed(&app).await;
     let client = sign_in(&app, "viewer@acme.test").await;
-    let page = client
-        .get("/_lighthouse/alerts")
-        .send()
+    let page = html(&client, "/_lighthouse/alerts")
         .await
         .assert_status(200)
         .text();
@@ -108,7 +105,8 @@ async fn the_page_lists_the_channels_with_their_kinds_and_the_delivery_history()
     // Create and edit are not offered, and the page says why.
     assert!(page.contains("secrets"), "{page}");
     // Read-only for someone who may not configure.
-    assert!(!page.contains("data-action=\"mute\""));
+    assert!(!page.contains("/_lighthouse/alerts/channels/slack"));
+    assert!(!page.contains("Send a test alert"));
 
     let list: Value = client
         .get("/_lighthouse/api/alerts/channels")
@@ -136,9 +134,7 @@ async fn without_channels_the_page_says_how_to_add_one() {
     let app = builder().build().await;
     people(&app).await;
     let client = sign_in(&app, "viewer@acme.test").await;
-    let page = client
-        .get("/_lighthouse/alerts")
-        .send()
+    let page = html(&client, "/_lighthouse/alerts")
         .await
         .assert_status(200)
         .text();
@@ -325,9 +321,10 @@ async fn changing_and_testing_channels_needs_the_configure_ability_and_a_known_c
         "{}",
         bad.status()
     );
-    // Through the cookie, the CSRF token is needed.
+    // Through the session, the CSRF token is needed.
     let web = sign_in(&app, "admin@acme.test").await;
-    let csrf = csrf_of(&web.get("/_lighthouse/alerts").send().await.text());
+    html(&web, "/_lighthouse/alerts").await.assert_status(200);
+    let csrf = web.cookie("XSRF-TOKEN").expect("the session's token");
     web.put("/_lighthouse/api/alerts/channels/slack")
         .json(&json!({ "muted": true }))
         .send()
@@ -339,9 +336,168 @@ async fn changing_and_testing_channels_needs_the_configure_ability_and_a_known_c
         .send()
         .await
         .assert_status(200);
-    let page = web.get("/_lighthouse/alerts").send().await.text();
-    assert!(page.contains("data-action=\"mute\""), "the controls show");
+    let page = html(&web, "/_lighthouse/alerts").await.text();
+    assert!(
+        page.contains("/_lighthouse/alerts/channels/slack"),
+        "the controls show"
+    );
     assert!(page.contains("Muted"), "{page}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_channel_forms_mute_change_kinds_return_to_the_configured_ones_and_test() {
+    let (builder, server) = channels(200);
+    let app = builder.build().await;
+    people(&app).await;
+    let web = sign_in(&app, "admin@acme.test").await;
+    let page = html(&web, "/_lighthouse/alerts")
+        .await
+        .assert_status(200)
+        .text();
+    for control in [
+        "/_lighthouse/alerts/channels/slack",
+        "/_lighthouse/alerts/channels/webhook",
+        "Save kinds",
+        "Send a test alert",
+        "name=\"kind.new_issue\"",
+        "name=\"_csrf\"",
+    ] {
+        assert!(page.contains(control), "{control}: {page}");
+    }
+    let kinds_of = |name: &'static str| {
+        let web = web.clone();
+        async move {
+            let list: Value = web
+                .get("/_lighthouse/api/alerts/channels")
+                .send()
+                .await
+                .assert_status(200)
+                .json_value();
+            channel(&list, name)["kinds"].clone()
+        }
+    };
+
+    // Muting stops one channel and no other.
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "mute"), ("minutes", "60")],
+    )
+    .await
+    .assert_status(303);
+    boom(&app, 1).await;
+    flushed(&app).await;
+    assert_eq!(sent_to(&server, SLACK), 0, "muted");
+    assert_eq!(sent_to(&server, WEBHOOK), 1);
+    let page = html(&web, "/_lighthouse/alerts").await.text();
+    assert!(page.contains("Muted until"), "{page}");
+    assert!(page.contains("Unmute"), "{page}");
+
+    // A test goes through the one channel even when it is muted.
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "test")],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(sent_to(&server, SLACK), 1);
+    assert_eq!(sent_to(&server, WEBHOOK), 1, "only the one asked for");
+
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "unmute")],
+    )
+    .await
+    .assert_status(303);
+
+    // The kinds a channel gets: the checked ones, in the order they are listed.
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/webhook",
+        &[
+            ("action", "save-kinds"),
+            ("kind.failed_job", "true"),
+            ("kind.spike", "true"),
+        ],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(kinds_of("webhook").await, json!(["spike", "failed_job"]));
+    // None checked changes nothing.
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/webhook",
+        &[("action", "save-kinds")],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(kinds_of("webhook").await, json!(["spike", "failed_job"]));
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/webhook",
+        &[("action", "reset-kinds")],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(
+        kinds_of("webhook").await,
+        json!(["new_issue", "regression", "spike"])
+    );
+
+    // What the form cannot do is refused.
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/carrier-pigeon",
+        &[("action", "mute")],
+    )
+    .await
+    .assert_status(404);
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "explode")],
+    )
+    .await
+    .assert_status(400);
+    post_form(
+        &web,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "mute"), ("minutes", "soon")],
+    )
+    .await
+    .assert_status(400);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_channel_forms_need_the_token_and_the_configure_ability() {
+    let (builder, server) = channels(200);
+    let app = builder.build().await;
+    people(&app).await;
+    let admin = sign_in(&app, "admin@acme.test").await;
+    html(&admin, "/_lighthouse/alerts").await.assert_status(200);
+    admin
+        .post("/_lighthouse/alerts/channels/slack")
+        .header("accept", "text/html")
+        .form(&[("action", "test")])
+        .send()
+        .await
+        .assert_status(403);
+    let viewer = sign_in(&app, "viewer@acme.test").await;
+    html(&viewer, "/_lighthouse/alerts")
+        .await
+        .assert_status(200);
+    post_form(
+        &viewer,
+        "/_lighthouse/alerts/channels/slack",
+        &[("action", "test")],
+    )
+    .await
+    .assert_status(403);
+    assert_eq!(sent_to(&server, SLACK), 0);
     app.shutdown().await.unwrap();
 }
 

@@ -9,8 +9,7 @@ use navree_lighthouse::IssueFilter;
 use navree_testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::dashboard::sign_in;
-use crate::releases::csrf_of;
+use crate::dashboard::{html, post_form, sign_in};
 use crate::support::{builder, flushed, lighthouse, token, user};
 
 const SLACK: &str = "https://hooks.slack.test/services/T000/B000/SECRETPATH";
@@ -162,8 +161,10 @@ async fn a_change_through_the_cookie_needs_the_csrf_token() {
     let app = builder().build().await;
     people(&app).await;
     let client = sign_in(&app, "admin@acme.test").await;
-    let page = client.get("/_lighthouse/settings").send().await.text();
-    let csrf = csrf_of(&page);
+    html(&client, "/_lighthouse/settings")
+        .await
+        .assert_status(200);
+    let csrf = client.cookie("XSRF-TOKEN").expect("the session's token");
     let body = json!({ "values": { "retention_days": 30 } });
     client
         .put("/_lighthouse/api/settings")
@@ -348,7 +349,8 @@ async fn the_settings_page_is_read_only_without_the_ability_and_says_what_is_fix
         page.contains("lighthouse.configure"),
         "says what is missing"
     );
-    assert!(!page.contains("data-action=\"save-settings\""));
+    assert!(!page.contains("Save changes"));
+    assert!(!page.contains("action=\"/_lighthouse/settings\""), "no form for a reader");
     assert!(page.contains("disabled"));
     // What is set in code or configuration, and where.
     assert!(page.contains("Set in code or configuration"));
@@ -362,7 +364,120 @@ async fn the_settings_page_is_read_only_without_the_ability_and_says_what_is_fix
         .await
         .assert_status(200)
         .text();
-    assert!(page.contains("data-action=\"save-settings\""));
+    assert!(page.contains("Save changes"));
+    assert!(page.contains("name=\"value.retention_days\""), "{page}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_form_saves_what_changed_returns_a_setting_to_the_configured_value_and_is_audited() {
+    let audit = Audit::default();
+    let app = builder()
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    people(&app).await;
+    let client = sign_in(&app, "admin@acme.test").await;
+    html(&client, "/_lighthouse/settings")
+        .await
+        .assert_status(200);
+    let current = |client: navree_testing::TestClient| async move {
+        client
+            .get("/_lighthouse/api/settings")
+            .send()
+            .await
+            .assert_status(200)
+            .json_value()
+    };
+
+    // A number that differs is saved; the browser comes back to the page.
+    let saved = post_form(
+        &client,
+        "/_lighthouse/settings",
+        &[("action", "save"), ("value.retention_days", "30")],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(saved.header("location"), Some("/_lighthouse/settings"));
+    let settings = current(client.clone()).await;
+    assert_eq!(row(&settings, "retention_days")["current"], 30);
+    assert_eq!(row(&settings, "retention_days")["changed"], true);
+    let page = html(&client, "/_lighthouse/settings").await.text();
+    assert!(page.contains("value=\"30\""), "{page}");
+    assert!(page.contains("Use configured"), "{page}");
+
+    // The same number again is no change, and leaves no second audit entry.
+    post_form(
+        &client,
+        "/_lighthouse/settings",
+        &[("action", "save"), ("value.retention_days", "30")],
+    )
+    .await
+    .assert_status(303);
+    let entries = audit.0.lock().unwrap().clone();
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|e| e.action == "lighthouse.settings.updated")
+            .count(),
+        1,
+        "{entries:?}"
+    );
+
+    // The button on one setting returns it to what the configuration says.
+    post_form(
+        &client,
+        "/_lighthouse/settings",
+        &[("reset", "retention_days"), ("value.retention_days", "99")],
+    )
+    .await
+    .assert_status(303);
+    let settings = current(client.clone()).await;
+    assert_eq!(row(&settings, "retention_days")["current"], 14);
+    assert_eq!(row(&settings, "retention_days")["changed"], false);
+
+    // A number out of range, a word and a setting that does not exist are refused.
+    for field in [
+        ("value.retention_days", "0"),
+        ("value.retention_days", "soon"),
+        ("value.nope", "1"),
+    ] {
+        post_form(&client, "/_lighthouse/settings", &[("action", "save"), field])
+            .await
+            .assert_status(400);
+    }
+    let settings = current(client.clone()).await;
+    assert_eq!(row(&settings, "retention_days")["current"], 14);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_settings_form_needs_the_token_and_the_ability() {
+    let app = builder().build().await;
+    people(&app).await;
+    let admin = sign_in(&app, "admin@acme.test").await;
+    html(&admin, "/_lighthouse/settings").await.assert_status(200);
+    admin
+        .post("/_lighthouse/settings")
+        .header("accept", "text/html")
+        .form(&[("action", "save"), ("value.retention_days", "30")])
+        .send()
+        .await
+        .assert_status(403);
+    let viewer = sign_in(&app, "viewer@acme.test").await;
+    html(&viewer, "/_lighthouse/settings").await.assert_status(200);
+    post_form(
+        &viewer,
+        "/_lighthouse/settings",
+        &[("action", "save"), ("value.retention_days", "30")],
+    )
+    .await
+    .assert_status(403);
+    assert_eq!(
+        lighthouse(&app).await.options().retention_days,
+        14,
+        "nothing changed"
+    );
     app.shutdown().await.unwrap();
 }
 

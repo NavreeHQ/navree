@@ -1,6 +1,6 @@
-//! Shared fixtures: a test app with the database, crypto, auth, access and
-//! Lighthouse, plus a demo module whose routes fail, run queries, report
-//! and take their time.
+//! Shared fixtures: a test app with the database, crypto, the session, auth
+//! with its sign-in pages, Navree UI, access and Lighthouse, plus a demo
+//! module whose routes fail, run queries, report and take their time.
 
 #![allow(dead_code)]
 
@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
-use navree_auth::{AuthModule, AuthService, ClientMeta};
+use navree_auth::{AuthModule, AuthPages, AuthService, ClientMeta};
 use navree_crypto::CryptoModule;
 use navree_db::{DatabaseModule, Db, Executor, Statement};
 use navree_http::{AppError, Controller, ModuleBuilderHttpExt, NoContent, Path, RouteDef};
@@ -17,9 +17,14 @@ use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_lighthouse::{Lighthouse, LighthouseModule, LighthouseStore, Report};
+use navree_session::{SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestAppBuilder};
+use navree_ui::UiModule;
 use serde_json::Value;
 use uuid::Uuid;
+
+/// The password every test user has.
+pub const PASSWORD: &str = "correct horse battery";
 
 /// The demo routes under `/api/demo`.
 pub struct DemoController {
@@ -134,9 +139,9 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     ctx.grant_permissions(rules);
 }
 
-/// The platform: database, crypto, auth (with fast hashing), access with
-/// the super-admin role `admin`, the demo routes, and Lighthouse
-/// configured from `lighthouse.*`.
+/// The platform: database, crypto, the session, auth (with fast hashing) and
+/// its sign-in pages on Navree UI, access with the super-admin role `admin`,
+/// the demo routes, and Lighthouse configured from `lighthouse.*`.
 pub fn builder() -> TestAppBuilder {
     crate::servers::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
@@ -152,7 +157,10 @@ pub fn builder() -> TestAppBuilder {
         .config("lighthouse.thresholds.slow_request_ms", 60_000)
         .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
+        .module(SessionModule::for_root(SessionOptions::default()))
         .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Acme CRM"))
         .module(AccessModule::for_root(AccessOptions {
             abilities,
             super_admin_role: Some("admin".to_owned()),
@@ -178,7 +186,7 @@ pub async fn flushed(app: &TestApp) -> LighthouseStore {
 pub async fn user(app: &TestApp, email: &str, role: Option<&str>, permissions: &[&str]) -> Uuid {
     let auth = app.get::<AuthService>().await;
     let user = auth
-        .create_user("Ada", email, "correct horse battery")
+        .create_user("Ada", email, PASSWORD)
         .await
         .unwrap();
     if let Some(role) = role {
@@ -201,7 +209,7 @@ pub async fn user(app: &TestApp, email: &str, role: Option<&str>, permissions: &
 pub async fn token(app: &TestApp, email: &str) -> String {
     let auth = app.get::<AuthService>().await;
     let (_, tokens) = auth
-        .login(email, "correct horse battery", &ClientMeta::default())
+        .login(email, PASSWORD, &ClientMeta::default())
         .await
         .unwrap();
     tokens.access_token

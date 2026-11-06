@@ -93,7 +93,8 @@ async fn with_the_store_off_nothing_is_kept_and_nothing_is_mounted() {
     assert!(lighthouse.store().is_none());
     assert!(!lighthouse.is_recording());
     app.client()
-        .get("/_lighthouse/login")
+        .get("/_lighthouse")
+        .header("accept", "text/html")
         .send()
         .await
         .assert_status(404);
