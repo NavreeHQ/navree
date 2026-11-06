@@ -5,6 +5,9 @@
 //! problems of every registered section, and `config:check` and `config:show`
 //! work on a module graph that was never booted.
 
+use serde_json::{Map, Value as Json, json};
+
+use crate::schema::{EnvFallback, SectionSchema};
 use crate::{Config, ConfigError, ConfigSection};
 
 /// A section that a module registered with
@@ -26,6 +29,7 @@ pub struct SectionRegistration {
     type_name: &'static str,
     check: fn(&Config) -> Result<(), ConfigError>,
     defaults: fn() -> Option<serde_json::Value>,
+    schema: fn() -> Option<SectionSchema>,
 }
 
 impl SectionRegistration {
@@ -36,6 +40,7 @@ impl SectionRegistration {
             type_name: std::any::type_name::<T>(),
             check: |config| config.typed::<T>().map(drop),
             defaults: T::defaults,
+            schema: T::schema,
         }
     }
 
@@ -58,6 +63,158 @@ impl SectionRegistration {
     /// publishes them ([`ConfigSection::defaults`]).
     pub fn defaults(&self) -> Option<serde_json::Value> {
         (self.defaults)()
+    }
+
+    /// What the section says about itself, when its type describes its
+    /// fields ([`ConfigSection::schema`]).
+    pub fn schema(&self) -> Option<SectionSchema> {
+        (self.schema)()
+    }
+}
+
+/// One section in a [`ConfigRegistry`].
+#[derive(Clone, Debug)]
+pub struct SectionInfo {
+    /// The section key (`mail`, `database.mongodb`).
+    pub key: &'static str,
+    /// The Rust type that reads the section.
+    pub type_name: &'static str,
+    /// Its fields, when the type describes them.
+    pub schema: Option<SectionSchema>,
+    /// Its defaults, when the type publishes them.
+    pub defaults: Option<Json>,
+}
+
+/// The sections an app registers, with what each says about itself: fields,
+/// defaults, credentials and environment fallbacks. Built from the app's
+/// [`SectionRegistration`]s, so it needs no booted app.
+///
+/// ```
+/// use navree_config::{AppOptions, ConfigRegistry, SectionRegistration};
+///
+/// let registry = ConfigRegistry::new(&[SectionRegistration::of::<AppOptions>()]);
+/// assert_eq!(registry.sections()[0].key, "app");
+/// assert_eq!(registry.defaults_tree()["app"]["previous_keys"], serde_json::json!([]));
+/// ```
+#[derive(Clone, Debug)]
+pub struct ConfigRegistry {
+    sections: Vec<SectionInfo>,
+}
+
+impl ConfigRegistry {
+    /// The registry of `registrations`: each section once (a section
+    /// registered by two modules is one), in key order.
+    pub fn new(registrations: &[SectionRegistration]) -> Self {
+        let mut sections: Vec<SectionInfo> = Vec::new();
+        for registration in registrations {
+            let known = sections.iter().any(|section| {
+                section.key == registration.key() && section.type_name == registration.type_name()
+            });
+            if known {
+                continue;
+            }
+            sections.push(SectionInfo {
+                key: registration.key(),
+                type_name: registration.type_name(),
+                schema: registration.schema(),
+                defaults: registration.defaults(),
+            });
+        }
+        sections.sort_by(|a, b| a.key.cmp(b.key));
+        ConfigRegistry { sections }
+    }
+
+    /// The sections, by key.
+    pub fn sections(&self) -> &[SectionInfo] {
+        &self.sections
+    }
+
+    /// The section registered at `key`.
+    pub fn section(&self, key: &str) -> Option<&SectionInfo> {
+        self.sections.iter().find(|section| section.key == key)
+    }
+
+    /// The defaults of every section that publishes them, as one JSON
+    /// object with each section at its key (`database.mongodb` nests).
+    pub fn defaults_tree(&self) -> Json {
+        let mut tree = Json::Object(Map::new());
+        for section in &self.sections {
+            if let Some(defaults) = &section.defaults {
+                crate::show::insert(&mut tree, section.key, defaults.clone());
+            }
+        }
+        tree
+    }
+
+    /// The keys of the fields that are credentials (`mail.api_key`).
+    pub fn secret_paths(&self) -> Vec<String> {
+        self.schemas()
+            .flat_map(SectionSchema::secret_paths)
+            .collect()
+    }
+
+    /// The environment variables fields fall back to.
+    pub fn env_fallbacks(&self) -> Vec<EnvFallback> {
+        self.schemas()
+            .flat_map(SectionSchema::env_fallbacks)
+            .collect()
+    }
+
+    /// The text fields named like a credential that are not marked as one
+    /// (see [`SectionSchema::unmarked_secrets`]).
+    pub fn unmarked_secrets(&self) -> Vec<String> {
+        self.schemas()
+            .flat_map(SectionSchema::unmarked_secrets)
+            .collect()
+    }
+
+    /// The sections that describe themselves.
+    fn schemas(&self) -> impl Iterator<Item = &SectionSchema> {
+        self.sections
+            .iter()
+            .filter_map(|section| section.schema.as_ref())
+    }
+
+    /// A JSON Schema of the whole configuration tree: a property per
+    /// section, with its fields, their rustdoc as `description`, `x-secret`
+    /// on credentials and `x-env-fallback` on fields that fall back to an
+    /// environment variable. Editors read it for completion and type checks
+    /// of `config/app.toml`.
+    pub fn schema_document(&self) -> Json {
+        let mut root = json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Navree configuration",
+            "type": "object",
+            "properties": {},
+        });
+        // Key order puts `database` before `database.mongodb`.
+        for section in &self.sections {
+            if let Some(schema) = &section.schema {
+                let path: Vec<&str> = section.key.split('.').collect();
+                insert_section(&mut root, &path, schema.json_schema());
+            }
+        }
+        root
+    }
+}
+
+/// Puts `schema` at `path` below the `properties` of `node`, making the
+/// tables on the way.
+fn insert_section(node: &mut Json, path: &[&str], schema: Json) {
+    let Some(properties) = node.get_mut("properties").and_then(Json::as_object_mut) else {
+        return;
+    };
+    match path {
+        [] => {}
+        [last] => {
+            properties.insert((*last).to_owned(), schema);
+        }
+        [head, rest @ ..] => {
+            let child = properties
+                .entry((*head).to_owned())
+                .or_insert_with(|| json!({ "type": "object", "properties": {} }));
+            insert_section(child, rest, schema);
+        }
     }
 }
 

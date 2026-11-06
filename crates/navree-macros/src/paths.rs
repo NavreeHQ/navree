@@ -39,6 +39,14 @@ pub(crate) const ACCESS: RuntimeCrate = RuntimeCrate {
     facade_module: "access",
 };
 
+/// navree-config: `ConfigSection`, `ConfigTable` and the schema types
+/// (`#[derive(ConfigSection)]`, `#[derive(ConfigTable)]`). The derives name
+/// the crate itself when the crate being compiled depends on it.
+pub(crate) const CONFIG: RuntimeCrate = RuntimeCrate {
+    package: "navree-config",
+    facade_module: "config",
+};
+
 /// navree-flags: `Flag` (`#[flag]`) and `requires_flag`
 /// (`#[requires_flag(NewPipeline)]`).
 pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {

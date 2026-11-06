@@ -102,7 +102,8 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-template-peak", 0, &["navree-template"]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
-    rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
+    // `#[derive(ConfigSection)]` comes from navree-macros and is re-exported.
+    rule("navree-config", 1, &["navree-kernel", "navree-contracts", "navree-macros"]),
     // Telemetry events and trace context: every emitter (L2 and up) uses it.
     rule("navree-telemetry", 1, &["navree-kernel", "navree-contracts"]),
     // L2

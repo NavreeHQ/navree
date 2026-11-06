@@ -145,7 +145,7 @@ fn render_json(rows: &BTreeMap<String, Row>, options: &ShowOptions) -> String {
 }
 
 /// Sets `value` at dotted `path` in a JSON object tree.
-fn insert(tree: &mut Json, path: &str, value: Json) {
+pub(crate) fn insert(tree: &mut Json, path: &str, value: Json) {
     let mut node = tree;
     let mut segments = path.split('.').peekable();
     while let Some(segment) = segments.next() {

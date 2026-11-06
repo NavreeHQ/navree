@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
+# `#[derive(ConfigSection)]` and `#[derive(ConfigTable)]`, re-exported.
+navree-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

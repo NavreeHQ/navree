@@ -32,6 +32,7 @@ use proc_macro::TokenStream;
 
 mod agent;
 mod attr;
+mod config_section;
 mod controller;
 mod duration;
 mod flag;
@@ -604,6 +605,71 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Searchable, attributes(searchable))]
 pub fn derive_searchable(input: TokenStream) -> TokenStream {
     searchable::expand(input.into()).into()
+}
+
+/// Implements `navree_config::ConfigSection` for a struct that holds a
+/// module's configuration, and describes its fields.
+///
+/// ```text
+/// /// Mail settings.
+/// #[derive(Clone, Debug, Deserialize, ConfigSection)]
+/// #[config(key = "mail", docs = "/docs/digging-deeper/mail/", validate = Self::check)]
+/// #[serde(default)]
+/// pub struct MailOptions {
+///     /// The default sender (`hello@example.com`).
+///     pub from: String,
+///     /// The API key of the mail service.
+///     pub api_key: Option<Secret<String>>,
+///     #[config(env_fallback = "REDIS_URL")]
+///     pub url: Option<String>,
+/// }
+/// ```
+///
+/// The struct needs `Deserialize`; with `#[serde(default)]` it also needs
+/// `Default`, and then it publishes its defaults.
+///
+/// | Argument | On | Does |
+/// |---|---|---|
+/// | `key = ".."` | struct | the section key (required) |
+/// | `docs = ".."` | struct | the documentation page about the section |
+/// | `validate = path` | struct | checks the values at boot: `fn(&self) -> Result<(), String>` |
+/// | `default` | struct | publishes `Default::default()` as the defaults without `#[serde(default)]` |
+/// | `secret` | field | the value is a credential though its type is not `Secret` |
+/// | `public` | field | the name looks like a credential's, the value is not one |
+/// | `table` | field | the type derives `ConfigTable`; its fields are described below this one |
+/// | `skip` | field | leaves the field out of the description |
+/// | `env_fallback = ".."` | field | the environment variable the field falls back to |
+/// | `one_of = "a, b"` | field | the names the value can take |
+/// | `default = ".."` | field | the text shown as the default (types without `Debug`) |
+///
+/// A field's name is its `serde` name (`rename`, `rename_all`), its type is
+/// reduced to a few kinds (boolean, integer, number, string, duration, list,
+/// table), and its description is the first paragraph of its rustdoc. A
+/// `Secret<..>` field is a credential; its default is always `null`. Fields
+/// with `#[serde(skip)]` and flattened fields are left out, except a
+/// flattened field marked `#[config(table)]`.
+///
+/// The generated code names `navree_config` itself, or `::navree::config`.
+#[proc_macro_derive(ConfigSection, attributes(config))]
+pub fn derive_config_section(input: TokenStream) -> TokenStream {
+    config_section::expand_section(input.into()).into()
+}
+
+/// Describes the fields of a struct that is nested in a section: the same
+/// description as `#[derive(ConfigSection)]`, without a key. Mark the field
+/// of the section that holds it with `#[config(table)]`.
+///
+/// ```text
+/// #[derive(Clone, Debug, Default, Deserialize, ConfigTable)]
+/// #[serde(default)]
+/// pub struct CorsOptions {
+///     /// The origins that may call the API.
+///     pub allowed_origins: Vec<String>,
+/// }
+/// ```
+#[proc_macro_derive(ConfigTable, attributes(config))]
+pub fn derive_config_table(input: TokenStream) -> TokenStream {
+    config_section::expand_table(input.into()).into()
 }
 
 /// Implements `navree_settings::SettingsGroup` for a struct whose fields

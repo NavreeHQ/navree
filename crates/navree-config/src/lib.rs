@@ -71,6 +71,10 @@
 //! ```
 #![forbid(unsafe_code)]
 
+// The code that `#[derive(ConfigSection)]` writes names this crate as
+// `::navree_config`, also inside the crate itself.
+extern crate self as navree_config;
+
 mod app;
 pub mod check;
 mod commands;
@@ -83,6 +87,7 @@ mod module;
 mod origin;
 mod redact;
 mod registry;
+mod schema;
 pub mod show;
 mod sources;
 mod usage;
@@ -93,7 +98,18 @@ pub use config::Config;
 pub use dotenv::{DotenvEntryExists, parse_dotenv, set_dotenv_value};
 pub use error::ConfigError;
 pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt, defaults_of};
+// The derives share the names of the traits, as serde's do.
+pub use navree_macros::{ConfigSection, ConfigTable};
 pub use origin::{Shadowed, ValueOrigin};
-pub use registry::{FRAMEWORK_SECTIONS, SectionRegistration};
+pub use registry::{ConfigRegistry, FRAMEWORK_SECTIONS, SectionInfo, SectionRegistration};
+pub use schema::{
+    ConfigTable, DescribeValue, EnvFallback, FieldSchema, FieldType, SectionSchema, debug_value,
+};
 pub use sources::ConfigSources;
 pub use usage::UnusedKey;
+
+/// Items the code of the derives uses.
+#[doc(hidden)]
+pub mod __private {
+    pub use serde_json::{Map, Value};
+}

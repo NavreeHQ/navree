@@ -9,6 +9,7 @@ use navree_kernel::{
 use serde::de::DeserializeOwned;
 
 use crate::registry::{SectionRegistration, boot_error};
+use crate::schema::SectionSchema;
 use crate::{AppOptions, Config, ConfigSources, commands};
 
 /// The global module that loads [`Config`] at boot and exports it to every module.
@@ -150,6 +151,42 @@ impl Lifecycle for ConfigDiagnostics {
 /// A typed configuration section, registered with
 /// [`ModuleBuilderConfigExt::config`], which a module calls in `register`.
 ///
+/// `#[derive(ConfigSection)]` writes the impl and describes the fields
+/// (their names, types, rustdoc, secrets and defaults) for `config:show`,
+/// `config:schema`, `config:publish` and the reference:
+///
+/// ```
+/// use navree_config::ConfigSection;
+/// use serde::Deserialize;
+///
+/// /// Billing settings.
+/// #[derive(Default, Deserialize, ConfigSection)]
+/// #[config(key = "billing", validate = Self::check)]
+/// #[serde(default)]
+/// struct BillingConfig {
+///     /// The ISO code of the currency (`INR`).
+///     currency: String,
+///     /// Days of a free trial.
+///     trial_days: u32,
+/// }
+///
+/// impl BillingConfig {
+///     fn check(&self) -> Result<(), String> {
+///         if self.currency.len() == 3 {
+///             Ok(())
+///         } else {
+///             Err("currency must be a 3-letter ISO code".into())
+///         }
+///     }
+/// }
+///
+/// assert_eq!(BillingConfig::KEY, "billing");
+/// assert_eq!(BillingConfig::schema().unwrap().fields[1].name, "trial_days");
+/// assert_eq!(BillingConfig::defaults().unwrap()["trial_days"], 0);
+/// ```
+///
+/// Written by hand, the impl needs only a key:
+///
 /// ```
 /// use navree_config::ConfigSection;
 /// use serde::Deserialize;
@@ -157,20 +194,10 @@ impl Lifecycle for ConfigDiagnostics {
 /// #[derive(Deserialize)]
 /// struct BillingConfig {
 ///     currency: String,
-///     #[serde(default)]
-///     trial_days: u32,
 /// }
 ///
 /// impl ConfigSection for BillingConfig {
 ///     const KEY: &'static str = "billing";
-///
-///     fn validate(&self) -> Result<(), String> {
-///         if self.currency.len() == 3 {
-///             Ok(())
-///         } else {
-///             Err("currency must be a 3-letter ISO code".into())
-///         }
-///     }
 /// }
 /// ```
 pub trait ConfigSection: DeserializeOwned + Send + Sync + 'static {
@@ -189,6 +216,13 @@ pub trait ConfigSection: DeserializeOwned + Send + Sync + 'static {
     /// publishes nothing. [`defaults_of`] builds it from `Default` and
     /// `Serialize` for a section that has no secret field.
     fn defaults() -> Option<serde_json::Value> {
+        None
+    }
+
+    /// What the section says about itself: its fields, their types, rustdoc,
+    /// credentials and environment fallbacks. `None` (the default) for a
+    /// section written by hand; `#[derive(ConfigSection)]` fills it in.
+    fn schema() -> Option<SectionSchema> {
         None
     }
 }
@@ -236,6 +270,12 @@ pub trait ModuleBuilderConfigExt {
     /// ([`SectionRegistration`]), so `config:check` can read it without
     /// booting.
     fn config<T: ConfigSection>(&mut self) -> &mut Self;
+
+    /// Registers `T` with the app ([`SectionRegistration`]) without building
+    /// it: for a module that reads its section itself (it builds its options
+    /// from [`Config::typed`], or from code), so `config:check`,
+    /// `config:show` and the reference still know the section and its keys.
+    fn config_section<T: ConfigSection>(&mut self) -> &mut Self;
 }
 
 impl ModuleBuilderConfigExt for ModuleBuilder {
@@ -259,5 +299,10 @@ impl ModuleBuilderConfigExt for ModuleBuilder {
             })
             .deps(vec![ProviderKey::of::<Config>()]),
         )
+    }
+
+    fn config_section<T: ConfigSection>(&mut self) -> &mut Self {
+        self.contribute(SectionRegistration::of::<T>());
+        self
     }
 }

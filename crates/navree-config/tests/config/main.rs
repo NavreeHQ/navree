@@ -16,6 +16,7 @@ mod origins;
 mod pinned;
 mod properties;
 mod redaction;
+mod registry;
 mod sections;
 mod shadows;
 mod show;
