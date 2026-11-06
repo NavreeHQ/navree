@@ -17,6 +17,11 @@
  * - `handle` routes a request to the right one of these by its path;
  * - `ensureSession` gives middleware and server rendering a valid access token,
  *   refreshing it when it has expired, and `api`/`me` call Navree with it;
+ * - `socialRedirect`, `socialCallback` and `verifyEmail` are the three browser-facing
+ *   GET routes of social sign-in and the link in the verification mail: each ends in a
+ *   redirect to a page of the app, with the tokens in the cookies like a password sign-in;
+ * - a refresh the API refuses ends the session (the cookies are cleared); a refresh that
+ *   could not finish because the API was unreachable does not (the cookies stay);
  * - every non-GET request must come from the app's own origin (403 otherwise),
  *   which is the CSRF defence for the cookie hop;
  * - the browser's `X-Forwarded-For` / `X-Real-IP` never reach Navree; the BFF
@@ -35,6 +40,8 @@ export const REFRESH_COOKIE = "navree_rt";
 export const CHALLENGE_COOKIE = "navree_2fa";
 /** The current workspace (a slug or an id). Not a secret: the browser sets it when the user switches. */
 export const WORKSPACE_COOKIE = "navree_workspace";
+/** The social sign-in state, between the redirect to the provider and the callback. */
+export const SOCIAL_COOKIE = "navree_social";
 
 /** Navree's token response (`POST /api/auth/login` and `/api/auth/refresh`). */
 export interface TokenPair {
@@ -50,6 +57,25 @@ export interface CookieNames {
   refresh?: string;
   challenge?: string;
   workspace?: string;
+  social?: string;
+}
+
+/** The pages of the app that the BFF's redirects end on. */
+export interface BffPages {
+  /** The sign-in page (default `/login`). A failed social sign-in lands here with `?error=`. */
+  signIn?: string;
+  /** The page that asks for the two-factor code (default `/two-factor`). */
+  twoFactor?: string;
+  /** The page the verification link ends on, with `?status=verified|invalid|unreachable` (default `/verify-email`). */
+  verifyEmail?: string;
+}
+
+/** Where the app mounts the two social sign-in routes. */
+export interface BffSocialPaths {
+  /** `GET {start}/{provider}?next=` starts a sign-in (default `/auth/social`). */
+  start?: string;
+  /** `GET {callback}/{provider}?code&state` is where the provider sends the browser back (default `/auth/callback`). */
+  callback?: string;
 }
 
 export interface BffOptions {
@@ -88,8 +114,18 @@ export interface BffOptions {
   mePath?: string;
   /** The workspace header, as the API's `workspace.header` names it (default `X-Workspace`). */
   workspaceHeader?: string;
-  /** Cookie names, for several apps on one domain (defaults `navree_at`, `navree_rt`, `navree_2fa`, `navree_workspace`). */
+  /** Cookie names, for several apps on one domain (defaults `navree_at`, `navree_rt`, `navree_2fa`, `navree_workspace`, `navree_social`). */
   cookieNames?: CookieNames;
+  /** The pages of the app that social sign-in, the verification link and `redirectNavigations` end on. */
+  pages?: BffPages;
+  /** Where the app mounts social sign-in (defaults `/auth/social` and `/auth/callback`). */
+  socialPaths?: BffSocialPaths;
+  /**
+   * Send a page request that the API refuses with 401 (the session is over) to `pages.signIn` with
+   * `?next=`, instead of passing the 401 on. For a server-rendered tool mounted through the BFF, such
+   * as the admin panel at `/admin`. Off by default; a call that doesn't ask for HTML gets the 401.
+   */
+  redirectNavigations?: boolean;
   /** Maps a request path to the API path `handle` forwards to (default: the same path). */
   upstreamPath?: (pathname: string) => string;
   /** Refresh an access token this many seconds before it expires (`ensureSession`; default 30). */
@@ -100,9 +136,12 @@ export interface BffOptions {
 export interface Session {
   /**
    * `anonymous`: no token cookies; `active`: the access token is usable;
-   * `refreshed`: it had expired and was refreshed; `expired`: the refresh failed.
+   * `refreshed`: it had expired and was refreshed; `expired`: the API refused the refresh, so the
+   * session is over; `unavailable`: the access token had expired and the API could not be reached
+   * to refresh it, so nothing is known yet. The cookies are kept: serve the page and let it show
+   * its own error, or try again.
    */
-  status: "anonymous" | "active" | "refreshed" | "expired";
+  status: "anonymous" | "active" | "refreshed" | "expired" | "unavailable";
   /** The access token to call Navree with (`active` and `refreshed`). */
   accessToken?: string;
   /** `Set-Cookie` values the response must carry (new tokens, or cleared ones). */
@@ -251,16 +290,31 @@ export function createBff(options: BffOptions) {
     refresh: options.cookieNames?.refresh ?? REFRESH_COOKIE,
     challenge: options.cookieNames?.challenge ?? CHALLENGE_COOKIE,
     workspace: options.cookieNames?.workspace ?? WORKSPACE_COOKIE,
+    social: options.cookieNames?.social ?? SOCIAL_COOKIE,
   };
+  const pages = {
+    signIn: options.pages?.signIn ?? "/login",
+    twoFactor: options.pages?.twoFactor ?? "/two-factor",
+    verifyEmail: options.pages?.verifyEmail ?? "/verify-email",
+  };
+  const socialStart = (options.socialPaths?.start ?? "/auth/social").replace(/\/+$/, "");
+  const socialCallbackPath = (options.socialPaths?.callback ?? "/auth/callback").replace(/\/+$/, "");
   const upstreamPathOf = options.upstreamPath ?? ((pathname: string) => pathname);
   const refreshSkew = options.refreshSkewSeconds ?? 30;
+
+  /**
+   * What a refresh came to: new tokens; `rejected` (the API said no: the token expired, was revoked
+   * or was used twice, so the session is over); or `unavailable` (the API could not be reached or
+   * failed, so nothing is known and the cookies must stay).
+   */
+  type Refresh = { kind: "ok"; pair: TokenPair } | { kind: "rejected" } | { kind: "unavailable" };
 
   /**
    * Refresh tokens rotate and reuse revokes the whole family, so concurrent
    * requests holding the same refresh cookie must share one refresh call, and
    * requests that arrive shortly after with the old cookie get the new pair.
    */
-  const refreshes = new Map<string, { promise: Promise<TokenPair | null>; settledAt?: number }>();
+  const refreshes = new Map<string, { promise: Promise<Refresh>; settledAt?: number }>();
 
   function cookie(name: string, value: string, { maxAge, path = "/", httpOnly = true }: CookieOptions): string {
     const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`];
@@ -378,7 +432,7 @@ export function createBff(options: BffOptions) {
     return address ? { "x-forwarded-for": address } : {};
   }
 
-  async function callNavreeRefresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
+  async function callNavreeRefresh(refreshToken: string, request: Request): Promise<Refresh> {
     try {
       const response = await upstreamFetch(`${apiUrl}${authPrefix}/refresh`, {
         method: "POST",
@@ -388,28 +442,31 @@ export function createBff(options: BffOptions) {
       });
       if (!response.ok) {
         await discard(response);
-        return null;
+        // A 4xx other than 408 and 429 is the API's answer about this token. Anything else
+        // (an overloaded or restarting API, a rate limit) says nothing about the session.
+        const answered = response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
+        return answered ? { kind: "rejected" } : { kind: "unavailable" };
       }
       const pair = (await response.json()) as TokenPair;
-      return pair.access_token && pair.refresh_token ? pair : null;
+      return pair.access_token && pair.refresh_token ? { kind: "ok", pair } : { kind: "unavailable" };
     } catch {
-      return null;
+      return { kind: "unavailable" };
     }
   }
 
   /** Single-flight refresh keyed by the refresh token being spent. */
-  function refresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
+  function refresh(refreshToken: string, request: Request): Promise<Refresh> {
     const now = Date.now();
     for (const [key, entry] of refreshes) {
       if (entry.settledAt !== undefined && now - entry.settledAt > refreshGraceMs) refreshes.delete(key);
     }
     const existing = refreshes.get(refreshToken);
     if (existing) return existing.promise;
-    const entry: { promise: Promise<TokenPair | null>; settledAt?: number } = {
-      promise: callNavreeRefresh(refreshToken, request).then((pair) => {
+    const entry: { promise: Promise<Refresh>; settledAt?: number } = {
+      promise: callNavreeRefresh(refreshToken, request).then((outcome) => {
         entry.settledAt = Date.now();
-        if (!pair) refreshes.delete(refreshToken);
-        return pair;
+        if (outcome.kind !== "ok") refreshes.delete(refreshToken);
+        return outcome;
       }),
     };
     refreshes.set(refreshToken, entry);
@@ -421,7 +478,7 @@ export function createBff(options: BffOptions) {
     const headers = new Headers();
     for (const name of FORWARD_RESPONSE_HEADERS) {
       const value = upstream.headers.get(name);
-      if (value) headers.set(name, value);
+      if (value) headers.set(name, name === "location" ? ownOrigin(value) : value);
     }
     for (const [name, value] of upstream.headers) {
       if (name.startsWith("x-ratelimit-")) headers.set(name, value);
@@ -437,6 +494,39 @@ export function createBff(options: BffOptions) {
 
   function unreachable(): Response {
     return errorResponse(502, "The Navree API is unreachable", "api_unreachable");
+  }
+
+  /**
+   * A redirect the API sent to its own address (`Location: http://api:8080/admin/users`) becomes a
+   * path on this app's origin, so the browser stays here. Any other location is left as it is.
+   */
+  function ownOrigin(location: string): string {
+    if (location === apiUrl) return "/";
+    return location.startsWith(`${apiUrl}/`) ? location.slice(apiUrl.length) : location;
+  }
+
+  /** A `303 See Other` to a page of this app, with `headers` (cookies). */
+  function redirect(location: string, headers = new Headers()): Response {
+    headers.set("location", location);
+    return new Response(null, { status: 303, headers });
+  }
+
+  /** A GET for a page (the browser asks for HTML), as opposed to a call from the app's own scripts. */
+  function isNavigation(request: Request): boolean {
+    const method = request.method.toUpperCase();
+    if (method !== "GET" && method !== "HEAD") return false;
+    return (request.headers.get("accept") ?? "").includes("text/html");
+  }
+
+  /** `next` when it is a path on this origin, else `/`: never an open redirect. */
+  function localPath(next: string | null | undefined): string {
+    return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  }
+
+  /** The sign-in page, with the page the browser asked for in `next`. */
+  function signInUrl(request: Request): string {
+    const url = new URL(request.url);
+    return `${pages.signIn}?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`;
   }
 
   /**
@@ -466,31 +556,43 @@ export function createBff(options: BffOptions) {
 
     // The access cookie expired (or was never set) but a refresh token remains: refresh up front.
     if (!tokens.access && tokens.refresh) {
-      refreshed = await refresh(tokens.refresh, request);
-      refreshFailed = refreshed === null;
+      const outcome = await refresh(tokens.refresh, request);
+      if (outcome.kind === "unavailable") return unreachable();
+      refreshed = outcome.kind === "ok" ? outcome.pair : null;
+      refreshFailed = outcome.kind === "rejected";
     }
 
     let upstream: Response;
     try {
       upstream = await send(refreshed?.access_token ?? tokens.access);
       if (upstream.status === 401 && !refreshed && tokens.refresh && !refreshFailed) {
-        refreshed = await refresh(tokens.refresh, request);
-        if (refreshed) {
+        const outcome = await refresh(tokens.refresh, request);
+        if (outcome.kind === "ok") {
+          refreshed = outcome.pair;
           await discard(upstream);
           upstream = await send(refreshed.access_token);
-        } else {
+        } else if (outcome.kind === "rejected") {
           refreshFailed = true;
+        } else {
+          // The API couldn't be asked: the 401 says nothing about the session, so the cookies stay.
+          await discard(upstream);
+          return unreachable();
         }
       }
     } catch {
       return unreachable();
     }
 
-    // New pair → set both cookies. Refresh failed, or Navree rejected the token with nothing to
-    // refresh it with → the session is over: clear both so the browser goes back to sign-in.
+    // New pair -> set both cookies. The API refused the refresh, or refused the token with nothing to
+    // refresh it with -> the session is over: clear both so the browser goes back to sign-in.
     const cookies = new Headers();
+    const sessionOver = !refreshed && (refreshFailed || (upstream.status === 401 && Boolean(tokens.access)));
     if (refreshed) setTokenCookies(cookies, refreshed);
-    else if (refreshFailed || (upstream.status === 401 && tokens.access)) clearTokenCookies(cookies);
+    else if (sessionOver) clearTokenCookies(cookies);
+    if (upstream.status === 401 && options.redirectNavigations && isNavigation(request)) {
+      await discard(upstream);
+      return redirect(signInUrl(request), cookies);
+    }
     if (upstream.ok && upstreamPath.startsWith(`${authPrefix}/`) && isJson(upstream)) {
       return withoutTokens(upstream, cookies);
     }
@@ -621,8 +723,8 @@ export function createBff(options: BffOptions) {
         if ((!response || response.status === 401) && tokens.refresh) {
           // Logout needs a bearer token: get a fresh pair, then revoke the new refresh token.
           await discard(response);
-          const pair = await refresh(tokens.refresh, request);
-          response = pair ? await revoke(pair.access_token, pair.refresh_token) : null;
+          const outcome = await refresh(tokens.refresh, request);
+          response = outcome.kind === "ok" ? await revoke(outcome.pair.access_token, outcome.pair.refresh_token) : null;
         }
         await discard(response);
       }
@@ -638,24 +740,150 @@ export function createBff(options: BffOptions) {
   async function refreshSession(request: Request): Promise<Response> {
     if (!originAllowed(request)) return invalidOrigin();
     const tokens = tokensFrom(request);
-    const pair = tokens.refresh ? await refresh(tokens.refresh, request) : null;
+    const outcome: Refresh = tokens.refresh ? await refresh(tokens.refresh, request) : { kind: "rejected" };
+    // The API could not be reached: nothing is known about the session, so its cookies stay.
+    if (outcome.kind === "unavailable") return unreachable();
     const headers = new Headers();
-    if (!pair) {
+    if (outcome.kind === "rejected") {
       clearTokenCookies(headers);
       return errorResponse(401, "Your session has expired", "session_expired", headers);
     }
-    setTokenCookies(headers, pair);
+    setTokenCookies(headers, outcome.pair);
     return new Response(null, { status: 204, headers });
+  }
+
+  /** The provider name in `{base}/{provider}`, or `undefined` when `pathname` is not one of those. */
+  function providerOf(pathname: string, base: string): string | undefined {
+    if (!pathname.startsWith(`${base}/`)) return undefined;
+    const rest = pathname.slice(base.length + 1);
+    return /^[A-Za-z0-9_-]{1,64}$/.test(rest) ? rest : undefined;
+  }
+
+  /** Whether `path` is the API's `{authPrefix}/email/verify/{id}/{hash}`. */
+  function isVerifyPath(path: string): boolean {
+    const prefix = `${authPrefix}/email/verify/`;
+    if (!path.startsWith(prefix)) return false;
+    const parts = path.slice(prefix.length).split("/");
+    return parts.length === 2 && parts.every((part) => part.length > 0);
+  }
+
+  function isWebUrl(value: string): boolean {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === "https:" || protocol === "http:";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * `GET {socialPaths.start}/{provider}?next=/w/acme`: starts a social sign-in. The API answers with
+   * the provider's URL and a sealed state; the state waits in an httpOnly cookie that only the
+   * callback route receives, and the browser goes to the provider. Failures end on `pages.signIn`
+   * with `?error=social_unavailable` or `api_unreachable`.
+   */
+  async function socialRedirect(request: Request, provider: string): Promise<Response> {
+    const next = localPath(new URL(request.url).searchParams.get("next"));
+    let upstream: Response;
+    try {
+      upstream = await api(
+        `${authPrefix}/social/${encodeURIComponent(provider)}/redirect?return_to=${encodeURIComponent(next)}`,
+        { request },
+      );
+    } catch {
+      return redirect(`${pages.signIn}?error=api_unreachable`);
+    }
+    if (!upstream.ok) {
+      await discard(upstream);
+      return redirect(`${pages.signIn}?error=social_unavailable`);
+    }
+    const { url, state } = (await upstream.json().catch(() => ({}))) as { url?: string; state?: string };
+    if (!url || !state || !isWebUrl(url)) return redirect(`${pages.signIn}?error=social_unavailable`);
+    const headers = new Headers();
+    headers.append("set-cookie", cookie(names.social, state, { maxAge: 600, path: socialCallbackPath }));
+    return redirect(url, headers);
+  }
+
+  /**
+   * `GET {socialPaths.callback}/{provider}?code&state`: the provider sends the browser back here. The
+   * state must match the cookie. The API exchanges the code and answers like a password sign-in: the
+   * tokens go into the cookies and the browser lands on the page the sign-in started from, or a
+   * two-factor challenge goes into its cookie and `pages.twoFactor` finishes it. Failures end on
+   * `pages.signIn` with `?error=social_state`, `social_failed` or `api_unreachable`.
+   */
+  async function socialCallback(request: Request, provider: string): Promise<Response> {
+    const params = new URL(request.url).searchParams;
+    const code = params.get("code");
+    const state = params.get("state");
+    const expected = readCookie(request, names.social);
+    // The state is spent whatever comes of it.
+    const headers = new Headers();
+    headers.append("set-cookie", cookie(names.social, "", { maxAge: 0, path: socialCallbackPath }));
+    if (!code || !state || !expected || state !== expected) {
+      return redirect(`${pages.signIn}?error=social_state`, headers);
+    }
+
+    let upstream: Response;
+    try {
+      upstream = await api(`${authPrefix}/social/${encodeURIComponent(provider)}/callback`, {
+        method: "POST",
+        request,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, state }),
+      });
+    } catch {
+      return redirect(`${pages.signIn}?error=api_unreachable`, headers);
+    }
+    if (!upstream.ok) {
+      await discard(upstream);
+      return redirect(`${pages.signIn}?error=social_failed`, headers);
+    }
+    const data = (await upstream.json().catch(() => ({}))) as LoginBody & { return_to?: string };
+    const next = localPath(data.return_to);
+    if (data.two_factor_required === true && typeof data.challenge_token === "string") {
+      setChallengeCookie(headers, data.challenge_token, data.expires_in);
+      return redirect(`${pages.twoFactor}?next=${encodeURIComponent(next)}`, headers);
+    }
+    if (!isTokenPair(data)) return redirect(`${pages.signIn}?error=social_failed`, headers);
+    setTokenCookies(headers, data);
+    return redirect(next, headers);
+  }
+
+  /**
+   * `GET {authPrefix}/email/verify/{id}/{hash}?expires&signature`: the link in the verification mail.
+   * The API checks the signature and marks the address verified; the browser lands on
+   * `pages.verifyEmail` with `?status=verified`, `invalid` or `unreachable`.
+   */
+  async function verifyEmail(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const path = upstreamPathOf(url.pathname.replace(/\/+$/, ""));
+    if (!isVerifyPath(path)) return errorResponse(404, "Not Found", "not_found");
+    try {
+      const upstream = await api(`${path}${url.search}`, { request });
+      await discard(upstream);
+      const status = upstream.ok ? "verified" : upstream.status >= 500 ? "unreachable" : "invalid";
+      return redirect(`${pages.verifyEmail}?status=${status}`);
+    } catch {
+      return redirect(`${pages.verifyEmail}?status=unreachable`);
+    }
   }
 
   /**
    * One entry point for a catch-all route: `POST {authPrefix}/login`, `/2fa/verify`,
-   * `/logout` and `/refresh` go to their handlers; everything else is proxied to the
-   * same path (or `upstreamPath(pathname)`).
+   * `/logout` and `/refresh` go to their handlers; the GET routes of social sign-in and of the
+   * verification link go to theirs; everything else is proxied to the same path (or
+   * `upstreamPath(pathname)`).
    */
   function handle(request: Request): Promise<Response> {
     const pathname = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
     const upstream = upstreamPathOf(pathname);
+    if (request.method.toUpperCase() === "GET") {
+      const startProvider = providerOf(pathname, socialStart);
+      if (startProvider) return socialRedirect(request, startProvider);
+      const callbackProvider = providerOf(pathname, socialCallbackPath);
+      if (callbackProvider) return socialCallback(request, callbackProvider);
+      if (isVerifyPath(upstream)) return verifyEmail(request);
+    }
     if (request.method.toUpperCase() === "POST") {
       switch (upstream) {
         case `${authPrefix}/login`:
@@ -684,8 +912,17 @@ export function createBff(options: BffOptions) {
       const fresh = exp === undefined || exp - refreshSkew > Date.now() / 1000;
       if (fresh || !tokens.refresh) return { status: "active", accessToken: tokens.access, setCookie: [] };
     }
-    const pair = await refresh(tokens.refresh as string, request);
-    if (!pair) return { status: "expired", setCookie: clearedTokenCookies() };
+    const outcome = await refresh(tokens.refresh as string, request);
+    if (outcome.kind === "rejected") return { status: "expired", setCookie: clearedTokenCookies() };
+    if (outcome.kind === "unavailable") {
+      // The API could not be asked. A token that is only inside the refresh margin still works.
+      const exp = tokens.access ? tokenExpiresAt(tokens.access) : undefined;
+      if (tokens.access && exp !== undefined && exp > Date.now() / 1000) {
+        return { status: "active", accessToken: tokens.access, setCookie: [] };
+      }
+      return { status: "unavailable", setCookie: [] };
+    }
+    const pair = outcome.pair;
     return {
       status: "refreshed",
       accessToken: pair.access_token,
@@ -703,13 +940,17 @@ export function createBff(options: BffOptions) {
    */
   function api(
     path: string,
-    init: RequestInit & { accessToken?: string; workspace?: string } = {},
+    init: RequestInit & { accessToken?: string; workspace?: string; request?: Request } = {},
   ): Promise<Response> {
-    const { accessToken, workspace, headers: extra, ...rest } = init;
+    const { accessToken, workspace, request, headers: extra, ...rest } = init;
     const headers = new Headers(extra);
     if (!headers.has("accept")) headers.set("accept", "application/json");
     if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
     if (workspace && !headers.has(workspaceHeader)) headers.set(workspaceHeader, workspace);
+    // The browser the call is for: the API sees the address the BFF vouches for, not the BFF's own.
+    if (request) {
+      for (const [name, value] of Object.entries(forwardedFor(request))) headers.set(name, value);
+    }
     return upstreamFetch(`${apiUrl}${path}`, { cache: "no-store", ...rest, headers });
   }
 
@@ -731,6 +972,9 @@ export function createBff(options: BffOptions) {
     verifyTwoFactor,
     logout,
     refreshSession,
+    socialRedirect,
+    socialCallback,
+    verifyEmail,
     handle,
     ensureSession,
     api,
@@ -739,6 +983,10 @@ export function createBff(options: BffOptions) {
     workspaceOf,
     /** The cookie names this BFF uses. */
     cookieNames: names as Required<CookieNames>,
+    /** The app's pages its redirects end on. */
+    pages: pages as Required<BffPages>,
+    /** Where the app mounts social sign-in. */
+    socialPaths: { start: socialStart, callback: socialCallbackPath } as Required<BffSocialPaths>,
   };
 }
 
