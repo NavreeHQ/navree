@@ -33,8 +33,12 @@
 //!   signs their VAPID headers (RFC 8292) with a P-256
 //!   [`VapidKey`](webpush::VapidKey).
 //! - [`sns`] checks Amazon SNS messages: the text SNS signs, signature
-//!   versions 1 and 2 against the signing certificate's key, and the URLs
-//!   a certificate or a subscription confirmation may come from.
+//!   versions 1 and 2 against the signing certificate's key, the URLs a
+//!   certificate or a subscription confirmation may come from, the topic
+//!   and the timestamp, and keeps fetched certificates' keys.
+//! - [`sigv4`] signs requests to AWS with Signature Version 4: the one
+//!   signer of Bedrock, SES and SNS requests, checked against AWS's
+//!   published test suite.
 //!
 //! Keys, plaintexts and passwords never appear in `Debug` output or error
 //! messages.
@@ -63,6 +67,7 @@ mod key;
 mod key_command;
 mod module;
 pub mod qr;
+pub mod sigv4;
 pub mod sns;
 mod tokens;
 pub mod totp;

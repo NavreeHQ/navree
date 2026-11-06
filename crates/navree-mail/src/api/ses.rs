@@ -4,6 +4,7 @@ use std::fmt;
 
 use chrono::Utc;
 use navree_contracts::Secret;
+use navree_crypto::sigv4::{Credentials, Signer};
 use navree_http_client::HttpClient;
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
@@ -13,7 +14,6 @@ use url::Url;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 
-use super::sigv4::{Credentials, Signer};
 use super::{address, addresses, client_for, endpoint, join, refusal, unreachable, unusable};
 use crate::attachment::{SES_MAX_MESSAGE_BYTES, check_size};
 use crate::smtp::to_lettre;
@@ -54,7 +54,7 @@ pub struct SesConfig {
 /// `MessageId`. [`check`](MailTransport::check) calls `GetAccount`.
 pub struct SesTransport {
     config: SesConfig,
-    credentials: Credentials,
+    signer: Signer,
     base: Url,
     client: HttpClient,
 }
@@ -68,13 +68,13 @@ impl SesTransport {
                 "the ses transport needs a `region`".to_owned(),
             ));
         }
-        let credentials = credentials(&config)?;
+        let signer = Signer::new(credentials(&config)?, config.region.clone(), "ses");
         let default = format!("https://email.{}.amazonaws.com", config.region);
         let base = endpoint(config.endpoint.as_deref(), &default, "ses")?;
         let client = client_for(config.endpoint.as_ref().map(|_| &base))?;
         Ok(Self {
             config,
-            credentials,
+            signer,
             base,
             client,
         })
@@ -166,12 +166,7 @@ impl SesTransport {
 
     /// The SigV4 headers for a request.
     fn signed(&self, method: &str, url: &Url, body: &[u8]) -> Vec<(String, String)> {
-        Signer {
-            credentials: &self.credentials,
-            region: &self.config.region,
-            service: "ses",
-        }
-        .sign(
+        self.signer.sign(
             method,
             url,
             &[("content-type", "application/json")],
@@ -219,11 +214,7 @@ fn credentials(config: &SesConfig) -> Result<Credentials, MailError> {
                 .to_owned(),
         ));
     }
-    Ok(Credentials {
-        access_key_id,
-        secret_access_key,
-        session_token: session_token.filter(|token| !token.is_empty()),
-    })
+    Ok(Credentials::new(access_key_id, secret_access_key).with_session_token(session_token))
 }
 
 impl MailTransport for SesTransport {

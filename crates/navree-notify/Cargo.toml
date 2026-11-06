@@ -22,12 +22,11 @@ ui = ["dep:navree-ui"]
 base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
-hex = { workspace = true }
-hmac = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
-# VAPID signatures (ES256 through `jose`) and push message encryption.
+# VAPID signatures (ES256 through `jose`), push message encryption and
+# the SigV4 signatures of SNS requests.
 navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
@@ -57,7 +56,6 @@ navree-validation = { workspace = true, features = ["phone"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

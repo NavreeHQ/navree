@@ -10,14 +10,15 @@ use std::sync::OnceLock;
 use chrono::Utc;
 use futures_util::StreamExt;
 use navree_contracts::Secret;
+use navree_crypto::sigv4::{self, Credentials, Signer};
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
 use url::Url;
 
+use super::aws_credentials::resolve_credentials;
 use super::aws_role::{RoleCredentials, RoleSource};
 use super::eventstream::{Decoder, EventMessage};
-use super::sigv4::{self, Credentials, Signable};
 use super::wire;
 use super::{
     Capabilities, ChatRequest, ChatResponse, ChunkStream, Driver, EmbedRequest, EmbedResponse,
@@ -78,7 +79,7 @@ impl Bedrock {
     fn static_credentials(&self) -> Option<&Credentials> {
         self.credentials
             .get_or_init(|| {
-                sigv4::resolve_credentials(
+                resolve_credentials(
                     (
                         self.explicit.0.as_deref(),
                         self.explicit
@@ -127,57 +128,32 @@ impl Bedrock {
                 self.name.to_uppercase()
             ),
         })?;
-        let credentials = &self.credentials().await?;
+        let credentials = self.credentials().await?;
         let base = self
             .base
             .clone()
             .unwrap_or_else(|| format!("https://bedrock-runtime.{region}.amazonaws.com"));
         let url = Url::parse(&format!(
             "{base}/model/{}/{action}",
-            sigv4::uri_encode(model)
+            sigv4::uri_encode(model, true)
         ))
         .map_err(|error| ProviderError::request(format!("invalid Bedrock URL: {error}")))?;
-        let host = match url.port() {
-            Some(port) => format!("{}:{port}", url.host_str().unwrap_or_default()),
-            None => url.host_str().unwrap_or_default().to_owned(),
-        };
         let bytes = serde_json::to_vec(body).unwrap_or_default();
-        let amz_date = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-        let now = chrono::NaiveDateTime::parse_from_str(&amz_date, "%Y%m%dT%H%M%SZ")
-            .map(|n| n.and_utc())
-            .unwrap_or_else(|_| Utc::now());
-        let mut headers = vec![
-            ("content-type", "application/json"),
-            ("host", host.as_str()),
-            ("x-amz-date", amz_date.as_str()),
-        ];
-        if let Some(token) = &credentials.session_token {
-            headers.push(("x-amz-security-token", token.as_str()));
-        }
-        let authorization = sigv4::authorization(
-            &Signable {
-                method: "POST",
-                path: url.path(),
-                query: &[],
-                headers: &headers,
-                body: &bytes,
-            },
-            credentials,
-            region,
-            "bedrock",
-            now,
+        let signed = Signer::new(credentials, region, "bedrock").sign(
+            "POST",
+            &url,
+            &[("content-type", "application/json")],
+            &bytes,
+            Utc::now(),
         );
         let mut request = self
             .http
             .post(url.as_str())
-            .header("content-type", "application/json")
-            .header("x-amz-date", amz_date.as_str())
-            .header("authorization", authorization.as_str())
-            .body(bytes);
-        if let Some(token) = &credentials.session_token {
-            request = request.header("x-amz-security-token", token.as_str());
+            .header("content-type", "application/json");
+        for (name, value) in signed {
+            request = request.header(name, value);
         }
-        Ok(request)
+        Ok(request.body(bytes))
     }
 }
 

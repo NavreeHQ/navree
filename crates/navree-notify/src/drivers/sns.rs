@@ -4,10 +4,10 @@ use std::fmt;
 
 use chrono::Utc;
 use navree_contracts::BoxFuture;
+use navree_crypto::sigv4::{Credentials, Signer};
 use navree_http_client::HttpClient;
 use url::Url;
 
-use super::sigv4::{self, Credentials};
 use super::{ChannelError, SentMessage, SmsDriver, client_for, endpoint, unreachable};
 use crate::{SmsMessage, SmsOptions, SnsOptions};
 
@@ -24,8 +24,7 @@ const FORM: &str = "application/x-www-form-urlencoded; charset=utf-8";
 /// message id is SNS's `MessageId`. SNS reports delivery statuses to
 /// CloudWatch Logs, not to a callback.
 pub struct SnsSms {
-    credentials: Credentials,
-    region: String,
+    signer: Signer,
     sms_type: String,
     base: Url,
     client: HttpClient,
@@ -44,17 +43,13 @@ impl SnsSms {
         let default = format!("https://sns.{}.amazonaws.com", sns.region);
         let base = endpoint(sns.endpoint.as_deref(), &default, "notify.sns.endpoint")?;
         let client = client_for(sns.endpoint.as_ref().map(|_| &base))?;
+        let credentials = Credentials::new(
+            sns.access_key_id.clone(),
+            sns.secret_access_key.expose().clone(),
+        )
+        .with_session_token(sns.session_token.as_ref().map(|t| t.expose().clone()));
         Ok(Self {
-            credentials: Credentials {
-                access_key_id: sns.access_key_id.clone(),
-                secret_access_key: sns.secret_access_key.expose().clone(),
-                session_token: sns
-                    .session_token
-                    .as_ref()
-                    .map(|t| t.expose().clone())
-                    .filter(|t| !t.is_empty()),
-            },
-            region: sns.region.clone(),
+            signer: Signer::new(credentials, sns.region.clone(), "sns"),
             sms_type: sns.sms_type.clone(),
             base,
             client,
@@ -126,12 +121,11 @@ impl SmsDriver for SnsSms {
             if url.path().is_empty() {
                 url.set_path("/");
             }
-            let signed = sigv4::sign(
+            let signed = self.signer.sign(
                 "POST",
                 &url,
                 &[("content-type", FORM)],
                 body.as_bytes(),
-                (&self.credentials, &self.region, "sns"),
                 Utc::now(),
             );
             let mut request = self
@@ -168,8 +162,8 @@ impl SmsDriver for SnsSms {
 impl fmt::Debug for SnsSms {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SnsSms")
-            .field("region", &self.region)
-            .field("access_key_id", &self.credentials.access_key_id)
+            .field("region", &self.signer.region())
+            .field("access_key_id", &self.signer.credentials().access_key_id)
             .finish_non_exhaustive()
     }
 }

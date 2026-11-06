@@ -18,6 +18,7 @@ use crate::options::ProviderConfig;
 use crate::response::{Finish, Usage};
 
 pub(crate) mod anthropic;
+pub(crate) mod aws_credentials;
 pub(crate) mod aws_role;
 pub(crate) mod bedrock;
 #[cfg(test)]
@@ -26,7 +27,6 @@ pub(crate) mod eventstream;
 pub(crate) mod gemini;
 pub(crate) mod ollama;
 pub(crate) mod openai;
-pub(crate) mod sigv4;
 pub(crate) mod wire;
 
 /// A tool the model may call.

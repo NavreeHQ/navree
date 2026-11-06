@@ -1,7 +1,8 @@
 //! An S3 server inside the test process: objects with ranges, listing,
 //! multipart uploads, copies and bulk deletes, path-style, with every
 //! request's SigV4 signature checked (the `Authorization` header, or the
-//! query of a presigned URL, including its signed headers and expiry). It
+//! query of a presigned URL, including its signed headers and expiry) by
+//! `navree_crypto::sigv4`, the signer of Navree's own AWS requests. It
 //! lets the s3 driver run the conformance suite without Docker; MinIO runs
 //! the same suite when `NAVREE_TEST_S3_URL` is set.
 //!
@@ -22,7 +23,8 @@ use std::time::Duration;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use http::{HeaderMap, Method, StatusCode};
-use navree_crypto::{hmac_sha256, sha256_hex};
+use navree_crypto::sha256_hex;
+use navree_crypto::sigv4;
 use navree_http::AppRouter;
 use navree_http::body::{Body, Bytes};
 use navree_http::extract::Request;
@@ -542,37 +544,32 @@ fn authorize(
     if scope_parts.len() != 4 || scope_parts[1] != REGION || scope_parts[2] != "s3" {
         return Err(format!("unexpected scope `{scope}`"));
     }
-    let mut pairs: Vec<(String, String)> = query
-        .iter()
-        .filter(|(key, _)| key != "X-Amz-Signature")
-        .map(|(key, value)| (aws_encode(key), aws_encode(value)))
-        .collect();
-    pairs.sort();
-    let canonical_query = pairs
-        .iter()
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect::<Vec<_>>()
-        .join("&");
-    let canonical_headers: String = signed_headers
-        .split(';')
-        .map(|name| format!("{name}:{}\n", header(name)))
-        .collect();
-    let canonical_request = format!(
-        "{method}\n{raw_path}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload}"
-    );
-    let string_to_sign = format!(
-        "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
-        sha256_hex(canonical_request.as_bytes())
-    );
-    let mut key = hmac_sha256(
-        format!("AWS4{SECRET_KEY}").as_bytes(),
-        scope_parts[0].as_bytes(),
-    );
-    for part in [REGION, "s3", "aws4_request"] {
-        key = hmac_sha256(&key, part.as_bytes());
+    if !amz_date.starts_with(scope_parts[0]) {
+        return Err(format!("the scope's date is not the one of `{amz_date}`"));
     }
-    let expected = hex::encode(hmac_sha256(&key, string_to_sign.as_bytes()));
-    if expected == signature {
+    // S3 signs the path as sent, not encoded a second time.
+    let canonical_query = sigv4::canonical_query(
+        query
+            .iter()
+            .filter(|(key, _)| key != "X-Amz-Signature")
+            .map(|(key, value)| (key.as_str(), value.as_str())),
+    );
+    let signed: Vec<(&str, &str)> = signed_headers
+        .split(';')
+        .map(|name| (name, header(name)))
+        .collect();
+    let canonical = sigv4::canonical_request(
+        method.as_str(),
+        raw_path,
+        &canonical_query,
+        &signed,
+        &payload,
+    );
+    if canonical.signed_headers != signed_headers {
+        return Err(format!("`{signed_headers}` is not in canonical order"));
+    }
+    let expected = sigv4::signature(SECRET_KEY, &amz_date, REGION, "s3", &canonical.text);
+    if navree_crypto::constant_time_eq(expected.as_bytes(), signature.as_bytes()) {
         Ok(())
     } else {
         Err("The request signature we calculated does not match the signature you provided".into())

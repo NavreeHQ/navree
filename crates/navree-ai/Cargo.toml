@@ -30,7 +30,6 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
-hmac = { workspace = true }
 http = { workspace = true }
 infer = { workspace = true }
 metrics = { workspace = true }
@@ -39,6 +38,8 @@ navree-auth = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# Bedrock requests are signed with its SigV4 signer.
+navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
@@ -66,7 +67,6 @@ navree-db = { workspace = true, features = ["sqlite"] }
 # Its own `ui` feature, for the tests of the assistant on a page.
 navree-ai = { workspace = true, features = ["ui"] }
 http-body-util = { workspace = true }
-navree-crypto = { workspace = true }
 # The tests' notes are an ORM model and a navree-access subject.
 navree-orm = { workspace = true, features = ["access"] }
 navree-testing = { workspace = true }

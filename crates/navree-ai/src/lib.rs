@@ -9,8 +9,8 @@
 //!   a [`TextStream`] that is also a server-sent events response.
 //! - **Providers are drivers**: Anthropic (Messages API), OpenAI (chat
 //!   completions, and any compatible server), Google Gemini, Mistral,
-//!   Ollama and AWS Bedrock (Converse, signed with SigV4 in this crate).
-//!   Their HTTP goes through navree-http-client and its SSRF guard.
+//!   Ollama and AWS Bedrock (Converse, signed with navree-crypto's SigV4
+//!   signer). Their HTTP goes through navree-http-client and its SSRF guard.
 //! - **Failover**: each model is retried on a 429, a 5xx, a timeout or a
 //!   connection failure (exponential backoff, `retry-after` honored), then
 //!   its `fallbacks` are tried in order.

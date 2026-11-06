@@ -3,7 +3,6 @@
 
 pub(crate) mod log;
 pub(crate) mod meta;
-pub(crate) mod sigv4;
 pub(crate) mod slack;
 pub(crate) mod sns;
 pub(crate) mod teams;

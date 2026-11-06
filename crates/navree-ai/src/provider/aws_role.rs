@@ -13,8 +13,8 @@ use navree_http_client::{HttpClient, HttpClientError, HttpClientOptions, SsrfPol
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-use super::sigv4::Credentials;
 use crate::error::ProviderError;
+use navree_crypto::sigv4::Credentials;
 
 /// The ECS container credentials host, for a relative URI.
 const CONTAINER_HOST: &str = "http://169.254.170.2";
@@ -303,11 +303,8 @@ fn document(body: &str) -> Result<Fetched, ProviderError> {
         .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
         .map(|at| at.with_timezone(&Utc));
     Ok((
-        Credentials {
-            access_key_id: document.access_key_id,
-            secret_access_key: document.secret_access_key,
-            session_token: document.token.filter(|token| !token.is_empty()),
-        },
+        Credentials::new(document.access_key_id, document.secret_access_key)
+            .with_session_token(document.token),
         expires,
     ))
 }

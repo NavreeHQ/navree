@@ -31,7 +31,6 @@ css-inline = { workspace = true }
 encoding_rs = { workspace = true, optional = true }
 hex = { workspace = true }
 hickory-resolver = { workspace = true }
-hmac = { workspace = true }
 html2text = { workspace = true }
 # Feature `inbound`: the text of received mail that has only HTML.
 html5ever = { workspace = true, optional = true }

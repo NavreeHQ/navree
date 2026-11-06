@@ -5,7 +5,6 @@ pub(crate) mod mailgun;
 pub(crate) mod postmark;
 pub(crate) mod resend;
 pub(crate) mod ses;
-pub(crate) mod sigv4;
 
 use navree_http_client::{HttpClient, HttpClientOptions, Response};
 use serde_json::Value;
