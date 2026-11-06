@@ -542,7 +542,7 @@ fn stylesheet() -> String {
     files.sort();
     files.push(root.join("extra/theme-builder.css"));
     // The modules that link a stylesheet of their own draw colours too.
-    for name in ["markdown", "upload", "otp", "carousel", "menubar"] {
+    for name in ["markdown", "upload", "otp", "carousel", "menubar", "parts"] {
         files.push(root.join(format!("extra/{name}.css")));
     }
     files
