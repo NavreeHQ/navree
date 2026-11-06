@@ -178,7 +178,7 @@ async fn case_is_ignored_and_accents_kept(db: Db) {
         ("oresund energie", 0),
         ("øresund", 0),
         ("øresund énergie ", 0),
-        ("ACME 100% *REAL* (V2.0)", 1),
+        ("AGRA 100% *REAL* (V2.0)", 1),
     ] {
         let found = titles(&db, eq_ignore_case(backend, title(), value)).await;
         assert_eq!(found.len(), matches, "equals {value:?}");
