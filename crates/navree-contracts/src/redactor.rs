@@ -47,8 +47,9 @@ impl Redactor {
     pub const REDACTED: &'static str = REDACTED;
 
     /// The fragments every redactor starts with: a name that contains one
-    /// of them (in any case) holds a secret.
-    pub const DEFAULT_FRAGMENTS: [&'static str; 14] = [
+    /// of them (in any case) holds a secret. `api-key` is the header form
+    /// (`X-Api-Key`).
+    pub const DEFAULT_FRAGMENTS: [&'static str; 15] = [
         "password",
         "passwd",
         "pwd",
@@ -60,6 +61,7 @@ impl Redactor {
         "credential",
         "dsn",
         "api_key",
+        "api-key",
         "apikey",
         "private_key",
         "connection_string",

@@ -84,7 +84,7 @@ With it the boot stops, naming every unknown key and every failed setting, and s
 
 A credential in a section is a `Secret<String>` (or any `Secret<T>`): its `Debug` and `Display` print `[redacted]`, and it has no `Serialize`, so it cannot reach a log or a JSON response by accident. `config:show`, the reference and `config:publish` know which keys are credentials by their types, whatever they are called. A key whose type is not `Secret` can say so with `#[config(secret)]`, and a key that only looks like a credential (`realtime.key`, a public id) says `#[config(public)]`.
 
-One list of secret words, shared by configuration, the logger, Logbook, Lighthouse, Fleet and the audit trail, masks the rest by name: `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `apikey`, `private_key` and `connection_string`. Configuration adds `key`. Set a credential in `.env` or in the environment, never in a file you commit.
+One list of secret words, shared by configuration, the logger, Logbook, Lighthouse, Fleet and the audit trail, masks the rest by name: `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `api-key`, `apikey`, `private_key` and `connection_string`. Configuration adds `key`. Set a credential in `.env` or in the environment, never in a file you commit.
 
 ## Your own section
 

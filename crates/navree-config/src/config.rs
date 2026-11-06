@@ -219,8 +219,8 @@ impl Config {
     /// contains (case-insensitively) one of the words of the framework's
     /// shared list of secrets (`password`, `passwd`, `pwd`, `passphrase`,
     /// `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`,
-    /// `api_key`, `private_key`, `connection_string`) or `key` is replaced,
-    /// subtree and all, by `"[redacted]"`;
+    /// `api_key`, `api-key`, `apikey`, `private_key`, `connection_string`) or
+    /// `key` is replaced, subtree and all, by `"[redacted]"`;
     /// the password of any `scheme://user:password@host` URL is masked, and
     /// so is the value of a secret-looking query parameter
     /// (`?token=...`). Other values are shown as they are, so keep secrets

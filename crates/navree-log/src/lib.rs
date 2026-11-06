@@ -12,7 +12,7 @@
 //! - **redaction before writing**: any event or span field whose name
 //!   contains a configured key (the shared list of secret words by default:
 //!   `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`,
-//!   `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `apikey`,
+//!   `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `api-key`, `apikey`,
 //!   `private_key` and `connection_string`; ASCII case-insensitive) is
 //!   written as `[redacted]`, in every format and in the log file;
 //! - **levels per target**, changeable at runtime through [`LogControl`]
