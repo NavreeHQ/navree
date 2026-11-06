@@ -78,8 +78,8 @@ impl PaymentWebhooks {
             Report::error(error)
                 .level(Level::Warning)
                 .context("invoice_id", invoice_id)
-                .tag("provider", "acme-pay")
-                .fingerprint(["acme-pay", "card-declined"])
+                .tag("provider", "agra-pay")
+                .fingerprint(["agra-pay", "card-declined"])
                 .backtrace(),
         );
         // No error value: something that should never happen.
@@ -198,7 +198,7 @@ async fn a_payment_for_an_unknown_invoice_is_reported() {
 
     webhooks.capture(&InvoiceError::NotFound("inv_1".into()), 1042);
     fake.assert_reported_times(3);
-    assert_eq!(fake.reports()[1].tags["provider"], "acme-pay");
+    assert_eq!(fake.reports()[1].tags["provider"], "agra-pay");
     app.shutdown().await.unwrap();
 }
 

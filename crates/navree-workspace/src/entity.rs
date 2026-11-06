@@ -126,7 +126,7 @@ pub mod workspace {
         pub id: Uuid,
         /// The display name.
         pub name: String,
-        /// The unique, URL-safe handle (`acme`), used by the resolvers.
+        /// The unique, URL-safe handle (`agra`), used by the resolvers.
         pub slug: String,
         /// The owner: always a member with the `owner` role.
         pub owner_id: Uuid,
@@ -280,7 +280,7 @@ pub mod organization {
         pub id: Uuid,
         /// The display name.
         pub name: String,
-        /// The unique, URL-safe handle (`acme-group`), used by the
+        /// The unique, URL-safe handle (`agra-group`), used by the
         /// resolvers.
         pub slug: String,
         /// The owner: always a member with the `owner` role.
@@ -444,9 +444,9 @@ pub mod partition {
         pub id: Uuid,
         /// The workspace.
         pub workspace_id: Uuid,
-        /// The display name (`acme.co.uk`).
+        /// The display name (`agra.co.uk`).
         pub name: String,
-        /// The handle, unique in the workspace (`acme-co-uk`).
+        /// The handle, unique in the workspace (`agra-co-uk`).
         pub slug: String,
         /// When the partition was created.
         pub created_at: DateTime<Utc>,

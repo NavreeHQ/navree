@@ -14,7 +14,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = join(root, "test", "fixture");
 const port = 3900 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 const unauthorized = () =>
   Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized", code: "unauthenticated" }, { status: 401 });
 
@@ -89,13 +89,13 @@ check("sign-in sets httpOnly token cookies and returns only the user", async () 
 });
 
 check("server-side rendering loads the user and calls the API through the BFF with the workspace", async () => {
-  const response = await fetch(`${base}/?filter[stage]=won`, { headers: { ...html, cookie: "navree_at=AT1; navree_workspace=acme" } });
+  const response = await fetch(`${base}/?filter[stage]=won`, { headers: { ...html, cookie: "navree_at=AT1; navree_workspace=agra" } });
   assert.equal(response.status, 200);
   const page = await response.text();
-  assert.match(page, /user:Ada/);
-  assert.match(page, /ws:acme auth:Bearer AT1/);
+  assert.match(page, /user:Anu/);
+  assert.match(page, /ws:agra auth:Bearer AT1/);
   assert.match(page, /data-slot="data-table"/);
-  assert.match(page, /Acme renewal/);
+  assert.match(page, /Agra renewal/);
 });
 
 check("the gate refreshes an expired token before the page renders", async () => {
@@ -103,7 +103,7 @@ check("the gate refreshes an expired token before the page renders", async () =>
   const response = await fetch(`${base}/`, { headers: { ...html, cookie: `navree_at=${stale}; navree_rt=RT0` } });
   assert.equal(response.status, 200);
   assert.equal(readSetCookies(response).navree_at.value, "AT1");
-  assert.match(await response.text(), /user:Ada/);
+  assert.match(await response.text(), /user:Anu/);
 });
 
 check("the BFF refuses a write from another origin", async () => {

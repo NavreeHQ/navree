@@ -1447,7 +1447,7 @@ mod tests {
 
     #[test]
     fn the_shell_page_has_the_short_title_as_its_heading_and_the_state_below() {
-        let shell = crate::Shell::new("Acme");
+        let shell = crate::Shell::new("Agra");
         let app = shell.for_request("/missing", &http::HeaderMap::new());
         let page = ErrorPage::not_found()
             .reference("req-2")

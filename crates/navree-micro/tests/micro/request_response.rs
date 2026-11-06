@@ -47,7 +47,7 @@ async fn can_from_reads_the_record_id_from_the_payload() {
     let micro = MicroFake::new();
     let (app, audit) = deals_app(&micro).await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, rep, "Acme renewal").await;
+    let deal = insert_deal(&app, rep, "Agra renewal").await;
 
     // The owner reads it.
     let view: DealView = micro
@@ -56,7 +56,7 @@ async fn can_from_reads_the_record_id_from_the_payload() {
         .send("deals.get", &GetDeal { id: deal.id })
         .await
         .unwrap();
-    assert_eq!(view.title, "Acme renewal");
+    assert_eq!(view.title, "Agra renewal");
 
     // Anonymous messages are refused.
     micro
@@ -112,7 +112,7 @@ async fn validation_runs_before_the_handler_and_the_unit_of_work_commits_on_ok()
     let micro = MicroFake::new();
     let (app, _) = deals_app(&micro).await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, rep, "Acme renewal").await;
+    let deal = insert_deal(&app, rep, "Agra renewal").await;
     let rename = |title: &str| Rename {
         id: deal.id,
         title: title.to_owned(),
@@ -141,10 +141,10 @@ async fn validation_runs_before_the_handler_and_the_unit_of_work_commits_on_ok()
     let renamed: DealView = micro
         .client()
         .acting_as(principal(rep))
-        .send("deals.rename", &rename("Acme renewal 2027"))
+        .send("deals.rename", &rename("Agra renewal 2027"))
         .await
         .unwrap();
-    assert_eq!(renamed.title, "Acme renewal 2027");
+    assert_eq!(renamed.title, "Agra renewal 2027");
     // Committed: read back through another message.
     let view: DealView = micro
         .client()
@@ -152,10 +152,10 @@ async fn validation_runs_before_the_handler_and_the_unit_of_work_commits_on_ok()
         .send("deals.get", &GetDeal { id: deal.id })
         .await
         .unwrap();
-    assert_eq!(view.title, "Acme renewal 2027");
+    assert_eq!(view.title, "Agra renewal 2027");
     // The event went through the outbox after the commit.
     micro.assert_emitted("deal.renamed", |event: &crate::support::DealRenamed| {
-        event.deal_id == deal.id && event.title == "Acme renewal 2027"
+        event.deal_id == deal.id && event.title == "Agra renewal 2027"
     });
     let event = &micro.emitted_envelopes("deal.renamed")[0];
     assert_eq!(event.key(), Some(deal.id.to_string().as_str()));
@@ -405,13 +405,13 @@ async fn stubs_answer_what_the_app_sends_elsewhere() {
         .await
         .assert_error(503, "Service Unavailable");
 
-    micro.on("companies.get", Reply::json(&json!({ "name": "Acme" })));
+    micro.on("companies.get", Reply::json(&json!({ "name": "Agra" })));
     let reply: Value = micro
         .client()
         .send("deals.relay", &"companies.get")
         .await
         .unwrap();
-    assert_eq!(reply, json!({ "name": "Acme" }));
+    assert_eq!(reply, json!({ "name": "Agra" }));
 
     // A remote 4xx passes through with its status and message.
     micro.on("companies.get", Reply::error(AppError::not_found()));

@@ -522,8 +522,8 @@ mod tests {
     #[test]
     fn json_round_trips_and_names_its_schema() {
         let theme = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme \"CRM\"",
+            ThemeId::parse("agra").unwrap(),
+            "Agra \"CRM\"",
             *Theme::SUNSET.spec(),
         )
         .unwrap();
@@ -531,16 +531,16 @@ mod tests {
         assert!(json.contains("\"schema\": \"navree-theme/1\""), "{json}");
         let back = Theme::from_json(&json).unwrap();
         assert_eq!(back.spec(), theme.spec());
-        assert_eq!(back.name(), "Acme \"CRM\"");
-        assert_eq!(back.id(), "acme");
+        assert_eq!(back.name(), "Agra \"CRM\"");
+        assert_eq!(back.id(), "agra");
         assert_eq!(back.key(), theme.key());
     }
 
     #[test]
     fn a_stored_theme_is_checked_field_by_field() {
         let good = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::OCEAN.spec(),
         )
         .unwrap();
@@ -595,8 +595,8 @@ mod tests {
     #[test]
     fn a_stored_theme_whose_text_fails_is_refused_with_the_pairs() {
         let good = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::NAVREE.spec(),
         )
         .unwrap();
@@ -616,19 +616,19 @@ mod tests {
 
     #[test]
     fn ids_are_strict() {
-        for good in ["acme", "a", "acme-2", "x1"] {
+        for good in ["agra", "a", "agra-2", "x1"] {
             assert!(ThemeId::parse(good).is_ok(), "{good}");
         }
         for bad in [
             "",
-            "Acme",
+            "Agra",
             "1acme",
-            "-acme",
-            "acme-",
+            "-agra",
+            "agra-",
             "ac--me",
             "ac me",
-            "acme!",
-            "ACME",
+            "agra!",
+            "AGRA",
             "navree",
             "ocean",
             "custom",
@@ -644,18 +644,18 @@ mod tests {
     #[test]
     fn rust_export_names_every_token_and_quotes_the_name() {
         let theme = Theme::custom(
-            ThemeId::parse("acme-crm").unwrap(),
-            "Acme \"CRM\"\\",
+            ThemeId::parse("agra-crm").unwrap(),
+            "Agra \"CRM\"\\",
             *Theme::VIOLET.spec(),
         )
         .unwrap();
         let rust = theme.to_rust("navree::ui");
         assert!(
-            rust.contains("pub fn acme_crm_theme() -> Theme {"),
+            rust.contains("pub fn agra_crm_theme() -> Theme {"),
             "{rust}"
         );
         assert!(rust.contains("use navree::ui::theme::{"), "{rust}");
-        assert!(rust.contains(r#""Acme \"CRM\"\\""#), "{rust}");
+        assert!(rust.contains(r#""Agra \"CRM\"\\""#), "{rust}");
         assert_eq!(rust.matches("), // ").count(), TOKEN_COUNT * 2, "{rust}");
         assert!(rust.contains("radius: Radius::DEFAULT,"), "{rust}");
     }

@@ -31,18 +31,18 @@ fn recorded_mailer() -> (Mailer, TelemetryRecorder) {
 #[tokio::test]
 async fn sent_mail_is_reported_with_its_rendered_message() {
     let (mailer, recorder) = recorded_mailer();
-    let mail = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-        .context(json!({ "name": "Ada" }));
+    let mail = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+        .context(json!({ "name": "Anu" }));
     mailer.send(&mail).await.expect("sent");
 
     let mails = recorder.mails();
     assert_eq!(mails.len(), 1);
     let sent = &mails[0];
-    assert_eq!(sent.to, ["ada@example.com"]);
+    assert_eq!(sent.to, ["anu@example.com"]);
     assert_eq!(sent.from.as_deref(), Some(FROM));
     assert_eq!(sent.subject, "Welcome");
-    assert_eq!(sent.text.as_deref(), Some("Welcome, Ada!"));
-    assert_eq!(sent.html.as_deref(), Some("<p>Welcome, Ada!</p>"));
+    assert_eq!(sent.text.as_deref(), Some("Welcome, Anu!"));
+    assert_eq!(sent.html.as_deref(), Some("<p>Welcome, Anu!</p>"));
     assert_eq!(sent.transport, "array");
 }
 
@@ -57,8 +57,8 @@ async fn mail_that_is_not_sent_is_not_reported() {
 #[tokio::test]
 async fn queued_mail_sent_at_once_is_reported() {
     let (mailer, recorder) = recorded_mailer();
-    let mail = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-        .context(json!({ "name": "Ada" }));
+    let mail = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+        .context(json!({ "name": "Anu" }));
     mailer
         .queue(&mail)
         .await
@@ -81,7 +81,7 @@ async fn the_module_mailer_reports_to_the_app() {
     mailer
         .send_message(
             Message::new()
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .subject("Hi")
                 .text("Hello"),
         )

@@ -7,8 +7,8 @@ use super::*;
 #[tokio::test]
 async fn a_request_that_fails_leaves_its_staff_entry() {
     let (world, staff) = staff_world().await;
-    let globex = world.globex.to_string();
-    let note = world.globex_note;
+    let gulati = world.gulati.to_string();
+    let note = world.gulati_note;
     let cases = [
         (
             "a record that isn't there",
@@ -35,7 +35,7 @@ async fn a_request_that_fails_leaves_its_staff_entry() {
     let mut expected = staff_entries(&world.app).await.len();
     for (what, status, request) in cases {
         request
-            .header("X-Workspace", globex.clone())
+            .header("X-Workspace", gulati.clone())
             .send()
             .await
             .assert_status(status);
@@ -66,8 +66,8 @@ async fn a_queued_action_that_fails_leaves_its_staff_entry() {
     let staff = world.app.acting_as(navree_testing::principal(staff_id));
     staff
         .post(&format!("{NOTES}/actions/whisper"))
-        .header("X-Workspace", world.globex.to_string())
-        .json(&json!({ "ids": [world.globex_note] }))
+        .header("X-Workspace", world.gulati.to_string())
+        .json(&json!({ "ids": [world.gulati_note] }))
         .send()
         .await
         .assert_status(200);
@@ -75,9 +75,9 @@ async fn a_queued_action_that_fails_leaves_its_staff_entry() {
     // The record goes before the job runs, so the run fails.
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    enter(&uow, world.globex).await;
+    enter(&uow, world.gulati).await;
     Note::query()
-        .where_key(world.globex_note)
+        .where_key(world.gulati_note)
         .delete(&uow)
         .await
         .unwrap();

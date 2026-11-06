@@ -16,7 +16,7 @@
 //!     Ok(format!("Hello, {name}{}", punctuation.unwrap_or(".")))
 //! });
 //! let out = env
-//!     .render_str("hi.txt", "{{ greet(name|shout, end='!') }}", serde_json::json!({ "name": "ada" }))
+//!     .render_str("hi.txt", "{{ greet(name|shout, end='!') }}", serde_json::json!({ "name": "anu" }))
 //!     .unwrap();
 //! assert_eq!(out, "Hello, ADA!");
 //! ```

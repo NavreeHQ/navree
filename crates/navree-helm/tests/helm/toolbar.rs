@@ -68,7 +68,7 @@ async fn many(app: &TestApp, count: usize, owner: Option<Uuid>) {
 async fn export_is_the_list_as_csv_for_its_filters() {
     let app = app().await;
     let (_, manager) = user(&app, "manager").await;
-    let acme = company(&app, "Acme, Inc.", None).await;
+    let agra = company(&app, "Agra, Inc.", None).await;
     for (title, cents, stage) in [
         ("Alpha", 300, "lead"),
         ("Beta", 100, "won"),
@@ -80,7 +80,7 @@ async fn export_is_the_list_as_csv_for_its_filters() {
                 title,
                 amount_cents: cents,
                 stage,
-                company: Some(acme.id),
+                company: Some(agra.id),
                 ..DealSeed::default()
             },
         )
@@ -107,7 +107,7 @@ async fn export_is_the_list_as_csv_for_its_filters() {
     // The list's order, the display of each value, quotes where they belong.
     assert_eq!(lines.len(), 4, "{body}");
     assert!(
-        lines[1].starts_with("Beta,$1.00,US dollar,Won,\"Acme, Inc.\","),
+        lines[1].starts_with("Beta,$1.00,US dollar,Won,\"Agra, Inc.\","),
         "{}",
         lines[1]
     );
@@ -483,11 +483,11 @@ async fn a_page_does_not_count_the_menu() {
 async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     let app = app().await;
     let (_, manager) = user(&app, "manager").await;
-    let acme = company(&app, "Acme", None).await;
+    let agra = company(&app, "Agra", None).await;
     deal(
         &app,
         DealSeed {
-            company: Some(acme.id),
+            company: Some(agra.id),
             ..DealSeed::default()
         },
     )
@@ -539,7 +539,7 @@ async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
     );
     assert!(html.contains("Reset"), "{html}");
     // A relationship's options are the records the user may read.
-    assert!(html.contains(&format!("value=\"{}\"", acme.id)), "{html}");
+    assert!(html.contains(&format!("value=\"{}\"", agra.id)), "{html}");
     // Strict pages: no inline style, no inline script.
     assert!(!html.contains("style=\""), "{html}");
     assert!(!html.contains("<script>"), "{html}");

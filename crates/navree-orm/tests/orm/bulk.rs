@@ -127,7 +127,7 @@ async fn keys_come_back_from_single_inserts() {
         .unwrap();
     assert_eq!(id, 2);
     let key: i32 = table("user_accounts")
-        .insert_get_key(&t.db, [("display_name", "Ada")], "account_id")
+        .insert_get_key(&t.db, [("display_name", "Anu")], "account_id")
         .await
         .unwrap();
     assert_eq!(key, 1);
@@ -360,17 +360,17 @@ async fn update_or_insert_writes_one_or_the_other() {
 #[tokio::test]
 async fn updates_and_deletes_through_joins_and_limits() {
     let t = sqlite().await;
-    let acme = Company::create(
+    let agra = Company::create(
         &t.db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             active: false,
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    for (title, company) in [("a", Some(acme.id)), ("b", None), ("c", Some(acme.id))] {
+    for (title, company) in [("a", Some(agra.id)), ("b", None), ("c", Some(agra.id))] {
         Deal::create(
             &t.db,
             Deal {
@@ -392,7 +392,7 @@ async fn updates_and_deletes_through_joins_and_limits() {
     // `UPDATE … FROM`.
     let renamed = table("deals")
         .join("companies", "companies.id", "=", "deals.company_id")
-        .where_(col("companies.name").eq("Acme"))
+        .where_(col("companies.name").eq("Agra"))
         .update_from(
             &t.db,
             [col("title").set_expr(Expr::raw(
@@ -408,7 +408,7 @@ async fn updates_and_deletes_through_joins_and_limits() {
         .pluck(&t.db, Deal::TITLE)
         .await
         .unwrap();
-    assert_eq!(titles, ["Acme: a", "Acme: c", "b"]);
+    assert_eq!(titles, ["Agra: a", "Agra: c", "b"]);
     // An ordered, limited delete removes the rows it selects.
     let deleted = table("deals")
         .order_by_desc("title")
@@ -501,12 +501,12 @@ async fn models_insert_as_they_are_or_filled_like_save() {
         &t.db,
         [
             Company {
-                name: "Acme".into(),
+                name: "Agra".into(),
                 ..Company::default()
             },
             Company {
                 id: 10,
-                name: "Globex".into(),
+                name: "Gulati".into(),
                 ..Company::default()
             },
         ],
@@ -536,7 +536,7 @@ async fn models_insert_as_they_are_or_filled_like_save() {
         .fill_and_insert_get_id(
             &t.db,
             Company {
-                name: "Initech".into(),
+                name: "Indrani".into(),
                 ..Company::default()
             },
         )
@@ -701,10 +701,10 @@ async fn save_or_ignore_inserts_unless_a_unique_index_conflicts() {
 #[tokio::test]
 async fn model_update_from_sets_the_update_timestamp() {
     let t = sqlite().await;
-    let acme = Company::create(
+    let agra = Company::create(
         &t.db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             country: Some("US".into()),
             ..Company::default()
         },
@@ -714,7 +714,7 @@ async fn model_update_from_sets_the_update_timestamp() {
     Deal::create(
         &t.db,
         Deal {
-            company_id: Some(acme.id),
+            company_id: Some(agra.id),
             stage: Stage::Qualified,
             ..Deal::new("a", 1)
         },

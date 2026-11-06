@@ -112,7 +112,7 @@ mod tests {
     fn both_codecs_round_trip_serde_types() {
         let deal = Deal {
             id: 7,
-            title: "Acme".into(),
+            title: "Agra".into(),
             owner: None,
         };
         for codec in [Codec::Json, Codec::Msgpack] {
@@ -127,11 +127,11 @@ mod tests {
             .encode(&Deal {
                 id: 1,
                 title: "x".into(),
-                owner: Some("ada".into()),
+                owner: Some("anu".into()),
             })
             .unwrap();
         let value: Value = Codec::Msgpack.decode(&bytes).unwrap();
-        assert_eq!(value, json!({ "id": 1, "title": "x", "owner": "ada" }));
+        assert_eq!(value, json!({ "id": 1, "title": "x", "owner": "anu" }));
     }
 
     #[test]

@@ -234,7 +234,7 @@ mod tests {
             GrpcChannel::connect_lazy("deals", &ClientOptions::new("http://127.0.0.1:1")).unwrap();
         let mut headers = http::HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer user-token"));
-        headers.insert(&X_WORKSPACE, HeaderValue::from_static("acme"));
+        headers.insert(&X_WORKSPACE, HeaderValue::from_static("agra"));
         headers.insert(
             &TRACEPARENT,
             HeaderValue::from_static("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
@@ -250,7 +250,7 @@ mod tests {
             .await;
         let sent = request.headers();
         assert_eq!(sent[AUTHORIZATION], "Bearer user-token");
-        assert_eq!(sent[&X_WORKSPACE], "acme");
+        assert_eq!(sent[&X_WORKSPACE], "agra");
         assert_eq!(sent[&X_REQUEST_ID], request_id.as_str());
         assert!(sent.contains_key(&TRACEPARENT));
         let timeout = grpc_timeout(sent).unwrap();
@@ -264,7 +264,7 @@ mod tests {
         );
         request
             .headers_mut()
-            .insert(&X_WORKSPACE, HeaderValue::from_static("globex"));
+            .insert(&X_WORKSPACE, HeaderValue::from_static("gulati"));
         request
             .headers_mut()
             .insert(&X_REQUEST_ID, HeaderValue::from_static("req-own"));
@@ -274,7 +274,7 @@ mod tests {
             .await;
         let sent = request.headers();
         assert_eq!(sent[AUTHORIZATION], "Bearer service-token");
-        assert_eq!(sent[&X_WORKSPACE], "globex");
+        assert_eq!(sent[&X_WORKSPACE], "gulati");
         assert_eq!(sent[&X_REQUEST_ID], "req-own");
 
         // Outside any call: only the channel's own timeout.
@@ -293,6 +293,6 @@ mod tests {
         let mut request = http::Request::new(tonic::body::Body::empty());
         context.scope(async { channel.apply(&mut request) }).await;
         assert!(!request.headers().contains_key(AUTHORIZATION));
-        assert_eq!(request.headers()[&X_WORKSPACE], "acme");
+        assert_eq!(request.headers()[&X_WORKSPACE], "agra");
     }
 }

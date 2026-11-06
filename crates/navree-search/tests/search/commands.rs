@@ -26,8 +26,8 @@ async fn import_indexes_every_row_and_skips_filtered_ones() {
         let rows = insert_contacts(
             &db,
             vec![
-                new_contact("Ada", "Lovelace"),
-                new_contact("Grace", "Hopper"),
+                new_contact("Anu", "Lakhotia"),
+                new_contact("Gauri", "Hundal"),
                 gone,
             ],
         )
@@ -79,7 +79,7 @@ async fn fresh_imports_swap_in_a_rebuilt_index() {
             .await;
         let db = app.get::<Db>().await;
         let search = app.get::<Search>().await;
-        let [deal] = insert(&db, vec![new_deal("Lovelace renewal", "won", 1)])
+        let [deal] = insert(&db, vec![new_deal("Lakhotia renewal", "won", 1)])
             .await
             .try_into()
             .unwrap();
@@ -222,8 +222,8 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
     let rows = insert_contacts(
         &db,
         vec![
-            new_contact("Ada", "Lovelace"),
-            new_contact("Grace", "Hopper"),
+            new_contact("Anu", "Lakhotia"),
+            new_contact("Gauri", "Hundal"),
         ],
     )
     .await;
@@ -238,7 +238,7 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
     gated.reached.notified().await;
 
     // Searches keep answering from the live index...
-    let found = search.query::<Contact>("lovelace").ids(10).await.unwrap();
+    let found = search.query::<Contact>("lakhotia").ids(10).await.unwrap();
     assert_eq!(found, std::slice::from_ref(&ada));
     // ...and writes keep syncing into it.
     support::update(&db, &rows[0], |c| c.last_name = "Byron".into()).await;
@@ -253,6 +253,6 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
     assert_eq!(report.documents, 2);
     let found = search.query::<Contact>("byron").ids(10).await.unwrap();
     assert_eq!(found, [ada], "the write made during the import survives");
-    let stale = search.query::<Contact>("lovelace").ids(10).await.unwrap();
+    let stale = search.query::<Contact>("lakhotia").ids(10).await.unwrap();
     assert!(stale.is_empty(), "{stale:?}");
 }

@@ -7,7 +7,7 @@ addr = "127.0.0.1:8080"
 api_prefix = "/api"
 
 [database]
-url = "sqlite://storage/acme_cloud.db?mode=rwc"
+url = "sqlite://storage/agra_cloud.db?mode=rwc"
 # Run pending migrations at boot (handy in development; use `navree migrate`
 # in deployments).
 migrate_on_boot = true
@@ -35,7 +35,7 @@ registration = true
 resolvers = ["header"]
 
 [api]
-title = "Acme cloud API"
+title = "Agra cloud API"
 # The Lighthouse and Logbook dashboards are pages, not API routes:
 # `navree check` doesn't ask them for #[api] docs.
 undocumented = ["/_lighthouse*", "/_logbook*"]

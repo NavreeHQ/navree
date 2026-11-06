@@ -14,7 +14,7 @@
 //! // `options` is the body of `POST /api/auth/passkeys/register/options`.
 //! let options = json!({
 //!     "challenge": "Y2hhbGxlbmdl",
-//!     "user": { "id": "AZJhJhJhJhJhJhJhJhJhJg", "name": "ada@example.com" },
+//!     "user": { "id": "AZJhJhJhJhJhJhJhJhJhJg", "name": "anu@example.com" },
 //! });
 //! let credential = authenticator.create(&options);
 //! assert_eq!(credential["type"], "public-key");

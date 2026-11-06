@@ -110,7 +110,7 @@ async fn refresh(app: &navree_testing::TestApp, token: &str) -> u16 {
 async fn a_domains_sessions_end_whatever_the_spelling_of_the_email_or_the_domain() {
     let app = support::app().await;
     let auth = app.get::<AuthService>().await;
-    let acme = support::create_user(&app, "ann@acme.test").await;
+    let agra = support::create_user(&app, "ann@acme.test").await;
     let idn = support::create_user(&app, "ina@bücher.example").await;
     let other = support::create_user(&app, "bob@other.test").await;
     let mut sessions = Vec::new();
@@ -152,7 +152,7 @@ async fn a_domains_sessions_end_whatever_the_spelling_of_the_email_or_the_domain
         let error = auth.revoke_credentials_of_domain(blank).await.unwrap_err();
         assert!(matches!(error, AuthError::Invalid { .. }), "{blank:?}");
     }
-    let _ = (acme, other);
+    let _ = (agra, other);
 }
 
 #[tokio::test]

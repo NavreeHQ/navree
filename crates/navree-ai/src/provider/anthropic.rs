@@ -491,7 +491,7 @@ mod tests {
                 Part::ToolCall(ToolCall {
                     id: "toolu_1".into(),
                     name: "search_deals".into(),
-                    arguments: json!({ "q": "acme" }),
+                    arguments: json!({ "q": "agra" }),
                     meta: None,
                 }),
             ],
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(assistant[0]["type"], "thinking");
         assert_eq!(assistant[1]["type"], "text");
         assert_eq!(assistant[2]["type"], "tool_use");
-        assert_eq!(assistant[2]["input"], json!({ "q": "acme" }));
+        assert_eq!(assistant[2]["input"], json!({ "q": "agra" }));
         let result = &body["messages"][2]["content"][0];
         assert_eq!(result["type"], "tool_result");
         assert_eq!(result["tool_use_id"], "toolu_1");

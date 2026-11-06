@@ -414,12 +414,12 @@ async fn two_relationships_may_share_a_foreign_key_name() {
     // The app boots (it did not) and both panels show their own records.
     let app = many_app().await;
     let staff = staff(&app).await;
-    let acme = company(&app, "Acme", None).await;
+    let agra = company(&app, "Agra", None).await;
     deal(
         &app,
         DealSeed {
-            title: "Acme renewal",
-            company: Some(acme.id),
+            title: "Agra renewal",
+            company: Some(agra.id),
             ..DealSeed::default()
         },
     )
@@ -430,8 +430,8 @@ async fn two_relationships_may_share_a_foreign_key_name() {
             &*db,
             [Contact {
                 id: Uuid::now_v7(),
-                company_id: Some(acme.id),
-                name: "Ada Lovelace".to_owned(),
+                company_id: Some(agra.id),
+                name: "Anu Lakhotia".to_owned(),
                 created_at: now(),
             }],
         )
@@ -441,7 +441,7 @@ async fn two_relationships_may_share_a_foreign_key_name() {
     let html = plain(
         page(
             &staff,
-            &format!("/admin/resources/company-overview/{}", acme.id),
+            &format!("/admin/resources/company-overview/{}", agra.id),
         )
         .await
         .assert_status(200),
@@ -454,12 +454,12 @@ async fn two_relationships_may_share_a_foreign_key_name() {
         html.contains("Contacts <span class=\"muted count\">1</span>"),
         "{html}"
     );
-    assert!(html.contains("Acme renewal"), "{html}");
-    assert!(html.contains("Ada Lovelace"), "{html}");
+    assert!(html.contains("Agra renewal"), "{html}");
+    assert!(html.contains("Anu Lakhotia"), "{html}");
     assert!(
         html.contains(&format!(
             "/admin/resources/contacts?via%5Bcompany_id%5D={}",
-            acme.id
+            agra.id
         )),
         "{html}"
     );

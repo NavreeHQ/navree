@@ -33,9 +33,9 @@ fn entra_user(external_id: &str, user_name: &str) -> Value {
         "externalId": external_id,
         "userName": user_name,
         "active": true,
-        "displayName": "Ada Lovelace",
+        "displayName": "Anu Lakhotia",
         "password": "Initial!Passw0rd",
-        "name": { "formatted": "Ada Lovelace", "familyName": "Lovelace", "givenName": "Ada" },
+        "name": { "formatted": "Anu Lakhotia", "familyName": "Lakhotia", "givenName": "Anu" },
         "emails": [{ "primary": true, "type": "work", "value": user_name }],
         "title": "Principal engineer",
         (ENTERPRISE): { "employeeNumber": "1815", "department": "Engineering" }
@@ -203,7 +203,7 @@ async fn users_are_created_read_filtered_and_paged() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("8f6c9a1e", "ada@acme.test"),
+        &entra_user("8f6c9a1e", "anu@acme.test"),
     )
     .await;
     let created = created.assert_status(201);
@@ -219,7 +219,7 @@ async fn users_are_created_read_filtered_and_paged() {
         Some(format!("https://app.acme.test/scim/v2/Users/{id}").as_str())
     );
     assert_eq!(ada["schemas"], json!([USER, ENTERPRISE]));
-    assert_eq!(ada["userName"], json!("ada@acme.test"));
+    assert_eq!(ada["userName"], json!("anu@acme.test"));
     assert_eq!(ada["externalId"], json!("8f6c9a1e"));
     assert_eq!(ada[ENTERPRISE]["employeeNumber"], json!("1815"));
     assert_eq!(ada["groups"], json!([]));
@@ -237,7 +237,7 @@ async fn users_are_created_read_filtered_and_paged() {
         &h,
         &token,
         "/scim/v2/Users",
-        &json!({ "schemas": [USER], "userName": "grace@acme.test", "name": { "familyName": "Hopper" } }),
+        &json!({ "schemas": [USER], "userName": "gauri@acme.test", "name": { "familyName": "Hundal" } }),
     )
     .await;
     let grace = grace.assert_status(201);
@@ -257,7 +257,7 @@ async fn users_are_created_read_filtered_and_paged() {
     let by_name = get(
         &h,
         &token,
-        "/scim/v2/Users?filter=userName%20eq%20%22ADA%40acme.test%22",
+        "/scim/v2/Users?filter=userName%20eq%20%22ADA%40agra.test%22",
     )
     .await;
     by_name
@@ -289,7 +289,7 @@ async fn users_are_created_read_filtered_and_paged() {
     )
     .await
     .assert_json_path("totalResults", json!(1))
-    .assert_json_path("Resources.0.userName", json!("grace@acme.test"));
+    .assert_json_path("Resources.0.userName", json!("gauri@acme.test"));
     get(
         &h,
         &token,
@@ -307,7 +307,7 @@ async fn users_are_created_read_filtered_and_paged() {
         .assert_json_path("totalResults", json!(2))
         .assert_json_path("startIndex", json!(2))
         .assert_json_path("itemsPerPage", json!(1))
-        .assert_json_path("Resources.0.userName", json!("grace@acme.test"));
+        .assert_json_path("Resources.0.userName", json!("gauri@acme.test"));
     let count = get(&h, &token, "/scim/v2/Users?count=0").await;
     count
         .assert_json_path("totalResults", json!(2))
@@ -326,7 +326,7 @@ async fn users_are_created_read_filtered_and_paged() {
     .await;
     assert_eq!(
         only.json_value(),
-        json!({ "schemas": [USER, ENTERPRISE], "id": id, "userName": "ada@acme.test", "name": { "givenName": "Ada" } })
+        json!({ "schemas": [USER, ENTERPRISE], "id": id, "userName": "anu@acme.test", "name": { "givenName": "Anu" } })
     );
     let without = get(
         &h,
@@ -350,7 +350,7 @@ async fn bad_requests_get_scim_errors() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("e1", "ada@acme.test"),
+        &entra_user("e1", "anu@acme.test"),
     )
     .await
     .assert_status(201);
@@ -358,7 +358,7 @@ async fn bad_requests_get_scim_errors() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("e2", "ADA@acme.test"),
+        &entra_user("e2", "ANU@acme.test"),
     )
     .await;
     assert_scim_error(&taken, 409, Some("uniqueness"));
@@ -414,7 +414,7 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("8f6c9a1e", "ada@acme.test"),
+        &entra_user("8f6c9a1e", "anu@acme.test"),
     )
     .await;
     let path = format!(
@@ -458,7 +458,7 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
         &token,
         &path,
         json!([
-            { "op": "Replace", "path": "emails[type eq \"work\"].value", "value": "lovelace@acme.test" },
+            { "op": "Replace", "path": "emails[type eq \"work\"].value", "value": "lakhotia@acme.test" },
             { "op": "Add", "path": "phoneNumbers[type eq \"mobile\"].value", "value": "+44 7700 900123" },
             { "op": "Add", "path": format!("{ENTERPRISE}:department"), "value": "Research" },
             { "op": "Remove", "path": "title" }
@@ -467,7 +467,7 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
     .await;
     let changed = changed.assert_status(200);
     let user = changed.json_value();
-    assert_eq!(user["emails"][0]["value"], json!("lovelace@acme.test"));
+    assert_eq!(user["emails"][0]["value"], json!("lakhotia@acme.test"));
     assert_eq!(
         user["phoneNumbers"],
         json!([{ "type": "mobile", "value": "+44 7700 900123" }])
@@ -480,7 +480,7 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
         last.changed,
         vec!["department", "emails", "phone_numbers", "title"]
     );
-    assert_eq!(last.user.primary_email(), Some("lovelace@acme.test"));
+    assert_eq!(last.user.primary_email(), Some("lakhotia@acme.test"));
 
     // A PATCH that changes nothing calls nobody.
     h.log.clear();
@@ -513,14 +513,14 @@ async fn put_replaces_and_delete_removes() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("8f6c9a1e", "ada@acme.test"),
+        &entra_user("8f6c9a1e", "anu@acme.test"),
     )
     .await;
     let id = ada.json_value()["id"].as_str().unwrap().to_owned();
     let path = format!("/scim/v2/Users/{id}");
     h.log.clear();
 
-    let mut replacement = entra_user("8f6c9a1e", "ada@acme.test");
+    let mut replacement = entra_user("8f6c9a1e", "anu@acme.test");
     replacement["title"] = json!("Countess");
     replacement["id"] = json!("ignored");
     let replaced = h
@@ -553,7 +553,7 @@ async fn put_replaces_and_delete_removes() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("8f6c9a1e", "ada@acme.test"),
+        &entra_user("8f6c9a1e", "anu@acme.test"),
     )
     .await
     .assert_status(201);
@@ -566,7 +566,7 @@ async fn groups_carry_their_members() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("e-ada", "ada@acme.test"),
+        &entra_user("e-anu", "anu@acme.test"),
     )
     .await;
     let ada_id = ada.json_value()["id"].as_str().unwrap().to_owned();
@@ -574,7 +574,7 @@ async fn groups_carry_their_members() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("e-grace", "grace@acme.test"),
+        &entra_user("e-gauri", "gauri@acme.test"),
     )
     .await;
     let grace_id = grace.json_value()["id"].as_str().unwrap().to_owned();
@@ -598,14 +598,14 @@ async fn groups_carry_their_members() {
     assert_eq!(group["schemas"], json!([GROUP]));
     assert_eq!(group["displayName"], json!("Engineering"));
     assert_eq!(group["members"][0]["value"], json!(ada_id));
-    assert_eq!(group["members"][0]["display"], json!("Ada Lovelace"));
+    assert_eq!(group["members"][0]["display"], json!("Anu Lakhotia"));
     assert_eq!(group["members"][0]["type"], json!("User"));
     assert_eq!(
         group["members"].as_array().unwrap().len(),
         1,
         "unknown members are left out"
     );
-    assert_eq!(h.log.calls(), vec!["group:create:grp-eng:+local-e-ada-"]);
+    assert_eq!(h.log.calls(), vec!["group:create:grp-eng:+local-e-anu-"]);
 
     // The user shows the group.
     get(&h, &token, &format!("/scim/v2/Users/{ada_id}"))
@@ -623,7 +623,7 @@ async fn groups_carry_their_members() {
     )
     .await
     .assert_status(200);
-    assert_eq!(h.log.calls()[1], "group:update:grp-eng:+local-e-grace-");
+    assert_eq!(h.log.calls()[1], "group:update:grp-eng:+local-e-gauri-");
     patch(
         &h,
         &token,
@@ -632,7 +632,7 @@ async fn groups_carry_their_members() {
     )
     .await
     .assert_status(200);
-    assert_eq!(h.log.calls()[2], "group:update:grp-eng:+-e-ada");
+    assert_eq!(h.log.calls()[2], "group:update:grp-eng:+-e-anu");
     // Okta removes with a value filter and renames with replace.
     let renamed = patch(
         &h,
@@ -702,7 +702,7 @@ async fn connections_are_kept_apart() {
         &h,
         &token,
         "/scim/v2/Users",
-        &entra_user("e1", "ada@acme.test"),
+        &entra_user("e1", "anu@acme.test"),
     )
     .await;
     let id = ada.json_value()["id"].as_str().unwrap().to_owned();
@@ -711,7 +711,7 @@ async fn connections_are_kept_apart() {
         &h,
         &other_token,
         "/scim/v2/Users",
-        &entra_user("e1", "ada@acme.test"),
+        &entra_user("e1", "anu@acme.test"),
     )
     .await
     .assert_status(201);

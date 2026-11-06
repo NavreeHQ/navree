@@ -9,7 +9,7 @@ use crate::support::sqlite;
 #[tokio::test]
 async fn a_new_record_is_dirty_in_every_column() {
     let record = Record::new(Company {
-        name: "Acme".into(),
+        name: "Agra".into(),
         ..Company::default()
     });
     assert!(record.is_dirty());

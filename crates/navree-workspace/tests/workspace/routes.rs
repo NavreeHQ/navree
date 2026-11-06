@@ -7,23 +7,23 @@ use crate::support::{World, builder};
 #[tokio::test]
 async fn a_user_creates_lists_shows_renames_and_deletes_workspaces() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let client = world.as_user(ada);
 
     let created = client
         .post("/api/workspaces")
-        .json(&json!({ "name": "Acme Inc." }))
+        .json(&json!({ "name": "Agra Inc." }))
         .send()
         .await
         .assert_status(201)
         .assert_json_path("__type", json!("Workspace"))
-        .assert_json_path("slug", json!("acme-inc"))
+        .assert_json_path("slug", json!("agra-inc"))
         .assert_json_path("role", json!("owner"))
         .assert_json_path("owner_id", json!(ada));
-    assert_eq!(created.header("location"), Some("/api/workspaces/acme-inc"));
+    assert_eq!(created.header("location"), Some("/api/workspaces/agra-inc"));
     client
         .post("/api/workspaces")
-        .json(&json!({ "name": "Taken", "slug": "acme-inc" }))
+        .json(&json!({ "name": "Taken", "slug": "agra-inc" }))
         .send()
         .await
         .assert_validation_error("slug");
@@ -39,28 +39,28 @@ async fn a_user_creates_lists_shows_renames_and_deletes_workspaces() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.slug", json!("acme-inc"))
+        .assert_json_path("data.0.slug", json!("agra-inc"))
         .assert_json_path("data.0.role", json!("owner"));
     client
-        .get("/api/workspaces/acme-inc")
+        .get("/api/workspaces/agra-inc")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme Inc."));
+        .assert_json_path("name", json!("Agra Inc."));
     client
-        .patch("/api/workspaces/acme-inc")
-        .json(&json!({ "name": "Acme Corp" }))
+        .patch("/api/workspaces/agra-inc")
+        .json(&json!({ "name": "Agra Corp" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme Corp"));
+        .assert_json_path("name", json!("Agra Corp"));
     client
-        .delete("/api/workspaces/acme-inc")
+        .delete("/api/workspaces/agra-inc")
         .send()
         .await
         .assert_status(204);
     client
-        .get("/api/workspaces/acme-inc")
+        .get("/api/workspaces/agra-inc")
         .send()
         .await
         .assert_error(404, "Workspace not found.");
@@ -76,30 +76,30 @@ async fn a_user_creates_lists_shows_renames_and_deletes_workspaces() {
 #[tokio::test]
 async fn permissions_follow_the_workspace_role() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Linus", "linus@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.join(acme.id, grace, "admin").await;
-    world.join(acme.id, linus, "member").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.join(agra.id, grace, "admin").await;
+    world.join(agra.id, linus, "member").await;
 
     // A member reads but does not manage.
     let member = world.as_user(linus);
     member
-        .get("/api/workspaces/acme/members")
+        .get("/api/workspaces/agra/members")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data.0.__type", json!("WorkspaceMember"))
-        .assert_json_path("data.0.user.name", json!("Ada"));
+        .assert_json_path("data.0.user.name", json!("Anu"));
     member
-        .patch("/api/workspaces/acme")
+        .patch("/api/workspaces/agra")
         .json(&json!({ "name": "Mine" }))
         .send()
         .await
         .assert_error(403, None);
     member
-        .get("/api/workspaces/acme/invitations")
+        .get("/api/workspaces/agra/invitations")
         .send()
         .await
         .assert_error(403, None);
@@ -108,43 +108,43 @@ async fn permissions_follow_the_workspace_role() {
     // transfer the workspace, or grant `owner`.
     let admin = world.as_user(grace);
     admin
-        .patch(&format!("/api/workspaces/acme/members/{linus}"))
+        .patch(&format!("/api/workspaces/agra/members/{linus}"))
         .json(&json!({ "role": "viewer" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("role", json!("viewer"));
     admin
-        .patch(&format!("/api/workspaces/acme/members/{linus}"))
+        .patch(&format!("/api/workspaces/agra/members/{linus}"))
         .json(&json!({ "role": "owner" }))
         .send()
         .await
         .assert_error(403, "Only an owner can grant or change the owner role.")
         .assert_error_code(403, "owner_role_required");
     admin
-        .delete(&format!("/api/workspaces/acme/members/{ada}"))
+        .delete(&format!("/api/workspaces/agra/members/{ada}"))
         .send()
         .await
         .assert_error(403, "Only an owner can grant or change the owner role.");
     admin
-        .patch(&format!("/api/workspaces/acme/members/{linus}"))
+        .patch(&format!("/api/workspaces/agra/members/{linus}"))
         .json(&json!({ "role": "auditor" }))
         .send()
         .await
         .assert_validation_error("role");
     admin
-        .delete("/api/workspaces/acme")
+        .delete("/api/workspaces/agra")
         .send()
         .await
         .assert_error(403, None);
     admin
-        .post("/api/workspaces/acme/transfer")
+        .post("/api/workspaces/agra/transfer")
         .json(&json!({ "user_id": grace }))
         .send()
         .await
         .assert_error(403, None);
     admin
-        .delete(&format!("/api/workspaces/acme/members/{linus}"))
+        .delete(&format!("/api/workspaces/agra/members/{linus}"))
         .send()
         .await
         .assert_status(204);
@@ -152,7 +152,7 @@ async fn permissions_follow_the_workspace_role() {
     // The owner can't be removed or demoted, even by themselves.
     let owner = world.as_user(ada);
     owner
-        .patch(&format!("/api/workspaces/acme/members/{ada}"))
+        .patch(&format!("/api/workspaces/agra/members/{ada}"))
         .json(&json!({ "role": "admin" }))
         .send()
         .await
@@ -161,14 +161,14 @@ async fn permissions_follow_the_workspace_role() {
             "The workspace owner can't be removed or demoted; transfer ownership first.",
         );
     owner
-        .post("/api/workspaces/acme/leave")
+        .post("/api/workspaces/agra/leave")
         .send()
         .await
         .assert_status(409);
 
     // Transfer, then the old owner can leave.
     owner
-        .post("/api/workspaces/acme/transfer")
+        .post("/api/workspaces/agra/transfer")
         .json(&json!({ "user_id": grace }))
         .send()
         .await
@@ -176,12 +176,12 @@ async fn permissions_follow_the_workspace_role() {
         .assert_json_path("owner_id", json!(grace))
         .assert_json_path("role", json!("admin"));
     owner
-        .post("/api/workspaces/acme/leave")
+        .post("/api/workspaces/agra/leave")
         .send()
         .await
         .assert_status(204);
     owner
-        .get("/api/workspaces/acme")
+        .get("/api/workspaces/agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");
@@ -190,12 +190,12 @@ async fn permissions_follow_the_workspace_role() {
 #[tokio::test]
 async fn members_are_added_by_id() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    world.workspace(ada, "Agra").await;
     let owner = world.as_user(ada);
     let added = owner
-        .post("/api/workspaces/acme/members")
+        .post("/api/workspaces/agra/members")
         .json(&json!({ "user_id": grace }))
         .send()
         .await
@@ -204,10 +204,10 @@ async fn members_are_added_by_id() {
         .assert_json_path("user_id", json!(grace));
     assert_eq!(
         added.header("location"),
-        Some(format!("/api/workspaces/acme/members/{grace}").as_str())
+        Some(format!("/api/workspaces/agra/members/{grace}").as_str())
     );
     owner
-        .post("/api/workspaces/acme/members")
+        .post("/api/workspaces/agra/members")
         .json(&json!({ "user_id": grace }))
         .send()
         .await
@@ -217,31 +217,31 @@ async fn members_are_added_by_id() {
 #[tokio::test]
 async fn invitations_are_sent_listed_revoked_and_accepted() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let owner = world.as_user(ada);
 
     let sent = owner
-        .post("/api/workspaces/acme/invitations")
-        .json(&json!({ "email": "grace@example.com", "role": "admin" }))
+        .post("/api/workspaces/agra/invitations")
+        .json(&json!({ "email": "gauri@example.com", "role": "admin" }))
         .send()
         .await
         .assert_status(201)
         .assert_json_path("__type", json!("WorkspaceInvitation"))
-        .assert_json_path("email", json!("grace@example.com"))
+        .assert_json_path("email", json!("gauri@example.com"))
         .assert_json_path("role", json!("admin"));
     let body = sent.json_value();
     assert!(body.get("token").is_none() && body.get("token_hash").is_none());
     owner
-        .get("/api/workspaces/acme/invitations")
+        .get("/api/workspaces/agra/invitations")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.email", json!("grace@example.com"));
+        .assert_json_path("data.0.email", json!("gauri@example.com"));
     owner
-        .post("/api/workspaces/acme/invitations")
-        .json(&json!({ "email": "ada@example.com" }))
+        .post("/api/workspaces/agra/invitations")
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(409);
@@ -271,18 +271,18 @@ async fn invitations_are_sent_listed_revoked_and_accepted() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("workspace.id", json!(acme.id))
+        .assert_json_path("workspace.id", json!(agra.id))
         .assert_json_path("workspace.role", json!("admin"))
         .assert_json_path("member.role", json!("admin"));
     invitee
         .get("/api/workspaces")
         .send()
         .await
-        .assert_json_path("data.0.slug", json!("acme"));
+        .assert_json_path("data.0.slug", json!("agra"));
 
     // Revoking: the token stops working.
     let revoked = owner
-        .post("/api/workspaces/acme/invitations")
+        .post("/api/workspaces/agra/invitations")
         .json(&json!({ "email": "linus@example.com" }))
         .send()
         .await
@@ -290,14 +290,14 @@ async fn invitations_are_sent_listed_revoked_and_accepted() {
         .json_value();
     owner
         .delete(&format!(
-            "/api/workspaces/acme/invitations/{}",
+            "/api/workspaces/agra/invitations/{}",
             revoked["id"].as_str().unwrap()
         ))
         .send()
         .await
         .assert_status(204);
     owner
-        .get("/api/workspaces/acme/invitations")
+        .get("/api/workspaces/agra/invitations")
         .send()
         .await
         .assert_json_path("data", json!([]));
@@ -306,13 +306,13 @@ async fn invitations_are_sent_listed_revoked_and_accepted() {
 #[tokio::test]
 async fn expired_invitations_answer_410() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    world.workspace(ada, "Agra").await;
     world
         .as_user(ada)
-        .post("/api/workspaces/acme/invitations")
-        .json(&json!({ "email": "grace@example.com" }))
+        .post("/api/workspaces/agra/invitations")
+        .json(&json!({ "email": "gauri@example.com" }))
         .send()
         .await
         .assert_status(201);
@@ -340,7 +340,7 @@ async fn expired_invitations_answer_410() {
 #[tokio::test]
 async fn the_routes_can_be_turned_off() {
     let world = World::with(builder().config("workspace.routes", false)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     world
         .as_user(ada)
         .get("/api/workspaces")

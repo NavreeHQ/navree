@@ -209,7 +209,7 @@ fn json_columns() {
             .where_json_contains(Deal::TAGS, "vip")
             .where_json_doesnt_contain(Deal::TAGS, "spam")
             .where_json_length(Deal::TAGS, ">=", 2)
-            .where_(col("meta->owner->name").eq("ada"))
+            .where_(col("meta->owner->name").eq("anu"))
             .where_(col("meta->items[0]").eq(3))
     ));
     insta::assert_snapshot!(query(
@@ -241,7 +241,7 @@ fn raw_fragments_and_operators() {
             .where_(Deal::AMOUNT_CENTS.gt(1))
             .where_raw(
                 "lower(title) = ? OR amount_cents = ?",
-                [Value::from("acme"), Value::from(5_i64)]
+                [Value::from("agra"), Value::from(5_i64)]
             )
             .where_raw("meta ?? 'k' AND title <> '?'", Vec::<Value>::new())
             .where_(Deal::TITLE.null_safe_eq("x"))
@@ -477,11 +477,11 @@ fn writes() {
         vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
         vec![
             vec![
-                IrExpr::Value(Value::from("Acme")),
+                IrExpr::Value(Value::from("Agra")),
                 IrExpr::Value(Value::Null(Kind::String)),
             ],
             vec![
-                IrExpr::Value(Value::from("Globex")),
+                IrExpr::Value(Value::from("Gulati")),
                 IrExpr::Value(Value::from("DE")),
             ],
         ],
@@ -538,7 +538,7 @@ fn pattern_and_null_safe_operators() {
             .where_(Deal::TITLE.ilike("%renewal%"))
             .where_(Deal::TITLE.regex("^[A-Z]"))
             .where_(Deal::TITLE.not_regex("draft$"))
-            .where_(Deal::TITLE.regex_case_insensitive("^acme"))
+            .where_(Deal::TITLE.regex_case_insensitive("^agra"))
             .where_(Deal::TITLE.not_regex_case_insensitive("test"))
             .where_(Company::COUNTRY.is_distinct_from("US"))
     ));
@@ -827,7 +827,7 @@ fn json_path_updates() {
             ),
             (
                 Cow::Borrowed("meta->owner->name"),
-                IrExpr::Value(Value::from("ada")),
+                IrExpr::Value(Value::from("anu")),
             ),
             (
                 Cow::Borrowed("meta->tags[0]"),

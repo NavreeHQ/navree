@@ -36,7 +36,7 @@ async fn query_errors_are_400_with_field_errors() {
     );
 
     app.client()
-        .get("/v/search?q=acme&per_page=20")
+        .get("/v/search?q=agra&per_page=20")
         .send()
         .await
         .assert_status(200)
@@ -68,7 +68,7 @@ async fn form_body_is_validated() {
     let response = app
         .client()
         .post("/v/subscribe")
-        .form(&[("email", "ada@example.com"), ("newsletter", "maybe")])
+        .form(&[("email", "anu@example.com"), ("newsletter", "maybe")])
         .send()
         .await
         .assert_error(400, None);
@@ -95,7 +95,7 @@ async fn form_body_is_validated() {
 
     app.client()
         .post("/v/subscribe")
-        .form(&[("email", "ada@example.com"), ("newsletter", "true")])
+        .form(&[("email", "anu@example.com"), ("newsletter", "true")])
         .send()
         .await
         .assert_status(200)
@@ -103,7 +103,7 @@ async fn form_body_is_validated() {
 
     app.client()
         .post("/v/subscribe")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_error(

@@ -201,54 +201,54 @@ async fn a_navree_ui_page_follows_the_workspace_the_browser_switched_to() {
     let app = app().await;
     let ada = Uuid::now_v7();
     let grace = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
-    let globex = create(&app, ada, "Globex").await;
-    let initech = create(&app, grace, "Initech").await;
-    deal(&app, acme.id, "Acme renewal").await;
-    deal(&app, acme.id, "Acme upsell").await;
-    deal(&app, globex.id, "Globex pilot").await;
-    deal(&app, initech.id, "Initech secret").await;
+    let agra = create(&app, ada, "Agra").await;
+    let gulati = create(&app, ada, "Gulati").await;
+    let indrani = create(&app, grace, "Indrani").await;
+    deal(&app, agra.id, "Agra renewal").await;
+    deal(&app, agra.id, "Agra upsell").await;
+    deal(&app, gulati.id, "Gulati pilot").await;
+    deal(&app, indrani.id, "Indrani secret").await;
 
     let client = app.acting_as(principal(ada));
     client.csrf_cookie().await;
 
-    switch(&client, "acme").await;
+    switch(&client, "agra").await;
     let html = page(&client).await;
-    assert!(html.contains("Deals of Acme"), "{html}");
+    assert!(html.contains("Deals of Agra"), "{html}");
     assert!(
-        html.contains("Acme renewal") && html.contains("Acme upsell"),
+        html.contains("Agra renewal") && html.contains("Agra upsell"),
         "{html}"
     );
-    assert!(!html.contains("Globex pilot"), "{html}");
+    assert!(!html.contains("Gulati pilot"), "{html}");
     assert!(
-        !html.contains("Initech"),
+        !html.contains("Indrani"),
         "another user's workspace is never listed: {html}"
     );
     assert_eq!(html.matches(r#"name="workspace""#).count(), 2, "{html}");
     let current = html
         .find(r#"aria-current="true""#)
         .expect("a current workspace");
-    assert!(html[current..].contains("Acme"), "{html}");
+    assert!(html[current..].contains("Agra"), "{html}");
 
-    switch(&client, "globex").await;
+    switch(&client, "gulati").await;
     let html = page(&client).await;
-    assert!(html.contains("Deals of Globex"), "{html}");
-    assert!(html.contains("Globex pilot"), "{html}");
-    assert!(!html.contains("Acme renewal"), "{html}");
+    assert!(html.contains("Deals of Gulati"), "{html}");
+    assert!(html.contains("Gulati pilot"), "{html}");
+    assert!(!html.contains("Agra renewal"), "{html}");
     let current = html
         .find(r#"aria-current="true""#)
         .expect("a current workspace");
-    assert!(html[current..].contains("Globex"), "{html}");
+    assert!(html[current..].contains("Gulati"), "{html}");
 
-    // Initech isn't Ada's: refused, and the page stays in Globex.
+    // Indrani isn't Anu's: refused, and the page stays in Gulati.
     client
         .post("/workspace/switch")
         .xsrf()
-        .form(&[("workspace", initech.id.to_string().as_str())])
+        .form(&[("workspace", indrani.id.to_string().as_str())])
         .send()
         .await
         .assert_error_code(403, "not_a_member");
     let html = page(&client).await;
-    assert!(html.contains("Deals of Globex"), "{html}");
-    assert!(!html.contains("Initech secret"), "{html}");
+    assert!(html.contains("Deals of Gulati"), "{html}");
+    assert!(!html.contains("Indrani secret"), "{html}");
 }

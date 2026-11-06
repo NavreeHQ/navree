@@ -76,7 +76,7 @@ fn builder(clock: &Arc<FixedClock>) -> TestAppBuilder {
         .module(SessionModule::for_root(SessionOptions::default()))
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme CRM"))
+        .module(AuthPages::new().app_name("Agra CRM"))
         .module(PagesModule)
 }
 
@@ -113,7 +113,7 @@ async fn a_navree_ui_page_signs_a_browser_in_and_out_on_the_session() {
     let app = builder(&clock).build().await;
     app.get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", "ada@example.com", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@example.com", PASSWORD)
         .await
         .unwrap();
     let browser = app.client();
@@ -128,14 +128,14 @@ async fn a_navree_ui_page_signs_a_browser_in_and_out_on_the_session() {
         .await
         .assert_status(200)
         .text();
-    assert!(form.contains("Acme CRM"), "{form}");
+    assert!(form.contains("Agra CRM"), "{form}");
     assert!(form.contains(r#"name="_csrf""#), "{form}");
 
     // Without its token the form is refused.
     browser
         .post("/sign-in")
         .header("accept", "text/html")
-        .form(&[("email", "ada@example.com"), ("password", PASSWORD)])
+        .form(&[("email", "anu@example.com"), ("password", PASSWORD)])
         .send()
         .await
         .assert_status(403);
@@ -144,7 +144,7 @@ async fn a_navree_ui_page_signs_a_browser_in_and_out_on_the_session() {
         &browser,
         "/sign-in",
         &[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("password", PASSWORD),
             ("next", "/dashboard"),
         ],
@@ -159,7 +159,7 @@ async fn a_navree_ui_page_signs_a_browser_in_and_out_on_the_session() {
     assert_eq!(cookie.secure(), Some(true));
 
     let page = get(&browser, "/dashboard").await.assert_status(200).text();
-    assert!(page.contains("Signed in as Ada Lovelace"), "{page}");
+    assert!(page.contains("Signed in as Anu Lakhotia"), "{page}");
 
     let out = post(&browser, "/sign-out", &[]).await.assert_status(303);
     assert_eq!(out.header("location"), Some("/sign-in?status=signed-out"));
@@ -240,11 +240,11 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
         .await;
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada Lovelace", "ada@example.com", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@example.com", PASSWORD)
         .await
         .unwrap();
     let grace = auth
-        .create_user("Grace Hopper", "grace@example.com", PASSWORD)
+        .create_user("Gauri Hundal", "gauri@example.com", PASSWORD)
         .await
         .unwrap();
     let meta = ClientMeta::default();
@@ -257,15 +257,15 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
     let workspaces = app.get::<Workspaces>().await;
     let uow = db.uow(None, None).await;
     workspaces
-        .create(&uow, ada.id, NewWorkspace::named("Acme"))
+        .create(&uow, ada.id, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     workspaces
-        .create(&uow, ada.id, NewWorkspace::named("Globex"))
+        .create(&uow, ada.id, NewWorkspace::named("Gulati"))
         .await
         .unwrap();
-    let initech = workspaces
-        .create(&uow, grace.id, NewWorkspace::named("Initech"))
+    let indrani = workspaces
+        .create(&uow, grace.id, NewWorkspace::named("Indrani"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -276,7 +276,7 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
         &browser,
         "/sign-in",
         &[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("password", PASSWORD),
             ("next", "/home"),
         ],
@@ -306,30 +306,30 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
     post(
         &browser,
         "/workspace/switch",
-        &[("workspace", "acme"), ("next", "/home")],
+        &[("workspace", "agra"), ("next", "/home")],
     )
     .await
     .assert_status(303);
     let home = get(&browser, "/home").await.assert_status(200).text();
-    assert!(home.contains("Working in Acme"), "{home}");
+    assert!(home.contains("Working in Agra"), "{home}");
     assert!(
-        home.contains("Globex") && !home.contains("Initech"),
+        home.contains("Gulati") && !home.contains("Indrani"),
         "{home}"
     );
-    post(&browser, "/workspace/switch", &[("workspace", "globex")])
+    post(&browser, "/workspace/switch", &[("workspace", "gulati")])
         .await
         .assert_status(303);
     let home = get(&browser, "/home").await.assert_status(200).text();
-    assert!(home.contains("Working in Globex"), "{home}");
+    assert!(home.contains("Working in Gulati"), "{home}");
     post(
         &browser,
         "/workspace/switch",
-        &[("workspace", initech.id.to_string().as_str())],
+        &[("workspace", indrani.id.to_string().as_str())],
     )
     .await
     .assert_status(403);
     let home = get(&browser, "/home").await.assert_status(200).text();
-    assert!(home.contains("Working in Globex"), "{home}");
+    assert!(home.contains("Working in Gulati"), "{home}");
 
     post(&browser, "/sign-out", &[]).await.assert_status(303);
     get(&browser, "/home").await.assert_status(401);

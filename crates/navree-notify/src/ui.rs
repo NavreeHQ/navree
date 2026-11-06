@@ -7,7 +7,7 @@
 //! the app has `RealtimeModule`, and polls once a minute otherwise.
 //!
 //! ```ignore
-//! Shell::new("Acme").search(NotificationBell::new())
+//! Shell::new("Agra").search(NotificationBell::new())
 //! ```
 //!
 //! `NotifyModule` mounts the routes it uses when `notify.routes` is on and the app has a
@@ -423,7 +423,7 @@ mod tests {
     fn it_lists_the_latest_with_a_count_and_links_only_to_this_site() {
         let items = vec![
             item(
-                json!({ "title": "Contact moved", "message": "Gurpreet now works at Acme", "url": "/contacts/7" }),
+                json!({ "title": "Contact moved", "message": "Gurpreet now works at Agra", "url": "/contacts/7" }),
                 false,
             ),
             item(
@@ -435,7 +435,7 @@ mod tests {
         let page = html(NotificationBell::new().live().inbox(2, items));
         assert!(page.contains(r#"data-unread="2""#), "{page}");
         assert!(page.contains("Contact moved"), "{page}");
-        assert!(page.contains("Gurpreet now works at Acme"), "{page}");
+        assert!(page.contains("Gurpreet now works at Agra"), "{page}");
         assert!(page.contains(r#"href="/contacts/7""#), "{page}");
         assert!(!page.contains("evil.example"), "{page}");
         assert!(page.contains("Mark all read"), "{page}");

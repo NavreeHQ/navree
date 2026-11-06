@@ -133,7 +133,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
         let writes = 0;
         let release;
         const held = new Promise((resolve) => (release = resolve));
-        route(`/${name}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${name}-post"><input name="title" value="Acme"><input type="file" name="attachment"><button id="go">Create</button></form>`));
+        route(`/${name}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${name}-post"><input name="title" value="Agra"><input type="file" name="attachment"><button id="go">Create</button></form>`));
         f.routes.set(`/${name}-post`, async (req, res) => {
           writes++;
           await held;
@@ -201,12 +201,12 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       const name = key("detail");
       route(`/${name}`, doc(
         `<table><thead><tr><th data-col="title">Title</th><th data-col="amount">Amount</th></tr></thead><tbody>` +
-        `<tr data-key="7"><td>Acme</td><td>70</td></tr><tr data-slot="row-detail" data-key="7-detail"><td colspan="2">details ${button("inner", [["fill", "dlg"]])}</td></tr>` +
+        `<tr data-key="7"><td>Agra</td><td>70</td></tr><tr data-slot="row-detail" data-key="7-detail"><td colspan="2">details ${button("inner", [["fill", "dlg"]])}</td></tr>` +
         `</tbody></table><dialog id="dlg"><b id="t" data-ui-cell="title">-</b><i id="a" data-ui-cell="amount">-</i><form><input type="hidden" id="k" name="id" data-ui-row-key></form></dialog>`));
       const { context, page } = await fresh(`/${name}`);
       await click(page, "inner");
       const out = await page.evaluate(() => ({ title: document.getElementById("t").textContent, amount: document.getElementById("a").textContent, key: document.getElementById("k").value }));
-      assert.deepEqual(out, { title: "Acme", amount: "70", key: "7" });
+      assert.deepEqual(out, { title: "Agra", amount: "70", key: "7" });
       await context.close();
     });
 

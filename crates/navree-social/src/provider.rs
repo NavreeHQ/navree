@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(entry("x", |_| {}).name, "X");
         let okta = entry("okta", |c| {
             c.kind = Some("oidc".to_owned());
-            c.issuer = Some("https://acme.okta.com".to_owned());
+            c.issuer = Some("https://agra.okta.com".to_owned());
         });
         assert_eq!(okta.name, "okta");
         let named = entry("okta", |c| {

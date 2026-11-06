@@ -70,8 +70,8 @@ const CLOSEST_ROWS: usize = 3;
 /// booleans stored as integers, date-times by instant, JSON structurally),
 /// or a condition the database evaluates.
 ///
-/// Built from pairs (`[("title", "Acme")]`), from typed assignments
-/// (`[Deal::TITLE.set("Acme")]`, values encoded with the column's casts), or
+/// Built from pairs (`[("title", "Agra")]`), from typed assignments
+/// (`[Deal::TITLE.set("Agra")]`, values encoded with the column's casts), or
 /// from a [`Filter`] (`Deal::AMOUNT_CENTS.gt(100)`).
 #[derive(Clone, Debug)]
 pub struct Conditions(Inner);
@@ -659,7 +659,7 @@ fn row_json(row: &Row) -> String {
         .unwrap_or_else(|error| format!("<unreadable row: {error}>"))
 }
 
-/// `conditions` for a report: `title = "Acme", stage = "won"`.
+/// `conditions` for a report: `title = "Agra", stage = "won"`.
 fn describe(conditions: &Conditions) -> String {
     match &conditions.0 {
         Inner::Values(expected) => expected
@@ -728,8 +728,8 @@ mod tests {
 
     #[test]
     fn conditions_come_from_pairs_assignments_and_filters() {
-        let pairs = Conditions::from([("title", "Acme")]);
-        assert_eq!(describe(&pairs), r#"title = "Acme""#);
+        let pairs = Conditions::from([("title", "Agra")]);
+        assert_eq!(describe(&pairs), r#"title = "Agra""#);
         let assignments = Conditions::from([Assignment::value("stage", "won")]);
         assert_eq!(describe(&assignments), r#"stage = "won""#);
         let filter = Conditions::from(crate::col("amount").gt(5));

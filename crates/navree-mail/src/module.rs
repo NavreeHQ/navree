@@ -52,7 +52,7 @@ use crate::{
 /// use navree_view::ViewModule;
 ///
 /// # fn main() -> Result<(), navree_kernel::BoxError> {
-/// // .env: APP_MAIL__FROM="Acme <hello@acme.test>"
+/// // .env: APP_MAIL__FROM="Agra <hello@acme.test>"
 /// //       APP_MAIL__TRANSPORT=smtps://user:pass@smtp.acme.test
 /// Navree::app()
 ///     .module(ConfigModule::for_root(ConfigSources::defaults()))

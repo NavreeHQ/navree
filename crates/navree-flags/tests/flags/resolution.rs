@@ -18,7 +18,7 @@ fn id_in<F: Flag>(inside: bool, percent: u8) -> Uuid {
 }
 
 async fn defaults_and_overrides(flags: &Flags) {
-    let (ada, grace, acme, globex) = (
+    let (ada, grace, agra, gulati) = (
         Uuid::now_v7(),
         Uuid::now_v7(),
         Uuid::now_v7(),
@@ -41,7 +41,7 @@ async fn defaults_and_overrides(flags: &Flags) {
 
     // On for one workspace, and for one user wherever they work.
     flags
-        .activate::<NewPipeline>(FlagScope::workspace(acme))
+        .activate::<NewPipeline>(FlagScope::workspace(agra))
         .await
         .unwrap();
     flags
@@ -50,27 +50,27 @@ async fn defaults_and_overrides(flags: &Flags) {
         .unwrap();
     assert!(
         flags
-            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .active::<NewPipeline>(FlagScope::workspace(agra))
             .await
             .unwrap()
     );
     assert!(
         flags
-            .active::<NewPipeline>(FlagScope::user(grace).workspace(acme))
+            .active::<NewPipeline>(FlagScope::user(grace).workspace(agra))
             .await
             .unwrap(),
-        "grace gets what acme gets"
+        "gauri gets what agra gets"
     );
     assert!(
         flags
-            .active::<NewPipeline>(FlagScope::user(ada).workspace(globex))
+            .active::<NewPipeline>(FlagScope::user(ada).workspace(gulati))
             .await
             .unwrap(),
-        "ada has it in every workspace"
+        "anu has it in every workspace"
     );
     assert!(
         !flags
-            .active::<NewPipeline>(FlagScope::user(grace).workspace(globex))
+            .active::<NewPipeline>(FlagScope::user(grace).workspace(gulati))
             .await
             .unwrap()
     );
@@ -80,13 +80,13 @@ async fn defaults_and_overrides(flags: &Flags) {
         .deactivate::<NewPipeline>(FlagScope::user(grace))
         .await
         .unwrap();
-    let grace_at_acme = FlagScope::user(grace).workspace(acme);
-    assert!(!flags.active::<NewPipeline>(&grace_at_acme).await.unwrap());
+    let grace_at_agra = FlagScope::user(grace).workspace(agra);
+    assert!(!flags.active::<NewPipeline>(&grace_at_agra).await.unwrap());
     flags
         .forget::<NewPipeline>(FlagScope::user(grace))
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(&grace_at_acme).await.unwrap());
+    assert!(flags.active::<NewPipeline>(&grace_at_agra).await.unwrap());
 
     // Released to everyone, then off for everyone but the overrides.
     flags
@@ -95,7 +95,7 @@ async fn defaults_and_overrides(flags: &Flags) {
         .unwrap();
     assert!(
         flags
-            .active::<NewPipeline>(FlagScope::user(grace).workspace(globex))
+            .active::<NewPipeline>(FlagScope::user(grace).workspace(gulati))
             .await
             .unwrap()
     );
@@ -105,11 +105,11 @@ async fn defaults_and_overrides(flags: &Flags) {
         .unwrap();
     assert!(
         !flags
-            .active::<NewPipeline>(FlagScope::user(grace).workspace(globex))
+            .active::<NewPipeline>(FlagScope::user(grace).workspace(gulati))
             .await
             .unwrap()
     );
-    assert!(flags.active::<NewPipeline>(&grace_at_acme).await.unwrap());
+    assert!(flags.active::<NewPipeline>(&grace_at_agra).await.unwrap());
 
     // A default-on flag turned off for everyone.
     flags
@@ -143,7 +143,7 @@ async fn defaults_and_overrides(flags: &Flags) {
     );
     assert!(
         !flags
-            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .active::<NewPipeline>(FlagScope::workspace(agra))
             .await
             .unwrap()
     );
@@ -157,7 +157,7 @@ async fn defaults_and_overrides(flags: &Flags) {
     );
     assert!(
         flags
-            .active::<NewPipeline>(FlagScope::workspace(acme))
+            .active::<NewPipeline>(FlagScope::workspace(agra))
             .await
             .unwrap()
     );
@@ -531,10 +531,10 @@ async fn users_principals_and_workspaces_convert_into_scopes() {
 
     let world = World::new().await;
     let flags = world.flags().await;
-    let owner = world.user("Ada").await;
-    let acme = world.workspace(owner, "Acme").await;
-    flags.activate::<NewPipeline>(&acme).await.unwrap();
-    assert!(flags.active::<NewPipeline>(&acme).await.unwrap());
+    let owner = world.user("Anu").await;
+    let agra = world.workspace(owner, "Agra").await;
+    flags.activate::<NewPipeline>(&agra).await.unwrap();
+    assert!(flags.active::<NewPipeline>(&agra).await.unwrap());
 
     let principal = Principal {
         user_id: owner,

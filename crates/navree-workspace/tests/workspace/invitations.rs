@@ -12,8 +12,8 @@ use crate::support::World;
 async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
     let world = World::new().await;
     let mut events = world.events(&["workspace.invitation_sent"]).await;
-    let ada = world.user("Ada Lovelace", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu Lakhotia", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
 
     let invitations = world.invitations().await;
     let sent = world
@@ -21,8 +21,8 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    " Grace@Example.com ",
+                    agra.id,
+                    " Gauri@Example.com ",
                     WorkspaceRole::Admin,
                     Some(ada),
                 )
@@ -31,7 +31,7 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
         .await
         .unwrap();
 
-    assert_eq!(sent.invitation.email, "grace@example.com");
+    assert_eq!(sent.invitation.email, "gauri@example.com");
     assert_eq!(sent.invitation.role, "admin");
     assert_eq!(sent.token.len(), 48);
     assert_eq!(
@@ -49,11 +49,11 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
 
     let mails = world.mails().await;
     assert_eq!(mails.len(), 1);
-    assert_eq!(mails[0].to, ["grace@example.com"]);
-    assert_eq!(mails[0].subject, "You're invited to join Acme");
+    assert_eq!(mails[0].to, ["gauri@example.com"]);
+    assert_eq!(mails[0].subject, "You're invited to join Agra");
     let text = mails[0].text.clone().unwrap();
     assert!(
-        text.contains("Ada Lovelace invited you to join Acme as admin."),
+        text.contains("Anu Lakhotia invited you to join Agra as admin."),
         "{text}"
     );
     assert!(
@@ -65,7 +65,7 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
     );
     let payloads = events.drain();
     assert_eq!(payloads.len(), 1);
-    assert_eq!(payloads[0].1["email"], "grace@example.com");
+    assert_eq!(payloads[0].1["email"], "gauri@example.com");
     assert!(payloads[0].1.get("token").is_none());
 }
 
@@ -75,9 +75,9 @@ async fn accepting_adds_the_member_with_the_invited_role() {
     let mut events = world
         .events(&["workspace.invitation_accepted", "workspace.member_added"])
         .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     events.drain();
     let invitations = world.invitations().await;
     let sent = world
@@ -85,8 +85,8 @@ async fn accepting_adds_the_member_with_the_invited_role() {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Viewer,
                     Some(ada),
                 )
@@ -101,7 +101,7 @@ async fn accepting_adds_the_member_with_the_invited_role() {
         .work(|uow| async move { invitations.accept(&uow, &token, grace).await })
         .await
         .unwrap();
-    assert_eq!(accepted.workspace.id, acme.id);
+    assert_eq!(accepted.workspace.id, agra.id);
     assert_eq!(accepted.member.role, "viewer");
     assert_eq!(accepted.member.user_id, grace);
     let stored = Invitation::find(&*world.db().await, sent.invitation.id)
@@ -128,17 +128,17 @@ async fn accepting_adds_the_member_with_the_invited_role() {
 #[tokio::test]
 async fn only_the_invited_address_may_accept() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let eve = world.user("Eve", "eve@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )
@@ -161,17 +161,17 @@ async fn the_address_check_can_be_turned_off() {
         crate::support::builder().config("workspace.invitations.require_matching_email", false),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let eve = world.user("Eve", "eve@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )
@@ -191,17 +191,17 @@ async fn the_address_check_can_be_turned_off() {
 #[tokio::test]
 async fn invitations_expire() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )
@@ -213,7 +213,7 @@ async fn invitations_expire() {
         world
             .invitations()
             .await
-            .pending(acme.id)
+            .pending(agra.id)
             .await
             .unwrap()
             .len(),
@@ -232,7 +232,7 @@ async fn invitations_expire() {
         world
             .invitations()
             .await
-            .pending(acme.id)
+            .pending(agra.id)
             .await
             .unwrap()
             .is_empty()
@@ -259,17 +259,17 @@ async fn invitations_expire() {
 #[tokio::test]
 async fn a_revoked_invitation_cannot_be_accepted() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )
@@ -289,7 +289,7 @@ async fn a_revoked_invitation_cannot_be_accepted() {
     let invitations = world.invitations().await;
     let id = sent.invitation.id;
     world
-        .work(|uow| async move { invitations.revoke(&uow, acme.id, id).await })
+        .work(|uow| async move { invitations.revoke(&uow, agra.id, id).await })
         .await
         .unwrap();
     let invitations = world.invitations().await;
@@ -301,7 +301,7 @@ async fn a_revoked_invitation_cannot_be_accepted() {
     assert!(matches!(revoked, WorkspaceError::InvitationNotFound));
     let invitations = world.invitations().await;
     let again = world
-        .work(|uow| async move { invitations.revoke(&uow, acme.id, id).await })
+        .work(|uow| async move { invitations.revoke(&uow, agra.id, id).await })
         .await
         .unwrap_err();
     assert!(matches!(again, WorkspaceError::InvitationNotFound));
@@ -310,8 +310,8 @@ async fn a_revoked_invitation_cannot_be_accepted() {
 #[tokio::test]
 async fn inviting_again_replaces_the_pending_invitation() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invite = |role: WorkspaceRole| {
         let world = &world;
         async move {
@@ -319,7 +319,7 @@ async fn inviting_again_replaces_the_pending_invitation() {
             world
                 .work(|uow| async move {
                     invitations
-                        .invite(&uow, acme.id, "grace@example.com", role, Some(ada))
+                        .invite(&uow, agra.id, "gauri@example.com", role, Some(ada))
                         .await
                 })
                 .await
@@ -327,7 +327,7 @@ async fn inviting_again_replaces_the_pending_invitation() {
     };
     let first = invite(WorkspaceRole::Member).await.unwrap();
     let second = invite(WorkspaceRole::Admin).await.unwrap();
-    let pending = world.invitations().await.pending(acme.id).await.unwrap();
+    let pending = world.invitations().await.pending(agra.id).await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, second.invitation.id);
     assert!(
@@ -344,16 +344,16 @@ async fn inviting_again_replaces_the_pending_invitation() {
 #[tokio::test]
 async fn members_and_owners_are_not_invited() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let member = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "ADA@example.com",
+                    agra.id,
+                    "ANU@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )
@@ -368,8 +368,8 @@ async fn members_and_owners_are_not_invited() {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Owner,
                     Some(ada),
                 )
@@ -387,7 +387,7 @@ async fn members_and_owners_are_not_invited() {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
+                    agra.id,
                     "not-an-email",
                     WorkspaceRole::Member,
                     Some(ada),
@@ -424,16 +424,16 @@ async fn the_mail_can_come_from_a_template() {
             .module(InvitationTemplates),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
-                    "grace@example.com",
+                    agra.id,
+                    "gauri@example.com",
                     WorkspaceRole::Viewer,
                     Some(ada),
                 )
@@ -442,12 +442,12 @@ async fn the_mail_can_come_from_a_template() {
         .await
         .unwrap();
     let mails = world.mails().await;
-    assert_eq!(mails[0].subject, "You're invited to join Acme");
+    assert_eq!(mails[0].subject, "You're invited to join Agra");
     assert_eq!(
         mails[0].text.as_deref(),
         Some(
             format!(
-                "Ada invited grace@example.com to Acme as viewer: https://app.test/invitations/accept?token={} (2 days, 48 chars)",
+                "Anu invited gauri@example.com to Agra as viewer: https://app.test/invitations/accept?token={} (2 days, 48 chars)",
                 sent.token
             )
             .as_str()

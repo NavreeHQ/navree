@@ -10,9 +10,9 @@ use crate::support::{TestDb, sqlite};
 async fn seeded() -> (TestDb, Collection<Company>) {
     let t = sqlite().await;
     for (name, country, employees) in [
-        ("Acme", Some("US"), 10),
-        ("Globex", Some("DE"), 20),
-        ("Initech", Some("US"), 30),
+        ("Agra", Some("US"), 10),
+        ("Gulati", Some("DE"), 20),
+        ("Indrani", Some("US"), 30),
     ] {
         Company::create(
             &t.db,
@@ -39,10 +39,10 @@ async fn keys_finding_and_containment() {
     let (_t, all) = seeded().await;
     assert_eq!(all.len(), 3);
     assert_eq!(all.model_keys(), [1, 2, 3]);
-    assert_eq!(all.find(2).unwrap().name, "Globex");
+    assert_eq!(all.find(2).unwrap().name, "Gulati");
     assert!(all.contains(3));
     assert!(!all.contains(9));
-    assert_eq!(all[0].name, "Acme", "indexes like a slice");
+    assert_eq!(all[0].name, "Agra", "indexes like a slice");
     assert_eq!(all.first().unwrap().id, 1);
     assert_eq!(all.iter().map(|c| c.employees).sum::<i32>(), 60);
 }
@@ -50,10 +50,10 @@ async fn keys_finding_and_containment() {
 #[tokio::test]
 async fn transforming_and_grouping() {
     let (_t, all) = seeded().await;
-    assert_eq!(all.map(|c| c.name.clone()), ["Acme", "Globex", "Initech"]);
+    assert_eq!(all.map(|c| c.name.clone()), ["Agra", "Gulati", "Indrani"]);
     assert_eq!(
         all.pluck(Company::NAME).unwrap(),
-        ["Acme", "Globex", "Initech"]
+        ["Agra", "Gulati", "Indrani"]
     );
     assert_eq!(
         all.pluck(Company::COUNTRY).unwrap(),
@@ -76,7 +76,7 @@ async fn transforming_and_grouping() {
     assert_eq!(by_country.keys().collect::<Vec<_>>(), ["US", "DE"]);
     assert_eq!(by_country["US"].model_keys(), [1, 3]);
     let by_name = all.clone().key_by(|c| c.name.clone());
-    assert_eq!(by_name["Initech"].id, 3);
+    assert_eq!(by_name["Indrani"].id, 3);
 
     let sorted = all.clone().sort_by_key(|c| std::cmp::Reverse(c.employees));
     assert_eq!(sorted.model_keys(), [3, 2, 1]);

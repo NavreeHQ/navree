@@ -994,12 +994,12 @@ mod tests {
     #[test]
     fn a_paragraph_is_a_line_and_runs_join() {
         let body = [
-            para(&format!("{}{}", run("Prepared for "), run("Acme"))),
+            para(&format!("{}{}", run("Prepared for "), run("Agra"))),
             para(""),
             para(&run("Last")),
         ]
         .concat();
-        assert_eq!(text_of(&body), "Prepared for Acme\n\nLast");
+        assert_eq!(text_of(&body), "Prepared for Agra\n\nLast");
         assert_eq!(text_of(""), "");
         assert_eq!(text_of("<w:p/>"), "");
         assert_eq!(text_of("<w:p/><w:p/>"), "\n");

@@ -75,8 +75,8 @@ async fn discovery_replaces_the_handshake() {
 async fn every_request_is_checked_on_its_own() {
     let app = app().await;
     let (owner, rep) = (user(), user());
-    let mine = insert_deal(&app, rep.user_id, "Acme renewal", "lead").await;
-    let theirs = insert_deal(&app, owner.user_id, "Globex", "lead").await;
+    let mine = insert_deal(&app, rep.user_id, "Agra renewal", "lead").await;
+    let theirs = insert_deal(&app, owner.user_id, "Gulati", "lead").await;
     let mcp = stateless(app.acting_as(rep)).initialize().await;
 
     let tools = names(&mcp.list_tools().await);
@@ -86,7 +86,7 @@ async fn every_request_is_checked_on_its_own() {
     mcp.call_tool("list_deals", json!({ "mine": true }))
         .await
         .assert_ok()
-        .assert_json_path("0.title", json!("Acme renewal"));
+        .assert_json_path("0.title", json!("Agra renewal"));
     mcp.call_tool("move_deal", json!({ "deal_id": theirs.id, "stage": "won" }))
         .await
         .assert_error(403, "Forbidden");
@@ -99,7 +99,7 @@ async fn every_request_is_checked_on_its_own() {
     mcp.read_resource(&format!("crm://deals/{}", mine.id))
         .await
         .assert_ok()
-        .assert_json_path("title", json!("Acme renewal"));
+        .assert_json_path("title", json!("Agra renewal"));
     mcp.read_resource(&format!("crm://deals/{}", theirs.id))
         .await
         .assert_ok();

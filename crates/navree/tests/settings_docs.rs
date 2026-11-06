@@ -147,19 +147,19 @@ impl PortalService {
 
 #[test]
 fn scopes_name_their_levels() {
-    let (holding, acme, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let (holding, agra, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
     assert_eq!(Scope::global().target().kind, ScopeKind::Global);
     assert_eq!(
         Scope::organization(holding).target().kind,
         ScopeKind::Organization
     );
-    assert_eq!(Scope::workspace(acme).target().kind, ScopeKind::Workspace);
+    assert_eq!(Scope::workspace(agra).target().kind, ScopeKind::Workspace);
     assert_eq!(
-        Scope::user(ada).in_workspace(acme).target().kind,
+        Scope::user(ada).in_workspace(agra).target().kind,
         ScopeKind::User
     );
     assert_eq!(
-        Scope::workspace(acme)
+        Scope::workspace(agra)
             .in_organization(holding)
             .organization_id(),
         Some(holding)
@@ -223,7 +223,7 @@ async fn writes_resolve_inherit_and_announce() {
         .await;
     let settings = app.get::<Settings>().await;
     let db = app.get::<Db>().await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
 
     let uow = db.uow(None, None).await;
     settings
@@ -233,15 +233,15 @@ async fn writes_resolve_inherit_and_announce() {
     settings
         .update::<PortalSettings>(
             &uow,
-            Scope::workspace(acme),
-            json!({"welcome_text": "Welcome to Acme"}),
+            Scope::workspace(agra),
+            json!({"welcome_text": "Welcome to Agra"}),
         )
         .await
         .unwrap();
     uow.commit().await.unwrap();
 
     let portal = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme))
+        .resolve::<PortalSettings>(Scope::workspace(agra))
         .await
         .unwrap();
     assert_eq!(portal.page_size, 50);
@@ -251,17 +251,17 @@ async fn writes_resolve_inherit_and_announce() {
 
     let uow = db.uow(None, None).await;
     settings
-        .inherit::<PortalSettings>(&uow, Scope::workspace(acme), "welcome_text")
+        .inherit::<PortalSettings>(&uow, Scope::workspace(agra), "welcome_text")
         .await
         .unwrap();
     settings
-        .reset::<PortalSettings>(&uow, Scope::workspace(acme))
+        .reset::<PortalSettings>(&uow, Scope::workspace(agra))
         .await
         .unwrap();
     uow.commit().await.unwrap();
     assert_eq!(
         settings
-            .get::<PortalSettings>(Scope::workspace(acme))
+            .get::<PortalSettings>(Scope::workspace(agra))
             .await
             .unwrap()
             .welcome_text,
@@ -288,8 +288,8 @@ async fn writes_resolve_inherit_and_announce() {
         *cache.forgotten.lock().unwrap(),
         [
             (ScopeKind::Global, None),
-            (ScopeKind::Workspace, Some(acme)),
-            (ScopeKind::Workspace, Some(acme)),
+            (ScopeKind::Workspace, Some(agra)),
+            (ScopeKind::Workspace, Some(agra)),
         ]
     );
 
@@ -328,8 +328,8 @@ async fn the_home_page_shows_the_workspace_welcome() {
 
 #[tokio::test]
 async fn the_leaderboard_follows_the_organization() {
-    let (acme, holding) = (Uuid::now_v7(), Uuid::now_v7());
-    let fake = SettingsFake::new().attach(acme, holding);
+    let (agra, holding) = (Uuid::now_v7(), Uuid::now_v7());
+    let fake = SettingsFake::new().attach(agra, holding);
     fake.set::<PortalSettings>(
         Scope::organization(holding),
         json!({"show_leaderboard": true}),
@@ -340,7 +340,7 @@ async fn the_leaderboard_follows_the_organization() {
     let service = PortalService {
         settings: Arc::new(fake.settings()),
     };
-    assert!(service.leaderboard(acme).await.unwrap());
+    assert!(service.leaderboard(agra).await.unwrap());
 }
 
 #[tokio::test]

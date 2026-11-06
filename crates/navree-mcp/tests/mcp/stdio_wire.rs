@@ -128,7 +128,7 @@ impl LineClient {
 async fn the_handshake_lists_and_calls() {
     let app = app().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, rep, "Acme renewal", "lead").await;
+    let deal = insert_deal(&app, rep, "Agra renewal", "lead").await;
     let mut client = LineClient::connect(&app, &rep.to_string());
 
     let info = client.initialize("2025-06-18").await;

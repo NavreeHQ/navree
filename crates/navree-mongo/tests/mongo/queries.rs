@@ -11,14 +11,14 @@ use navree_orm::{Decimal, Expr, Filter, Model, OrmError, Value, col, table};
 use crate::models::{Company, Deal, DealMeta, Note, Reading, Stage, WORKSPACE};
 use crate::support::TestMongo;
 
-/// Companies Acme (NO, 12 people), Globex (US, 250) and Initech (US, no
+/// Companies Agra (NO, 12 people), Gulati (US, 250) and Indrani (US, no
 /// deals); deals across stages, amounts, tags and dates.
 async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
     let mut companies = Vec::new();
     for (name, country, employees) in [
-        ("Acme", Some("NO"), 12),
-        ("Globex", Some("US"), 250),
-        ("Initech", None, 40),
+        ("Agra", Some("NO"), 12),
+        ("Gulati", Some("US"), 250),
+        ("Indrani", None, 40),
     ] {
         let company = Company::create(
             mongo,
@@ -33,12 +33,12 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
         .unwrap();
         companies.push(company.into_inner());
     }
-    let (acme, globex) = (companies[0].id, companies[1].id);
+    let (agra, gulati) = (companies[0].id, companies[1].id);
     let mut deals = Vec::new();
     for (title, company, amount, stage, tags, score, closes) in [
         (
             "Renewal",
-            acme,
+            agra,
             120_000,
             Stage::Won,
             vec!["renewal", "vip"],
@@ -47,7 +47,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
         ),
         (
             "Expansion",
-            acme,
+            agra,
             45_000,
             Stage::Qualified,
             vec!["upsell"],
@@ -56,7 +56,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
         ),
         (
             "Pilot",
-            globex,
+            gulati,
             8_000,
             Stage::Lead,
             vec![],
@@ -65,7 +65,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
         ),
         (
             "Enterprise plan",
-            globex,
+            gulati,
             900_000,
             Stage::Won,
             vec!["vip"],
@@ -74,7 +74,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
         ),
         (
             "ACME support",
-            acme,
+            agra,
             15_000,
             Stage::Lost,
             vec!["support"],
@@ -154,7 +154,7 @@ async fn conditions_become_filter_documents() {
     );
     // LIKE ignores case on every database.
     assert_eq!(
-        titles(mongo, q().where_like(Deal::TITLE, "acme%")).await,
+        titles(mongo, q().where_like(Deal::TITLE, "agra%")).await,
         ["ACME support"]
     );
     assert_eq!(
@@ -162,7 +162,7 @@ async fn conditions_become_filter_documents() {
         ["Enterprise plan"]
     );
     assert!(
-        titles(mongo, q().where_like_case_sensitive(Deal::TITLE, "acme%"))
+        titles(mongo, q().where_like_case_sensitive(Deal::TITLE, "agra%"))
             .await
             .is_empty()
     );
@@ -235,7 +235,7 @@ async fn conditions_become_filter_documents() {
             .pluck(mongo, Company::NAME)
             .await
             .unwrap(),
-        ["Initech"]
+        ["Indrani"]
     );
     assert_eq!(
         Company::query()
@@ -581,13 +581,13 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(with_won, ["Acme", "Globex"]);
+    assert_eq!(with_won, ["Agra", "Gulati"]);
     let without: Vec<String> = Company::query()
         .where_not_exists(Deal::query().where_column(Deal::COMPANY_ID, "=", Company::ID))
         .pluck(mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(without, ["Initech"]);
+    assert_eq!(without, ["Indrani"]);
     // IN (subquery): deals of Norwegian companies.
     let norwegian = titles(
         mongo,
@@ -624,9 +624,9 @@ async fn subqueries_joins_and_unions_use_lookups() {
     assert_eq!(
         counted,
         [
-            ("Acme".into(), 3),
-            ("Globex".into(), 2),
-            ("Initech".into(), 0)
+            ("Agra".into(), 3),
+            ("Gulati".into(), 2),
+            ("Indrani".into(), 0)
         ]
     );
     // Joins.
@@ -645,8 +645,8 @@ async fn subqueries_joins_and_unions_use_lookups() {
     assert_eq!(
         pairs,
         [
-            ("Enterprise plan".into(), "Globex".into()),
-            ("Pilot".into(), "Globex".into())
+            ("Enterprise plan".into(), "Gulati".into()),
+            ("Pilot".into(), "Gulati".into())
         ]
     );
     let left = table("companies")
@@ -655,8 +655,8 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, "companies.name")
         .await
         .unwrap();
-    assert_eq!(left, [Value::from("Initech")]);
-    // NULL keys join nothing, as in SQL (MongoDB would match Initech's
+    assert_eq!(left, [Value::from("Indrani")]);
+    // NULL keys join nothing, as in SQL (MongoDB would match Indrani's
     // null country with itself).
     let unmatched = table("companies")
         .left_join(
@@ -669,7 +669,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, "companies.name")
         .await
         .unwrap();
-    assert_eq!(unmatched, [Value::from("Initech")]);
+    assert_eq!(unmatched, [Value::from("Indrani")]);
     // Unions: the columns are named by the first query's, by position.
     let names: Vec<String> = table("companies")
         .select(["name"])
@@ -691,7 +691,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .iter()
         .map(|row| row.get("name").unwrap())
         .collect();
-    assert_eq!(names, ["Pilot", "Acme"], "UNION removes the repeated Acme");
+    assert_eq!(names, ["Pilot", "Agra"], "UNION removes the repeated Agra");
     t.cleanup().await;
 }
 
@@ -994,8 +994,8 @@ async fn native_filters_and_pipelines() {
     assert_eq!(
         names,
         [
-            ("Enterprise plan".into(), "Globex".into()),
-            ("Renewal".into(), "Acme".into())
+            ("Enterprise plan".into(), "Gulati".into()),
+            ("Renewal".into(), "Agra".into())
         ]
     );
     // Shown without running.

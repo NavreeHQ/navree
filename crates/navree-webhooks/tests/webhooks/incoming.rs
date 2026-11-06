@@ -255,7 +255,7 @@ async fn stripe_and_paddle_webhooks_check_their_timestamps() {
 #[tokio::test]
 async fn an_app_source_uses_its_own_secret_and_tolerance() {
     let app = incoming_app().build().await;
-    let body = br#"{"type":"email.bounced","data":{"to":"ada@example.com"}}"#.to_vec();
+    let body = br#"{"type":"email.bounced","data":{"to":"anu@example.com"}}"#.to_vec();
     let send = |id: &'static str, timestamp: i64, body: Vec<u8>| {
         let signature = StandardWebhooks::sign(MAIL_SECRET, id, timestamp, &body);
         app.client()

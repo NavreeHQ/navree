@@ -87,37 +87,37 @@ async fn mail_renders_in_the_locale_it_is_sent_in() {
     let i18n = app.get::<I18n>().await;
     let mailer = app.get::<Mailer>().await;
     let context = json!({
-        "owner": { "name": "Ada" },
-        "deal": { "title": "Lovelace renewal", "amount_cents": 4_200_000, "currency": "EUR" },
+        "owner": { "name": "Anu" },
+        "deal": { "title": "Lakhotia renewal", "amount_cents": 4_200_000, "currency": "EUR" },
     });
     for locale in ["de", "fr"] {
         let mailer = mailer.clone();
         let context = context.clone();
         i18n.scope(locale, async move {
-            let subject = t!("deal-won-subject", title = "Lovelace renewal");
+            let subject = t!("deal-won-subject", title = "Lakhotia renewal");
             let mail =
-                TemplateMail::new("ada@navree.test", subject, "mail/deal-won").context(context);
+                TemplateMail::new("anu@navree.test", subject, "mail/deal-won").context(context);
             mailer.queue(&mail).await.unwrap();
         })
         .await;
     }
     let sent = mailer.array_transport().unwrap().sent();
-    assert_eq!(sent[0].subject, "Gewonnen: Lovelace renewal");
+    assert_eq!(sent[0].subject, "Gewonnen: Lakhotia renewal");
     assert_eq!(
         sent[0].text.as_deref(),
-        Some("Ada hat Lovelace renewal gewonnen.")
+        Some("Anu hat Lakhotia renewal gewonnen.")
     );
     let html = sent[0].html.as_deref().unwrap();
     assert!(html.contains("42.000,00\u{a0}€"), "{html}");
     // `mail-footer` is not in German: it falls back to English.
-    assert!(html.contains("Sent by Acme CRM."), "{html}");
-    assert_eq!(sent[1].subject, "Affaire gagnée : Lovelace renewal");
+    assert!(html.contains("Sent by Agra CRM."), "{html}");
+    assert_eq!(sent[1].subject, "Affaire gagnée : Lakhotia renewal");
     assert!(
         sent[1]
             .html
             .as_deref()
             .unwrap()
-            .contains("Envoyé par Acme CRM.")
+            .contains("Envoyé par Agra CRM.")
     );
     app.shutdown().await.unwrap();
 }

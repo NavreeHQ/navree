@@ -21,7 +21,7 @@ async fn send_in_stores_with_the_transaction_and_delivers_after_commit() {
     uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
 
     let id = notifier
-        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
 
@@ -45,7 +45,7 @@ async fn send_in_a_rolled_back_unit_of_work_sends_nothing() {
     let uow = app.get::<Db>().await.uow(None, None).await;
 
     notifier
-        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -70,7 +70,7 @@ async fn send_in_queues_the_other_channels_after_commit() {
     let uow = app.get::<Db>().await.uow(None, None).await;
 
     notifier
-        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
     assert!(dispatcher.jobs().is_empty(), "nothing queued before commit");
@@ -110,14 +110,14 @@ async fn send_inside_a_unit_of_work_scope_joins_it() {
     uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
     let sent = tokio::time::timeout(
         quick,
-        uow.scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Acme renewal"))),
+        uow.scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Agra renewal"))),
     )
     .await
     .expect("does not wait for the write lock")
     .unwrap();
     let sent_now = tokio::time::timeout(
         quick,
-        uow.scope(notifier.send_now(&TestUser::new(), DealWon::via(&ALL, "Globex"))),
+        uow.scope(notifier.send_now(&TestUser::new(), DealWon::via(&ALL, "Gulati"))),
     )
     .await
     .expect("does not wait for the write lock")
@@ -135,7 +135,7 @@ async fn send_inside_a_unit_of_work_scope_joins_it() {
 
     let rolled_back = db.uow(None, None).await;
     rolled_back
-        .scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Initech")))
+        .scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Indrani")))
         .await
         .unwrap();
     rolled_back.rollback().await.unwrap();

@@ -16,7 +16,7 @@ use crate::harness::{MailApp, mail_app};
 fn hello(from: &str) -> Message {
     Message::new()
         .from(from)
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hi")
         .text("Hi")
 }
@@ -81,7 +81,7 @@ async fn the_most_specific_tier_wins() {
         &TransportConfig::Array,
     )
     .await;
-    assert_eq!(tier("Acme <hello@acme.test>").await, TransportTier::Domain);
+    assert_eq!(tier("Agra <hello@acme.test>").await, TransportTier::Domain);
     // Another sender domain skips the domain tier.
     assert_eq!(tier("hello@other.test").await, TransportTier::Workspace);
     // The fake (the configured transport) sent only the first message.

@@ -66,7 +66,7 @@ test("a lazy region fills in after paint", async () => {
 test("a failed submit shows errors under the fields, with no reload", async () => {
   const { page, problems, close } = await open("/deals/new");
   await page.evaluate(() => { window.kept = true; });
-  await page.fill("[name=title]", "Acme renewal");
+  await page.fill("[name=title]", "Agra renewal");
   await page.selectOption("[name=company_id]", { index: 1 });
   await page.fill("[name=amount]", "lots");
   await page.selectOption("[name=stage]", { index: 0 });
@@ -75,7 +75,7 @@ test("a failed submit shows errors under the fields, with no reload", async () =
   await error.waitFor();
   assert.match(await error.textContent(), /12,500/);
   assert.equal(await page.evaluate(() => window.kept), true, "the page did not reload");
-  assert.equal(await page.inputValue("[name=title]"), "Acme renewal", "what was typed stays");
+  assert.equal(await page.inputValue("[name=title]"), "Agra renewal", "what was typed stays");
   const amount = page.locator("[name=amount]");
   assert.equal(await amount.getAttribute("aria-invalid"), "true");
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("name")), "amount", "focus goes to the first error");
@@ -87,7 +87,7 @@ test("a failed submit shows errors under the fields, with no reload", async () =
 
 test("the pending state shows within a frame of the submit", async () => {
   const { page, close } = await open("/deals/new");
-  await page.fill("[name=title]", "Acme");
+  await page.fill("[name=title]", "Agra");
   await page.selectOption("[name=company_id]", { index: 1 });
   await page.fill("[name=amount]", "100");
   await page.route("**/deals", async (route) => {
@@ -110,12 +110,12 @@ test("a good submit toasts and goes on, keeping the shell", async () => {
   const { page, problems, close } = await open("/deals/new");
   const sidebar = await page.evaluateHandle(() => document.querySelector("[data-slot=sidebar]"));
   await page.evaluate(() => { window.kept = true; });
-  await page.fill("[name=title]", "Acme renewal");
+  await page.fill("[name=title]", "Agra renewal");
   await page.selectOption("[name=company_id]", { index: 1 });
   await page.fill("[name=amount]", "12,500.50");
   await page.getByRole("button", { name: "Create deal" }).click();
   await page.waitForURL("**/deals?per_page=1000");
-  await page.locator("[data-slot=toast]", { hasText: "Acme renewal created" }).waitFor();
+  await page.locator("[data-slot=toast]", { hasText: "Agra renewal created" }).waitFor();
   assert.equal(await page.evaluate(() => window.kept), true, "no reload");
   assert.equal(await sidebar.evaluate((el) => el.isConnected), true, "the same sidebar");
   assert.equal(await page.title(), "Deals");
@@ -127,17 +127,17 @@ test("the form works with JavaScript off", async () => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto(URL_BASE + "/deals/new");
-  await page.fill("[name=title]", "Acme");
+  await page.fill("[name=title]", "Agra");
   await page.selectOption("[name=company_id]", { index: 1 });
   await page.fill("[name=amount]", "lots");
   await page.getByRole("button", { name: "Create deal" }).click();
   await page.locator("[data-slot=field-error]").waitFor();
-  assert.equal(await page.inputValue("[name=title]"), "Acme", "the page comes back with what was typed");
+  assert.equal(await page.inputValue("[name=title]"), "Agra", "the page comes back with what was typed");
   await page.fill("[name=amount]", "100");
   await page.getByRole("button", { name: "Create deal" }).click();
   await page.waitForURL("**/deals?per_page=1000");
   assert.equal(await page.locator("tbody tr").count(), 1000);
-  assert.match(await page.locator("[data-slot=toaster] [data-slot=toast]").textContent(), /Acme created/, "the toast comes through the redirect");
+  assert.match(await page.locator("[data-slot=toaster] [data-slot=toast]").textContent(), /Agra created/, "the toast comes through the redirect");
   await page.reload();
   assert.equal(await page.locator("[data-slot=toaster] [data-slot=toast]").count(), 0, "and only once");
   // Sorting is a plain link.
@@ -172,14 +172,14 @@ test("filtering as you type keeps focus and caret", async () => {
   const { page, problems, close } = await open("/deals?per_page=1000");
   const search = page.locator("input[name=q]");
   await search.click();
-  await page.keyboard.type("acme", { delay: 20 });
-  await page.waitForURL("**q=acme**");
+  await page.keyboard.type("agra", { delay: 20 });
+  await page.waitForURL("**q=agra**");
   await page.locator("text=of 167").waitFor();
   const state = await search.evaluate((el) => ({ focused: document.activeElement === el, value: el.value, caret: el.selectionStart }));
-  assert.deepEqual(state, { focused: true, value: "acme", caret: 4 });
+  assert.deepEqual(state, { focused: true, value: "agra", caret: 4 });
   await page.selectOption("select[name=stage]", "won");
   await page.waitForURL("**stage=won**");
-  assert.equal(await page.inputValue("input[name=q]"), "acme");
+  assert.equal(await page.inputValue("input[name=q]"), "agra");
   assert.deepEqual(problems, []);
   await close();
 });
@@ -359,7 +359,7 @@ test("text, a counter and a row's details need no request either", async () => {
   assert.equal(await page.textContent("#g-bio-count"), "7/160");
   await page.locator("#g-fill-8").click();
   await page.locator("#g-fill[open]").waitFor();
-  assert.deepEqual(await page.evaluate(() => [document.getElementById("g-fill-name").textContent, document.getElementById("g-fill-sum").textContent, document.getElementById("g-fill-key").value]), ["Globex expansion", "48,000", "8"]);
+  assert.deepEqual(await page.evaluate(() => [document.getElementById("g-fill-name").textContent, document.getElementById("g-fill-sum").textContent, document.getElementById("g-fill-key").value]), ["Gulati expansion", "48,000", "8"]);
   await page.keyboard.press("Escape");
   assert.equal(requests.length, before, "no network");
   assert.deepEqual(problems, []);

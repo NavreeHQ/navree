@@ -539,7 +539,7 @@ mod tests {
             "providers": {
                 "crm": { "client_id": "x" },
                 "slack": {},
-                "acme": { "type": "oauth2", "client_id": "a" },
+                "agra": { "type": "oauth2", "client_id": "a" },
                 "Bad Key": { "type": "api_key" },
                 "providers": { "type": "api_key" },
                 "microsoft": { "client_id": "m", "apps": { "mail_send": {} } }
@@ -555,7 +555,7 @@ mod tests {
             "{error}"
         );
         assert!(
-            error.contains("integrations.providers.acme.token_url is required"),
+            error.contains("integrations.providers.agra.token_url is required"),
             "{error}"
         );
         assert!(

@@ -166,9 +166,9 @@ async fn an_import_runs_as_a_batch_behind_an_operation() {
     let app = app().await;
     let me = Uuid::now_v7();
     let emails = [
-        "ada@example.test",
-        "grace@example.test",
-        "alan@example.test",
+        "anu@example.test",
+        "gauri@example.test",
+        "arun@example.test",
     ];
 
     let op = app
@@ -237,7 +237,7 @@ async fn a_failing_chunk_fails_the_operation() {
     let op = app
         .acting_as(principal(me))
         .post("/api/v1/contacts/imports")
-        .json(&json!({ "emails": ["ada@example.test", "", "alan@example.test"] }))
+        .json(&json!({ "emails": ["anu@example.test", "", "arun@example.test"] }))
         .send()
         .await
         .assert_status(200)
@@ -271,7 +271,7 @@ async fn the_fake_records_the_batch() {
 
     app.acting_as(principal(me))
         .post("/api/v1/contacts/imports")
-        .json(&json!({ "emails": ["ada@example.test", "grace@example.test", "alan@example.test"] }))
+        .json(&json!({ "emails": ["anu@example.test", "gauri@example.test", "arun@example.test"] }))
         .send()
         .await
         .assert_status(200);
@@ -280,7 +280,7 @@ async fn the_fake_records_the_batch() {
     let batch = &fake.batches()[0];
     assert_eq!(
         batch.jobs_of::<ImportChunk>()[1].rows,
-        ["alan@example.test"]
+        ["arun@example.test"]
     );
     assert_eq!(batch.then_of::<FinishImport>().unwrap().rows, 3);
     assert!(batch.catch_of::<ReportImportFailure>().is_some());

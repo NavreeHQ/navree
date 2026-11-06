@@ -448,7 +448,7 @@ async fn unknown_methods_answer_method_not_found_without_side_effects() {
         .build()
         .await;
     let rep = user();
-    insert_deal(&app, rep.user_id, "Acme renewal", "lead").await;
+    insert_deal(&app, rep.user_id, "Agra renewal", "lead").await;
     let notifier = app.get::<McpNotifier>().await;
     let session = Session::open(app.acting_as(rep.clone()), "2025-11-25").await;
     let before = (all_deals(&app).await, notifier.sessions());

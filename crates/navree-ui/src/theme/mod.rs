@@ -15,7 +15,7 @@
 //! use navree_ui::theme::{Appearance, Mode, Theme};
 //! use navree_ui::{Shell, View, el};
 //!
-//! let shell = Shell::new("Acme").appearance(Appearance::new(Theme::OCEAN, Mode::System));
+//! let shell = Shell::new("Agra").appearance(Appearance::new(Theme::OCEAN, Mode::System));
 //! let html = shell.page("Deals", "/deals").to_view().to_html();
 //! assert!(html.starts_with(r#"<!doctype html><html lang="en" data-theme="ocean" data-mode="system""#));
 //! ```
@@ -1442,12 +1442,12 @@ mod tests {
         let refused = Theme::custom(ThemeId::parse("pale").unwrap(), "Pale", spec);
         assert!(matches!(refused, Err(ImportError::Contrast(ref list)) if !list.is_empty()));
         let fine = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::OCEAN.spec(),
         )
         .unwrap();
-        assert_eq!(fine.id(), "acme");
+        assert_eq!(fine.id(), "agra");
         assert!(
             fine.key().starts_with('c') && fine.key().len() == 25,
             "{}",

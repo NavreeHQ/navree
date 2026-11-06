@@ -12,17 +12,17 @@ async fn creating_a_workspace_makes_its_creator_the_owner() {
     let mut events = world
         .events(&["workspace.created", "workspace.member_added"])
         .await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
 
-    let acme = world.workspace(ada, "Acme Inc.").await;
+    let agra = world.workspace(ada, "Agra Inc.").await;
 
-    assert_eq!(acme.name, "Acme Inc.");
-    assert_eq!(acme.slug, "acme-inc");
-    assert_eq!(acme.owner_id, ada);
+    assert_eq!(agra.name, "Agra Inc.");
+    assert_eq!(agra.slug, "agra-inc");
+    assert_eq!(agra.owner_id, ada);
     let membership = world
         .members()
         .await
-        .find(acme.id, ada)
+        .find(agra.id, ada)
         .await
         .unwrap()
         .unwrap();
@@ -34,17 +34,17 @@ async fn creating_a_workspace_makes_its_creator_the_owner() {
 #[tokio::test]
 async fn slugs_are_unique() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let first = world.workspace(ada, "Acme").await;
-    let second = world.workspace(ada, "Acme").await;
-    assert_eq!(first.slug, "acme");
-    assert_eq!(second.slug, "acme-2");
+    let ada = world.user("Anu", "anu@example.com").await;
+    let first = world.workspace(ada, "Agra").await;
+    let second = world.workspace(ada, "Agra").await;
+    assert_eq!(first.slug, "agra");
+    assert_eq!(second.slug, "agra-2");
 
     let workspaces = world.workspaces().await;
     let taken = world
         .work(|uow| async move {
             workspaces
-                .create(&uow, ada, NewWorkspace::named("Other").slug("acme"))
+                .create(&uow, ada, NewWorkspace::named("Other").slug("agra"))
                 .await
         })
         .await
@@ -86,19 +86,19 @@ async fn slugs_are_unique() {
 #[tokio::test]
 async fn workspaces_are_renamed_listed_and_resolved() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(grace, "Globex").await;
-    world.join(globex.id, ada, "viewer").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(grace, "Gulati").await;
+    world.join(gulati.id, ada, "viewer").await;
 
     let workspaces = world.workspaces().await;
     let renamed = world
-        .work(|uow| async move { workspaces.rename(&uow, acme.id, "Acme Corp").await })
+        .work(|uow| async move { workspaces.rename(&uow, agra.id, "Agra Corp").await })
         .await
         .unwrap();
-    assert_eq!(renamed.name, "Acme Corp");
-    assert_eq!(renamed.slug, "acme", "renaming keeps the slug");
+    assert_eq!(renamed.name, "Agra Corp");
+    assert_eq!(renamed.slug, "agra", "renaming keeps the slug");
 
     let workspaces = world.workspaces().await;
     let mine: Vec<(String, WorkspaceRole)> = workspaces
@@ -111,21 +111,21 @@ async fn workspaces_are_renamed_listed_and_resolved() {
     assert_eq!(
         mine,
         [
-            ("acme".to_owned(), WorkspaceRole::Owner),
-            ("globex".to_owned(), WorkspaceRole::Viewer)
+            ("agra".to_owned(), WorkspaceRole::Owner),
+            ("gulati".to_owned(), WorkspaceRole::Viewer)
         ]
     );
-    assert_eq!(workspaces.resolve("globex").await.unwrap().id, globex.id);
+    assert_eq!(workspaces.resolve("gulati").await.unwrap().id, gulati.id);
     assert_eq!(
         workspaces
-            .resolve(&globex.id.to_string())
+            .resolve(&gulati.id.to_string())
             .await
             .unwrap()
             .slug,
-        "globex"
+        "gulati"
     );
     assert!(matches!(
-        workspaces.resolve("initech").await,
+        workspaces.resolve("indrani").await,
         Err(WorkspaceError::WorkspaceNotFound(_))
     ));
 }
@@ -134,15 +134,15 @@ async fn workspaces_are_renamed_listed_and_resolved() {
 async fn ownership_moves_to_a_member() {
     let world = World::new().await;
     let mut events = world.events(&["workspace.ownership_transferred"]).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let stranger = world.user("Eve", "eve@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.join(acme.id, grace, "member").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.join(agra.id, grace, "member").await;
 
     let workspaces = world.workspaces().await;
     let refused = world
-        .work(|uow| async move { workspaces.transfer_ownership(&uow, acme.id, stranger).await })
+        .work(|uow| async move { workspaces.transfer_ownership(&uow, agra.id, stranger).await })
         .await
         .unwrap_err();
     assert!(matches!(
@@ -155,17 +155,17 @@ async fn ownership_moves_to_a_member() {
 
     let workspaces = world.workspaces().await;
     let moved = world
-        .work(|uow| async move { workspaces.transfer_ownership(&uow, acme.id, grace).await })
+        .work(|uow| async move { workspaces.transfer_ownership(&uow, agra.id, grace).await })
         .await
         .unwrap();
     assert_eq!(moved.owner_id, grace);
     let members = world.members().await;
     assert_eq!(
-        members.find(acme.id, grace).await.unwrap().unwrap().role,
+        members.find(agra.id, grace).await.unwrap().unwrap().role,
         "owner"
     );
     assert_eq!(
-        members.find(acme.id, ada).await.unwrap().unwrap().role,
+        members.find(agra.id, ada).await.unwrap().unwrap().role,
         "admin"
     );
     let payloads = events.drain();
@@ -178,17 +178,17 @@ async fn ownership_moves_to_a_member() {
 async fn deleting_a_workspace_removes_its_members_and_invitations() {
     let world = World::new().await;
     let mut events = world.events(&["workspace.deleted"]).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.join(acme.id, grace, "member").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.join(agra.id, grace, "member").await;
     let invitations = world.invitations().await;
     world
         .work(|uow| async move {
             invitations
                 .invite(
                     &uow,
-                    acme.id,
+                    agra.id,
                     "linus@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
@@ -200,13 +200,13 @@ async fn deleting_a_workspace_removes_its_members_and_invitations() {
 
     let workspaces = world.workspaces().await;
     world
-        .work(|uow| async move { workspaces.delete(&uow, acme.id).await })
+        .work(|uow| async move { workspaces.delete(&uow, agra.id).await })
         .await
         .unwrap();
 
     let db = world.db().await;
     let left = Member::query()
-        .where_(Member::WORKSPACE_ID.eq(acme.id))
+        .where_(Member::WORKSPACE_ID.eq(agra.id))
         .count(&*db)
         .await
         .unwrap();
@@ -215,7 +215,7 @@ async fn deleting_a_workspace_removes_its_members_and_invitations() {
         world
             .invitations()
             .await
-            .pending(acme.id)
+            .pending(agra.id)
             .await
             .unwrap()
             .is_empty()
@@ -224,7 +224,7 @@ async fn deleting_a_workspace_removes_its_members_and_invitations() {
         world
             .workspaces()
             .await
-            .find(acme.id)
+            .find(agra.id)
             .await
             .unwrap()
             .is_none()
@@ -242,17 +242,17 @@ async fn members_are_added_changed_listed_and_removed() {
             "workspace.member_removed",
         ])
         .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     events.drain();
 
-    world.join(acme.id, grace, "member").await;
+    world.join(agra.id, grace, "member").await;
     let members = world.members().await;
     let again = world
         .work(|uow| async move {
             members
-                .add(&uow, acme.id, grace, WorkspaceRole::Viewer)
+                .add(&uow, agra.id, grace, WorkspaceRole::Viewer)
                 .await
         })
         .await
@@ -265,7 +265,7 @@ async fn members_are_added_changed_listed_and_removed() {
             members
                 .add(
                     &uow,
-                    acme.id,
+                    agra.id,
                     Uuid::now_v7(),
                     WorkspaceRole::parse("auditor"),
                 )
@@ -282,7 +282,7 @@ async fn members_are_added_changed_listed_and_removed() {
     let changed = world
         .work(|uow| async move {
             members
-                .change_role(&uow, acme.id, grace, WorkspaceRole::Admin)
+                .change_role(&uow, agra.id, grace, WorkspaceRole::Admin)
                 .await
         })
         .await
@@ -292,7 +292,7 @@ async fn members_are_added_changed_listed_and_removed() {
     let listed: Vec<(String, String, Option<String>)> = world
         .members()
         .await
-        .list(acme.id)
+        .list(agra.id)
         .await
         .unwrap()
         .into_iter()
@@ -309,34 +309,34 @@ async fn members_are_added_changed_listed_and_removed() {
         [
             (
                 "owner".to_owned(),
-                "Ada".to_owned(),
-                Some("ada@example.com".to_owned())
+                "Anu".to_owned(),
+                Some("anu@example.com".to_owned())
             ),
             (
                 "admin".to_owned(),
-                "Grace".to_owned(),
-                Some("grace@example.com".to_owned())
+                "Gauri".to_owned(),
+                Some("gauri@example.com".to_owned())
             ),
         ]
     );
 
     let members = world.members().await;
     world
-        .work(|uow| async move { members.remove(&uow, acme.id, grace).await })
+        .work(|uow| async move { members.remove(&uow, agra.id, grace).await })
         .await
         .unwrap();
     assert!(
         world
             .members()
             .await
-            .find(acme.id, grace)
+            .find(agra.id, grace)
             .await
             .unwrap()
             .is_none()
     );
     let members = world.members().await;
     let gone = world
-        .work(|uow| async move { members.remove(&uow, acme.id, grace).await })
+        .work(|uow| async move { members.remove(&uow, agra.id, grace).await })
         .await
         .unwrap_err();
     assert!(matches!(gone, WorkspaceError::MemberNotFound));
@@ -353,13 +353,13 @@ async fn members_are_added_changed_listed_and_removed() {
 #[tokio::test]
 async fn the_last_owner_cannot_be_removed_or_demoted() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
 
     let members = world.members().await;
     let removed = world
-        .work(|uow| async move { members.remove(&uow, acme.id, ada).await })
+        .work(|uow| async move { members.remove(&uow, agra.id, ada).await })
         .await
         .unwrap_err();
     assert!(matches!(removed, WorkspaceError::OwnerRequired));
@@ -367,7 +367,7 @@ async fn the_last_owner_cannot_be_removed_or_demoted() {
     let demoted = world
         .work(|uow| async move {
             members
-                .change_role(&uow, acme.id, ada, WorkspaceRole::Admin)
+                .change_role(&uow, agra.id, ada, WorkspaceRole::Admin)
                 .await
         })
         .await
@@ -375,19 +375,19 @@ async fn the_last_owner_cannot_be_removed_or_demoted() {
     assert!(matches!(demoted, WorkspaceError::OwnerRequired));
 
     // A second owner can go; the workspace keeps its owner.
-    world.join(acme.id, grace, "owner").await;
+    world.join(agra.id, grace, "owner").await;
     let members = world.members().await;
     world
         .work(|uow| async move {
             members
-                .change_role(&uow, acme.id, grace, WorkspaceRole::Member)
+                .change_role(&uow, agra.id, grace, WorkspaceRole::Member)
                 .await
         })
         .await
         .unwrap();
     let members = world.members().await;
     world
-        .work(|uow| async move { members.remove(&uow, acme.id, grace).await })
+        .work(|uow| async move { members.remove(&uow, agra.id, grace).await })
         .await
         .unwrap();
 }
@@ -396,11 +396,11 @@ async fn the_last_owner_cannot_be_removed_or_demoted() {
 async fn rolled_back_changes_emit_no_events() {
     let world = World::new().await;
     let mut events = world.events(&["workspace.created"]).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let workspaces = world.workspaces().await;
     let uow = world.db().await.uow(None, None).await;
     workspaces
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -409,7 +409,7 @@ async fn rolled_back_changes_emit_no_events() {
         world
             .workspaces()
             .await
-            .find_by_slug("acme")
+            .find_by_slug("agra")
             .await
             .unwrap()
             .is_none()

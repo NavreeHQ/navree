@@ -273,7 +273,7 @@ fn the_documented_values_have_their_fields() {
         .never_expires()
         .scopes(["s"])
         .external_id("T1")
-        .display_name("Acme");
+        .display_name("Agra");
 
     let _ = ApiKeyInput {
         key: String::new(),

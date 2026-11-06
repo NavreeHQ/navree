@@ -343,7 +343,7 @@ mod tests {
                 "portal",
                 "show_leaderboard=true",
                 "--workspace",
-                "acme",
+                "agra",
                 &format!("--user={user}"),
                 "welcome_text=Hi",
             ]),
@@ -351,7 +351,7 @@ mod tests {
         .unwrap();
         assert_eq!(parsed.key, "portal");
         assert_eq!(parsed.rest, ["show_leaderboard=true", "welcome_text=Hi"]);
-        assert_eq!(parsed.scope.workspace.as_deref(), Some("acme"));
+        assert_eq!(parsed.scope.workspace.as_deref(), Some("agra"));
         assert_eq!(parsed.scope.user, Some(user));
         assert!(!parsed.all);
 
@@ -365,9 +365,9 @@ mod tests {
 
         for (bad, message) in [
             (vec![], "name the settings"),
-            (vec!["--workspace", "acme"], "name the settings"),
+            (vec!["--workspace", "agra"], "name the settings"),
             (vec!["portal", "--workspace"], "`--workspace` needs a value"),
-            (vec!["portal", "--user", "ada"], "is not a user id"),
+            (vec!["portal", "--user", "anu"], "is not a user id"),
             (
                 vec!["portal", "--team", "x"],
                 "unexpected argument `--team`",

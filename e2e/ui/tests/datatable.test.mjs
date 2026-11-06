@@ -312,7 +312,7 @@ for (const browserName of browsers) {
       await settled(page);
       const search = page.locator("#deals input[name=search]");
       await search.click();
-      await search.pressSequentially("acme", { delay: 20 });
+      await search.pressSequentially("agra", { delay: 20 });
       await page.waitForTimeout(500);
       // Each request waited for a pause: the last keystroke before it was 100 ms back.
       const waits = await page.evaluate(() =>
@@ -434,7 +434,7 @@ for (const browserName of browsers) {
       await page.keyboard.press("Escape");
 
       await page.locator("#deals-m-company").evaluate((pop) => pop.showPopover());
-      await page.locator("#deals-m-company label", { hasText: "Globex" }).locator("input").check();
+      await page.locator("#deals-m-company label", { hasText: "Gulati" }).locator("input").check();
       await page.waitForURL((url) => [...url.searchParams.keys()].includes("filter[company][in]"));
       await settled(page);
       await page.keyboard.press("Escape");
@@ -452,13 +452,13 @@ for (const browserName of browsers) {
       await reset();
       const { page, close } = await open("/deals-row");
       const row = page.locator("[data-slot=filter-row]");
-      await row.locator("[name='filter[title][contains]']").fill("globex");
-      await page.waitForURL((url) => url.searchParams.get("filter[title][contains]") === "globex");
+      await row.locator("[name='filter[title][contains]']").fill("gulati");
+      await page.waitForURL((url) => url.searchParams.get("filter[title][contains]") === "gulati");
       await settled(page);
-      assert.equal(await row.locator("[name='filter[title][contains]']").inputValue(), "globex");
+      assert.equal(await row.locator("[name='filter[title][contains]']").inputValue(), "gulati");
       assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "filter[title][contains]"), "focus stays in the box");
       const titles = await rows(page).locator("td[data-truncate]").allInnerTexts();
-      assert.ok(titles.length > 0 && titles.every((text) => /globex/i.test(text)), titles.join());
+      assert.ok(titles.length > 0 && titles.every((text) => /gulati/i.test(text)), titles.join());
       await shot(page, `${browserName}-filter-row`);
       assert.deepEqual(await axe(page), []);
       await close();
@@ -552,8 +552,8 @@ for (const browserName of browsers) {
       const { page, close } = await open("/deals?per_page=10");
       await page.locator("[data-ui-select-page]").check();
       await page.locator("[data-ui-select-all]").click();
-      await page.locator("#deals [name=search]").fill("globex");
-      await page.waitForURL(/search=globex/);
+      await page.locator("#deals [name=search]").fill("gulati");
+      await page.waitForURL(/search=gulati/);
       await settled(page);
       const bar = page.locator("[data-slot=table-bulk]");
       assert.match(await bar.innerText(), /The filter changed/);
@@ -748,13 +748,13 @@ for (const browserName of browsers) {
       await page.getByRole("link", { name: "Page 2", exact: true }).click();
       assert.match(page.url(), /page=2/);
       assert.match(page.url(), /sort=amount/);
-      await page.locator("#deals [name=search]").fill("globex");
+      await page.locator("#deals [name=search]").fill("gulati");
       await page.getByRole("button", { name: "Apply" }).click();
-      await page.waitForURL(/search=globex/);
+      await page.waitForURL(/search=gulati/);
       // The page number itself: the address also holds `per_page=25`.
       assert.notEqual(new URL(page.url()).searchParams.get("page"), "2", "a new search starts from the first page");
       const titles = await rows(page).locator("td[data-truncate]").allInnerTexts();
-      assert.ok(titles.length > 0 && titles.every((text) => /globex/i.test(text)));
+      assert.ok(titles.length > 0 && titles.every((text) => /gulati/i.test(text)));
       await shot(page, `${browserName}-no-js`);
       // Popovers are native.
       await page.locator("[popovertarget=deals-m-stage]").click({ force: true });
@@ -762,10 +762,10 @@ for (const browserName of browsers) {
       await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Apply" }).click();
       await page.waitForURL((url) => url.searchParams.get("filter[stage][in]") === "won");
-      assert.match(page.url(), /search=globex/);
+      assert.match(page.url(), /search=gulati/);
       // A chip is a link.
       await page.locator("[data-slot=filter-chip]").first().click();
-      await page.waitForURL((url) => !url.search.includes("search=globex"));
+      await page.waitForURL((url) => !url.search.includes("search=gulati"));
       // Columns, density, per page.
       await page.goto(BASE + "/deals");
       await page.locator("[popovertarget=deals-columns]").click();

@@ -84,7 +84,7 @@ mod tests {
     use super::*;
 
     const CREDENTIALS: &str = "postmark:s3cr3t-pa55";
-    const BOUNCE: &[u8] = br#"{"RecordType":"Bounce","MessageID":"883953f4-6105-42a2-a16a-77a8eac79483","Type":"HardBounce","Email":"ada@example.com"}"#;
+    const BOUNCE: &[u8] = br#"{"RecordType":"Bounce","MessageID":"883953f4-6105-42a2-a16a-77a8eac79483","Type":"HardBounce","Email":"anu@example.com"}"#;
 
     fn authorized(value: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();

@@ -27,7 +27,7 @@ async fn non_ascii_text_matches_in_any_case() {
         "Øresund Énergie",
         "Équipe Ünited Straße",
         "Ölwechsel Rahmenvertrag",
-        "Acme 100% *real*",
+        "Agra 100% *real*",
     ] {
         record::insert(&db, &new_note(title)).await.unwrap();
     }
@@ -42,9 +42,9 @@ async fn non_ascii_text_matches_in_any_case() {
         ("STRAßE", vec!["Équipe Ünited Straße"]),
         ("ölwechsel", vec!["Ölwechsel Rahmenvertrag"]),
         ("rahmenVERTRAG", vec!["Ölwechsel Rahmenvertrag"]),
-        ("100%", vec!["Acme 100% *real*"]),
-        ("*REAL*", vec!["Acme 100% *real*"]),
-        ("*", vec!["Acme 100% *real*"]),
+        ("100%", vec!["Agra 100% *real*"]),
+        ("*REAL*", vec!["Agra 100% *real*"]),
+        ("*", vec!["Agra 100% *real*"]),
         ("e?u", vec![]),
     ] {
         let found = titles(&db, contains_ignore_case(backend, &title, term)).await;

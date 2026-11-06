@@ -107,13 +107,13 @@ async fn smtp_transport_delivers_to_a_local_server() {
     let transport = SmtpTransport::from_url(&format!("smtp://127.0.0.1:{port}")).expect("url");
     let message = Message::new()
         .from("App <app@example.com>")
-        .to("ada@example.com")
-        .cc("grace@example.com")
+        .to("anu@example.com")
+        .cc("gauri@example.com")
         .bcc("hidden@example.com")
         .reply_to("support@example.com")
         .subject("Hello")
-        .text("Hello, Ada")
-        .html("<p>Hello, Ada</p>");
+        .text("Hello, Anu")
+        .html("<p>Hello, Anu</p>");
 
     transport.send(&message).await.expect("send");
     let session = server.await.expect("server");
@@ -121,8 +121,8 @@ async fn smtp_transport_delivers_to_a_local_server() {
     let commands = session.commands.join("\n");
     for expected in [
         "MAIL FROM:<app@example.com>",
-        "RCPT TO:<ada@example.com>",
-        "RCPT TO:<grace@example.com>",
+        "RCPT TO:<anu@example.com>",
+        "RCPT TO:<gauri@example.com>",
         "RCPT TO:<hidden@example.com>",
     ] {
         assert!(
@@ -133,13 +133,13 @@ async fn smtp_transport_delivers_to_a_local_server() {
     let data = &session.data;
     for expected in [
         "From: App <app@example.com>",
-        "To: ada@example.com",
-        "Cc: grace@example.com",
+        "To: anu@example.com",
+        "Cc: gauri@example.com",
         "Reply-To: support@example.com",
         "Subject: Hello",
         "multipart/alternative",
-        "Hello, Ada",
-        "<p>Hello, Ada</p>",
+        "Hello, Anu",
+        "<p>Hello, Anu</p>",
     ] {
         assert!(data.contains(expected), "missing {expected} in:\n{data}");
     }
@@ -222,7 +222,7 @@ async fn smtp_transport_reports_connection_failures() {
     let transport = SmtpTransport::from_url(&format!("smtp://127.0.0.1:{port}")).expect("url");
     let message = Message::new()
         .from("app@example.com")
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hello")
         .text("Hello");
 

@@ -188,11 +188,11 @@ mod s3 {
     #[tokio::test]
     async fn a_prefix_keeps_every_key_under_it() {
         let server = S3Server::start().await;
-        let disk = disk(config(&server).prefix("/tenants//acme/"));
+        let disk = disk(config(&server).prefix("/tenants//agra/"));
         disk.put("logo.png", crate::conformance::png(100))
             .await
             .unwrap();
-        assert_eq!(server.keys(), ["tenants/acme/logo.png"]);
+        assert_eq!(server.keys(), ["tenants/agra/logo.png"]);
         assert_eq!(disk.list("").await.unwrap(), ["logo.png"]);
 
         let http = Http::network();
@@ -200,7 +200,7 @@ mod s3 {
             .temporary_url("logo.png", Utc::now() + chrono::Duration::minutes(1))
             .await
             .unwrap();
-        assert!(url.contains("/navree-test/tenants/acme/logo.png?"), "{url}");
+        assert!(url.contains("/navree-test/tenants/agra/logo.png?"), "{url}");
         assert_eq!(http.get(&url).await.status, 200);
 
         let rules = UploadRules::new(1000, ["image/png"]);
@@ -220,10 +220,10 @@ mod s3 {
         assert_eq!(reply.status, 200, "{reply:?}");
         assert_eq!(
             server.keys(),
-            ["tenants/acme/logo.png", "tenants/acme/next.png"]
+            ["tenants/agra/logo.png", "tenants/agra/next.png"]
         );
         assert_eq!(
-            server.content_type("tenants/acme/next.png").as_deref(),
+            server.content_type("tenants/agra/next.png").as_deref(),
             Some("image/png")
         );
     }

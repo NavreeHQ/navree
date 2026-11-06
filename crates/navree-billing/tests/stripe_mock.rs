@@ -77,7 +77,7 @@ fn checkout(customer: Option<String>) -> CheckoutRequest {
         billable_type: "workspace".into(),
         billable_id: Uuid::now_v7(),
         customer_id: customer,
-        customer_email: Some("ada@example.com".into()),
+        customer_email: Some("anu@example.com".into()),
         plan: "pro".into(),
         interval: Interval::Monthly,
         price_id: "price_pro_monthly".into(),
@@ -106,8 +106,8 @@ async fn stripe_accepts_every_request_the_client_sends() {
             .create_customer(&NewCustomer {
                 billable_type: "workspace".into(),
                 billable_id: Uuid::now_v7(),
-                name: "Acme".into(),
-                email: Some("ada@example.com".into()),
+                name: "Agra".into(),
+                email: Some("anu@example.com".into()),
                 idempotency_key: format!("navree-customer-mock-{}", Uuid::now_v7().simple()),
             })
             .await,

@@ -858,10 +858,10 @@ mod tests {
     #[test]
     fn json_paths_create_objects_and_index_arrays() {
         let mut json = json!({"tags": ["a"]});
-        set_path(&mut json, &["owner", "name"], json!("Ada")).unwrap();
+        set_path(&mut json, &["owner", "name"], json!("Anu")).unwrap();
         set_path(&mut json, &["tags", "1"], json!("b")).unwrap();
         set_path(&mut json, &["tags", "0"], json!("z")).unwrap();
-        assert_eq!(json, json!({"tags": ["z", "b"], "owner": {"name": "Ada"}}));
+        assert_eq!(json, json!({"tags": ["z", "b"], "owner": {"name": "Anu"}}));
         assert_eq!(
             set_path(&mut json, &["tags", "5"], json!(1)).unwrap_err(),
             "index 5 is past the end of an array of 2"

@@ -200,7 +200,7 @@ fn a_form_can_draw_its_phone_fields_with_its_own_flags() {
 #[test]
 fn a_posted_number_is_read_in_its_country() {
     let contact = decode::<Contact>(&pairs(&[
-        ("name", "Ada"),
+        ("name", "Anu"),
         ("mobile", "07400 123456"),
         ("mobile_country", "GB"),
         ("office", "020 7946 0018 ext. 12"),
@@ -220,7 +220,7 @@ fn a_posted_number_is_read_in_its_country() {
 
     // An international number needs no country; an empty optional one is none.
     let contact = decode::<Contact>(&pairs(&[
-        ("name", "Ada"),
+        ("name", "Anu"),
         ("mobile", "+91 98765 43210"),
         ("mobile_country", ""),
         ("office", ""),
@@ -235,7 +235,7 @@ fn a_posted_number_is_read_in_its_country() {
 fn a_number_that_is_not_valid_in_its_country_is_a_field_error() {
     // Valid in the United Kingdom, not in France: the country chosen counts.
     let errors = decode::<Contact>(&pairs(&[
-        ("name", "Ada"),
+        ("name", "Anu"),
         ("mobile", "07400 123456"),
         ("mobile_country", "FR"),
     ]))
@@ -246,11 +246,11 @@ fn a_number_that_is_not_valid_in_its_country_is_a_field_error() {
     );
     // Without a country, a national number can't be read.
     let errors =
-        decode::<Contact>(&pairs(&[("name", "Ada"), ("mobile", "07400 123456")])).unwrap_err();
+        decode::<Contact>(&pairs(&[("name", "Anu"), ("mobile", "07400 123456")])).unwrap_err();
     assert!(errors.contains_key("mobile"), "{errors:?}");
     // A text field checked by the phone rule reports through the rule.
     let errors = decode::<Contact>(&pairs(&[
-        ("name", "Ada"),
+        ("name", "Anu"),
         ("mobile", "+447400123456"),
         ("fax", "12"),
         ("fax_country", "GB"),
@@ -351,7 +351,7 @@ fn a_saved_number_shows_as_text_that_reads_back_to_it_in_every_region() {
 #[test]
 fn a_text_field_holds_e164_only() {
     let with = |more: &[(&str, &str)]| {
-        let mut all = vec![("name", "Ada"), ("mobile", "+447400123456")];
+        let mut all = vec![("name", "Anu"), ("mobile", "+447400123456")];
         all.extend_from_slice(more);
         decode::<Contact>(&pairs(&all))
     };

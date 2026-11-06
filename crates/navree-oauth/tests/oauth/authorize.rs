@@ -33,7 +33,7 @@ async fn the_whole_flow_issues_tokens_for_a_public_client() {
         .assert_status(200)
         .assert_json_path("id", json!(request))
         .assert_json_path("client.id", json!(id))
-        .assert_json_path("client.name", json!("Acme mobile"))
+        .assert_json_path("client.name", json!("Agra mobile"))
         .assert_json_path(
             "scopes.0",
             json!({"name": "deals:read", "description": "Read your deals"}),
@@ -322,7 +322,7 @@ async fn loopback_redirect_uris_may_use_any_port() {
     let (_, token) = world.user("rep@acme.test", &["deals.read"]).await;
     let client = world
         .register(
-            NewClient::public("Acme CLI")
+            NewClient::public("Agra CLI")
                 .redirect_uri("http://127.0.0.1/callback")
                 .scopes(["deals:read"]),
         )
@@ -589,7 +589,7 @@ async fn trusted_clients_are_already_approved() {
     let (_, token) = world.user("rep@acme.test", &["deals.read"]).await;
     let client = world
         .register(
-            NewClient::public("Acme web")
+            NewClient::public("Agra web")
                 .redirect_uri(REDIRECT_URI)
                 .scopes(["deals:read"])
                 .trusted(),

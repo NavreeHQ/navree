@@ -1676,10 +1676,10 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       let { context, page } = await fresh(`/${name}`);
       await page.focus("#email");
       await page.evaluate(() => document.getElementById("f").requestSubmit());
-      await page.keyboard.type("ada");
+      await page.keyboard.type("anu");
       await page.waitForSelector("[data-slot=field-error]");
       assert.equal(await focused(page), "email");
-      assert.equal(await page.inputValue("#email"), "ada");
+      assert.equal(await page.inputValue("#email"), "anu");
       await context.close();
       // A save the user clicked and waited on: the first error takes focus.
       ({ context, page } = await fresh(`/${name}`));

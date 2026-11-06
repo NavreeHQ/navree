@@ -24,10 +24,10 @@ pub mod stripe {
             "id": "cus_QX1aBcDeF",
             "object": "customer",
             "created": NOW,
-            "email": "ada@example.com",
+            "email": "anu@example.com",
             "livemode": false,
             "metadata": { "billable_type": "workspace", "billable_id": WORKSPACE.to_string() },
-            "name": "Acme"
+            "name": "Agra"
         })
     }
 
@@ -263,11 +263,11 @@ pub mod paddle {
 
     pub fn customer() -> Value {
         json!({
-            "id": "ctm_01j8acme",
+            "id": "ctm_01j8agra",
             "status": "active",
             "custom_data": { "billable_type": "workspace", "billable_id": WORKSPACE.to_string() },
-            "name": "Acme",
-            "email": "ada@example.com",
+            "name": "Agra",
+            "email": "anu@example.com",
             "marketing_consent": false,
             "locale": "en",
             "created_at": iso(NOW),
@@ -279,7 +279,7 @@ pub mod paddle {
         json!({
             "id": "txn_01j8checkout",
             "status": "ready",
-            "customer_id": "ctm_01j8acme",
+            "customer_id": "ctm_01j8agra",
             "currency_code": "USD",
             "origin": "api",
             "subscription_id": null,
@@ -312,9 +312,9 @@ pub mod paddle {
             item["trial_dates"] = json!({ "starts_at": iso(NOW), "ends_at": iso(TRIAL_END) });
         }
         json!({
-            "id": "sub_01j8acme",
+            "id": "sub_01j8agra",
             "status": status,
-            "customer_id": "ctm_01j8acme",
+            "customer_id": "ctm_01j8agra",
             "address_id": "add_01j8",
             "business_id": null,
             "currency_code": "USD",
@@ -361,8 +361,8 @@ pub mod paddle {
         json!({
             "id": "txn_01j8first",
             "status": status,
-            "customer_id": "ctm_01j8acme",
-            "subscription_id": "sub_01j8acme",
+            "customer_id": "ctm_01j8agra",
+            "subscription_id": "sub_01j8agra",
             "invoice_number": "325-10001",
             "currency_code": "USD",
             "origin": "subscription_recurring",
@@ -378,7 +378,7 @@ pub mod paddle {
     pub fn portal_session() -> Value {
         json!({
             "id": "cpls_01j8",
-            "customer_id": "ctm_01j8acme",
+            "customer_id": "ctm_01j8agra",
             "urls": {
                 "general": { "overview": "https://customer-portal.paddle.com/cpl_01j8?action=overview&token=pga_x" },
                 "subscriptions": []

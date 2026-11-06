@@ -47,7 +47,7 @@ fn app() -> TestAppBuilder {
 
 fn certificate() -> Render {
     Render::template("certificates/classic")
-        .data(json!({"name": "Ada", "course": "Engines", "completed_on": "today"}))
+        .data(json!({"name": "Anu", "course": "Engines", "completed_on": "today"}))
 }
 
 /// Queues `render` to `path` behind a new operation of `owner`, in a unit
@@ -77,7 +77,7 @@ async fn queue(app: &TestApp, owner: Uuid, render: Render, path: &str) -> Uuid {
 #[tokio::test]
 async fn a_queued_render_runs_as_an_operation() {
     let app = app().build().await;
-    let id = queue(&app, Uuid::now_v7(), certificate(), "exports/ada.pdf").await;
+    let id = queue(&app, Uuid::now_v7(), certificate(), "exports/anu.pdf").await;
     let operations = app.get::<Operations>().await;
     assert_eq!(
         operations.find(id).await.unwrap().unwrap().status,
@@ -92,7 +92,7 @@ async fn a_queued_render_runs_as_an_operation() {
     assert_eq!(done.progress.percent, 100);
     let result = done.result.expect("the operation records the document");
     assert_eq!(result["disk"], "local");
-    assert_eq!(result["path"], "exports/ada.pdf");
+    assert_eq!(result["path"], "exports/anu.pdf");
     let size = result["size"].as_u64().unwrap();
     assert!(size > 1000, "{size}");
 
@@ -100,7 +100,7 @@ async fn a_queued_render_runs_as_an_operation() {
     let stored = documents
         .disk()
         .unwrap()
-        .get("exports/ada.pdf")
+        .get("exports/anu.pdf")
         .await
         .unwrap();
     assert_eq!(stored.len() as u64, size);
@@ -302,12 +302,12 @@ async fn the_fake_records_the_operation_and_renders_nothing() {
         .override_value(Arc::new(fake.documents()))
         .build()
         .await;
-    let id = queue(&app, Uuid::now_v7(), certificate(), "exports/ada.pdf").await;
+    let id = queue(&app, Uuid::now_v7(), certificate(), "exports/anu.pdf").await;
 
     fake.assert_queued("certificates/classic");
     let queued = fake.queued();
     assert_eq!(queued[0].document.operation_id, Some(id));
-    assert_eq!(queued[0].document.path, "exports/ada.pdf");
+    assert_eq!(queued[0].document.path, "exports/anu.pdf");
     fake.assert_nothing_rendered();
     // Nothing was dispatched: the operation waits.
     let stats = app.get::<Queue>().await.run_pending().await.unwrap();

@@ -46,10 +46,10 @@ impl Dispatcher for RecordingDispatcher {
     }
 }
 
-fn sync_acme() -> Tasks {
+fn sync_agra() -> Tasks {
     Tasks::new(|s| {
         s.job(SyncInvoices {
-            account: "acme".to_owned(),
+            account: "agra".to_owned(),
         })
         .hourly();
     })
@@ -61,7 +61,7 @@ async fn job_task_dispatches_job() {
     let dispatcher = Arc::new(RecordingDispatcher::default());
     let inline = Arc::new(InlineRuns::default());
     let app = db
-        .app(&clock("2026-10-25T05:00:00Z"), sync_acme())
+        .app(&clock("2026-10-25T05:00:00Z"), sync_agra())
         .override_value::<dyn Dispatcher>(dispatcher.clone())
         .override_value(inline.clone())
         .boot()
@@ -80,7 +80,7 @@ async fn job_task_dispatches_job() {
     let sent = dispatcher.0.lock().unwrap();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].job_type, "billing.sync_invoices");
-    assert_eq!(sent[0].payload, json!({ "account": "acme" }));
+    assert_eq!(sent[0].payload, json!({ "account": "agra" }));
     assert!(
         inline.0.lock().unwrap().is_empty(),
         "dispatched, not run inline"
@@ -92,7 +92,7 @@ async fn job_task_runs_inline_without_a_dispatcher() {
     let db = TestDb::new();
     let inline = Arc::new(InlineRuns::default());
     let app = db
-        .app(&clock("2026-10-25T05:00:00Z"), sync_acme())
+        .app(&clock("2026-10-25T05:00:00Z"), sync_agra())
         .override_value(inline.clone())
         .boot()
         .await
@@ -106,7 +106,7 @@ async fn job_task_runs_inline_without_a_dispatcher() {
     assert_eq!(outcomes[0].status, RunStatus::Succeeded);
     let runs = inline.0.lock().unwrap();
     assert_eq!(runs.len(), 1);
-    assert_eq!(runs[0].0, "acme");
+    assert_eq!(runs[0].0, "agra");
     assert!(
         runs[0]
             .1
@@ -146,14 +146,14 @@ async fn renamed_duplicates_are_fine() {
         .app(
             &clock("2026-10-25T05:00:00Z"),
             Tasks::new(|s| {
-                let acme = SyncInvoices {
-                    account: "acme".to_owned(),
+                let agra = SyncInvoices {
+                    account: "agra".to_owned(),
                 };
-                let globex = SyncInvoices {
-                    account: "globex".to_owned(),
+                let gulati = SyncInvoices {
+                    account: "gulati".to_owned(),
                 };
-                s.job(acme).hourly().name("sync acme");
-                s.job(globex).hourly().name("sync globex");
+                s.job(agra).hourly().name("sync agra");
+                s.job(gulati).hourly().name("sync gulati");
             }),
         )
         .override_value(Arc::new(InlineRuns::default()))
@@ -167,7 +167,7 @@ async fn renamed_duplicates_are_fine() {
         .unwrap();
     let mut names: Vec<_> = outcomes.into_iter().map(|o| o.task).collect();
     names.sort();
-    assert_eq!(names, ["sync acme", "sync globex"]);
+    assert_eq!(names, ["sync agra", "sync gulati"]);
 }
 
 #[tokio::test]
@@ -194,7 +194,7 @@ async fn empty_or_overlong_task_names_fail_the_boot() {
 #[tokio::test]
 async fn scheduling_a_job_registers_it_for_the_queue() {
     let db = TestDb::new();
-    let app = db.boot(&clock("2026-10-25T05:00:00Z"), sync_acme()).await;
+    let app = db.boot(&clock("2026-10-25T05:00:00Z"), sync_agra()).await;
     let names: Vec<&str> = app
         .ctx()
         .contributions::<navree_contracts::JobRegistration>()

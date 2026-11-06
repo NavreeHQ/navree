@@ -191,23 +191,23 @@ impl GetSettings for TestApp {
 async fn deleted_workspaces_and_organizations_lose_their_values() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
+    world.attach(holding.id, agra.id).await;
     for (scope, patch) in [
         (
             Scope::organization(holding.id),
             json!({"show_leaderboard": true}),
         ),
         (
-            Scope::workspace(acme.id),
-            json!({"welcome_text": "Hi Acme"}),
+            Scope::workspace(agra.id),
+            json!({"welcome_text": "Hi Agra"}),
         ),
         (
-            Scope::workspace(globex.id),
-            json!({"welcome_text": "Hi Globex"}),
+            Scope::workspace(gulati.id),
+            json!({"welcome_text": "Hi Gulati"}),
         ),
     ] {
         let settings = settings.clone();
@@ -219,7 +219,7 @@ async fn deleted_workspaces_and_organizations_lose_their_values() {
     // Cached before the deletes.
     assert!(
         settings
-            .get::<PortalSettings>(Scope::workspace(acme.id))
+            .get::<PortalSettings>(Scope::workspace(agra.id))
             .await
             .unwrap()
             .show_leaderboard
@@ -227,12 +227,12 @@ async fn deleted_workspaces_and_organizations_lose_their_values() {
 
     let workspaces = world.app.get::<Workspaces>().await;
     world
-        .work(|uow| async move { workspaces.delete(&uow, globex.id).await })
+        .work(|uow| async move { workspaces.delete(&uow, gulati.id).await })
         .await
         .unwrap();
     assert!(
         settings
-            .stored::<PortalSettings>(Scope::workspace(globex.id))
+            .stored::<PortalSettings>(Scope::workspace(gulati.id))
             .await
             .unwrap()
             .is_empty()
@@ -250,18 +250,18 @@ async fn deleted_workspaces_and_organizations_lose_their_values() {
             .unwrap()
             .is_empty()
     );
-    // Acme was detached: its organization's values no longer apply.
+    // Agra was detached: its organization's values no longer apply.
     let portal = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert!(!portal.show_leaderboard);
-    assert_eq!(portal.welcome_text, "Hi Acme");
+    assert_eq!(portal.welcome_text, "Hi Agra");
 
     // forget_scope reports the keys it removed.
     assert_eq!(
         settings
-            .forget_scope(ScopeTarget::new(ScopeKind::Workspace, acme.id))
+            .forget_scope(ScopeTarget::new(ScopeKind::Workspace, agra.id))
             .await
             .unwrap(),
         ["portal"]

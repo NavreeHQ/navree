@@ -177,8 +177,8 @@ fn a_pattern_is_stated_for_the_browser_only_when_its_rule_asks() {
         other: String::new(),
         handle: handle.into(),
     };
-    assert!(deal("ada_l").validate().is_ok());
-    let errors = deal("Ada L")
+    assert!(deal("anu_l").validate().is_ok());
+    let errors = deal("Anu L")
         .validate()
         .expect_err("checked on the server too");
     assert!(format!("{errors:?}").contains("handle"), "{errors:?}");

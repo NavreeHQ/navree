@@ -115,8 +115,8 @@ async fn every_stripe_write_carries_an_idempotency_key() {
         .create_customer(&NewCustomer {
             billable_type: "workspace".into(),
             billable_id: WORKSPACE,
-            name: "Acme".into(),
-            email: Some("ada@example.com".into()),
+            name: "Agra".into(),
+            email: Some("anu@example.com".into()),
             idempotency_key: "navree-customer-workspace-1".into(),
         })
         .await

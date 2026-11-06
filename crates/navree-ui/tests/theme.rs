@@ -149,13 +149,13 @@ fn check_theme(theme: &Theme) {
 #[test]
 fn a_name_is_cleaned_before_it_is_trimmed_and_cannot_reorder_text() {
     let spec = *Theme::OCEAN.spec();
-    let id = || ThemeId::parse("acme").unwrap();
-    let good = Theme::custom(id(), "Acme", spec).unwrap().to_json();
-    assert_eq!(good.matches(r#""Acme""#).count(), 1, "{good}");
-    let named = |name: &str| good.replace(r#""Acme""#, &format!(r#""{name}""#));
+    let id = || ThemeId::parse("agra").unwrap();
+    let good = Theme::custom(id(), "Agra", spec).unwrap().to_json();
+    assert_eq!(good.matches(r#""Agra""#).count(), 1, "{good}");
+    let named = |name: &str| good.replace(r#""Agra""#, &format!(r#""{name}""#));
     // A control character beyond a space is stripped first, then the space trimmed.
-    let theme = Theme::from_json(&named(r"\u0007 Acme \u0000")).unwrap();
-    assert_eq!(theme.name(), "Acme");
+    let theme = Theme::from_json(&named(r"\u0007 Agra \u0000")).unwrap();
+    assert_eq!(theme.name(), "Agra");
     assert!(
         Theme::from_json(&named(r"\u0007 \u0000")).is_err(),
         "nothing left is no name"
@@ -168,13 +168,13 @@ fn a_name_is_cleaned_before_it_is_trimmed_and_cannot_reorder_text() {
         );
     }
     // A name given in code, or typed into the builder, has them dropped.
-    let theme = Theme::custom(id(), " \u{202e}Acme\u{7} ", spec).unwrap();
-    assert_eq!(theme.name(), "Acme");
-    let draft = BuilderDraft::from_query("base=ocean&id=acme&name=%E2%80%AEAc%E2%81%A6me%07%20");
+    let theme = Theme::custom(id(), " \u{202e}Agra\u{7} ", spec).unwrap();
+    assert_eq!(theme.name(), "Agra");
+    let draft = BuilderDraft::from_query("base=ocean&id=agra&name=%E2%80%AEAc%E2%81%A6me%07%20");
     let theme = draft.to_theme().unwrap();
-    assert_eq!(theme.name(), "Acme");
+    assert_eq!(theme.name(), "Agra");
     let rust = theme.to_rust("navree::ui");
-    assert!(rust.contains(r#""Acme""#), "{rust}");
+    assert!(rust.contains(r#""Agra""#), "{rust}");
     assert!(!rust.contains('\u{202e}') && !rust.contains('\u{2066}'));
 }
 
@@ -271,8 +271,8 @@ fn short_forms_and_settings_from_anything_and_from_mutations() {
 fn stored_themes_from_mutations_never_panic_and_read_back() {
     let mut rng = Rng(0x0123_4567_89ab_cdef);
     let good = Theme::custom(
-        ThemeId::parse("acme").unwrap(),
-        "Acme",
+        ThemeId::parse("agra").unwrap(),
+        "Agra",
         *Theme::OCEAN.spec(),
     )
     .unwrap()
@@ -297,7 +297,7 @@ fn stored_themes_from_mutations_never_panic_and_read_back() {
 #[test]
 fn builder_queries_from_anything_read_back_from_their_own_query() {
     let mut rng = Rng(0xdead_beef_cafe_f00d);
-    let good = "base=ocean&accent=custom&accent_hex=%23ff8800&neutral=stone&radius=round&density=compact&font=serif&layout=inset&mode=light&d.fg-3=%23aabbcc&l.accent=%23123456&id=acme&name=Acme";
+    let good = "base=ocean&accent=custom&accent_hex=%23ff8800&neutral=stone&radius=round&density=compact&font=serif&layout=inset&mode=light&d.fg-3=%23aabbcc&l.accent=%23123456&id=agra&name=Agra";
     for round in 0..20_000 {
         let text = if round % 2 == 0 {
             rng.text(16)
@@ -321,7 +321,7 @@ fn builder_queries_from_anything_read_back_from_their_own_query() {
 }
 
 fn shell() -> Shell {
-    Shell::new("Acme")
+    Shell::new("Agra")
         .group(NavGroup::plain().item(NavItem::new("Home", "/").icon(icons::HOUSE)))
         .group(
             NavGroup::new("Sales")
@@ -332,7 +332,7 @@ fn shell() -> Shell {
                         .sub(NavItem::new("Pipeline", "/reports/pipeline")),
                 ),
         )
-        .user(UserMenu::new("Ada", "ada@example.com").action("Sign out", "/sign-out"))
+        .user(UserMenu::new("Anu", "anu@example.com").action("Sign out", "/sign-out"))
 }
 
 #[test]
@@ -353,7 +353,7 @@ fn a_page_with_nothing_set_is_as_it_always_was() {
 
 #[test]
 fn a_page_carries_its_theme_mode_density_and_sheet_from_the_first_byte() {
-    let mine = Theme::custom(ThemeId::parse("acme").unwrap(), "Acme", {
+    let mine = Theme::custom(ThemeId::parse("agra").unwrap(), "Agra", {
         let mut spec = *Theme::ROSE.spec();
         spec.density = navree_ui::theme::Density::Compact;
         spec.font = navree_ui::theme::Font::Serif;
@@ -513,8 +513,8 @@ fn the_levels_lay_over_each_other_and_a_cookie_or_url_picks_only_what_is_offered
 #[test]
 fn a_shell_with_the_theme_menu_links_the_sheets_of_the_themes_it_offers() {
     let mine = Theme::custom(
-        ThemeId::parse("acme").unwrap(),
-        "Acme",
+        ThemeId::parse("agra").unwrap(),
+        "Agra",
         *Theme::VIOLET.spec(),
     )
     .unwrap();
@@ -609,8 +609,8 @@ fn a_theme_is_offered_by_its_values_not_by_its_key() {
     // Two themes whose keys matched would still differ in their short forms: the
     // shell compares those, and the key is a long hash of them.
     let mine = Theme::custom(
-        ThemeId::parse("acme").unwrap(),
-        "Acme",
+        ThemeId::parse("agra").unwrap(),
+        "Agra",
         *Theme::VIOLET.spec(),
     )
     .unwrap();

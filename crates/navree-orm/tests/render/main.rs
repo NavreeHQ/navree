@@ -210,13 +210,13 @@ fn conditions_group_with_the_right_parentheses() {
     )));
     insta::assert_snapshot!(query(Query::from(deals().filter(Expr::raw(
         "lower(title) = ? OR amount_cents = ?",
-        [Value::from("acme"), Value::from(5_i64)]
+        [Value::from("agra"), Value::from(5_i64)]
     )))));
     insta::assert_snapshot!(query(Query::from(
         deals()
             .filter(Expr::raw(
                 "lower(title) = ? OR amount_cents = ?",
-                ["acme", "5"]
+                ["agra", "5"]
             ))
             .filter(col("id").gt(val(1_i64)))
             .filter(Expr::raw("a = ? OR b = ?", [1_i64, 2]).not())
@@ -597,8 +597,8 @@ fn inserts() {
         "companies",
         ["name", "country"],
         vec![
-            vec![val("Acme"), val(Value::Null(Kind::String))],
-            vec![val("Globex"), Expr::DefaultValue],
+            vec![val("Agra"), val(Value::Null(Kind::String))],
+            vec![val("Gulati"), Expr::DefaultValue],
         ],
     );
     insta::assert_snapshot!(statement(rows.clone()));
@@ -607,7 +607,7 @@ fn inserts() {
             SelectItem::new(col("id")),
             SelectItem::aliased(col("name"), "label")
         ],
-        ..Insert::values("companies", ["name"], vec![vec![val("Acme")]])
+        ..Insert::values("companies", ["name"], vec![vec![val("Agra")]])
     }));
     insta::assert_snapshot!(statement(Insert {
         table: ObjectName::parse("counters"),
@@ -619,7 +619,7 @@ fn inserts() {
     insta::assert_snapshot!(statement(Insert::values(
         "companies",
         ["name", "country"],
-        vec![vec![val("Acme")]]
+        vec![vec![val("Agra")]]
     )));
     insta::assert_snapshot!(statement(Insert::values("companies", ["name"], Vec::new())));
 }

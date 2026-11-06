@@ -163,7 +163,7 @@ async fn a_contact_from_cairo() {
 async fn the_region_source_wins_over_the_configured_region() {
     let app = app("EG").await;
     let contact =
-        |phone: &str| json!({ "name": "Ada", "phone": phone, "country": "GB", "notes": "" });
+        |phone: &str| json!({ "name": "Anu", "phone": phone, "country": "GB", "notes": "" });
     app.client()
         .post("/api/v1/contacts")
         .header("cf-ipcountry", "GB")

@@ -19,7 +19,7 @@ fn hidden(name: &str) -> Contact {
 async fn global_scopes_apply_wherever_relations_query() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    crm.acme
+    crm.agra
         .contacts()
         .create(&t.db, hidden("Ghost"))
         .await
@@ -34,9 +34,9 @@ async fn global_scopes_apply_wherever_relations_query() {
         .unwrap();
 
     // Relation queries.
-    assert_eq!(crm.acme.contacts().count(&t.db).await.unwrap(), 2);
+    assert_eq!(crm.agra.contacts().count(&t.db).await.unwrap(), 2);
     assert_eq!(
-        crm.acme
+        crm.agra
             .contacts()
             .without_global_scope::<Visible>()
             .count(&t.db)
@@ -45,7 +45,7 @@ async fn global_scopes_apply_wherever_relations_query() {
         3
     );
     assert_eq!(
-        crm.acme
+        crm.agra
             .contacts()
             .without_global_scopes()
             .get(&t.db)
@@ -55,7 +55,7 @@ async fn global_scopes_apply_wherever_relations_query() {
         3
     );
     // Pagination counts.
-    let page = crm.acme.contacts().paginate(&t.db, (1, 10)).await.unwrap();
+    let page = crm.agra.contacts().paginate(&t.db, (1, 10)).await.unwrap();
     assert_eq!((page.meta.total, page.data.len()), (2, 2));
 
     // Eager loads and aggregates.
@@ -94,7 +94,7 @@ async fn global_scopes_apply_wherever_relations_query() {
         .iter()
         .map(|company| company.name.clone())
         .collect();
-    assert_eq!(with_contacts, ["Acme", "Globex"]);
+    assert_eq!(with_contacts, ["Agra", "Gulati"]);
     let any = Company::query()
         .where_has(Company::contacts, |q| q.without_global_scope::<Visible>())
         .count(&t.db)

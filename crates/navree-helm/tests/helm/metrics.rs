@@ -13,8 +13,8 @@ use crate::support::*;
 /// Four deals around the app's clock (Monday 26 October 2026, noon UTC).
 async fn seed(app: &TestApp, owner: Uuid) {
     let at = |m, d, h| Utc.with_ymd_and_hms(2026, m, d, h, 0, 0).unwrap();
-    let globex = company(app, "Globex", None).await;
-    let initech = company(app, "Initech", None).await;
+    let gulati = company(app, "Gulati", None).await;
+    let indrani = company(app, "Indrani", None).await;
     deal(
         app,
         DealSeed {
@@ -22,7 +22,7 @@ async fn seed(app: &TestApp, owner: Uuid) {
             amount_cents: 1000,
             stage: "lead",
             owner: Some(owner),
-            company: Some(globex.id),
+            company: Some(gulati.id),
             created_at: at(10, 26, 9),
             ..DealSeed::default()
         },
@@ -35,7 +35,7 @@ async fn seed(app: &TestApp, owner: Uuid) {
             amount_cents: 2000,
             stage: "won",
             closed: true,
-            company: Some(globex.id),
+            company: Some(gulati.id),
             created_at: at(10, 25, 15),
             ..DealSeed::default()
         },
@@ -47,7 +47,7 @@ async fn seed(app: &TestApp, owner: Uuid) {
             title: "Three",
             amount_cents: 3000,
             stage: "lead",
-            company: Some(initech.id),
+            company: Some(indrani.id),
             created_at: at(10, 20, 10),
             ..DealSeed::default()
         },
@@ -215,8 +215,8 @@ async fn partitions_group_with_labels() {
         labels,
         [
             ("None", "$40.00"),
-            ("Globex", "$30.00"),
-            ("Initech", "$30.00")
+            ("Gulati", "$30.00"),
+            ("Indrani", "$30.00")
         ]
     );
 }

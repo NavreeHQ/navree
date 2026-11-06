@@ -41,7 +41,7 @@ fn frames(mut body: Bytes) -> Vec<(u8, Bytes)> {
 async fn grpc_web_calls_are_answered_on_the_http_port() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme renewal", rep).await;
+    let deal = insert_deal(&app, "Agra renewal", rep).await;
     let message = GetDealRequest {
         id: deal.id.to_string(),
     }
@@ -64,7 +64,7 @@ async fn grpc_web_calls_are_answered_on_the_http_port() {
     let frames = frames(response.bytes().clone());
     assert_eq!(frames.len(), 2, "the message, then the trailers");
     let found = Deal::decode(frames[0].1.clone()).unwrap();
-    assert_eq!(found.title, "Acme renewal");
+    assert_eq!(found.title, "Agra renewal");
     assert_eq!(frames[1].0, 0x80, "a trailers frame");
     let trailers = String::from_utf8(frames[1].1.to_vec()).unwrap();
     assert!(trailers.contains("grpc-status:0"), "{trailers}");
@@ -85,7 +85,7 @@ async fn grpc_web_calls_are_answered_on_the_http_port() {
 async fn connect_unary_calls_carry_json_or_protobuf() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme renewal", rep).await;
+    let deal = insert_deal(&app, "Agra renewal", rep).await;
     let owner = app.acting_as(principal(rep));
 
     let response = owner
@@ -99,7 +99,7 @@ async fn connect_unary_calls_carry_json_or_protobuf() {
         response.json_value(),
         json!({
             "id": deal.id.to_string(),
-            "title": "Acme renewal",
+            "title": "Agra renewal",
             "amountCents": "1200000",
             "currency": "USD",
             "stage": "lead",
@@ -124,7 +124,7 @@ async fn connect_unary_calls_carry_json_or_protobuf() {
     assert_eq!(response.header("content-type"), Some("application/proto"));
     assert_eq!(
         Deal::decode(response.bytes().clone()).unwrap().title,
-        "Acme renewal"
+        "Agra renewal"
     );
 }
 
@@ -132,7 +132,7 @@ async fn connect_unary_calls_carry_json_or_protobuf() {
 async fn connect_errors_use_http_statuses_and_a_json_body() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme", rep).await;
+    let deal = insert_deal(&app, "Agra", rep).await;
 
     let guest = app
         .client()
@@ -287,7 +287,7 @@ async fn browsers_get_the_grpc_web_and_connect_headers_in_cors() {
     }
 
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme", rep).await;
+    let deal = insert_deal(&app, "Agra", rep).await;
     let response = app
         .acting_as(principal(rep))
         .post(GET_DEAL)
@@ -404,7 +404,7 @@ fn decode_text(body: &[u8]) -> Bytes {
 async fn grpc_web_text_calls_are_base64() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme renewal", rep).await;
+    let deal = insert_deal(&app, "Agra renewal", rep).await;
     let message = GetDealRequest {
         id: deal.id.to_string(),
     }
@@ -431,7 +431,7 @@ async fn grpc_web_text_calls_are_base64() {
     assert_eq!(frames.len(), 2, "the message, then the trailers");
     assert_eq!(
         Deal::decode(frames[0].1.clone()).unwrap().title,
-        "Acme renewal"
+        "Agra renewal"
     );
     assert_eq!(frames[1].0, 0x80);
     let trailers = String::from_utf8(frames[1].1.to_vec()).unwrap();

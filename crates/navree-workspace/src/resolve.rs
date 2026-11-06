@@ -12,7 +12,7 @@ use crate::{OrganizationOptions, PartitionOptions, ResolverKind, WorkspaceConfig
 
 /// The workspace a request's host belongs to: a request extension that
 /// navree-domains' `DomainsModule` sets for a request to a workspace's
-/// verified custom domain (`crm.acme-corp.com`). The `domain` resolver
+/// verified custom domain (`crm.agra-corp.com`). The `domain` resolver
 /// (`workspace.resolvers = ["domain", ...]`) reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomainWorkspace {
@@ -213,13 +213,13 @@ pub(crate) async fn choose_first_workspace(
 /// use navree_workspace::{ResolverKind, WorkspaceConfig, requested_workspace};
 ///
 /// let (parts, ()) = http::Request::builder()
-///     .header("X-Workspace", "acme")
+///     .header("X-Workspace", "agra")
 ///     .body(())
 ///     .unwrap()
 ///     .into_parts();
 /// assert_eq!(
 ///     requested_workspace(&WorkspaceConfig::default(), &parts),
-///     Some((ResolverKind::Header, "acme".to_owned()))
+///     Some((ResolverKind::Header, "agra".to_owned()))
 /// );
 /// ```
 pub fn requested_workspace(
@@ -262,8 +262,8 @@ fn host(parts: &Parts) -> Option<&str> {
         .or_else(|| parts.uri.authority().map(|authority| authority.as_str()))
 }
 
-/// The single label in front of `base` in `host` (`acme.app.example.com`
-/// under `app.example.com` → `acme`); ports are ignored and the comparison
+/// The single label in front of `base` in `host` (`agra.app.example.com`
+/// under `app.example.com` → `agra`); ports are ignored and the comparison
 /// is case-insensitive. Nothing for the base domain itself or deeper
 /// subdomains.
 pub(crate) fn from_subdomain(host: &str, base: &str) -> Option<String> {
@@ -281,7 +281,7 @@ fn strip_port(host: &str) -> &str {
 }
 
 /// The path segment after the first occurrence of `prefix`'s segments
-/// (`/api/w/acme/deals` with `["w"]` → `acme`).
+/// (`/api/w/agra/deals` with `["w"]` → `agra`).
 pub(crate) fn from_path(path: &str, prefix: &[&str]) -> Option<String> {
     if prefix.is_empty() {
         return None;
@@ -367,33 +367,33 @@ mod tests {
     fn subdomains_name_workspaces() {
         let base = "app.example.com";
         assert_eq!(
-            from_subdomain("acme.app.example.com", base).as_deref(),
-            Some("acme")
+            from_subdomain("agra.app.example.com", base).as_deref(),
+            Some("agra")
         );
         assert_eq!(
             from_subdomain("ACME.App.Example.com:8443", base).as_deref(),
-            Some("acme")
+            Some("agra")
         );
         assert_eq!(from_subdomain("app.example.com", base), None);
-        assert_eq!(from_subdomain("x.acme.app.example.com", base), None);
-        assert_eq!(from_subdomain("acme.other.com", base), None);
+        assert_eq!(from_subdomain("x.agra.app.example.com", base), None);
+        assert_eq!(from_subdomain("agra.other.com", base), None);
         assert_eq!(from_subdomain("evilapp.example.com", base), None);
         assert_eq!(
-            from_subdomain("acme.localhost:3000", "localhost:3000").as_deref(),
-            Some("acme")
+            from_subdomain("agra.localhost:3000", "localhost:3000").as_deref(),
+            Some("agra")
         );
     }
 
     #[test]
     fn paths_name_workspaces_after_the_prefix() {
         assert_eq!(
-            from_path("/api/w/acme/deals", &["w"]).as_deref(),
-            Some("acme")
+            from_path("/api/w/agra/deals", &["w"]).as_deref(),
+            Some("agra")
         );
-        assert_eq!(from_path("/w/acme", &["w"]).as_deref(), Some("acme"));
+        assert_eq!(from_path("/w/agra", &["w"]).as_deref(), Some("agra"));
         assert_eq!(
-            from_path("/api/teams/t/acme/x", &["teams", "t"]).as_deref(),
-            Some("acme")
+            from_path("/api/teams/t/agra/x", &["teams", "t"]).as_deref(),
+            Some("agra")
         );
         assert_eq!(from_path("/api/w", &["w"]), None);
         assert_eq!(from_path("/api/deals", &["w"]), None);
@@ -401,10 +401,10 @@ mod tests {
 
     #[test]
     fn claims_come_from_the_bearer_token_of_signed_in_requests() {
-        let token = jwt(serde_json::json!({ "sub": "x", "workspace": "acme", "org": 42 }));
+        let token = jwt(serde_json::json!({ "sub": "x", "workspace": "agra", "org": 42 }));
         let bearer = format!("Bearer {token}");
         let signed_in = parts("/", &[("authorization", bearer.as_str())], true);
-        assert_eq!(from_claim(&signed_in, "workspace").as_deref(), Some("acme"));
+        assert_eq!(from_claim(&signed_in, "workspace").as_deref(), Some("agra"));
         assert_eq!(from_claim(&signed_in, "org").as_deref(), Some("42"));
         assert_eq!(from_claim(&signed_in, "missing"), None);
         let guest = parts("/", &[("authorization", bearer.as_str())], false);
@@ -453,7 +453,7 @@ mod tests {
         let mut request = parts(
             "/api/deals",
             &[
-                ("host", "crm.acme-corp.test"),
+                ("host", "crm.agra-corp.test"),
                 ("x-workspace", "from-header"),
             ],
             true,
@@ -469,7 +469,7 @@ mod tests {
         );
         request.extensions.insert(DomainWorkspace {
             workspace_id: workspace,
-            host: "crm.acme-corp.test".to_owned(),
+            host: "crm.agra-corp.test".to_owned(),
         });
         assert_eq!(
             identifier(&config, &request),
@@ -564,7 +564,7 @@ mod tests {
         let token = jwt(serde_json::json!({ "organization": "org-claim", "partition": "eu" }));
         let bearer = format!("Bearer {token}");
         let request = parts(
-            "/api/o/acme-group/p/uk/reports",
+            "/api/o/agra-group/p/uk/reports",
             &[
                 ("x-organization", "org-header"),
                 ("x-partition", "part-header"),
@@ -582,7 +582,7 @@ mod tests {
         };
         assert_eq!(orgs(&config).as_deref(), Some("org-header"));
         config.organizations.resolvers = vec![ResolverKind::Path];
-        assert_eq!(orgs(&config).as_deref(), Some("acme-group"));
+        assert_eq!(orgs(&config).as_deref(), Some("agra-group"));
         config.organizations.resolvers = vec![ResolverKind::Subdomain];
         assert_eq!(orgs(&config).as_deref(), Some("org-sub"));
         config.organizations.resolvers = vec![ResolverKind::Claim];

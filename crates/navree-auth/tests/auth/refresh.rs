@@ -17,7 +17,7 @@ use crate::support::{self, RecordingSink, refresh, signed_in, tokens};
 #[tokio::test]
 async fn refresh_rotates_and_old_token_stops_working() {
     let app = support::app().await;
-    let (user, _, first) = signed_in(&app, "ada@example.com").await;
+    let (user, _, first) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     let response = refresh(&client, &first)
@@ -64,11 +64,11 @@ async fn reused_refresh_token_revokes_family() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (user, _, first) = signed_in(&app, "ada@example.com").await;
+    let (user, _, first) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     // Another session of the same user (another device).
     let other = tokens(
-        &support::login(&client, "ada@example.com", support::PASSWORD)
+        &support::login(&client, "anu@example.com", support::PASSWORD)
             .await
             .assert_status(200),
     )
@@ -100,7 +100,7 @@ async fn invalid_or_expired_refresh_tokens_are_401() {
         .override_value::<dyn Clock>(clock.clone())
         .build()
         .await;
-    let (_, _, token) = signed_in(&app, "ada@example.com").await;
+    let (_, _, token) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     for garbage in [
         "nonsense",
@@ -132,7 +132,7 @@ async fn invalid_or_expired_refresh_tokens_are_401() {
 #[tokio::test]
 async fn refresh_token_hash_only_at_rest() {
     let app = support::app().await;
-    let (_, _, token) = signed_in(&app, "ada@example.com").await;
+    let (_, _, token) = signed_in(&app, "anu@example.com").await;
     let db = app.get::<Db>().await;
     let rows = refresh_token::Model::all(&*db).await.unwrap().into_vec();
     assert_eq!(rows.len(), 1);

@@ -16,7 +16,7 @@ use crate::support::{FROM, MailTemplates, array_options, dispatcher, view_module
 
 fn hello() -> Message {
     Message::new()
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hi")
         .text("Hi")
 }
@@ -117,8 +117,8 @@ async fn deliver_reports_the_default_transport() {
 
     let report = mailer
         .deliver(
-            &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-                .context(json!({ "name": "Ada" })),
+            &TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+                .context(json!({ "name": "Anu" })),
         )
         .await
         .expect("deliver");
@@ -170,8 +170,8 @@ async fn queued_mail_keeps_its_scope_transport_and_template() {
         .for_scope(&MailScope::workspace(workspace))
         .via("simulation")
         .queue(
-            &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-                .context(json!({ "name": "Ada", "locale": "ar" })),
+            &TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+                .context(json!({ "name": "Anu", "locale": "ar" })),
         )
         .await
         .expect("queue");
@@ -184,7 +184,7 @@ async fn queued_mail_keeps_its_scope_transport_and_template() {
     // Rendered once, before queueing.
     assert_eq!(
         job.message.html.as_deref(),
-        Some(r#"<div lang="ar" dir="rtl"><p>Welcome, Ada!</p></div>"#)
+        Some(r#"<div lang="ar" dir="rtl"><p>Welcome, Anu!</p></div>"#)
     );
 
     // The worker sends it through the named transport, without rendering

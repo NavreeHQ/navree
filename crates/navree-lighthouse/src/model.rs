@@ -354,8 +354,8 @@ mod tests {
             failed_job_fingerprint("mail.send", "smtp 450 at 10.0.0.2"),
         );
         assert_eq!(
-            custom_fingerprint(&["acme-pay".into(), "card-declined".into()]),
-            custom_fingerprint(&["acme-pay".into(), "card-declined".into()]),
+            custom_fingerprint(&["agra-pay".into(), "card-declined".into()]),
+            custom_fingerprint(&["agra-pay".into(), "card-declined".into()]),
         );
     }
 

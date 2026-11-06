@@ -79,8 +79,8 @@ async fn users_load_for_can_checks_and_users_permissions_apply() {
         .module(PeopleModule)
         .build()
         .await;
-    let (ada, access, _) = signed_in(&app, "ada@example.com").await;
-    let grace = support::create_user(&app, "grace@example.com").await;
+    let (ada, access, _) = signed_in(&app, "anu@example.com").await;
+    let grace = support::create_user(&app, "gauri@example.com").await;
     let client = app.client();
     let get = |id: Uuid| {
         client
@@ -93,7 +93,7 @@ async fn users_load_for_can_checks_and_users_permissions_apply() {
         .await
         .assert_status(200)
         .assert_json_path("__type", json!("User"))
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     get(grace.id).await.assert_error(403, None);
     get(Uuid::now_v7()).await.assert_error(404, None);
 
@@ -117,7 +117,7 @@ async fn users_load_for_can_checks_and_users_permissions_apply() {
     get(grace.id)
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("grace@example.com"));
+        .assert_json_path("email", json!("gauri@example.com"));
 }
 
 /// `PATCH /api/people/{id}`: a record check (which begins the request's
@@ -182,7 +182,7 @@ async fn current_user_after_a_record_check_needs_no_second_connection() {
         .module(EditorModule)
         .build()
         .await;
-    let (ada, access, _) = signed_in(&app, "ada@example.com").await;
+    let (ada, access, _) = signed_in(&app, "anu@example.com").await;
     let started = std::time::Instant::now();
     app.client()
         .patch(&format!("/api/people/{}", ada.id))

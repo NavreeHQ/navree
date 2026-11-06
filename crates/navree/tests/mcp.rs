@@ -85,12 +85,12 @@ async fn an_app_serves_its_mcp_server_through_the_facade() {
     assert_eq!(tools.len(), 1);
     assert_eq!(tools[0].name, "greet");
     let greeted = mcp
-        .call_tool("greet", json!({ "name": "Ada" }))
+        .call_tool("greet", json!({ "name": "Anu" }))
         .await
         .assert_ok();
     assert_eq!(
         greeted.text(),
-        format!("Hello, Ada! (from {})", user.user_id)
+        format!("Hello, Anu! (from {})", user.user_id)
     );
     mcp.call_tool("greet", json!({ "name": "" }))
         .await
@@ -99,8 +99,8 @@ async fn an_app_serves_its_mcp_server_through_the_facade() {
     let today = mcp.read_resource("hello://today").await.assert_ok();
     assert_eq!(today.text().as_deref(), Some("Good morning"));
     let prompt = mcp
-        .get_prompt("greet-someone", json!({ "name": "Grace" }))
+        .get_prompt("greet-someone", json!({ "name": "Gauri" }))
         .await
         .assert_ok();
-    assert_eq!(prompt.text(0).as_deref(), Some("Greet Grace warmly."));
+    assert_eq!(prompt.text(0).as_deref(), Some("Greet Gauri warmly."));
 }

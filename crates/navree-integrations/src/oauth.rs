@@ -625,12 +625,12 @@ mod tests {
             &slack,
             &json!({
                 "ok": true, "access_token": "xoxb-1", "scope": "chat:write,users:read",
-                "team": { "id": "T0123", "name": "Acme" }
+                "team": { "id": "T0123", "name": "Agra" }
             }),
         )
         .unwrap();
         assert_eq!(grant.external_id.as_deref(), Some("T0123"));
-        assert_eq!(grant.display_name.as_deref(), Some("Acme"));
+        assert_eq!(grant.display_name.as_deref(), Some("Agra"));
         assert_eq!(grant.scopes.unwrap().len(), 2);
         assert!(matches!(
             slack_body(&slack, &json!({ "ok": false, "error": "invalid_code" })),

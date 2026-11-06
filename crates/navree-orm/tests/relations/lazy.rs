@@ -44,7 +44,7 @@ async fn lazy_loads_of_records_from_a_result_of_several_can_be_prevented() {
                 .relation_or_load::<Option<Record<Company>>, _>(&t.db, "company")
                 .await
                 .unwrap();
-            assert_eq!(company.as_ref().unwrap().name, "Acme");
+            assert_eq!(company.as_ref().unwrap().name, "Agra");
             // An eager-loaded relation is no lazy load.
             let mut loaded = Deal::query()
                 .with("company")
@@ -89,7 +89,7 @@ async fn lazy_loading_violations_can_be_handled_another_way() {
                 .relation_or_load::<Option<Record<User>>, _>(&t.db, "owner")
                 .await
                 .unwrap();
-            assert_eq!(owner.as_ref().unwrap().name, "Ada", "the load went ahead");
+            assert_eq!(owner.as_ref().unwrap().name, "Anu", "the load went ahead");
         })
         .await;
     let seen = seen.lock().unwrap();
@@ -166,7 +166,7 @@ async fn automatic_eager_loading_loads_for_the_whole_result() {
                 .relation_or_load::<Option<Record<Company>>, _>(&t.db, "company")
                 .await
                 .unwrap();
-            assert_eq!(company.as_ref().unwrap().name, "Acme");
+            assert_eq!(company.as_ref().unwrap().name, "Agra");
             assert_eq!(t.log.selects().len(), 1);
             // The other records of the result find it loaded: no query.
             for deal in deals.iter_mut().skip(1) {
@@ -187,9 +187,9 @@ async fn automatic_eager_loading_loads_for_the_whole_result() {
             assert_eq!(
                 names,
                 [
-                    Some("Acme".to_owned()),
-                    Some("Acme".to_owned()),
-                    Some("Globex".to_owned()),
+                    Some("Agra".to_owned()),
+                    Some("Agra".to_owned()),
+                    Some("Gulati".to_owned()),
                     None
                 ]
             );
@@ -216,12 +216,12 @@ async fn collections_and_records_opt_into_automatic_loading() {
     assert_eq!(deals[0].loaded(Deal::activities).unwrap().len(), 3);
 
     // Nested: the loaded records load together too.
-    let mut acme = Company::find_or_fail(&t.db, crm.acme.id)
+    let mut agra = Company::find_or_fail(&t.db, crm.agra.id)
         .await
         .unwrap()
         .with_relationship_autoloading();
-    acme.related(&t.db, Company::deals).await.unwrap();
-    let mut deals = acme
+    agra.related(&t.db, Company::deals).await.unwrap();
+    let mut deals = agra
         .relation_mut::<Collection<Deal>>("deals")
         .unwrap()
         .clone()
@@ -257,7 +257,7 @@ async fn push_saves_the_record_and_its_loaded_relations() {
         .unwrap()
         .as_mut()
         .unwrap()
-        .name = "Acme Inc".into();
+        .name = "Agra Inc".into();
     for activity in deal
         .relation_mut::<Collection<Activity>>("activities")
         .unwrap()
@@ -291,11 +291,11 @@ async fn push_saves_the_record_and_its_loaded_relations() {
         "Renewal 2027"
     );
     assert_eq!(
-        Company::find_or_fail(&t.db, crm.acme.id)
+        Company::find_or_fail(&t.db, crm.agra.id)
             .await
             .unwrap()
             .name,
-        "Acme Inc"
+        "Agra Inc"
     );
     let minutes = crm
         .renewal
@@ -339,9 +339,9 @@ async fn refresh_reloads_loaded_relations() {
     deal.set_relation("custom", Some(Record::new(Company::named("By hand"))));
 
     // Changes made elsewhere.
-    let mut acme = Company::find_or_fail(&t.db, crm.acme.id).await.unwrap();
-    acme.name = "Acme Renamed".into();
-    acme.save(&t.db).await.unwrap();
+    let mut agra = Company::find_or_fail(&t.db, crm.agra.id).await.unwrap();
+    agra.name = "Agra Renamed".into();
+    agra.save(&t.db).await.unwrap();
     crm.renewal
         .activities()
         .create(&t.db, Activity::new("call", 1))
@@ -351,7 +351,7 @@ async fn refresh_reloads_loaded_relations() {
     deal.refresh(&t.db).await.unwrap();
     assert_eq!(
         deal.loaded(Deal::company).unwrap().as_ref().unwrap().name,
-        "Acme Renamed"
+        "Agra Renamed"
     );
     assert_eq!(deal.loaded(Deal::activities).unwrap().len(), 4);
     // What is not a relation of the model is left as it is.

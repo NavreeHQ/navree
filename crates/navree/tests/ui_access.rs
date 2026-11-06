@@ -63,7 +63,7 @@ fn the_navigation_follows_the_abilities() {
                 NavItem::new("Reports", "/reports").requires("read", "Report"),
             ],
         );
-        let mut shell = Shell::new("Acme");
+        let mut shell = Shell::new("Agra");
         if let Some(sales) = sales {
             shell = shell.group(sales);
         }

@@ -61,14 +61,14 @@ async fn the_directory_is_read_from_the_connected_tenant() {
     fake.api().on(
         Method::GET,
         "https://graph.microsoft.com/v1.0/users*",
-        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "ada@acme.test" }] })),
+        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "anu@acme.test" }] })),
     );
     let graph = integrations
         .client_for::<MicrosoftGraph>(Owner::App)
         .await
         .unwrap();
     let users: Vec<serde_json::Value> = graph.paginate("/users").await.unwrap();
-    assert_eq!(users[0]["mail"], "ada@acme.test");
+    assert_eq!(users[0]["mail"], "anu@acme.test");
     assert_eq!(fake.minted()[0].grant_type, "client_credentials");
 }
 
@@ -269,7 +269,7 @@ async fn the_feature_module_reads_the_directory_through_its_scope_set() {
         Method::GET,
         "https://graph.microsoft.com/v1.0/users*",
         FakeResponse::new(200).json(&json!({
-            "value": [{ "id": "u1", "mail": "ada@acme.test" }, { "id": "u2", "mail": null }]
+            "value": [{ "id": "u1", "mail": "anu@acme.test" }, { "id": "u2", "mail": null }]
         })),
     );
     admin
@@ -277,7 +277,7 @@ async fn the_feature_module_reads_the_directory_through_its_scope_set() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("0.mail", json!("ada@acme.test"))
+        .assert_json_path("0.mail", json!("anu@acme.test"))
         .assert_json_path("1.id", json!("u2"));
 
     // The job-side client of a workspace that has no connection.

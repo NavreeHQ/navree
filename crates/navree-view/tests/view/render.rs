@@ -19,15 +19,15 @@ fn render_source_renders_a_template_kept_as_text() {
         .render_source(
             "override.html",
             "{% extends \"layouts/mail.html\" %}{% block body %}Hi {{ name }}{% endblock %}",
-            json!({ "name": "<Ada>" }),
+            json!({ "name": "<Anu>" }),
         )
         .expect("render");
-    assert_eq!(html, "<main>Hi &lt;Ada&gt;</main>");
+    assert_eq!(html, "<main>Hi &lt;Anu&gt;</main>");
 
     let text = views
-        .render_source("subject.txt", "Hi {{ name }}", json!({ "name": "<Ada>" }))
+        .render_source("subject.txt", "Hi {{ name }}", json!({ "name": "<Anu>" }))
         .expect("render");
-    assert_eq!(text, "Hi <Ada>");
+    assert_eq!(text, "Hi <Anu>");
 
     // The filters and the strict undefined rule of every template apply.
     let error = views
@@ -49,10 +49,10 @@ fn renders_file_template() {
     let views = Views::new(&options(&[dir.path()])).expect("views");
 
     let html = views
-        .render("mail/welcome", json!({ "name": "Ada" }))
+        .render("mail/welcome", json!({ "name": "Anu" }))
         .expect("render");
 
-    assert_eq!(html, "Hello Ada!");
+    assert_eq!(html, "Hello Anu!");
 }
 
 #[test]
@@ -65,10 +65,10 @@ fn embedded_template_used_when_no_file() {
     .expect("views");
 
     let html = views
-        .render("mail/welcome", json!({ "name": "Ada" }))
+        .render("mail/welcome", json!({ "name": "Anu" }))
         .expect("render");
 
-    assert_eq!(html, "Embedded Ada");
+    assert_eq!(html, "Embedded Anu");
 }
 
 #[test]
@@ -81,10 +81,10 @@ fn file_overrides_embedded() {
     .expect("views");
 
     let html = views
-        .render("mail/welcome", json!({ "name": "Ada" }))
+        .render("mail/welcome", json!({ "name": "Anu" }))
         .expect("render");
 
-    assert_eq!(html, "File Ada");
+    assert_eq!(html, "File Anu");
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn printing_an_undefined_variable_fails() {
     .expect("views");
 
     let error = views
-        .render("typo", json!({ "name": "Ada" }))
+        .render("typo", json!({ "name": "Anu" }))
         .expect_err("undefined variable");
     assert!(
         matches!(&error, ViewError::Template { name, .. } if name == "typo.txt"),
@@ -213,9 +213,9 @@ fn printing_an_undefined_variable_fails() {
     );
     assert_eq!(
         views
-            .render("optional", json!({ "name": "Ada" }))
+            .render("optional", json!({ "name": "Anu" }))
             .expect("render"),
-        "Ada"
+        "Anu"
     );
 }
 

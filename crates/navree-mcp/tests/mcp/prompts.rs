@@ -43,7 +43,7 @@ async fn prompts_list_their_arguments() {
 async fn messages_embed_the_resources_they_name() {
     let app = app().await;
     let rep = user();
-    let deal = insert_deal(&app, rep.user_id, "Acme renewal", "proposal").await;
+    let deal = insert_deal(&app, rep.user_id, "Agra renewal", "proposal").await;
     let mcp = McpTestClient::new(app.acting_as(rep)).initialize().await;
 
     let prompt = mcp
@@ -63,8 +63,8 @@ async fn messages_embed_the_resources_they_name() {
     assert_eq!(resource["mimeType"], "application/json");
     let embedded: serde_json::Value =
         serde_json::from_str(resource["text"].as_str().unwrap()).unwrap();
-    assert_eq!(embedded["title"], "Acme renewal");
-    assert!(prompt.text(1).unwrap().contains("Acme renewal"));
+    assert_eq!(embedded["title"], "Agra renewal");
+    assert!(prompt.text(1).unwrap().contains("Agra renewal"));
     assert_eq!(messages[2]["role"], "assistant");
     assert_eq!(prompt.text(2).as_deref(), Some("Here is a draft:"));
 }

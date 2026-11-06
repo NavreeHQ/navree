@@ -58,7 +58,7 @@ async fn conformance(store: &dyn FlagStore) {
     assert_eq!(names, ["ai-summaries", "new-pipeline"]);
 
     // Overrides: insert, replace, list, count, remove.
-    let (ada, grace, acme) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let (ada, grace, agra) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
     let entry = |flag: &str, scope_type, scope_id, active| FlagOverride {
         flag: flag.to_owned(),
         scope_type,
@@ -76,7 +76,7 @@ async fn conformance(store: &dyn FlagStore) {
     store
         .set_override(
             None,
-            &entry("new-pipeline", ScopeType::Workspace, acme, true),
+            &entry("new-pipeline", ScopeType::Workspace, agra, true),
         )
         .await
         .unwrap();
@@ -100,7 +100,7 @@ async fn conformance(store: &dyn FlagStore) {
     );
     assert_eq!(
         store
-            .overrides_of(None, ScopeType::Workspace, acme)
+            .overrides_of(None, ScopeType::Workspace, agra)
             .await
             .unwrap(),
         BTreeMap::from([("new-pipeline".to_owned(), true)])

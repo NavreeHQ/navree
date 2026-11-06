@@ -628,7 +628,7 @@ mod tests {
     fn debug_output_hides_credentials() {
         let inputs: [&dyn fmt::Debug; 5] = [
             &ResetPasswordInput {
-                email: "ada@example.com".to_owned(),
+                email: "anu@example.com".to_owned(),
                 token: "reset-token-xyz".to_owned(),
                 password: "hunter2-hunter2".to_owned(),
             },

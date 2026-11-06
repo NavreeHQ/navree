@@ -31,7 +31,7 @@ use crate::value::{Field, FieldKind};
 ///     }
 /// }
 ///
-/// assert_eq!(Inbound::<NormalizedEmail>::set(&" Ada@Example.COM ".to_owned())?, "ada@example.com");
+/// assert_eq!(Inbound::<NormalizedEmail>::set(&" Anu@Example.COM ".to_owned())?, "anu@example.com");
 /// let read: String = Inbound::<NormalizedEmail>::get("Kept As Stored".to_owned())?;
 /// assert_eq!(read, "Kept As Stored");
 /// # Ok::<(), navree_orm::cast::CastError>(())

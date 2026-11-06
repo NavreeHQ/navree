@@ -61,18 +61,18 @@ fn a_request_exposes_its_principal_and_its_head() {
         token_abilities: None,
         session_id: None,
     };
-    let mut head = Head { workspace: "acme" };
+    let mut head = Head { workspace: "agra" };
     let mut request = ZoneRequest::new(Some(&principal), &mut head);
     assert_eq!(request.principal().map(|p| p.user_id), Some(user));
     assert_eq!(request.user_id(), Some(user));
     assert_eq!(
         request.head::<Head>().map(|h| h.workspace),
-        Some("acme"),
+        Some("agra"),
         "the head comes back as its own type"
     );
     assert!(request.head::<String>().is_none(), "other types do not");
-    request.head::<Head>().unwrap().workspace = "globex";
-    assert_eq!(head.workspace, "globex");
+    request.head::<Head>().unwrap().workspace = "gulati";
+    assert_eq!(head.workspace, "gulati");
 
     let mut detached = ZoneRequest::detached(None);
     assert!(detached.principal().is_none());

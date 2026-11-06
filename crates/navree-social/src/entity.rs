@@ -201,11 +201,11 @@ pub mod social_account {
         #[test]
         fn only_changed_fields_are_kept() {
             let (before, after) = changed_fields(
-                json!({"name": "Ada", "email": "a@x"}),
-                json!({"name": "Ada L", "email": "a@x"}),
+                json!({"name": "Anu", "email": "a@x"}),
+                json!({"name": "Anu L", "email": "a@x"}),
             );
-            assert_eq!(serde_json::Value::from(before), json!({"name": "Ada"}));
-            assert_eq!(serde_json::Value::from(after), json!({"name": "Ada L"}));
+            assert_eq!(serde_json::Value::from(before), json!({"name": "Anu"}));
+            assert_eq!(serde_json::Value::from(after), json!({"name": "Anu L"}));
         }
 
         #[test]

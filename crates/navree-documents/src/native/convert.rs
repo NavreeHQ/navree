@@ -809,12 +809,12 @@ mod tests {
     #[test]
     fn paragraphs_and_inline_formatting() {
         let converted = convert_html(
-            "<html lang=\"en\"><head><title> Invoice\n 42 </title><meta name=author content=\"Acme\"></head>\
+            "<html lang=\"en\"><head><title> Invoice\n 42 </title><meta name=author content=\"Agra\"></head>\
              <body><p>  Hello   <b>bold</b> and\n<em>italic <u>under</u></em>  </p><p>Line<br> two</p></body></html>",
         );
         let document = converted.document;
         assert_eq!(document.title.as_deref(), Some("Invoice 42"));
-        assert_eq!(document.author.as_deref(), Some("Acme"));
+        assert_eq!(document.author.as_deref(), Some("Agra"));
         assert_eq!(converted.lang.as_deref(), Some("en"));
         let [Block::Paragraph(first), Block::Paragraph(second)] = document.blocks.as_slice() else {
             panic!("{:?}", document.blocks);
@@ -926,7 +926,7 @@ mod tests {
     fn images_come_from_the_source_or_data_uris() {
         let png = BASE64.encode(b"\x89PNG-bytes");
         let html = format!(
-            "<p>Logo: <img src=\"images/logo.png\" width=\"120\" alt=\"Acme\"></p>\
+            "<p>Logo: <img src=\"images/logo.png\" width=\"120\" alt=\"Agra\"></p>\
              <img src=\"missing.png\"><img src=\"data:image/png;base64,{png}\" style=\"width: 50%\">"
         );
         let document = convert_html(&html).document;
@@ -940,7 +940,7 @@ mod tests {
             .collect();
         assert_eq!(images.len(), 2);
         assert_eq!(images[0].width, Some(90.0));
-        assert_eq!(images[0].alt.as_deref(), Some("Acme"));
+        assert_eq!(images[0].alt.as_deref(), Some("Agra"));
         assert_eq!(images[0].source.as_deref(), Some("images/logo.png"));
         assert_eq!(images[1].width_percent, Some(50.0));
         assert!(images[1].bytes.starts_with(b"\x89PNG"));
@@ -952,7 +952,7 @@ mod tests {
     fn headers_footers_page_numbers_and_page_rules() {
         let converted = convert_html(
             "<html dir=\"rtl\"><head><style>@page { size: letter landscape; margin: 1in }</style></head>\
-             <body><header><p>Acme report</p></header><p>Body</p>\
+             <body><header><p>Agra report</p></header><p>Body</p>\
              <footer><p>Page <span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span></p></footer></body></html>",
         );
         assert_eq!(converted.direction, Some(Direction::Rtl));

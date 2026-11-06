@@ -139,8 +139,8 @@ impl<'de> Deserialize<'de> for Environment {
 ///
 /// ```toml
 /// [app]
-/// name = "acme"
-/// url = "https://acme.example.com"   # absolute http or https address
+/// name = "agra"
+/// url = "https://agra.example.com"   # absolute http or https address
 /// version = "1.4.0"                  # optional
 /// env = "production"                 # also APP_ENV
 /// # key and previous_keys: APP_KEY and APP_PREVIOUS_KEYS (keep secrets out of files)
@@ -161,7 +161,7 @@ pub struct AppOptions {
     /// The app's name.
     #[serde(deserialize_with = "blank_is_none")]
     pub name: Option<String>,
-    /// The address users reach the app at (`https://acme.example.com`): used
+    /// The address users reach the app at (`https://agra.example.com`): used
     /// to build links in mail and callbacks. An absolute http or https URL.
     #[serde(deserialize_with = "blank_is_none")]
     pub url: Option<String>,

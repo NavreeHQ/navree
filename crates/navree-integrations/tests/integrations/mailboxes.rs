@@ -67,7 +67,7 @@ pub(crate) fn with_mail(seen: &Seen) -> impl FnOnce(TestAppBuilder) -> TestAppBu
 
 pub(crate) fn message(subject: &str) -> Vec<u8> {
     Incoming::compose()
-        .from("Ada Lovelace <ada@example.com>")
+        .from("Anu Lakhotia <anu@example.com>")
         .to("support@acme.test")
         .subject(subject)
         .text("Hello from outside.")
@@ -269,11 +269,11 @@ async fn graph_lifecycle_notifications_renew_and_flag_watches() {
 }
 
 /// A Google service-account connection (domain-wide delegation) and a
-/// watched `ada@acme.test` with cursor `1000`.
+/// watched `anu@acme.test` with cursor `1000`.
 pub(crate) async fn gmail_watch(h: &Harness) -> navree_integrations::MailboxWatch {
     h.fake.api().on(
         Method::POST,
-        &format!("{GMAIL}/users/ada@acme.test/watch"),
+        &format!("{GMAIL}/users/anu@acme.test/watch"),
         FakeResponse::new(200).json(&json!({
             "historyId": "1000",
             "expiration": "1793433600000",
@@ -290,7 +290,7 @@ pub(crate) async fn gmail_watch(h: &Harness) -> navree_integrations::MailboxWatc
         .unwrap();
     watches(h)
         .await
-        .watch(connection.id, "ada@acme.test")
+        .watch(connection.id, "anu@acme.test")
         .await
         .unwrap()
 }
@@ -320,7 +320,7 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
     );
     h.fake.api().assert_sent(|request| {
         let body: Value = request.json().unwrap_or(Value::Null);
-        request.url().as_str() == format!("{GMAIL}/users/ada@acme.test/watch")
+        request.url().as_str() == format!("{GMAIL}/users/anu@acme.test/watch")
             && body["topicName"] == "projects/acme-prod/topics/gmail-inbound"
             && body["labelIds"] == json!(["INBOX"])
     });
@@ -328,13 +328,13 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
         h.fake
             .minted()
             .iter()
-            .any(|minted| minted.subject.as_deref() == Some("ada@acme.test")),
+            .any(|minted| minted.subject.as_deref() == Some("anu@acme.test")),
         "the service account acts as the mailbox's user"
     );
 
     h.fake.api().on(
         Method::GET,
-        &format!("{GMAIL}/users/ada@acme.test/history*"),
+        &format!("{GMAIL}/users/anu@acme.test/history*"),
         FakeResponse::new(200).json(&json!({
             "history": [
                 { "id": "1001", "messagesAdded": [{ "message": { "id": "m1", "labelIds": ["INBOX"] } }] },
@@ -346,7 +346,7 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
     for (id, subject) in [("m1", "First"), ("m2", "Second")] {
         h.fake.api().on(
             Method::GET,
-            &format!("{GMAIL}/users/ada@acme.test/messages/{id}*"),
+            &format!("{GMAIL}/users/anu@acme.test/messages/{id}*"),
             FakeResponse::new(200)
                 .json(&json!({ "id": id, "raw": URL_SAFE_NO_PAD.encode(message(subject)) })),
         );
@@ -355,7 +355,7 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
     h.app
         .client()
         .post("/api/mail/inbound/gmail?token=push-secret")
-        .json(&push("Ada@acme.test", "1005"))
+        .json(&push("Anu@acme.test", "1005"))
         .send()
         .await
         .assert_status(204);
@@ -365,16 +365,16 @@ async fn gmail_mailboxes_are_watched_and_pushes_read_the_history() {
     assert_eq!(subjects, vec!["First", "Second"]);
     assert_eq!(seen[0].source, "gmail");
     assert_eq!(seen[0].provider_id.as_deref(), Some("m1"));
-    assert_eq!(seen[0].envelope.recipients, vec!["ada@acme.test"]);
+    assert_eq!(seen[0].envelope.recipients, vec!["anu@acme.test"]);
     h.fake.api().assert_sent(|request| {
-        request.url().path() == "/gmail/v1/users/ada@acme.test/history"
+        request.url().path() == "/gmail/v1/users/anu@acme.test/history"
             && request
                 .url()
                 .query_pairs()
                 .any(|(k, v)| k == "startHistoryId" && v == "1000")
     });
     h.fake.api().assert_sent(|request| {
-        request.url().path() == "/gmail/v1/users/ada@acme.test/messages/m1"
+        request.url().path() == "/gmail/v1/users/anu@acme.test/messages/m1"
             && request
                 .url()
                 .query_pairs()
@@ -397,7 +397,7 @@ async fn gmail_pushes_need_the_token() {
         h.app
             .client()
             .post(path)
-            .json(&push("ada@acme.test", "1005"))
+            .json(&push("anu@acme.test", "1005"))
             .send()
             .await
             .assert_error_code(401, "invalid_signature");
@@ -412,14 +412,14 @@ async fn a_cursor_gmail_forgot_restarts_from_the_latest_history() {
     let watch = gmail_watch(&h).await;
     h.fake.api().on(
         Method::GET,
-        &format!("{GMAIL}/users/ada@acme.test/history*"),
+        &format!("{GMAIL}/users/anu@acme.test/history*"),
         FakeResponse::new(404).json(&json!({ "error": { "code": 404 } })),
     );
 
     h.app
         .client()
         .post("/api/mail/inbound/gmail?token=push-secret")
-        .json(&push("ada@acme.test", "2000"))
+        .json(&push("anu@acme.test", "2000"))
         .send()
         .await
         .assert_status(204);
@@ -541,7 +541,7 @@ async fn only_microsoft_and_google_mailboxes_can_be_watched() {
     let h = harness(with_mail(&seen)).await;
     h.fake.api().on(
         Method::GET,
-        "https://acme.edr.example/api/v1/health",
+        "https://agra.edr.example/api/v1/health",
         FakeResponse::new(200).json(&json!({ "status": "ok" })),
     );
     let connection = h
@@ -550,7 +550,7 @@ async fn only_microsoft_and_google_mailboxes_can_be_watched() {
         .connect_api_key(
             Owner::App,
             "edr",
-            NewApiKey::new("edr-key").api_url("https://acme.edr.example/api"),
+            NewApiKey::new("edr-key").api_url("https://agra.edr.example/api"),
         )
         .await
         .unwrap();

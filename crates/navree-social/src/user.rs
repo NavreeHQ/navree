@@ -87,10 +87,10 @@ impl fmt::Debug for ProviderToken {
 /// use navree_social::SocialUser;
 ///
 /// let ada = SocialUser::new("github", "583231")
-///     .name("Ada Lovelace")
-///     .email(Some("ada@example.com"), true)
-///     .nickname("ada");
-/// assert_eq!(ada.email.as_deref(), Some("ada@example.com"));
+///     .name("Anu Lakhotia")
+///     .email(Some("anu@example.com"), true)
+///     .nickname("anu");
+/// assert_eq!(ada.email.as_deref(), Some("anu@example.com"));
 /// assert!(ada.email_verified);
 /// ```
 #[derive(Clone)]
@@ -311,11 +311,11 @@ mod tests {
     fn the_builder_normalizes_values() {
         let user = SocialUser::new("github", "1")
             .name("  ")
-            .email(Some(" Ada@Example.COM "), true)
+            .email(Some(" Anu@Example.COM "), true)
             .avatar_url("https://a.test/1.png")
-            .nickname("ada");
+            .nickname("anu");
         assert_eq!(user.name, None);
-        assert_eq!(user.email.as_deref(), Some("ada@example.com"));
+        assert_eq!(user.email.as_deref(), Some("anu@example.com"));
         assert_eq!(user.email_domain(), Some("example.com"));
         assert!(user.email_verified);
         let none = SocialUser::new("github", "1").email(None, true);
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn callbacks_deserialize_with_an_optional_apple_user() {
         let callback: SocialCallback = serde_json::from_value(json!({
-            "code": "c", "state": "s", "user": "{\"name\":{\"firstName\":\"Ada\"}}"
+            "code": "c", "state": "s", "user": "{\"name\":{\"firstName\":\"Anu\"}}"
         }))
         .unwrap();
         assert!(callback.user.is_some());

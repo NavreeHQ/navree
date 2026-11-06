@@ -1079,15 +1079,15 @@ mod tests {
             per_user: 2,
             ..StreamOptions::default()
         });
-        assert!(streams.admit(Some("ada")));
-        assert!(streams.admit(Some("ada")));
-        assert!(!streams.admit(Some("ada")));
+        assert!(streams.admit(Some("anu")));
+        assert!(streams.admit(Some("anu")));
+        assert!(!streams.admit(Some("anu")));
         assert!(streams.admit(Some("bob")));
         assert!(
             streams.admit(None),
             "guests are held by the server's limits"
         );
-        streams.release(Some("ada"));
-        assert!(streams.admit(Some("ada")));
+        streams.release(Some("anu"));
+        assert!(streams.admit(Some("anu")));
     }
 }

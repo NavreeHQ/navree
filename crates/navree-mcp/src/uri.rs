@@ -161,8 +161,8 @@ mod tests {
         assert!(uri.is_template());
         assert_eq!(uri.variables(), ["company", "id"]);
         assert_eq!(
-            uri.matches("crm://companies/acme/deals/0199"),
-            params(&[("company", "acme"), ("id", "0199")])
+            uri.matches("crm://companies/agra/deals/0199"),
+            params(&[("company", "agra"), ("id", "0199")])
         );
         assert_eq!(uri.matches("crm://companies//deals/1"), None);
         assert_eq!(uri.matches("crm://companies/a/b/deals/1"), None);

@@ -19,7 +19,7 @@ struct User {
 fn ada() -> User {
     User {
         id: 1,
-        name: "Ada".into(),
+        name: "Anu".into(),
     }
 }
 

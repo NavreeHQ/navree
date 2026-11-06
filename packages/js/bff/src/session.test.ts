@@ -4,7 +4,7 @@ import { browserRequest, fakeNavree, readSetCookies, tokenPair, unsignedJwt } fr
 
 const API = "http://navree.test";
 const APP = "http://app.test";
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 const now = () => Math.floor(Date.now() / 1000);
 
 describe("tokenExpiresAt", () => {
@@ -102,9 +102,9 @@ describe("server-side calls with the session's token", () => {
     });
     const bff = createBff({ apiUrl: API, fetch: api.fetch });
 
-    const response = await bff.api("/api/v1/deals?page=2", { accessToken: "AT1", workspace: "acme" });
+    const response = await bff.api("/api/v1/deals?page=2", { accessToken: "AT1", workspace: "agra" });
 
-    expect(await response.json()).toEqual({ auth: "Bearer AT1", ws: "acme" });
+    expect(await response.json()).toEqual({ auth: "Bearer AT1", ws: "agra" });
     expect(api.calls[0]!.url).toBe(`${API}/api/v1/deals?page=2`);
   });
 
@@ -134,7 +134,7 @@ describe("server-side calls with the session's token", () => {
 
   it("reads the workspace cookie of a request", () => {
     const bff = createBff({ apiUrl: API, fetch: fakeNavree({}).fetch });
-    expect(bff.workspaceOf(browserRequest(APP, "/", { cookies: { [WORKSPACE_COOKIE]: "acme" } }))).toBe("acme");
+    expect(bff.workspaceOf(browserRequest(APP, "/", { cookies: { [WORKSPACE_COOKIE]: "agra" } }))).toBe("agra");
     expect(bff.workspaceOf(browserRequest(APP, "/"))).toBeUndefined();
   });
 });

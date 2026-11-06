@@ -14,7 +14,7 @@ pub enum MailError {
     /// A mailable's template failed to render.
     #[error(transparent)]
     View(#[from] ViewError),
-    /// An address does not parse (`ada@example.com` or `Ada <ada@example.com>`).
+    /// An address does not parse (`anu@example.com` or `Anu <anu@example.com>`).
     #[error("invalid `{field}` address `{address}`: {reason}")]
     InvalidAddress {
         /// The field holding it: `from`, `to`, `cc`, `bcc` or `reply_to`.

@@ -13,12 +13,12 @@ use super::compose::Compose;
 use super::error::InboundError;
 use super::mime::{self, Limits, Mailbox};
 
-/// A mailbox address of a received message: `Ada Lovelace <ada@example.com>`.
+/// A mailbox address of a received message: `Anu Lakhotia <anu@example.com>`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Address {
-    /// The display name, decoded (`Ada Lovelace`), when the header has one.
+    /// The display name, decoded (`Anu Lakhotia`), when the header has one.
     pub name: Option<String>,
-    /// The address (`ada@example.com`), as written.
+    /// The address (`anu@example.com`), as written.
     pub email: String,
 }
 
@@ -645,7 +645,7 @@ fn is_original_marker(line: &str) -> bool {
         || (lower.starts_with("from:") && lower.contains('@') && !lower.starts_with("from: http"))
 }
 
-/// `On Mon, 26 Oct 2026 at 18:02, Ada <ada@example.com> wrote:`, also
+/// `On Mon, 26 Oct 2026 at 18:02, Anu <anu@example.com> wrote:`, also
 /// wrapped onto the next line.
 fn is_wrote_line(line: &str, next: Option<&str>) -> bool {
     let lower = line.to_ascii_lowercase();
@@ -774,11 +774,11 @@ mod tests {
     #[test]
     fn addresses_display_with_their_name() {
         let ada = Address {
-            name: Some("Ada".into()),
-            email: "Ada@Example.com".into(),
+            name: Some("Anu".into()),
+            email: "Anu@Example.com".into(),
         };
-        assert_eq!(ada.to_string(), "Ada <Ada@Example.com>");
-        assert_eq!(ada.normalized(), "ada@example.com");
+        assert_eq!(ada.to_string(), "Anu <Anu@Example.com>");
+        assert_eq!(ada.normalized(), "anu@example.com");
         assert_eq!(Address::new("x@y.test").to_string(), "x@y.test");
     }
 

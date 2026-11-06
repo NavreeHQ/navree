@@ -222,14 +222,14 @@ async fn refusals_answer_with_their_codes() {
 #[tokio::test]
 async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
     let h = harness(with_routes(true)).await;
-    let acme = h.workspace(OTHER, "acme").await;
-    let _globex = h.workspace(OTHER, "globex").await;
+    let agra = h.workspace(OTHER, "agra").await;
+    let _gulati = h.workspace(OTHER, "gulati").await;
     // OTHER owns both workspaces, so it holds every permission in them.
     let owner = h.app.acting_as(principal(OTHER));
 
     let state = owner
         .get("/api/integrations/microsoft/connect")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -241,31 +241,31 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
         .get(&format!(
             "/api/integrations/microsoft/callback?tenant={TENANT}&admin_consent=True&state={state}"
         ))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(201)
         .assert_json_path("owner_type", json!("workspace"))
-        .assert_json_path("owner_id", json!(acme.id))
+        .assert_json_path("owner_id", json!(agra.id))
         .json_value();
     let id = created["id"].as_str().unwrap().to_owned();
 
     owner
         .get("/api/integrations/connections")
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data", json!([]));
     owner
         .get(&format!("/api/integrations/connections/{id}"))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(404);
     owner
         .delete(&format!("/api/integrations/connections/{id}"))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(404);
@@ -274,10 +274,10 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
         .send()
         .await
         .assert_status(400);
-    // A state for acme can't be finished in globex.
+    // A state for agra can't be finished in gulati.
     let state = owner
         .get("/api/integrations/microsoft/connect")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .json_value()["state"]
@@ -288,15 +288,15 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
         .get(&format!(
             "/api/integrations/microsoft/callback?tenant={TENANT}&admin_consent=True&state={state}"
         ))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_error_code(400, "invalid_state");
-    // ADMIN (app-wide `integrations.manage`) is not a member of acme.
+    // ADMIN (app-wide `integrations.manage`) is not a member of agra.
     h.app
         .acting_as(principal(ADMIN))
         .get("/api/integrations/connections")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
@@ -305,15 +305,15 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
 #[tokio::test]
 async fn a_workspace_uses_its_organizations_connection_but_cannot_remove_it() {
     let h = harness(with_routes(true)).await;
-    let acme = h.workspace(OTHER, "acme").await;
-    let organization = h.organization(OTHER, "acme-group", &[acme.id]).await;
+    let agra = h.workspace(OTHER, "agra").await;
+    let organization = h.organization(OTHER, "agra-group", &[agra.id]).await;
     let connection = h
         .connect_microsoft(Owner::Organization(organization), TENANT)
         .await;
     let owner = h.app.acting_as(principal(OTHER));
     owner
         .get("/api/integrations/connections")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -321,29 +321,29 @@ async fn a_workspace_uses_its_organizations_connection_but_cannot_remove_it() {
         .assert_json_path("data.0.owner_type", json!("organization"));
     owner
         .get(&format!("/api/integrations/connections/{}", connection.id))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
     owner
         .delete(&format!("/api/integrations/connections/{}", connection.id))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_error_code(404, "connection_not_found");
 
     // A workspace connection of its own comes first.
     let own = h
-        .connect_microsoft(Owner::Workspace(acme.id), "contoso.onmicrosoft.com")
+        .connect_microsoft(Owner::Workspace(agra.id), "contoso.onmicrosoft.com")
         .await;
     let integrations = h.integrations().await;
     let used = integrations
-        .connection(Owner::Workspace(acme.id), "microsoft", "default")
+        .connection(Owner::Workspace(agra.id), "microsoft", "default")
         .await
         .unwrap();
     assert_eq!(used.id, own.id);
     let listed = integrations
-        .connections(Owner::Workspace(acme.id))
+        .connections(Owner::Workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(listed.len(), 2);
@@ -355,7 +355,7 @@ async fn keys_are_uploaded_over_the_api() {
     let h = harness(with_routes(false)).await;
     h.fake.api().on(
         http::Method::GET,
-        "https://acme.edr.example/api/v1/health",
+        "https://agra.edr.example/api/v1/health",
         navree_http_client::FakeResponse::new(200),
     );
     let admin = h.app.acting_as(principal(ADMIN));
@@ -394,7 +394,7 @@ async fn keys_are_uploaded_over_the_api() {
         .post("/api/integrations/edr/api-key")
         .json(&json!({
             "key": "edr-key",
-            "api_url": "https://acme.edr.example/api",
+            "api_url": "https://agra.edr.example/api",
             "fields": { "site_id": "17" }
         }))
         .send()

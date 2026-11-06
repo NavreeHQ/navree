@@ -21,13 +21,13 @@ use sha2::{Digest, Sha256};
 /// ```
 /// use navree_directory::DirectoryUser;
 ///
-/// let ada = DirectoryUser::new("00u1ada", "ada@acme.test")
-///     .name("Ada", "Lovelace")
-///     .email("ada@acme.test")
+/// let ada = DirectoryUser::new("00u1ada", "anu@acme.test")
+///     .name("Anu", "Lakhotia")
+///     .email("anu@acme.test")
 ///     .title("Principal engineer")
 ///     .department("Engineering");
-/// assert_eq!(ada.primary_email(), Some("ada@acme.test"));
-/// assert_eq!(ada.full_name(), "Ada Lovelace");
+/// assert_eq!(ada.primary_email(), Some("anu@acme.test"));
+/// assert_eq!(ada.full_name(), "Anu Lakhotia");
 /// assert!(ada.active);
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -373,11 +373,11 @@ mod tests {
 
     #[test]
     fn a_new_user_is_active_and_the_first_email_is_primary() {
-        let user = DirectoryUser::new("u1", "ada@acme.test")
-            .email("ada@acme.test")
-            .email("ada.lovelace@acme.test");
+        let user = DirectoryUser::new("u1", "anu@acme.test")
+            .email("anu@acme.test")
+            .email("anu.lakhotia@acme.test");
         assert!(user.active);
-        assert_eq!(user.primary_email(), Some("ada@acme.test"));
+        assert_eq!(user.primary_email(), Some("anu@acme.test"));
         assert!(user.emails[0].primary);
         assert!(!user.emails[1].primary);
         assert_eq!(user.primary_phone(), None);
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn the_primary_email_is_the_marked_one_else_the_first() {
-        let mut user = DirectoryUser::new("u1", "ada");
+        let mut user = DirectoryUser::new("u1", "anu");
         user.emails = vec![
             ContactValue::new("home@acme.test", Some("home"), false),
             ContactValue::new("work@acme.test", Some("work"), true),
@@ -397,21 +397,21 @@ mod tests {
 
     #[test]
     fn the_full_name_falls_back_to_the_parts_then_the_sign_in_name() {
-        let user = DirectoryUser::new("u1", "ada@acme.test");
-        assert_eq!(user.full_name(), "ada@acme.test");
-        let user = user.name("Ada", "Lovelace");
-        assert_eq!(user.full_name(), "Ada Lovelace");
-        let user = user.display_name("Countess of Lovelace");
-        assert_eq!(user.full_name(), "Countess of Lovelace");
-        let mut blank = DirectoryUser::new("u2", "grace");
+        let user = DirectoryUser::new("u1", "anu@acme.test");
+        assert_eq!(user.full_name(), "anu@acme.test");
+        let user = user.name("Anu", "Lakhotia");
+        assert_eq!(user.full_name(), "Anu Lakhotia");
+        let user = user.display_name("Countess of Lakhotia");
+        assert_eq!(user.full_name(), "Countess of Lakhotia");
+        let mut blank = DirectoryUser::new("u2", "gauri");
         blank.display_name = Some("  ".into());
-        blank.given_name = Some("Grace".into());
-        assert_eq!(blank.full_name(), "Grace");
+        blank.given_name = Some("Gauri".into());
+        assert_eq!(blank.full_name(), "Gauri");
     }
 
     #[test]
     fn fingerprints_change_with_any_field_and_list_the_changed_ones() {
-        let ada = DirectoryUser::new("u1", "ada@acme.test").title("Engineer");
+        let ada = DirectoryUser::new("u1", "anu@acme.test").title("Engineer");
         let same = ada.clone();
         assert_eq!(ada.fingerprint(), same.fingerprint());
         assert_eq!(ada.fingerprint().len(), 64);
@@ -438,15 +438,15 @@ mod tests {
     #[test]
     fn users_round_trip_through_json_with_defaults() {
         let user: DirectoryUser =
-            serde_json::from_value(json!({ "external_id": "u1", "user_name": "ada" })).unwrap();
+            serde_json::from_value(json!({ "external_id": "u1", "user_name": "anu" })).unwrap();
         assert!(user.active);
         assert!(user.emails.is_empty());
-        let email = ContactValue::new("ada@acme.test", Some("work"), true);
+        let email = ContactValue::new("anu@acme.test", Some("work"), true);
         assert_eq!(
             serde_json::to_value(&email).unwrap(),
-            json!({ "value": "ada@acme.test", "type": "work", "primary": true })
+            json!({ "value": "anu@acme.test", "type": "work", "primary": true })
         );
-        let user = DirectoryUser::new("u1", "ada").phone("mobile", "+33 6 12 34 56 78");
+        let user = DirectoryUser::new("u1", "anu").phone("mobile", "+33 6 12 34 56 78");
         assert_eq!(user.primary_phone(), Some("+33 6 12 34 56 78"));
         let back: DirectoryUser =
             serde_json::from_value(serde_json::to_value(&user).unwrap()).unwrap();

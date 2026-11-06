@@ -99,9 +99,9 @@ const ENGINE: &str = "native";
 /// )]));
 /// let pdf = engine
 ///     .render(&Render::template("certificates/classic")
-///         .data(json!({ "name": "Ada Lovelace", "course": "Analytical Engines" })))
+///         .data(json!({ "name": "Anu Lakhotia", "course": "Analytical Engines" })))
 ///     .await?;
-/// assert!(pdf.text()?.contains("Ada Lovelace completed Analytical Engines."));
+/// assert!(pdf.text()?.contains("Anu Lakhotia completed Analytical Engines."));
 /// # Ok(())
 /// # }
 /// ```

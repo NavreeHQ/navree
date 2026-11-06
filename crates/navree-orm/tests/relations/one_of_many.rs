@@ -164,7 +164,7 @@ async fn to_many_relations_as_to_one() {
     let activity = any.first(&t.db).await.unwrap().unwrap();
     assert_eq!(activity.kind, "meeting");
     let contact = crm
-        .acme
+        .agra
         .contacts()
         .one()
         .oldest_of_many()
@@ -215,7 +215,7 @@ async fn defaults_when_nothing_is_related() {
             .clone()
             .unwrap()
     };
-    assert_eq!(company(&deals[0]).name, "Acme");
+    assert_eq!(company(&deals[0]).name, "Agra");
     assert_eq!(company(&deals[3]).name, "No company for Orphan");
     let activity = one(&deals[2], "first_activity_or_default").unwrap();
     assert_eq!(activity.kind, "none yet");

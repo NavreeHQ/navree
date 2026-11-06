@@ -10,12 +10,12 @@ use crate::support::{self, PASSWORD, login, refresh, tokens};
 #[tokio::test]
 async fn login_then_request_then_refresh_then_logout() {
     let app = support::app().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let client = app.client();
 
     // 1. Login.
     let (access, refresh_token) = tokens(
-        &login(&client, "ada@example.com", PASSWORD)
+        &login(&client, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );

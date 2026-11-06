@@ -268,7 +268,7 @@ mod tests {
                 "traceparent",
                 "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
             )
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .body(())
             .unwrap();
         request
@@ -294,7 +294,7 @@ mod tests {
             Some("00f067aa0ba902b7"),
             "the header's span is the parent"
         );
-        assert_eq!(context.workspace.as_deref(), Some("acme"));
+        assert_eq!(context.workspace.as_deref(), Some("agra"));
         assert_eq!(context.actor, Some(user));
     }
 

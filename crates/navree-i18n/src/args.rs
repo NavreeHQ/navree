@@ -18,9 +18,9 @@ use crate::format::{DateStyle, Formats, TimeStyle};
 /// ```
 /// use navree_i18n::{Args, Money, args};
 ///
-/// let args = args!(count = 3, owner = "Ada", amount = Money::new(4_200_000, "EUR"));
+/// let args = args!(count = 3, owner = "Anu", amount = Money::new(4_200_000, "EUR"));
 /// assert_eq!(args.len(), 3);
-/// let same = Args::new().with("count", 3).with("owner", "Ada");
+/// let same = Args::new().with("count", 3).with("owner", "Anu");
 /// assert_eq!(same.len(), 2);
 /// ```
 #[derive(Default)]
@@ -366,7 +366,7 @@ mod tests {
     fn values_convert_to_fluent_values() {
         assert!(matches!(Arg::from(3_usize).0, FluentValue::Number(n) if n.value == 3.0));
         assert!(matches!(Arg::from(-2.5_f64).0, FluentValue::Number(n) if n.value == -2.5));
-        assert!(matches!(Arg::from("Ada").0, FluentValue::String(s) if s == "Ada"));
+        assert!(matches!(Arg::from("Anu").0, FluentValue::String(s) if s == "Anu"));
         assert!(matches!(Arg::from(true).0, FluentValue::String(s) if s == "true"));
         assert!(matches!(Arg::from(None::<&str>).0, FluentValue::None));
         assert!(matches!(Arg::from(Some(1_u8)).0, FluentValue::Number(_)));

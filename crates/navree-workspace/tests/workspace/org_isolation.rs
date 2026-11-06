@@ -242,32 +242,32 @@ async fn contact_row(world: &World, workspace: Uuid, partition: Option<Uuid>, na
 #[tokio::test]
 async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
-    let acme = world.organization(ada, "Acme").await;
-    let ws = world.workspace(ada, "Acme UK").await;
+    let agra = world.organization(ada, "Agra").await;
+    let ws = world.workspace(ada, "Agra UK").await;
     let client = world.as_user(ada);
 
     for (request, resolver) in [
         (
-            client.get("/api/org").header("x-organization", "acme"),
+            client.get("/api/org").header("x-organization", "agra"),
             "header",
         ),
         (
             client
                 .get("/api/org")
-                .header("x-organization", acme.id.to_string().as_str()),
+                .header("x-organization", agra.id.to_string().as_str()),
             "header",
         ),
-        (client.get("/api/o/acme/org"), "path"),
+        (client.get("/api/o/agra/org"), "path"),
         (
-            client.get("/api/org").header("host", "acme.partners.test"),
+            client.get("/api/org").header("host", "agra.partners.test"),
             "subdomain",
         ),
         (
             client
                 .get("/api/org")
-                .bearer(&jwt(json!({ "organization": "acme" }))),
+                .bearer(&jwt(json!({ "organization": "agra" }))),
             "claim",
         ),
     ] {
@@ -275,7 +275,7 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
             .send()
             .await
             .assert_status(200)
-            .assert_json_path("id", json!(acme.id))
+            .assert_json_path("id", json!(agra.id))
             .assert_json_path("role", json!("owner"))
             .assert_json_path("resolver", json!(resolver))
             .assert_json_path("permissions", json!(["all.*"]));
@@ -294,7 +294,7 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
     world
         .as_user(ken)
         .get("/api/org")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this organization.");
@@ -302,14 +302,14 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
         .app
         .client()
         .get("/api/org")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .send()
         .await
         .assert_error(401, None);
     // A token pinned to a workspace stays out of organizations.
     client
         .get("/api/org")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .header("x-test-pin", ws.id.to_string().as_str())
         .send()
         .await
@@ -320,22 +320,22 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
 #[tokio::test]
 async fn route_checks_use_the_organization_role_behind_the_guard() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
-    let acme = world.organization(ada, "Acme").await;
+    let agra = world.organization(ada, "Agra").await;
     world
-        .grant(acme.id, grace, "admin", WorkspaceSelector::All)
+        .grant(agra.id, grace, "admin", WorkspaceSelector::All)
         .await;
     world
-        .grant(acme.id, ken, "partner", WorkspaceSelector::All)
+        .grant(agra.id, ken, "partner", WorkspaceSelector::All)
         .await;
 
     // `partner` carries `reports.read`; the built-in `admin` doesn't.
     world
         .as_user(ken)
         .get("/api/org/guarded")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .send()
         .await
         .assert_status(200)
@@ -344,14 +344,14 @@ async fn route_checks_use_the_organization_role_behind_the_guard() {
     world
         .as_user(grace)
         .get("/api/org/guarded")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .send()
         .await
         .assert_error(403, None);
     world
         .as_user(ada)
         .get("/api/org/guarded")
-        .header("x-organization", "acme")
+        .header("x-organization", "agra")
         .send()
         .await
         .assert_status(200);
@@ -360,7 +360,7 @@ async fn route_checks_use_the_organization_role_behind_the_guard() {
 #[tokio::test]
 async fn organization_a_cannot_see_organization_b() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let bob = world.user("Bob", "bob@example.com").await;
     let linus = world.user("Linus", "linus@example.com").await;
     let a = world.organization(ada, "Org A").await;
@@ -492,28 +492,28 @@ async fn organization_a_cannot_see_organization_b() {
 #[tokio::test]
 async fn partition_grants_hold() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Linus", "linus@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     let other = world.workspace(ada, "Other").await;
-    world.join(acme.id, grace, "member").await;
-    world.join(acme.id, linus, "member").await;
-    let uk = world.partition(acme.id, "acme.co.uk").await;
-    let de = world.partition(acme.id, "acme.de").await;
+    world.join(agra.id, grace, "member").await;
+    world.join(agra.id, linus, "member").await;
+    let uk = world.partition(agra.id, "agra.co.uk").await;
+    let de = world.partition(agra.id, "agra.de").await;
     let foreign = world.partition(other.id, "other.com").await;
-    contact_row(&world, acme.id, Some(uk.id), "uk contact").await;
-    let de_contact = contact_row(&world, acme.id, Some(de.id), "de contact").await;
-    contact_row(&world, acme.id, None, "unsorted contact").await;
+    contact_row(&world, agra.id, Some(uk.id), "uk contact").await;
+    let de_contact = contact_row(&world, agra.id, Some(de.id), "de contact").await;
+    contact_row(&world, agra.id, None, "unsorted contact").await;
     contact_row(&world, other.id, Some(foreign.id), "other contact").await;
     world
-        .limit_partitions(acme.id, linus, PartitionSelector::only([uk.id]))
+        .limit_partitions(agra.id, linus, PartitionSelector::only([uk.id]))
         .await;
 
     // A full member sees every partition, rows without one included.
     let full = world.as_user(grace);
     full.get("/api/contacts")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -524,33 +524,33 @@ async fn partition_grants_hold() {
         .assert_json_path("selector", json!("all"))
         .assert_json_path("current", json!(null));
     full.get("/api/contacts")
-        .header("x-workspace", "acme")
-        .header("x-partition", "acme-de")
+        .header("x-workspace", "agra")
+        .header("x-partition", "agra-de")
         .send()
         .await
         .assert_json_path("names", json!(["de contact"]))
         .assert_json_path("selector", json!([de.id]))
-        .assert_json_path("current", json!("acme-de"));
+        .assert_json_path("current", json!("agra-de"));
 
     // A limited member sees their partitions only.
     let limited = world.as_user(linus);
     limited
         .get("/api/contacts")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_json_path("names", json!(["uk contact"]))
         .assert_json_path("allowed", json!([uk.id]));
     limited
         .get("/api/contacts")
-        .header("x-workspace", "acme")
-        .header("x-partition", "acme-de")
+        .header("x-workspace", "agra")
+        .header("x-partition", "agra-de")
         .send()
         .await
         .assert_error(403, "You don't have access to this partition.");
     limited
         .get("/api/contacts")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .header("x-partition", foreign.id.to_string().as_str())
         .send()
         .await
@@ -559,28 +559,28 @@ async fn partition_grants_hold() {
     // `CurrentPartition` needs a partition, then writes into it.
     limited
         .post("/api/contacts")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "new" }))
         .send()
         .await
         .assert_error(400, "The request names no partition.");
     limited
         .post("/api/contacts")
-        .header("x-workspace", "acme")
-        .header("x-partition", "acme-co-uk")
+        .header("x-workspace", "agra")
+        .header("x-partition", "agra-co-uk")
         .json(&json!({ "name": "new" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("partition_id", json!(uk.id))
-        .assert_json_path("workspace_id", json!(acme.id));
+        .assert_json_path("workspace_id", json!(agra.id));
     limited
         .get("/api/partition")
-        .header("x-workspace", "acme")
-        .header("x-partition", "acme-co-uk")
+        .header("x-workspace", "agra")
+        .header("x-partition", "agra-co-uk")
         .send()
         .await
-        .assert_json_path("slug", json!("acme-co-uk"))
+        .assert_json_path("slug", json!("agra-co-uk"))
         .assert_json_path("resolver", json!("header"));
 
     // `PartitionRepo` refuses rows outside the selector.
@@ -594,16 +594,16 @@ async fn partition_grants_hold() {
         .unwrap()
         .unwrap();
     assert!(matches!(
-        PartitionRepo::<Contact>::find_or_fail(&uow, acme.id, &only_uk, de_contact).await,
+        PartitionRepo::<Contact>::find_or_fail(&uow, agra.id, &only_uk, de_contact).await,
         Err(OrmError::ModelNotFound { .. })
     ));
     assert!(matches!(
-        PartitionRepo::<Contact>::delete(&uow, acme.id, &only_uk, row.clone()).await,
+        PartitionRepo::<Contact>::delete(&uow, agra.id, &only_uk, row.clone()).await,
         Err(OrmError::ModelNotFound { .. })
     ));
     let mut moved = row.clone();
     moved.partition_id = Some(uk.id);
-    let refused = PartitionRepo::<Contact>::update(&uow, acme.id, &only_uk, &mut moved).await;
+    let refused = PartitionRepo::<Contact>::update(&uow, agra.id, &only_uk, &mut moved).await;
     assert!(
         matches!(refused, Err(OrmError::ModelNotFound { .. })),
         "{refused:?}"
@@ -611,19 +611,19 @@ async fn partition_grants_hold() {
     let all = Selector::All;
     let mut renamed = row.clone();
     renamed.name = "de renamed".into();
-    PartitionRepo::<Contact>::update(&uow, acme.id, &all, &mut renamed)
+    PartitionRepo::<Contact>::update(&uow, agra.id, &all, &mut renamed)
         .await
         .unwrap();
     assert_eq!(renamed.name, "de renamed");
     assert_eq!(
-        PartitionRepo::<Contact>::query(acme.id, &Selector::Only(vec![]))
+        PartitionRepo::<Contact>::query(agra.id, &Selector::Only(vec![]))
             .count(&uow)
             .await
             .unwrap(),
         0
     );
     assert_eq!(OrgRepo::<Deal>::query(&[]).count(&uow).await.unwrap(), 0);
-    PartitionRepo::<Contact>::delete(&uow, acme.id, &all, renamed)
+    PartitionRepo::<Contact>::delete(&uow, agra.id, &all, renamed)
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -632,21 +632,21 @@ async fn partition_grants_hold() {
 #[tokio::test]
 async fn organization_members_see_every_partition_of_the_workspaces_they_reach() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let org = world.organization(ada, "Acme").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(org.id, acme.id).await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let org = world.organization(ada, "Agra").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(org.id, agra.id).await;
     world
         .grant(org.id, grace, "viewer", WorkspaceSelector::All)
         .await;
-    let uk = world.partition(acme.id, "acme.co.uk").await;
-    contact_row(&world, acme.id, Some(uk.id), "uk contact").await;
-    contact_row(&world, acme.id, None, "unsorted contact").await;
+    let uk = world.partition(agra.id, "agra.co.uk").await;
+    contact_row(&world, agra.id, Some(uk.id), "uk contact").await;
+    contact_row(&world, agra.id, None, "unsorted contact").await;
     world
         .as_user(grace)
         .get("/api/contacts")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)

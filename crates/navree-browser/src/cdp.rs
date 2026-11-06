@@ -645,9 +645,9 @@ mod tests {
         );
         let answer = log.event(
             "Page.javascriptDialogOpening",
-            &json!({ "type": "prompt", "message": "Name?", "defaultPrompt": "Ada" }),
+            &json!({ "type": "prompt", "message": "Name?", "defaultPrompt": "Anu" }),
         );
-        assert_eq!(answer.unwrap().1["promptText"], "Ada");
+        assert_eq!(answer.unwrap().1["promptText"], "Anu");
         assert_eq!(
             log.lines[0],
             "[dialog] confirm(\"Delete the deal?\") accepted"

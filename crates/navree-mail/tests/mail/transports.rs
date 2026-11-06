@@ -9,9 +9,9 @@ use navree_mail::{ArrayTransport, FailoverTransport, MailError, MailTransport, M
 fn hello() -> Message {
     Message::new()
         .from("App <app@example.com>")
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hello")
-        .text("Hello, Ada")
+        .text("Hello, Anu")
 }
 
 /// A transport that always fails, counting its attempts.
@@ -40,7 +40,7 @@ async fn array_transport_records() {
     transport.send(&message).await.expect("send");
 
     assert_eq!(transport.sent(), vec![message]);
-    transport.assert_sent(|m| m.subject == "Hello" && m.to == ["ada@example.com"]);
+    transport.assert_sent(|m| m.subject == "Hello" && m.to == ["anu@example.com"]);
 
     // Clones share the recorded messages, so a test can keep one.
     let clone = transport.clone();

@@ -17,7 +17,7 @@ use crate::user::{DirectoryGroup, DirectoryUser};
 /// use navree_directory::{DirectoryGroup, DirectoryUser, Pulled};
 ///
 /// let pulled = Pulled::snapshot(
-///     vec![DirectoryUser::new("u1", "ada@acme.test")],
+///     vec![DirectoryUser::new("u1", "anu@acme.test")],
 ///     vec![DirectoryGroup::new("g1", "Engineering").members(["u1"])],
 /// )
 /// .cursor("opaque-cursor");

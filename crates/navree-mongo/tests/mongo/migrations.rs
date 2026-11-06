@@ -59,7 +59,7 @@ mod m20261027_000002_seed_companies {
             Company::create(
                 uow,
                 Company {
-                    name: "Acme".into(),
+                    name: "Agra".into(),
                     employees: 12,
                     ..Company::default()
                 },
@@ -355,7 +355,7 @@ async fn a_failed_migration_rolls_back_its_transaction_and_is_not_recorded() {
         .pluck(&*mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(names, ["Acme"], "the failed migration's write rolled back");
+    assert_eq!(names, ["Agra"], "the failed migration's write rolled back");
     let status = migrator.status().await.unwrap();
     let applied: Vec<bool> = status.iter().map(|migration| migration.applied).collect();
     assert_eq!(

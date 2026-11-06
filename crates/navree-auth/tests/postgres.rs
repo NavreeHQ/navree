@@ -108,7 +108,7 @@ async fn sign_in(app: &TestApp, email: &str) -> (Uuid, String, String) {
     let user = app
         .get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", email, PASSWORD)
+        .create_user("Anu Lakhotia", email, PASSWORD)
         .await
         .unwrap();
     let body = app
@@ -134,7 +134,7 @@ async fn sessions_impersonation_and_its_audit_trail_work_on_postgres() {
     let app = app(&scratch).await;
     let client = app.client();
     let (agent, agent_access, _) = sign_in(&app, "agent@example.com").await;
-    let (ada, ada_access, ada_refresh) = sign_in(&app, "ada@example.com").await;
+    let (ada, ada_access, ada_refresh) = sign_in(&app, "anu@example.com").await;
 
     // Sessions: a refresh keeps the session columns.
     client
@@ -210,12 +210,12 @@ async fn emailed_codes_and_passkeys_work_on_postgres() {
     };
     let app = app(&scratch).await;
     let client = app.client();
-    let (_, access, _) = sign_in(&app, "ada@example.com").await;
+    let (_, access, _) = sign_in(&app, "anu@example.com").await;
 
     // An emailed code: a wrong guess is counted, the right one signs in.
     client
         .post("/api/auth/otp")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(202);
@@ -229,13 +229,13 @@ async fn emailed_codes_and_passkeys_work_on_postgres() {
     let wrong = if code == "000000" { "111111" } else { "000000" };
     client
         .post("/api/auth/otp/verify")
-        .json(&json!({ "email": "ada@example.com", "code": wrong }))
+        .json(&json!({ "email": "anu@example.com", "code": wrong }))
         .send()
         .await
         .assert_status(401);
     client
         .post("/api/auth/otp/verify")
-        .json(&json!({ "email": "ada@example.com", "code": code }))
+        .json(&json!({ "email": "anu@example.com", "code": code }))
         .send()
         .await
         .assert_status(200);
@@ -259,7 +259,7 @@ async fn emailed_codes_and_passkeys_work_on_postgres() {
     for _ in 0..2 {
         let options = client
             .post("/api/auth/passkeys/login/options")
-            .json(&json!({ "email": "ada@example.com" }))
+            .json(&json!({ "email": "anu@example.com" }))
             .send()
             .await
             .json_value();

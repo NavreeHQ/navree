@@ -33,7 +33,7 @@ fn ping(message: &str) -> PingRequest {
 async fn get_deal_checks_access() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme renewal", rep).await;
+    let deal = insert_deal(&app, "Agra renewal", rep).await;
     let request = || GetDealRequest {
         id: deal.id.to_string(),
     };
@@ -50,7 +50,7 @@ async fn get_deal_checks_access() {
     let mut owner = DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)));
     let found = owner.get_deal(request()).await.unwrap().into_inner();
     assert_eq!(found.owner_id, rep.to_string());
-    assert_eq!(found.title, "Acme renewal");
+    assert_eq!(found.title, "Agra renewal");
     assert_eq!(found.amount_cents, 1_200_000);
 
     app.shutdown().await.unwrap();
@@ -110,7 +110,7 @@ async fn lists_are_filtered_by_the_same_rules() {
 async fn valid_messages_report_every_broken_rule() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme", rep).await;
+    let deal = insert_deal(&app, "Agra", rep).await;
     let mut owner = DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)));
 
     let status = owner
@@ -150,7 +150,7 @@ async fn valid_messages_report_every_broken_rule() {
 async fn the_unit_of_work_commits_on_ok_and_rolls_back_on_errors() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme", rep).await;
+    let deal = insert_deal(&app, "Agra", rep).await;
     let mut owner = DealsClient::new(TestChannel::new(&app).acting_as(principal(rep)));
     let request = |stage: &str, lost_reason: Option<&str>| MoveDealRequest {
         id: deal.id.to_string(),

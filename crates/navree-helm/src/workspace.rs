@@ -613,8 +613,8 @@ mod tests {
 
     #[test]
     fn the_header_comes_before_the_cookie_and_only_a_uuid_counts() {
-        let acme = Uuid::now_v7();
-        let globex = Uuid::now_v7();
+        let agra = Uuid::now_v7();
+        let gulati = Uuid::now_v7();
         let mut headers = HeaderMap::new();
         let requested = |headers: &HeaderMap| {
             requested(headers, Some(WORKSPACE_HEADER), None).map(|(workspace, _)| workspace)
@@ -622,16 +622,16 @@ mod tests {
         assert_eq!(requested(&headers), None);
         headers.insert(
             COOKIE,
-            HeaderValue::from_str(&format!("{WORKSPACE_COOKIE}={acme}")).unwrap(),
+            HeaderValue::from_str(&format!("{WORKSPACE_COOKIE}={agra}")).unwrap(),
         );
-        assert_eq!(requested(&headers), Some(acme));
+        assert_eq!(requested(&headers), Some(agra));
         headers.insert(
             WORKSPACE_HEADER,
-            HeaderValue::from_str(&format!(" {globex} ")).unwrap(),
+            HeaderValue::from_str(&format!(" {gulati} ")).unwrap(),
         );
-        assert_eq!(requested(&headers), Some(globex));
+        assert_eq!(requested(&headers), Some(gulati));
         // A header that is not a UUID does not fall back to the cookie.
-        headers.insert(WORKSPACE_HEADER, HeaderValue::from_static("acme"));
+        headers.insert(WORKSPACE_HEADER, HeaderValue::from_static("agra"));
         assert_eq!(requested(&headers), None);
         headers.remove(WORKSPACE_HEADER);
         headers.insert(

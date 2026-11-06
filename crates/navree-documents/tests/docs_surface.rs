@@ -89,7 +89,7 @@ fn the_documented_api_exists() {
     let _ = documents;
 
     let render = Render::template("certificates/course")
-        .data(json!({"name": "Ada"}))
+        .data(json!({"name": "Anu"}))
         .locale("ar")
         .title("Certificate")
         .engine(EngineKind::Chrome)
@@ -123,7 +123,7 @@ fn the_documented_api_exists() {
 
     let built: Pdf = PdfDocument::new()
         .title("Quarterly audit report")
-        .author("Acme")
+        .author("Agra")
         .locale("en")
         .font("Noto Serif")
         .font_size(10.5)
@@ -178,12 +178,12 @@ fn the_documented_api_exists() {
             native::Image::new(
                 std::fs::read(concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/tests/fixtures/templates/images/acme-logo.png"
+                    "/tests/fixtures/templates/images/agra-logo.png"
                 ))
                 .unwrap(),
             )
             .width_mm(40.0)
-            .alt("Acme"),
+            .alt("Agra"),
         )
         .rule()
         .space_mm(5.0)

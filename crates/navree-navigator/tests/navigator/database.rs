@@ -18,8 +18,8 @@ async fn crm_db(fixture: &Fixture) {
         "CREATE TABLE navree_migrations (module TEXT NOT NULL, name TEXT NOT NULL, batch INTEGER NOT NULL, \
          applied_at TEXT NOT NULL, PRIMARY KEY (module, name))",
         "INSERT INTO navree_migrations VALUES ('crm', 'm20261026_000001_create_deals', 1, '2026-10-26T10:00:00Z')",
-        "INSERT INTO companies (id, name) VALUES (1, 'Acme')",
-        "INSERT INTO users (email, password_hash, remember_token) VALUES ('ada@example.com', '$argon2id$v=19$x', 'tok')",
+        "INSERT INTO companies (id, name) VALUES (1, 'Agra')",
+        "INSERT INTO users (email, password_hash, remember_token) VALUES ('anu@example.com', '$argon2id$v=19$x', 'tok')",
     ];
     let deals: Vec<String> = (1..=150)
         .map(|i| {
@@ -95,7 +95,7 @@ async fn secret_looking_columns_are_masked() {
     );
     assert_eq!(
         answer["rows"][0],
-        json!([1, "ada@example.com", "[redacted]", "[redacted]"])
+        json!([1, "anu@example.com", "[redacted]", "[redacted]"])
     );
 }
 

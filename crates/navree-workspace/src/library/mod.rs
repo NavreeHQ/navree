@@ -227,12 +227,12 @@ impl LibraryOwner {
     /// use navree_workspace::library::{LibraryOwner, LibraryScope};
     /// use uuid::Uuid;
     ///
-    /// let acme = Uuid::now_v7();
+    /// let agra = Uuid::now_v7();
     /// assert_eq!(
-    ///     LibraryOwner::from_columns(LibraryScope::Workspace, None, Some(acme)),
-    ///     Ok(LibraryOwner::Workspace(acme))
+    ///     LibraryOwner::from_columns(LibraryScope::Workspace, None, Some(agra)),
+    ///     Ok(LibraryOwner::Workspace(agra))
     /// );
-    /// assert!(LibraryOwner::from_columns(LibraryScope::Global, None, Some(acme)).is_err());
+    /// assert!(LibraryOwner::from_columns(LibraryScope::Global, None, Some(agra)).is_err());
     /// ```
     pub fn from_columns(
         scope: LibraryScope,
@@ -283,13 +283,13 @@ impl fmt::Display for LibraryOwner {
 /// use navree_workspace::library::{LibraryOwner, LibraryViewer};
 /// use uuid::Uuid;
 ///
-/// let (group, acme, other) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-/// let viewer = LibraryViewer::workspace(acme).in_organization(Some(group));
+/// let (group, agra, other) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+/// let viewer = LibraryViewer::workspace(agra).in_organization(Some(group));
 /// assert!(viewer.sees(&LibraryOwner::Global));
 /// assert!(viewer.sees(&LibraryOwner::Organization(group)));
-/// assert!(viewer.sees(&LibraryOwner::Workspace(acme)));
+/// assert!(viewer.sees(&LibraryOwner::Workspace(agra)));
 /// assert!(!viewer.sees(&LibraryOwner::Workspace(other)));
-/// assert_eq!(viewer.owner(), LibraryOwner::Workspace(acme));
+/// assert_eq!(viewer.owner(), LibraryOwner::Workspace(agra));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LibraryViewer {
@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     fn viewers_see_the_global_items_their_organization_s_and_their_own() {
-        let (group, other_group, acme, globex) = (
+        let (group, other_group, agra, gulati) = (
             Uuid::now_v7(),
             Uuid::now_v7(),
             Uuid::now_v7(),
@@ -631,26 +631,26 @@ mod tests {
         let nobody = LibraryViewer::global();
         assert!(nobody.sees(&LibraryOwner::Global));
         assert!(!nobody.sees(&LibraryOwner::Organization(group)));
-        assert!(!nobody.sees(&LibraryOwner::Workspace(acme)));
+        assert!(!nobody.sees(&LibraryOwner::Workspace(agra)));
         assert_eq!(nobody.owner(), LibraryOwner::Global);
 
         let org = LibraryViewer::organization(group);
         assert!(org.sees(&LibraryOwner::Organization(group)));
         assert!(!org.sees(&LibraryOwner::Organization(other_group)));
-        assert!(!org.sees(&LibraryOwner::Workspace(acme)));
+        assert!(!org.sees(&LibraryOwner::Workspace(agra)));
         assert_eq!(org.owner(), LibraryOwner::Organization(group));
 
-        let standalone = LibraryViewer::workspace(globex);
+        let standalone = LibraryViewer::workspace(gulati);
         assert!(standalone.sees(&LibraryOwner::Global));
         assert!(!standalone.sees(&LibraryOwner::Organization(group)));
-        assert!(standalone.sees(&LibraryOwner::Workspace(globex)));
-        assert!(!standalone.sees(&LibraryOwner::Workspace(acme)));
+        assert!(standalone.sees(&LibraryOwner::Workspace(gulati)));
+        assert!(!standalone.sees(&LibraryOwner::Workspace(agra)));
         assert_eq!(standalone.organization_id(), None);
 
-        let member = LibraryViewer::workspace(acme).in_organization(Some(group));
-        assert_eq!(member.workspace_id(), Some(acme));
+        let member = LibraryViewer::workspace(agra).in_organization(Some(group));
+        assert_eq!(member.workspace_id(), Some(agra));
         assert_eq!(member.organization_id(), Some(group));
         assert!(member.sees(&LibraryOwner::Organization(group)));
-        assert_eq!(member.owner(), LibraryOwner::Workspace(acme));
+        assert_eq!(member.owner(), LibraryOwner::Workspace(agra));
     }
 }

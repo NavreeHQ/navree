@@ -283,7 +283,7 @@ async fn sources_without_their_required_setting_are_a_500() {
 fn push_body() -> Vec<u8> {
     use base64::Engine as _;
     let data = base64::engine::general_purpose::STANDARD
-        .encode(br#"{"emailAddress":"ada@example.com","historyId":"9876543210"}"#);
+        .encode(br#"{"emailAddress":"anu@example.com","historyId":"9876543210"}"#);
     serde_json::to_vec(&json!({
         "message": {
             "data": data,
@@ -521,7 +521,7 @@ async fn mailgun_and_postmark_events_are_verified() {
         "RecordType": "Bounce",
         "MessageID": "883953f4-6105-42a2-a16a-77a8eac79483",
         "Type": "HardBounce",
-        "Email": "ada@example.com"
+        "Email": "anu@example.com"
     });
     app.client()
         .post("/api/hooks/postmark")

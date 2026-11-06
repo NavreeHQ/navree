@@ -257,7 +257,7 @@ impl GlobalScope<Article> for ByAuthor {
 
 /// A model with global scopes.
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
-#[model(global_scopes(Published, ByAuthor("ada".to_owned())))]
+#[model(global_scopes(Published, ByAuthor("anu".to_owned())))]
 pub struct Article {
     pub id: i64,
     pub title: String,

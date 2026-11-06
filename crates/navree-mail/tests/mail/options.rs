@@ -88,7 +88,7 @@ fn options_read_environment_variables() {
     let options = load(ConfigSources::new().env_vars(
         "APP_",
         [
-            ("APP_MAIL__FROM", "Acme <billing@acme.test>"),
+            ("APP_MAIL__FROM", "Agra <billing@acme.test>"),
             ("APP_MAIL__TRANSPORT", "smtp://localhost:1025"),
             ("APP_MAIL__QUEUE", "mail"),
         ],
@@ -98,7 +98,7 @@ fn options_read_environment_variables() {
     assert_eq!(
         options,
         MailOptions {
-            from: "Acme <billing@acme.test>".to_owned(),
+            from: "Agra <billing@acme.test>".to_owned(),
             transport: TransportConfig::smtp("smtp://localhost:1025"),
             queue: Some("mail".to_owned()),
             ..MailOptions::default()

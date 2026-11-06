@@ -107,7 +107,7 @@ fn post(
 }
 
 const BASICS: &[(&str, &str)] = &[("title", "Annual plan"), ("kind", "new")];
-const CONTACT: &[(&str, &str)] = &[("email", "ada@example.com"), ("password", "correct horse")];
+const CONTACT: &[(&str, &str)] = &[("email", "anu@example.com"), ("password", "correct horse")];
 const TERMS: &[(&str, &str)] = &[("accept", "true")];
 
 /// A draft that has done every step up to the review.
@@ -225,12 +225,12 @@ fn back_and_the_stepper_keep_input_without_checking_it() {
     let mut draft = wizard.start();
     post(&wizard, &mut draft, "basics", "next", BASICS);
     // Half a step typed, then Back: kept, though not valid.
-    let out = post(&wizard, &mut draft, "contact", "back", &[("email", "ada@")]);
+    let out = post(&wizard, &mut draft, "contact", "back", &[("email", "anu@")]);
     assert_eq!(out, WizardOutcome::Go("basics".into()));
-    assert_eq!(draft.value("contact", "email"), Some("ada@"));
+    assert_eq!(draft.value("contact", "email"), Some("anu@"));
     // The step was not tried, so it shows no error when it opens again.
     let html = render(&wizard.page(&draft, "contact").unwrap().into());
-    assert!(html.contains(r#"value="ada@""#), "{html}");
+    assert!(html.contains(r#"value="anu@""#), "{html}");
     assert!(!html.contains("data-invalid"), "{html}");
     // The stepper moves to a step the person has been to.
     let out = post(&wizard, &mut draft, "basics", "goto:contact", BASICS);
@@ -475,7 +475,7 @@ fn only_the_steps_own_fields_are_kept_and_a_password_never_is() {
     assert_eq!(record.values, pairs(&[("title", "T"), ("kind", "new")]));
     post(&wizard, &mut draft, "contact", "next", CONTACT);
     let record = draft.record("contact").unwrap();
-    assert_eq!(record.values, pairs(&[("email", "ada@example.com")]));
+    assert_eq!(record.values, pairs(&[("email", "anu@example.com")]));
     let json = serde_json::to_string(&draft).unwrap();
     assert!(
         !json.contains("correct horse") && !json.contains("leak") && !json.contains("tok"),
@@ -496,21 +496,21 @@ fn what_a_password_got_wrong_is_said_again_in_words_and_never_in_value() {
         &mut draft,
         "contact",
         "next",
-        &[("email", "ada@example.com"), ("password", "short")],
+        &[("email", "anu@example.com"), ("password", "short")],
     );
     assert_eq!(out, WizardOutcome::Invalid("contact".into()));
     let json = serde_json::to_string(&draft).unwrap();
     assert!(!json.contains("short\""), "the value is not kept: {json}");
     let html = render(&wizard.page(&draft, "contact").unwrap().into());
     assert!(html.contains("longer than or equal to 8"), "{html}");
-    assert!(html.contains(r#"value="ada@example.com""#), "{html}");
+    assert!(html.contains(r#"value="anu@example.com""#), "{html}");
     // Moving away and back without typing it again keeps the words; typing it right clears them.
     post(
         &wizard,
         &mut draft,
         "contact",
         "back",
-        &[("email", "ada@example.com")],
+        &[("email", "anu@example.com")],
     );
     let html = render(&wizard.page(&draft, "contact").unwrap().into());
     assert!(html.contains("longer than or equal to 8"), "{html}");
@@ -523,7 +523,7 @@ fn what_a_password_got_wrong_is_said_again_in_words_and_never_in_value() {
         &mut draft,
         "contact",
         "back",
-        &[("email", "grace@example.com")],
+        &[("email", "gauri@example.com")],
     );
     let html = render(&wizard.page(&draft, "contact").unwrap().into());
     assert!(!html.contains("longer than or equal to 8"), "{html}");
@@ -567,7 +567,7 @@ fn a_rule_that_says_a_password_back_has_it_masked_before_the_words_are_kept() {
         "account",
         "next",
         &[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("password", "hunter2hunter2"),
             ("again", "hunter2hunter2"),
         ],
@@ -712,7 +712,7 @@ fn finish_and_the_review_check_an_optional_answer_the_person_left_by_back() {
         &mut draft,
         "contact",
         "goto:terms",
-        &[("email", "ada@example.com")],
+        &[("email", "anu@example.com")],
     );
     post(&wizard, &mut draft, "terms", "next", TERMS);
     let html = render(&wizard.page(&draft, "review").unwrap().into());
@@ -750,7 +750,7 @@ fn finish_and_the_review_check_an_optional_answer_the_person_left_by_back() {
         &mut draft,
         "contact",
         "goto:terms",
-        &[("email", "ada@example.com")],
+        &[("email", "anu@example.com")],
     );
     post(&wizard, &mut draft, "terms", "next", TERMS);
     let html = render(&wizard.page(&draft, "review").unwrap().into());
@@ -783,7 +783,7 @@ fn the_review_marks_a_step_as_not_done_when_the_stepper_does_and_not_otherwise()
         &mut draft,
         "contact",
         "goto:terms",
-        &[("email", "ada@example.com"), ("password", "short")],
+        &[("email", "anu@example.com"), ("password", "short")],
     );
     post(&wizard, &mut draft, "terms", "next", TERMS);
     let html = render(&wizard.page(&draft, "review").unwrap().into());
@@ -805,7 +805,7 @@ fn the_review_shows_answers_as_text_with_a_button_to_each_step() {
         html.contains("A new customer"),
         "option labels, not values: {html}"
     );
-    assert!(html.contains("ada@example.com"), "{html}");
+    assert!(html.contains("anu@example.com"), "{html}");
     assert!(!html.contains("correct horse"), "{html}");
     assert!(html.contains(r#"value="goto:basics""#), "{html}");
     assert!(html.contains(r#"value="goto:terms""#), "{html}");

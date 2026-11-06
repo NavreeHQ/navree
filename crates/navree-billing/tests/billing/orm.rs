@@ -9,14 +9,14 @@ use crate::support::World;
 #[tokio::test]
 async fn customers_subscriptions_and_items_are_orm_models() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
-    let started = world.subscribe(&acme, "pro").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
+    let started = world.subscribe(&agra, "pro").await;
     let db = world.db().await;
 
     assert_eq!(subscription::Model::table_name(), "subscriptions");
     let rows = subscription::Model::query()
-        .where_(subscription::Model::BILLABLE_ID.eq(acme.id))
+        .where_(subscription::Model::BILLABLE_ID.eq(agra.id))
         .where_(subscription::Model::PLAN.eq("pro"))
         .get(&db)
         .await
@@ -26,7 +26,7 @@ async fn customers_subscriptions_and_items_are_orm_models() {
     assert_eq!(rows[0].provider, "fake");
     assert_eq!(
         customer::Model::query()
-            .where_(customer::Model::BILLABLE_ID.eq(acme.id))
+            .where_(customer::Model::BILLABLE_ID.eq(agra.id))
             .count(&db)
             .await
             .unwrap(),

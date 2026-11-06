@@ -54,14 +54,14 @@ async fn fixed_resources_and_templates_are_listed_apart() {
 async fn templates_load_and_authorize_their_record() {
     let app = app().await;
     let rep = user();
-    let deal = insert_deal(&app, Uuid::now_v7(), "Acme renewal", "qualified").await;
+    let deal = insert_deal(&app, Uuid::now_v7(), "Agra renewal", "qualified").await;
     let mcp = McpTestClient::new(app.acting_as(rep)).initialize().await;
 
     let read = mcp
         .read_resource(&format!("crm://deals/{}", deal.id))
         .await
         .assert_ok()
-        .assert_json_path("title", json!("Acme renewal"))
+        .assert_json_path("title", json!("Agra renewal"))
         .assert_json_path("stage", json!("qualified"));
     assert_eq!(read.mime_type().as_deref(), Some("application/json"));
     assert_eq!(
@@ -98,7 +98,7 @@ async fn record_checks_refuse_with_403() {
 #[tokio::test]
 async fn resources_a_token_may_not_read_are_unknown() {
     let app = app().await;
-    let deal = insert_deal(&app, Uuid::now_v7(), "Acme", "lead").await;
+    let deal = insert_deal(&app, Uuid::now_v7(), "Agra", "lead").await;
     // A token limited to creating activities cannot read deals.
     let mut limited = user();
     limited.token_abilities = Some(vec!["activities.create".to_owned()]);

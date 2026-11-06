@@ -40,7 +40,7 @@ async fn emits_are_reported_with_payload_and_listeners() {
     let context =
         TelemetryContext::new(Telemetry::from_app(app.ctx()).await).with_request_id("req-1");
     context
-        .scope(bus.emit(UserRegistered::new("ada@example.com")))
+        .scope(bus.emit(UserRegistered::new("anu@example.com")))
         .await
         .unwrap();
 
@@ -49,7 +49,7 @@ async fn emits_are_reported_with_payload_and_listeners() {
     assert_eq!(records[0].context.request_id.as_deref(), Some("req-1"));
     let emitted = recorder.emitted_events();
     assert_eq!(emitted[0].name, "user.registered");
-    assert_eq!(emitted[0].payload, json!({ "email": "ada@example.com" }));
+    assert_eq!(emitted[0].payload, json!({ "email": "anu@example.com" }));
     assert_eq!(emitted[0].listeners.len(), 1);
     assert!(emitted[0].listeners[0].ends_with("Greeter"), "{emitted:?}");
     assert_eq!(emitted[0].queued.len(), 1);
@@ -88,7 +88,7 @@ async fn nothing_is_reported_without_a_sink_that_wants_events() {
         .await
         .unwrap();
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     assert!(recorder.is_empty());
     app.shutdown().await.unwrap();
 }

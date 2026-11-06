@@ -656,7 +656,7 @@ mod tests {
         let title = Field::text("title").required().max_length(5);
         assert_eq!(errors(&title, json!("")), ["title should not be empty"]);
         assert_eq!(
-            errors(&title, json!("Globex renewal")),
+            errors(&title, json!("Gulati renewal")),
             ["title must be shorter than or equal to 5 characters"]
         );
         assert!(errors(&title, json!("Deal")).is_empty());

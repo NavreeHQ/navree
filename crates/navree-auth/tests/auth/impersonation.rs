@@ -34,7 +34,7 @@ async fn setup() -> Setup {
         .await;
     let (admin, admin_access, _) = signed_in(&app, "admin@example.com").await;
     grant_role(&app, admin.id, "support", &["users.impersonate"]).await;
-    let target = support::create_user(&app, "ada@example.com").await;
+    let target = support::create_user(&app, "anu@example.com").await;
     Setup {
         app,
         sink,
@@ -70,7 +70,7 @@ async fn an_administrator_signs_in_as_the_user() {
         .await
         .assert_status(200)
         .assert_json_path("user.id", json!(s.target.id))
-        .assert_json_path("user.email", json!("ada@example.com"))
+        .assert_json_path("user.email", json!("anu@example.com"))
         .assert_json_path("impersonator_id", json!(s.admin.id));
     let (access, _) = tokens(&response);
     let jwt = s.app.get::<JwtService>().await;
@@ -86,7 +86,7 @@ async fn an_administrator_signs_in_as_the_user() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     client
         .get("/api/probe/actor")
         .bearer(&access)
@@ -113,7 +113,7 @@ async fn an_administrator_signs_in_as_the_user() {
 
     // The user sees the session among theirs.
     let (_, own_access, _) = {
-        let response = support::login(&client, "ada@example.com", PASSWORD)
+        let response = support::login(&client, "anu@example.com", PASSWORD)
             .await
             .assert_status(200);
         let (a, r) = tokens(&response);
@@ -138,7 +138,7 @@ async fn an_administrator_signs_in_as_the_user() {
 #[tokio::test]
 async fn impersonation_needs_the_permission_a_reason_and_a_fit_target() {
     let s = setup().await;
-    let (_, plain_access, _) = signed_in(&s.app, "grace@example.com").await;
+    let (_, plain_access, _) = signed_in(&s.app, "gauri@example.com").await;
     impersonate(&s.app, &plain_access, s.target.id, json!("curious"))
         .await
         .assert_error(403, None);

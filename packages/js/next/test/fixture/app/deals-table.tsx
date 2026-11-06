@@ -26,7 +26,7 @@ export function DealsTable() {
         </Can>
         <DataTable<Deal>
           columns={columns}
-          data={[{ id: "d1", title: "Acme renewal" }]}
+          data={[{ id: "d1", title: "Agra renewal" }]}
           meta={{ current_page: 1, per_page: 25, total: 1, last_page: 1 }}
           query={query}
           onQueryChange={setQuery}

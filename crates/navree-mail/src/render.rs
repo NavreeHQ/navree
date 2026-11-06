@@ -6,12 +6,12 @@
 //! ```
 //! use navree_mail::render;
 //!
-//! let html = "<style>p { color: #333 }</style><p>Hi <a href=\"https://acme.test\">Ada</a></p>";
+//! let html = "<style>p { color: #333 }</style><p>Hi <a href=\"https://acme.test\">Anu</a></p>";
 //! let inlined = render::inline_css(html).unwrap();
 //! assert!(inlined.contains(r#"<p style="color: #333;">"#));
 //!
-//! let text = render::html_to_text("<p>Hi <b>Ada</b></p><p>Bye</p>");
-//! assert_eq!(text, "Hi Ada\n\nBye");
+//! let text = render::html_to_text("<p>Hi <b>Anu</b></p><p>Bye</p>");
+//! assert_eq!(text, "Hi Anu\n\nBye");
 //!
 //! assert!(render::is_rtl("ar-EG"));
 //! assert_eq!(

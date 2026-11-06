@@ -34,7 +34,7 @@
 //! }
 //!
 //! let app = AppRouter::new(Router::new())
-//!     .layer(from_fn_with_state("acme", only_from))
+//!     .layer(from_fn_with_state("agra", only_from))
 //!     .layer(from_fn(require_tenant));
 //! # let _ = app;
 //! ```

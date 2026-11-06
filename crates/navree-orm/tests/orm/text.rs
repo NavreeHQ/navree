@@ -38,7 +38,7 @@ async fn contains_ignores_case_beyond_ascii_and_keeps_accents() {
     let test = sqlite().await;
     companies(
         &test,
-        &["Équipe Lyon", "EQUIPE PARIS", "Ölwechsel GmbH", "Acme"],
+        &["Équipe Lyon", "EQUIPE PARIS", "Ölwechsel GmbH", "Agra"],
     )
     .await;
 
@@ -59,7 +59,7 @@ async fn contains_ignores_case_beyond_ascii_and_keeps_accents() {
         ["Ölwechsel GmbH"]
     );
     assert!(
-        names(&test, Company::NAME.contains_ignore_case("globex"))
+        names(&test, Company::NAME.contains_ignore_case("gulati"))
             .await
             .is_empty()
     );
@@ -92,11 +92,11 @@ async fn the_text_is_taken_literally() {
 #[tokio::test]
 async fn equality_ignores_case_and_nulls_never_match() {
     let test = sqlite().await;
-    companies(&test, &["Acme", "Acme Holdings"]).await;
+    companies(&test, &["Agra", "Agra Holdings"]).await;
 
     assert_eq!(
-        names(&test, Company::NAME.eq_ignore_case("ACME")).await,
-        ["Acme"]
+        names(&test, Company::NAME.eq_ignore_case("AGRA")).await,
+        ["Agra"]
     );
     assert!(
         names(&test, Company::NAME.eq_ignore_case("acm"))

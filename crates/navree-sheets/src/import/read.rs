@@ -847,7 +847,7 @@ mod tests {
     #[test]
     fn csv_rows_are_numbered_like_a_spreadsheet() {
         let table = read_table(
-            b"\n Name , Email,\nAda, ada@example.com\n,,\nAlan,alan@example.com,extra\nGrace\n",
+            b"\n Name , Email,\nAnu, anu@example.com\n,,\nArun,arun@example.com,extra\nGauri\n",
             "people.csv",
             &options(),
         )
@@ -857,18 +857,18 @@ mod tests {
         assert_eq!(table.headers, ["Name", "Email"]);
         let numbers: Vec<u64> = table.rows.iter().map(|r| r.number).collect();
         assert_eq!(numbers, [3, 5, 6]);
-        assert_eq!(text(&table.rows[0].cells), ["Ada", "ada@example.com"]);
-        assert_eq!(text(&table.rows[1].cells), ["Alan", "alan@example.com"]);
+        assert_eq!(text(&table.rows[0].cells), ["Anu", "anu@example.com"]);
+        assert_eq!(text(&table.rows[1].cells), ["Arun", "arun@example.com"]);
         assert_eq!(
             table.rows[2].cells,
-            [Cell::Text("Grace".into()), Cell::Empty]
+            [Cell::Text("Gauri".into()), Cell::Empty]
         );
     }
 
     #[test]
     fn a_cell_spanning_lines_is_one_row() {
         let table = read_table(
-            b"Name,Note\nAda,\"first\nsecond\"\n\nAlan,x\n",
+            b"Name,Note\nAnu,\"first\nsecond\"\n\nArun,x\n",
             "people.csv",
             &options(),
         )
@@ -947,7 +947,7 @@ mod tests {
                 "Active".into(),
             ],
             &[vec![
-                Cell::Text("Ada".into()),
+                Cell::Text("Anu".into()),
                 Cell::Int(36),
                 Cell::Date(date),
                 Cell::Bool(true),
@@ -961,7 +961,7 @@ mod tests {
         assert_eq!(
             table.rows[0].cells,
             [
-                Cell::Text("Ada".into()),
+                Cell::Text("Anu".into()),
                 Cell::Float(36.0),
                 Cell::Date(date),
                 Cell::Bool(true)

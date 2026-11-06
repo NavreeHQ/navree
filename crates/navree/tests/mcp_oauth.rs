@@ -31,7 +31,7 @@ impl DealsMcp {
     #[mcp_tool(read_only)]
     #[permissions("deals.read")]
     async fn list_deals(&self) -> Result<Vec<String>> {
-        Ok(vec!["Acme renewal".to_owned()])
+        Ok(vec!["Agra renewal".to_owned()])
     }
 
     /// Creates a deal.
@@ -88,7 +88,7 @@ fn builder() -> TestAppBuilder {
 async fn rep(app: &TestApp) -> (uuid::Uuid, String) {
     let auth = app.get::<AuthService>().await;
     let user = auth
-        .create_user("Ada Lovelace", "ada@example.com", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@example.com", PASSWORD)
         .await
         .expect("the user is created");
     let access = app.get::<AccessService>().await;
@@ -102,7 +102,7 @@ async fn rep(app: &TestApp) -> (uuid::Uuid, String) {
     let token = app
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200)
@@ -203,7 +203,7 @@ async fn personal_access_tokens_reach_mcp_narrowed_to_their_scopes() {
     mcp.call_tool("list_deals", json!({}))
         .await
         .assert_ok()
-        .assert_json_path("0", json!("Acme renewal"));
+        .assert_json_path("0", json!("Agra renewal"));
     let hidden = mcp.call_tool("create_deal", json!({})).await;
     assert_eq!(
         hidden.response().clone().error()["message"],

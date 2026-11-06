@@ -66,7 +66,7 @@ pub struct Person {
 
 #[accessors]
 impl Person {
-    /// "Ada Lovelace".
+    /// "Anu Lakhotia".
     #[accessor]
     pub fn full_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name)
@@ -167,9 +167,9 @@ pub struct Odd {
 fn ada() -> Person {
     Person {
         id: 1,
-        first_name: "Ada".into(),
-        last_name: "Lovelace".into(),
-        email: "ada@example.com".into(),
+        first_name: "Anu".into(),
+        last_name: "Lakhotia".into(),
+        email: "anu@example.com".into(),
         secret_token: "s3cret".into(),
         nickname: None,
         born_on: NaiveDate::from_ymd_opt(1815, 12, 10),
@@ -191,7 +191,7 @@ fn records_serialize_with_serdes_keys_one_date_format_and_appends() {
     let person = Record::new(ada());
     assert_eq!(
         person.to_json().unwrap(),
-        r#"{"id":1,"firstName":"Ada","lastName":"Lovelace","mail":"ada@example.com","bornOn":"1815-12-10","lastSeenAt":"2026-10-27T09:30:00.000000Z","score":"42","createdAt":"2026-10-27T08:00:00.123456Z","updatedAt":"2026-10-27T09:00:00.000000Z","full_name":"Ada Lovelace"}"#
+        r#"{"id":1,"firstName":"Anu","lastName":"Lakhotia","mail":"anu@example.com","bornOn":"1815-12-10","lastSeenAt":"2026-10-27T09:30:00.000000Z","score":"42","createdAt":"2026-10-27T08:00:00.123456Z","updatedAt":"2026-10-27T09:00:00.000000Z","full_name":"Anu Lakhotia"}"#
     );
     assert_eq!(
         serde_json::to_value(&person).unwrap(),
@@ -199,7 +199,7 @@ fn records_serialize_with_serdes_keys_one_date_format_and_appends() {
     );
     let pretty = person.to_json_pretty().unwrap();
     assert!(
-        pretty.starts_with("{\n  \"id\": 1,\n  \"firstName\": \"Ada\""),
+        pretty.starts_with("{\n  \"id\": 1,\n  \"firstName\": \"Anu\""),
         "{pretty}"
     );
 }
@@ -217,14 +217,14 @@ fn visibility_changes_per_record() {
     person.set_visible(["id", "mail"]);
     assert_eq!(
         person.to_value().unwrap(),
-        json!({"id": 1, "mail": "ada@example.com"})
+        json!({"id": 1, "mail": "anu@example.com"})
     );
     person.merge_visible(["last_name"]);
     assert_eq!(person.visible(), ["id", "mail", "last_name"]);
     person.make_visible(["first_name"]);
     assert_eq!(
         person.to_value().unwrap(),
-        json!({"id": 1, "firstName": "Ada", "lastName": "Lovelace", "mail": "ada@example.com"})
+        json!({"id": 1, "firstName": "Anu", "lastName": "Lakhotia", "mail": "anu@example.com"})
     );
     person
         .set_hidden(Vec::<String>::new())
@@ -250,7 +250,7 @@ fn appends_change_per_record() {
     let mut person = Record::new(ada());
     assert_eq!(
         person.full_name(),
-        "Ada Lovelace",
+        "Anu Lakhotia",
         "an accessor is a plain method of the model"
     );
     assert_eq!(person.appends(), ["full_name"]);
@@ -291,7 +291,7 @@ fn appends_change_per_record() {
 fn visible_lists_and_custom_date_formats_per_model() {
     let mut badge = Record::new(Badge {
         id: 7,
-        first_name: "Grace".into(),
+        first_name: "Gauri".into(),
         created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
         ..Badge::default()
     });
@@ -299,7 +299,7 @@ fn visible_lists_and_custom_date_formats_per_model() {
     badge.set_extra("other", 2_i64);
     assert_eq!(
         badge.to_value().unwrap(),
-        json!({"id": 7, "first_name": "Grace", "created_at": "2026-01-02 03:04 +00:00", "rank": 1})
+        json!({"id": 7, "first_name": "Gauri", "created_at": "2026-01-02 03:04 +00:00", "rank": 1})
     );
 }
 
@@ -360,7 +360,7 @@ async fn extras_and_relations_serialize_with_the_records_visibility() {
 #[tokio::test]
 async fn collections_serialize_as_arrays_and_change_every_record() {
     let t = sqlite(SCHEMA).await;
-    for name in ["Ada", "Grace"] {
+    for name in ["Anu", "Gauri"] {
         Person::create(
             &t.db,
             Person {
@@ -379,7 +379,7 @@ async fn collections_serialize_as_arrays_and_change_every_record() {
         .unwrap();
     let json = serde_json::to_value(&people).unwrap();
     assert_eq!(json.as_array().unwrap().len(), 2);
-    for (person, first) in json.as_array().unwrap().iter().zip(["Ada", "Grace"]) {
+    for (person, first) in json.as_array().unwrap().iter().zip(["Anu", "Gauri"]) {
         assert_eq!(person["firstName"], first);
         assert!(person.get("mail").is_none() && person.get("score").is_none());
         assert!(person.get("initials").is_some());
@@ -395,7 +395,7 @@ async fn collections_serialize_as_arrays_and_change_every_record() {
         .set_hidden(["id"]);
     assert_eq!(
         serde_json::to_value(&people).unwrap(),
-        json!([{"firstName": "Ada", "mail": "ada@example.com"}, {"firstName": "Grace", "mail": "ada@example.com"}])
+        json!([{"firstName": "Anu", "mail": "anu@example.com"}, {"firstName": "Gauri", "mail": "anu@example.com"}])
     );
     people
         .merge_hidden(["mail"])
@@ -403,7 +403,7 @@ async fn collections_serialize_as_arrays_and_change_every_record() {
         .unwrap();
     assert_eq!(
         serde_json::to_value(&people).unwrap(),
-        json!([{"firstName": "Ada"}, {"firstName": "Grace"}]),
+        json!([{"firstName": "Anu"}, {"firstName": "Gauri"}]),
         "visible lists filter appended values too"
     );
     assert!(people.append(["nope"]).is_err());
@@ -445,11 +445,11 @@ fn only_and_except_pick_values_whatever_the_visibility() {
                 .unwrap()
         ),
         json!({
-            "first_name": "Ada",
+            "first_name": "Anu",
             "secret_token": "s3cret",
             "initials": null,
             "nope": null,
-            "mail": "ada@example.com",
+            "mail": "anu@example.com",
         })
     );
     let except = person
@@ -465,9 +465,9 @@ fn only_and_except_pick_values_whatever_the_visibility() {
         serde_json::Value::Object(except),
         json!({
             "id": 1,
-            "first_name": "Ada",
-            "last_name": "Lovelace",
-            "email": "ada@example.com",
+            "first_name": "Anu",
+            "last_name": "Lakhotia",
+            "email": "anu@example.com",
             "last_seen_at": "2026-10-27T09:30:00.000000Z",
         }),
         "keyed by column; columns serde leaves out are absent"
@@ -548,10 +548,10 @@ fn records_have_no_display_and_templates_get_their_values() {
         "records do not print themselves"
     );
     let mut person = Record::new(ada());
-    person.first_name = "<b>Ada</b>".into();
+    person.first_name = "<b>Anu</b>".into();
     assert_eq!(
         person.to_value().unwrap()["firstName"],
-        "<b>Ada</b>",
+        "<b>Anu</b>",
         "values stay as they are, for the template to escape"
     );
 }

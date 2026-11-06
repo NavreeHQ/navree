@@ -121,20 +121,20 @@ async fn answers_use_only_the_deals_own_activity() {
         .build()
         .await;
     let fake = app.get::<Ai>().await.fake().unwrap();
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let (acme_note, globex_note) = (Uuid::now_v7(), Uuid::now_v7());
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let (agra_note, gulati_note) = (Uuid::now_v7(), Uuid::now_v7());
     index(
         &app,
-        acme_note,
-        acme,
+        agra_note,
+        agra,
         "Dana wants to be live before January planning",
     )
     .await;
     index(
         &app,
-        globex_note,
-        globex,
-        "Globex wants to be live before the summer",
+        gulati_note,
+        gulati,
+        "Gulati wants to be live before the summer",
     )
     .await;
 
@@ -145,23 +145,23 @@ async fn answers_use_only_the_deals_own_activity() {
         "answered": true
     })));
 
-    let (reply, sources) = ask(&app, acme, "When do they want to be live?").await;
+    let (reply, sources) = ask(&app, agra, "When do they want to be live?").await;
 
     assert!(reply.answered);
     assert_eq!(
         sources,
         [Source {
-            activity_id: acme_note,
+            activity_id: agra_note,
             excerpt: "Dana wants to be live before January planning".into()
         }],
         "the invented source 7 is dropped"
     );
-    // One structured call (the fake reranker makes none), with only Acme's note.
+    // One structured call (the fake reranker makes none), with only Agra's note.
     fake.assert_prompt_count(1);
     fake.assert_prompted(|r| {
         r.is_structured() && r.last_user_message().contains("January planning")
     });
-    fake.assert_not_prompted(|r| r.last_user_message().contains("Globex"));
+    fake.assert_not_prompted(|r| r.last_user_message().contains("Gulati"));
     // Indexing embedded both notes, and asking embedded the question.
     assert_eq!(fake.embedded().len(), 3);
 }

@@ -202,7 +202,7 @@ async fn an_app_on_tantivy_syncs_and_searches() {
         .await;
     let db = app.get::<navree_db::Db>().await;
     let rows =
-        crate::support::insert_contacts(&db, vec![crate::support::new_contact("Ada", "Lovelace")])
+        crate::support::insert_contacts(&db, vec![crate::support::new_contact("Anu", "Lakhotia")])
             .await;
     crate::support::settle(&app).await;
     let search = app.get::<Search>().await;

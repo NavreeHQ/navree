@@ -44,7 +44,7 @@ async fn pinned_world() -> (World, TestClient) {
         .module(StaffNotesModule)
         .module(PinLayer);
     let world = world(with_members(builder).build().await).await;
-    join(&world.app, world.globex, world.member_id).await;
+    join(&world.app, world.gulati, world.member_id).await;
     let staff_id = account(&world.app, "staff").await;
     give_role(
         &world.app,
@@ -67,32 +67,32 @@ pub(super) fn pinned(
 #[tokio::test]
 async fn staff_stay_inside_the_workspace_of_their_token() {
     let (world, staff) = pinned_world().await;
-    pinned(staff.get(NOTES), world.acme)
-        .header("X-Workspace", world.globex.to_string())
+    pinned(staff.get(NOTES), world.agra)
+        .header("X-Workspace", world.gulati.to_string())
         .send()
         .await
         .assert_error_code(403, "token_workspace_mismatch");
-    let body = pinned(staff.get(NOTES), world.acme)
-        .header("X-Workspace", world.acme.to_string())
+    let body = pinned(staff.get(NOTES), world.agra)
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
-    assert_eq!(staff_entries(&world.app).await, [world.acme.to_string()]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
+    assert_eq!(staff_entries(&world.app).await, [world.agra.to_string()]);
 }
 
 #[tokio::test]
 async fn a_request_that_names_nothing_works_in_the_workspace_of_its_token() {
     let (world, _) = pinned_world().await;
-    let body = pinned(world.member.get(NOTES), world.acme)
+    let body = pinned(world.member.get(NOTES), world.agra)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
     // A token for a workspace the user isn't in gets nothing.
-    pinned(world.outsider.get(NOTES), world.acme)
+    pinned(world.outsider.get(NOTES), world.agra)
         .send()
         .await
         .assert_error(403, None);
@@ -102,61 +102,61 @@ async fn a_request_that_names_nothing_works_in_the_workspace_of_its_token() {
 async fn a_resource_across_workspaces_works_inside_the_token() {
     let (world, _) = pinned_world().await;
     let member = &world.member;
-    let body = pinned(member.get(EVERY), world.acme)
+    let body = pinned(member.get(EVERY), world.agra)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
     pinned(
-        member.get(&format!("{EVERY}/{}", world.globex_note)),
-        world.acme,
+        member.get(&format!("{EVERY}/{}", world.gulati_note)),
+        world.agra,
     )
     .send()
     .await
     .assert_error(404, None);
     pinned(
-        member.patch(&format!("{EVERY}/{}", world.globex_note)),
-        world.acme,
+        member.patch(&format!("{EVERY}/{}", world.gulati_note)),
+        world.agra,
     )
     .json(&json!({ "title": "Across the pin" }))
     .send()
     .await
     .assert_error(404, None);
     pinned(
-        member.delete(&format!("{EVERY}/{}", world.globex_note)),
-        world.acme,
+        member.delete(&format!("{EVERY}/{}", world.gulati_note)),
+        world.agra,
     )
     .send()
     .await
     .assert_error(404, None);
-    pinned(member.post(EVERY), world.acme)
-        .json(&json!({ "title": "Across the pin", "workspace_id": world.globex }))
+    pinned(member.post(EVERY), world.agra)
+        .json(&json!({ "title": "Across the pin", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(400);
-    pinned(member.post(&format!("{EVERY}/actions/locate")), world.acme)
-        .json(&json!({ "ids": [world.globex_note] }))
+    pinned(member.post(&format!("{EVERY}/actions/locate")), world.agra)
+        .json(&json!({ "ids": [world.gulati_note] }))
         .send()
         .await
         .assert_error(403, None);
     assert_eq!(
-        note_in(&world.app, world.globex, world.globex_note)
+        note_in(&world.app, world.gulati, world.gulati_note)
             .await
             .unwrap()
             .title,
-        "Globex secret"
+        "Gulati secret"
     );
     // Its own workspace works as ever.
     pinned(
-        member.patch(&format!("{EVERY}/{}", world.acme_note)),
-        world.acme,
+        member.patch(&format!("{EVERY}/{}", world.agra_note)),
+        world.agra,
     )
     .json(&json!({ "title": "Inside the pin" }))
     .send()
     .await
     .assert_status(200);
-    pinned(member.post(EVERY), world.acme)
+    pinned(member.post(EVERY), world.agra)
         .json(&json!({ "title": "Mine" }))
         .send()
         .await
@@ -166,17 +166,17 @@ async fn a_resource_across_workspaces_works_inside_the_token() {
 #[tokio::test]
 async fn a_cookie_doesnt_take_a_token_elsewhere_and_the_form_refuses() {
     let (world, staff) = pinned_world().await;
-    staff.set_cookie(WORKSPACE_COOKIE, &world.globex.to_string());
-    let body = pinned(staff.get(NOTES), world.acme)
+    staff.set_cookie(WORKSPACE_COOKIE, &world.gulati.to_string());
+    let body = pinned(staff.get(NOTES), world.agra)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
     staff.remove_cookie(WORKSPACE_COOKIE);
-    let response = pinned(staff.post("/admin/workspace"), world.acme)
+    let response = pinned(staff.post("/admin/workspace"), world.agra)
         .header("accept", "text/html")
-        .form(&[("workspace", world.globex.to_string().as_str())])
+        .form(&[("workspace", world.gulati.to_string().as_str())])
         .send()
         .await
         .assert_status(303);

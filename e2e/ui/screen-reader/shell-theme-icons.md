@@ -68,9 +68,9 @@ The UI proof app (see [README.md](README.md), "Start the proof apps"):
 ### The account menu
 
 **9. The account button**
-- Keys: Make the window wide again (zoom back to 100 percent) and reload `/themes`. Tab or move to the button at the foot of the sidebar that shows "Ada Lovelace" and "ada@navree.test".
+- Keys: Make the window wide again (zoom back to 100 percent) and reload `/themes`. Tab or move to the button at the foot of the sidebar that shows "Anu Lakhotia" and "anu@navree.test".
 - The page: a button with a person icon, the name and the email.
-- The reader says: the name "Ada Lovelace", the role "button", and that it opens a dialog or popup (NVDA: "opens dialog" or "has popup"; VoiceOver: "popup"). The email is conveyed. "Ada Lovelace" is not spoken three times in a row; once as part of the name is right, a repeat from the icon's label and from the title is not. Note any repeat.
+- The reader says: the name "Anu Lakhotia", the role "button", and that it opens a dialog or popup (NVDA: "opens dialog" or "has popup"; VoiceOver: "popup"). The email is conveyed. "Anu Lakhotia" is not spoken three times in a row; once as part of the name is right, a repeat from the icon's label and from the title is not. Note any repeat.
 
 **10. Open the account menu**
 - Keys: Both readers: Enter (or Space). VoiceOver: VO+Space.
@@ -80,7 +80,7 @@ The UI proof app (see [README.md](README.md), "Start the proof apps"):
 **11. Close the account menu**
 - Keys: Escape.
 - The page: the panel closes.
-- The reader says: focus returns to the button "Ada Lovelace", and the reader says that button again (name and role). Nothing else is spoken.
+- The reader says: focus returns to the button "Anu Lakhotia", and the reader says that button again (name and role). Nothing else is spoken.
 
 ### The appearance menu
 
@@ -192,7 +192,7 @@ Fill in the sign-off block for this run, then one row for each step.
 | 6 | Toggle sidebar expanded/collapsed spoken; folded links keep names | | | |
 | 7 | Narrow: no Sidebar landmark; button opens sheet, focus on first link | | | |
 | 8 | Escape returns to Toggle sidebar; link closes sheet and announces title | | | |
-| 9 | "Ada Lovelace", button, has popup; email conveyed; no triple repeat | | | |
+| 9 | "Anu Lakhotia", button, has popup; email conveyed; no triple repeat | | | |
 | 10 | "Account" dialog; Settings link; Sign out button | | | |
 | 11 | Escape returns focus to the account button | | | |
 | 12 | "Appearance", button, has popup; no icon name | | | |

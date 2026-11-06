@@ -11,7 +11,7 @@ use crate::support::TestRedis;
 
 fn record(clock: &FixedClock, minutes: i64) -> SessionRecord {
     let mut record = SessionRecord::default();
-    record.data.insert("user".to_owned(), json!("ada"));
+    record.data.insert("user".to_owned(), json!("anu"));
     record.expires_at = Some(navree_contracts::Clock::now(clock) + Span::minutes(minutes));
     record
 }
@@ -27,7 +27,7 @@ async fn records_are_saved_loaded_and_deleted() {
 
     store.save("s1", record(&clock, 120)).await.unwrap();
     let loaded = store.load("s1").await.unwrap().expect("saved");
-    assert_eq!(loaded.data["user"], "ada");
+    assert_eq!(loaded.data["user"], "anu");
     let ttl: i64 = redis::cmd("PTTL")
         .arg(store.redis_key("s1"))
         .query_async(&mut t.redis.manager())

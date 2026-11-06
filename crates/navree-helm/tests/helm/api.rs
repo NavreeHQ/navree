@@ -20,7 +20,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
     let toms_deal = deal(
         &app,
         DealSeed {
-            title: "Globex renewal",
+            title: "Gulati renewal",
             owner: Some(tom),
             ..DealSeed::default()
         },
@@ -28,7 +28,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
     .await;
 
     rep.get("/admin/api/resources/deals")
-        .query(&[("search", "Globex")])
+        .query(&[("search", "Gulati")])
         .send()
         .await
         .assert_status(200)
@@ -41,7 +41,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
         .assert_error(403, None);
     assert_eq!(
         reload(&app, toms_deal.id).await.unwrap().title,
-        "Globex renewal"
+        "Gulati renewal"
     );
 }
 
@@ -151,10 +151,10 @@ async fn lists_search_sort_and_paginate() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
     for (title, amount) in [
-        ("Globex renewal", 500),
-        ("Initech upgrade", 300),
-        ("GLOBEX expansion", 900),
-        ("Hooli pilot", 100),
+        ("Gulati renewal", 500),
+        ("Indrani upgrade", 300),
+        ("GULATI expansion", 900),
+        ("Hariyali pilot", 100),
     ] {
         deal(
             &app,
@@ -168,12 +168,12 @@ async fn lists_search_sort_and_paginate() {
     }
     let body = rep
         .get("/admin/api/resources/deals")
-        .query(&[("search", "globex"), ("sort", "-amount_cents")])
+        .query(&[("search", "gulati"), ("sort", "-amount_cents")])
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles(&body), ["GLOBEX expansion", "Globex renewal"]);
+    assert_eq!(titles(&body), ["GULATI expansion", "Gulati renewal"]);
 
     let body = rep
         .get("/admin/api/resources/deals")
@@ -181,7 +181,7 @@ async fn lists_search_sort_and_paginate() {
         .send()
         .await
         .json_value();
-    assert_eq!(titles(&body), ["Globex renewal", "GLOBEX expansion"]);
+    assert_eq!(titles(&body), ["Gulati renewal", "GULATI expansion"]);
     assert_eq!(
         body["meta"],
         json!({ "current_page": 2, "per_page": 2, "total": 4, "last_page": 2 })
@@ -214,16 +214,16 @@ async fn lists_search_sort_and_paginate() {
     assert_eq!(
         titles(&body),
         [
-            "GLOBEX expansion",
-            "Globex renewal",
-            "Initech upgrade",
-            "Hooli pilot"
+            "GULATI expansion",
+            "Gulati renewal",
+            "Indrani upgrade",
+            "Hariyali pilot"
         ]
     );
     // The search is `search`; `q` is not the list query's and searches nothing.
     let body = rep
         .get("/admin/api/resources/deals")
-        .query(&[("q", "globex")])
+        .query(&[("q", "gulati")])
         .send()
         .await
         .assert_status(200)
@@ -246,15 +246,15 @@ async fn lists_search_sort_and_paginate() {
 async fn filters_narrow_the_list() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
-    let globex = company(&app, "Globex", Some("Springfield")).await;
-    let initech = company(&app, "Initech", None).await;
+    let gulati = company(&app, "Gulati", Some("Springfield")).await;
+    let indrani = company(&app, "Indrani", None).await;
     let day = |d| NaiveDate::from_ymd_opt(2026, 10, d);
     deal(
         &app,
         DealSeed {
             title: "A",
             stage: "lead",
-            company: Some(globex.id),
+            company: Some(gulati.id),
             expected_close_date: day(3),
             amount_cents: 100,
             ..DealSeed::default()
@@ -266,7 +266,7 @@ async fn filters_narrow_the_list() {
         DealSeed {
             title: "B",
             stage: "won",
-            company: Some(globex.id),
+            company: Some(gulati.id),
             expected_close_date: day(20),
             amount_cents: 5000,
             closed: true,
@@ -279,7 +279,7 @@ async fn filters_narrow_the_list() {
         DealSeed {
             title: "C",
             stage: "lost",
-            company: Some(initech.id),
+            company: Some(indrani.id),
             expected_close_date: day(27),
             amount_cents: 900,
             closed: true,
@@ -327,13 +327,13 @@ async fn filters_narrow_the_list() {
         ["A", "C"]
     );
     assert_eq!(
-        list(vec![("filter[company_id]", globex.id.to_string())]).await,
+        list(vec![("filter[company_id]", gulati.id.to_string())]).await,
         ["A", "B"]
     );
     assert_eq!(
         list(vec![(
             "filter[company_id][in]",
-            format!("{},{}", globex.id, initech.id)
+            format!("{},{}", gulati.id, indrani.id)
         )])
         .await,
         ["A", "B", "C"]
@@ -367,7 +367,7 @@ async fn filters_narrow_the_list() {
     assert_eq!(
         list(vec![
             ("filter[stage]", "won".into()),
-            ("filter[company_id]", globex.id.to_string())
+            ("filter[company_id]", gulati.id.to_string())
         ])
         .await,
         ["B"]
@@ -508,15 +508,15 @@ async fn the_query_and_the_access_rules_hide_rows() {
 async fn a_record_shows_its_values_display_and_permissions() {
     let app = app().await;
     let (rep_id, rep) = user(&app, "rep").await;
-    let globex = company(&app, "Globex", None).await;
+    let gulati = company(&app, "Gulati", None).await;
     let deal = deal(
         &app,
         DealSeed {
-            title: "Globex renewal",
+            title: "Gulati renewal",
             amount_cents: 1_250_000,
             stage: "qualified",
             owner: Some(rep_id),
-            company: Some(globex.id),
+            company: Some(gulati.id),
             expected_close_date: NaiveDate::from_ymd_opt(2026, 11, 30),
             ..DealSeed::default()
         },
@@ -530,13 +530,13 @@ async fn a_record_shows_its_values_display_and_permissions() {
         .json_value();
     let data = &body["data"];
     assert_eq!(data["id"], deal.id.to_string());
-    assert_eq!(data["title"], "Globex renewal");
+    assert_eq!(data["title"], "Gulati renewal");
     assert_eq!(data["values"]["amount_cents"], 1_250_000);
-    assert_eq!(data["values"]["company_id"], globex.id.to_string());
+    assert_eq!(data["values"]["company_id"], gulati.id.to_string());
     assert_eq!(data["values"]["probability"], "25%");
     assert_eq!(data["display"]["amount_cents"], "$12,500.00");
     assert_eq!(data["display"]["stage"], "Qualified");
-    assert_eq!(data["display"]["company_id"], "Globex");
+    assert_eq!(data["display"]["company_id"], "Gulati");
     assert_eq!(data["display"]["expected_close_date"], "30 Nov 2026");
     assert_eq!(data["display"]["notes"], "Secret notes");
     assert_eq!(data["display"]["priority"], "No");
@@ -584,7 +584,7 @@ async fn field_rules_hide_values_the_user_may_not_read() {
 async fn creating_validates_and_saves_through_the_resource() {
     let app = app().await;
     let (rep_id, rep) = user(&app, "rep").await;
-    let globex = company(&app, "Globex", None).await;
+    let gulati = company(&app, "Gulati", None).await;
 
     rep.post("/admin/api/resources/deals")
         .json(&json!({ "amount_cents": -5 }))
@@ -625,9 +625,9 @@ async fn creating_validates_and_saves_through_the_resource() {
     let body = rep
         .post("/admin/api/resources/deals")
         .json(&json!({
-            "title": "Globex renewal",
+            "title": "Gulati renewal",
             "amount_cents": "125050",
-            "company_id": globex.id,
+            "company_id": gulati.id,
             "expected_close_date": "2026-12-01",
             "priority": "on",
         }))
@@ -637,7 +637,7 @@ async fn creating_validates_and_saves_through_the_resource() {
         .json_value();
     let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
     let saved = reload(&app, id).await.unwrap();
-    assert_eq!(saved.title, "Globex renewal");
+    assert_eq!(saved.title, "Gulati renewal");
     assert_eq!(saved.amount_cents, 125_050);
     // Defaults fill what the form did not send; the resource sets the owner.
     assert_eq!(saved.currency, "USD");
@@ -666,17 +666,17 @@ async fn the_default_create_writes_the_form_to_the_columns() {
     let (_, manager) = user(&app, "manager").await;
     let body = manager
         .post("/admin/api/resources/companies")
-        .json(&json!({ "name": "Initech", "city": "", "website": "https://initech.example" }))
+        .json(&json!({ "name": "Indrani", "city": "", "website": "https://indrani.example" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
     let saved = reload_company(&app, id).await.unwrap();
-    assert_eq!(saved.name, "Initech");
+    assert_eq!(saved.name, "Indrani");
     // A blank nullable column is stored as NULL; created_at is set.
     assert_eq!(saved.city, None);
-    assert_eq!(saved.website.as_deref(), Some("https://initech.example"));
+    assert_eq!(saved.website.as_deref(), Some("https://indrani.example"));
     assert_eq!(saved.created_at, now());
     manager
         .post("/admin/api/resources/companies")
@@ -812,9 +812,9 @@ async fn deleting_needs_the_delete_ability() {
 async fn pickers_list_readable_records_by_title() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
-    company(&app, "Initech", Some("Austin")).await;
-    company(&app, "Globex", Some("Springfield")).await;
-    company(&app, "Hooli", Some("Palo Alto")).await;
+    company(&app, "Indrani", Some("Austin")).await;
+    company(&app, "Gulati", Some("Springfield")).await;
+    company(&app, "Hariyali", Some("Palo Alto")).await;
     let body = rep
         .get("/admin/api/resources/companies/options")
         .send()
@@ -827,7 +827,7 @@ async fn pickers_list_readable_records_by_title() {
         .iter()
         .map(|r| r["title"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["Globex", "Hooli", "Initech"]);
+    assert_eq!(names, ["Gulati", "Hariyali", "Indrani"]);
     let body = rep
         .get("/admin/api/resources/companies/options")
         .query(&[("search", "spring")])
@@ -835,7 +835,7 @@ async fn pickers_list_readable_records_by_title() {
         .await
         .json_value();
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
-    assert_eq!(body["data"][0]["title"], "Globex");
+    assert_eq!(body["data"][0]["title"], "Gulati");
 
     let (_, limited) = user(&app, "limited").await;
     limited
@@ -905,7 +905,7 @@ async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
     let (manager_id, manager) = user(&app, "manager").await;
     let body = manager
         .post("/admin/api/resources/companies")
-        .json(&json!({ "name": "Initech", "api_token": "tok-created-secret" }))
+        .json(&json!({ "name": "Indrani", "api_token": "tok-created-secret" }))
         .send()
         .await
         .assert_status(201)
@@ -968,7 +968,7 @@ async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
         &json!({ "city": "Austin" })
     );
     let text = serde_json::to_string(&rows).unwrap();
-    assert!(text.contains("Initech"), "{text}");
+    assert!(text.contains("Indrani"), "{text}");
     assert!(
         !text.contains("tok-"),
         "a secret reached the audit log: {text}"

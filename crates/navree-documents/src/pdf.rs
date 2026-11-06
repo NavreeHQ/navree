@@ -110,7 +110,7 @@ impl Pdf {
     /// The text of every page, pages separated by a form feed (`\u{c}`):
     /// what the content streams show, in the order they show it, decoded
     /// through each font's encoding. For tests and checks, such as
-    /// `assert!(pdf.text()?.contains("Ada Lovelace"))`; layout (columns,
+    /// `assert!(pdf.text()?.contains("Anu Lakhotia"))`; layout (columns,
     /// tables) is not reconstructed. Right-to-left text comes back in
     /// reading order.
     pub fn text(&self) -> Result<String, DocumentsError> {

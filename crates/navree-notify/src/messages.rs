@@ -71,10 +71,10 @@ impl SlackRoute {
 /// use navree_notify::SlackMessage;
 /// use serde_json::json;
 ///
-/// let message = SlackMessage::new("Deal won: Acme renewal").blocks(json!([
-///     { "type": "section", "text": { "type": "mrkdwn", "text": "*Acme renewal* was won" } }
+/// let message = SlackMessage::new("Deal won: Agra renewal").blocks(json!([
+///     { "type": "section", "text": { "type": "mrkdwn", "text": "*Agra renewal* was won" } }
 /// ]));
-/// assert_eq!(message.text, "Deal won: Acme renewal");
+/// assert_eq!(message.text, "Deal won: Agra renewal");
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -321,7 +321,7 @@ impl TeamsMessage {
 /// ```
 /// use navree_notify::SmsMessage;
 ///
-/// let sms = SmsMessage::new("Your code is 481 516").from("Acme");
+/// let sms = SmsMessage::new("Your code is 481 516").from("Agra");
 /// assert_eq!(sms.body, "Your code is 481 516");
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -496,7 +496,7 @@ impl Urgency {
 /// use navree_notify::{Urgency, WebPushMessage};
 ///
 /// let push = WebPushMessage::new("Deal won")
-///     .body("Acme renewal was won")
+///     .body("Agra renewal was won")
 ///     .url("/deals/42")
 ///     .urgency(Urgency::High);
 /// assert_eq!(push.payload()["title"], "Deal won");
@@ -709,14 +709,14 @@ mod tests {
     #[test]
     fn push_payloads_hold_the_display_fields() {
         let push = WebPushMessage::new("Deal won")
-            .body("Acme")
+            .body("Agra")
             .url("/deals/1")
             .ttl_secs(60)
             .urgency(Urgency::High)
             .topic("deals");
         assert_eq!(
             push.payload(),
-            json!({ "title": "Deal won", "body": "Acme", "url": "/deals/1" })
+            json!({ "title": "Deal won", "body": "Agra", "url": "/deals/1" })
         );
         assert_eq!(Urgency::VeryLow.as_str(), "very-low");
         assert_eq!(serde_json::to_value(Urgency::VeryLow).unwrap(), "very-low");

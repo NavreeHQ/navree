@@ -32,7 +32,7 @@ const EMU_PER_MM: f64 = 36_000.0;
 /// # fn main() -> Result<(), navree_documents::DocumentsError> {
 /// let file = Docx::new()
 ///     .heading(1, "Quarterly audit report")
-///     .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+///     .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd").text("."))
 ///     .bullets(["Every control was tested", "Two findings are open"])
 ///     .table(
 ///         Table::new()
@@ -44,7 +44,7 @@ const EMU_PER_MM: f64 = 36_000.0;
 ///     .footer_page_numbers()
 ///     .build()?;
 /// let text = file.text()?;
-/// assert!(text.contains("Prepared for Acme Ltd."));
+/// assert!(text.contains("Prepared for Agra Ltd."));
 /// assert!(text.contains("Multi-factor sign-in\tPassed"));
 /// # Ok(())
 /// # }

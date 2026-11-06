@@ -23,14 +23,14 @@ describe("serializeListQuery", () => {
     const params = serializeListQuery({
       filter: { status: "active", created_at: { gte: "2026-10-01", lt: "2026-11-01" } },
       sort: ["-created_at", "name"],
-      search: "acme",
+      search: "agra",
       page: 2,
       per_page: 25,
     });
 
     expect(decoded(params)).toBe(
       "filter[status]=active&filter[created_at][gte]=2026-10-01&filter[created_at][lt]=2026-11-01" +
-        "&sort=-created_at,name&search=acme&page=2&per_page=25",
+        "&sort=-created_at,name&search=agra&page=2&per_page=25",
     );
   });
 
@@ -75,7 +75,7 @@ describe("serializeListQuery", () => {
   });
 
   it("trims the search and the sort terms, as the reader does", () => {
-    expect(serializeListQuery({ search: "  acme corp ", sort: [" -name ", " "] }).toString()).toBe("sort=-name&search=acme+corp");
+    expect(serializeListQuery({ search: "  agra corp ", sort: [" -name ", " "] }).toString()).toBe("sort=-name&search=agra+corp");
   });
 });
 
@@ -84,7 +84,7 @@ describe("parseListQuery", () => {
     const query = {
       filter: { status: "active", created_at: { gte: "2026-10-01" }, stage: { in: ["lead", "won"] } },
       sort: ["-created_at", "name"],
-      search: "acme",
+      search: "agra",
       page: 3,
       per_page: 50,
     };
@@ -137,7 +137,7 @@ describe("checkListQuery", () => {
     const written = serializeListQuery({
       filter: { stage: { in: ["lead", "won"] }, owner_id: { null: true }, title: { contains: "a b" } },
       sort: ["-created_at"],
-      search: "acme",
+      search: "agra",
       before: "xyz",
       limit: 10,
     });
@@ -157,14 +157,14 @@ describe("isListParam", () => {
 describe("listQuery builder", () => {
   it("builds a query step by step without changing earlier steps", () => {
     const base = listQuery().where("status", "active").perPage(25);
-    const sorted = base.sort("-created_at").search("acme");
+    const sorted = base.sort("-created_at").search("agra");
     const ranged = sorted.where("created_at", "gte", "2026-10-01").whereIn("stage", ["lead", "won"]).page(2);
 
     expect(base.toQuery()).toEqual({ filter: { status: "active" }, per_page: 25 });
     expect(ranged.toQuery()).toEqual({
       filter: { status: "active", created_at: { gte: "2026-10-01" }, stage: { in: ["lead", "won"] } },
       sort: ["-created_at"],
-      search: "acme",
+      search: "agra",
       page: 2,
       per_page: 25,
     });
@@ -219,11 +219,11 @@ describe("listQuerySerializer (the client's querySerializer)", () => {
         tab: "open",
         limit: 20,
         before: "b",
-        search: " acme ",
+        search: " agra ",
         sort: "-name",
         filter: { stage: "won" },
       }),
-    ).toBe("filter%5Bstage%5D=won&sort=-name&search=acme&before=b&limit=20&tab=open");
+    ).toBe("filter%5Bstage%5D=won&sort=-name&search=agra&before=b&limit=20&tab=open");
   });
 
   it("leaves a value of another type to the generic writer", () => {

@@ -27,10 +27,10 @@ async fn translating_in_code() {
     assert_eq!(import_summary(4), "4 deals created");
 
     let subject = Locale::scope("de", async {
-        t!("deal-won", owner = "Ada", title = "Lovelace renewal")
+        t!("deal-won", owner = "Anu", title = "Lakhotia renewal")
     })
     .await;
-    assert_eq!(subject, "Ada hat Lovelace renewal gewonnen.");
+    assert_eq!(subject, "Anu hat Lakhotia renewal gewonnen.");
 
     // "The I18n service".
     let i18n = app.get::<I18n>().await;
@@ -124,7 +124,7 @@ async fn validation_errors_are_in_the_requested_language() {
     app.client()
         .post("/api/v1/contacts")
         .header("Accept-Language", "fr-FR,fr;q=0.9")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_validation_error("first_name")

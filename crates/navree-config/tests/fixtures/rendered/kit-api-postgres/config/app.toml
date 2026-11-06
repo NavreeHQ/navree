@@ -1,4 +1,4 @@
-# Acme cloud: settings for every environment.
+# Agra cloud: settings for every environment.
 #
 # `.env` ranks above this file and holds the settings of one machine (the
 # database and mail settings Dock writes, secrets), and APP_* environment
@@ -20,7 +20,7 @@ migrate_on_boot = true
 
 [mail]
 # The transport comes from .env (Mailpit, written by `navree dock up`).
-from = "Acme cloud <hello@acme-cloud.test>"
+from = "Agra cloud <hello@agra-cloud.test>"
 
 [queue]
 driver = "database"
@@ -33,7 +33,7 @@ level = "info"
 registration = true
 
 [auth.two_factor]
-issuer = "Acme cloud"
+issuer = "Agra cloud"
 
 [workspace]
 # Where a request's workspace comes from: the X-Workspace header (the web
@@ -83,16 +83,16 @@ redirect_base = "http://localhost:3000/auth/callback"
 # client_id = "0123456789-abc.apps.googleusercontent.com"
 
 [realtime]
-# Browsers connect to ws://127.0.0.1:8080/app/acme-cloud
-key = "acme-cloud"
+# Browsers connect to ws://127.0.0.1:8080/app/agra-cloud
+key = "agra-cloud"
 # queue:work and schedule:work hand their broadcasts to `serve`.
 relay_url = "auto"
 
 [api]
-title = "Acme cloud API"
+title = "Agra cloud API"
 # The admin panel is pages and its own API, not part of the app's contract:
 # `navree check` doesn't ask its routes for #[api] docs.
 undocumented = ["/admin*"]
 
 [helm]
-title = "Acme cloud admin"
+title = "Agra cloud admin"

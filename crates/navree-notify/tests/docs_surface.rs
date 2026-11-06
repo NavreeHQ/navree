@@ -315,7 +315,7 @@ async fn _documented_api(
         .summary("s")
         .to(TeamsRoute::conversation("https://smba", "a:1"));
     let _ = TeamsRoute::webhook("https://x");
-    let _ = SmsMessage::new("x").from("Acme").to("+1");
+    let _ = SmsMessage::new("x").from("Agra").to("+1");
     let _ = WhatsAppMessage::text("x").to("+1").from("+1");
     let _ = WhatsAppMessage::template(WhatsAppTemplate::new("t", "en_US").parameter("p"));
     let push_message = WebPushMessage::new("t")

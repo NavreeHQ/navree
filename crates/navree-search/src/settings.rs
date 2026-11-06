@@ -361,10 +361,10 @@ mod tests {
         let settings = IndexSettings::new("Company", "companies")
             .stop_words(["inc"])
             .with_overrides(
-                &BTreeMap::from([("acme".to_owned(), vec!["acme corp".to_owned()])]),
+                &BTreeMap::from([("agra".to_owned(), vec!["agra corp".to_owned()])]),
                 &["inc".to_owned(), "ltd".to_owned()],
             );
         assert_eq!(settings.stop_word_list(), ["inc", "ltd"]);
-        assert_eq!(settings.synonym_map()["acme"], ["acme corp"]);
+        assert_eq!(settings.synonym_map()["agra"], ["agra corp"]);
     }
 }

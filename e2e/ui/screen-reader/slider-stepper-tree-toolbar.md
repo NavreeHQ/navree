@@ -116,9 +116,9 @@ The UI proof app, http://127.0.0.1:8090/flow. See [Start the proof apps](README.
 - The reader says: "Couldn't load this.", once for the first ask, and the row "Couldn't load this. Try again". After Enter, "Couldn't load this." once more. Then press Shift+Tab or Tab and write down where focus goes. If focus was lost, move the reading cursor to the end of this tree before the next step.
 
 **19. A tree where one row is chosen**
-- Keys: Both readers: press Tab to the next tree, named "Owner". Down arrow to "Ada", then Enter. Down arrow to "Grace".
-- The page: "Owner" lets one row be chosen. "Sales" is open with Ada and Grace; Grace is chosen at the start. Enter on Ada chooses Ada and unchooses Grace.
-- The reader says: "Owner", then "Sales", expanded, level 1. "Ada", level 2, 1 of 2, not selected. After Enter, "selected". "Grace", level 2, 2 of 2, not selected now.
+- Keys: Both readers: press Tab to the next tree, named "Owner". Down arrow to "Anu", then Enter. Down arrow to "Gauri".
+- The page: "Owner" lets one row be chosen. "Sales" is open with Anu and Grace; Grace is chosen at the start. Enter on Anu chooses Anu and unchooses Grace.
+- The reader says: "Owner", then "Sales", expanded, level 1. "Anu", level 2, 1 of 2, not selected. After Enter, "selected". "Gauri", level 2, 2 of 2, not selected now.
 
 **20. A long list in pages**
 - Keys: Both readers: press Tab to the next tree, named "Everyone". Down arrow once, then End, then Enter.
@@ -211,7 +211,7 @@ The UI proof app, http://127.0.0.1:8090/flow. See [Start the proof apps](README.
 | 16 | Loading, then "2 items loaded" after about 2.5 seconds | | | |
 | 17 | Folder with nothing: expanded, "0 items loaded" | | | |
 | 18 | "Couldn't load this." and Try again row; where focus goes | | | |
-| 19 | Owner: Ada not selected, then selected; Grace not selected | | | |
+| 19 | Owner: Anu not selected, then selected; Grace not selected | | | |
 | 20 | Person 0 of 10,000; Show more (9950); 50 items loaded; Person 50 | | | |
 | 21 | Toolbar "Text formatting"; Bold, check box, not checked | | | |
 | 22 | Ten tools in order with roles and states; Disabled skipped | | | |

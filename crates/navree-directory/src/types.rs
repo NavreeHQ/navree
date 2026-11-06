@@ -36,7 +36,7 @@ pub struct DirectoryConnection {
     pub owner_type: OwnerType,
     /// The workspace or organization (`None` for the app).
     pub owner_id: Option<Uuid>,
-    /// Its name, for people (`Acme Entra ID`).
+    /// Its name, for people (`Agra Entra ID`).
     pub name: String,
     /// The source: `scim`, `microsoft`, `google`, `okta`, `ldap` or one
     /// your app registered.

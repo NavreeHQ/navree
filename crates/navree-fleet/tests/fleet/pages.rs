@@ -42,7 +42,7 @@ async fn site() -> Harness {
                 ..AccessOptions::default()
             }))
             .module(UiModule)
-            .module(AuthPages::new().app_name("Acme Operations")),
+            .module(AuthPages::new().app_name("Agra Operations")),
     )
     .await
 }
@@ -137,7 +137,7 @@ async fn a_guest_is_sent_to_sign_in_from_every_page() {
         .await
         .assert_status(200)
         .text();
-    assert!(form.contains("Acme Operations"), "{form}");
+    assert!(form.contains("Agra Operations"), "{form}");
 }
 
 #[tokio::test]
@@ -229,7 +229,7 @@ async fn every_page_draws_with_the_data_behind_the_api() {
     let pending = h
         .queue
         .dispatch(SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "tok_123".into(),
         })
         .await

@@ -35,10 +35,10 @@ async fn queued_listener_dispatches_job_and_job_runs_listener() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
 
     // The queued listener did not run inline; the sync one did.
-    assert_eq!(journal.entries(), ["audit:ada"]);
+    assert_eq!(journal.entries(), ["audit:anu"]);
     let envelopes = capture.envelopes();
     assert_eq!(envelopes.len(), 1);
     let expected_job = format!(
@@ -46,7 +46,7 @@ async fn queued_listener_dispatches_job_and_job_runs_listener() {
         std::any::type_name::<SendWelcomeMail>()
     );
     assert_eq!(envelopes[0].job_type, expected_job);
-    assert_eq!(envelopes[0].payload, json!({ "email": "ada" }));
+    assert_eq!(envelopes[0].payload, json!({ "email": "anu" }));
     assert_eq!(envelopes[0].delay_secs, None);
 
     // The worker side: the contributed job registration runs the listener.
@@ -65,7 +65,7 @@ async fn queued_listener_dispatches_job_and_job_runs_listener() {
         .await
         .unwrap();
 
-    assert_eq!(journal.entries(), ["audit:ada", "mail:ada"]);
+    assert_eq!(journal.entries(), ["audit:anu", "mail:anu"]);
 }
 
 #[tokio::test]
@@ -80,7 +80,7 @@ async fn queued_listener_runs_inline_without_dispatcher() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
 
-    assert_eq!(journal.entries(), ["mail:ada", "audit:ada"]);
+    assert_eq!(journal.entries(), ["mail:anu", "audit:anu"]);
 }

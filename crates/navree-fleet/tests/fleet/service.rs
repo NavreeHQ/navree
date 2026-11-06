@@ -122,7 +122,7 @@ async fn a_mail_waiting_two_minutes_is_a_long_wait() {
     .await;
     h.queue
         .dispatch(SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "t".into(),
         })
         .await
@@ -352,17 +352,17 @@ async fn fail_exports(h: &Harness, contacts: &[&str]) -> Vec<String> {
 #[tokio::test]
 async fn failed_jobs_are_searched_retried_and_forgotten() {
     let h = Harness::new(builder()).await;
-    let ids = fail_exports(&h, &["ada", "grace", "linus"]).await;
+    let ids = fail_exports(&h, &["anu", "gauri", "linus"]).await;
     h.queue.dispatch(Record::new("fine")).await.unwrap();
 
     let all = h.fleet.failed_jobs(None).await.unwrap();
     assert_eq!(all.len(), 3);
     assert_eq!(all[0].error, "the mail server is down");
-    for search in ["CONTACTS.export", "exports", "mail server", "grace"] {
+    for search in ["CONTACTS.export", "exports", "mail server", "gauri"] {
         let found = h.fleet.failed_jobs(Some(search)).await.unwrap();
         assert!(!found.is_empty(), "{search}");
     }
-    assert_eq!(h.fleet.failed_jobs(Some("grace")).await.unwrap().len(), 1);
+    assert_eq!(h.fleet.failed_jobs(Some("gauri")).await.unwrap().len(), 1);
     assert!(
         h.fleet
             .failed_jobs(Some("nothing"))
@@ -398,16 +398,16 @@ async fn failed_jobs_are_searched_retried_and_forgotten() {
 async fn payloads_are_redacted_by_the_log_redact_fragments() {
     let h = Harness::new(builder()).await;
     let payload =
-        json!({ "contact": "ada", "password": "hunter2", "nested": { "api_token": "x" } });
+        json!({ "contact": "anu", "password": "hunter2", "nested": { "api_token": "x" } });
     assert_eq!(
         h.fleet.redact(&payload),
-        json!({ "contact": "ada", "password": REDACTED, "nested": { "api_token": REDACTED } })
+        json!({ "contact": "anu", "password": REDACTED, "nested": { "api_token": REDACTED } })
     );
     let custom = Harness::new(builder().config("log.redact", "contact")).await;
     assert_eq!(
         custom
             .fleet
-            .redact(&json!({ "contact": "ada", "password": "p" })),
+            .redact(&json!({ "contact": "anu", "password": "p" })),
         json!({ "contact": REDACTED, "password": "p" })
     );
 }
@@ -418,7 +418,7 @@ async fn pending_and_completed_jobs_are_listed_and_searched() {
     let first = h.queue.dispatch(Record::new("one")).await.unwrap();
     h.queue
         .dispatch(SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "t".into(),
         })
         .await

@@ -13,20 +13,20 @@ use serde_json::json;
 use crate::support::harness;
 
 fn ada() -> DirectoryUser {
-    DirectoryUser::new("u1", "ada@acme.test")
-        .name("Ada", "Lovelace")
-        .email("ada@acme.test")
+    DirectoryUser::new("u1", "anu@acme.test")
+        .name("Anu", "Lakhotia")
+        .email("anu@acme.test")
         .title("Engineer")
 }
 
 fn grace() -> DirectoryUser {
-    DirectoryUser::new("u2", "grace@acme.test")
-        .name("Grace", "Hopper")
-        .email("grace@acme.test")
+    DirectoryUser::new("u2", "gauri@acme.test")
+        .name("Gauri", "Hundal")
+        .email("gauri@acme.test")
 }
 
 fn alan() -> DirectoryUser {
-    DirectoryUser::new("u3", "alan@acme.test").email("alan@acme.test")
+    DirectoryUser::new("u3", "arun@acme.test").email("arun@acme.test")
 }
 
 #[tokio::test]
@@ -62,7 +62,7 @@ async fn a_first_sync_creates_users_and_groups_through_the_sink() {
     );
     let users = directory.users(id).await.unwrap();
     assert_eq!(users.len(), 2);
-    assert_eq!(users[0].user.user_name, "ada@acme.test");
+    assert_eq!(users[0].user.user_name, "anu@acme.test");
     assert_eq!(users[0].local_id.as_deref(), Some("local-u1"));
     assert!(users[1].deactivated_at.is_some());
     let groups = directory.groups(id).await.unwrap();
@@ -256,7 +256,7 @@ async fn a_dry_run_plans_without_applying() {
     assert_eq!(changes.len(), 2);
     assert!(changes.iter().all(|c| c.status == ChangeStatus::Planned));
     assert_eq!(changes[0].action, ChangeAction::Create);
-    assert_eq!(changes[0].label, "ada@acme.test");
+    assert_eq!(changes[0].label, "anu@acme.test");
     // A dry run keeps no cursor and does not move the schedule.
     let connection = directory.connection(id).await.unwrap();
     assert!(connection.last_synced_at.is_none());
@@ -485,7 +485,7 @@ async fn connections_keep_secrets_sealed_and_delete_their_rows() {
     let created = directory
         .create_connection(
             Owner::App,
-            NewConnection::new("Acme AD", "ldap")
+            NewConnection::new("Agra AD", "ldap")
                 .settings(json!({ "url": "ldaps://dc1.acme.test", "base_dn": "DC=acme,DC=test" }))
                 .secret("hunter2"),
         )
@@ -511,14 +511,14 @@ async fn connections_keep_secrets_sealed_and_delete_their_rows() {
         .update_connection(
             id,
             ConnectionUpdate {
-                name: Some("Acme Active Directory".into()),
+                name: Some("Agra Active Directory".into()),
                 secret: Some(String::new()),
                 ..ConnectionUpdate::default()
             },
         )
         .await
         .unwrap();
-    assert_eq!(updated.name, "Acme Active Directory");
+    assert_eq!(updated.name, "Agra Active Directory");
     assert!(!updated.has_secret);
 
     h.fake()

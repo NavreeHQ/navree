@@ -101,7 +101,7 @@ for (const name of NAMES) {
       const { light, user, expect: expected, ...rest } = options;
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, bypassCSP: !!light, ...rest });
       contexts.push(context);
-      if (user) await context.addCookies([{ name: "proof_user", value: "ada", url: BASE }]);
+      if (user) await context.addCookies([{ name: "proof_user", value: "anu", url: BASE }]);
       const page = await context.newPage();
       page.problems = [];
       page.requests = [];
@@ -521,7 +521,7 @@ for (const name of NAMES) {
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         contexts.push(context);
         const page = await context.newPage();
-        await context.addCookies([{ name: "proof_user", value: "ada", url: BASE }]);
+        await context.addCookies([{ name: "proof_user", value: "anu", url: BASE }]);
         // The fragment's fetch is cut off, as it is with no connection.
         await page.route("**/pages/frag/offline", (route) => route.abort());
         await page.goto(BASE + "/pages/regions");
@@ -764,7 +764,7 @@ for (const name of NAMES) {
         const context = await browser.newContext();
         contexts.push(context);
         const page = await context.newPage();
-        await context.addCookies([{ name: "proof_user", value: "ada", url: BASE }]);
+        await context.addCookies([{ name: "proof_user", value: "anu", url: BASE }]);
         await page.route("**/pages/frag/offline", (route) => route.abort());
         await page.goto(BASE + "/pages/regions");
         await until(() => page.locator("#r-offline").evaluate((el) => el.hasAttribute("data-ui-failed")), "the mark");

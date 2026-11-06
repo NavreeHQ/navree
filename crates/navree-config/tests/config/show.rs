@@ -33,7 +33,7 @@ fn config() -> Config {
             .set("http.addr", "127.0.0.1:8080")
             .set(
                 "database.url",
-                format!("postgres://app:{PASSWORD}@db.internal/acme"),
+                format!("postgres://app:{PASSWORD}@db.internal/agra"),
             )
             .set("auth.jwt.secret", PASSWORD)
             .set("mail.webhooks.token", PASSWORD)
@@ -66,7 +66,7 @@ fn secrets_are_masked_and_there_is_no_way_to_reveal_them() {
     assert!(text.contains("[redacted] (set)"), "{text}");
     // The password of a URL is masked, the rest of the URL is not.
     assert!(
-        text.contains("postgres://app:[redacted]@db.internal/acme"),
+        text.contains("postgres://app:[redacted]@db.internal/agra"),
         "{text}"
     );
     for flag in [
@@ -104,7 +104,7 @@ fn the_json_view_masks_too() {
 #[test]
 fn origins_name_the_source_of_each_value() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let env = write(&dir, ".env", "APP_MAIL__FROM=\"Acme <hello@acme.test>\"\n");
+    let env = write(&dir, ".env", "APP_MAIL__FROM=\"Agra <hello@acme.test>\"\n");
     let file = write(&dir, "app.toml", "[http]\naddr = \"0.0.0.0:80\"\n");
     let config = Config::load(
         &ConfigSources::new()
@@ -142,7 +142,7 @@ fn a_section_limits_the_keys() {
 
 #[test]
 fn the_defaults_fill_in_what_no_source_sets() {
-    let config = Config::load(&ConfigSources::new().set("app.name", "acme")).expect("load");
+    let config = Config::load(&ConfigSources::new().set("app.name", "agra")).expect("load");
     let defaults = defaults_tree(&[SectionRegistration::of::<AppOptions>()]);
     let without = render(&config, &defaults, &options(&["app"]));
     assert!(
@@ -156,7 +156,7 @@ fn the_defaults_fill_in_what_no_source_sets() {
         &options(&["app", "--defaults", "--origin"]),
     );
     assert!(
-        with.contains("app.name") && with.contains("\"acme\""),
+        with.contains("app.name") && with.contains("\"agra\""),
         "{with}"
     );
     let url = with

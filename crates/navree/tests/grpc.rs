@@ -310,7 +310,7 @@ async fn get_deal_checks_access() {
         &*app.get::<navree::db::Db>().await,
         Deal {
             id: deal_id,
-            title: "Acme renewal".into(),
+            title: "Agra renewal".into(),
             stage: "lead".into(),
             owner_id: rep,
         },

@@ -36,9 +36,9 @@ async fn seeded(
     seed(
         &app,
         &[
-            ("ada@example.com", "Ada Lovelace", Some(36), true),
-            ("alan@example.com", "Alan Turing", Some(41), false),
-            ("grace@example.com", "=cmd|' /C calc'!A0", None, true),
+            ("anu@example.com", "Anu Lakhotia", Some(36), true),
+            ("arun@example.com", "Arun Tiwari", Some(41), false),
+            ("gauri@example.com", "=cmd|' /C calc'!A0", None, true),
         ],
     )
     .await;
@@ -100,9 +100,9 @@ async fn a_csv_export_streams_every_page_with_its_parameters() {
         csv_lines(response.bytes()),
         [
             "Email,Name,Age,Vip",
-            "ada@example.com,Ada Lovelace,36,true",
-            "alan@example.com,Alan Turing,41,false",
-            "grace@example.com,'=cmd|' /C calc'!A0,,true",
+            "anu@example.com,Anu Lakhotia,36,true",
+            "arun@example.com,Arun Tiwari,41,false",
+            "gauri@example.com,'=cmd|' /C calc'!A0,,true",
         ]
     );
 
@@ -138,7 +138,7 @@ async fn an_xlsx_export_is_built_page_by_page() {
     let (names, rows) = read_xlsx(response.bytes());
     assert_eq!(names, ["Contacts"]);
     assert_eq!(rows.len(), 2);
-    assert_eq!(rows[1][0], Data::String("alan@example.com".into()));
+    assert_eq!(rows[1][0], Data::String("arun@example.com".into()));
     assert_eq!(rows[1][2], Data::Float(41.0));
     assert_eq!(rows[1][3], Data::Bool(false));
 }

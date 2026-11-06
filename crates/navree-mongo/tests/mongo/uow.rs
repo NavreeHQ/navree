@@ -42,10 +42,10 @@ async fn units_of_work_commit_together_or_not_at_all() {
         (uow.actor(), uow.request_id()),
         (Some(actor), Some("req-1"))
     );
-    Company::create(&uow, company("Acme")).await.unwrap();
-    let mut globex = Company::create(&uow, company("Globex")).await.unwrap();
-    globex.employees = 250;
-    globex.save(&uow).await.unwrap();
+    Company::create(&uow, company("Agra")).await.unwrap();
+    let mut gulati = Company::create(&uow, company("Gulati")).await.unwrap();
+    gulati.employees = 250;
+    gulati.save(&uow).await.unwrap();
     assert_eq!(
         Company::query().count(&uow).await.unwrap(),
         2,
@@ -70,7 +70,7 @@ async fn units_of_work_commit_together_or_not_at_all() {
             ("companies", ChangeOp::Updated)
         ]
     );
-    assert_eq!(changes[2].id, globex.id.to_hex());
+    assert_eq!(changes[2].id, gulati.id.to_hex());
 
     let ran = Arc::new(AtomicBool::new(false));
     let hook = ran.clone();
@@ -90,7 +90,7 @@ async fn units_of_work_commit_together_or_not_at_all() {
 
     // Rolled back: nothing stays, no hook runs.
     let uow = mongo.begin().await.unwrap();
-    Company::create(&uow, company("Initech")).await.unwrap();
+    Company::create(&uow, company("Indrani")).await.unwrap();
     let ran = Arc::new(AtomicBool::new(false));
     let hook = ran.clone();
     uow.after_commit(move || {
@@ -115,12 +115,12 @@ async fn sessions_run_models_and_transactions_by_hand() {
     let session = mongo.session().await.unwrap();
     assert!(session.db().same_as(mongo));
     // Outside a transaction a session's writes land at once.
-    Company::create(&session, company("Acme")).await.unwrap();
+    Company::create(&session, company("Agra")).await.unwrap();
     assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
 
     session.start_transaction().await.unwrap();
     assert!(session.in_transaction());
-    Company::create(&session, company("Globex")).await.unwrap();
+    Company::create(&session, company("Gulati")).await.unwrap();
     assert_eq!(
         Company::query().count(&session).await.unwrap(),
         2,
@@ -132,14 +132,14 @@ async fn sessions_run_models_and_transactions_by_hand() {
     assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
 
     session.start_transaction().await.unwrap();
-    Company::create(&session, company("Initech")).await.unwrap();
+    Company::create(&session, company("Indrani")).await.unwrap();
     session.commit_transaction().await.unwrap();
     let names: Vec<String> = Company::query()
         .order_by(Company::NAME)
         .pluck(mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(names, ["Acme", "Initech"]);
+    assert_eq!(names, ["Agra", "Indrani"]);
     t.cleanup().await;
 }
 
@@ -154,7 +154,7 @@ async fn the_connection_runs_in_the_current_unit_of_work() {
     uow.scope(async {
         assert!(MongoUow::current().is_some_and(|current| current.same_as(&uow)));
         // A plain connection handle writes in the unit of work...
-        Company::create(mongo, company("Acme")).await.unwrap();
+        Company::create(mongo, company("Agra")).await.unwrap();
         assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
     })
     .await;
@@ -169,7 +169,7 @@ async fn the_connection_runs_in_the_current_unit_of_work() {
     let other = MongoDb::connect(&t.options()).await.unwrap();
     let uow = mongo.begin().await.unwrap();
     uow.scope(async {
-        Company::create(&other, company("Globex")).await.unwrap();
+        Company::create(&other, company("Gulati")).await.unwrap();
     })
     .await;
     uow.rollback().await.unwrap();
@@ -183,7 +183,7 @@ async fn transactions_run_again_after_a_write_conflict() {
         return;
     };
     let mongo = &t.db;
-    let acme = Company::create(mongo, company("Acme"))
+    let agra = Company::create(mongo, company("Agra"))
         .await
         .unwrap()
         .into_inner();
@@ -195,18 +195,18 @@ async fn transactions_run_again_after_a_write_conflict() {
             async move {
                 let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
                 // The first read fixes the transaction's snapshot.
-                let read = Company::find_or_fail(&uow, acme.id).await?;
+                let read = Company::find_or_fail(&uow, agra.id).await?;
                 if attempt == 1 {
                     // Another transaction changes the document and commits.
                     let other = mongo.begin().await?;
                     Company::query()
-                        .where_(Company::ID.eq(acme.id))
+                        .where_(Company::ID.eq(agra.id))
                         .increment(&other, Company::EMPLOYEES, 10)
                         .await?;
                     other.commit().await?;
                 }
                 Company::query()
-                    .where_(Company::ID.eq(acme.id))
+                    .where_(Company::ID.eq(agra.id))
                     .update(&uow, [Company::EMPLOYEES.set(read.employees + 1)])
                     .await?;
                 Ok(attempt)
@@ -216,7 +216,7 @@ async fn transactions_run_again_after_a_write_conflict() {
         .unwrap();
     assert_eq!(result, 2, "the conflicting first attempt ran again");
     assert_eq!(
-        Company::find_or_fail(mongo, acme.id)
+        Company::find_or_fail(mongo, agra.id)
             .await
             .unwrap()
             .employees,
@@ -320,19 +320,19 @@ async fn observers_see_the_changes_inside_the_transaction() {
         .unit_of_work(Some(actor), Some("req-9".into()))
         .await
         .unwrap();
-    let acme = Company::create(&uow, company("Acme")).await.unwrap();
+    let agra = Company::create(&uow, company("Agra")).await.unwrap();
     uow.commit().await.unwrap();
     let audit = table("audit").get(&*mongo).await.unwrap();
     assert_eq!(audit.len(), 1);
     assert_eq!(audit[0].get::<String>("entity").unwrap(), "companies");
     assert_eq!(audit[0].get::<String>("op").unwrap(), "created");
-    assert_eq!(audit[0].get::<String>("key").unwrap(), acme.id.to_hex());
+    assert_eq!(audit[0].get::<String>("key").unwrap(), agra.id.to_hex());
     assert_eq!(audit[0].get::<String>("actor").unwrap(), actor.to_string());
     assert_eq!(audit[0].get::<String>("request_id").unwrap(), "req-9");
 
     // An observer's error rolls the whole unit of work back.
     let uow = mongo.begin().await.unwrap();
-    Company::create(&uow, company("Globex")).await.unwrap();
+    Company::create(&uow, company("Gulati")).await.unwrap();
     Company::create(&uow, company("Forbidden")).await.unwrap();
     let error = uow.commit().await.unwrap_err();
     assert_eq!(error.to_string(), "companies cannot be called Forbidden");
@@ -368,7 +368,7 @@ async fn a_unit_of_work_joins_the_databases_and_commits_after_it() {
         (Some(actor), Some("req-7"))
     );
     assert!(joined.joined().is_some_and(|sql_uow| sql_uow.same_as(&uow)));
-    Company::create(&joined, company("Acme")).await.unwrap();
+    Company::create(&joined, company("Agra")).await.unwrap();
     // The change belongs to the database's unit of work, for its observers.
     let changes = uow.changes();
     assert_eq!(changes.len(), 1);
@@ -384,7 +384,7 @@ async fn a_unit_of_work_joins_the_databases_and_commits_after_it() {
     // When the database's unit of work rolls back, so does MongoDB's.
     let uow = sql.uow(None, None).await;
     let joined = mongo.begin_in(&uow).await.unwrap();
-    Company::create(&joined, company("Globex")).await.unwrap();
+    Company::create(&joined, company("Gulati")).await.unwrap();
     uow.rollback().await.unwrap();
     drop(joined);
     assert_eq!(Company::query().count(mongo).await.unwrap(), 1);

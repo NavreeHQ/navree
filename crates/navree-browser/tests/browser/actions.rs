@@ -61,8 +61,8 @@ async fn select_by_text_or_value_and_custom_selects() {
     assert!(message.contains(r#"no option "Lost""#), "{message}");
     assert!(message.contains(r#""Negotiation""#), "{message}");
 
-    page.select("Owner", "Grace Hopper").await.unwrap();
-    page.assert_see_in("#owner", "Grace Hopper").await.unwrap();
+    page.select("Owner", "Gauri Hundal").await.unwrap();
+    page.assert_see_in("#owner", "Gauri Hundal").await.unwrap();
 }
 
 #[tokio::test]
@@ -107,10 +107,10 @@ async fn attach_puts_a_file_in_a_hidden_file_input() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    let logo = dir.path().join("acme.png");
+    let logo = dir.path().join("agra.png");
     std::fs::write(&logo, b"\x89PNG fake").unwrap();
     page.attach("Logo", &logo).await.unwrap();
-    page.assert_see("acme.png").await.unwrap();
+    page.assert_see("agra.png").await.unwrap();
 
     let error = page
         .attach("Logo", dir.path().join("missing.png"))
@@ -165,9 +165,9 @@ async fn a_button_that_stays_covered_or_disabled_fails_with_the_reason() {
 async fn keys_press_named_keys_and_combinations() {
     let (browser, site) = browser_or_skip!("keys_press_named_keys_and_combinations");
     let page = browser.visit(site.url("/playground")).await.unwrap();
-    page.type_into("Quick add", "Call Ada").await.unwrap();
+    page.type_into("Quick add", "Call Anu").await.unwrap();
     page.keys("Enter").await.unwrap();
-    page.assert_see_in("#quick-list", "Call Ada").await.unwrap();
+    page.assert_see_in("#quick-list", "Call Anu").await.unwrap();
     page.assert_value("Quick add", "").await.unwrap();
 
     page.click("Command").await.unwrap();

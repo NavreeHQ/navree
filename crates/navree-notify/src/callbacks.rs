@@ -443,7 +443,7 @@ mod tests {
         let body = json!({
             "message_uuid": "aaaaaaaa-bbbb-cccc-dddd-0123456789ab",
             "to": "447700900000",
-            "from": "Acme",
+            "from": "Agra",
             "timestamp": "2026-10-28T10:00:00Z",
             "status": "rejected",
             "channel": "sms",

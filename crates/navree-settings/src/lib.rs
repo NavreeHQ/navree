@@ -59,12 +59,12 @@
 //!     const KEY: &'static str = "portal";
 //! }
 //!
-//! let acme = Uuid::now_v7();
+//! let agra = Uuid::now_v7();
 //! let fake = SettingsFake::new();
 //! fake.set::<PortalSettings>(Scope::global(), json!({"show_leaderboard": true})).await.unwrap();
-//! fake.set::<PortalSettings>(Scope::workspace(acme), json!({"welcome_text": "Hi"})).await.unwrap();
+//! fake.set::<PortalSettings>(Scope::workspace(agra), json!({"welcome_text": "Hi"})).await.unwrap();
 //!
-//! let portal = fake.settings().resolve::<PortalSettings>(Scope::workspace(acme)).await.unwrap();
+//! let portal = fake.settings().resolve::<PortalSettings>(Scope::workspace(agra)).await.unwrap();
 //! assert!(portal.show_leaderboard);
 //! assert_eq!(portal.welcome_text, "Hi");
 //! assert_eq!(portal.source("show_leaderboard"), Some(Source::Global));

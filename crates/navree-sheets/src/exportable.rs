@@ -73,12 +73,12 @@ impl Column {
 /// assert_eq!(ContactRow::sheet_name(), "Contacts");
 ///
 /// let row = ContactRow {
-///     name: "Ada".into(),
+///     name: "Anu".into(),
 ///     email: None,
 ///     deals: 3,
 ///     internal_note: String::new(),
 /// };
-/// assert_eq!(row.cells(), vec![Cell::Text("Ada".into()), Cell::Empty, Cell::Int(3)]);
+/// assert_eq!(row.cells(), vec![Cell::Text("Anu".into()), Cell::Empty, Cell::Int(3)]);
 /// ```
 ///
 /// | Attribute | Meaning |

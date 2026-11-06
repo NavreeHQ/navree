@@ -716,14 +716,14 @@ mod tests {
 
     #[test]
     fn field_conditions_compare_json() {
-        let data = json!({"event": {"amount": 1500, "tags": ["vip"], "name": "Acme Inc"}});
+        let data = json!({"event": {"amount": 1500, "tags": ["vip"], "name": "Agra Inc"}});
         assert!(field("event.amount", CompareOp::Gte, json!(1000)).test(&data));
         assert!(!field("event.amount", CompareOp::Lt, json!(1000)).test(&data));
         assert!(field("event.amount", CompareOp::Eq, json!(1500)).test(&data));
         assert!(field("event.amount", CompareOp::Ne, json!(1)).test(&data));
         assert!(field("event.tags", CompareOp::Contains, json!("vip")).test(&data));
-        assert!(field("event.name", CompareOp::Contains, json!("Acme")).test(&data));
-        assert!(field("event.name", CompareOp::In, json!(["Acme Inc", "Other"])).test(&data));
+        assert!(field("event.name", CompareOp::Contains, json!("Agra")).test(&data));
+        assert!(field("event.name", CompareOp::In, json!(["Agra Inc", "Other"])).test(&data));
         assert!(field("event.name", CompareOp::Exists, Value::Null).test(&data));
         assert!(field("event.missing", CompareOp::Missing, Value::Null).test(&data));
         // A missing field never compares.

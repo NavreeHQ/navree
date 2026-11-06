@@ -169,7 +169,7 @@ mod tests {
     fn templates_fill_the_body_parameters() {
         let message = WhatsAppMessage::template(
             WhatsAppTemplate::new("order_shipped", "en_GB")
-                .parameter("Ada")
+                .parameter("Anu")
                 .parameter("A-1042"),
         );
         assert_eq!(
@@ -183,7 +183,7 @@ mod tests {
                     "name": "order_shipped",
                     "language": { "code": "en_GB" },
                     "components": [{ "type": "body", "parameters": [
-                        { "type": "text", "text": "Ada" },
+                        { "type": "text", "text": "Anu" },
                         { "type": "text", "text": "A-1042" },
                     ] }],
                 },

@@ -102,7 +102,7 @@ async fn app(fake: &MailFake, contacts: &Arc<ContactService>) -> TestApp {
     TestApp::builder()
         .temp_database()
         .config("app.key", navree::crypto::generate_key())
-        .config("mail.from", "Acme <hello@acme.test>")
+        .config("mail.from", "Agra <hello@acme.test>")
         .config("mail.delivery.enabled", true)
         .config("mail.transports.campaigns", "array")
         .config("mail.delivery.routes", false)
@@ -137,33 +137,33 @@ async fn bounces_flag_the_contact_and_suppress_the_address() {
 
     let report = mailer
         .for_scope(&MailScope::workspace(workspace))
-        .deliver(&newsletter("ada@example.com"))
+        .deliver(&newsletter("anu@example.com"))
         .await
         .unwrap();
     assert_eq!(report.status, DeliveryStatus::Sent);
     assert_eq!(report.tier, Some(TransportTier::Config));
     assert!(report.delivery_id.is_some());
 
-    fake.bounce(app.ctx(), "ada@example.com").await.unwrap();
+    fake.bounce(app.ctx(), "anu@example.com").await.unwrap();
 
     assert_eq!(
         contacts.bounced.lock().unwrap().clone(),
-        [(Some(workspace), "ada@example.com".to_owned())]
+        [(Some(workspace), "anu@example.com".to_owned())]
     );
     let suppressions = app.get::<Suppressions>().await;
     assert!(
         suppressions
-            .is_suppressed(Some(workspace), "ada@example.com")
+            .is_suppressed(Some(workspace), "anu@example.com")
             .await
             .unwrap()
     );
     let again = mailer
         .for_scope(&MailScope::workspace(workspace))
-        .deliver(&newsletter("ada@example.com"))
+        .deliver(&newsletter("anu@example.com"))
         .await
         .unwrap();
     assert_eq!(again.status, DeliveryStatus::Suppressed);
-    assert_eq!(fake.sent_to("ada@example.com").len(), 1);
+    assert_eq!(fake.sent_to("anu@example.com").len(), 1);
 }
 
 #[tokio::test]
@@ -262,7 +262,7 @@ async fn tenant_transports_resolve_most_specific_first() {
         .get::<Mailer>()
         .await
         .for_scope(&MailScope::workspace(workspace))
-        .deliver(&newsletter("ada@example.com"))
+        .deliver(&newsletter("anu@example.com"))
         .await
         .unwrap();
 

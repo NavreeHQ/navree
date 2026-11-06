@@ -188,11 +188,11 @@ mod tests {
     #[test]
     fn only_changed_fields_are_kept() {
         let (before, after) = changed_fields(
-            json!({"name": "Ada", "email": "a@x"}),
-            json!({"name": "Ada L", "email": "a@x"}),
+            json!({"name": "Anu", "email": "a@x"}),
+            json!({"name": "Anu L", "email": "a@x"}),
         );
-        assert_eq!(serde_json::Value::from(before), json!({"name": "Ada"}));
-        assert_eq!(serde_json::Value::from(after), json!({"name": "Ada L"}));
+        assert_eq!(serde_json::Value::from(before), json!({"name": "Anu"}));
+        assert_eq!(serde_json::Value::from(after), json!({"name": "Anu L"}));
     }
 
     #[test]
@@ -200,8 +200,8 @@ mod tests {
         let now = Utc::now();
         let user = Model {
             id: Uuid::now_v7(),
-            name: "Ada".into(),
-            email: "ada@example.com".into(),
+            name: "Anu".into(),
+            email: "anu@example.com".into(),
             password_hash: "$argon2id$secret".into(),
             email_verified_at: None,
             two_factor_secret: Some("secret".into()),

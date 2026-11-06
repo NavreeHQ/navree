@@ -124,7 +124,7 @@ async fn tagged_calls_are_reported() {
     let (cache, recorder) = recorded_cache("");
     let users = cache.tags(&["users"]);
     users
-        .put("u:1", &"Ada", Duration::from_secs(60))
+        .put("u:1", &"Anu", Duration::from_secs(60))
         .await
         .unwrap();
     let _: Option<String> = users.get("u:1").await.unwrap();

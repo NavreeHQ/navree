@@ -21,12 +21,12 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::fixtures::{NOW, WORKSPACE, paddle as pfx, stripe as sfx};
 
-fn acme() -> BillableRef {
+fn agra() -> BillableRef {
     BillableRef {
         billable_type: "workspace".into(),
         billable_id: WORKSPACE,
-        name: "Acme".into(),
-        email: Some("ada@example.com".into()),
+        name: "Agra".into(),
+        email: Some("anu@example.com".into()),
     }
 }
 
@@ -119,7 +119,7 @@ async fn a_stripe_app_checks_out_receives_webhooks_and_swaps() {
     assert_eq!(billing.provider().name(), "stripe");
 
     let checkout = billing
-        .checkout(&acme(), "pro")
+        .checkout(&agra(), "pro")
         .quantity(2)
         .create()
         .await
@@ -130,7 +130,7 @@ async fn a_stripe_app_checks_out_receives_webhooks_and_swaps() {
     );
     assert_eq!(
         billing
-            .customer(&acme())
+            .customer(&agra())
             .await
             .unwrap()
             .unwrap()
@@ -169,19 +169,19 @@ async fn a_stripe_app_checks_out_receives_webhooks_and_swaps() {
             .assert_status(200);
     }
     app.get::<Queue>().await.run_pending().await.unwrap();
-    let sub = billing.subscription(&acme()).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra()).await.unwrap().unwrap();
     assert!(sub.on_trial() && sub.on_plan("pro"));
     assert_eq!(sub.quantity, 2);
     assert_eq!(sub.provider_id.as_deref(), Some("sub_1Q8XyzAbC"));
 
     billing
-        .report_usage(&acme(), "ai_summaries", 5)
+        .report_usage(&agra(), "ai_summaries", 5)
         .await
         .unwrap();
     let summary = billing.report_pending_usage().await.unwrap();
     assert_eq!((summary.reported, summary.units), (1, 5));
 
-    let swapped = billing.swap(&acme(), "business").await.unwrap();
+    let swapped = billing.swap(&agra(), "business").await.unwrap();
     assert!(swapped.on_plan("business"));
     assert_eq!(swapped.status, SubscriptionStatus::Active);
     let sent = server.received_requests().await.unwrap();
@@ -203,10 +203,10 @@ async fn a_stripe_app_checks_out_receives_webhooks_and_swaps() {
         Some("true")
     );
 
-    let invoices = billing.invoices(&acme()).await.unwrap();
+    let invoices = billing.invoices(&agra()).await.unwrap();
     assert_eq!(invoices[0].total_cents, 5800);
     // Cached: the mock expects one call.
-    billing.invoices(&acme()).await.unwrap();
+    billing.invoices(&agra()).await.unwrap();
 
     // A forged webhook is refused.
     client
@@ -231,7 +231,7 @@ async fn a_paddle_app_links_the_customer_from_the_transaction() {
         .mount(&server)
         .await;
     Mock::given(method("POST"))
-        .and(path("/subscriptions/sub_01j8acme/cancel"))
+        .and(path("/subscriptions/sub_01j8agra/cancel"))
         .respond_with(ok(pfx::canceling("pri_pro_m")))
         .mount(&server)
         .await;
@@ -250,7 +250,7 @@ async fn a_paddle_app_links_the_customer_from_the_transaction() {
     // A billable without an email: Paddle's checkout collects it.
     let anonymous = BillableRef {
         email: None,
-        ..acme()
+        ..agra()
     };
     let checkout = billing.checkout(&anonymous, "pro").create().await.unwrap();
     assert_eq!(checkout.url, "https://acme.test/pay?_ptxn=txn_01j8checkout");
@@ -286,7 +286,7 @@ async fn a_paddle_app_links_the_customer_from_the_transaction() {
     assert_eq!(customer.provider.as_deref(), Some("paddle"));
     assert_eq!(
         customer.provider_customer_id.as_deref(),
-        Some("ctm_01j8acme")
+        Some("ctm_01j8agra")
     );
     let sub = billing.subscription(&anonymous).await.unwrap().unwrap();
     assert!(sub.on_trial() && sub.on_plan("pro"));

@@ -430,16 +430,16 @@ mod plain_forms {
     #[tokio::test]
     async fn the_token_field_passes_and_the_handler_never_sees_it() {
         let (_app, client, token) = signed_in().await;
-        let response = form(&client, format!("title=Acme&_csrf={token}&amount=12"))
+        let response = form(&client, format!("title=Agra&_csrf={token}&amount=12"))
             .send()
             .await
             .assert_status(200);
-        assert_eq!(response.text(), "title=Acme&amount=12");
-        let response = form(&client, format!("_csrf={token}&title=Acme"))
+        assert_eq!(response.text(), "title=Agra&amount=12");
+        let response = form(&client, format!("_csrf={token}&title=Agra"))
             .send()
             .await
             .assert_status(200);
-        assert_eq!(response.text(), "title=Acme");
+        assert_eq!(response.text(), "title=Agra");
         let response = form(&client, format!("_csrf={token}"))
             .send()
             .await
@@ -454,7 +454,7 @@ mod plain_forms {
         let last = wrong.pop().unwrap();
         wrong.push(if last == 'a' { 'b' } else { 'a' });
         for body in [
-            "title=Acme".to_owned(),
+            "title=Agra".to_owned(),
             format!("_csrf={wrong}"),
             "_csrf=".to_owned(),
             format!("_csrf={}", &token[..39]),
@@ -491,7 +491,7 @@ mod plain_forms {
         client
             .post(&format!("/api/probe/echo?_csrf={token}"))
             .header("content-type", "application/x-www-form-urlencoded")
-            .body("title=Acme")
+            .body("title=Agra")
             .send()
             .await
             .assert_error(403, "Invalid CSRF token");
@@ -525,12 +525,12 @@ mod plain_forms {
             .await
             .assert_error(403, "Invalid CSRF token");
         // The header alone still passes, and leaves the body as it is.
-        let response = form(&client, "_csrf=whatever&title=Acme".to_owned())
+        let response = form(&client, "_csrf=whatever&title=Agra".to_owned())
             .header("x-csrf-token", &token)
             .send()
             .await
             .assert_status(200);
-        assert_eq!(response.text(), "_csrf=whatever&title=Acme");
+        assert_eq!(response.text(), "_csrf=whatever&title=Agra");
     }
 
     #[tokio::test]

@@ -109,7 +109,7 @@ async fn the_device_flow_polls_until_the_user_approves() {
     let (user, token) = world.user("rep@acme.test", &["deals.read"]).await;
     let client = world
         .register(
-            NewClient::public("Acme CLI")
+            NewClient::public("Agra CLI")
                 .device()
                 .scopes(["deals:read", "offline_access"]),
         )
@@ -172,7 +172,7 @@ async fn the_device_flow_polls_until_the_user_approves() {
         .await
         .assert_status(200)
         .assert_json_path("user_code", json!(user_code))
-        .assert_json_path("client.name", json!("Acme CLI"))
+        .assert_json_path("client.name", json!("Agra CLI"))
         .assert_json_path("scopes.0.name", json!("deals:read"));
     world
         .client()

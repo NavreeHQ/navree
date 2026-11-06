@@ -18,7 +18,7 @@ navree_orm::morph_types! {
     }
 }
 
-/// Notes on Renewal, Acme and Globex, and one about nothing.
+/// Notes on Renewal, Agra and Gulati, and one about nothing.
 async fn notes(db: &navree_db::Db, crm: &crate::fixtures::Crm) -> Vec<Record<Note>> {
     let mut notes = Vec::new();
     notes.push(
@@ -29,16 +29,16 @@ async fn notes(db: &navree_db::Db, crm: &crate::fixtures::Crm) -> Vec<Record<Not
             .unwrap(),
     );
     notes.push(
-        crm.acme
+        crm.agra
             .notes()
-            .create(db, Note::new("acme lunch"))
+            .create(db, Note::new("agra lunch"))
             .await
             .unwrap(),
     );
     notes.push(
-        crm.globex
+        crm.gulati
             .notes()
-            .create(db, Note::new("globex visit"))
+            .create(db, Note::new("gulati visit"))
             .await
             .unwrap(),
     );
@@ -69,12 +69,12 @@ async fn morph_one_and_morph_many() {
         .await
         .unwrap();
 
-    // Acme and Renewal share the key 1: the type column keeps them apart.
-    assert_eq!(crm.acme.id, crm.renewal.id);
+    // Agra and Renewal share the key 1: the type column keeps them apart.
+    assert_eq!(crm.agra.id, crm.renewal.id);
     let deal_notes = crm.renewal.notes().get(&t.db).await.unwrap();
     assert_eq!(deal_notes.len(), 1);
     assert_eq!(deal_notes[0].body, "renewal call");
-    assert!(crm.acme.logo().first(&t.db).await.unwrap().is_none());
+    assert!(crm.agra.logo().first(&t.db).await.unwrap().is_none());
     assert_eq!(
         crm.renewal.image().first(&t.db).await.unwrap().unwrap().url,
         "renewal.png"
@@ -103,7 +103,7 @@ async fn morph_one_and_morph_many() {
         .collect();
     assert_eq!(
         counts,
-        [("Acme".to_owned(), Some(1)), ("Globex".to_owned(), Some(1))]
+        [("Agra".to_owned(), Some(1)), ("Gulati".to_owned(), Some(1))]
     );
 }
 
@@ -129,14 +129,14 @@ async fn morph_to_results_are_typed() {
     assert_eq!(deal.downcast_ref::<Deal>().unwrap().title, "Renewal");
     assert!(deal.downcast_ref::<Company>().is_none());
     let company = notable(&notes[1]).unwrap();
-    assert_eq!(company.downcast_ref::<Company>().unwrap().name, "Acme");
-    assert_eq!(company.key_string(), crm.acme.id.to_string());
+    assert_eq!(company.downcast_ref::<Company>().unwrap().name, "Agra");
+    assert_eq!(company.key_string(), crm.agra.id.to_string());
     assert!(notable(&notes[3]).is_none());
 
     // Into an enum of the possible models.
     match Notable::try_from(notable(&notes[2]).unwrap().clone()) {
-        Ok(Notable::Company(globex)) => assert_eq!(globex.name, "Globex"),
-        _ => panic!("Globex is a company"),
+        Ok(Notable::Company(gulati)) => assert_eq!(gulati.name, "Gulati"),
+        _ => panic!("Gulati is a company"),
     }
     let record: Record<Deal> = notable(&notes[0]).unwrap().clone().downcast().unwrap();
     assert_eq!(record.id, crm.renewal.id);
@@ -157,13 +157,13 @@ async fn morph_to_results_are_typed() {
     assert!(notable(&note).unwrap().is::<Deal>());
     assert!(created[0].notable().is(&crm.renewal));
     assert!(
-        created[0].notable().is_not(&crm.acme),
+        created[0].notable().is_not(&crm.agra),
         "same key, other type"
     );
 
     // Serialized as the related record.
     let json = serde_json::to_value(&notes[1]).unwrap();
-    assert_eq!(json["notable"]["name"], "Acme");
+    assert_eq!(json["notable"]["name"], "Agra");
     assert!(json["notable_type"] == "company");
 }
 
@@ -196,29 +196,29 @@ async fn morph_to_loads_nested_relations_per_type() {
             .as_ref()
             .unwrap()
             .name,
-        "Acme"
+        "Agra"
     );
     assert_eq!(renewal.loaded(Deal::activities).unwrap().len(), 3);
-    let acme = notable(&notes[1])
+    let agra = notable(&notes[1])
         .unwrap()
         .downcast_ref::<Company>()
         .unwrap();
-    assert_eq!(acme.loaded(Company::contacts).unwrap().len(), 2);
-    assert_eq!(acme.extra::<i64>("deals_count").unwrap(), Some(2));
-    assert!(!acme.relation_loaded("activities"));
+    assert_eq!(agra.loaded(Company::contacts).unwrap().len(), 2);
+    assert_eq!(agra.extra::<i64>("deals_count").unwrap(), Some(2));
+    assert!(!agra.relation_loaded("activities"));
 
     // Constraints per type.
     let notes = Note::query()
         .with_morph(
             "notable",
-            MorphWith::new().constrain::<Company>(|q| q.where_(Company::NAME.ne("Acme"))),
+            MorphWith::new().constrain::<Company>(|q| q.where_(Company::NAME.ne("Agra"))),
         )
         .order_by(Note::ID)
         .get(&t.db)
         .await
         .unwrap();
     assert!(notable(&notes[0]).is_some(), "deals are not constrained");
-    assert!(notable(&notes[1]).is_none(), "Acme is filtered out");
+    assert!(notable(&notes[1]).is_none(), "Agra is filtered out");
     assert!(notable(&notes[2]).is_some());
 }
 
@@ -234,7 +234,7 @@ async fn morph_loads_after_the_fact() {
     let deal = notable(&note).unwrap().downcast_ref::<Deal>().unwrap();
     assert_eq!(
         deal.loaded(Deal::owner).unwrap().as_ref().unwrap().name,
-        "Ada"
+        "Anu"
     );
     note.load_morph_count(
         &t.db,
@@ -281,10 +281,10 @@ async fn morph_loads_after_the_fact() {
     all.load_morph(&t.db, "notable", MorphWith::new().on::<Company>(["owner"]))
         .await
         .unwrap();
-    let acme = notable(&all[1]).unwrap().downcast_ref::<Company>().unwrap();
+    let agra = notable(&all[1]).unwrap().downcast_ref::<Company>().unwrap();
     assert_eq!(
-        acme.loaded(Company::owner).unwrap().as_ref().unwrap().name,
-        "Ada"
+        agra.loaded(Company::owner).unwrap().as_ref().unwrap().name,
+        "Anu"
     );
     all.load_morph_count(
         &t.db,
@@ -293,8 +293,8 @@ async fn morph_loads_after_the_fact() {
     )
     .await
     .unwrap();
-    let globex = notable(&all[2]).unwrap().downcast_ref::<Company>().unwrap();
-    assert_eq!(globex.extra::<i64>("contacts_count").unwrap(), Some(1));
+    let gulati = notable(&all[2]).unwrap().downcast_ref::<Company>().unwrap();
+    assert_eq!(gulati.extra::<i64>("contacts_count").unwrap(), Some(1));
 
     // A missing chain for the records of one type among mixed ones.
     let mut mixed: Vec<AnyRecord> = all
@@ -351,7 +351,7 @@ async fn morph_to_soft_delete_visibility() {
     for (type_, id) in [
         ("deal", crm.renewal.id),
         ("deal", crm.upgrade.id),
-        ("company", crm.acme.id),
+        ("company", crm.agra.id),
     ] {
         Image::create(
             &t.db,
@@ -430,7 +430,7 @@ async fn a_required_morph_map_refuses_unmapped_models() {
                 .unwrap();
             // An unmapped one is an error naming it.
             let error = crm
-                .acme
+                .agra
                 .notes()
                 .create(&t.db, Note::new("unmapped"))
                 .await
@@ -440,7 +440,7 @@ async fn a_required_morph_map_refuses_unmapped_models() {
             };
             assert_eq!(model, "Company");
             let mut note = Record::new(Note::new("associated"));
-            assert!(note.associate(Note::notable, &crm.acme).is_err());
+            assert!(note.associate(Note::notable, &crm.agra).is_err());
         })
         .await;
 
@@ -591,7 +591,7 @@ async fn polymorphic_existence_queries() {
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&either), ["acme lunch", "globex visit", "loose"]);
+    assert_eq!(bodies(&either), ["agra lunch", "gulati visit", "loose"]);
     // Of a listed type, pointing at no record.
     let gone = ordered()
         .doesnt_have_morph("notable", MorphTypes::of::<Deal>())
@@ -621,31 +621,31 @@ async fn polymorphic_existence_queries() {
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&named_a), ["renewal call", "acme lunch"]);
+    assert_eq!(bodies(&named_a), ["renewal call", "agra lunch"]);
     let either = ordered()
         .where_(Note::BODY.eq("loose"))
         .or_where_has_morph("notable", ["company"], |q, _| {
-            q.where_(col("name").eq("Globex"))
+            q.where_(col("name").eq("Gulati"))
         })
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&either), ["globex visit", "loose"]);
-    let not_globex = ordered()
+    assert_eq!(bodies(&either), ["gulati visit", "loose"]);
+    let not_gulati = ordered()
         .where_doesnt_have_morph("notable", ["company"], |q, _| {
-            q.where_(col("name").eq("Globex"))
+            q.where_(col("name").eq("Gulati"))
         })
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&not_globex), ["acme lunch"]);
+    assert_eq!(bodies(&not_gulati), ["agra lunch"]);
     let either = ordered()
-        .where_(Note::BODY.eq("globex visit"))
+        .where_(Note::BODY.eq("gulati visit"))
         .or_where_doesnt_have_morph("notable", MorphTypes::all(), |q, _| q)
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&either), ["globex visit", "loose", "dangling"]);
+    assert_eq!(bodies(&either), ["gulati visit", "loose", "dangling"]);
 
     // One condition on a column of every listed type.
     let renewal = ordered()
@@ -656,24 +656,24 @@ async fn polymorphic_existence_queries() {
     assert_eq!(bodies(&renewal), ["renewal call"]);
     let either = ordered()
         .where_morph_relation("notable", ["deal"], col("title").eq("Renewal"))
-        .or_where_morph_relation("notable", ["company"], col("name").eq("Acme"))
+        .or_where_morph_relation("notable", ["company"], col("name").eq("Agra"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&either), ["renewal call", "acme lunch"]);
-    let not_acme = ordered()
-        .where_morph_doesnt_have_relation("notable", ["company"], col("name").eq("Acme"))
+    assert_eq!(bodies(&either), ["renewal call", "agra lunch"]);
+    let not_agra = ordered()
+        .where_morph_doesnt_have_relation("notable", ["company"], col("name").eq("Agra"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&not_acme), ["globex visit"]);
+    assert_eq!(bodies(&not_agra), ["gulati visit"]);
     let either = ordered()
-        .where_(Note::BODY.eq("acme lunch"))
+        .where_(Note::BODY.eq("agra lunch"))
         .or_where_morph_doesnt_have_relation("notable", ["deal"], col("title").ne("x"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(&either), ["acme lunch", "dangling"]);
+    assert_eq!(bodies(&either), ["agra lunch", "dangling"]);
 }
 
 #[tokio::test]
@@ -685,20 +685,20 @@ async fn morph_to_pointing_at_a_record_or_a_type() {
         notes.iter().map(|note| note.body.clone()).collect()
     };
     let ordered = || Note::query().order_by(Note::ID);
-    let acme = ordered()
-        .where_morphed_to("notable", &crm.acme)
+    let agra = ordered()
+        .where_morphed_to("notable", &crm.agra)
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(acme), ["acme lunch"]);
+    assert_eq!(bodies(agra), ["agra lunch"]);
     let companies = ordered()
         .where_morphed_to("notable", MorphRef::type_of::<Company>())
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(companies), ["acme lunch", "globex visit"]);
+    assert_eq!(bodies(companies), ["agra lunch", "gulati visit"]);
     let several = Company::query()
-        .where_key_in([crm.acme.id, crm.globex.id])
+        .where_key_in([crm.agra.id, crm.gulati.id])
         .get(&t.db)
         .await
         .unwrap();
@@ -708,12 +708,12 @@ async fn morph_to_pointing_at_a_record_or_a_type() {
         .await
         .unwrap();
     assert_eq!(both.len(), 2);
-    let not_acme = ordered()
-        .where_not_morphed_to("notable", &crm.acme)
+    let not_agra = ordered()
+        .where_not_morphed_to("notable", &crm.agra)
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(bodies(not_acme), ["renewal call", "globex visit", "loose"]);
+    assert_eq!(bodies(not_agra), ["renewal call", "gulati visit", "loose"]);
     let either = ordered()
         .where_morphed_to("notable", &crm.renewal)
         .or_where_morphed_to("notable", MorphRef::named("company"))

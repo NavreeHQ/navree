@@ -110,16 +110,16 @@ fn a_disabled_choice_is_aria_disabled_and_disabled_in_the_carrier() {
 fn rich_choices_carry_a_description_an_icon_keywords_and_a_selected_label() {
     let out = html(
         Select::new("x").choice(
-            Choice::new("a", "Ada Lovelace")
+            Choice::new("a", "Anu Lakhotia")
                 .description("Engineer")
                 .icon(icons::CHECK)
                 .keywords(["analytical", "engine"])
-                .selected_label("Ada"),
+                .selected_label("Anu"),
         ),
     );
     assert!(out.contains(r#"data-slot="option-description""#), "{out}");
     assert!(out.contains(r#"data-keywords="analytical engine""#));
-    assert!(out.contains(r#"data-selected-label="Ada""#));
+    assert!(out.contains(r#"data-selected-label="Anu""#));
 }
 
 #[test]
@@ -277,16 +277,16 @@ fn a_combobox_is_an_input_with_the_chosen_label_and_a_carrier_that_posts_the_val
     let out = html(
         Combobox::new("owner")
             .placeholder("Search people")
-            .option("1", "Ada Lovelace")
-            .option("2", "Alan Turing")
+            .option("1", "Anu Lakhotia")
+            .option("2", "Arun Tiwari")
             .selected("2"),
     );
     assert!(out.contains(r#"role="combobox""#), "{out}");
     assert!(out.contains(r#"aria-autocomplete="list""#));
     assert!(out.contains(r#"autocomplete="off""#));
-    assert!(out.contains(r#"value="Alan Turing""#));
+    assert!(out.contains(r#"value="Arun Tiwari""#));
     assert!(out.contains(r#"placeholder="Search people""#));
-    assert!(out.contains(r#"<option value="2" selected>Alan Turing</option>"#));
+    assert!(out.contains(r#"<option value="2" selected>Arun Tiwari</option>"#));
     // The input is not posted: it has no name.
     assert!(attr_of(&out, "data-slot=\"combobox-input\"", "name").is_none());
     assert_eq!(
@@ -302,7 +302,7 @@ fn a_searched_combobox_names_its_endpoint_and_carries_only_the_chosen_option() {
             .search("/people/options")
             .min_chars(2)
             .debounce(300)
-            .selected_choice(Choice::new("7", "Grace Hopper")),
+            .selected_choice(Choice::new("7", "Gauri Hundal")),
     );
     assert_eq!(
         attr_of(&out, "data-ui-picker", "data-ui-search"),
@@ -314,7 +314,7 @@ fn a_searched_combobox_names_its_endpoint_and_carries_only_the_chosen_option() {
         Some("300")
     );
     assert!(
-        out.contains(r#"<option value="7" selected>Grace Hopper</option>"#),
+        out.contains(r#"<option value="7" selected>Gauri Hundal</option>"#),
         "{out}"
     );
     assert_eq!(
@@ -380,7 +380,7 @@ fn creating_is_off_unless_asked_and_can_be_switched_off_with_a_reason() {
 #[test]
 fn a_combobox_in_a_field_takes_the_id_on_its_input_not_on_the_carrier_or_the_hidden_parts() {
     let out =
-        html(Field::new("deal-owner", "Owner").control(Combobox::new("owner").option("1", "Ada")));
+        html(Field::new("deal-owner", "Owner").control(Combobox::new("owner").option("1", "Anu")));
     assert_eq!(
         attr_of(&out, "data-slot=\"combobox-input\"", "id"),
         Some("deal-owner")
@@ -581,8 +581,8 @@ fn a_palette_page_loads_the_select_module() {
 
 #[test]
 fn a_query_clips_text_caps_the_limit_and_the_offset_and_never_fails() {
-    let q = OptionQuery::parse("q=ada&limit=500&after=99999999999");
-    assert_eq!(q.text(), "ada");
+    let q = OptionQuery::parse("q=anu&limit=500&after=99999999999");
+    assert_eq!(q.text(), "anu");
     assert_eq!(q.limit(), 50);
     assert_eq!(q.offset(), 1_000_000);
     let long = format!("q={}", "x".repeat(5000));
@@ -604,8 +604,8 @@ fn text_is_clipped_on_a_character_boundary() {
 #[test]
 fn the_option_list_is_the_same_markup_as_an_inline_list() {
     let list = ChoiceList::new()
-        .option("1", "Ada")
-        .group("Others", [("2", "Alan")])
+        .option("1", "Anu")
+        .group("Others", [("2", "Arun")])
         .more("/people/options?q=a&after=2");
     let out = list.to_html();
     assert!(out.contains(r#"role="option" data-value="1""#), "{out}");
@@ -627,7 +627,7 @@ fn an_option_list_escapes_what_it_holds() {
 #[test]
 fn an_option_list_answers_html_that_is_not_stored() {
     use navree_http::response::IntoResponse;
-    let response = ChoiceList::new().option("1", "Ada").into_response();
+    let response = ChoiceList::new().option("1", "Anu").into_response();
     assert_eq!(
         response.headers()["content-type"],
         "text/html; charset=utf-8"
@@ -648,8 +648,8 @@ fn control_characters_are_taken_out_of_a_search_text() {
         ("q=%00", ""),
         ("q=%00%00x%00", "x"),
         ("q=a%0Ab%09c%1Fd%7F", "abcd"),
-        ("q=%C2%85gr%C2%9Dace", "grace"),
-        ("q=+%00+ada+%00+", "ada"),
+        ("q=%C2%85gr%C2%9Dace", "gauri"),
+        ("q=+%00+anu+%00+", "anu"),
     ] {
         assert_eq!(OptionQuery::parse(query).text(), text, "{query}");
     }
@@ -698,8 +698,8 @@ fn a_palette_with_a_post_item_posts_through_the_form_runtime_and_one_without_loa
 
 #[test]
 fn the_link_to_the_next_page_goes_on_a_query_the_path_already_has() {
-    let plain = OptionQuery::parse("q=ada").next_url("/people", 20);
-    assert_eq!(plain, "/people?q=ada&limit=20&after=20");
-    let with_query = OptionQuery::parse("q=ada").next_url("/people?team=7", 20);
-    assert_eq!(with_query, "/people?team=7&q=ada&limit=20&after=20");
+    let plain = OptionQuery::parse("q=anu").next_url("/people", 20);
+    assert_eq!(plain, "/people?q=anu&limit=20&after=20");
+    let with_query = OptionQuery::parse("q=anu").next_url("/people?team=7", 20);
+    assert_eq!(with_query, "/people?team=7&q=anu&limit=20&after=20");
 }

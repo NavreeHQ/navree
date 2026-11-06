@@ -1,6 +1,6 @@
 {
   "api": {
-    "title": "Acme cloud API",
+    "title": "Agra cloud API",
     "undocumented": [
       "/admin*"
     ]
@@ -11,7 +11,7 @@
   "auth": {
     "registration": "false",
     "two_factor": {
-      "issuer": "Acme cloud"
+      "issuer": "Agra cloud"
     }
   },
   "billing": {
@@ -40,10 +40,10 @@
   "database": {
     "max_connections": "20",
     "migrate_on_boot": true,
-    "url": "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+    "url": "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
   },
   "helm": {
-    "title": "Acme cloud admin"
+    "title": "Agra cloud admin"
   },
   "http": {
     "addr": "0.0.0.0:8080",
@@ -54,14 +54,14 @@
     "level": "debug"
   },
   "mail": {
-    "from": "Acme cloud <hello@acme-cloud.test>",
+    "from": "Agra cloud <hello@agra-cloud.test>",
     "transport": "smtp://127.0.0.1:1025"
   },
   "queue": {
     "driver": "redis"
   },
   "realtime": {
-    "key": "acme-cloud",
+    "key": "agra-cloud",
     "relay_url": "auto"
   },
   "social": {

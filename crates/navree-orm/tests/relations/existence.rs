@@ -93,18 +93,18 @@ async fn related_records_matching_conditions() {
 
     // A string path names the closure's model; the closure applies to the
     // last relation of a nested path.
-    let acme_owned_by_ada = ordered()
+    let agra_owned_by_ada = ordered()
         .where_has("company.owner", |q: Builder<User>| {
-            q.where_(User::NAME.eq("Ada"))
+            q.where_(User::NAME.eq("Anu"))
         })
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(titles(&acme_owned_by_ada), ["Renewal", "Upgrade"]);
+    assert_eq!(titles(&agra_owned_by_ada), ["Renewal", "Upgrade"]);
 
     let either = ordered()
         .where_has(Deal::activities, |q| q.where_(Activity::KIND.eq("meeting")))
-        .or_where_has(Deal::company, |q| q.where_(Company::NAME.eq("Globex")))
+        .or_where_has(Deal::company, |q| q.where_(Company::NAME.eq("Gulati")))
         .get(&t.db)
         .await
         .unwrap();
@@ -163,7 +163,7 @@ async fn filtering_and_eager_loading_with_the_same_conditions() {
     assert!(calls.iter().all(|activity| activity.kind == "call"));
 
     let deals = Deal::query()
-        .with_where_relation("company", Company::NAME.eq("Globex"))
+        .with_where_relation("company", Company::NAME.eq("Gulati"))
         .get(&t.db)
         .await
         .unwrap();
@@ -175,7 +175,7 @@ async fn filtering_and_eager_loading_with_the_same_conditions() {
             .as_ref()
             .unwrap()
             .name,
-        "Globex"
+        "Gulati"
     );
 }
 
@@ -184,12 +184,12 @@ async fn conditions_on_one_related_column() {
     let t = sqlite().await;
     seed(&t.db).await;
     let ordered = || Deal::query().order_by(Deal::ID);
-    let acme = ordered()
-        .where_relation("company", Company::NAME.eq("Acme"))
+    let agra = ordered()
+        .where_relation("company", Company::NAME.eq("Agra"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(titles(&acme), ["Renewal", "Upgrade"]);
+    assert_eq!(titles(&agra), ["Renewal", "Upgrade"]);
     let nested = ordered()
         .where_relation("company.contacts", Contact::NAME.eq("Dave"))
         .get(&t.db)
@@ -197,19 +197,19 @@ async fn conditions_on_one_related_column() {
         .unwrap();
     assert_eq!(titles(&nested), ["Platform"]);
     let either = ordered()
-        .where_relation(Deal::company, Company::NAME.eq("Globex"))
+        .where_relation(Deal::company, Company::NAME.eq("Gulati"))
         .or_where_relation("activities", Activity::KIND.eq("meeting"))
         .get(&t.db)
         .await
         .unwrap();
     assert_eq!(titles(&either), ["Upgrade", "Platform"]);
 
-    let not_acme = ordered()
-        .where_doesnt_have_relation("company", Company::NAME.eq("Acme"))
+    let not_agra = ordered()
+        .where_doesnt_have_relation("company", Company::NAME.eq("Agra"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(titles(&not_acme), ["Platform", "Orphan"]);
+    assert_eq!(titles(&not_agra), ["Platform", "Orphan"]);
     let either = ordered()
         .where_(Deal::TITLE.eq("Renewal"))
         .or_where_doesnt_have_relation("activities", Activity::KIND.eq("call"))
@@ -229,12 +229,12 @@ async fn belongs_to_a_record_or_one_of_several() {
     let ordered = || Deal::query().order_by(Deal::ID);
 
     // Through the relation named after the owner's model (`company`).
-    let acme = ordered()
-        .where_belongs_to(&crm.acme)
+    let agra = ordered()
+        .where_belongs_to(&crm.agra)
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(titles(&acme), ["Renewal", "Upgrade"]);
+    assert_eq!(titles(&agra), ["Renewal", "Upgrade"]);
     // Through a named relation.
     let ada = ordered()
         .where_belongs_to_named(&crm.ada, "owner")
@@ -243,7 +243,7 @@ async fn belongs_to_a_record_or_one_of_several() {
         .unwrap();
     assert_eq!(titles(&ada), ["Renewal", "Platform"]);
     let companies = Company::query()
-        .where_key_in([crm.acme.id, crm.globex.id])
+        .where_key_in([crm.agra.id, crm.gulati.id])
         .get(&t.db)
         .await
         .unwrap();
@@ -254,8 +254,8 @@ async fn belongs_to_a_record_or_one_of_several() {
         .unwrap();
     assert_eq!(titles(&both), ["Renewal", "Upgrade", "Platform"]);
     let either = ordered()
-        .where_belongs_to(&crm.globex)
-        .or_where_belongs_to(&crm.acme)
+        .where_belongs_to(&crm.gulati)
+        .or_where_belongs_to(&crm.agra)
         .get(&t.db)
         .await
         .unwrap();
@@ -354,15 +354,15 @@ async fn self_relations_alias_the_inner_table() {
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(names(&parents), ["Acme"]);
+    assert_eq!(names(&parents), ["Agra"]);
     let children = Company::query().has("parent").get(&t.db).await.unwrap();
-    assert_eq!(names(&children), ["Acme Labs"]);
-    let of_acme = Company::query()
-        .where_relation("parent", Company::NAME.eq("Acme"))
+    assert_eq!(names(&children), ["Agra Labs"]);
+    let of_agra = Company::query()
+        .where_relation("parent", Company::NAME.eq("Agra"))
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(names(&of_acme), ["Acme Labs"]);
+    assert_eq!(names(&of_agra), ["Agra Labs"]);
     // Two levels deep, and a count of the same table.
     let grandparents = Company::query()
         .has("subsidiaries.subsidiaries")
@@ -384,7 +384,7 @@ async fn self_relations_alias_the_inner_table() {
 
     let sql = Company::query()
         .where_has("subsidiaries", |q: Builder<Company>| {
-            q.where_(Company::NAME.like("Acme%"))
+            q.where_(Company::NAME.like("Agra%"))
         })
         .to_sql(Dialect::Sqlite)
         .unwrap()
@@ -403,14 +403,14 @@ async fn existence_subqueries_apply_the_related_models_global_scopes() {
     let crm = seed(&t.db).await;
     let mut platform = Deal::find_or_fail(&t.db, crm.platform.id).await.unwrap();
     platform.delete(&t.db).await.unwrap();
-    // Globex's only deal is soft-deleted.
+    // Gulati's only deal is soft-deleted.
     let with_deals = Company::query()
         .has("deals")
         .order_by(Company::ID)
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(names(&with_deals), ["Acme"]);
+    assert_eq!(names(&with_deals), ["Agra"]);
     let counts = Company::query()
         .with_count("deals")
         .order_by(Company::ID)
@@ -425,7 +425,7 @@ async fn existence_subqueries_apply_the_related_models_global_scopes() {
         .get(&t.db)
         .await
         .unwrap();
-    assert_eq!(names(&any), ["Acme", "Globex"]);
+    assert_eq!(names(&any), ["Agra", "Gulati"]);
 }
 
 #[tokio::test]
@@ -459,20 +459,20 @@ async fn existence_checks_do_not_cross_connections() {
 async fn merging_another_querys_constraints() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    let big_or_acme = Deal::query()
+    let big_or_agra = Deal::query()
         .where_(Deal::AMOUNT_CENTS.gte(25_000))
-        .or_where(Deal::COMPANY_ID.eq(crm.acme.id));
+        .or_where(Deal::COMPANY_ID.eq(crm.agra.id));
     let deals = crm
         .ada
         .deals()
         .into_query()
         .unwrap()
-        .merge_constraints_from(&big_or_acme)
+        .merge_constraints_from(&big_or_agra)
         .order_by(Deal::ID)
         .get(&t.db)
         .await
         .unwrap();
-    // The `OR` stays inside its group: only Ada's deals.
+    // The `OR` stays inside its group: only Anu's deals.
     assert_eq!(titles(&deals), ["Renewal", "Platform"]);
     // The global scopes the other query leaves out are left out.
     let trashed_too = Deal::query().with_trashed();

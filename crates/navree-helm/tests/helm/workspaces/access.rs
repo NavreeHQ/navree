@@ -155,13 +155,13 @@ async fn leave(app: &TestApp, workspace: Uuid, user: Uuid) {
 }
 
 /// Two workspaces, a note in each, and users of the panel with every ability
-/// on notes: a member of Acme only, and someone in neither.
+/// on notes: a member of Agra only, and someone in neither.
 struct World {
     app: TestApp,
-    acme: Uuid,
-    globex: Uuid,
-    acme_note: Uuid,
-    globex_note: Uuid,
+    agra: Uuid,
+    gulati: Uuid,
+    agra_note: Uuid,
+    gulati_note: Uuid,
     member_id: Uuid,
     member: TestClient,
     outsider_id: Uuid,
@@ -170,12 +170,12 @@ struct World {
 
 async fn world(app: TestApp) -> World {
     let owner = account(&app, "owner").await;
-    let acme = workspace(&app, owner, "Acme").await.id;
-    let globex = workspace(&app, owner, "Globex").await.id;
-    let acme_note = seed(&app, acme, "Acme secret").await;
-    let globex_note = seed(&app, globex, "Globex secret").await;
+    let agra = workspace(&app, owner, "Agra").await.id;
+    let gulati = workspace(&app, owner, "Gulati").await.id;
+    let agra_note = seed(&app, agra, "Agra secret").await;
+    let gulati_note = seed(&app, gulati, "Gulati secret").await;
     let member_id = account(&app, "member").await;
-    join(&app, acme, member_id).await;
+    join(&app, agra, member_id).await;
     let outsider_id = account(&app, "outsider").await;
     give_role(&app, member_id, "editor", &["helm.view", "notes.*"]).await;
     give_role(&app, outsider_id, "editor", &["helm.view", "notes.*"]).await;
@@ -183,10 +183,10 @@ async fn world(app: TestApp) -> World {
     let outsider = app.acting_as(navree_testing::principal(outsider_id));
     World {
         app,
-        acme,
-        globex,
-        acme_note,
-        globex_note,
+        agra,
+        gulati,
+        agra_note,
+        gulati_note,
         member_id,
         member,
         outsider_id,
@@ -203,16 +203,16 @@ async fn a_member_works_in_their_workspace_and_nobody_else_gets_in_by_naming_one
     let ghost = Uuid::now_v7();
 
     // The member, in their own workspace: reads, writes, and every record stays there.
-    let body = in_workspace(&world.member, world.acme, NOTES)
+    let body = in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
     let created = world
         .member
         .post(NOTES)
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .json(&json!({ "title": "Mine" }))
         .send()
         .await
@@ -220,18 +220,18 @@ async fn a_member_works_in_their_workspace_and_nobody_else_gets_in_by_naming_one
         .json_value();
     let made: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(
-        note_in(&world.app, world.acme, made)
+        note_in(&world.app, world.agra, made)
             .await
             .unwrap()
             .workspace_id,
-        world.acme
+        world.agra
     );
 
     // The same user in another workspace, a user in none, and a workspace nobody made.
     for (client, target) in [
-        (&world.member, world.globex),
-        (&world.outsider, world.acme),
-        (&world.outsider, world.globex),
+        (&world.member, world.gulati),
+        (&world.outsider, world.agra),
+        (&world.outsider, world.gulati),
         (&world.member, ghost),
         (&world.outsider, ghost),
     ] {
@@ -249,48 +249,48 @@ async fn a_member_works_in_their_workspace_and_nobody_else_gets_in_by_naming_one
     }
     world
         .outsider
-        .patch(&format!("{NOTES}/{}", world.acme_note))
-        .header("X-Workspace", world.acme.to_string())
+        .patch(&format!("{NOTES}/{}", world.agra_note))
+        .header("X-Workspace", world.agra.to_string())
         .json(&json!({ "title": "Changed" }))
         .send()
         .await
         .assert_error(403, None);
     world
         .outsider
-        .delete(&format!("{NOTES}/{}", world.globex_note))
-        .header("X-Workspace", world.globex.to_string())
+        .delete(&format!("{NOTES}/{}", world.gulati_note))
+        .header("X-Workspace", world.gulati.to_string())
         .send()
         .await
         .assert_error(403, None);
     assert_eq!(
-        note_in(&world.app, world.acme, world.acme_note)
+        note_in(&world.app, world.agra, world.agra_note)
             .await
             .unwrap()
             .title,
-        "Acme secret"
+        "Agra secret"
     );
     assert!(
-        note_in(&world.app, world.globex, world.globex_note)
+        note_in(&world.app, world.gulati, world.gulati_note)
             .await
             .is_some()
     );
     // Nothing was planted anywhere.
-    let body = in_workspace(&world.member, world.acme, NOTES)
+    let body = in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret", "Mine"]);
+    assert_eq!(titles_of(&body), ["Agra secret", "Mine"]);
 }
 
 #[tokio::test]
 async fn a_member_who_is_removed_is_out_at_once() {
     let world = world(app_with_members().await).await;
-    in_workspace(&world.member, world.acme, NOTES)
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200);
-    leave(&world.app, world.acme, world.member_id).await;
-    in_workspace(&world.member, world.acme, NOTES)
+    leave(&world.app, world.agra, world.member_id).await;
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_error(403, None);
@@ -308,15 +308,15 @@ async fn the_cookie_is_checked_like_the_header_and_a_stale_one_locks_nobody_out(
     // A cookie for a workspace of someone else's, however it got there.
     world
         .outsider
-        .set_cookie(WORKSPACE_COOKIE, &world.globex.to_string());
+        .set_cookie(WORKSPACE_COOKIE, &world.gulati.to_string());
     let response = world.outsider.get(NOTES).send().await.assert_status(400);
     assert!(response.text().contains("Choose a workspace first"));
     // The panel still answers, and shows the form to choose another.
     let home = page(&world.outsider, "").await.assert_status(200).text();
-    assert!(!home.contains(&world.globex.to_string()), "{home}");
+    assert!(!home.contains(&world.gulati.to_string()), "{home}");
 
     // The form in the sidebar sets it only for a workspace the user may enter.
-    for target in [world.globex, Uuid::now_v7()] {
+    for target in [world.gulati, Uuid::now_v7()] {
         let response = world
             .member
             .post("/admin/workspace")
@@ -331,7 +331,7 @@ async fn the_cookie_is_checked_like_the_header_and_a_stale_one_locks_nobody_out(
         .member
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -339,10 +339,10 @@ async fn the_cookie_is_checked_like_the_header_and_a_stale_one_locks_nobody_out(
         .await
         .assert_status(200)
         .text();
-    assert!(listed.contains("Acme secret"), "{listed}");
+    assert!(listed.contains("Agra secret"), "{listed}");
 
     // Removed: the cookie stops counting, and the panel stays open.
-    leave(&world.app, world.acme, world.member_id).await;
+    leave(&world.app, world.agra, world.member_id).await;
     world.member.get(NOTES).send().await.assert_status(400);
     page(&world.member, "").await.assert_status(200);
     // From there a form can still be sent, to leave the workspace.
@@ -364,7 +364,7 @@ async fn the_cookie_lasts_a_sign_in_and_does_not_outlive_it() {
         .member
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -396,7 +396,7 @@ async fn the_panel_reads_the_header_the_app_configured() {
     world
         .member
         .get(NOTES)
-        .header("X-Tenant", world.acme.to_string())
+        .header("X-Tenant", world.agra.to_string())
         .send()
         .await
         .assert_status(200)
@@ -404,7 +404,7 @@ async fn the_panel_reads_the_header_the_app_configured() {
     world
         .member
         .get(NOTES)
-        .header("X-Tenant", world.globex.to_string())
+        .header("X-Tenant", world.gulati.to_string())
         .send()
         .await
         .assert_error(403, None);
@@ -412,7 +412,7 @@ async fn the_panel_reads_the_header_the_app_configured() {
     world
         .member
         .get(NOTES)
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await
         .assert_status(400);
@@ -451,34 +451,34 @@ async fn an_update_naming_another_workspace_is_a_400() {
     // Through a resource in one workspace, and through one across all of them.
     world
         .member
-        .patch(&format!("{NOTES}/{}", world.acme_note))
-        .header("X-Workspace", world.acme.to_string())
-        .json(&json!({ "workspace_id": world.globex }))
+        .patch(&format!("{NOTES}/{}", world.agra_note))
+        .header("X-Workspace", world.agra.to_string())
+        .json(&json!({ "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(400);
     if Server::current() != Server::Postgres {
         world
             .member
-            .patch(&format!("{EVERY}/{}", world.acme_note))
-            .json(&json!({ "workspace_id": world.globex }))
+            .patch(&format!("{EVERY}/{}", world.agra_note))
+            .json(&json!({ "workspace_id": world.gulati }))
             .send()
             .await
             .assert_status(400);
     }
     assert_eq!(
-        note_anywhere(&world.app, world.acme_note)
+        note_anywhere(&world.app, world.agra_note)
             .await
             .unwrap()
             .workspace_id,
-        world.acme
+        world.agra
     );
     // Naming the one it is in changes nothing.
     world
         .member
-        .patch(&format!("{NOTES}/{}", world.acme_note))
-        .header("X-Workspace", world.acme.to_string())
-        .json(&json!({ "workspace_id": world.acme, "title": "Same place" }))
+        .patch(&format!("{NOTES}/{}", world.agra_note))
+        .header("X-Workspace", world.agra.to_string())
+        .json(&json!({ "workspace_id": world.agra, "title": "Same place" }))
         .send()
         .await
         .assert_status(200);
@@ -487,43 +487,43 @@ async fn an_update_naming_another_workspace_is_a_400() {
 #[tokio::test]
 async fn a_form_across_workspaces_names_its_workspace_whatever_the_sidebar_holds() {
     let world = world(app_with_members().await).await;
-    join(&world.app, world.globex, world.member_id).await;
+    join(&world.app, world.gulati, world.member_id).await;
     world
         .member
-        .set_cookie(WORKSPACE_COOKIE, &world.acme.to_string());
+        .set_cookie(WORKSPACE_COOKIE, &world.agra.to_string());
     let created = world
         .member
         .post(EVERY)
-        .json(&json!({ "title": "For Globex", "workspace_id": world.globex }))
+        .json(&json!({ "title": "For Gulati", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(
-        note_in(&world.app, world.globex, id)
+        note_in(&world.app, world.gulati, id)
             .await
             .unwrap()
             .workspace_id,
-        world.globex
+        world.gulati
     );
     // A form naming none takes the sidebar's.
     let created = world
         .member
         .post(EVERY)
-        .json(&json!({ "title": "For Acme" }))
+        .json(&json!({ "title": "For Agra" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
-    assert!(note_in(&world.app, world.acme, id).await.is_some());
+    assert!(note_in(&world.app, world.agra, id).await.is_some());
     // A header is the client's own choice, and a form may not contradict it.
     world
         .member
         .post(EVERY)
-        .header("X-Workspace", world.acme.to_string())
-        .json(&json!({ "title": "Mixed", "workspace_id": world.globex }))
+        .header("X-Workspace", world.agra.to_string())
+        .json(&json!({ "title": "Mixed", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(400);
@@ -555,8 +555,8 @@ async fn a_queued_action_checks_the_member_again_when_it_runs() {
         world
             .member
             .post(&format!("{NOTES}/actions/whisper"))
-            .header("X-Workspace", world.acme.to_string())
-            .json(&json!({ "ids": [world.acme_note] }))
+            .header("X-Workspace", world.agra.to_string())
+            .json(&json!({ "ids": [world.agra_note] }))
             .send()
             .await
             .assert_status(200)
@@ -572,23 +572,23 @@ async fn a_queued_action_checks_the_member_again_when_it_runs() {
     let mut jobs = fake.dispatched::<HelmActionJob>().into_iter();
     jobs.next().unwrap().handle(context("1")).await.unwrap();
     assert_eq!(
-        note_in(&world.app, world.acme, world.acme_note)
+        note_in(&world.app, world.agra, world.agra_note)
             .await
             .unwrap()
             .title,
-        "acme secret"
+        "agra secret"
     );
 
     // The second one finds they have gone.
-    let mut note = note_in(&world.app, world.acme, world.acme_note)
+    let mut note = note_in(&world.app, world.agra, world.agra_note)
         .await
         .unwrap();
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    enter(&uow, world.acme).await;
+    enter(&uow, world.agra).await;
     note.title = "LOUD AGAIN".to_owned();
     Note::query()
-        .where_key(world.acme_note)
+        .where_key(world.agra_note)
         .update(
             &uow,
             vec![navree_orm::Assignment::value("title", note.title.clone())],
@@ -596,7 +596,7 @@ async fn a_queued_action_checks_the_member_again_when_it_runs() {
         .await
         .unwrap();
     uow.commit().await.unwrap();
-    leave(&world.app, world.acme, world.member_id).await;
+    leave(&world.app, world.agra, world.member_id).await;
     let error = jobs
         .next()
         .unwrap()
@@ -605,7 +605,7 @@ async fn a_queued_action_checks_the_member_again_when_it_runs() {
         .expect_err("not a member any more");
     assert!(error.to_string().contains("may not work"), "{error}");
     assert_eq!(
-        note_in(&world.app, world.acme, world.acme_note)
+        note_in(&world.app, world.agra, world.agra_note)
             .await
             .unwrap()
             .title,
@@ -634,17 +634,17 @@ async fn under_row_level_security_naming_a_workspace_takes_being_in_it() {
     }
     let world = rls_world(false).await;
     assert_bound_by_row_level_security(&world.app).await;
-    let body = in_workspace(&world.member, world.acme, NOTES)
+    let body = in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
-    in_workspace(&world.member, world.globex, NOTES)
+    assert_eq!(titles_of(&body), ["Agra secret"]);
+    in_workspace(&world.member, world.gulati, NOTES)
         .send()
         .await
         .assert_error(403, None);
-    for target in [world.globex, Uuid::now_v7()] {
+    for target in [world.gulati, Uuid::now_v7()] {
         world
             .outsider
             .post(NOTES)
@@ -674,26 +674,26 @@ async fn under_row_level_security_a_create_across_workspaces_is_closed_like_its_
     world
         .outsider
         .post(EVERY)
-        .json(&json!({ "title": "Through Every", "workspace_id": world.globex }))
+        .json(&json!({ "title": "Through Every", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_error(403, None);
-    let body = in_workspace(&world.member, world.acme, NOTES)
+    let body = in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme secret"]);
+    assert_eq!(titles_of(&body), ["Agra secret"]);
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    enter(&uow, world.globex).await;
+    enter(&uow, world.gulati).await;
     let count = Note::query().count(&uow).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(count, 1, "Globex holds a planted note");
+    assert_eq!(count, 1, "Gulati holds a planted note");
     // A member names their own.
     world
         .member
         .post(EVERY)
-        .json(&json!({ "title": "Mine", "workspace_id": world.acme }))
+        .json(&json!({ "title": "Mine", "workspace_id": world.agra }))
         .send()
         .await
         .assert_status(201);
@@ -708,7 +708,7 @@ async fn a_role_that_bypasses_row_level_security_makes_records_across_workspaces
     world
         .outsider
         .post(EVERY)
-        .json(&json!({ "title": "Maintenance", "workspace_id": world.globex }))
+        .json(&json!({ "title": "Maintenance", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(201);
@@ -764,9 +764,9 @@ async fn under_schema_isolation_the_panel_works_in_the_schema_of_the_workspace()
         .build()
         .await;
     let owner = account(&app, "owner").await;
-    let acme = workspace(&app, owner, "Acme").await.id;
+    let agra = workspace(&app, owner, "Agra").await.id;
     let member_id = account(&app, "member").await;
-    join(&app, acme, member_id).await;
+    join(&app, agra, member_id).await;
     give_role(&app, member_id, "editor", &["helm.view", "notes.*"]).await;
     let member = app.acting_as(navree_testing::principal(member_id));
     // What the shared table holds isn't the workspace's.
@@ -774,13 +774,13 @@ async fn under_schema_isolation_the_panel_works_in_the_schema_of_the_workspace()
     use navree_db::Executor as _;
     db.execute(&Statement::text(format!(
         "INSERT INTO public.notes (id, workspace_id, title, created_at) \
-         VALUES ('{}', '{acme}', 'In public', now())",
+         VALUES ('{}', '{agra}', 'In public', now())",
         Uuid::now_v7()
     )))
     .await
     .unwrap();
 
-    let body = in_workspace(&member, acme, NOTES)
+    let body = in_workspace(&member, agra, NOTES)
         .send()
         .await
         .assert_status(200)
@@ -788,12 +788,12 @@ async fn under_schema_isolation_the_panel_works_in_the_schema_of_the_workspace()
     assert_eq!(titles_of(&body), Vec::<String>::new());
     member
         .post(NOTES)
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "In the schema" }))
         .send()
         .await
         .assert_status(201);
-    let body = in_workspace(&member, acme, NOTES).send().await.json_value();
+    let body = in_workspace(&member, agra, NOTES).send().await.json_value();
     assert_eq!(titles_of(&body), ["In the schema"]);
     let row = db
         .fetch_optional(&Statement::text(
@@ -833,11 +833,11 @@ async fn under_database_isolation_the_panel_says_it_cannot_work_in_a_workspace()
 /// A member of a workspace, without seeding notes in it (they live elsewhere).
 async fn world_of_members_only(app: &TestApp) -> (TestClient, Uuid) {
     let owner = account(app, "owner").await;
-    let acme = workspace(app, owner, "Acme").await.id;
+    let agra = workspace(app, owner, "Agra").await.id;
     let member_id = account(app, "member").await;
-    join(app, acme, member_id).await;
+    join(app, agra, member_id).await;
     give_role(app, member_id, "editor", &["helm.view", "notes.*"]).await;
-    (app.acting_as(navree_testing::principal(member_id)), acme)
+    (app.acting_as(navree_testing::principal(member_id)), agra)
 }
 
 // ---------------------------------------------------------------------------
@@ -896,13 +896,13 @@ async fn staff_entries(app: &TestApp) -> Vec<String> {
 #[tokio::test]
 async fn staff_enter_by_the_panels_own_word_and_it_is_written_down() {
     let (world, staff) = staff_world().await;
-    let body = in_workspace(&staff, world.globex, NOTES)
+    let body = in_workspace(&staff, world.gulati, NOTES)
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Globex secret"]);
-    assert_eq!(staff_entries(&world.app).await, [world.globex.to_string()]);
+    assert_eq!(titles_of(&body), ["Gulati secret"]);
+    assert_eq!(staff_entries(&world.app).await, [world.gulati.to_string()]);
 
     // A workspace nobody made is not one staff can plant records in.
     in_workspace(&staff, Uuid::now_v7(), NOTES)
@@ -910,11 +910,11 @@ async fn staff_enter_by_the_panels_own_word_and_it_is_written_down() {
         .await
         .assert_error(404, None);
     // The same app's other users don't get in, and what members do isn't audited as staff.
-    in_workspace(&world.outsider, world.globex, NOTES)
+    in_workspace(&world.outsider, world.gulati, NOTES)
         .send()
         .await
         .assert_error(403, None);
-    in_workspace(&world.member, world.acme, NOTES)
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200);
@@ -923,7 +923,7 @@ async fn staff_enter_by_the_panels_own_word_and_it_is_written_down() {
     let response = staff
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.globex.to_string().as_str())])
+        .form(&[("workspace", world.gulati.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -945,10 +945,10 @@ async fn app_with_no_check() -> TestApp {
 #[tokio::test]
 async fn a_panel_with_no_way_to_check_refuses_and_says_why() {
     let app = app_with_no_check().await;
-    let acme = Uuid::now_v7();
-    seed(&app, acme, "Acme secret").await;
+    let agra = Uuid::now_v7();
+    seed(&app, agra, "Agra secret").await;
     let editor = editor(&app).await;
-    let response = in_workspace(&editor, acme, NOTES)
+    let response = in_workspace(&editor, agra, NOTES)
         .send()
         .await
         .assert_error_code(403, "helm_workspace_unchecked");
@@ -959,19 +959,19 @@ async fn a_panel_with_no_way_to_check_refuses_and_says_why() {
     );
     editor
         .post(NOTES)
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Planted" }))
         .send()
         .await
         .assert_error_code(403, "helm_workspace_unchecked");
     // The cookie names nothing; the form that sets it refuses.
-    editor.set_cookie(WORKSPACE_COOKIE, &acme.to_string());
+    editor.set_cookie(WORKSPACE_COOKIE, &agra.to_string());
     editor.get(NOTES).send().await.assert_status(400);
     editor.remove_cookie(WORKSPACE_COOKIE);
     let response = editor
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", acme.to_string().as_str())])
+        .form(&[("workspace", agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -979,7 +979,7 @@ async fn a_panel_with_no_way_to_check_refuses_and_says_why() {
     // A form across workspaces isn't taken at its word either.
     editor
         .post(EVERY)
-        .json(&json!({ "title": "Planted", "workspace_id": acme }))
+        .json(&json!({ "title": "Planted", "workspace_id": agra }))
         .send()
         .await
         .assert_error_code(403, "helm_workspace_unchecked");
@@ -995,7 +995,7 @@ async fn an_action_across_workspaces_runs_in_no_workspace_unless_one_was_named()
     world
         .outsider
         .post(&format!("{EVERY}/actions/locate"))
-        .json(&json!({ "ids": [world.acme_note] }))
+        .json(&json!({ "ids": [world.agra_note] }))
         .send()
         .await
         .assert_status(200)

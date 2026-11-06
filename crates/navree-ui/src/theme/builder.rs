@@ -1224,14 +1224,14 @@ mod tests {
 
     /// The proof app's own theme, built here and exported as Rust: the app
     /// compiles the export as it comes.
-    const EXAMPLE: &str = "accent=custom&accent_hex=%237c5cff&neutral=zinc&radius=round&font=system&id=acme&name=Acme";
+    const EXAMPLE: &str = "accent=custom&accent_hex=%237c5cff&neutral=zinc&radius=round&font=system&id=agra&name=Agra";
 
     fn example() -> (std::path::PathBuf, String) {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../apps/ui-proof/src/acme_theme.rs");
+            .join("../../apps/ui-proof/src/agra_theme.rs");
         let theme = BuilderDraft::from_query(EXAMPLE).to_theme().unwrap();
         let text = format!(
-            "//! The \"Acme\" theme: the theme builder's Rust export, used as it comes. A\n//! test in navree-ui writes it and keeps it current.\n\n{}",
+            "//! The \"Agra\" theme: the theme builder's Rust export, used as it comes. A\n//! test in navree-ui writes it and keeps it current.\n\n{}",
             theme.to_rust("navree::ui")
         );
         (path, text)
@@ -1312,7 +1312,7 @@ mod tests {
     #[test]
     fn a_draft_reads_the_query_strictly() {
         let draft = BuilderDraft::from_query(
-            "base=ocean&accent=custom&accent_hex=%23ff8800&neutral=stone&radius=round&density=compact&font=serif&layout=inset&mode=light&d.fg-3=%23aabbcc&id=acme&name=Acme",
+            "base=ocean&accent=custom&accent_hex=%23ff8800&neutral=stone&radius=round&density=compact&font=serif&layout=inset&mode=light&d.fg-3=%23aabbcc&id=agra&name=Agra",
         );
         let spec = draft.spec();
         assert_eq!(spec.light.get(Token::Accent), Rgb::hex(0xff8800));
@@ -1399,7 +1399,7 @@ mod tests {
 
     #[test]
     fn a_passing_draft_exports_rust_and_json_and_posts_its_query() {
-        let draft = BuilderDraft::from_query("base=violet&id=acme&name=Acme");
+        let draft = BuilderDraft::from_query("base=violet&id=agra&name=Agra");
         let html = render(
             &ThemeBuilder::new(&draft, "/b")
                 .save("/b/save")
@@ -1407,7 +1407,7 @@ mod tests {
                 .into(),
         );
         assert!(
-            html.contains("pub fn acme_theme() -&gt; Theme"),
+            html.contains("pub fn agra_theme() -&gt; Theme"),
             "{html:.100}"
         );
         assert!(html.contains("navree-theme/1"));
@@ -1418,14 +1418,14 @@ mod tests {
         assert!(html.contains("Save theme"));
         let saved = draft.to_theme().unwrap();
         assert_eq!(saved.spec(), Theme::VIOLET.spec());
-        assert_eq!(saved.id(), "acme");
+        assert_eq!(saved.id(), "agra");
     }
 
     #[test]
     fn an_imported_theme_becomes_a_draft_of_itself() {
         let theme = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::SUNSET.spec(),
         )
         .unwrap();
@@ -1433,6 +1433,6 @@ mod tests {
         assert_eq!(draft.spec(), *theme.spec());
         let back = BuilderDraft::from_query(&draft.to_query());
         assert_eq!(back.spec(), *theme.spec());
-        assert_eq!(back.to_theme().unwrap().id(), "acme");
+        assert_eq!(back.to_theme().unwrap().id(), "agra");
     }
 }

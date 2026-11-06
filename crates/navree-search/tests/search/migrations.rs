@@ -33,14 +33,14 @@ async fn the_search_tables_survive_fresh_and_rollback() {
     assert!(found.contains(&DOCUMENTS_TABLE.to_owned()), "{found:?}");
     assert!(found.contains(&FTS_TABLE.to_owned()), "{found:?}");
 
-    insert_contacts(&db, vec![new_contact("Ada", "Lovelace")]).await;
+    insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")]).await;
     support::settle(&app).await;
     let search = app.get::<Search>().await;
-    assert_eq!(search.query::<Contact>("ada").count().await.unwrap(), 1);
+    assert_eq!(search.query::<Contact>("anu").count().await.unwrap(), 1);
 
     app.run_command("migrate:fresh", &[]).await.unwrap();
     assert!(tables(&db).await.contains(&FTS_TABLE.to_owned()));
-    assert_eq!(search.query::<Contact>("ada").count().await.unwrap(), 0);
+    assert_eq!(search.query::<Contact>("anu").count().await.unwrap(), 0);
 
     app.run_command("migrate:rollback", &[]).await.unwrap();
     assert!(tables(&db).await.is_empty(), "{:?}", tables(&db).await);

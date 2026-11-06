@@ -145,10 +145,10 @@ fn the_normalized_directory_has_the_documented_fields() {
         locale,
         time_zone,
         attributes,
-    } = DirectoryUser::new("00u1", "ada@acme.test")
-        .name("Ada", "Lovelace")
-        .display_name("Ada Lovelace")
-        .email("ada@acme.test")
+    } = DirectoryUser::new("00u1", "anu@acme.test")
+        .name("Anu", "Lakhotia")
+        .display_name("Anu Lakhotia")
+        .email("anu@acme.test")
         .phone("mobile", "+44 7700 900123")
         .title("Engineer")
         .department("Engineering")
@@ -174,7 +174,7 @@ fn the_normalized_directory_has_the_documented_fields() {
         value,
         kind,
         primary,
-    } = ContactValue::new("ada@acme.test", Some("work"), true);
+    } = ContactValue::new("anu@acme.test", Some("work"), true);
     let _: (String, Option<String>, bool) = (value, kind, primary);
 
     let user = DirectoryUser::new("u", "u").inactive();
@@ -229,7 +229,7 @@ fn the_service_values_have_their_documented_fields() {
         id: Uuid::nil(),
         owner_type: navree_integrations::OwnerType::Workspace,
         owner_id: Some(Uuid::nil()),
-        name: "Acme".into(),
+        name: "Agra".into(),
         source: SCIM.into(),
         settings: json!({}),
         has_secret: false,

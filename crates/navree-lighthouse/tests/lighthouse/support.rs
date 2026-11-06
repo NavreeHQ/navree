@@ -166,7 +166,7 @@ pub fn builder_with_session(session: SessionOptions) -> TestAppBuilder {
         .module(SessionModule::for_root(session))
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme CRM"))
+        .module(AuthPages::new().app_name("Agra CRM"))
         .module(AccessModule::for_root(AccessOptions {
             abilities,
             super_admin_role: Some("admin".to_owned()),
@@ -191,7 +191,7 @@ pub async fn flushed(app: &TestApp) -> LighthouseStore {
 /// (none: no role), and returns the id.
 pub async fn user(app: &TestApp, email: &str, role: Option<&str>, permissions: &[&str]) -> Uuid {
     let auth = app.get::<AuthService>().await;
-    let user = auth.create_user("Ada", email, PASSWORD).await.unwrap();
+    let user = auth.create_user("Anu", email, PASSWORD).await.unwrap();
     if let Some(role) = role {
         let db = app.get::<Db>().await;
         let service = app.get::<AccessService>().await;

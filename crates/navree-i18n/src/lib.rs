@@ -81,13 +81,13 @@ pub use navree_i18n_macros::embed_locales;
 pub use options::{BidiIsolation, I18nOptions, LocaleFiles, Missing, Source};
 pub use service::I18n;
 
-/// Message arguments: `args!(count = 3, owner = "Ada")` is an [`Args`];
+/// Message arguments: `args!(count = 3, owner = "Anu")` is an [`Args`];
 /// `args!()` is empty. Values are anything [`Arg`] converts from.
 ///
 /// ```
 /// use navree_i18n::args;
 ///
-/// let args = args!(count = 2, title = "Lovelace renewal");
+/// let args = args!(count = 2, title = "Lakhotia renewal");
 /// assert_eq!(args.len(), 2);
 /// assert!(args!().is_empty());
 /// ```
@@ -122,7 +122,7 @@ macro_rules! args {
 /// .unwrap();
 /// Locale::scope(i18n.locale("fr"), async {
 ///     assert_eq!(t!("deal-created", count = 1), "Une affaire créée");
-///     assert_eq!(t!("deal-won", owner = "Ada", title = "Lovelace"), "Ada a gagné Lovelace.");
+///     assert_eq!(t!("deal-won", owner = "Anu", title = "Lakhotia"), "Anu a gagné Lakhotia.");
 ///     assert_eq!(t!("pipeline-empty"), "Votre pipeline est vide. Créez une affaire pour commencer.");
 /// })
 /// .await;

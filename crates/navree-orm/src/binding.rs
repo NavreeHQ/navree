@@ -450,8 +450,8 @@ impl<M: Model> Record<M> {
     ///
     /// ```
     /// # use navree_orm::__doc_factories::*;
-    /// let deal = Record::new(Deal { slug: "acme-renewal".into(), ..Deal::default() });
-    /// assert_eq!(deal.route_key()?, Value::from("acme-renewal"));
+    /// let deal = Record::new(Deal { slug: "agra-renewal".into(), ..Deal::default() });
+    /// assert_eq!(deal.route_key()?, Value::from("agra-renewal"));
     /// # Ok::<(), navree_orm::OrmError>(())
     /// ```
     pub fn route_key(&self) -> crate::Result<Value> {
@@ -489,6 +489,6 @@ mod tests {
         let ulid = ColumnMeta::new("id", "id", "navree_orm::Ulid");
         assert_eq!(route_value(&ulid, "nope"), None);
         let text = ColumnMeta::new("slug", "slug", "Option<String>");
-        assert_eq!(route_value(&text, "acme"), Some(Value::from("acme")));
+        assert_eq!(route_value(&text, "agra"), Some(Value::from("agra")));
     }
 }

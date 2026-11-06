@@ -64,7 +64,7 @@ async fn guests_are_refused() {
 #[tokio::test]
 async fn the_index_lists_every_registered_type() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let body = world
         .as_user(ada)
         .get("/api/settings")
@@ -107,10 +107,10 @@ async fn the_index_lists_every_registered_type() {
 #[tokio::test]
 async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(holding.id, agra.id).await;
     store(
         &world,
         vec![
@@ -120,8 +120,8 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
                 json!({"show_leaderboard": true}),
             ),
             (
-                Scope::workspace(acme.id),
-                json!({"welcome_text": "Hi Acme"}),
+                Scope::workspace(agra.id),
+                json!({"welcome_text": "Hi Agra"}),
             ),
             (Scope::user(ada), json!({"page_size": 10})),
         ],
@@ -131,7 +131,7 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
     let body = world
         .as_user(ada)
         .get("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -139,7 +139,7 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
     assert_eq!(
         body,
         json!({
-            "data": {"show_leaderboard": true, "welcome_text": "Hi Acme", "page_size": 50},
+            "data": {"show_leaderboard": true, "welcome_text": "Hi Agra", "page_size": 50},
             "sources": {
                 "page_size": "global",
                 "show_leaderboard": "organization",
@@ -173,7 +173,7 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
     world
         .as_user(ada)
         .get("/api/settings/portal")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -194,16 +194,16 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
 #[tokio::test]
 async fn reads_need_what_the_scope_needs() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    let grace = world.user("Grace").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    let grace = world.user("Gauri").await;
+    world.workspace(ada, "Agra").await;
     world.organization(ada, "Holding").await;
 
     // Not a member of the workspace or the organization.
     world
         .as_user(grace)
         .get("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
@@ -256,15 +256,15 @@ async fn reads_need_what_the_scope_needs() {
 async fn a_read_permission_guards_reads() {
     let world =
         World::with(builder().module(SettingsModule::for_feature::<BillingContact>())).await;
-    let ada = world.user("Ada").await;
-    let grace = world.user("Grace").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.member(acme.id, grace, WorkspaceRole::Member).await;
+    let ada = world.user("Anu").await;
+    let grace = world.user("Gauri").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.member(agra.id, grace, WorkspaceRole::Member).await;
 
     world
         .as_user(grace)
         .get("/api/settings/billing-contact")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
@@ -272,7 +272,7 @@ async fn a_read_permission_guards_reads() {
     world
         .as_user(ada)
         .get("/api/settings/billing-contact")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -282,20 +282,20 @@ async fn a_read_permission_guards_reads() {
 #[tokio::test]
 async fn writes_need_the_level_permission() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    let grace = world.user("Grace").await;
+    let ada = world.user("Anu").await;
+    let grace = world.user("Gauri").await;
     let linus = world.user("Linus").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.member(acme.id, grace, WorkspaceRole::Member).await;
-    world.member(acme.id, linus, WorkspaceRole::Admin).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.member(agra.id, grace, WorkspaceRole::Member).await;
+    world.member(agra.id, linus, WorkspaceRole::Admin).await;
     world.org_member(holding.id, grace, OrgRole::Member).await;
 
     // Workspace: `workspace.update` (admins and owners).
     world
         .as_user(grace)
         .patch("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({"welcome_text": "Hi"}))
         .send()
         .await
@@ -303,7 +303,7 @@ async fn writes_need_the_level_permission() {
     world
         .as_user(linus)
         .patch("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({"welcome_text": "Hi from Linus"}))
         .send()
         .await
@@ -380,16 +380,16 @@ async fn writes_need_the_level_permission() {
 #[tokio::test]
 async fn a_type_permission_replaces_the_level_permissions() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let linus = world.user("Linus").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.member(acme.id, linus, WorkspaceRole::Admin).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.member(agra.id, linus, WorkspaceRole::Admin).await;
 
     // `notifications.manage`: an admin has `workspace.update`, not this.
     world
         .as_user(linus)
         .patch("/api/settings/notifications?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({"daily_digest": true}))
         .send()
         .await
@@ -398,7 +398,7 @@ async fn a_type_permission_replaces_the_level_permissions() {
     world
         .as_user(ada)
         .patch("/api/settings/notifications?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({"daily_digest": true}))
         .send()
         .await
@@ -407,7 +407,7 @@ async fn a_type_permission_replaces_the_level_permissions() {
     world
         .as_user(ada)
         .patch("/api/settings/notifications?scope=global")
-        .json(&json!({"sender_name": "Acme"}))
+        .json(&json!({"sender_name": "Agra"}))
         .send()
         .await
         .assert_status(403);
@@ -415,29 +415,29 @@ async fn a_type_permission_replaces_the_level_permissions() {
     world
         .as_user(linus)
         .patch("/api/settings/notifications?scope=global")
-        .json(&json!({"sender_name": "Acme"}))
+        .json(&json!({"sender_name": "Agra"}))
         .send()
         .await
         .assert_status(200);
     let settings = world.settings().await;
     let notifications = settings
-        .resolve::<NotificationSettings>(Scope::workspace(acme.id))
+        .resolve::<NotificationSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert!(notifications.daily_digest);
-    assert_eq!(notifications.sender_name, "Acme");
+    assert_eq!(notifications.sender_name, "Agra");
 }
 
 #[tokio::test]
 async fn invalid_patches_are_400s_naming_the_field() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    world.workspace(ada, "Agra").await;
     let patch = |body: Value| {
         world
             .as_user(ada)
             .patch("/api/settings/portal?scope=workspace")
-            .header("X-Workspace", "acme")
+            .header("X-Workspace", "agra")
             .json(&body)
     };
 
@@ -478,12 +478,12 @@ async fn invalid_patches_are_400s_naming_the_field() {
 #[tokio::test]
 async fn delete_makes_fields_inherit_again() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    let agra = world.workspace(ada, "Agra").await;
     world
         .as_user(ada)
         .patch("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({"welcome_text": "Hi", "page_size": 10}))
         .send()
         .await
@@ -493,7 +493,7 @@ async fn delete_makes_fields_inherit_again() {
     world
         .as_user(ada)
         .delete("/api/settings/portal/welcome_text?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -503,14 +503,14 @@ async fn delete_makes_fields_inherit_again() {
     world
         .as_user(ada)
         .delete("/api/settings/portal/colour?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(400);
     world
         .as_user(ada)
         .delete("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -518,7 +518,7 @@ async fn delete_makes_fields_inherit_again() {
     let settings = world.settings().await;
     assert!(
         settings
-            .stored::<PortalSettings>(Scope::workspace(acme.id))
+            .stored::<PortalSettings>(Scope::workspace(agra.id))
             .await
             .unwrap()
             .is_empty()
@@ -528,11 +528,11 @@ async fn delete_makes_fields_inherit_again() {
 #[tokio::test]
 async fn the_extractor_resolves_for_the_request() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    let grace = world.user("Grace").await;
+    let ada = world.user("Anu").await;
+    let grace = world.user("Gauri").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(holding.id, agra.id).await;
     store(
         &world,
         vec![
@@ -542,8 +542,8 @@ async fn the_extractor_resolves_for_the_request() {
                 json!({"show_leaderboard": true}),
             ),
             (
-                Scope::workspace(acme.id),
-                json!({"welcome_text": "Hi Acme"}),
+                Scope::workspace(agra.id),
+                json!({"welcome_text": "Hi Agra"}),
             ),
         ],
     )
@@ -552,7 +552,7 @@ async fn the_extractor_resolves_for_the_request() {
     let body = world
         .as_user(ada)
         .get("/api/portal")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -560,11 +560,11 @@ async fn the_extractor_resolves_for_the_request() {
     assert_eq!(
         body,
         json!({
-            "welcome": "Hi Acme",
+            "welcome": "Hi Agra",
             "leaderboard": true,
             "source": "workspace",
             "user": ada,
-            "workspace": acme.id,
+            "workspace": agra.id,
             "organization": holding.id,
         })
     );
@@ -591,7 +591,7 @@ async fn the_extractor_resolves_for_the_request() {
     world
         .as_user(grace)
         .get("/api/portal")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
@@ -610,7 +610,7 @@ async fn the_extractor_resolves_for_the_request() {
 #[tokio::test]
 async fn routes_can_be_turned_off_and_are_documented() {
     let world = World::with(builder().config("settings.routes", false)).await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     world
         .as_user(ada)
         .get("/api/settings")

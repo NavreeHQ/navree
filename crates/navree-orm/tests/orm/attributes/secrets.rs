@@ -75,7 +75,7 @@ pub struct Vault {
 
 fn patient() -> Patient {
     Patient {
-        name: "Ada".into(),
+        name: "Anu".into(),
         ssn: "078-05-1120".into(),
         notes: Some("allergic to penicillin".into()),
         history: vec![Visit {
@@ -206,7 +206,7 @@ async fn hashed_fields_hold_the_hash_once_saved() {
 
     let filled = Patient::create_from(
         &*db,
-        attrs! { "name" => "Grace", "ssn" => "1", "password" => "from a form" },
+        attrs! { "name" => "Gauri", "ssn" => "1", "password" => "from a form" },
     )
     .await
     .unwrap();

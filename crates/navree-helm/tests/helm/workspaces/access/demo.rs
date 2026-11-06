@@ -90,13 +90,13 @@ async fn a_demo_in_the_sidebar_doesnt_stop_a_form_for_another_workspace() {
     let created = world
         .member
         .post(EVERY)
-        .json(&json!({ "title": "For Acme", "workspace_id": world.acme }))
+        .json(&json!({ "title": "For Agra", "workspace_id": world.agra }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
-    assert!(note_in(&world.app, world.acme, id).await.is_some());
+    assert!(note_in(&world.app, world.agra, id).await.is_some());
     // A form for the demo itself, or a write that leaves it to the sidebar, is refused.
     world
         .member

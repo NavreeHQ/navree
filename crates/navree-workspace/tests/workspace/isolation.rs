@@ -173,28 +173,28 @@ async fn has_table(db: &navree_db::Db, table: &str) -> bool {
 async fn each_workspace_writes_to_its_own_database() {
     let dir = TempDirGuard::new();
     let world = world(&dir).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
     client
         .post("/api/notes")
-        .header("x-workspace", "acme")
-        .json(&json!({ "body": "Acme's note" }))
+        .header("x-workspace", "agra")
+        .json(&json!({ "body": "Agra's note" }))
         .send()
         .await
         .assert_status(200);
     client
         .get("/api/notes")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.body", json!("Acme's note"));
+        .assert_json_path("data.0.body", json!("Agra's note"));
     client
         .get("/api/notes")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
@@ -203,31 +203,31 @@ async fn each_workspace_writes_to_its_own_database() {
     let databases = world.app.get::<WorkspaceDatabases>().await;
     let file = dir
         .path()
-        .join(format!("workspace-{}.sqlite", acme.id.simple()));
+        .join(format!("workspace-{}.sqlite", agra.id.simple()));
     assert!(file.exists(), "{}", file.display());
     assert!(
         databases
-            .url(globex.id)
+            .url(gulati.id)
             .unwrap()
-            .contains(&globex.id.simple().to_string())
+            .contains(&gulati.id.simple().to_string())
     );
     assert!(!has_table(&*world.db().await, "notes").await);
-    assert!(has_table(&databases.db(acme.id).await.unwrap(), "notes").await);
+    assert!(has_table(&databases.db(agra.id).await.unwrap(), "notes").await);
 }
 
 #[tokio::test]
 async fn orm_models_run_in_the_workspace_database() {
     let dir = TempDirGuard::new();
     let world = world(&dir).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
     for body in ["First", "Second"] {
         client
             .post("/api/notes/orm")
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .json(&json!({ "body": body }))
             .send()
             .await
@@ -236,7 +236,7 @@ async fn orm_models_run_in_the_workspace_database() {
     }
     client
         .get("/api/notes/orm")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -245,13 +245,13 @@ async fn orm_models_run_in_the_workspace_database() {
     // The other route reads the same database.
     client
         .get("/api/notes")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_json_path("data.1.body", json!("Second"));
     client
         .get("/api/notes/orm")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
@@ -260,11 +260,11 @@ async fn orm_models_run_in_the_workspace_database() {
 
     // Outside a request: the workspace's own pool is an executor too.
     let databases = world.app.get::<WorkspaceDatabases>().await;
-    let acme_db = databases.db(acme.id).await.unwrap();
+    let agra_db = databases.db(agra.id).await.unwrap();
     {
         use navree_orm::Model;
         assert_eq!(
-            orm_note::OrmNote::query().count(&*acme_db).await.unwrap(),
+            orm_note::OrmNote::query().count(&*agra_db).await.unwrap(),
             2
         );
     }
@@ -275,18 +275,18 @@ async fn orm_models_run_in_the_workspace_database() {
 async fn a_failed_request_rolls_the_workspace_database_back() {
     let dir = TempDirGuard::new();
     let world = world(&dir).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada, "Agra").await;
     let client = world.as_user(ada);
     client
         .post("/api/notes/fail")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(400, "nope");
     client
         .get("/api/notes")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_json_path("data", json!([]));
@@ -296,17 +296,17 @@ async fn a_failed_request_rolls_the_workspace_database_back() {
 async fn workspace_migrations_run_once() {
     let dir = TempDirGuard::new();
     let world = world(&dir).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let workspaces = world.app.get::<Workspaces>().await;
     assert_eq!(
-        workspaces.migrate(acme.id).await.unwrap(),
+        workspaces.migrate(agra.id).await.unwrap(),
         ["notes/m20261026_000001_create_notes"]
     );
-    assert!(workspaces.migrate(acme.id).await.unwrap().is_empty());
+    assert!(workspaces.migrate(agra.id).await.unwrap().is_empty());
     world
         .app
-        .run_command("workspace:migrate", &["acme"])
+        .run_command("workspace:migrate", &["agra"])
         .await
         .unwrap();
 }

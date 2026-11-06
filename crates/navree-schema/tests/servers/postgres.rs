@@ -135,7 +135,7 @@ async fn tables_columns_keys_and_alterations() {
         Some("open and closed deals")
     );
 
-    exec(&conn, "INSERT INTO companies (name) VALUES ('Acme')").await;
+    exec(&conn, "INSERT INTO companies (name) VALUES ('Agra')").await;
     exec(
         &conn,
         "INSERT INTO deals (company_id, title, amount) VALUES (1, 'Big', 12.5)",

@@ -41,7 +41,7 @@ async fn update_password_requires_current() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (user, access, refresh_token) = signed_in(&app, "ada@example.com").await;
+    let (user, access, refresh_token) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     change_password(
@@ -67,7 +67,7 @@ async fn update_password_requires_current() {
         .send()
         .await
         .assert_error(401, None);
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
 
@@ -92,10 +92,10 @@ async fn update_password_requires_current() {
         .send()
         .await
         .assert_status(200);
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_error(401, "Invalid credentials");
-    login(&client, "ada@example.com", NEW_PASSWORD)
+    login(&client, "anu@example.com", NEW_PASSWORD)
         .await
         .assert_status(200);
 
@@ -114,7 +114,7 @@ async fn update_profile_changes_name_and_email() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let db = app.get::<Db>().await;
     User::query()
         .where_key(user.id)
@@ -123,12 +123,12 @@ async fn update_profile_changes_name_and_email() {
         .unwrap();
     let client = app.client();
 
-    update_profile(&client, &access, json!({ "name": "  Ada King  " }))
+    update_profile(&client, &access, json!({ "name": "  Anu Kaur  " }))
         .await
         .assert_status(200)
         .assert_json_path("__type", json!("User"))
-        .assert_json_path("name", json!("Ada King"))
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("name", json!("Anu Kaur"))
+        .assert_json_path("email", json!("anu@example.com"));
     let me = client
         .get("/api/auth/me")
         .bearer(&access)
@@ -139,10 +139,10 @@ async fn update_profile_changes_name_and_email() {
     assert!(sent_mail(&app).await.is_empty());
 
     // The same address in another case changes nothing.
-    update_profile(&client, &access, json!({ "email": "ADA@example.com" }))
+    update_profile(&client, &access, json!({ "email": "ANU@example.com" }))
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     assert!(sent_mail(&app).await.is_empty());
 
     // A new address must be verified again; the link goes to it, and the
@@ -150,23 +150,23 @@ async fn update_profile_changes_name_and_email() {
     update_profile(
         &client,
         &access,
-        json!({ "email": "Ada.King@Example.com", "current_password": PASSWORD }),
+        json!({ "email": "Anu.King@Example.com", "current_password": PASSWORD }),
     )
     .await
     .assert_status(200)
-    .assert_json_path("email", json!("ada.king@example.com"))
+    .assert_json_path("email", json!("anu.kaur@example.com"))
     .assert_json_path("email_verified_at", Value::Null);
     let sent = sent_mail(&app).await;
     assert_eq!(sent.len(), 2, "{sent:?}");
-    assert_eq!(sent[0].to, vec!["ada.king@example.com".to_owned()]);
-    assert_eq!(sent[1].to, vec!["ada@example.com".to_owned()]);
+    assert_eq!(sent[0].to, vec!["anu.kaur@example.com".to_owned()]);
+    assert_eq!(sent[1].to, vec!["anu@example.com".to_owned()]);
     let link = first_url(sent[0].text.as_deref().unwrap()).unwrap();
     client
         .get(link.strip_prefix("https://app.example.com").unwrap())
         .send()
         .await
         .assert_status(200);
-    login(&client, "ada.king@example.com", PASSWORD)
+    login(&client, "anu.kaur@example.com", PASSWORD)
         .await
         .assert_status(200);
 
@@ -175,26 +175,26 @@ async fn update_profile_changes_name_and_email() {
     assert_eq!(updated[0].actor_id, Some(user.id));
     assert_eq!(
         updated[0].old_values,
-        Some(json!({ "name": "Ada Lovelace" }))
+        Some(json!({ "name": "Anu Lakhotia" }))
     );
-    assert_eq!(updated[0].new_values, Some(json!({ "name": "Ada King" })));
+    assert_eq!(updated[0].new_values, Some(json!({ "name": "Anu Kaur" })));
     assert_eq!(
         updated[1].new_values,
-        Some(json!({ "email": "ada.king@example.com" }))
+        Some(json!({ "email": "anu.kaur@example.com" }))
     );
 }
 
 #[tokio::test]
 async fn update_profile_rejects_a_taken_email_and_invalid_input() {
     let app = support::app().await;
-    support::create_user(&app, "grace@example.com").await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    support::create_user(&app, "gauri@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     update_profile(
         &client,
         &access,
-        json!({ "email": "Grace@Example.com", "current_password": PASSWORD }),
+        json!({ "email": "Gauri@Example.com", "current_password": PASSWORD }),
     )
     .await
     .assert_status(400)
@@ -224,7 +224,7 @@ async fn changing_email_requires_current_password() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     update_profile(&client, &access, json!({ "email": "mallory@example.com" }))
@@ -238,8 +238,8 @@ async fn changing_email_requires_current_password() {
     .await
     .assert_validation_error("current_password");
     // A taken address is not revealed without the password either.
-    support::create_user(&app, "grace@example.com").await;
-    update_profile(&client, &access, json!({ "email": "grace@example.com" }))
+    support::create_user(&app, "gauri@example.com").await;
+    update_profile(&client, &access, json!({ "email": "gauri@example.com" }))
         .await
         .assert_validation_error("current_password");
     assert!(sent_mail(&app).await.is_empty());
@@ -259,29 +259,29 @@ async fn changing_email_requires_current_password() {
     );
 
     // A name change alone needs no password.
-    update_profile(&client, &access, json!({ "name": "Ada King" }))
+    update_profile(&client, &access, json!({ "name": "Anu Kaur" }))
         .await
         .assert_status(200);
 
     update_profile(
         &client,
         &access,
-        json!({ "email": "ada.king@example.com", "current_password": PASSWORD }),
+        json!({ "email": "anu.kaur@example.com", "current_password": PASSWORD }),
     )
     .await
     .assert_status(200)
-    .assert_json_path("email", json!("ada.king@example.com"));
+    .assert_json_path("email", json!("anu.kaur@example.com"));
     let sent = sent_mail(&app).await;
     let to_old: Vec<_> = sent
         .iter()
-        .filter(|mail| mail.to == vec!["ada@example.com".to_owned()])
+        .filter(|mail| mail.to == vec!["anu@example.com".to_owned()])
         .collect();
     assert_eq!(to_old.len(), 1, "{sent:?}");
     let text = to_old[0].text.as_deref().unwrap();
-    assert!(text.contains("ada.king@example.com"), "{text}");
+    assert!(text.contains("anu.kaur@example.com"), "{text}");
     assert!(
         sent.iter()
-            .any(|mail| mail.to == vec!["ada.king@example.com".to_owned()]),
+            .any(|mail| mail.to == vec!["anu.kaur@example.com".to_owned()]),
         "the verification link goes to the new address: {sent:?}"
     );
 }
@@ -294,11 +294,11 @@ async fn an_email_change_cancels_a_pending_reset() {
         .config("auth.password_reset.url", "https://app.example.com/reset")
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     client
         .post("/api/auth/forgot-password")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(202);
@@ -309,14 +309,14 @@ async fn an_email_change_cancels_a_pending_reset() {
     update_profile(
         &client,
         &access,
-        json!({ "email": "ada.king@example.com", "current_password": PASSWORD }),
+        json!({ "email": "anu.kaur@example.com", "current_password": PASSWORD }),
     )
     .await
     .assert_status(200);
     // Someone else signs up with the freed address.
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
 
-    for email in ["ada@example.com", "ada.king@example.com"] {
+    for email in ["anu@example.com", "anu.kaur@example.com"] {
         client
             .post("/api/auth/reset-password")
             .json(&json!({ "email": email, "token": token, "password": NEW_PASSWORD }))
@@ -324,7 +324,7 @@ async fn an_email_change_cancels_a_pending_reset() {
             .await
             .assert_error(400, "Invalid or expired password reset token");
     }
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
 }
@@ -335,11 +335,11 @@ async fn a_password_change_cancels_a_pending_reset() {
         .config("auth.password_reset.url", "https://app.example.com/reset")
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     client
         .post("/api/auth/forgot-password")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(202);
@@ -357,7 +357,7 @@ async fn a_password_change_cancels_a_pending_reset() {
     client
         .post("/api/auth/reset-password")
         .json(
-            &json!({ "email": "ada@example.com", "token": token, "password": "another password" }),
+            &json!({ "email": "anu@example.com", "token": token, "password": "another password" }),
         )
         .send()
         .await

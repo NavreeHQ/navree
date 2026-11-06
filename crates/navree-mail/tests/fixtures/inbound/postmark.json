@@ -1,24 +1,24 @@
 {
-  "FromName": "Ada Lovelace",
+  "FromName": "Anu Lakhotia",
   "MessageStream": "inbound",
-  "From": "ada@example.com",
+  "From": "anu@example.com",
   "FromFull": {
-    "Email": "ada@example.com",
-    "Name": "Ada Lovelace",
+    "Email": "anu@example.com",
+    "Name": "Anu Lakhotia",
     "MailboxHash": ""
   },
-  "To": "\"Acme Support\" <reply+abc@in.acme.test>",
+  "To": "\"Agra Support\" <reply+abc@in.acme.test>",
   "ToFull": [
     {
       "Email": "reply+abc@in.acme.test",
-      "Name": "Acme Support",
+      "Name": "Agra Support",
       "MailboxHash": "abc"
     }
   ],
-  "Cc": "grace@example.com",
+  "Cc": "gauri@example.com",
   "CcFull": [
     {
-      "Email": "grace@example.com",
+      "Email": "gauri@example.com",
       "Name": "",
       "MailboxHash": ""
     }
@@ -31,7 +31,7 @@
   "ReplyTo": "",
   "MailboxHash": "abc",
   "Date": "Tue, 27 Oct 2026 10:14:00 +0100",
-  "TextBody": "Thanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Acme Support <support@acme.test> wrote:\n> We are sending someone over.\n",
+  "TextBody": "Thanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Agra Support <support@acme.test> wrote:\n> We are sending someone over.\n",
   "HtmlBody": "<p>Thanks, the fire is out now.</p>",
   "StrippedTextReply": "Thanks, the fire is out now.",
   "Tag": "",

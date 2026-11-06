@@ -42,7 +42,7 @@ pub enum TwoFactorPolicy {
 /// routes = true                   # /api/auth/social/...
 /// # registration = true           # default: auth.registration
 /// link_by_email = "verified"      # verified | never
-/// allowed_email_domains = []      # e.g. ["acme.test"]; or "acme.test,acme.dev"
+/// allowed_email_domains = []      # e.g. ["acme.test"]; or "acme.test,agra.dev"
 /// two_factor = "require"          # require | skip
 /// state_ttl_secs = 600
 /// store_tokens = false            # keep encrypted provider tokens for Social::token
@@ -490,7 +490,7 @@ mod tests {
             "redirect_base": "https://app.acme.test/auth/callback",
             "link_by_email": "never",
             "two_factor": "skip",
-            "allowed_email_domains": "acme.test, acme.dev",
+            "allowed_email_domains": "acme.test, agra.dev",
             "providers": {
                 "github": { "client_id": "Iv1.8a61f9b3a7aba766", "client_secret": "s3cret" },
                 "google": {
@@ -502,7 +502,7 @@ mod tests {
                 "okta": {
                     "type": "oidc",
                     "name": "Okta",
-                    "issuer": "https://acme.okta.com",
+                    "issuer": "https://agra.okta.com",
                     "client_id": "0oa8f2kq1xYz3AbC4d5e",
                     "scopes": ["openid", "profile", "email", "groups"]
                 }
@@ -511,7 +511,7 @@ mod tests {
         .expect("valid options");
         assert_eq!(options.link_by_email, LinkByEmail::Never);
         assert_eq!(options.two_factor, TwoFactorPolicy::Skip);
-        assert_eq!(options.allowed_email_domains, ["acme.test", "acme.dev"]);
+        assert_eq!(options.allowed_email_domains, ["acme.test", "agra.dev"]);
         let github = options.provider("github").unwrap();
         assert_eq!(github.key, "github");
         assert_eq!(github.kind(), "github");
@@ -601,7 +601,7 @@ mod tests {
     #[test]
     fn provider_keys_are_lower_case_and_not_accounts() {
         assert!(is_provider_key("github"));
-        assert!(is_provider_key("acme-sso_2"));
+        assert!(is_provider_key("agra-sso_2"));
         assert!(!is_provider_key("GitHub"));
         assert!(!is_provider_key("accounts"));
         assert!(!is_provider_key(""));

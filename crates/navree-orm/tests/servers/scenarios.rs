@@ -15,20 +15,20 @@ fn at(day: u32, hour: u32) -> DateTime<Utc> {
 
 /// Two companies and four deals.
 async fn seed(db: &Db) -> (Record<Company>, Record<Company>) {
-    let acme = Company::create(
+    let agra = Company::create(
         db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             country: Some("US".into()),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    let globex = Company::create(
+    let gulati = Company::create(
         db,
         Company {
-            name: "Globex".into(),
+            name: "Gulati".into(),
             country: Some("DE".into()),
             ..Company::default()
         },
@@ -37,8 +37,8 @@ async fn seed(db: &Db) -> (Record<Company>, Record<Company>) {
     .unwrap();
     for (title, company, cents, stage, tags, closed) in [
         (
-            "Renewal for Acme",
-            Some(acme.id),
+            "Renewal for Agra",
+            Some(agra.id),
             5_000,
             Stage::Lead,
             vec!["vip"],
@@ -46,7 +46,7 @@ async fn seed(db: &Db) -> (Record<Company>, Record<Company>) {
         ),
         (
             "Pricing upgrade",
-            Some(acme.id),
+            Some(agra.id),
             25_000,
             Stage::Qualified,
             vec!["q1", "vip"],
@@ -54,7 +54,7 @@ async fn seed(db: &Db) -> (Record<Company>, Record<Company>) {
         ),
         (
             "Platform deal",
-            Some(globex.id),
+            Some(gulati.id),
             90_000,
             Stage::ClosedWon,
             vec![],
@@ -90,7 +90,7 @@ async fn seed(db: &Db) -> (Record<Company>, Record<Company>) {
         .await
         .unwrap();
     }
-    (acme, globex)
+    (agra, gulati)
 }
 
 fn titles(deals: &navree_orm::Collection<Deal>) -> Vec<String> {
@@ -101,31 +101,31 @@ fn titles(deals: &navree_orm::Collection<Deal>) -> Vec<String> {
 
 /// Keys, types, casts, timestamps and dirty updates round-trip exactly.
 pub async fn records_round_trip(db: Db) {
-    let acme = Company::create(
+    let agra = Company::create(
         &db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    let globex = Company::create(
+    let gulati = Company::create(
         &db,
         Company {
-            name: "Globex".into(),
+            name: "Gulati".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert!(acme.id > 0);
-    assert_eq!(globex.id, acme.id + 1, "the database assigned the keys");
+    assert!(agra.id > 0);
+    assert_eq!(gulati.id, agra.id + 1, "the database assigned the keys");
 
     let deal = Deal::create(
         &db,
         Deal {
-            company_id: Some(acme.id),
+            company_id: Some(agra.id),
             stage: Stage::ClosedWon,
             priority: Priority::High,
             meta: DealMeta {
@@ -165,10 +165,10 @@ pub async fn records_round_trip(db: Db) {
         Stage::Lead
     );
 
-    let mut acme = acme;
-    acme.increment(&db, Company::EMPLOYEES, 5).await.unwrap();
+    let mut agra = agra;
+    agra.increment(&db, Company::EMPLOYEES, 5).await.unwrap();
     assert_eq!(
-        Company::find_or_fail(&db, acme.id).await.unwrap().employees,
+        Company::find_or_fail(&db, agra.id).await.unwrap().employees,
         5
     );
 
@@ -198,12 +198,12 @@ pub async fn records_round_trip(db: Db) {
             .unwrap()
             .is_some()
     );
-    assert_eq!(Company::destroy(&db, [globex.id]).await.unwrap(), 1);
+    assert_eq!(Company::destroy(&db, [gulati.id]).await.unwrap(), 1);
 }
 
 /// The where family, selects, joins, groups, aggregates and plucks.
 pub async fn queries(db: Db, server: Server) {
-    let (acme, _globex) = seed(&db).await;
+    let (agra, _gulati) = seed(&db).await;
     let deals = |q: navree_orm::Builder<Deal>| {
         let db = db.clone();
         async move { titles(&q.get(&db).await.unwrap()) }
@@ -215,7 +215,7 @@ pub async fn queries(db: Db, server: Server) {
     );
     assert_eq!(
         deals(Deal::query().where_in(Deal::STAGE, [Stage::Lead, Stage::ClosedLost])).await,
-        ["Renewal for Acme", "Small change"]
+        ["Renewal for Agra", "Small change"]
     );
     assert_eq!(
         deals(Deal::query().where_null(Deal::COMPANY_ID)).await,
@@ -223,11 +223,11 @@ pub async fn queries(db: Db, server: Server) {
     );
     assert_eq!(
         deals(Deal::query().where_between(Deal::AMOUNT_CENTS, 1_000, 30_000)).await,
-        ["Pricing upgrade", "Renewal for Acme"]
+        ["Pricing upgrade", "Renewal for Agra"]
     );
     assert_eq!(
         deals(Deal::query().where_like(Deal::TITLE, "%ACME%")).await,
-        ["Renewal for Acme"]
+        ["Renewal for Agra"]
     );
     assert!(
         deals(Deal::query().where_like_case_sensitive(Deal::TITLE, "%ACME%"))
@@ -236,7 +236,7 @@ pub async fn queries(db: Db, server: Server) {
     );
     assert_eq!(
         deals(Deal::query().where_json_contains(Deal::TAGS, "vip")).await,
-        ["Pricing upgrade", "Renewal for Acme"]
+        ["Pricing upgrade", "Renewal for Agra"]
     );
     assert_eq!(
         deals(Deal::query().where_json_length(Deal::TAGS, ">", 1)).await,
@@ -294,7 +294,7 @@ pub async fn queries(db: Db, server: Server) {
                 .where_(Deal::STAGE.eq(Stage::Lead))
         )
         .await,
-        ["Renewal for Acme"]
+        ["Renewal for Agra"]
     );
     assert_eq!(
         deals(Deal::query().where_raw("amount_cents > ?", [80_000_i64])).await,
@@ -317,11 +317,11 @@ pub async fn queries(db: Db, server: Server) {
                 Deal::COMPANY_ID,
                 Company::query()
                     .select([Company::ID])
-                    .where_(Company::NAME.eq("Acme"))
+                    .where_(Company::NAME.eq("Agra"))
             )
         )
         .await,
-        ["Pricing upgrade", "Renewal for Acme"]
+        ["Pricing upgrade", "Renewal for Agra"]
     );
     let joined = Deal::query()
         .join("companies", Deal::COMPANY_ID, "=", Company::ID)
@@ -329,7 +329,7 @@ pub async fn queries(db: Db, server: Server) {
         .get(&db)
         .await
         .unwrap();
-    assert_eq!(titles(&joined), ["Pricing upgrade", "Renewal for Acme"]);
+    assert_eq!(titles(&joined), ["Pricing upgrade", "Renewal for Agra"]);
 
     assert_eq!(Deal::query().count(&db).await.unwrap(), 4);
     assert_eq!(
@@ -415,7 +415,7 @@ pub async fn queries(db: Db, server: Server) {
     assert_eq!(names.len(), 3);
 
     let locked = Deal::query()
-        .where_(Deal::COMPANY_ID.eq(acme.id))
+        .where_(Deal::COMPANY_ID.eq(agra.id))
         .lock_for_update()
         .get(&db.uow(None, None).await)
         .await
@@ -568,17 +568,17 @@ pub async fn pagination(db: Db) {
 pub async fn unit_of_work(db: Db, server: Server) {
     let actor = Uuid::now_v7();
     let uow = db.uow(Some(actor), Some("req-7".into())).await;
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    acme.name = "Acme Corp".into();
-    acme.save(&uow).await.unwrap();
+    agra.name = "Agra Corp".into();
+    agra.save(&uow).await.unwrap();
     let note = Note::create(
         &uow,
         Note {
@@ -643,7 +643,7 @@ pub async fn unit_of_work(db: Db, server: Server) {
 pub async fn json_patterns_and_vectors(db: Db, server: Server) {
     use navree_orm::{Filter, OrmError};
 
-    let (acme, _globex) = seed(&db).await;
+    let (agra, _gulati) = seed(&db).await;
     let deals = |q: navree_orm::Builder<Deal>| {
         let db = db.clone();
         async move { titles(&q.get(&db).await.unwrap()) }
@@ -654,7 +654,7 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
     );
     assert_eq!(
         deals(Deal::query().where_(Deal::TAGS.contained_by(["vip"]))).await,
-        ["Platform deal", "Renewal for Acme"],
+        ["Platform deal", "Renewal for Agra"],
         "an empty array fits in anything"
     );
     assert_eq!(
@@ -663,7 +663,7 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
     );
     assert_eq!(
         deals(Deal::query().where_json_contains_key("tags[-1]")).await,
-        ["Pricing upgrade", "Renewal for Acme", "Small change"]
+        ["Pricing upgrade", "Renewal for Agra", "Small change"]
     );
     assert_eq!(
         deals(Deal::query().where_(Deal::META.has_key("source")))
@@ -691,9 +691,9 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
         ["Pricing upgrade"]
     );
     assert_eq!(
-        deals(Deal::query().where_(Deal::COMPANY_ID.is_distinct_from(acme.id))).await,
+        deals(Deal::query().where_(Deal::COMPANY_ID.is_distinct_from(agra.id))).await,
         ["Platform deal", "Small change"],
-        "a NULL company id is distinct from Acme's"
+        "a NULL company id is distinct from Agra's"
     );
     let raw_text = match server {
         Server::Postgres => "pricing & upgrade",
@@ -771,7 +771,7 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
 /// Compound queries: lateral joins, limits per group, unions with orders
 /// and limits, derived tables and (PostgreSQL) a table function.
 pub async fn compound(db: Db, server: Server) {
-    let (acme, globex) = seed(&db).await;
+    let (agra, gulati) = seed(&db).await;
     // Each company with its biggest deal, through a lateral join.
     let biggest = Deal::query()
         .select([Deal::TITLE.expr()])
@@ -792,8 +792,8 @@ pub async fn compound(db: Db, server: Server) {
     assert_eq!(
         pairs,
         [
-            (acme.id, "Pricing upgrade".to_owned()),
-            (globex.id, "Platform deal".to_owned())
+            (agra.id, "Pricing upgrade".to_owned()),
+            (gulati.id, "Platform deal".to_owned())
         ]
     );
     // The smallest deal of each company.
@@ -805,7 +805,7 @@ pub async fn compound(db: Db, server: Server) {
         .await
         .unwrap();
     smallest.sort();
-    assert_eq!(smallest, ["Platform deal", "Renewal for Acme"]);
+    assert_eq!(smallest, ["Platform deal", "Renewal for Agra"]);
     // A union sorted and cut as a whole, its second part with its own limit.
     let titles: Vec<String> = Deal::query()
         .where_(Deal::STAGE.eq(Stage::Lead))
@@ -819,7 +819,7 @@ pub async fn compound(db: Db, server: Server) {
         .pluck(&db, Deal::TITLE)
         .await
         .unwrap();
-    assert_eq!(titles, ["Platform deal", "Renewal for Acme"]);
+    assert_eq!(titles, ["Platform deal", "Renewal for Agra"]);
     let from_union: Vec<String> = Deal::query()
         .from_sub(
             Deal::query()
@@ -830,7 +830,7 @@ pub async fn compound(db: Db, server: Server) {
         .pluck(&db, Deal::TITLE)
         .await
         .unwrap();
-    assert_eq!(from_union, ["Small change", "Renewal for Acme"]);
+    assert_eq!(from_union, ["Small change", "Renewal for Agra"]);
     if server == Server::Postgres {
         let days: Vec<i64> = table("ignored")
             .from_raw("generate_series(?::int, ?::int) AS day", [1_i64, 3])
@@ -1044,9 +1044,9 @@ pub async fn bulk_writes(db: Db, server: Server) {
     assert!(fresh.id > 0);
 
     // JSON paths updated in place.
-    let (acme, _globex) = seed(&db).await;
+    let (agra, _gulati) = seed(&db).await;
     let deal = Deal::query()
-        .where_(Deal::COMPANY_ID.eq(acme.id))
+        .where_(Deal::COMPANY_ID.eq(agra.id))
         .where_(Deal::STAGE.eq(Stage::Lead))
         .first(&db)
         .await
@@ -1083,7 +1083,7 @@ pub async fn bulk_writes(db: Db, server: Server) {
     // A joined table write: by ctid on PostgreSQL; MySQL has no row id.
     let joined = table("deals")
         .join("companies", "companies.id", "=", "deals.company_id")
-        .where_(col("companies.name").eq("Acme"))
+        .where_(col("companies.name").eq("Agra"))
         .update(&db, [col("probability").set(0.5)])
         .await;
     match server {
@@ -1325,7 +1325,7 @@ pub async fn timeouts(db: Db, server: Server) {
     Company::create(
         &db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -1370,7 +1370,7 @@ pub async fn timeouts(db: Db, server: Server) {
             .pluck(&db, Company::NAME)
             .await
             .unwrap(),
-        ["Acme"]
+        ["Agra"]
     );
 
     // A unit of work.
@@ -1379,7 +1379,7 @@ pub async fn timeouts(db: Db, server: Server) {
         Company::create(
             &uow,
             Company {
-                name: "Globex".to_owned(),
+                name: "Gulati".to_owned(),
                 ..Company::default()
             },
         )

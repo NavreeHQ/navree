@@ -53,10 +53,10 @@ impl std::error::Error for DotenvEntryExists {}
 /// ```
 /// use navree_config::set_dotenv_value;
 ///
-/// let env = "# keys\nAPP_KEY=\nAPP_NAME=acme\n";
+/// let env = "# keys\nAPP_KEY=\nAPP_NAME=agra\n";
 /// assert_eq!(
 ///     set_dotenv_value(env, "APP_KEY", "base64:abc", false).unwrap(),
-///     "# keys\nAPP_KEY=base64:abc\nAPP_NAME=acme\n"
+///     "# keys\nAPP_KEY=base64:abc\nAPP_NAME=agra\n"
 /// );
 /// assert!(set_dotenv_value("APP_KEY=base64:old\n", "APP_KEY", "base64:new", false).is_err());
 /// assert_eq!(
@@ -378,13 +378,13 @@ APP_AGAIN=${APP_HOST}
 
     #[test]
     fn a_set_entry_is_kept_unless_asked() {
-        let env = "APP_KEY=base64:old\nAPP_NAME=acme\n";
+        let env = "APP_KEY=base64:old\nAPP_NAME=agra\n";
         let error = set_dotenv_value(env, "APP_KEY", "base64:new", false).unwrap_err();
         assert_eq!(error.name, "APP_KEY");
         assert!(!error.to_string().contains("old"));
         assert_eq!(
             set_dotenv_value(env, "APP_KEY", "base64:new", true).unwrap(),
-            "APP_KEY=base64:new\nAPP_NAME=acme\n"
+            "APP_KEY=base64:new\nAPP_NAME=agra\n"
         );
     }
 
@@ -395,8 +395,8 @@ APP_AGAIN=${APP_HOST}
             "APP_KEY=base64:k\n"
         );
         assert_eq!(
-            set_dotenv_value("APP_NAME=acme", "APP_KEY", "base64:k", false).unwrap(),
-            "APP_NAME=acme\nAPP_KEY=base64:k\n"
+            set_dotenv_value("APP_NAME=agra", "APP_KEY", "base64:k", false).unwrap(),
+            "APP_NAME=agra\nAPP_KEY=base64:k\n"
         );
         // A commented line and a longer name are not the entry.
         let env = "# APP_KEY=base64:old\nAPP_KEY_FILE=x\r\n";

@@ -9,7 +9,7 @@ api_prefix = "/api"
 [database]
 # MySQL or MariaDB (`mariadb://` works too). Production sets
 # APP_DATABASE__URL instead.
-url = "mysql://navree:navree@127.0.0.1:3306/acme_cloud"
+url = "mysql://navree:navree@127.0.0.1:3306/agra_cloud"
 # Run pending migrations at boot (handy in development; use `navree migrate`
 # in deployments).
 migrate_on_boot = true
@@ -37,7 +37,7 @@ registration = true
 resolvers = ["header"]
 
 [api]
-title = "Acme cloud API"
+title = "Agra cloud API"
 # The Lighthouse and Logbook dashboards are pages, not API routes:
 # `navree check` doesn't ask them for #[api] docs.
 undocumented = ["/_lighthouse*", "/_logbook*"]

@@ -112,7 +112,7 @@ impl ReportsController {
             .paragraph(
                 native::Paragraph::new()
                     .text("Prepared for ")
-                    .bold("Acme Ltd")
+                    .bold("Agra Ltd")
                     .text("."),
             )
             .bullets(["Every control was tested", "Two findings are open"])
@@ -134,7 +134,7 @@ impl ReportsController {
             .paragraph(
                 Paragraph::new()
                     .text("Prepared for ")
-                    .bold("Acme Ltd")
+                    .bold("Agra Ltd")
                     .text("."),
             )
             .bullets(["Every control was tested", "Two findings are open"])
@@ -238,7 +238,7 @@ async fn certificates_download_and_reports_queue() {
 
     let response = app
         .client()
-        .get("/api/v1/certificates/Ada%20Lovelace")
+        .get("/api/v1/certificates/Anu%20Lakhotia")
         .send()
         .await
         .assert_status(200);
@@ -249,7 +249,7 @@ async fn certificates_download_and_reports_queue() {
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
     let text = pdf.text().unwrap();
     assert!(text.contains("Certificate of completion"), "{text}");
-    assert!(text.contains("Ada Lovelace"), "{text}");
+    assert!(text.contains("Anu Lakhotia"), "{text}");
 
     let response = app
         .client()
@@ -302,7 +302,7 @@ async fn certificates_download_and_reports_queue() {
         .assert_status(200);
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
     let text = pdf.text().unwrap();
-    assert!(text.contains("Prepared for Acme Ltd."), "{text}");
+    assert!(text.contains("Prepared for Agra Ltd."), "{text}");
     assert!(
         text.contains("Multi-factor sign-in Security Passed"),
         "{text}"
@@ -394,10 +394,10 @@ async fn the_fake_records_what_was_rendered() {
         .await;
 
     app.client()
-        .get("/api/v1/certificates/Ada")
+        .get("/api/v1/certificates/Anu")
         .send()
         .await
         .assert_status(200);
 
-    fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
+    fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Anu");
 }

@@ -34,7 +34,7 @@ async fn fake_embeddings_are_deterministic_and_close_for_shared_words() {
         .embed("When do they want to be live before January?")
         .await
         .unwrap();
-    let c = embeddings.embed("Globex prefers the summer").await.unwrap();
+    let c = embeddings.embed("Gulati prefers the summer").await.unwrap();
 
     assert_eq!(a.dimensions(), 64);
     assert!(a.cosine(&b) > a.cosine(&c));
@@ -179,7 +179,7 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
         ),
         (
             "a3:0",
-            "Globex wants to be live before the summer",
+            "Gulati wants to be live before the summer",
             "d2",
             "call",
             8,
@@ -276,7 +276,7 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
     // A record comes back by id, with its text, metadata and vector.
     let got = notes.get("a3:0").await.unwrap().expect("a3:0 is stored");
     assert_eq!(got.id, "a3:0");
-    assert_eq!(got.text, "Globex wants to be live before the summer");
+    assert_eq!(got.text, "Gulati wants to be live before the summer");
     assert_eq!(got.metadata["subject_id"], "d2");
     assert_eq!(got.embedding.dimensions(), store.dimensions());
     assert!(notes.get("a2:0").await.unwrap().is_none());

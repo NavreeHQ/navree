@@ -31,9 +31,9 @@ use crate::{DocumentsError, DocumentsOptions, Pdf};
 ///     "<h1>Certificate</h1><p>{{ name }} completed {{ course }}.</p>",
 /// )]));
 /// let pdf = documents
-///     .pdf("certificates/classic", json!({ "name": "Ada Lovelace", "course": "Engines" }))
+///     .pdf("certificates/classic", json!({ "name": "Anu Lakhotia", "course": "Engines" }))
 ///     .await?;
-/// assert!(pdf.text()?.contains("Ada Lovelace completed Engines."));
+/// assert!(pdf.text()?.contains("Anu Lakhotia completed Engines."));
 /// # Ok(())
 /// # }
 /// ```

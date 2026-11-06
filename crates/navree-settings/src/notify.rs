@@ -41,7 +41,7 @@ pub const MAX_BODY_LEN: usize = 100_000;
 ///
 /// let templates = NotificationTemplates {
 ///     brand_color: Some("#0F766E".into()),
-///     footer: Some("Acme Corp, 12 Harbour Road, Pune".into()),
+///     footer: Some("Agra Corp, 12 Harbour Road, Pune".into()),
 ///     templates: [(
 ///         "deal_won".to_owned(),
 ///         TemplateOverride { subject: Some("We won {{ title }}!".into()), ..TemplateOverride::default() },
@@ -307,7 +307,7 @@ mod tests {
         let good = NotificationTemplates {
             logo_url: Some("https://cdn.acme.test/logo.png".into()),
             brand_color: Some("#0f766e".into()),
-            footer: Some("Acme".into()),
+            footer: Some("Agra".into()),
             ..NotificationTemplates::default()
         };
         assert!(valid(&good).is_ok());

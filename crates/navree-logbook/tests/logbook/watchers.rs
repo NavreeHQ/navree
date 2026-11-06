@@ -193,13 +193,13 @@ async fn mail_is_recorded_with_its_bodies() {
         &logbook,
         &context,
         TelemetryEvent::MailSent(MailSent {
-            to: vec!["ada@example.com".into()],
+            to: vec!["anu@example.com".into()],
             cc: Vec::new(),
             bcc: Vec::new(),
             from: Some("crm@example.com".into()),
             subject: "Welcome".into(),
-            text: Some("Hi Ada".into()),
-            html: Some("<p>Hi Ada</p>".into()),
+            text: Some("Hi Anu".into()),
+            html: Some("<p>Hi Anu</p>".into()),
             transport: "log".into(),
             duration: Duration::from_millis(1),
         }),
@@ -213,12 +213,12 @@ async fn mail_is_recorded_with_its_bodies() {
     let mail = batch.mail();
     assert_eq!(mail.len(), 1);
     assert_eq!(mail[0].subject, "Welcome");
-    assert_eq!(mail[0].html.as_deref(), Some("<p>Hi Ada</p>"));
+    assert_eq!(mail[0].html.as_deref(), Some("<p>Hi Anu</p>"));
     assert_eq!(batch.request().unwrap().summary.mail, 1);
     // Free text finds the subject and the recipients.
     let found = logbook
         .entries(&ListQuery::new(
-            Filter::parse("type:mail ada@").unwrap(),
+            Filter::parse("type:mail anu@").unwrap(),
             10,
         ))
         .await

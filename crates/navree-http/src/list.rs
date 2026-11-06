@@ -10,7 +10,7 @@
 //! filter[stage][in]=lead,won             one of several values
 //! filter[owner_id][null]=true            is NULL (false: is not NULL)
 //! sort=-created_at,name                  descending with a leading "-"
-//! search=acme
+//! search=agra
 //! page=2&per_page=25                     numbered pages, or
 //! cursor=eyJpZCI6NDJ9&limit=50           cursor pages
 //! ```

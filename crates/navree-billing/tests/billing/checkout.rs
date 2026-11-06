@@ -7,12 +7,12 @@ use crate::support::{World, platform};
 #[tokio::test]
 async fn a_checkout_charges_the_monthly_price_with_the_plans_trial() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
 
     let checkout = billing
-        .checkout(&acme, "pro")
+        .checkout(&agra, "pro")
         .customer_email(&ada.email)
         .create()
         .await
@@ -34,8 +34,8 @@ async fn a_checkout_charges_the_monthly_price_with_the_plans_trial() {
     assert_eq!(recorded.price_id, "price_pro_m");
     assert_eq!(recorded.metered_prices, ["price_ai"]);
     assert_eq!(recorded.billable_type, "workspace");
-    assert_eq!(recorded.billable_id, acme.id);
-    assert_eq!(recorded.customer_email.as_deref(), Some("ada@example.com"));
+    assert_eq!(recorded.billable_id, agra.id);
+    assert_eq!(recorded.customer_email.as_deref(), Some("anu@example.com"));
     assert_eq!(
         recorded.success_url,
         "https://app.acme.test/settings/billing"
@@ -44,16 +44,16 @@ async fn a_checkout_charges_the_monthly_price_with_the_plans_trial() {
         recorded.cancel_url,
         "https://app.acme.test/settings/billing"
     );
-    assert_eq!(recorded.metadata["billable_id"], acme.id.to_string());
+    assert_eq!(recorded.metadata["billable_id"], agra.id.to_string());
     assert_eq!(recorded.metadata["plan"], "pro");
     assert!(!recorded.allow_promotion_codes);
 
     // The customer was created and linked on the first checkout.
-    let customer = billing.customer(&acme).await.unwrap().unwrap();
+    let customer = billing.customer(&agra).await.unwrap().unwrap();
     assert_eq!(customer.provider.as_deref(), Some("fake"));
     assert_eq!(customer.provider_customer_id, recorded.customer_id);
     // A second checkout reuses it.
-    let again = billing.checkout(&acme, "business").create().await.unwrap();
+    let again = billing.checkout(&agra, "business").create().await.unwrap();
     let second = fake.assert_checkout(|c| c.id == again.id);
     assert_eq!(second.customer_id, customer.provider_customer_id);
 }
@@ -61,14 +61,14 @@ async fn a_checkout_charges_the_monthly_price_with_the_plans_trial() {
 #[tokio::test]
 async fn every_builder_option_reaches_the_provider() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
-    world.join(acme.id, grace.id, "member").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
+    world.join(agra.id, grace.id, "member").await;
     let billing = world.billing().await;
 
     let checkout = billing
-        .checkout(&acme, "pro")
+        .checkout(&agra, "pro")
         .yearly()
         .trial_days(30)
         .coupon("LAUNCH")
@@ -91,7 +91,7 @@ async fn every_builder_option_reaches_the_provider() {
     assert_eq!(recorded.metadata["source"], "pricing-page");
 
     let skip_trial = billing
-        .checkout(&acme, "pro")
+        .checkout(&agra, "pro")
         .trial_days(0)
         .quantity(5)
         .monthly()
@@ -100,7 +100,7 @@ async fn every_builder_option_reaches_the_provider() {
         .unwrap();
     assert_eq!(skip_trial.trial_days, None);
     assert_eq!(skip_trial.quantity, 5);
-    let no_trial = billing.checkout(&acme, "business").create().await.unwrap();
+    let no_trial = billing.checkout(&agra, "business").create().await.unwrap();
     assert_eq!(no_trial.trial_days, None, "business has no trial");
     assert_eq!(no_trial.quantity, 1, "business has no seats");
 }
@@ -108,12 +108,12 @@ async fn every_builder_option_reaches_the_provider() {
 #[tokio::test]
 async fn unknown_plans_missing_prices_and_bad_quantities_are_refused() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
 
     let error = billing
-        .checkout(&acme, "enterprise")
+        .checkout(&agra, "enterprise")
         .create()
         .await
         .unwrap_err();
@@ -121,7 +121,7 @@ async fn unknown_plans_missing_prices_and_bad_quantities_are_refused() {
     assert_eq!(error.to_app_error().status.as_u16(), 400);
 
     let error = billing
-        .checkout(&acme, "starter")
+        .checkout(&agra, "starter")
         .yearly()
         .create()
         .await
@@ -135,7 +135,7 @@ async fn unknown_plans_missing_prices_and_bad_quantities_are_refused() {
     ));
 
     let error = billing
-        .checkout(&acme, "starter")
+        .checkout(&agra, "starter")
         .quantity(0)
         .create()
         .await
@@ -153,13 +153,13 @@ async fn unknown_plans_missing_prices_and_bad_quantities_are_refused() {
 #[tokio::test]
 async fn a_billable_with_a_valid_subscription_gets_a_409() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
-    world.subscribe(&acme, "starter").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
+    world.subscribe(&agra, "starter").await;
     let error = world
         .billing()
         .await
-        .checkout(&acme, "pro")
+        .checkout(&agra, "pro")
         .create()
         .await
         .unwrap_err();
@@ -176,11 +176,11 @@ async fn return_urls_default_to_app_url_and_are_required() {
             .config("app.url", "https://acme.test"),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
     assert_eq!(billing.return_url(), Some("https://acme.test"));
-    let checkout = billing.checkout(&acme, "starter").create().await.unwrap();
+    let checkout = billing.checkout(&agra, "starter").create().await.unwrap();
     let recorded = world.fake().await.assert_checkout(|c| c.id == checkout.id);
     assert_eq!(recorded.success_url, "https://acme.test");
 
@@ -190,12 +190,12 @@ async fn return_urls_default_to_app_url_and_are_required() {
             .config("billing.return_url", serde_json::Value::Null),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let error = world
         .billing()
         .await
-        .checkout(&acme, "starter")
+        .checkout(&agra, "starter")
         .create()
         .await
         .unwrap_err();
@@ -203,7 +203,7 @@ async fn return_urls_default_to_app_url_and_are_required() {
     let ok = world
         .billing()
         .await
-        .checkout(&acme, "starter")
+        .checkout(&agra, "starter")
         .success_url("https://x.test/ok")
         .cancel_url("https://x.test/back")
         .create()
@@ -214,7 +214,7 @@ async fn return_urls_default_to_app_url_and_are_required() {
 #[tokio::test]
 async fn users_are_billable_with_their_email() {
     let world = World::with(platform().module(crate::support::UserBilling)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let checkout = world
         .billing()
         .await
@@ -225,5 +225,5 @@ async fn users_are_billable_with_their_email() {
     let recorded = world.fake().await.assert_checkout(|c| c.id == checkout.id);
     assert_eq!(recorded.billable_type, "user");
     assert_eq!(recorded.billable_id, ada.id);
-    assert_eq!(recorded.customer_email.as_deref(), Some("ada@example.com"));
+    assert_eq!(recorded.customer_email.as_deref(), Some("anu@example.com"));
 }

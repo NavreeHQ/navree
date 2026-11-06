@@ -247,7 +247,7 @@ for (const name of NAMES) {
     });
 
     /** The short form of the proof app's own theme, from its card in the menu. */
-    async function acmeForm() {
+    async function agraForm() {
       const html = await (await fetch(BASE + "/themes")).text();
       const forms = [...html.matchAll(/name="theme" value="(v1-[0-9a-z-]+)"/g)].map((m) => m[1]);
       assert.equal(forms.length, 1, "one theme of the app's own is offered");
@@ -255,7 +255,7 @@ for (const name of NAMES) {
     }
 
     test("the first paint is already in the chosen theme, a built-in or the app's own, even with its stylesheet 1.5 s late", async () => {
-      const form = await acmeForm();
+      const form = await agraForm();
       for (const [value, expectTheme] of [["light.ocean", "ocean"], [`dark.${form}`, null]]) {
         const page = await open(null, { slowSheets: 1500 });
         await page.context().addCookies([{ name: "navree_ui_theme", value, url: BASE }]);
@@ -288,7 +288,7 @@ for (const name of NAMES) {
     });
 
     test("a page shown twice while its theme's stylesheet is late waits both times, and its title changes with its content", async () => {
-      const form = await acmeForm();
+      const form = await agraForm();
       // A page that doesn't link the app's own theme yet: no theme menu offers it.
       const page = await open("/deals?theme=ocean&mode=light", { slowSheets: 1500 });
       assert.equal(await page.locator(`link[href*="${form}"]`).count(), 0);
@@ -346,7 +346,7 @@ for (const name of NAMES) {
     });
 
     test("with JavaScript off, the chosen theme is in the page as served, with no script", async () => {
-      const form = await acmeForm();
+      const form = await agraForm();
       const page = await open(null, { javaScriptEnabled: false });
       await page.context().addCookies([{ name: "navree_ui_theme", value: `light.${form}`, url: BASE }]);
       await page.goto(BASE + "/themes/layouts/inset", { waitUntil: "load" });
@@ -354,7 +354,7 @@ for (const name of NAMES) {
       assert.match(seen.theme, /^c[0-9a-f]{24}$/);
       assert.equal(seen.mode, "light");
       assert.equal(seen.accent, "rgb(124, 92, 255)", "the app's own violet accent");
-      await shot(page, "nojs-acme-light");
+      await shot(page, "nojs-agra-light");
       await page.done();
     });
 
@@ -479,7 +479,7 @@ for (const name of NAMES) {
       assert.equal(ok.headers.get("location"), "/", "never off the site");
       // The stylesheet route serves a theme's short form and nothing else: at the
       // URL a page links, with the build in it, for good; at any other, checked each time.
-      const form = await acmeForm();
+      const form = await agraForm();
       await page.goto(BASE + "/themes", { waitUntil: "load" });
       const linked = await page.evaluate((form) => [...document.querySelectorAll("link[data-ui-theme]")].map((l) => l.getAttribute("href")).find((h) => h.includes(form)), form);
       assert.match(linked, new RegExp(`^/_navree/ui/theme/${form}-[0-9a-f]{12}\\.css$`));
@@ -649,26 +649,26 @@ for (const name of NAMES) {
       // The server checks again.
       const refused = await fetch(BASE + "/themes/builder/save", { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "draft=" + encodeURIComponent("l.fg-3=#dddddd&id=pale") });
       assert.equal(refused.status, 422);
-      const saved = await fetch(BASE + "/themes/builder/save", { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "draft=" + encodeURIComponent("base=violet&id=acme-two&name=Acme two") });
+      const saved = await fetch(BASE + "/themes/builder/save", { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "draft=" + encodeURIComponent("base=violet&id=agra-two&name=Agra two") });
       assert.equal(saved.status, 303);
       await page.done();
     });
 
     test("the builder's export is Rust and a stored theme, and a stored theme imports back; a hostile one is refused field by field", async () => {
-      const page = await open("/themes/builder?base=sunset&accent=custom&accent_hex=%23c2410c&id=acme-three&name=Acme%20three&mode=dark");
+      const page = await open("/themes/builder?base=sunset&accent=custom&accent_hex=%23c2410c&id=agra-three&name=Agra%20three&mode=dark");
       const [rust, json] = await page.locator("pre[data-variant=export]").allInnerTexts();
-      assert.match(rust, /pub fn acme_three_theme\(\) -> Theme \{/);
+      assert.match(rust, /pub fn agra_three_theme\(\) -> Theme \{/);
       assert.match(json, /"schema": "navree-theme\/1"/);
       // Copy works by the button, with no request.
       if (name === "chromium") {
         await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
         await page.locator("[data-slot=theme-export-block] [data-slot=button]").first().click();
-        await page.waitFor(() => navigator.clipboard.readText().then((text) => text.includes("acme_three_theme")));
+        await page.waitFor(() => navigator.clipboard.readText().then((text) => text.includes("agra_three_theme")));
       }
       // Import it back under another id.
-      await page.fill("textarea[name=json]", json.replace('"acme-three"', '"acme-four"'));
+      await page.fill("textarea[name=json]", json.replace('"agra-three"', '"agra-four"'));
       await Promise.all([page.waitForURL(/\/themes\/builder\?/), page.click("[data-slot=theme-import] [data-slot=button]")]);
-      await page.waitFor(() => document.querySelector("input[name=id]")?.value === "acme-four");
+      await page.waitFor(() => document.querySelector("input[name=id]")?.value === "agra-four");
       const imported = await look(page);
       assert.match(imported.theme, /^c[0-9a-f]{24}$/);
       // A hostile file: refused with what is wrong, and nothing of it in the page as markup or style.

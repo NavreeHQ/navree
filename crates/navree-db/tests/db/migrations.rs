@@ -146,7 +146,7 @@ async fn fresh_drops_and_reruns() {
     db.pool()
         .execute_script(
             "INSERT INTO users (id, title) VALUES ('0199a7a0-0000-7000-8000-000000000001', 'ann');
-             INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'acme', '0199a7a0-0000-7000-8000-000000000001');
+             INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'agra', '0199a7a0-0000-7000-8000-000000000001');
              CREATE TABLE stray (id INTEGER PRIMARY KEY);",
         )
         .await
@@ -192,7 +192,7 @@ async fn fresh_drops_join_tables_with_two_cascading_parents() {
              INSERT INTO permissions (id) VALUES ('deals.manage');
              INSERT INTO role_permissions (role_id, permission_id) VALUES ('admin', 'deals.manage');
              INSERT INTO users (id, title) VALUES ('0199a7a0-0000-7000-8000-000000000001', 'ann');
-             INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'acme', '0199a7a0-0000-7000-8000-000000000001');",
+             INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'agra', '0199a7a0-0000-7000-8000-000000000001');",
         )
         .await
         .unwrap();

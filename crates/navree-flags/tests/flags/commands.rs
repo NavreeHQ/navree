@@ -9,24 +9,24 @@ use crate::support::{AiSummaries, NewPipeline, World};
 async fn on_off_and_forget_target_users_workspaces_or_everyone() {
     let world = World::new().await;
     let flags = world.flags().await;
-    let owner = world.user("Ada").await;
-    let acme = world.workspace(owner, "Acme").await;
+    let owner = world.user("Anu").await;
+    let agra = world.workspace(owner, "Agra").await;
     let grace = Uuid::now_v7();
     let grace_arg = grace.to_string();
     let app = &world.app;
 
-    app.run_command("flags:on", &["new-pipeline", "--workspace", "acme"])
+    app.run_command("flags:on", &["new-pipeline", "--workspace", "agra"])
         .await
         .unwrap();
-    assert!(flags.active::<NewPipeline>(&acme).await.unwrap());
-    let acme_id = acme.id.to_string();
+    assert!(flags.active::<NewPipeline>(&agra).await.unwrap());
+    let agra_id = agra.id.to_string();
     app.run_command(
         "flags:off",
-        &["new-pipeline", &format!("--workspace={acme_id}")],
+        &["new-pipeline", &format!("--workspace={agra_id}")],
     )
     .await
     .unwrap();
-    assert!(!flags.active::<NewPipeline>(&acme).await.unwrap());
+    assert!(!flags.active::<NewPipeline>(&agra).await.unwrap());
 
     app.run_command("flags:on", &["new-pipeline", "--user", &grace_arg])
         .await

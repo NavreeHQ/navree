@@ -29,8 +29,8 @@ fn mailer() -> (Mailer, ArrayTransport) {
 #[tokio::test]
 async fn send_renders_template_into_message() {
     let (mailer, transport) = mailer();
-    let mail = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-        .context(json!({ "name": "Ada & Co" }));
+    let mail = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+        .context(json!({ "name": "Anu & Co" }));
 
     mailer.send(&mail).await.expect("send");
 
@@ -39,10 +39,10 @@ async fn send_renders_template_into_message() {
         vec![
             Message::new()
                 .from(FROM)
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .subject("Welcome")
-                .html("<p>Welcome, Ada &amp; Co!</p>")
-                .text("Welcome, Ada & Co!")
+                .html("<p>Welcome, Anu &amp; Co!</p>")
+                .text("Welcome, Anu & Co!")
         ]
     );
 }
@@ -51,14 +51,14 @@ async fn send_renders_template_into_message() {
 fn template_mail_renders_only_the_parts_that_exist() {
     let views = views();
 
-    let text_only = TemplateMail::new("ada@example.com", "Receipt", "mail/receipt")
-        .context(json!({ "name": "Ada" }))
+    let text_only = TemplateMail::new("anu@example.com", "Receipt", "mail/receipt")
+        .context(json!({ "name": "Anu" }))
         .build(&views)
         .expect("text only");
-    assert_eq!(text_only.text.as_deref(), Some("Receipt for Ada"));
+    assert_eq!(text_only.text.as_deref(), Some("Receipt for Anu"));
     assert_eq!(text_only.html, None);
 
-    let html_only = TemplateMail::new("ada@example.com", "Promo", "mail/promo")
+    let html_only = TemplateMail::new("anu@example.com", "Promo", "mail/promo")
         .context(json!({ "offer": "50%" }))
         .build(&views)
         .expect("html only");
@@ -68,19 +68,19 @@ fn template_mail_renders_only_the_parts_that_exist() {
 
 #[test]
 fn template_mail_with_an_extension_renders_that_template() {
-    let message = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome.txt")
-        .context(json!({ "name": "Ada" }))
+    let message = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome.txt")
+        .context(json!({ "name": "Anu" }))
         .build(&views())
         .expect("build");
 
-    assert_eq!(message.text.as_deref(), Some("Welcome, Ada!"));
+    assert_eq!(message.text.as_deref(), Some("Welcome, Anu!"));
     assert_eq!(message.html, None);
 }
 
 #[tokio::test]
 async fn send_fails_for_a_missing_template_and_sends_nothing() {
     let (mailer, transport) = mailer();
-    let mail = TemplateMail::new("ada@example.com", "Gone", "mail/missing");
+    let mail = TemplateMail::new("anu@example.com", "Gone", "mail/missing");
 
     let error = mailer.send(&mail).await.expect_err("missing template");
 
@@ -96,14 +96,14 @@ async fn send_message_fills_in_the_default_sender_only_when_missing() {
     let (mailer, transport) = mailer();
 
     mailer
-        .send_message(Message::new().to("ada@example.com").subject("A").text("a"))
+        .send_message(Message::new().to("anu@example.com").subject("A").text("a"))
         .await
         .expect("default sender");
     mailer
         .send_message(
             Message::new()
                 .from("billing@example.com")
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .subject("B")
                 .text("b"),
         )
@@ -137,7 +137,7 @@ async fn send_message_rejects_invalid_messages_before_the_transport() {
     let error = mailer
         .send_message(
             Message::new()
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .subject("Hi\r\nBcc: victim@example.com")
                 .text("x"),
         )
@@ -153,7 +153,7 @@ async fn send_message_rejects_invalid_messages_before_the_transport() {
 
 #[test]
 fn validate_names_the_field_holding_a_bad_address() {
-    let valid = || Message::new().from(FROM).to("ada@example.com").subject("x");
+    let valid = || Message::new().from(FROM).to("anu@example.com").subject("x");
     for (message, expected) in [
         (valid().from("bad"), "from"),
         (valid().cc("bad"), "cc"),
@@ -168,7 +168,7 @@ fn validate_names_the_field_holding_a_bad_address() {
     // A bcc-only message has a recipient.
     let bcc_only = Message::new()
         .from(FROM)
-        .bcc("ada@example.com")
+        .bcc("anu@example.com")
         .subject("x");
     bcc_only.validate().expect("bcc only");
 }
@@ -179,7 +179,7 @@ async fn send_message_without_any_sender_fails() {
     let mailer = Mailer::new(Arc::new(transport.clone()), views(), "");
 
     let error = mailer
-        .send_message(Message::new().to("ada@example.com").subject("x").text("x"))
+        .send_message(Message::new().to("anu@example.com").subject("x").text("x"))
         .await
         .expect_err("no sender");
 
@@ -191,7 +191,7 @@ async fn send_message_without_any_sender_fails() {
 async fn send_accepts_a_message_as_a_mailable() {
     let (mailer, transport) = mailer();
     let message = Message::new()
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Raw")
         .text("raw");
 

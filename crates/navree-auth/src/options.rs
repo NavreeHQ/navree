@@ -890,7 +890,7 @@ mod tests {
             ("auth.verification.ttl_secs", json!(0)),
             ("auth.verification.base_url", json!("api.example.com")),
             ("auth.two_factor.issuer", json!("")),
-            ("auth.two_factor.issuer", json!("Acme:CRM")),
+            ("auth.two_factor.issuer", json!("Agra:CRM")),
             ("auth.two_factor.challenge_ttl_secs", json!(0)),
             ("auth.two_factor.recovery_codes", json!(0)),
             ("auth.two_factor.recovery_codes", json!(33)),
@@ -902,14 +902,14 @@ mod tests {
             ConfigSources::new()
                 .set("auth.password_reset.url", "https://app.example.com/reset")
                 .set("auth.verification.base_url", "http://localhost:3000")
-                .set("auth.two_factor.issuer", "Acme CRM"),
+                .set("auth.two_factor.issuer", "Agra CRM"),
         )
         .unwrap();
         assert_eq!(
             options.password_reset.url.as_deref(),
             Some("https://app.example.com/reset")
         );
-        assert_eq!(options.two_factor.issuer, "Acme CRM");
+        assert_eq!(options.two_factor.issuer, "Agra CRM");
     }
 
     #[test]

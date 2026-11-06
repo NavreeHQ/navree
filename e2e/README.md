@@ -126,7 +126,7 @@ A package proves itself with up to three things, all data or small files:
    ```
 
    `auth` sends the operator's bearer token, `workspace` the `X-Workspace`
-   header (`acme`); `expect` is a status or a list; `json_path` must exist
+   header (`agra`); `expect` is a status or a list; `json_path` must exist
    in the body.
 
 2. **A scenario** in `load/scenarios/<package>.js`. Export a step function

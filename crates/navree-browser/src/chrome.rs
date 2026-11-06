@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn the_cache_dir_follows_the_platform_and_can_be_moved() {
-        let home = PathBuf::from("/home/ada");
+        let home = PathBuf::from("/home/anu");
         let env = env_of(&[("HOME", &home)]);
         assert_eq!(
             cache_dir(Os::Linux, &env),
@@ -488,7 +488,7 @@ mod tests {
             cache_dir(Os::Mac, &env),
             Some(home.join("Library/Caches/navree"))
         );
-        let local = PathBuf::from(r"C:\Users\ada\AppData\Local");
+        let local = PathBuf::from(r"C:\Users\anu\AppData\Local");
         let env = env_of(&[("LOCALAPPDATA", &local)]);
         assert_eq!(cache_dir(Os::Windows, &env), Some(local.join("navree")));
         let custom = PathBuf::from("/ci/cache");

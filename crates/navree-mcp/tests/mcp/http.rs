@@ -58,7 +58,7 @@ async fn navree_auth_access_tokens_are_bearer_tokens() {
         .await;
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada", "ada@example.com", "a-long-password")
+        .create_user("Anu", "anu@example.com", "a-long-password")
         .await
         .expect("user");
     let tokens = auth

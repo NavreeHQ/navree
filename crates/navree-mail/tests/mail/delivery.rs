@@ -19,7 +19,7 @@ use crate::harness::{MailApp, mail_app};
 use crate::support::{FROM, view_module};
 
 fn welcome(to: &str) -> TemplateMail {
-    TemplateMail::new(to, "Welcome", "mail/welcome").context(json!({ "name": "Ada" }))
+    TemplateMail::new(to, "Welcome", "mail/welcome").context(json!({ "name": "Anu" }))
 }
 
 fn hash(address: &str) -> String {
@@ -37,7 +37,7 @@ async fn every_message_is_logged_with_the_providers_id() {
     let report = mail
         .mailer()
         .await
-        .deliver(&welcome("Ada <Ada@Example.com>"))
+        .deliver(&welcome("Anu <Anu@Example.com>"))
         .await
         .expect("deliver");
 
@@ -53,7 +53,7 @@ async fn every_message_is_logged_with_the_providers_id() {
     assert_eq!(delivery.template.as_deref(), Some("mail/welcome"));
     assert_eq!(delivery.subject, "Welcome");
     assert_eq!(delivery.sender, "app@example.com");
-    assert_eq!(delivery.recipient_hash, hash("ada@example.com"));
+    assert_eq!(delivery.recipient_hash, hash("anu@example.com"));
     assert_eq!(delivery.recipients, 1);
     mail.fake.assert_sent(|m| m.subject == "Welcome");
 }
@@ -76,7 +76,7 @@ impl MailTransport for Broken {
 async fn a_refused_message_is_logged_as_failed() {
     let mail = mail_app(|b| b.override_value::<dyn MailTransport>(Arc::new(Broken))).await;
 
-    let error = mail.mailer().await.send(&welcome("ada@example.com")).await;
+    let error = mail.mailer().await.send(&welcome("anu@example.com")).await;
 
     assert!(error.is_err());
     let page = mail
@@ -107,13 +107,13 @@ async fn a_hard_bounce_suppresses_the_address_and_later_mail_is_not_sent() {
     let first = mail
         .mailer()
         .await
-        .deliver(&welcome("ada@example.com"))
+        .deliver(&welcome("anu@example.com"))
         .await
         .expect("deliver");
 
     let delivery = mail
         .fake
-        .bounce(mail.app.ctx(), "ada@example.com")
+        .bounce(mail.app.ctx(), "anu@example.com")
         .await
         .expect("record")
         .expect("the delivery is found");
@@ -132,17 +132,17 @@ async fn a_hard_bounce_suppresses_the_address_and_later_mail_is_not_sent() {
     assert_eq!(events[0].provider, "fake");
     assert_eq!(
         events[0].recipient_hash.as_deref(),
-        Some(hash("ada@example.com").as_str())
+        Some(hash("anu@example.com").as_str())
     );
     let event = bounced.try_recv().expect("MailBounced emitted");
     assert_eq!(event["permanent"], true);
-    assert_eq!(event["recipient"], "ada@example.com");
+    assert_eq!(event["recipient"], "anu@example.com");
     assert_eq!(event["delivery_id"], json!(delivery.id));
 
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         suppressions
-            .is_suppressed(None, "ADA@example.com")
+            .is_suppressed(None, "ANU@example.com")
             .await
             .unwrap()
     );
@@ -151,11 +151,11 @@ async fn a_hard_bounce_suppresses_the_address_and_later_mail_is_not_sent() {
     let second = mail
         .mailer()
         .await
-        .deliver(&welcome("Ada <ada@example.com>"))
+        .deliver(&welcome("Anu <anu@example.com>"))
         .await
         .expect("deliver");
     assert_eq!(second.status, DeliveryStatus::Suppressed);
-    assert_eq!(second.suppressed, ["Ada <ada@example.com>"]);
+    assert_eq!(second.suppressed, ["Anu <anu@example.com>"]);
     assert_eq!(mail.fake.sent().len(), 1);
     let logged = mail
         .get::<Deliveries>()
@@ -171,13 +171,13 @@ async fn soft_bounces_and_deferrals_change_nothing() {
     let mail = app().await;
     mail.mailer()
         .await
-        .send(&welcome("ada@example.com"))
+        .send(&welcome("anu@example.com"))
         .await
         .unwrap();
 
     let delivery = mail
         .fake
-        .soft_bounce(mail.app.ctx(), "ada@example.com")
+        .soft_bounce(mail.app.ctx(), "anu@example.com")
         .await
         .unwrap()
         .unwrap();
@@ -186,7 +186,7 @@ async fn soft_bounces_and_deferrals_change_nothing() {
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         !suppressions
-            .is_suppressed(None, "ada@example.com")
+            .is_suppressed(None, "anu@example.com")
             .await
             .unwrap()
     );
@@ -197,13 +197,13 @@ async fn a_complaint_suppresses_with_its_reason() {
     let mail = app().await;
     mail.mailer()
         .await
-        .send(&welcome("ada@example.com"))
+        .send(&welcome("anu@example.com"))
         .await
         .unwrap();
 
     let delivery = mail
         .fake
-        .complain(mail.app.ctx(), "ada@example.com")
+        .complain(mail.app.ctx(), "anu@example.com")
         .await
         .unwrap()
         .unwrap();
@@ -212,7 +212,7 @@ async fn a_complaint_suppresses_with_its_reason() {
     let page = mail
         .get::<Suppressions>()
         .await
-        .list(None, Some("ada@example.com"), PageQuery::new(1, 10))
+        .list(None, Some("anu@example.com"), PageQuery::new(1, 10))
         .await
         .unwrap();
     assert_eq!(page.data[0].reason, SuppressionReason::Complaint);
@@ -225,13 +225,13 @@ async fn deliveries_opens_and_clicks_are_stamped() {
     let mut clicked = mail.events("mail.clicked").await;
     mail.mailer()
         .await
-        .send(&welcome("ada@example.com"))
+        .send(&welcome("anu@example.com"))
         .await
         .unwrap();
 
     let delivered = mail
         .fake
-        .deliver(mail.app.ctx(), "ada@example.com")
+        .deliver(mail.app.ctx(), "anu@example.com")
         .await
         .unwrap()
         .unwrap();
@@ -240,7 +240,7 @@ async fn deliveries_opens_and_clicks_are_stamped() {
 
     let clicked_delivery = mail
         .fake
-        .click(mail.app.ctx(), "ada@example.com", "https://acme.test/start")
+        .click(mail.app.ctx(), "anu@example.com", "https://acme.test/start")
         .await
         .unwrap()
         .unwrap();
@@ -262,19 +262,19 @@ async fn auto_suppression_can_be_turned_off() {
     let mail = mail_app(|b| b.config("mail.delivery.auto_suppress", false)).await;
     mail.mailer()
         .await
-        .send(&welcome("ada@example.com"))
+        .send(&welcome("anu@example.com"))
         .await
         .unwrap();
 
     mail.fake
-        .bounce(mail.app.ctx(), "ada@example.com")
+        .bounce(mail.app.ctx(), "anu@example.com")
         .await
         .unwrap();
 
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         !suppressions
-            .is_suppressed(None, "ada@example.com")
+            .is_suppressed(None, "anu@example.com")
             .await
             .unwrap()
     );
@@ -314,7 +314,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .add(
             &uow,
             Some(a),
-            "ada@example.com",
+            "anu@example.com",
             SuppressionReason::Unsubscribed,
             None,
         )
@@ -335,7 +335,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .add(
             &uow,
             Some(a),
-            "Ada@Example.com",
+            "Anu@Example.com",
             SuppressionReason::Manual,
             None,
         )
@@ -349,7 +349,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .for_scope(&MailScope::workspace(a))
         .deliver(
             &Message::new()
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .to("bob@example.com")
                 .subject("Hi")
                 .text("Hi"),
@@ -357,12 +357,12 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .await
         .unwrap();
     assert_eq!(in_a.status, DeliveryStatus::Sent);
-    assert_eq!(in_a.suppressed, ["ada@example.com"]);
+    assert_eq!(in_a.suppressed, ["anu@example.com"]);
     assert_eq!(mail.fake.sent()[0].to, ["bob@example.com"]);
 
     let in_b = mailer
         .for_scope(&MailScope::workspace(b))
-        .deliver(&welcome("ada@example.com"))
+        .deliver(&welcome("anu@example.com"))
         .await
         .unwrap();
     assert_eq!(in_b.status, DeliveryStatus::Sent);
@@ -394,20 +394,20 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
     let uow = mail.uow().await;
     assert!(
         suppressions
-            .remove_email(&uow, Some(a), "ada@example.com")
+            .remove_email(&uow, Some(a), "anu@example.com")
             .await
             .unwrap()
     );
     assert!(
         !suppressions
-            .remove_email(&uow, Some(a), "ada@example.com")
+            .remove_email(&uow, Some(a), "anu@example.com")
             .await
             .unwrap()
     );
     uow.commit().await.unwrap();
     assert!(
         !suppressions
-            .is_suppressed(Some(a), "ada@example.com")
+            .is_suppressed(Some(a), "anu@example.com")
             .await
             .unwrap()
     );
@@ -422,7 +422,7 @@ async fn suppression_checks_can_be_turned_off() {
         .add(
             &uow,
             None,
-            "ada@example.com",
+            "anu@example.com",
             SuppressionReason::Manual,
             None,
         )
@@ -433,7 +433,7 @@ async fn suppression_checks_can_be_turned_off() {
     let report = mail
         .mailer()
         .await
-        .deliver(&welcome("ada@example.com"))
+        .deliver(&welcome("anu@example.com"))
         .await
         .unwrap();
 
@@ -464,7 +464,7 @@ async fn held_mail_waits_in_the_outbox_until_released() {
     assert_eq!(held.workspace_id, Some(workspace));
     assert_eq!(held.template.as_deref(), Some("mail/welcome"));
     let preview = outbox.message(id).await.unwrap();
-    assert_eq!(preview.html.as_deref(), Some("<p>Welcome, Ada!</p>"));
+    assert_eq!(preview.html.as_deref(), Some("<p>Welcome, Anu!</p>"));
     let listed = outbox
         .list(Some(OutboxStatus::Held), None, PageQuery::new(1, 10))
         .await
@@ -563,7 +563,7 @@ async fn without_the_pipeline_nothing_is_logged() {
     let report = mail
         .mailer()
         .await
-        .deliver(&welcome("ada@example.com"))
+        .deliver(&welcome("anu@example.com"))
         .await
         .unwrap();
 

@@ -159,12 +159,12 @@ async fn a_title_a_rule_hides_on_some_records_shows_on_the_others() {
 #[tokio::test]
 async fn the_title_of_a_related_record_the_rules_hide_reaches_no_route() {
     let app = app().await;
-    let acme = company(&app, "COMPANYSECRET", Some("Town")).await;
+    let agra = company(&app, "COMPANYSECRET", Some("Town")).await;
     let d = deal(
         &app,
         DealSeed {
             title: "Open deal",
-            company: Some(acme.id),
+            company: Some(agra.id),
             ..DealSeed::default()
         },
     )
@@ -176,7 +176,7 @@ async fn the_title_of_a_related_record_the_rules_hide_reaches_no_route() {
     }
     for path in [
         "/admin/api/resources/companies".to_owned(),
-        format!("/admin/api/resources/companies/{}", acme.id),
+        format!("/admin/api/resources/companies/{}", agra.id),
         "/admin/api/resources/companies/options".to_owned(),
     ] {
         let text = hides.get(&path).send().await.assert_status(200).text();
@@ -184,7 +184,7 @@ async fn the_title_of_a_related_record_the_rules_hide_reaches_no_route() {
     }
     for path in [
         "/admin/resources/companies".to_owned(),
-        format!("/admin/resources/companies/{}", acme.id),
+        format!("/admin/resources/companies/{}", agra.id),
         "/admin/resources/companies/export.csv".to_owned(),
     ] {
         let text = plain(page(&hides, &path).await);
@@ -194,7 +194,7 @@ async fn the_title_of_a_related_record_the_rules_hide_reaches_no_route() {
         .await
         .text();
     assert!(
-        csv.contains(&format!("Company #{}", short(acme.id))),
+        csv.contains(&format!("Company #{}", short(agra.id))),
         "named by its label and short key: {csv}"
     );
 }
@@ -373,7 +373,7 @@ async fn search_tells_nothing_about_a_column_the_rules_hide() {
     assert_eq!(deals_in(&index)["search"], false, "{index}");
 
     // Of several, the column it may read is still searched.
-    let acme = company(&app, "COMPANYSECRET", Some("Town")).await;
+    let agra = company(&app, "COMPANYSECRET", Some("Town")).await;
     let (_, no_name) = user(&app, "no-company-name").await;
     let found = |query: &'static str| {
         let no_name = no_name.clone();
@@ -390,7 +390,7 @@ async fn search_tells_nothing_about_a_column_the_rules_hide() {
         }
     };
     assert_eq!(found("Town").await, 1);
-    assert_eq!(found("COMPANYSECRET").await, 0, "{}", acme.id);
+    assert_eq!(found("COMPANYSECRET").await, 0, "{}", agra.id);
 }
 
 #[tokio::test]
@@ -491,14 +491,14 @@ async fn a_default_order_on_a_hidden_column_gives_way_to_the_key() {
 #[tokio::test]
 async fn filters_on_a_column_the_rules_hide_are_refused() {
     let app = app().await;
-    let acme = company(&app, "Acme", None).await;
+    let agra = company(&app, "Agra", None).await;
     deal(
         &app,
         DealSeed {
             title: "Listed",
             stage: "won",
             amount_cents: 5000,
-            company: Some(acme.id),
+            company: Some(agra.id),
             expected_close_date: chrono::NaiveDate::from_ymd_opt(2026, 11, 1),
             ..DealSeed::default()
         },
@@ -519,7 +519,7 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
     ];
     for (role, query) in cases {
         let (_, client) = user(&app, role).await;
-        let query = query.replace("ID", &acme.id.to_string());
+        let query = query.replace("ID", &agra.id.to_string());
         client
             .get(&format!("/admin/api/resources/deals?{query}"))
             .send()
@@ -563,19 +563,19 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
 #[tokio::test]
 async fn a_relationship_panel_on_a_key_the_rules_hide_is_left_out() {
     let app = app().await;
-    let acme = company(&app, "Acme", None).await;
+    let agra = company(&app, "Agra", None).await;
     deal(
         &app,
         DealSeed {
             title: "PANELDEAL",
-            company: Some(acme.id),
+            company: Some(agra.id),
             ..DealSeed::default()
         },
     )
     .await;
     let (_, hides) = user(&app, "no-company").await;
     let html = plain(
-        page(&hides, &format!("/admin/resources/companies/{}", acme.id))
+        page(&hides, &format!("/admin/resources/companies/{}", agra.id))
             .await
             .assert_status(200),
     );

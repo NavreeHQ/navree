@@ -203,7 +203,7 @@ pub trait ModuleBuilderViewExt {
     /// impl Module for BrandModule {
     ///     fn register(&self, m: &mut ModuleBuilder) {
     ///         m.view_environment(|env| {
-    ///             env.add_global("brand", "Acme");
+    ///             env.add_global("brand", "Agra");
     ///             env.add_filter("shout", |text: &str| text.to_uppercase());
     ///         });
     ///     }

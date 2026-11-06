@@ -217,7 +217,7 @@ async fn deal_mail_waits_for_the_morning_digest() {
     let notifier = app.get::<Notifier>().await;
     let priya = member("Asia/Kolkata");
 
-    for title in ["Acme renewal", "Globex expansion"] {
+    for title in ["Agra renewal", "Gulati expansion"] {
         let won = DealWon {
             deal_id: Uuid::now_v7(),
             title: title.into(),
@@ -241,7 +241,7 @@ async fn deal_mail_waits_for_the_morning_digest() {
             .text
             .as_deref()
             .unwrap()
-            .contains("Deal won: Acme renewal")
+            .contains("Deal won: Agra renewal")
     );
 }
 
@@ -382,16 +382,16 @@ async fn workspace_templates_restyle_the_mail() {
     let settings = app.get::<Settings>().await;
     let db = app.get::<Db>().await;
     let priya = member("UTC");
-    let acme = priya.workspace_id;
+    let agra = priya.workspace_id;
 
     let uow = db.uow(None, None).await;
     settings
         .update::<NotificationTemplates>(
             &uow,
-            Scope::workspace(acme),
+            Scope::workspace(agra),
             json!({
                 "brand_color": "#0F766E",
-                "templates": { "training.due": { "subject": "Acme Academy: {{ module }}" } },
+                "templates": { "training.due": { "subject": "Agra Academy: {{ module }}" } },
             }),
         )
         .await
@@ -411,5 +411,5 @@ async fn workspace_templates_restyle_the_mail() {
         .unwrap();
     let mailer = app.get::<Mailer>().await;
     let sent = mailer.array_transport().unwrap().sent();
-    assert_eq!(sent[0].subject, "Acme Academy: Phishing basics");
+    assert_eq!(sent[0].subject, "Agra Academy: Phishing basics");
 }

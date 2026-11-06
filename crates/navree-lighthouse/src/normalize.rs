@@ -14,7 +14,7 @@
 ///     "deal <uuid> not found"
 /// );
 /// assert_eq!(
-///     normalize_message("user 'ada@example.com' has 3 invoices"),
+///     normalize_message("user 'anu@example.com' has 3 invoices"),
 ///     "user \"?\" has <n> invoices"
 /// );
 /// ```
@@ -143,7 +143,7 @@ fn replace_numbers(token: &str) -> String {
 ///     "SELECT * FROM \"deals\" WHERE id IN (?) AND amount > ?"
 /// );
 /// assert_eq!(
-///     normalize_sql("select * from users where email = 'ada@example.com'"),
+///     normalize_sql("select * from users where email = 'anu@example.com'"),
 ///     "select * from users where email = ?"
 /// );
 /// ```
@@ -315,7 +315,7 @@ mod tests {
             "cannot charge invoice <n>: card declined"
         );
         assert_eq!(
-            normalize_message("no account for ada@example.com."),
+            normalize_message("no account for anu@example.com."),
             "no account for <email>."
         );
         assert_eq!(

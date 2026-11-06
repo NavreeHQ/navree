@@ -1,10 +1,10 @@
 ---
 source: crates/navree-orm/tests/render/main.rs
-expression: "query(Query::from(deals().filter(Expr::raw(\"lower(title) = ? OR amount_cents = ?\",\n[Value::from(\"acme\"), Value::from(5_i64)]))))"
+expression: "query(Query::from(deals().filter(Expr::raw(\"lower(title) = ? OR amount_cents = ?\",\n[Value::from(\"agra\"), Value::from(5_i64)]))))"
 ---
 PostgreSQL: SELECT * FROM "deals" WHERE lower(title) = $1 OR amount_cents = $2
-  values: [String("acme"), I64(5)]
+  values: [String("agra"), I64(5)]
 MySQL: SELECT * FROM `deals` WHERE lower(title) = ? OR amount_cents = ?
-  values: [String("acme"), I64(5)]
+  values: [String("agra"), I64(5)]
 SQLite: SELECT * FROM "deals" WHERE lower(title) = ? OR amount_cents = ?
-  values: [String("acme"), I64(5)]
+  values: [String("agra"), I64(5)]

@@ -38,7 +38,7 @@ pub struct PostgresOptions {
     /// how close a query word must be to a word of the text to match, above
     /// 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses
     /// a one-letter typo in a longer word ("lovlace" scores 0.55 against
-    /// "Lovelace"), so the engine sets this value per query.
+    /// "Lakhotia"), so the engine sets this value per query.
     pub typo_threshold: f64,
 }
 
@@ -306,7 +306,7 @@ impl fmt::Debug for VectorOptions {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct IndexOverrides {
-    /// Synonyms: `{ "acme" = ["acme corp"] }`.
+    /// Synonyms: `{ "agra" = ["agra corp"] }`.
     pub synonyms: BTreeMap<String, Vec<String>>,
     /// Words the index ignores (a list, or a comma-separated string).
     #[serde(deserialize_with = "navree_config::comma_list")]
@@ -725,7 +725,7 @@ mod tests {
         let options = parse(json!({
             "engine": "memory",
             "vectors": {"store": "pgvector", "dimensions": 3, "metric": "dot"},
-            "indexes": {"companies": {"synonyms": {"acme": ["acme corp"]}, "stop_words": "inc,ltd"}}
+            "indexes": {"companies": {"synonyms": {"agra": ["agra corp"]}, "stop_words": "inc,ltd"}}
         }))
         .unwrap();
         let vectors = options.vectors.unwrap();

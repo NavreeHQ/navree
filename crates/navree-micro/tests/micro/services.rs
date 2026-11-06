@@ -170,7 +170,7 @@ pub(crate) async fn deals_answer_the_api_over(deals: MicroOptions, api: MicroOpt
         .await;
     assert!(MicroModule::start_listener(deals_app.ctx()).await.unwrap());
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&deals_app, rep, "Acme renewal").await;
+    let deal = insert_deal(&deals_app, rep, "Agra renewal").await;
     let api_app = TestApp::builder()
         .module(BearerAuthModule)
         .module(MicroModule::for_root(MicroOptions {
@@ -190,7 +190,7 @@ pub(crate) async fn deals_answer_the_api_over(deals: MicroOptions, api: MicroOpt
         .await
         .assert_status(200)
         .json();
-    assert_eq!(view.title, "Acme renewal");
+    assert_eq!(view.title, "Agra renewal");
     api_app
         .client()
         .get(&path)
@@ -250,7 +250,7 @@ async fn routes_forward_the_request_context_and_map_remote_errors() {
         .client()
         .get(&path)
         .bearer(&user.to_string())
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .header(
             "traceparent",
             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
@@ -264,7 +264,7 @@ async fn routes_forward_the_request_context_and_map_remote_errors() {
         sent.header("authorization"),
         Some(format!("Bearer {user}").as_str())
     );
-    assert_eq!(sent.header("x-workspace"), Some("acme"));
+    assert_eq!(sent.header("x-workspace"), Some("agra"));
     assert_eq!(sent.service(), Some("crm-api"));
     assert_eq!(
         sent.header("x-request-id"),
@@ -359,7 +359,7 @@ async fn two_services_talk_over_tcp_with_the_users_credentials() {
         "started once"
     );
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&deals, rep, "Acme renewal").await;
+    let deal = insert_deal(&deals, rep, "Agra renewal").await;
 
     let api = TestApp::builder()
         .module(BearerAuthModule)
@@ -386,7 +386,7 @@ async fn two_services_talk_over_tcp_with_the_users_credentials() {
         .await
         .assert_status(200)
         .json();
-    assert_eq!(view.title, "Acme renewal");
+    assert_eq!(view.title, "Agra renewal");
     api.client()
         .get("/api/gateway/whoami")
         .bearer(&rep.to_string())

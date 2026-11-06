@@ -34,11 +34,11 @@ async fn valid_input_reaches_the_handler() {
 
     app.client()
         .post("/v/users")
-        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .json(&json!({ "name": "Anu", "email": "anu@example.com", "age": 36, "tags": ["x"] }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("ok.name", json!("Ada"));
+        .assert_json_path("ok.name", json!("Anu"));
 }
 
 #[tokio::test]
@@ -195,13 +195,13 @@ async fn bodies_over_the_limit_are_413() {
 
     app.client()
         .post("/v/users")
-        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .json(&json!({ "name": "Anu", "email": "anu@example.com", "age": 36, "tags": ["x"] }))
         .send()
         .await
         .assert_status(200);
     app.client()
         .post("/v/users")
-        .json(&json!({ "name": "A".repeat(100), "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .json(&json!({ "name": "A".repeat(100), "email": "anu@example.com", "age": 36, "tags": ["x"] }))
         .send()
         .await
         .assert_error(413, None);
@@ -255,11 +255,11 @@ async fn bodies_the_straight_read_refuses_are_judged_as_json_values() {
     app.client()
         .post("/v/users")
         .header("content-type", "application/json")
-        .body(r#"{"name": "Al", "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"]}"#)
+        .body(r#"{"name": "Al", "name": "Anu", "email": "anu@example.com", "age": 36, "tags": ["x"]}"#)
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("ok.name", json!("Ada"));
+        .assert_json_path("ok.name", json!("Anu"));
 
     let response = app
         .client()
@@ -277,7 +277,7 @@ async fn bodies_the_straight_read_refuses_are_judged_as_json_values() {
     let response = app
         .client()
         .post("/v/users")
-        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": "old", "tags": [] }))
+        .json(&json!({ "name": "Anu", "email": "anu@example.com", "age": "old", "tags": [] }))
         .send()
         .await
         .assert_error(400, None);

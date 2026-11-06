@@ -29,7 +29,7 @@ pub async fn ignoring_case(db: Db, server: Server) {
         "500 Offices",
         "A_B Ltd",
         "AXB Ltd",
-        "Acme",
+        "Agra",
     ] {
         Company::create(
             &db,
@@ -70,8 +70,8 @@ pub async fn ignoring_case(db: Db, server: Server) {
         "{server:?}: `_` is literal"
     );
     assert_eq!(
-        names(&db, Company::NAME.eq_ignore_case("ACME")).await,
-        ["Acme"],
+        names(&db, Company::NAME.eq_ignore_case("AGRA")).await,
+        ["Agra"],
         "{server:?}"
     );
     assert!(

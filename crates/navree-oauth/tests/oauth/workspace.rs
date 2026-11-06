@@ -74,15 +74,15 @@ async fn workspace(world: &World, owner: Uuid, name: &str) -> Uuid {
 #[tokio::test]
 async fn a_workspace_client_s_tokens_are_pinned_to_it() {
     let world = world().await;
-    let (ada, token) = world.user("ada@acme.test", &["deals.read"]).await;
-    let acme = workspace(&world, ada.id, "Acme").await;
-    workspace(&world, ada.id, "Globex").await;
+    let (ada, token) = world.user("anu@acme.test", &["deals.read"]).await;
+    let agra = workspace(&world, ada.id, "Agra").await;
+    workspace(&world, ada.id, "Gulati").await;
     let client = world
         .register(
-            NewClient::public("Acme reports")
+            NewClient::public("Agra reports")
                 .redirect_uri(REDIRECT_URI)
                 .scopes(["deals:read"])
-                .workspace(acme),
+                .workspace(agra),
         )
         .await;
     let tokens = authorize(&world.client(), client.client.id, &token, &["deals:read"]).await;
@@ -93,7 +93,7 @@ async fn a_workspace_client_s_tokens_are_pinned_to_it() {
         .bearer(&tokens.access_token)
         .send()
         .await
-        .assert_json_path("oauth.workspace_id", json!(acme));
+        .assert_json_path("oauth.workspace_id", json!(agra));
     // No workspace named: the pinned one.
     world
         .client()
@@ -102,11 +102,11 @@ async fn a_workspace_client_s_tokens_are_pinned_to_it() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("slug", json!("acme"));
+        .assert_json_path("slug", json!("agra"));
     world
         .client()
         .get("/api/probe/workspace")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .bearer(&tokens.access_token)
         .send()
         .await
@@ -115,7 +115,7 @@ async fn a_workspace_client_s_tokens_are_pinned_to_it() {
     world
         .client()
         .get("/api/probe/workspace")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .bearer(&token)
         .send()
         .await
@@ -125,15 +125,15 @@ async fn a_workspace_client_s_tokens_are_pinned_to_it() {
 #[tokio::test]
 async fn only_members_approve_a_workspace_client() {
     let world = world().await;
-    let (ada, _) = world.user("ada@acme.test", &["deals.read"]).await;
+    let (ada, _) = world.user("anu@acme.test", &["deals.read"]).await;
     let (eve, eve_token) = world.user("eve@acme.test", &["deals.read"]).await;
-    let acme = workspace(&world, ada.id, "Acme").await;
+    let agra = workspace(&world, ada.id, "Agra").await;
     let client = world
         .register(
-            NewClient::public("Acme reports")
+            NewClient::public("Agra reports")
                 .redirect_uri(REDIRECT_URI)
                 .scopes(["deals:read"])
-                .workspace(acme),
+                .workspace(agra),
         )
         .await;
     let (_, challenge) = navree_oauth::testing::pkce_pair();
@@ -154,7 +154,7 @@ async fn only_members_approve_a_workspace_client() {
     world
         .work(|uow| async move {
             Ok(members
-                .add(&uow, acme, eve.id, "member".into())
+                .add(&uow, agra, eve.id, "member".into())
                 .await
                 .map(|_| ())?)
         })

@@ -11,7 +11,7 @@ async fn the_fake_records_what_app_code_starts() {
     let fake = WorkflowsFake::new();
     let h = harness(|b| b.override_value(Arc::new(fake.workflows()))).await;
     let workflows: Arc<Workflows> = h.workflows().await;
-    let id = h.start(Greet { name: "Ada".into() }).await;
+    let id = h.start(Greet { name: "Anu".into() }).await;
     workflows.spawn(Onboarding { user_id: 7 }).await.unwrap();
     let keyed = workflows
         .spawn_with(Onboarding { user_id: 8 }, StartOptions::new().key("u-8"))
@@ -25,7 +25,7 @@ async fn the_fake_records_what_app_code_starts() {
 
     // Nothing ran.
     assert!(h.journal.calls().is_empty());
-    fake.assert_started::<Greet>(|input| input.name == "Ada");
+    fake.assert_started::<Greet>(|input| input.name == "Anu");
     fake.assert_started_times::<Onboarding>(2);
     assert_eq!(
         fake.started::<Onboarding>()

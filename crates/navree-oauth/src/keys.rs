@@ -365,12 +365,12 @@ mod tests {
     fn tokens_verify_with_current_and_previous_keys() {
         let (old, new) = (SigningKey25519::generate(), SigningKey25519::generate());
         let before = SigningKeys::new(old.clone(), Vec::new());
-        let token = before.sign(&json!({"sub": "ada"}));
+        let token = before.sign(&json!({"sub": "anu"}));
         let after = SigningKeys::new(new.clone(), vec![old.clone()]);
-        assert_eq!(after.verify(&token).unwrap()["sub"], "ada");
+        assert_eq!(after.verify(&token).unwrap()["sub"], "anu");
         assert_eq!(after.jwks()["keys"].as_array().unwrap().len(), 2);
         assert_eq!(after.jwks()["keys"][0]["kid"], new.kid());
-        let fresh = after.sign(&json!({"sub": "grace"}));
+        let fresh = after.sign(&json!({"sub": "gauri"}));
         assert!(after.verify(&fresh).is_ok());
         // Unknown key, tampered payload, garbage.
         let other = SigningKeys::new(SigningKey25519::generate(), Vec::new());
@@ -504,17 +504,17 @@ mod tests {
     fn switching_to_rs256_keeps_eddsa_tokens_verifiable() {
         let old = SigningKey25519::generate();
         let before = SigningKeys::new(old.clone(), Vec::new());
-        let old_token = before.sign(&json!({"sub": "ada"}));
+        let old_token = before.sign(&json!({"sub": "anu"}));
         let after = SigningKeys::with_keys(
             IdTokenKey::parse(RSA_PEM).unwrap(),
             vec![IdTokenKey::from(old)],
         );
-        assert_eq!(after.verify(&old_token).unwrap()["sub"], "ada");
+        assert_eq!(after.verify(&old_token).unwrap()["sub"], "anu");
         let jwks = after.jwks();
         assert_eq!(jwks["keys"][0]["kty"], "RSA");
         assert_eq!(jwks["keys"][1]["kty"], "OKP");
-        let new_token = after.sign(&json!({"sub": "grace"}));
-        assert_eq!(after.verify(&new_token).unwrap()["sub"], "grace");
+        let new_token = after.sign(&json!({"sub": "gauri"}));
+        assert_eq!(after.verify(&new_token).unwrap()["sub"], "gauri");
         // A token whose header names the RSA key but another algorithm is
         // refused.
         let mut parts: Vec<String> = new_token.split('.').map(str::to_owned).collect();

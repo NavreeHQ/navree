@@ -557,7 +557,7 @@ async fn twilio_whatsapp_sends_templates_as_content() {
     };
     let message = WhatsAppMessage::template(
         WhatsAppTemplate::new("HXb5b62575e6e4ff6129ad7c8efe1f983e", "")
-            .parameter("Ada")
+            .parameter("Anu")
             .parameter("A-1042"),
     );
     let sent = TwilioWhatsApp::new(&twilio_options(&server), &whatsapp)
@@ -577,7 +577,7 @@ async fn twilio_whatsapp_sends_templates_as_content() {
     );
     let variables: Value =
         serde_json::from_str(form_value(&form, "ContentVariables").unwrap()).unwrap();
-    assert_eq!(variables, json!({ "1": "Ada", "2": "A-1042" }));
+    assert_eq!(variables, json!({ "1": "Anu", "2": "A-1042" }));
     assert_eq!(form_value(&form, "Body"), None);
 }
 
@@ -606,7 +606,7 @@ async fn vonage_sends_through_the_messages_api() {
             "message_type": "text",
             "channel": "sms",
             "to": "447700900000",
-            "from": "Acme",
+            "from": "Agra",
             "text": "Your code is 481 516",
             "webhook_url": "https://api.acme.test/api/webhooks/notify/twilio",
         })))
@@ -617,7 +617,7 @@ async fn vonage_sends_through_the_messages_api() {
         .mount(&server)
         .await;
 
-    let sent = VonageSms::new(&vonage_options(&server), &sms_options("Acme"))
+    let sent = VonageSms::new(&vonage_options(&server), &sms_options("Agra"))
         .unwrap()
         .with_client(local_client())
         .send("+447700900000", &SmsMessage::new("Your code is 481 516"))
@@ -643,7 +643,7 @@ async fn vonage_problems_name_their_code() {
         .mount(&server)
         .await;
 
-    let error = VonageSms::new(&vonage_options(&server), &sms_options("Acme"))
+    let error = VonageSms::new(&vonage_options(&server), &sms_options("Agra"))
         .unwrap()
         .with_client(local_client())
         .send("+447700900000", &SmsMessage::new("x"))
@@ -693,7 +693,7 @@ async fn sns_publishes_to_the_number_signed_with_sigv4() {
         .mount(&server)
         .await;
 
-    let sent = SnsSms::new(&sns_options(&server), &sms_options("Acme"))
+    let sent = SnsSms::new(&sns_options(&server), &sms_options("Agra"))
         .unwrap()
         .with_client(local_client())
         .send("+14155550100", &SmsMessage::new("Your code is 481 516"))
@@ -733,7 +733,7 @@ async fn sns_publishes_to_the_number_signed_with_sigv4() {
     );
     assert_eq!(
         form_value(&form, "MessageAttributes.entry.2.Value.StringValue"),
-        Some("Acme")
+        Some("Agra")
     );
 }
 
@@ -946,7 +946,7 @@ async fn pushes_are_encrypted_for_the_browser_and_signed_with_vapid() {
     let browser = Browser::new();
     let target = browser.target(&format!("{}/push/v2/abc", server.uri()));
     let message = WebPushMessage::new("Deal won")
-        .body("Acme renewal")
+        .body("Agra renewal")
         .url("/deals/42")
         .ttl_secs(60)
         .urgency(Urgency::High)
@@ -981,7 +981,7 @@ async fn pushes_are_encrypted_for_the_browser_and_signed_with_vapid() {
     let payload: Value = serde_json::from_slice(&browser.decrypt(&request.body)).unwrap();
     assert_eq!(
         payload,
-        json!({ "title": "Deal won", "body": "Acme renewal", "url": "/deals/42" })
+        json!({ "title": "Deal won", "body": "Agra renewal", "url": "/deals/42" })
     );
 }
 

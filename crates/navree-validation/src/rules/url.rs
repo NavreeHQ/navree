@@ -15,7 +15,7 @@
 //!   address or a bracketed IPv6 address, and it is required except for
 //!   `file` (`file:///etc/hosts`), which takes no credentials or port. Other
 //!   schemes take any RFC 3986 host (`urn:isbn:0451450523`,
-//!   `mailto:ada@example.com` and `custom://anything` pass).
+//!   `mailto:anu@example.com` and `custom://anything` pass).
 //! - Internationalized host names are accepted in their ASCII form
 //!   (`https://xn--bcher-kva.de`).
 
@@ -186,7 +186,7 @@ mod tests {
             "http://[2001:db8::1]:8080/",
             "https://xn--bcher-kva.de/b%C3%BCcher",
             "https://example.com/?q=a/b?c#frag/ment?",
-            "https://example.com/~ada/(1)/it's,ok;*+=!$&",
+            "https://example.com/~anu/(1)/it's,ok;*+=!$&",
             "ftp://ftp.example.com/pub",
             "ws://example.com/socket",
             "file:///etc/hosts",
@@ -194,7 +194,7 @@ mod tests {
             "https://0x.example.com",
             "https://example.0xg",
             "file://server/share",
-            "mailto:ada@example.com",
+            "mailto:anu@example.com",
             "urn:isbn:0451450523",
             "tel:+44-20-7946-0000",
             "data:text/plain,hello",

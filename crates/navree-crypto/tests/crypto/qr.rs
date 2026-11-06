@@ -243,7 +243,7 @@ fn every_mask_pattern_decodes() {
     let payloads: [&[u8]; 4] = [
         b"01234567",
         b"HELLO WORLD",
-        b"otpauth://totp/Navree:ada%40example.com?secret=RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER&issuer=Navree",
+        b"otpauth://totp/Navree:anu%40example.com?secret=RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER&issuer=Navree",
         &[0, 255, 1, 254, 2, 253, 3, 252, 4, 251],
     ];
     for payload in payloads {

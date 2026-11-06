@@ -208,11 +208,11 @@ async fn the_commands_check_and_list_connections() {
 #[tokio::test]
 async fn deleting_a_workspace_forgets_its_connections() {
     let h = harness(crate::support::with_workspaces).await;
-    let acme = h.workspace(crate::support::OTHER, "acme").await;
-    h.connect_microsoft(Owner::Workspace(acme.id), TENANT).await;
+    let agra = h.workspace(crate::support::OTHER, "agra").await;
+    h.connect_microsoft(Owner::Workspace(agra.id), TENANT).await;
     let workspaces = h.app.get::<navree_workspace::Workspaces>().await;
     let uow = h.app.get::<navree_db::Db>().await.uow(None, None).await;
-    workspaces.delete(&uow, acme.id).await.unwrap();
+    workspaces.delete(&uow, agra.id).await.unwrap();
     uow.commit().await.unwrap();
     assert!(h.integrations().await.all().await.unwrap().is_empty());
 }

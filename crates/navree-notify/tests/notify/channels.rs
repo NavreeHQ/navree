@@ -10,7 +10,7 @@ async fn database_channel_stores_notification() {
     let app = support::app().await;
     let notifier = app.get::<Notifier>().await;
     let user = TestUser::new();
-    let notification = DealWon::via(&[Channel::Database], "Acme renewal");
+    let notification = DealWon::via(&[Channel::Database], "Agra renewal");
 
     notifier.send(&user, notification.clone()).await.unwrap();
 
@@ -33,7 +33,7 @@ async fn mail_channel_sends_via_mailer_array_transport() {
     let user = TestUser::new();
 
     notifier
-        .send(&user, DealWon::via(&[Channel::Mail], "Acme renewal"))
+        .send(&user, DealWon::via(&[Channel::Mail], "Agra renewal"))
         .await
         .unwrap();
 
@@ -42,9 +42,9 @@ async fn mail_channel_sends_via_mailer_array_transport() {
     let mail = &sent[0];
     assert_eq!(mail.to, vec![user.email.clone().unwrap()]);
     assert_eq!(mail.from.as_deref(), Some("Navree <noreply@navree.test>"));
-    assert_eq!(mail.subject, "Deal won: Acme renewal");
-    assert_eq!(mail.html.as_deref(), Some("<p>Acme renewal was won.</p>"));
-    assert_eq!(mail.text.as_deref(), Some("Acme renewal was won."));
+    assert_eq!(mail.subject, "Deal won: Agra renewal");
+    assert_eq!(mail.html.as_deref(), Some("<p>Agra renewal was won.</p>"));
+    assert_eq!(mail.text.as_deref(), Some("Agra renewal was won."));
     assert!(support::rows(&app).await.is_empty(), "mail only");
 }
 
@@ -56,7 +56,7 @@ async fn mail_channel_skips_a_notifiable_without_an_address() {
     notifier
         .send(
             &TestUser::without_email(),
-            DealWon::via(&[Channel::Mail, Channel::Database], "Acme renewal"),
+            DealWon::via(&[Channel::Mail, Channel::Database], "Agra renewal"),
         )
         .await
         .unwrap();
@@ -70,7 +70,7 @@ async fn broadcast_channel_calls_broadcaster() {
     let (app, broadcaster) = support::app_with_broadcaster().await;
     let notifier = app.get::<Notifier>().await;
     let user = TestUser::new();
-    let notification = DealWon::via(&[Channel::Broadcast, Channel::Database], "Acme renewal");
+    let notification = DealWon::via(&[Channel::Broadcast, Channel::Database], "Agra renewal");
 
     let id = notifier.send(&user, notification.clone()).await.unwrap();
 
@@ -101,7 +101,7 @@ async fn missing_broadcaster_fails_only_the_broadcast_channel() {
     let error = notifier
         .send(
             &TestUser::new(),
-            DealWon::via(&[Channel::Broadcast, Channel::Database], "Acme renewal"),
+            DealWon::via(&[Channel::Broadcast, Channel::Database], "Agra renewal"),
         )
         .await
         .unwrap_err();

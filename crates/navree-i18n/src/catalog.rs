@@ -621,12 +621,12 @@ mod tests {
     fn lookups_fall_back_through_the_chain() {
         let catalog = catalog();
         assert_eq!(
-            text(catalog.format("fr", "hello", Some(&args("Ada")))),
-            "Bonjour, Ada !"
+            text(catalog.format("fr", "hello", Some(&args("Anu")))),
+            "Bonjour, Anu !"
         );
         assert_eq!(
-            text(catalog.format("fr-CA", "hello", Some(&args("Ada")))),
-            "Allô, Ada !"
+            text(catalog.format("fr-CA", "hello", Some(&args("Anu")))),
+            "Allô, Anu !"
         );
         assert_eq!(
             text(catalog.format("fr-CA", "only-en", None)),
@@ -754,7 +754,7 @@ mod tests {
                 file(
                     "en",
                     "deals.ftl",
-                    "deal-won = Won\n-brand = Acme\ndeal-lost = Lost\n",
+                    "deal-won = Won\n-brand = Agra\ndeal-lost = Lost\n",
                 ),
                 file("fr", "deals.ftl", "deal-won = Gagné\n"),
                 file("pt", "deals.ftl", "deal-won = Ganho\ndeal-lost = Perdido\n"),
@@ -807,12 +807,12 @@ mod tests {
         };
         let catalog = Catalog::build(&options(&["en", "ar"], "en"), files(), false).unwrap();
         assert_eq!(
-            text(catalog.format("en", "hello", Some(&args("Ada")))),
-            "Hello Ada"
+            text(catalog.format("en", "hello", Some(&args("Anu")))),
+            "Hello Anu"
         );
         assert_eq!(
-            text(catalog.format("ar", "hello", Some(&args("Ada")))),
-            "مرحبا \u{2068}Ada\u{2069}"
+            text(catalog.format("ar", "hello", Some(&args("Anu")))),
+            "مرحبا \u{2068}Anu\u{2069}"
         );
         let always = I18nOptions {
             bidi_isolation: BidiIsolation::Always,
@@ -820,8 +820,8 @@ mod tests {
         };
         let catalog = Catalog::build(&always, files(), false).unwrap();
         assert_eq!(
-            text(catalog.format("en", "hello", Some(&args("Ada")))),
-            "Hello \u{2068}Ada\u{2069}"
+            text(catalog.format("en", "hello", Some(&args("Anu")))),
+            "Hello \u{2068}Anu\u{2069}"
         );
     }
 

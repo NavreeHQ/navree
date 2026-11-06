@@ -260,7 +260,7 @@ fn seed(dialect: Dialect) -> String {
     };
     sql.push_str(&format!(
         "INSERT INTO companies (name, country, active, region_id) VALUES \
-         ('Acme', 'US', {}, 1), ('Globex', 'DE', {}, 2), ('Initech', NULL, {}, NULL), ({}, 'FR', {}, 1);\n",
+         ('Agra', 'US', {}, 1), ('Gulati', 'DE', {}, 2), ('Indrani', NULL, {}, NULL), ({}, 'FR', {}, 1);\n",
         b(true),
         b(true),
         b(false),
@@ -269,7 +269,7 @@ fn seed(dialect: Dialect) -> String {
     ));
     sql.push_str(&format!(
         "INSERT INTO users (name, email, active) VALUES \
-         ('Ada', 'ada@example.com', {}), ('Grace', NULL, {}), ('Linus', 'linus@example.com', {});\n",
+         ('Anu', 'anu@example.com', {}), ('Gauri', NULL, {}), ('Linus', 'linus@example.com', {});\n",
         b(true),
         b(true),
         b(false)
@@ -295,7 +295,7 @@ fn seed(dialect: Dialect) -> String {
             "won",
             Some(r#"["vip","q1"]"#),
             Some(
-                r#"{"owner":{"name":"ada","email":"ada@example.com"},"items":[3,4],"status":"open"}"#,
+                r#"{"owner":{"name":"anu","email":"anu@example.com"},"items":[3,4],"status":"open"}"#,
             ),
             Some("2026-10-20 09:15:00"),
             "2026-10-01 08:00:00",
@@ -308,7 +308,7 @@ fn seed(dialect: Dialect) -> String {
             4_500,
             "lead",
             Some(r#"["q2"]"#),
-            Some(r#"{"owner":{"name":"grace"},"labels":["spam"]}"#),
+            Some(r#"{"owner":{"name":"gauri"},"labels":["spam"]}"#),
             None,
             "2026-10-05 10:30:00",
             None,
@@ -380,7 +380,7 @@ fn seed(dialect: Dialect) -> String {
             990_000,
             "lead",
             Some(r#"["q1","q2","vip"]"#),
-            Some(r#"{"owner":{"name":"ada"},"items":[3],"we\"ird":"x"}"#),
+            Some(r#"{"owner":{"name":"anu"},"items":[3],"we\"ird":"x"}"#),
             None,
             "2026-10-26 18:00:00",
             None,

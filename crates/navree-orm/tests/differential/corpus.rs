@@ -361,7 +361,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "equals ignoring case",
-            table("companies").where_(col("name").eq_ignore_case("acme")),
+            table("companies").where_(col("name").eq_ignore_case("agra")),
         ),
         read(
             "equals ignoring case beyond ascii",
@@ -387,7 +387,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "json path as text",
-            deals().where_(col("meta->owner->name").eq("ada")),
+            deals().where_(col("meta->owner->name").eq("anu")),
         ),
         read(
             "json path with an index",
@@ -1096,7 +1096,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
         names(&["name", "country", "active"]),
         vec![
             vec![
-                val("Hooli"),
+                val("Hariyali"),
                 val(Value::Null(navree_orm::Kind::String)),
                 val(true),
             ],
@@ -1121,7 +1121,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
         Kind::Insert(InsertIr::new(
             "companies",
             names(&["name", "country"]),
-            vec![vec![val("Hooli")]],
+            vec![vec![val("Hariyali")]],
         )),
     ));
     let tags = || {
@@ -1244,7 +1244,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
         Kind::Update(update(
             vec![
                 ("meta->status", val("won")),
-                ("meta->owner->name", val("ada2")),
+                ("meta->owner->name", val("anu2")),
                 ("title", val("Renamed")),
             ],
             vec![and(col("id").is_in([1_i64, 4]))],

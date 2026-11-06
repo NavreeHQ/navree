@@ -877,8 +877,8 @@ mod tests {
 
     #[test]
     fn dotted_paths_walk_objects_and_arrays() {
-        let value = json!({ "data": [{ "title": "Acme" }] });
-        assert_eq!(at_path(&value, "data.0.title"), Some(&json!("Acme")));
+        let value = json!({ "data": [{ "title": "Agra" }] });
+        assert_eq!(at_path(&value, "data.0.title"), Some(&json!("Agra")));
         assert_eq!(at_path(&value, "data.1.title"), None);
         assert_eq!(at_path(&value, ""), Some(&value));
     }

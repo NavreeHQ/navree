@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn write_fills_an_empty_entry_and_does_not_print_the_key() {
         let path = scratch("fill");
-        std::fs::write(&path, "# keys\nAPP_KEY=\nAPP_NAME=acme\n").expect("write");
+        std::fs::write(&path, "# keys\nAPP_KEY=\nAPP_NAME=agra\n").expect("write");
         let printed = run(&args(&["--write"]), &path).expect("runs");
         assert!(!printed.contains("base64:"), "{printed}");
         let text = std::fs::read_to_string(&path).expect("read");
@@ -106,7 +106,7 @@ mod tests {
             .expect("APP_KEY");
         crate::AppKey::parse(key).expect("a valid key");
         assert!(text.starts_with("# keys\n"), "{text}");
-        assert!(text.ends_with("APP_NAME=acme\n"), "{text}");
+        assert!(text.ends_with("APP_NAME=agra\n"), "{text}");
     }
 
     #[test]

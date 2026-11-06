@@ -89,7 +89,7 @@ impl Module for App {
         m.controller::<Pages>();
         if self.shell {
             m.factory(Factory::<Shell>::new(|_| async {
-                Ok(Arc::new(Shell::new("Acme").group(NavGroup::plain().item(
+                Ok(Arc::new(Shell::new("Agra").group(NavGroup::plain().item(
                     NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE),
                 ))))
             }))
@@ -153,7 +153,7 @@ async fn a_refused_form_without_javascript_keeps_the_shell() {
     let html = response.text();
     assert!(html.contains("Check this form"), "{html}");
     assert!(
-        html.contains("Acme") && html.contains("Deals"),
+        html.contains("Agra") && html.contains("Deals"),
         "the shell's name and navigation: {html}"
     );
     assert!(html.contains(r#"value="nope""#), "what was typed: {html}");
@@ -171,7 +171,7 @@ async fn without_a_shell_or_for_a_guest_the_form_is_on_its_own() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let html = response.text();
     assert!(html.contains("<title>Check this form</title>"), "{html}");
-    assert!(!html.contains("Acme"), "{html}");
+    assert!(!html.contains("Agra"), "{html}");
 
     let app = boot(builder(), true).await;
     let response = post_as_guest(&app, "/contacts", "email=nope", false).await;
@@ -179,7 +179,7 @@ async fn without_a_shell_or_for_a_guest_the_form_is_on_its_own() {
     let html = response.text();
     assert!(html.contains("<title>Check this form</title>"), "{html}");
     assert!(
-        !html.contains("Acme") && !html.contains("Deals"),
+        !html.contains("Agra") && !html.contains("Deals"),
         "a guest's page is not the app's: {html}"
     );
 }

@@ -221,14 +221,14 @@ mod tests {
         std::fs::create_dir_all(dir.join("crm")).unwrap();
         std::fs::write(
             dir.join("crm").join("tasks.json"),
-            r#"[{ "title": "Call Ada", "due": "{{ today + 1d }}", "created_at": "{{ now - 2d }}" }]"#,
+            r#"[{ "title": "Call Anu", "due": "{{ today + 1d }}", "created_at": "{{ now - 2d }}" }]"#,
         )
         .unwrap();
         let tasks: Vec<Task> = read(&dir, "crm/tasks", now()).unwrap();
         assert_eq!(
             tasks,
             [Task {
-                title: "Call Ada".into(),
+                title: "Call Anu".into(),
                 due: chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
                 created_at: Utc.with_ymd_and_hms(2026, 10, 25, 9, 30, 0).unwrap(),
             }]

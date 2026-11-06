@@ -59,8 +59,8 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 
 **7. Options with a description and a picture**
 - Keys: Both readers: Tab to "Owner" (placeholder "Choose an owner"). Down arrow to open, Down arrow, Enter. Then Down arrow to open again, Home, Enter.
-- The page: three options each show a name and a second line: Ada Lovelace (Engineering), Alan Turing (Research), Grace Hopper (Compilers). After the first Enter the button shows "Alan Turing". After the second it shows "Ada", which is shorter than the option's text.
-- The reader says: each option as its name followed by its second line ("Ada Lovelace Engineering"), with its position, "1 of 3" and so on. The small picture beside Ada Lovelace has no text of its own: it must not be spoken as "image" or as a file name. The final value is "Ada".
+- The page: three options each show a name and a second line: Anu Lakhotia (Engineering), Arun Tiwari (Research), Gauri Hundal (Compilers). After the first Enter the button shows "Arun Tiwari". After the second it shows "Anu", which is shorter than the option's text.
+- The reader says: each option as its name followed by its second line ("Anu Lakhotia Engineering"), with its position, "1 of 3" and so on. The small picture beside Anu Lakhotia has no text of its own: it must not be spoken as "image" or as a file name. The final value is "Anu".
 
 **8. Clear a chosen value**
 - Keys: Both readers: move focus to "Clearable" (it shows "Lead"; use the form field list to jump there). With the list closed, press Delete.
@@ -139,7 +139,7 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 ### Pickers that search on the server
 
 **22. A list that is fetched**
-- Keys: Both readers: Tab to "Person (searched on the server)" (it holds "Grace Hopper 3"). Press Down arrow. Then Ctrl+A and type mallory.
+- Keys: Both readers: Tab to "Person (searched on the server)" (it holds "Gauri Hundal 3"). Press Down arrow. Then Ctrl+A and type mallory.
 - The page: the list fills with the first 20 people, with a "Show more" row at the end. After "mallory" one person is left, whose name is made of the text `<img src=x onerror=alert(1)> Mallory`.
 - The reader says: expanded, then "20 results available", once, when the list lands. The "Show more" row is spoken as an option. After "mallory": "1 result available", once, and the name read as plain text (a reader may spell out the angle brackets), with no image and no alert. Press Escape.
 
@@ -149,7 +149,7 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 - The reader says: "Type at least 2 characters to search.", once, after the first letter. After the second letter a count of results, once.
 
 **24. A slow search**
-- Keys: Both readers: first slow the network (Chrome or Firefox: developer tools, Network, throttling set to a slow profile; in Safari there is no built-in throttle, so mark VoiceOver n/a unless you have one). Tab to "Person (searched on the server)", press Ctrl+A, type grace.
+- Keys: Both readers: first slow the network (Chrome or Firefox: developer tools, Network, throttling set to a slow profile; in Safari there is no built-in throttle, so mark VoiceOver n/a unless you have one). Tab to "Person (searched on the server)", press Ctrl+A, type gauri.
 - The page: while the answer is on its way the list is marked busy and the note reads "Searching...".
 - The reader says: "Searching...", once, then a count when the answer lands. Turn the throttle off afterwards.
 
@@ -214,7 +214,7 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 | 4 | Closes; Stage, collapsed, value Won | | | |
 | 5 | Won selected, 4 of 5; Escape keeps value and focus | | | |
 | 6 | Options with positions; Delhi never highlighted | | | |
-| 7 | Name plus second line; picture silent; value "Ada" | | | |
+| 7 | Name plus second line; picture silent; value "Anu" | | | |
 | 8 | "Selection cleared" once; value "None" | | | |
 | 9 | Invalid with its message once; read only; unavailable; "No options" | | | |
 | 10 | Country, combobox, collapsed; arrow button not spoken | | | |

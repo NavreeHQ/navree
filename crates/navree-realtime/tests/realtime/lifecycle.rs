@@ -20,7 +20,7 @@ async fn disconnect_user_closes_sockets() {
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
 
-    // Ada's two connections: one signed into a private channel through the
+    // Anu's two connections: one signed into a private channel through the
     // auth endpoint, one that joined a presence channel.
     let mut first = server.connect().await;
     server.join(&mut first, ada, "private-crm.deals").await;
@@ -39,7 +39,7 @@ async fn disconnect_user_closes_sockets() {
         assert!(message.contains("disconnected"), "{message}");
         assert_eq!(client.expect_close().await, 4009);
     }
-    // Bob sees Ada leave the room; he and the anonymous client stay connected.
+    // Bob sees Anu leave the room; he and the anonymous client stay connected.
     let removed = other.expect("pusher_internal:member_removed").await;
     assert_eq!(removed.data["user_id"], ada.to_string());
     other.assert_alive().await;

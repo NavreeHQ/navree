@@ -170,13 +170,13 @@ impl DirectorySource for HrSource {
             // two people.
             let _export = request.setting("export_url");
             let people = vec![
-                DirectoryUser::new("E-1001", "ada@acme.test")
-                    .name("Ada", "Lovelace")
-                    .email("ada@acme.test")
+                DirectoryUser::new("E-1001", "anu@acme.test")
+                    .name("Anu", "Lakhotia")
+                    .email("anu@acme.test")
                     .department("Engineering"),
-                DirectoryUser::new("E-1002", "grace@acme.test")
-                    .name("Grace", "Hopper")
-                    .email("grace@acme.test"),
+                DirectoryUser::new("E-1002", "gauri@acme.test")
+                    .name("Gauri", "Hundal")
+                    .email("gauri@acme.test"),
             ];
             Ok(Pulled::snapshot(people, Vec::new()))
         })
@@ -207,15 +207,15 @@ async fn directory_people_become_recipients() {
         .build()
         .await;
     fake.user(
-        DirectoryUser::new("00u1", "ada@acme.test")
-            .name("Ada", "Lovelace")
-            .email("ada@acme.test"),
+        DirectoryUser::new("00u1", "anu@acme.test")
+            .name("Anu", "Lakhotia")
+            .email("anu@acme.test"),
     )
-    .user(DirectoryUser::new("00u2", "grace@acme.test").inactive());
+    .user(DirectoryUser::new("00u2", "gauri@acme.test").inactive());
 
     let directory = app.get::<Directory>().await;
     let connection = directory
-        .create_connection(Owner::App, NewConnection::new("Acme Okta", "okta"))
+        .create_connection(Owner::App, NewConnection::new("Agra Okta", "okta"))
         .await
         .unwrap()
         .connection;
@@ -227,21 +227,21 @@ async fn directory_people_become_recipients() {
 
     let db = app.get::<Db>().await;
     let ada = Recipient::query()
-        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+        .where_(Recipient::EMAIL.eq("anu@acme.test"))
         .first(&*db)
         .await
         .unwrap()
         .unwrap();
     assert!(ada.active);
 
-    // Ada leaves the company.
+    // Anu leaves the company.
     fake.remove_user("00u1");
     directory
         .sync_now(connection.id, SyncOptions::default())
         .await
         .unwrap();
     let ada = Recipient::query()
-        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+        .where_(Recipient::EMAIL.eq("anu@acme.test"))
         .first(&*db)
         .await
         .unwrap()
@@ -270,7 +270,7 @@ async fn connections_are_made_in_code_and_custom_sources_sync() {
 
     // A SCIM connection: give the identity provider the URL and the token.
     let scim = directory
-        .create_connection(workspace, NewConnection::new("Acme Entra ID", "scim"))
+        .create_connection(workspace, NewConnection::new("Agra Entra ID", "scim"))
         .await
         .unwrap();
     let token = scim.scim_token.unwrap();
@@ -281,7 +281,7 @@ async fn connections_are_made_in_code_and_custom_sources_sync() {
     let ldap = directory
         .create_connection(
             workspace,
-            NewConnection::new("Acme Active Directory", "ldap")
+            NewConnection::new("Agra Active Directory", "ldap")
                 .settings(json!({
                     "url": "ldaps://dc1.acme.test",
                     "base_dn": "DC=acme,DC=test",
@@ -319,7 +319,7 @@ async fn connections_are_made_in_code_and_custom_sources_sync() {
     assert_eq!(plan.status, RunStatus::Succeeded);
     assert_eq!(plan.summary.users_created, 2);
     let changes = directory.changes(plan.id, 0, 50).await.unwrap();
-    assert_eq!(changes[0].label, "ada@acme.test");
+    assert_eq!(changes[0].label, "anu@acme.test");
     let run = directory
         .sync_now(hr.id, SyncOptions::default())
         .await
@@ -327,7 +327,7 @@ async fn connections_are_made_in_code_and_custom_sources_sync() {
     assert_eq!(run.summary.users_created, 2);
     let db = app.get::<Db>().await;
     let ada = Recipient::query()
-        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+        .where_(Recipient::EMAIL.eq("anu@acme.test"))
         .first(&*db)
         .await
         .unwrap()

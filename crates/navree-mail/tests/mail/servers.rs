@@ -186,7 +186,7 @@ on_every_server!(
 );
 
 fn welcome(to: &str) -> TemplateMail {
-    TemplateMail::new(to, "Welcome", "mail/welcome").context(json!({ "name": "Ada" }))
+    TemplateMail::new(to, "Welcome", "mail/welcome").context(json!({ "name": "Anu" }))
 }
 
 /// The migration made the five tables, and each reads back empty.
@@ -375,7 +375,7 @@ async fn events_for_one_message_at_the_same_time(mail: MailApp) {
     let report = mail
         .mailer()
         .await
-        .deliver(&welcome("ada@example.com"))
+        .deliver(&welcome("anu@example.com"))
         .await
         .unwrap();
     let id = report.delivery_id.unwrap();
@@ -431,7 +431,7 @@ async fn suppressions(mail: MailApp) {
         .add(
             &uow,
             Some(workspace),
-            "Ada <ADA@example.com>",
+            "Anu <ANU@example.com>",
             SuppressionReason::Manual,
             Some("asked".to_owned()),
         )
@@ -441,7 +441,7 @@ async fn suppressions(mail: MailApp) {
         .add(
             &uow,
             Some(workspace),
-            "ada@example.com",
+            "anu@example.com",
             SuppressionReason::Complaint,
             None,
         )
@@ -452,7 +452,7 @@ async fn suppressions(mail: MailApp) {
         .add(
             &uow,
             None,
-            "grace@example.com",
+            "gauri@example.com",
             SuppressionReason::Unsubscribed,
             None,
         )
@@ -469,26 +469,26 @@ async fn suppressions(mail: MailApp) {
 
     assert!(
         suppressions
-            .is_suppressed(Some(workspace), "ada@example.com")
+            .is_suppressed(Some(workspace), "anu@example.com")
             .await
             .unwrap()
     );
     assert!(
         !suppressions
-            .is_suppressed(None, "ada@example.com")
+            .is_suppressed(None, "anu@example.com")
             .await
             .unwrap()
     );
     assert!(
         suppressions
-            .is_suppressed(Some(Uuid::now_v7()), "Grace <grace@example.com>")
+            .is_suppressed(Some(Uuid::now_v7()), "Gauri <gauri@example.com>")
             .await
             .unwrap(),
         "the app-wide list applies to every workspace"
     );
     let found = suppressions.find(added.id).await.unwrap();
     assert_eq!(found, added);
-    assert_eq!(found.email, "ada@example.com");
+    assert_eq!(found.email, "anu@example.com");
     assert_eq!(found.reason, SuppressionReason::Manual);
     let listed = suppressions
         .list(Some(workspace), None, PageQuery::default())
@@ -515,13 +515,13 @@ async fn suppressions(mail: MailApp) {
     assert_eq!(removed.id, added.id);
     assert!(
         suppressions
-            .remove_email(&uow, None, "grace@example.com")
+            .remove_email(&uow, None, "gauri@example.com")
             .await
             .unwrap()
     );
     assert!(
         !suppressions
-            .remove_email(&uow, None, "grace@example.com")
+            .remove_email(&uow, None, "gauri@example.com")
             .await
             .unwrap()
     );
@@ -706,7 +706,7 @@ async fn outbox(mail: MailApp) {
     assert_eq!(found.workspace_id, Some(workspace));
     assert_eq!(
         outbox.message(id).await.unwrap().html.as_deref(),
-        Some("<p>Welcome, Ada!</p>")
+        Some("<p>Welcome, Anu!</p>")
     );
     let listed = outbox
         .list(

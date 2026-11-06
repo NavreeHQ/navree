@@ -227,7 +227,7 @@ async fn the_create_command_makes_a_read_only_demo() {
     let ada = Uuid::now_v7();
     app.run_command(
         "workspace:demo-create",
-        &["Acme demo", "--owner", &ada.to_string(), "--slug", "demo"],
+        &["Agra demo", "--owner", &ada.to_string(), "--slug", "demo"],
     )
     .await
     .unwrap();
@@ -269,7 +269,7 @@ async fn a_reset_demo_takes_writes_until_the_nightly_reset() {
     assert_eq!(demos.mode(), DemoMode::Reset);
     let uow = app.get::<Db>().await.uow(Some(ada), None).await;
     let demo = demos
-        .create(&uow, ada, NewWorkspace::named("Acme demo"))
+        .create(&uow, ada, NewWorkspace::named("Agra demo"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -278,7 +278,7 @@ async fn a_reset_demo_takes_writes_until_the_nightly_reset() {
     let client = app.acting_as(principal(ada));
     let written = client
         .post("/api/v1/companies")
-        .header("X-Workspace", "acme-demo")
+        .header("X-Workspace", "agra-demo")
         .send()
         .await
         .assert_status(200);

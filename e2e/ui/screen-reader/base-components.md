@@ -119,8 +119,8 @@ The UI proof app, `/gallery`: http://127.0.0.1:8090/gallery (see [README.md](REA
 
 **19. Avatars**
 - Keys: Continue reading with Down arrow or VO+Right arrow.
-- The page: two person icons, named "Ada Lovelace" and "Small". The toolkit has no avatar group; each avatar stands alone.
-- The reader says: "Ada Lovelace", role "graphic" (NVDA) or "image" (VoiceOver), then "Small", role "graphic" or "image". The names are spoken once each.
+- The page: two person icons, named "Anu Lakhotia" and "Small". The toolkit has no avatar group; each avatar stands alone.
+- The reader says: "Anu Lakhotia", role "graphic" (NVDA) or "image" (VoiceOver), then "Small", role "graphic" or "image". The names are spoken once each.
 
 **20. Alerts**
 - Keys: Continue reading down.
@@ -149,8 +149,8 @@ The UI proof app, `/gallery`: http://127.0.0.1:8090/gallery (see [README.md](REA
 
 **25. Breadcrumb**
 - Keys: Read on to the breadcrumb. NVDA: D to jump between landmarks. VoiceOver: VO+U, Landmarks.
-- The page: a trail named "Example trail": the link "Deals", and the current page "Acme".
-- The reader says: a navigation landmark named "Example trail". A list of 2 items. "Deals" as a link. "Acme" is the current page: NVDA says "current page", VoiceOver says "current page" or reads it as the last item. It is not a link.
+- The page: a trail named "Example trail": the link "Deals", and the current page "Agra".
+- The reader says: a navigation landmark named "Example trail". A list of 2 items. "Deals" as a link. "Agra" is the current page: NVDA says "current page", VoiceOver says "current page" or reads it as the last item. It is not a link.
 
 **26. Pagination**
 - Keys: Read on to the pagination, or jump with the landmarks list (NVDA: D; VoiceOver: VO+U, Landmarks).
@@ -164,13 +164,13 @@ The UI proof app, `/gallery`: http://127.0.0.1:8090/gallery (see [README.md](REA
 
 **28. File tile, markers and messages**
 - Keys: Read on to "report.pdf", "Today", "Earlier" and the two messages.
-- The page: a file tile "report.pdf", "2.4 MB", the markers "Today" and "Earlier", a message from "Ada" with a bubble "Hello" and the time "10:42", and a reply bubble "Hi there".
-- The reader says: "report.pdf" as a link, "2.4 MB". "Today" and "Earlier" as plain text. For the message: the avatar "Ada" as a graphic, the header "Ada", the bubble "Hello" and the footer "10:42", in that order. "Hi there" follows. The name "Ada" is spoken twice here, once for the avatar and once for the header; note it, and treat it as a failure only if the text "Hello" or the time is missing or out of order.
+- The page: a file tile "report.pdf", "2.4 MB", the markers "Today" and "Earlier", a message from "Anu" with a bubble "Hello" and the time "10:42", and a reply bubble "Hi there".
+- The reader says: "report.pdf" as a link, "2.4 MB". "Today" and "Earlier" as plain text. For the message: the avatar "Anu" as a graphic, the header "Anu", the bubble "Hello" and the footer "10:42", in that order. "Hi there" follows. The name "Anu" is spoken twice here, once for the avatar and once for the header; note it, and treat it as a failure only if the text "Hello" or the time is missing or out of order.
 
 **29. Headings, text and a plain table**
 - Keys: Read on. NVDA: press T to the table, then Ctrl+Alt+Down arrow and Ctrl+Alt+Right arrow to move by cell. VoiceOver: VO+Right arrow to the table, VO+Shift+Down arrow to interact, then VO+arrow keys.
-- The page: a level 3 heading "A heading", some text, code text "code()", a right-to-left phrase, and a table "A plain table" with columns "Name" and "Amount" and rows "Acme 1,200.00" and "Globex 3,400.00". The second row is drawn selected.
-- The reader says: the heading "A heading", level 3. For the table: the caption "A plain table", a table of 2 columns, the column headers "Name" and "Amount". Moving to "1,200.00" says the column header "Amount" with the cell. Moving down to "3,400.00" says the same header. The Globex row is selected by colour only: the markup carries no selected state on a plain table row, so no reader says "selected", and none should.
+- The page: a level 3 heading "A heading", some text, code text "code()", a right-to-left phrase, and a table "A plain table" with columns "Name" and "Amount" and rows "Agra 1,200.00" and "Gulati 3,400.00". The second row is drawn selected.
+- The reader says: the heading "A heading", level 3. For the table: the caption "A plain table", a table of 2 columns, the column headers "Name" and "Amount". Moving to "1,200.00" says the column header "Amount" with the cell. Moving down to "3,400.00" says the same header. The Gulati row is selected by colour only: the markup carries no selected state on a plain table row, so no reader says "selected", and none should.
 
 ### Commands
 
@@ -223,13 +223,13 @@ Fill in the sign-off block for this run, then one row for each step.
 | 16 | Switch role and state; label "Off" stays, state turns on | | | |
 | 17 | Radio group named once; "One" checked 1 of 2; Down moves to "Two" 2 of 2 | | | |
 | 18 | Badges as text; no icon names; spinner "Loading" once or silent | | | |
-| 19 | "Ada Lovelace" and "Small" as graphics, once each | | | |
+| 19 | "Anu Lakhotia" and "Small" as graphics, once each | | | |
 | 20 | Four alerts read as title then text; no icon spoken | | | |
 | 21 | "Upload", progress bar, 40 percent; "Working" with no percent | | | |
 | 22 | Heading "A card" level 2, then description, Act, content, Footer | | | |
 | 23 | "No deals yet" plain text, description, "New deal" button | | | |
 | 24 | "An item", description, "Open, button"; "A link item" once as a link | | | |
-| 25 | Navigation "Example trail"; list of 2; "Acme" current page, not a link | | | |
+| 25 | Navigation "Example trail"; list of 2; "Agra" current page, not a link | | | |
 | 26 | Navigation "Pagination"; "Page 5" current; gaps not spoken | | | |
 | 27 | Skeletons silent; separators; "A", "B", "21:9" | | | |
 | 28 | File link, markers, message avatar, header, bubble, time in order | | | |

@@ -175,8 +175,8 @@ async fn the_docs_examples_run_through_the_facade() {
     let workspaces = app.get::<Workspaces>().await;
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    let acme = workspaces
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+    let agra = workspaces
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -196,7 +196,7 @@ async fn the_docs_examples_run_through_the_facade() {
 
     // Turning flags on and off.
     flags
-        .activate::<NewPipeline>(FlagScope::workspace(acme.id))
+        .activate::<NewPipeline>(FlagScope::workspace(agra.id))
         .await
         .unwrap();
     flags
@@ -226,7 +226,7 @@ async fn the_docs_examples_run_through_the_facade() {
         .send()
         .await
         .assert_json_path("version", json!(2));
-    assert!(flags.active::<NewPipeline>(&acme).await.unwrap());
+    assert!(flags.active::<NewPipeline>(&agra).await.unwrap());
 
     // Percentage rollouts.
     flags
@@ -239,10 +239,10 @@ async fn the_docs_examples_run_through_the_facade() {
         .unwrap();
     let inside = Rollout::percent(25)
         .of_workspaces()
-        .includes::<NewPipeline>(acme.id);
+        .includes::<NewPipeline>(agra.id);
     assert_eq!(
         inside,
-        navree::flags::bucket("new-pipeline", acme.id) < 25,
+        navree::flags::bucket("new-pipeline", agra.id) < 25,
         "the documented bucket"
     );
 
@@ -252,14 +252,14 @@ async fn the_docs_examples_run_through_the_facade() {
         .plans
         .lock()
         .unwrap()
-        .insert(acme.id, "pro".to_owned());
+        .insert(agra.id, "pro".to_owned());
     flags
         .rollout::<AiSummaries>(Rollout::plans(["pro", "business"]))
         .await
         .unwrap();
     let summaries = app.get::<DealSummaries>().await;
     assert_eq!(
-        summaries.maybe_summarize(grace, acme.id).await.unwrap(),
+        summaries.maybe_summarize(grace, agra.id).await.unwrap(),
         Some("A summary.".to_owned())
     );
     assert_eq!(
@@ -293,10 +293,10 @@ async fn the_docs_examples_run_through_the_facade() {
         .assert_status(200);
 
     // The front end's flags: half of the Pro workspaces get AI summaries.
-    let half = navree::flags::bucket("ai-summaries", acme.id) < 50;
+    let half = navree::flags::bucket("ai-summaries", agra.id) < 50;
     app.acting_as(principal(ada))
         .get("/api/flags")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -448,39 +448,39 @@ mod with_billing {
         let owner = app
             .get::<AuthService>()
             .await
-            .create_user("Ada Lovelace", "ada@example.com", "password123")
+            .create_user("Anu Lakhotia", "anu@example.com", "password123")
             .await
             .unwrap();
         let workspaces = app.get::<Workspaces>().await;
         let uow = app.get::<Db>().await.uow(None, None).await;
-        let acme = workspaces
-            .create(&uow, owner.id, NewWorkspace::named("Acme"))
+        let agra = workspaces
+            .create(&uow, owner.id, NewWorkspace::named("Agra"))
             .await
             .unwrap();
-        let globex = workspaces
-            .create(&uow, owner.id, NewWorkspace::named("Globex"))
+        let gulati = workspaces
+            .create(&uow, owner.id, NewWorkspace::named("Gulati"))
             .await
             .unwrap();
         uow.commit().await.unwrap();
 
-        // Acme subscribes to Pro; Globex has no subscription.
+        // Agra subscribes to Pro; Gulati has no subscription.
         let billing = app.get::<Billing>().await;
-        let checkout = billing.checkout(&acme, "pro").create().await.unwrap();
+        let checkout = billing.checkout(&agra, "pro").create().await.unwrap();
         let fake = billing.fake().expect("the fake provider");
         fake.complete_checkout(&checkout.id).await.unwrap();
         app.get::<Queue>().await.run_pending().await.unwrap();
-        assert!(billing.subscribed(&acme, "pro").await.unwrap());
+        assert!(billing.subscribed(&agra, "pro").await.unwrap());
 
         let flags = app.get::<Flags>().await;
         flags
             .rollout::<AiSummaries>(Rollout::plans(["pro", "business"]))
             .await
             .unwrap();
-        assert!(flags.active::<AiSummaries>(&acme).await.unwrap());
-        assert!(!flags.active::<AiSummaries>(&globex).await.unwrap());
+        assert!(flags.active::<AiSummaries>(&agra).await.unwrap());
+        assert!(!flags.active::<AiSummaries>(&gulati).await.unwrap());
         assert!(
             flags
-                .active::<AiSummaries>(FlagScope::user(owner.id).workspace(acme.id))
+                .active::<AiSummaries>(FlagScope::user(owner.id).workspace(agra.id))
                 .await
                 .unwrap()
         );

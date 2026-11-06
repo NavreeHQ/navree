@@ -57,7 +57,7 @@ struct Text {
 
 fn valid_text() -> Text {
     Text {
-        email: "ada@example.com".into(),
+        email: "anu@example.com".into(),
         website: Some("https://example.com".into()),
         ip: "::1".into(),
         v4: "192.0.2.1".into(),
@@ -65,7 +65,7 @@ fn valid_text() -> Text {
         ascii: "plain".into(),
         code: "abc123".into(),
         card: "4111 1111 1111 1111".into(),
-        handle: "@ada!".into(),
+        handle: "@anu!".into(),
         currency: "EUR".into(),
     }
 }
@@ -74,7 +74,7 @@ fn valid_text() -> Text {
 fn text_rules_pass_and_fail() {
     assert_eq!(failures(&valid_text()), []);
     let text = Text {
-        email: "ada@".into(),
+        email: "anu@".into(),
         website: Some("example.com".into()),
         ip: "localhost".into(),
         v4: "::1".into(),
@@ -82,7 +82,7 @@ fn text_rules_pass_and_fail() {
         ascii: "café".into(),
         code: "a-b".into(),
         card: "4111".into(),
-        handle: "ada".into(),
+        handle: "anu".into(),
         currency: "eur".into(),
     };
     assert_eq!(
@@ -164,7 +164,7 @@ fn length_range_and_required() {
         ])
     );
     let long = Measured {
-        name: Some("Ada Lovelace".into()),
+        name: Some("Anu Lakhotia".into()),
         ..ok
     };
     let violations = long.validate().unwrap_err();
@@ -243,7 +243,7 @@ fn nested_values_report_at_their_full_path() {
         gift: None,
         by_warehouse: BTreeMap::new(),
         customer: Customer {
-            email: "ada@example.com".into(),
+            email: "anu@example.com".into(),
             address: Box::new(Address { city: "x".into() }),
         },
     };
@@ -275,7 +275,7 @@ struct Tagged {
 fn each_checks_every_item() {
     let tagged = Tagged {
         tags: vec!["vip".into(), " ".into(), "toolong".into()],
-        scores: BTreeMap::from([("ada".to_owned(), 101), ("bob".to_owned(), 5)]),
+        scores: BTreeMap::from([("anu".to_owned(), 101), ("bob".to_owned(), 5)]),
         emails: Some(HashSet::from(["x".to_owned()])),
         grid: vec![vec![0, 1], vec![-1]],
         items: [Item {
@@ -288,7 +288,7 @@ fn each_checks_every_item() {
         pairs(&[
             ("tags.1", ":attribute must not be blank"),
             ("tags.2", "max.string"),
-            ("scores.ada", "max.numeric"),
+            ("scores.anu", "max.numeric"),
             ("emails.0", "email"),
             ("grid.1.0", "min.numeric"),
             ("items.0.sku", "min.string"),

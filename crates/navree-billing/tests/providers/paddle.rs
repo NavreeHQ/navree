@@ -17,7 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use crate::fixtures::{NOW, PERIOD_END, TRIAL_END, WORKSPACE, paddle as fx};
 use crate::support::{change, checkout_request, client, json};
 
-const SUB: &str = "/subscriptions/sub_01j8acme";
+const SUB: &str = "/subscriptions/sub_01j8agra";
 
 async fn paddle() -> (MockServer, PaddleProvider) {
     let server = MockServer::start().await;
@@ -61,19 +61,19 @@ async fn customers_and_checkouts_are_authenticated_json_posts_on_version_1() {
         .create_customer(&NewCustomer {
             billable_type: "workspace".into(),
             billable_id: WORKSPACE,
-            name: "Acme".into(),
-            email: Some("ada@example.com".into()),
+            name: "Agra".into(),
+            email: Some("anu@example.com".into()),
             idempotency_key: "navree-customer-test-1".into(),
         })
         .await
         .unwrap();
-    assert_eq!(customer.as_deref(), Some("ctm_01j8acme"));
+    assert_eq!(customer.as_deref(), Some("ctm_01j8agra"));
     // Without an email Paddle can't create a customer: the checkout will.
     let none = paddle
         .create_customer(&NewCustomer {
             billable_type: "workspace".into(),
             billable_id: WORKSPACE,
-            name: "Acme".into(),
+            name: "Agra".into(),
             email: None,
             idempotency_key: "navree-customer-test-2".into(),
         })
@@ -90,15 +90,15 @@ async fn customers_and_checkouts_are_authenticated_json_posts_on_version_1() {
 
     let requests = server.received_requests().await.unwrap();
     let created = json(&requests[0]);
-    assert_eq!(created["email"], "ada@example.com");
-    assert_eq!(created["name"], "Acme");
+    assert_eq!(created["email"], "anu@example.com");
+    assert_eq!(created["name"], "Agra");
     assert_eq!(created["custom_data"]["billable_id"], WORKSPACE.to_string());
     let transaction = json(&requests[1]);
     assert_eq!(
         transaction["items"],
         json!([{ "price_id": "pri_pro_m", "quantity": 2 }])
     );
-    assert_eq!(transaction["customer_id"], "ctm_01j8acme");
+    assert_eq!(transaction["customer_id"], "ctm_01j8agra");
     assert_eq!(transaction["custom_data"]["plan"], "pro");
     assert_eq!(transaction["collection_mode"], "automatic");
 }
@@ -167,7 +167,7 @@ async fn subscription_changes_return_the_mapped_subscription() {
         .await;
 
     let changed = paddle
-        .update_subscription("sub_01j8acme", &change(None, "pri_business_m", 3))
+        .update_subscription("sub_01j8agra", &change(None, "pri_business_m", 3))
         .await
         .unwrap();
     assert_eq!(changed.status, SubscriptionStatus::Active);
@@ -175,19 +175,19 @@ async fn subscription_changes_return_the_mapped_subscription() {
     assert_eq!(changed.items[0].quantity, Some(3));
     assert_eq!(changed.current_period_end, Some(at(PERIOD_END)));
     let canceling = paddle
-        .cancel_subscription("sub_01j8acme", true)
+        .cancel_subscription("sub_01j8agra", true)
         .await
         .unwrap();
     assert_eq!(canceling.ends_at, Some(at(PERIOD_END)));
     assert_eq!(canceling.status, SubscriptionStatus::Active);
-    let resumed = paddle.resume_subscription("sub_01j8acme").await.unwrap();
+    let resumed = paddle.resume_subscription("sub_01j8agra").await.unwrap();
     assert_eq!(resumed.ends_at, None);
-    let paused = paddle.pause_subscription("sub_01j8acme").await.unwrap();
+    let paused = paddle.pause_subscription("sub_01j8agra").await.unwrap();
     assert_eq!(paused.status, SubscriptionStatus::Paused);
-    let unpaused = paddle.unpause_subscription("sub_01j8acme").await.unwrap();
+    let unpaused = paddle.unpause_subscription("sub_01j8agra").await.unwrap();
     assert_eq!(unpaused.status, SubscriptionStatus::Active);
     let canceled = paddle
-        .cancel_subscription("sub_01j8acme", false)
+        .cancel_subscription("sub_01j8agra", false)
         .await
         .unwrap();
     assert_eq!(canceled.status, SubscriptionStatus::Canceled);
@@ -199,19 +199,19 @@ async fn lists_invoices_the_portal_prices_charges_and_notification_settings() {
     let (server, paddle) = paddle().await;
     Mock::given(method("GET"))
         .and(path("/subscriptions"))
-        .and(query_param("customer_id", "ctm_01j8acme"))
+        .and(query_param("customer_id", "ctm_01j8agra"))
         .respond_with(ok(json!([fx::subscription("trialing", "pri_pro_m", 2)])))
         .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path("/transactions"))
-        .and(query_param("customer_id", "ctm_01j8acme"))
+        .and(query_param("customer_id", "ctm_01j8agra"))
         .respond_with(ok(json!([fx::transaction("completed", "5800")])))
         .mount(&server)
         .await;
     Mock::given(method("POST"))
-        .and(path("/customers/ctm_01j8acme/portal-sessions"))
-        .and(body_json(json!({ "subscription_ids": ["sub_01j8acme"] })))
+        .and(path("/customers/ctm_01j8agra/portal-sessions"))
+        .and(body_json(json!({ "subscription_ids": ["sub_01j8agra"] })))
         .respond_with(ok(fx::portal_session()))
         .mount(&server)
         .await;
@@ -243,7 +243,7 @@ async fn lists_invoices_the_portal_prices_charges_and_notification_settings() {
         .mount(&server)
         .await;
 
-    let subs = paddle.subscriptions("ctm_01j8acme").await.unwrap();
+    let subs = paddle.subscriptions("ctm_01j8agra").await.unwrap();
     assert_eq!(subs[0].status, SubscriptionStatus::Trialing);
     assert_eq!(subs[0].trial_ends_at, Some(at(TRIAL_END)));
     assert_eq!(
@@ -251,7 +251,7 @@ async fn lists_invoices_the_portal_prices_charges_and_notification_settings() {
         Some(("workspace".to_owned(), WORKSPACE))
     );
 
-    let invoices = paddle.invoices("ctm_01j8acme").await.unwrap();
+    let invoices = paddle.invoices("ctm_01j8agra").await.unwrap();
     assert_eq!(invoices[0].number, "325-10001");
     assert_eq!(invoices[0].status, InvoiceStatus::Paid);
     assert_eq!(invoices[0].total_cents, 5800);
@@ -259,9 +259,9 @@ async fn lists_invoices_the_portal_prices_charges_and_notification_settings() {
 
     let url = paddle
         .portal_url(
-            "ctm_01j8acme",
+            "ctm_01j8agra",
             "https://ignored.test",
-            &["sub_01j8acme".to_owned()],
+            &["sub_01j8agra".to_owned()],
         )
         .await
         .unwrap();
@@ -271,8 +271,8 @@ async fn lists_invoices_the_portal_prices_charges_and_notification_settings() {
 
     paddle
         .report_usage(&UsageReport {
-            customer_id: "ctm_01j8acme".into(),
-            subscription_id: "sub_01j8acme".into(),
+            customer_id: "ctm_01j8agra".into(),
+            subscription_id: "sub_01j8agra".into(),
             meter: "ai_summaries".into(),
             price_id: "pri_ai".into(),
             quantity: 3,
@@ -306,17 +306,17 @@ async fn errors_carry_the_status_and_detail() {
     Mock::given(method("PATCH"))
         .and(path(SUB))
         .respond_with(
-            ResponseTemplate::new(404).set_body_json(fx::error("Entity sub_01j8acme not found")),
+            ResponseTemplate::new(404).set_body_json(fx::error("Entity sub_01j8agra not found")),
         )
         .mount(&server)
         .await;
     let error = paddle
-        .update_subscription("sub_01j8acme", &change(None, "pri_pro_m", 1))
+        .update_subscription("sub_01j8agra", &change(None, "pri_pro_m", 1))
         .await
         .unwrap_err();
     assert!(matches!(
         &error,
-        ProviderError::Api { provider: "paddle", status: 404, message } if message == "Entity sub_01j8acme not found"
+        ProviderError::Api { provider: "paddle", status: 404, message } if message == "Entity sub_01j8agra not found"
     ));
 }
 
@@ -349,14 +349,14 @@ async fn notifications_are_verified_and_parsed() {
         event.actions,
         [
             WebhookAction::CustomerLinked {
-                customer_id: "ctm_01j8acme".into(),
+                customer_id: "ctm_01j8agra".into(),
                 billable: Some(("workspace".into(), WORKSPACE)),
                 email: None,
             },
             WebhookAction::InvoicePaid(ProviderInvoice {
                 id: "txn_01j8first".into(),
-                customer_id: Some("ctm_01j8acme".into()),
-                subscription_id: Some("sub_01j8acme".into()),
+                customer_id: Some("ctm_01j8agra".into()),
+                subscription_id: Some("sub_01j8agra".into()),
                 amount_cents: 5800,
                 currency: "usd".into(),
             }),

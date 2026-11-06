@@ -902,19 +902,19 @@ mod tests {
     #[test]
     fn hits_serialize_as_the_record_plus_score_and_highlights() {
         let hit = Hit {
-            record: Contact { id: 1, name: "Ada" },
+            record: Contact { id: 1, name: "Anu" },
             score: 0.5,
-            highlights: BTreeMap::from([("name".to_owned(), "<mark>Ada</mark>".to_owned())]),
+            highlights: BTreeMap::from([("name".to_owned(), "<mark>Anu</mark>".to_owned())]),
         };
         assert_eq!(
             serde_json::to_value(&hit).unwrap(),
-            json!({"id": 1, "name": "Ada", "_score": 0.5, "_highlights": {"name": "<mark>Ada</mark>"}})
+            json!({"id": 1, "name": "Anu", "_score": 0.5, "_highlights": {"name": "<mark>Anu</mark>"}})
         );
         let mapped = hit.map(|c| c.name);
-        assert_eq!(mapped.record, "Ada");
+        assert_eq!(mapped.record, "Anu");
         assert_eq!(
             serde_json::to_value(&mapped).unwrap()["record"],
-            json!("Ada")
+            json!("Anu")
         );
     }
 }

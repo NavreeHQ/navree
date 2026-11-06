@@ -11,7 +11,7 @@ export const API = `${BASE_URL}/api`;
 export const PROFILE = __ENV.PROFILE || 'smoke';
 
 /** The seeded workspace the load runs in (a slug or an id). */
-export const WORKSPACE = __ENV.WORKSPACE || 'acme';
+export const WORKSPACE = __ENV.WORKSPACE || 'agra';
 
 /** The password of every seeded account (apps/evidence-app/src/seed.rs). */
 export const PASSWORD = __ENV.PASSWORD || 'evidence-password';

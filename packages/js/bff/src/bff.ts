@@ -777,7 +777,7 @@ export function createBff(options: BffOptions) {
   }
 
   /**
-   * `GET {socialPaths.start}/{provider}?next=/w/acme`: starts a social sign-in. The API answers with
+   * `GET {socialPaths.start}/{provider}?next=/w/agra`: starts a social sign-in. The API answers with
    * the provider's URL and a sealed state; the state waits in an httpOnly cookie that only the
    * callback route receives, and the browser goes to the provider. Failures end on `pages.signIn`
    * with `?error=social_unavailable` or `api_unreachable`.

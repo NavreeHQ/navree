@@ -1,6 +1,6 @@
 {
   "api": {
-    "title": "Acme cloud API",
+    "title": "Agra cloud API",
     "undocumented": [
       "/_lighthouse*",
       "/_logbook*"
@@ -11,7 +11,7 @@
   },
   "database": {
     "migrate_on_boot": true,
-    "url": "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+    "url": "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
   },
   "http": {
     "addr": "127.0.0.1:8080",
@@ -22,7 +22,7 @@
     "level": "info"
   },
   "mail": {
-    "from": "Acme cloud <hello@example.com>",
+    "from": "Agra cloud <hello@example.com>",
     "transport": "log"
   },
   "queue": {

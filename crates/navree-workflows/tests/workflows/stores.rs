@@ -65,18 +65,18 @@ async fn units_of_work(h: Harness) {
     let workflows = h.workflows().await;
     let uow = h.db().await.uow(None, None).await;
     let id = workflows
-        .start(&uow, Greet { name: "Ada".into() })
+        .start(&uow, Greet { name: "Anu".into() })
         .await
         .unwrap();
     assert!(h.journal.calls().is_empty());
     uow.commit().await.unwrap();
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Completed);
-    assert_eq!(run.output, Some(json!("Hello, Ada")));
+    assert_eq!(run.output, Some(json!("Hello, Anu")));
     assert_eq!(run.finished_at, Some(start()));
     let steps = workflows.details(id).await.unwrap().steps;
     assert_eq!(steps.len(), 1);
-    assert_eq!(steps[0].output, Some(json!("Hello, Ada")));
+    assert_eq!(steps[0].output, Some(json!("Hello, Anu")));
     assert_eq!(workflows.execute(id).await.unwrap(), Execution::Skipped);
 
     let uow = h.db().await.uow(None, None).await;

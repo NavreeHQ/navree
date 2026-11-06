@@ -142,8 +142,8 @@ impl Module for DemoModule {
 
 const FIXTURE: &str = r#"[
     { "title": "Northwind renewal" },
-    { "title": "Globex pilot" },
-    { "title": "Initech expansion" }
+    { "title": "Gulati pilot" },
+    { "title": "Indrani expansion" }
 ]"#;
 
 /// A directory with `deals.json`.
@@ -195,7 +195,7 @@ impl World {
 }
 
 fn seeded() -> Vec<String> {
-    let mut titles: Vec<String> = ["Northwind renewal", "Globex pilot", "Initech expansion"]
+    let mut titles: Vec<String> = ["Northwind renewal", "Gulati pilot", "Indrani expansion"]
         .map(str::to_owned)
         .to_vec();
     titles.sort();
@@ -209,15 +209,15 @@ async fn demo_workspaces_are_created_and_seeded_from_fixtures() {
     let mut events = world
         .events(&["workspace.created", "workspace.demo_seeded"])
         .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let live = world.workspace(ada, "Acme").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let live = world.workspace(ada, "Agra").await;
+    let demo = world.demo(ada, "Agra demo").await;
 
     assert_eq!(live.kind(), WorkspaceKind::Live);
     assert!(!live.is_demo());
     assert_eq!(demo.kind(), WorkspaceKind::Demo);
     assert!(demo.is_demo());
-    assert_eq!(demo.slug, "acme-demo");
+    assert_eq!(demo.slug, "agra-demo");
     assert_eq!(world.deal_titles(demo.id).await, seeded());
     assert!(world.deal_titles(live.id).await.is_empty());
 
@@ -234,7 +234,7 @@ async fn demo_workspaces_are_created_and_seeded_from_fixtures() {
         .map(|(_, payload)| payload.clone())
         .expect("a demo_seeded event");
     assert_eq!(seeded_event["workspace_id"], json!(demo.id));
-    assert_eq!(seeded_event["slug"], json!("acme-demo"));
+    assert_eq!(seeded_event["slug"], json!("agra-demo"));
     assert_eq!(seeded_event["seeders"], json!(["deals"]));
     assert_eq!(seeded_event["reset"], json!(false));
 }
@@ -243,14 +243,14 @@ async fn demo_workspaces_are_created_and_seeded_from_fixtures() {
 async fn read_only_demos_refuse_writes_and_mark_their_responses() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada, "Acme").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada, "Agra").await;
+    let demo = world.demo(ada, "Agra demo").await;
     let client = world.as_user(ada);
 
     let read = client
         .get("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .send()
         .await
         .assert_status(200)
@@ -260,7 +260,7 @@ async fn read_only_demos_refuse_writes_and_mark_their_responses() {
 
     let refused = client
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Sneaky" }))
         .send()
         .await
@@ -270,23 +270,23 @@ async fn read_only_demos_refuse_writes_and_mark_their_responses() {
 
     // The workspace routes are writes too.
     client
-        .patch("/api/workspaces/acme-demo")
+        .patch("/api/workspaces/agra-demo")
         .json(&json!({ "name": "Renamed" }))
         .send()
         .await
         .assert_error(403, "Demo workspaces are read-only.");
     client
-        .get("/api/workspaces/acme-demo")
+        .get("/api/workspaces/agra-demo")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("kind", json!("demo"))
-        .assert_json_path("name", json!("Acme demo"));
+        .assert_json_path("name", json!("Agra demo"));
 
     // A live workspace writes, and its responses carry no demo header.
     let live = client
         .post("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "title": "Real deal" }))
         .send()
         .await
@@ -311,10 +311,10 @@ async fn editor_roles_and_allowed_routes_write_to_read_only_demos() {
             )
     })
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Linus", "linus@example.com").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let demo = world.demo(ada, "Agra demo").await;
     world.join(demo.id, grace, "admin").await;
     world.join(demo.id, linus, "member").await;
 
@@ -322,7 +322,7 @@ async fn editor_roles_and_allowed_routes_write_to_read_only_demos() {
     world
         .as_user(grace)
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Curated deal" }))
         .send()
         .await
@@ -332,21 +332,21 @@ async fn editor_roles_and_allowed_routes_write_to_read_only_demos() {
     let member = world.as_user(linus);
     member
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Nope" }))
         .send()
         .await
         .assert_error(403, "Demo workspaces are read-only.");
     member
         .post("/api/deals/preview")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "What if" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("preview", json!("What if"));
     member
-        .post("/api/workspaces/acme-demo/leave")
+        .post("/api/workspaces/agra-demo/leave")
         .send()
         .await
         .assert_status(204);
@@ -361,14 +361,14 @@ async fn reset_demos_accept_writes_until_the_reset_restores_the_fixtures() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b.config("workspace.demo.mode", "reset")).await;
     let mut events = world.events(&["workspace.demo_seeded"]).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let live = world.workspace(ada, "Acme").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let live = world.workspace(ada, "Agra").await;
+    let demo = world.demo(ada, "Agra demo").await;
     let client = world.as_user(ada);
 
     let written = client
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Prospect's experiment" }))
         .send()
         .await
@@ -376,7 +376,7 @@ async fn reset_demos_accept_writes_until_the_reset_restores_the_fixtures() {
     assert_eq!(written.header(DEMO_HEADER), Some("reset"));
     client
         .post("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "title": "Real deal" }))
         .send()
         .await
@@ -408,8 +408,8 @@ async fn reset_demos_accept_writes_until_the_reset_restores_the_fixtures() {
 async fn the_reset_command_takes_demo_slugs_only() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let live = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let live = world.workspace(ada, "Agra").await;
     world.demo(ada, "First demo").await;
     let second = world.demo(ada, "Second demo").await;
 
@@ -428,7 +428,7 @@ async fn the_reset_command_takes_demo_slugs_only() {
 
     let error = world
         .app
-        .run_command("workspace:demo-reset", &["acme"])
+        .run_command("workspace:demo-reset", &["agra"])
         .await
         .unwrap_err()
         .to_string();
@@ -451,7 +451,7 @@ async fn the_reset_command_takes_demo_slugs_only() {
 async fn the_create_command_makes_a_seeded_demo() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     world
         .app
         .run_command(
@@ -460,7 +460,7 @@ async fn the_create_command_makes_a_seeded_demo() {
                 "Sales",
                 "demo",
                 "--owner",
-                "ada@example.com",
+                "anu@example.com",
                 "--slug",
                 "sales",
             ],
@@ -487,7 +487,7 @@ async fn the_create_command_makes_a_seeded_demo() {
     for args in [
         &["No owner"][..],
         &["Unknown owner", "--owner", "nobody@example.com"][..],
-        &["--owner", "ada@example.com"][..],
+        &["--owner", "anu@example.com"][..],
     ] {
         assert!(
             world
@@ -504,15 +504,15 @@ async fn the_create_command_makes_a_seeded_demo() {
 async fn guests_enter_demos_with_the_guest_role() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b.config("workspace.demo.guest_role", "viewer")).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    world.workspace(ada, "Acme").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    world.workspace(ada, "Agra").await;
+    let demo = world.demo(ada, "Agra demo").await;
     let guest = world.as_user(grace);
 
     let entered = guest
         .get("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .send()
         .await
         .assert_status(200)
@@ -523,7 +523,7 @@ async fn guests_enter_demos_with_the_guest_role() {
     // Guests can't enter live workspaces.
     guest
         .get("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");
@@ -533,7 +533,7 @@ async fn guests_enter_demos_with_the_guest_role() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.slug", json!("acme-demo"))
+        .assert_json_path("data.0.slug", json!("agra-demo"))
         .assert_json_path("data.0.kind", json!("demo"))
         .assert_json_path("data.0.role", json!("viewer"));
     let listed = world
@@ -549,7 +549,7 @@ async fn guests_enter_demos_with_the_guest_role() {
         .iter()
         .map(|w| (w["slug"].as_str().unwrap(), w["kind"].as_str().unwrap()))
         .collect();
-    assert_eq!(kinds, [("acme", "live"), ("acme-demo", "demo")]);
+    assert_eq!(kinds, [("agra", "live"), ("agra-demo", "demo")]);
     // Guests write no more than members do.
     guest
         .post("/api/deals")
@@ -560,15 +560,15 @@ async fn guests_enter_demos_with_the_guest_role() {
         .assert_error(403, "Demo workspaces are read-only.");
     // They see the workspace, but not its members or invitations.
     guest
-        .get("/api/workspaces/acme-demo")
+        .get("/api/workspaces/agra-demo")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("role", json!("viewer"))
         .assert_json_path("kind", json!("demo"));
     for path in [
-        "/api/workspaces/acme-demo/members",
-        "/api/workspaces/acme-demo/invitations",
+        "/api/workspaces/agra-demo/members",
+        "/api/workspaces/agra-demo/invitations",
     ] {
         guest
             .get(path)
@@ -578,7 +578,7 @@ async fn guests_enter_demos_with_the_guest_role() {
     }
     world
         .as_user(ada)
-        .get("/api/workspaces/acme-demo/members")
+        .get("/api/workspaces/agra-demo/members")
         .send()
         .await
         .assert_status(200);
@@ -592,26 +592,26 @@ async fn reset_demo_guests_write_with_their_role_but_never_manage_the_workspace(
             .config("workspace.demo.guest_role", "member")
     })
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let demo = world.demo(ada, "Agra demo").await;
     let guest = world.as_user(grace);
     guest
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Guest's deal" }))
         .send()
         .await
         .assert_status(200);
     assert_eq!(world.deal_titles(demo.id).await.len(), 4);
     guest
-        .post("/api/workspaces/acme-demo/invitations")
+        .post("/api/workspaces/agra-demo/invitations")
         .json(&json!({ "email": "friend@example.com" }))
         .send()
         .await
         .assert_error(403, "Only members of this workspace can do this.");
     guest
-        .post("/api/workspaces/acme-demo/leave")
+        .post("/api/workspaces/agra-demo/leave")
         .send()
         .await
         .assert_error(403, "Only members of this workspace can do this.");
@@ -621,13 +621,13 @@ async fn reset_demo_guests_write_with_their_role_but_never_manage_the_workspace(
 async fn without_a_guest_role_demos_are_for_members() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    world.demo(ada, "Agra demo").await;
     world
         .as_user(grace)
         .get("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");
@@ -649,12 +649,12 @@ async fn the_nightly_reset_runs_at_reset_at() {
             .module(ScheduleModule::for_root())
     })
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let demo = world.demo(ada, "Agra demo").await;
     world
         .as_user(ada)
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Prospect's experiment" }))
         .send()
         .await
@@ -684,12 +684,12 @@ async fn read_only_demos_are_not_reset_on_the_schedule() {
             .module(ScheduleModule::for_root())
     })
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let demo = world.demo(ada, "Acme demo").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let demo = world.demo(ada, "Agra demo").await;
     world
         .as_user(ada)
         .post("/api/deals")
-        .header("x-workspace", "acme-demo")
+        .header("x-workspace", "agra-demo")
         .json(&json!({ "title": "Curated" }))
         .send()
         .await
@@ -706,7 +706,7 @@ async fn read_only_demos_are_not_reset_on_the_schedule() {
 async fn a_missing_fixture_fails_the_seed_and_rolls_back() {
     let dir = TempDirGuard::new();
     let world = world_with(&dir, |b| b).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let demos = world.demos().await;
     let error = world
         .work(|uow| async move {
@@ -743,7 +743,7 @@ impl Module for DuplicateModule {
 async fn seeder_names_must_be_unique() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b.module(DuplicateModule)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let demos = world.demos().await;
     let error = demos.seeders().await.unwrap_err().to_string();
     assert!(error.contains("`deals`"), "{error}");
@@ -900,7 +900,7 @@ async fn database_isolation_seeds_and_resets_the_demo_database() {
             .module(NotesModule),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let demo = world.demo(ada, "Notes demo").await;
     let databases = world
         .app

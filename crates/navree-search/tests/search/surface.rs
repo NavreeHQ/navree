@@ -21,7 +21,7 @@ use crate::support::Contact;
 #[allow(dead_code, unused_must_use, clippy::let_underscore_future)]
 async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, page: PageQuery) {
     let query: SearchQuery<Contact> = search
-        .query::<Contact>("ada")
+        .query::<Contact>("anu")
         .filter("status", "customer")
         .filter_not("status", "lost")
         .filter_in("owner_id", [uuid::Uuid::nil()])
@@ -39,7 +39,7 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .highlight_tags("<em>", "</em>");
     let _: Result<Page<Record<Contact>>, SearchError> = query.paginate(page).await;
     let _: Result<Page<Hit<Record<Contact>>>, SearchError> =
-        search.query::<Contact>("ada").hits(page).await;
+        search.query::<Contact>("anu").hits(page).await;
     let _: Result<Vec<String>, SearchError> = search.query::<Contact>("").ids(10).await;
     let _: Result<u64, SearchError> = search.query::<Contact>("").count().await;
 
@@ -55,7 +55,7 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .run()
         .await;
 
-    let across: AcrossQuery = search.across("ada").include::<Contact>(scope).limit(10);
+    let across: AcrossQuery = search.across("anu").include::<Contact>(scope).limit(10);
     let hits: Vec<AcrossHit> = across.run().await.unwrap();
     for hit in hits {
         let (_kind, _id, _title, _score) = (&hit.kind, &hit.id, &hit.title, hit.score);
@@ -150,7 +150,7 @@ async fn the_documented_commands_and_config_keys_exist() {
         .config("search.tantivy.memory_budget_mb", 64)
         .config(
             "search.indexes.companies.synonyms",
-            serde_json::json!({"acme": ["acme corp"]}),
+            serde_json::json!({"agra": ["agra corp"]}),
         )
         .config(
             "search.indexes.companies.stop_words",

@@ -267,26 +267,26 @@ async fn row_level_security_scopes_every_query_to_the_request_workspace() {
     };
     let app = app(&scratch, "row", RowItemsModule).await;
     let ada = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
-    let globex = create(&app, ada, "Globex").await;
+    let agra = create(&app, ada, "Agra").await;
+    let gulati = create(&app, ada, "Gulati").await;
     let client = app.acting_as(principal(ada));
 
     client
         .post("/api/items")
-        .header("x-workspace", "acme")
-        .json(&json!({ "title": "Acme item" }))
+        .header("x-workspace", "agra")
+        .json(&json!({ "title": "Agra item" }))
         .send()
         .await
         .assert_status(200);
     client
         .get("/api/items")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
-        .assert_json_path("data.0.title", json!("Acme item"));
+        .assert_json_path("data.0.title", json!("Agra item"));
     client
         .get("/api/items")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
@@ -301,21 +301,21 @@ async fn row_level_security_scopes_every_query_to_the_request_workspace() {
     assert_eq!(count(db.uow(None, None).await).await, 0);
     // A job enters a workspace explicitly.
     let uow = db.uow(None, None).await;
-    workspaces.enter(&uow, globex.id).await.unwrap();
+    workspaces.enter(&uow, gulati.id).await.unwrap();
     assert_eq!(count(uow.clone()).await, 0);
     uow.rollback().await.unwrap();
     let uow = db.uow(None, None).await;
-    workspaces.enter(&uow, acme.id).await.unwrap();
+    workspaces.enter(&uow, agra.id).await.unwrap();
     assert_eq!(count(uow.clone()).await, 1);
     // Writing another workspace's row fails the policy check.
-    let refused = Item::create(&uow, new_item(globex.id, "Smuggled")).await;
+    let refused = Item::create(&uow, new_item(gulati.id, "Smuggled")).await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
     // WorkspaceRepo scopes on its own too.
     let uow = db.uow(None, None).await;
-    workspaces.enter(&uow, acme.id).await.unwrap();
+    workspaces.enter(&uow, agra.id).await.unwrap();
     assert_eq!(
-        WorkspaceRepo::<Item>::query(globex.id)
+        WorkspaceRepo::<Item>::query(gulati.id)
             .count(&uow)
             .await
             .unwrap(),
@@ -334,26 +334,26 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
     };
     let app = app(&scratch, "schema", SchemaItemsModule).await;
     let ada = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
-    create(&app, ada, "Globex").await;
+    let agra = create(&app, ada, "Agra").await;
+    create(&app, ada, "Gulati").await;
     let client = app.acting_as(principal(ada));
 
     client
         .post("/api/items")
-        .header("x-workspace", "acme")
-        .json(&json!({ "title": "In Acme's schema" }))
+        .header("x-workspace", "agra")
+        .json(&json!({ "title": "In Agra's schema" }))
         .send()
         .await
         .assert_status(200);
     client
         .get("/api/items")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
-        .assert_json_path("data.0.title", json!("In Acme's schema"));
+        .assert_json_path("data.0.title", json!("In Agra's schema"));
     client
         .get("/api/items")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
@@ -370,17 +370,17 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
         .map(|row| row.get::<String>("s").unwrap())
         .collect();
     assert_eq!(schemas.len(), 2, "{schemas:?}");
-    assert!(schemas.contains(&format!("workspace_{}", acme.id.simple())));
+    assert!(schemas.contains(&format!("workspace_{}", agra.id.simple())));
 
     // Deleting the workspace drops its schema.
     let workspaces = app.get::<Workspaces>().await;
     let uow = db.uow(None, None).await;
-    workspaces.delete(&uow, acme.id).await.unwrap();
+    workspaces.delete(&uow, agra.id).await.unwrap();
     uow.commit().await.unwrap();
     let left = db
         .fetch_optional(&Statement::portable(
             "SELECT 1 AS found FROM information_schema.schemata WHERE schema_name = ?",
-            [DbValue::from(format!("workspace_{}", acme.id.simple()))],
+            [DbValue::from(format!("workspace_{}", agra.id.simple()))],
         ))
         .await
         .unwrap();
@@ -628,35 +628,35 @@ async fn row_level_security_narrows_partition_requests() {
     };
     let app = org_app(&scratch).await;
     let ada = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
+    let agra = create(&app, ada, "Agra").await;
     let partitions = app.get::<Partitions>().await;
     let db = app.get::<navree_db::Db>().await;
     let uow = db.uow(None, None).await;
     let uk = partitions
-        .create(&uow, acme.id, NewPartition::named("acme.co.uk"))
+        .create(&uow, agra.id, NewPartition::named("agra.co.uk"))
         .await
         .unwrap();
     let de = partitions
-        .create(&uow, acme.id, NewPartition::named("acme.de"))
+        .create(&uow, agra.id, NewPartition::named("agra.de"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
-    note(&app, acme.id, Some(uk.id), "uk").await;
-    note(&app, acme.id, Some(de.id), "de").await;
-    note(&app, acme.id, None, "unsorted").await;
+    note(&app, agra.id, Some(uk.id), "uk").await;
+    note(&app, agra.id, Some(de.id), "de").await;
+    note(&app, agra.id, None, "unsorted").await;
     let client = app.acting_as(principal(ada));
 
     client
         .get("/api/notes/partition")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data", json!(["de", "uk", "unsorted"]));
     client
         .get("/api/notes/partition")
-        .header("x-workspace", "acme")
-        .header("x-partition", "acme-co-uk")
+        .header("x-workspace", "agra")
+        .header("x-partition", "agra-co-uk")
         .send()
         .await
         .assert_json_path("data", json!(["uk"]));
@@ -665,12 +665,12 @@ async fn row_level_security_narrows_partition_requests() {
     let uow = db.uow(None, None).await;
     app.get::<Workspaces>()
         .await
-        .enter(&uow, acme.id)
+        .enter(&uow, agra.id)
         .await
         .unwrap();
     partitions.enter(&uow, uk.id).await.unwrap();
     assert_eq!(every_note(&uow).await.unwrap(), json!(["uk"]));
-    let refused = Note::create(&uow, new_note(acme.id, Some(de.id), "smuggled")).await;
+    let refused = Note::create(&uow, new_note(agra.id, Some(de.id), "smuggled")).await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
 
@@ -900,16 +900,16 @@ async fn row_level_security_covers_orm_queries() {
     };
     let app = app(&scratch, "row", RowItemsModule).await;
     let ada = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
-    let globex = create(&app, ada, "Globex").await;
+    let agra = create(&app, ada, "Agra").await;
+    let gulati = create(&app, ada, "Gulati").await;
 
-    let uow = uow_in(&app, Some(acme.id)).await;
+    let uow = uow_in(&app, Some(agra.id)).await;
     let created = PlainItem::create(
         &uow,
         PlainItem {
             id: Uuid::now_v7(),
-            workspace_id: acme.id,
-            title: "Acme item".into(),
+            workspace_id: agra.id,
+            title: "Agra item".into(),
         },
     )
     .await
@@ -925,13 +925,13 @@ async fn row_level_security_covers_orm_queries() {
     .unwrap();
     uow.commit().await.unwrap();
 
-    let uow = uow_in(&app, Some(acme.id)).await;
+    let uow = uow_in(&app, Some(agra.id)).await;
     assert_eq!(PlainItem::query().count(&uow).await.unwrap(), 2);
     assert_eq!(ScopedItem::query().count(&uow).await.unwrap(), 2);
     uow.rollback().await.unwrap();
 
     // Another workspace: the policy hides the rows from every ORM read.
-    let uow = uow_in(&app, Some(globex.id)).await;
+    let uow = uow_in(&app, Some(gulati.id)).await;
     assert_eq!(PlainItem::query().count(&uow).await.unwrap(), 0);
     assert!(PlainItem::find(&uow, created.id).await.unwrap().is_none());
     assert_eq!(
@@ -943,12 +943,12 @@ async fn row_level_security_covers_orm_queries() {
         0,
         "without the ORM's scope, still nothing: the policy's"
     );
-    // ... and refuses an ORM write into Acme.
+    // ... and refuses an ORM write into Agra.
     let smuggled = PlainItem::create(
         &uow,
         PlainItem {
             id: Uuid::now_v7(),
-            workspace_id: acme.id,
+            workspace_id: agra.id,
             title: "Smuggled".into(),
         },
     )
@@ -977,33 +977,33 @@ async fn orm_queries_follow_the_workspace_schema() {
     };
     let app = app(&scratch, "schema", SchemaItemsModule).await;
     let ada = Uuid::now_v7();
-    let acme = create(&app, ada, "Acme").await;
-    let globex = create(&app, ada, "Globex").await;
+    let agra = create(&app, ada, "Agra").await;
+    let gulati = create(&app, ada, "Gulati").await;
 
-    let uow = uow_in(&app, Some(acme.id)).await;
+    let uow = uow_in(&app, Some(agra.id)).await;
     PlainItem::create(
         &uow,
         PlainItem {
             id: Uuid::now_v7(),
-            workspace_id: acme.id,
-            title: "In Acme's schema".into(),
+            workspace_id: agra.id,
+            title: "In Agra's schema".into(),
         },
     )
     .await
     .unwrap();
     uow.commit().await.unwrap();
 
-    for (workspace, expected) in [(acme.id, 1), (globex.id, 0)] {
+    for (workspace, expected) in [(agra.id, 1), (gulati.id, 0)] {
         let uow = uow_in(&app, Some(workspace)).await;
         assert_eq!(PlainItem::query().count(&uow).await.unwrap(), expected);
         uow.rollback().await.unwrap();
     }
-    // The row is in Acme's schema (read inside Acme: the table's policy
+    // The row is in Agra's schema (read inside Agra: the table's policy
     // hides rows outside a workspace).
-    let uow = uow_in(&app, Some(acme.id)).await;
+    let uow = uow_in(&app, Some(agra.id)).await;
     let sql = format!(
         "SELECT count(*)::bigint AS n FROM workspace_{}.items",
-        acme.id.simple()
+        agra.id.simple()
     );
     assert_eq!(scalar::<i64>(&uow, &sql, "n").await, 1);
     uow.rollback().await.unwrap();
@@ -1099,13 +1099,13 @@ async fn demo_workspace(app: &TestApp, owner: Uuid) -> navree_workspace::Workspa
 /// checks that only the demo's rows changed.
 async fn seed_write_and_reset(app: &TestApp) {
     let ada = Uuid::now_v7();
-    let live = create(app, ada, "Acme").await;
+    let live = create(app, ada, "Agra").await;
     let demo = demo_workspace(app, ada).await;
     assert_eq!(titles(app, demo.id).await, ["Demo one", "Demo two"]);
     assert!(titles(app, live.id).await.is_empty());
 
     let client = app.acting_as(principal(ada));
-    for (workspace, title) in [("acme", "Real"), ("demo", "Experiment")] {
+    for (workspace, title) in [("agra", "Real"), ("demo", "Experiment")] {
         let response = client
             .post("/api/items")
             .header("x-workspace", workspace)

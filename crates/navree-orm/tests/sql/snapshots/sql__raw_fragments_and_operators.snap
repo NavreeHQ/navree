@@ -1,10 +1,10 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "query(Deal::query().where_(Deal::AMOUNT_CENTS.gt(1)).where_raw(\"lower(title) = ? OR amount_cents = ?\",\n[Value::from(\"acme\"),\nValue::from(5_i64)]).where_raw(\"meta ?? 'k' AND title <> '?'\",\nVec::<Value>::new()).where_(Deal::TITLE.null_safe_eq(\"x\")).where_(Deal::TITLE.op(\"regexp\",\n\"^A\")).where_(Deal::AMOUNT_CENTS.op(\"&\", 4)))"
+expression: "query(Deal::query().where_(Deal::AMOUNT_CENTS.gt(1)).where_raw(\"lower(title) = ? OR amount_cents = ?\",\n[Value::from(\"agra\"),\nValue::from(5_i64)]).where_raw(\"meta ?? 'k' AND title <> '?'\",\nVec::<Value>::new()).where_(Deal::TITLE.null_safe_eq(\"x\")).where_(Deal::TITLE.op(\"regexp\",\n\"^A\")).where_(Deal::AMOUNT_CENTS.op(\"&\", 4)))"
 ---
 PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."amount_cents" > $1 AND (lower(title) = $2 OR amount_cents = $3) AND (meta ? 'k' AND title <> '?') AND "deals"."title" IS NOT DISTINCT FROM $4 AND "deals"."title" ~ $5 AND "deals"."amount_cents" & $6 AND "deals"."deleted_at" IS NULL
-  values: [I64(1), String("acme"), I64(5), String("x"), String("^A"), I64(4)]
+  values: [I64(1), String("agra"), I64(5), String("x"), String("^A"), I64(4)]
 MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE `deals`.`amount_cents` > ? AND (lower(title) = ? OR amount_cents = ?) AND (meta ? 'k' AND title <> '?') AND `deals`.`title` <=> ? AND REGEXP_LIKE(`deals`.`title`, ?, 'c') AND `deals`.`amount_cents` & ? AND `deals`.`deleted_at` IS NULL
-  values: [I64(1), String("acme"), I64(5), String("x"), String("^A"), I64(4)]
+  values: [I64(1), String("agra"), I64(5), String("x"), String("^A"), I64(4)]
 SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."amount_cents" > ? AND (lower(title) = ? OR amount_cents = ?) AND (meta ? 'k' AND title <> '?') AND "deals"."title" IS ? AND "deals"."title" REGEXP ? AND "deals"."amount_cents" & ? AND "deals"."deleted_at" IS NULL
-  values: [I64(1), String("acme"), I64(5), String("x"), String("^A"), I64(4)]
+  values: [I64(1), String("agra"), I64(5), String("x"), String("^A"), I64(4)]

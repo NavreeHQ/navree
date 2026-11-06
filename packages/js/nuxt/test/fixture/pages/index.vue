@@ -11,7 +11,7 @@ const state = useRealtimeState();
 useChannel("crm.deals", "deal.updated", () => undefined);
 const { operation } = useOperation(null);
 const columns: NavreeColumnDef<Deal>[] = [{ accessorKey: "title", header: "Title", meta: { sortField: "title" } }];
-const deals: Deal[] = [{ id: "d1", title: "Acme renewal" }];
+const deals: Deal[] = [{ id: "d1", title: "Agra renewal" }];
 
 // Server-side rendering calls the BFF in-process with the browser's cookies.
 const me = await auth.load().catch(() => null);

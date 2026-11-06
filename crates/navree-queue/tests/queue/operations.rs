@@ -410,7 +410,7 @@ pub async fn access_is_the_owner_or_the_permission(driver: QueueDriver) {
     let viewer = Uuid::now_v7();
     let member = Uuid::now_v7();
     let stranger = Uuid::now_v7();
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let grants = vec![
         Arc::new(Grant {
             user: viewer,
@@ -420,14 +420,14 @@ pub async fn access_is_the_owner_or_the_permission(driver: QueueDriver) {
         Arc::new(Grant {
             user: member,
             permission: "operations.cancel",
-            workspace: Some(acme),
+            workspace: Some(agra),
         }),
     ];
     let h = harness_using(one_worker(driver), |builder| {
         builder.module(GrantsModule(grants))
     })
     .await;
-    let op = started(&h, Operation::new("export").owner(owner).workspace(acme)).await;
+    let op = started(&h, Operation::new("export").owner(owner).workspace(agra)).await;
 
     let view = |user| {
         let ops = h.operations.clone();

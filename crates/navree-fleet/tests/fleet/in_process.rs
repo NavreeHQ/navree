@@ -55,7 +55,7 @@ async fn workers_run_jobs_and_the_master_stores_them() {
     }
     h.queue
         .dispatch(SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "t".into(),
         })
         .await

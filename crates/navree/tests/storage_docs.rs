@@ -395,7 +395,7 @@ async fn an_s3_disk_signs_links_for_the_bucket() {
         .config("app.key", navree::crypto::generate_key())
         .config("storage.default", "uploads")
         .config("storage.disks.uploads.driver", "s3")
-        .config("storage.disks.uploads.bucket", "acme-uploads")
+        .config("storage.disks.uploads.bucket", "agra-uploads")
         .config("storage.disks.uploads.endpoint", "http://127.0.0.1:9")
         .config("storage.disks.uploads.region", "us-east-1")
         .config("storage.disks.uploads.access_key", "navree")
@@ -411,7 +411,7 @@ async fn an_s3_disk_signs_links_for_the_bucket() {
         .await
         .unwrap();
     assert!(
-        link.starts_with("http://127.0.0.1:9/acme-uploads/reports/q1.csv?X-Amz-Algorithm="),
+        link.starts_with("http://127.0.0.1:9/agra-uploads/reports/q1.csv?X-Amz-Algorithm="),
         "{link}"
     );
 

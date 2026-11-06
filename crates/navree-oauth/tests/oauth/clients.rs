@@ -12,9 +12,9 @@ async fn clients_are_created_with_a_secret_shown_once() {
     let (user, _) = world.user("dev@acme.test", &[]).await;
     let created = world
         .register(
-            NewClient::confidential("Ada's reporting script")
+            NewClient::confidential("Anu's reporting script")
                 .owner(user.id)
-                .redirect_uri("https://reports.lovelace.test/callback")
+                .redirect_uri("https://reports.lakhotia.test/callback")
                 .scopes(["deals:read"]),
         )
         .await;
@@ -38,7 +38,7 @@ async fn clients_are_created_with_a_secret_shown_once() {
     assert_eq!(clients.owned_by(user.id).await.unwrap().len(), 1);
     assert_eq!(
         clients.find(client.id).await.unwrap().unwrap().name,
-        "Ada's reporting script"
+        "Anu's reporting script"
     );
 
     let public = world.public_client(&["deals:read"]).await;
@@ -159,7 +159,7 @@ async fn the_commands_manage_clients() {
     app.run_command(
         "oauth:client",
         &[
-            "Acme mobile",
+            "Agra mobile",
             "--public",
             "--redirect-uri",
             REDIRECT_URI,
@@ -184,7 +184,7 @@ async fn the_commands_manage_clients() {
     .unwrap();
     app.run_command(
         "oauth:client",
-        &["Acme CLI", "--public", "--device", "--scopes", "deals:read"],
+        &["Agra CLI", "--public", "--device", "--scopes", "deals:read"],
     )
     .await
     .unwrap();
@@ -199,12 +199,12 @@ async fn the_commands_manage_clients() {
     assert!(!zapier.is_public());
     assert_eq!(zapier.scope_list(), ["deals:read", "contacts:read"]);
     assert_eq!(zapier.redirect_uri_list(), [REDIRECT_URI]);
-    let mobile = by_name("Acme mobile");
+    let mobile = by_name("Agra mobile");
     assert!(mobile.is_public() && mobile.trusted);
     let sync = by_name("Warehouse sync");
     assert_eq!(sync.grant_list(), ["client_credentials"]);
     assert_eq!(sync.owner_id, Some(owner.id));
-    let cli = by_name("Acme CLI");
+    let cli = by_name("Agra CLI");
     assert_eq!(
         cli.grant_list(),
         ["urn:ietf:params:oauth:grant-type:device_code"]

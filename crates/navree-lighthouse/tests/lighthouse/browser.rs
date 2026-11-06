@@ -146,14 +146,14 @@ async fn a_guest_signs_in_on_the_apps_page_and_comes_back_to_the_page_they_asked
         .unwrap();
     page.press("Sign in").await.unwrap();
     page.assert_path_is("/sign-in").await.unwrap();
-    page.assert_see("Acme CRM").await.unwrap();
+    page.assert_see("Agra CRM").await.unwrap();
     page.type_into("Email", EMAIL).await.unwrap();
     page.type_into("Password", PASSWORD).await.unwrap();
     page.press("Sign in").await.unwrap();
     page.assert_path_is("/_lighthouse/issues").await.unwrap();
     page.assert_see("invoice inv_7 not found").await.unwrap();
     page.assert_see("Lighthouse").await.unwrap();
-    page.assert_see("Ada").await.unwrap();
+    page.assert_see("Anu").await.unwrap();
     page.assert_no_console_errors().await.unwrap();
     site.app.shutdown().await.unwrap();
 }

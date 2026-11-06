@@ -349,7 +349,7 @@ fn the_short_names_of_the_app_settings_are_never_reported() {
             ("APP_KEY", "base64:abc"),
             ("APP_ENV", "production"),
             ("APP_URL", "https://acme.test"),
-            ("APP_NAME", "acme"),
+            ("APP_NAME", "agra"),
             ("APP_VERSION", "1.0.0"),
             ("APP_PREVIOUS_KEYS", "a,b"),
         ],
@@ -362,8 +362,8 @@ fn the_short_names_of_the_app_settings_are_never_reported() {
 fn a_typo_in_the_app_section_is_named() {
     let config = load(
         ConfigSources::new()
-            .set("app.nmae", "acme")
-            .set("app.name", "acme"),
+            .set("app.nmae", "agra")
+            .set("app.name", "agra"),
     );
     config.app().expect("app");
     let unused = config.unused();

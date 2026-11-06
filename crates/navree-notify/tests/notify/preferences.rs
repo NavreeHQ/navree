@@ -39,14 +39,14 @@ async fn channels_turned_off_are_skipped_and_the_workspace_gives_the_defaults() 
     let (builder, _clock, fakes) = timed(options(), "2026-10-28T12:00:00Z");
     let app = builder.build().await;
     let notifier = app.get::<Notifier>().await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     prefer(
         &app,
-        &PreferenceOwner::workspace(acme),
+        &PreferenceOwner::workspace(agra),
         json!({"channels": {"sms": false}}),
     )
     .await;
-    let quiet = Person::in_zone(Some("UTC")).of(acme);
+    let quiet = Person::in_zone(Some("UTC")).of(agra);
     prefer(
         &app,
         &quiet.owner(),
@@ -54,12 +54,12 @@ async fn channels_turned_off_are_skipped_and_the_workspace_gives_the_defaults() 
     )
     .await;
     let texter = Person::in_zone(Some("UTC"))
-        .of(acme)
+        .of(agra)
         .phone("+44 7400 123456");
     prefer(&app, &texter.owner(), json!({"channels": {"sms": true}})).await;
 
     notifier
-        .send(&quiet, Mention { by: "Ada".into() })
+        .send(&quiet, Mention { by: "Anu".into() })
         .await
         .unwrap();
     notifier
@@ -98,7 +98,7 @@ async fn turning_off_database_also_stops_the_broadcast() {
         .await;
     let ada = Person::in_zone(Some("UTC"));
     prefer(&app, &ada.owner(), json!({"channels": {"database": false}})).await;
-    let mut update = DealUpdate::new("Acme");
+    let mut update = DealUpdate::new("Agra");
     update.channels = vec![Channel::Database, Channel::Broadcast];
     app.get::<Notifier>()
         .await
@@ -365,7 +365,7 @@ impl Module for Admins {
 async fn a_workspace_gives_its_members_defaults_that_admins_change() {
     let admin = Uuid::now_v7();
     let member = Uuid::now_v7();
-    let acme = Uuid::now_v7().to_string();
+    let agra = Uuid::now_v7().to_string();
     let (builder, _clock, _fakes) = timed(options(), "2026-10-28T12:00:00Z");
     let app = builder
         .module(Catalog)
@@ -387,14 +387,14 @@ async fn a_workspace_gives_its_members_defaults_that_admins_change() {
         json!({"channels": {"sms": false}, "categories": {"deals": {"digest": "weekly"}}});
     as_member
         .patch("/api/notifications/preferences/workspace")
-        .header("x-workspace", acme.as_str())
+        .header("x-workspace", agra.as_str())
         .json(&defaults)
         .send()
         .await
         .assert_status(403);
     let body = as_admin
         .patch("/api/notifications/preferences/workspace")
-        .header("x-workspace", acme.as_str())
+        .header("x-workspace", agra.as_str())
         .json(&defaults)
         .send()
         .await
@@ -407,14 +407,14 @@ async fn a_workspace_gives_its_members_defaults_that_admins_change() {
     // Members see the defaults under their own choices.
     as_member
         .patch("/api/notifications/preferences")
-        .header("x-workspace", acme.as_str())
+        .header("x-workspace", agra.as_str())
         .json(&json!({"categories": {"deals": {"channels": {"sms": true}}}}))
         .send()
         .await
         .assert_status(200);
     let body = as_member
         .get("/api/notifications/preferences")
-        .header("x-workspace", acme.as_str())
+        .header("x-workspace", agra.as_str())
         .send()
         .await
         .assert_status(200)
@@ -428,15 +428,15 @@ async fn a_workspace_gives_its_members_defaults_that_admins_change() {
     // Any member reads the workspace's defaults.
     as_member
         .get("/api/notifications/preferences/workspace")
-        .header("x-workspace", acme.as_str())
+        .header("x-workspace", agra.as_str())
         .send()
         .await
         .assert_status(200);
 }
 
-/// Overrides for workspace `acme` and app-wide.
+/// Overrides for workspace `agra` and app-wide.
 struct Branded {
-    acme: Uuid,
+    agra: Uuid,
 }
 
 impl TemplateOverrides for Branded {
@@ -444,17 +444,17 @@ impl TemplateOverrides for Branded {
         &self,
         workspace: Option<Uuid>,
     ) -> BoxFuture<'_, Result<NotificationOverrides, BoxError>> {
-        let acme = self.acme;
+        let agra = self.agra;
         Box::pin(async move {
             let mut overrides = NotificationOverrides::default();
-            if workspace == Some(acme) {
+            if workspace == Some(agra) {
                 overrides
                     .style
                     .insert("brand_color".into(), json!("#0F766E"));
                 overrides.templates.insert(
                     "mentions".into(),
                     MailOverride {
-                        subject: Some("Acme: {{ title }} mentioned you".into()),
+                        subject: Some("Agra: {{ title }} mentioned you".into()),
                         html: Some(
                             "<p style=\"color: {{ style.brand_color }}\">{{ title }}</p>".into(),
                         ),
@@ -479,18 +479,18 @@ impl TemplateOverrides for Branded {
 
 #[tokio::test]
 async fn a_workspaces_overrides_restyle_its_mail() {
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let (builder, _clock, _fakes) = timed(NotifyOptions::default(), "2026-10-28T12:00:00Z");
     let app = builder
-        .override_value::<dyn TemplateOverrides>(Arc::new(Branded { acme }))
+        .override_value::<dyn TemplateOverrides>(Arc::new(Branded { agra }))
         .build()
         .await;
     let notifier = app.get::<Notifier>().await;
 
     notifier
         .send(
-            &Person::in_zone(Some("UTC")).of(acme),
-            Mention { by: "Ada".into() },
+            &Person::in_zone(Some("UTC")).of(agra),
+            Mention { by: "Anu".into() },
         )
         .await
         .unwrap();
@@ -508,12 +508,12 @@ async fn a_workspaces_overrides_restyle_its_mail() {
         .unwrap();
 
     let mail = support::sent_mail(&app).await;
-    assert_eq!(mail[0].subject, "Acme: Ada mentioned you");
+    assert_eq!(mail[0].subject, "Agra: Anu mentioned you");
     assert_eq!(
         mail[0].html.as_deref(),
-        Some("<p style=\"color: #0F766E\">Ada</p>")
+        Some("<p style=\"color: #0F766E\">Anu</p>")
     );
-    assert_eq!(mail[0].text.as_deref(), Some("Ada was won."));
+    assert_eq!(mail[0].text.as_deref(), Some("Anu was won."));
     assert_eq!(mail[1].subject, "Mention from Bob");
     assert_eq!(mail[2].subject, "Cy mentioned you");
 }

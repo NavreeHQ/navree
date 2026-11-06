@@ -435,7 +435,7 @@ mod tests {
         d.steps.insert(
             "one".into(),
             StepRecord {
-                values: vec![("name".into(), "Ada \u{0} \"x\"".into())],
+                values: vec![("name".into(), "Anu \u{0} \"x\"".into())],
                 visited: true,
                 valid: true,
                 secret_errors: BTreeMap::new(),
@@ -449,22 +449,22 @@ mod tests {
     fn the_store_is_a_compare_and_swap() {
         let store = MemoryDrafts::default();
         let mut draft = Draft::new("one");
-        assert_eq!(block(store.save("ada", &draft, None)), Ok(()));
+        assert_eq!(block(store.save("anu", &draft, None)), Ok(()));
         // It exists now: saving it as new is a conflict.
         assert_eq!(
-            block(store.save("ada", &draft, None)),
+            block(store.save("anu", &draft, None)),
             Err(DraftError::Conflict)
         );
         let before = draft.revision;
         draft.revision += 1;
-        assert_eq!(block(store.save("ada", &draft, Some(before))), Ok(()));
+        assert_eq!(block(store.save("anu", &draft, Some(before))), Ok(()));
         // A second writer holding the old revision loses.
         assert_eq!(
-            block(store.save("ada", &draft, Some(before))),
+            block(store.save("anu", &draft, Some(before))),
             Err(DraftError::Conflict)
         );
         assert_eq!(
-            block(store.load("ada", &draft.id))
+            block(store.load("anu", &draft.id))
                 .unwrap()
                 .unwrap()
                 .revision,
@@ -476,16 +476,16 @@ mod tests {
     fn another_owner_finds_nothing() {
         let store = MemoryDrafts::default();
         let draft = Draft::new("one");
-        block(store.save("ada", &draft, None)).unwrap();
-        assert_eq!(block(store.load("grace", &draft.id)), Ok(None));
+        block(store.save("anu", &draft, None)).unwrap();
+        assert_eq!(block(store.load("gauri", &draft.id)), Ok(None));
         assert_eq!(
-            block(store.save("grace", &draft, Some(0))),
+            block(store.save("gauri", &draft, Some(0))),
             Err(DraftError::Conflict)
         );
-        assert_eq!(block(store.discard("grace", &draft.id)), Ok(()));
-        assert!(block(store.load("ada", &draft.id)).unwrap().is_some());
-        block(store.discard("ada", &draft.id)).unwrap();
-        assert_eq!(block(store.load("ada", &draft.id)), Ok(None));
+        assert_eq!(block(store.discard("gauri", &draft.id)), Ok(()));
+        assert!(block(store.load("anu", &draft.id)).unwrap().is_some());
+        block(store.discard("anu", &draft.id)).unwrap();
+        assert_eq!(block(store.load("anu", &draft.id)), Ok(None));
     }
 
     #[test]
@@ -536,7 +536,7 @@ mod tests {
         // A store with no room at all still says so.
         let none = MemoryDrafts::new(0, Duration::from_secs(60));
         assert_eq!(
-            block(none.save("ada", &Draft::new("one"), None)),
+            block(none.save("anu", &Draft::new("one"), None)),
             Err(DraftError::Full)
         );
     }
@@ -545,20 +545,20 @@ mod tests {
     fn an_owner_at_their_limit_gives_up_their_own_oldest_and_nobody_elses() {
         let store = MemoryDrafts::default();
         let first = Draft::new("one");
-        block(store.save("ada", &first, None)).unwrap();
+        block(store.save("anu", &first, None)).unwrap();
         let grace = Draft::new("one");
-        block(store.save("grace", &grace, None)).unwrap();
+        block(store.save("gauri", &grace, None)).unwrap();
         for _ in 1..100 {
-            block(store.save("ada", &Draft::new("one"), None)).unwrap();
+            block(store.save("anu", &Draft::new("one"), None)).unwrap();
         }
-        // Ada has 100 and opens another, over and over, finishing none: she loses her oldest.
+        // Anu has 100 and opens another, over and over, finishing none: she loses her oldest.
         for _ in 0..250 {
-            block(store.save("ada", &Draft::new("one"), None)).unwrap();
+            block(store.save("anu", &Draft::new("one"), None)).unwrap();
         }
-        assert_eq!(block(store.load("ada", &first.id)), Ok(None));
+        assert_eq!(block(store.load("anu", &first.id)), Ok(None));
         assert!(
-            block(store.load("grace", &grace.id)).unwrap().is_some(),
-            "grace's draft stays"
+            block(store.load("gauri", &grace.id)).unwrap().is_some(),
+            "gauri's draft stays"
         );
         assert_eq!(store.len(), 101);
     }
@@ -576,7 +576,7 @@ mod tests {
             },
         );
         assert_eq!(
-            block(MemoryDrafts::default().save("ada", &big, None)),
+            block(MemoryDrafts::default().save("anu", &big, None)),
             Err(DraftError::TooLarge)
         );
     }
@@ -585,9 +585,9 @@ mod tests {
     fn a_draft_nobody_touched_is_forgotten() {
         let store = MemoryDrafts::new(10, Duration::from_millis(1));
         let draft = Draft::new("one");
-        block(store.save("ada", &draft, None)).unwrap();
+        block(store.save("anu", &draft, None)).unwrap();
         std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(block(store.load("ada", &draft.id)), Ok(None));
+        assert_eq!(block(store.load("anu", &draft.id)), Ok(None));
         assert!(store.is_empty());
     }
 

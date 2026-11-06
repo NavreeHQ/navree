@@ -419,18 +419,18 @@ impl ChangeRecorder for Recorded {
 #[tokio::test]
 async fn models_run_on_a_document_store() {
     let store = MemoryStore::new(Memory::default());
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &store,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             employees: 5,
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert_eq!(acme.id, 1, "the store assigned the key");
-    for (name, employees) in [("Globex", 50), ("Initech", 15)] {
+    assert_eq!(agra.id, 1, "the store assigned the key");
+    for (name, employees) in [("Gulati", 50), ("Indrani", 15)] {
         Company::create(
             &store,
             Company {
@@ -449,10 +449,10 @@ async fn models_run_on_a_document_store() {
         .get(&store)
         .await
         .unwrap();
-    assert_eq!(big.map(|c| c.name.clone()), ["Globex", "Initech"]);
+    assert_eq!(big.map(|c| c.name.clone()), ["Gulati", "Indrani"]);
     assert_eq!(
-        Company::find_or_fail(&store, acme.id).await.unwrap().name,
-        "Acme"
+        Company::find_or_fail(&store, agra.id).await.unwrap().name,
+        "Agra"
     );
     assert_eq!(Company::query().count(&store).await.unwrap(), 3);
     let page = Company::query()
@@ -462,26 +462,26 @@ async fn models_run_on_a_document_store() {
         .unwrap();
     assert_eq!(
         (page.meta.total, page.data[0].name.as_str()),
-        (3, "Initech")
+        (3, "Indrani")
     );
 
-    acme.employees = 6;
-    acme.save(&store).await.unwrap();
+    agra.employees = 6;
+    agra.save(&store).await.unwrap();
     assert_eq!(
-        Company::find_or_fail(&store, acme.id)
+        Company::find_or_fail(&store, agra.id)
             .await
             .unwrap()
             .employees,
         6
     );
-    assert!(acme.delete(&store).await.unwrap());
+    assert!(agra.delete(&store).await.unwrap());
     assert_eq!(Company::query().count(&store).await.unwrap(), 2);
     let names: Vec<String> = Company::query()
         .order_by(Company::NAME)
         .pluck(&store, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(names, ["Globex", "Initech"]);
+    assert_eq!(names, ["Gulati", "Indrani"]);
 
     // What the store cannot express is refused, not guessed.
     let error = Company::query()
@@ -496,28 +496,28 @@ async fn models_run_on_a_document_store() {
 #[tokio::test]
 async fn relations_eager_load_on_a_document_store() {
     let store = MemoryStore::new(Memory::default());
-    let mut acme = Customer::create(
+    let mut agra = Customer::create(
         &store,
         Customer {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Customer::default()
         },
     )
     .await
     .unwrap();
-    let globex = Customer::create(
+    let gulati = Customer::create(
         &store,
         Customer {
-            name: "Globex".into(),
+            name: "Gulati".into(),
             ..Customer::default()
         },
     )
     .await
     .unwrap();
     for (customer, subject) in [
-        (Some(acme.id), "Printer"),
-        (Some(acme.id), "Login"),
-        (Some(globex.id), "Billing"),
+        (Some(agra.id), "Printer"),
+        (Some(agra.id), "Login"),
+        (Some(gulati.id), "Billing"),
         (None, "Spam"),
     ] {
         SupportTicket::create(
@@ -563,25 +563,25 @@ async fn relations_eager_load_on_a_document_store() {
     assert_eq!(
         owners,
         [
-            Some("Acme".to_owned()),
-            Some("Acme".to_owned()),
-            Some("Globex".to_owned()),
+            Some("Agra".to_owned()),
+            Some("Agra".to_owned()),
+            Some("Gulati".to_owned()),
             None
         ]
     );
 
     // Loading afterwards and querying through a relation too.
-    acme.load(&store, "tickets").await.unwrap();
-    assert_eq!(acme.loaded(Customer::tickets).unwrap().len(), 2);
-    assert_eq!(acme.tickets().count(&store).await.unwrap(), 2);
-    let login = acme
+    agra.load(&store, "tickets").await.unwrap();
+    assert_eq!(agra.loaded(Customer::tickets).unwrap().len(), 2);
+    assert_eq!(agra.tickets().count(&store).await.unwrap(), 2);
+    let login = agra
         .tickets()
         .where_(SupportTicket::SUBJECT.eq("Login"))
         .first(&store)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(login.customer_id, Some(acme.id));
+    assert_eq!(login.customer_id, Some(agra.id));
 }
 
 /// Cursors and lazy streams run on a document store: the driver's default
@@ -591,7 +591,7 @@ async fn documents_stream_through_cursors_and_pages() {
     use futures::TryStreamExt;
 
     let store = MemoryStore::new(Memory::default());
-    for (name, employees) in [("Acme", 5), ("Globex", 50), ("Initech", 15)] {
+    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Indrani", 15)] {
         Company::create(
             &store,
             Company {
@@ -611,7 +611,7 @@ async fn documents_stream_through_cursors_and_pages() {
         .try_collect()
         .await
         .unwrap();
-    assert_eq!(streamed, ["Globex", "Initech"]);
+    assert_eq!(streamed, ["Gulati", "Indrani"]);
     let paged: Vec<i64> = Company::query()
         .lazy_by_id(&store, 2)
         .map_ok(|company| company.id)
@@ -647,26 +647,26 @@ async fn timestamps_keep_the_precision_of_the_store() {
         ..Memory::default()
     });
     store.app = Some(app.ctx().clone());
-    let acme = Company::create(
+    let agra = Company::create(
         &store,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert_eq!(acme.created_at.nanosecond(), 123_000_000);
-    let stored = Company::find_or_fail(&store, acme.id).await.unwrap();
-    assert_eq!(stored.created_at, acme.created_at);
+    assert_eq!(agra.created_at.nanosecond(), 123_000_000);
+    let stored = Company::find_or_fail(&store, agra.id).await.unwrap();
+    assert_eq!(stored.created_at, agra.created_at);
     let target = store.target(Access::Read).await.unwrap();
     assert_eq!(target.context().time_precision(), 3);
 
     // The default is microseconds.
     let mut store = MemoryStore::new(Memory::default());
     store.app = Some(app.ctx().clone());
-    let globex = Company::create(&store, Company::default()).await.unwrap();
-    assert_eq!(globex.created_at.nanosecond(), 123_456_000);
+    let gulati = Company::create(&store, Company::default()).await.unwrap();
+    assert_eq!(gulati.created_at.nanosecond(), 123_456_000);
 }
 
 /// Writes through a document target record their change events where the
@@ -676,18 +676,18 @@ async fn document_writes_record_change_events() {
     let recorded = Arc::new(Recorded::default());
     let mut store = MemoryStore::new(Memory::default());
     store.recorder = Some(recorded.clone());
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &store,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    acme.name = "Acme Corp".into();
-    acme.save(&store).await.unwrap();
-    acme.delete(&store).await.unwrap();
+    agra.name = "Agra Corp".into();
+    agra.save(&store).await.unwrap();
+    agra.delete(&store).await.unwrap();
 
     let events = recorded.0.lock().unwrap().clone();
     let ops: Vec<(&str, &str, ChangeOp)> = events
@@ -702,8 +702,8 @@ async fn document_writes_record_change_events() {
             ("companies", "1", ChangeOp::Deleted),
         ]
     );
-    assert_eq!(events[1].old.as_ref().unwrap()["name"], "Acme");
-    assert_eq!(events[1].new.as_ref().unwrap()["name"], "Acme Corp");
+    assert_eq!(events[1].old.as_ref().unwrap()["name"], "Agra");
+    assert_eq!(events[1].new.as_ref().unwrap()["name"], "Agra Corp");
 }
 
 /// ...or navree-db's unit of work, which the operation's context then
@@ -717,7 +717,7 @@ async fn document_targets_join_a_unit_of_work() {
     Company::create(
         &store,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -744,7 +744,7 @@ async fn drivers_turn_native_rows_into_records() {
     let target = store.target(Access::Read).await.unwrap();
     let rows = vec![Row::from_values(vec![
         ("id".to_owned(), Value::from(7_i64)),
-        ("name".to_owned(), Value::from("Initech")),
+        ("name".to_owned(), Value::from("Indrani")),
         ("country".to_owned(), Value::Null(Kind::String)),
         ("active".to_owned(), Value::from(true)),
         ("employees".to_owned(), Value::from(15_i32)),
@@ -755,6 +755,6 @@ async fn drivers_turn_native_rows_into_records() {
     let records = target.records::<Company>(&rows).await.unwrap();
     assert_eq!(records.len(), 1);
     assert!(records[0].exists() && !records[0].is_dirty());
-    assert_eq!(records[0].name, "Initech");
+    assert_eq!(records[0].name, "Indrani");
     assert_eq!(records[0].extra::<f64>("score").unwrap(), Some(0.5));
 }

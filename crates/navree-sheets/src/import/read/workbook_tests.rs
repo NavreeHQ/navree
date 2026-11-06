@@ -292,7 +292,7 @@ fn assert_read_as_a_range(label: &str, bytes: &[u8]) {
 
 #[test]
 fn hand_written_sheets_are_tabulated_as_their_range_was() {
-    let strings = ["Name", "Email", "Ada", "a (2)", " padded ", "x"];
+    let strings = ["Name", "Email", "Anu", "a (2)", " padded ", "x"];
     let cases: Vec<(&str, Vec<u8>)> = vec![
         (
             "the first row starts in column B and a later row in column A",
@@ -687,7 +687,7 @@ fn workbooks_the_crate_writes_are_tabulated_as_their_range_was() {
     .into();
     let rows: Vec<Vec<Cell>> = vec![
         vec![
-            Cell::Text("Ada".into()),
+            Cell::Text("Anu".into()),
             Cell::Int(36),
             Cell::Float(0.25),
             Cell::Date(date),
@@ -698,7 +698,7 @@ fn workbooks_the_crate_writes_are_tabulated_as_their_range_was() {
         ],
         vec![Cell::Empty; 8],
         vec![
-            Cell::Text("Alan".into()),
+            Cell::Text("Arun".into()),
             Cell::Empty,
             Cell::Float(-1e12),
             Cell::Empty,
@@ -707,7 +707,7 @@ fn workbooks_the_crate_writes_are_tabulated_as_their_range_was() {
             Cell::Text("é\nnew line".into()),
             Cell::Empty,
         ],
-        vec![Cell::Text("Grace".into())],
+        vec![Cell::Text("Gauri".into())],
     ];
     for name in ["People", "A sheet"] {
         let file = crate::write_xlsx(name, &[], &headers, &rows).unwrap();
@@ -1874,7 +1874,7 @@ fn an_xlsb_workbook_is_read_as_an_excel_workbook() {
     let bytes = xlsb_of(&[
         (0, 0, Value::Text("Name".into())),
         (0, 1, Value::Text("Age".into())),
-        (1, 0, Value::Text(" Ada ".into())),
+        (1, 0, Value::Text(" Anu ".into())),
         (1, 1, Value::RkInt(36, false)),
     ]);
     let table = read_table(&bytes, "people.xlsb", &limits(10)).unwrap();
@@ -1882,7 +1882,7 @@ fn an_xlsb_workbook_is_read_as_an_excel_workbook() {
     assert_eq!(table.headers, ["Name", "Age"]);
     assert_eq!(
         table.rows[0].cells,
-        [Cell::Text("Ada".into()), Cell::Int(36)]
+        [Cell::Text("Anu".into()), Cell::Int(36)]
     );
 }
 

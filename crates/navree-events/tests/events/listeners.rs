@@ -32,11 +32,11 @@ async fn sync_listener_receives_event() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada@example.com"))
+    bus.emit(UserRegistered::new("anu@example.com"))
         .await
         .unwrap();
 
-    assert_eq!(journal.entries(), ["welcome:ada@example.com"]);
+    assert_eq!(journal.entries(), ["welcome:anu@example.com"]);
 }
 
 listener!(First, "first", [UserRegistered => |e| e.email]);
@@ -74,15 +74,15 @@ async fn listeners_run_in_registration_order() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     bus.emit(UserRegistered::new("bob")).await.unwrap();
 
     assert_eq!(
         journal.entries(),
         [
-            "second:ada",
-            "first:ada",
-            "third:ada",
+            "second:anu",
+            "first:anu",
+            "third:anu",
             "second:bob",
             "first:bob",
             "third:bob"
@@ -131,9 +131,9 @@ async fn error_in_one_listener_does_not_skip_others() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    let error = bus.emit(UserRegistered::new("ada")).await.unwrap_err();
+    let error = bus.emit(UserRegistered::new("anu")).await.unwrap_err();
 
-    assert_eq!(journal.entries(), ["first:ada", "second:ada"]);
+    assert_eq!(journal.entries(), ["first:anu", "second:anu"]);
     let message = error.to_string();
     assert!(message.contains("user.registered"), "{message}");
     assert!(message.contains("Failing"), "{message}");
@@ -200,12 +200,12 @@ async fn listener_can_emit_events() {
 
     tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        bus.emit(UserRegistered::new("ada")),
+        bus.emit(UserRegistered::new("anu")),
     )
     .await
     .expect("nested emit must not deadlock")
     .unwrap();
 
-    assert_eq!(journal.entries(), ["cleanup:1", "welcome:ada"]);
+    assert_eq!(journal.entries(), ["cleanup:1", "welcome:anu"]);
     assert_eq!(deleted.try_recv().unwrap(), serde_json::json!({ "id": 1 }));
 }

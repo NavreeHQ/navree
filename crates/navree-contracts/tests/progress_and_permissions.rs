@@ -222,7 +222,7 @@ impl Module for ChecksModule {
 async fn permitted_asks_every_check_and_any_grant_wins() {
     let ada = Uuid::now_v7();
     let bob = Uuid::now_v7();
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let app = boot(ChecksModule {
         checks: vec![
             Arc::new(Grants {
@@ -233,7 +233,7 @@ async fn permitted_asks_every_check_and_any_grant_wins() {
             Arc::new(Grants {
                 user: bob,
                 permission: "operations.view",
-                workspace: Some(acme),
+                workspace: Some(agra),
             }),
         ],
     })
@@ -246,20 +246,20 @@ async fn permitted_asks_every_check_and_any_grant_wins() {
             .await
             .unwrap()
     );
-    // Bob holds it in acme only.
+    // Bob holds it in agra only.
     assert!(
         !permitted(ctx, &principal(bob), "operations.view", None)
             .await
             .unwrap()
     );
     assert!(
-        permitted(ctx, &principal(bob), "operations.view", Some(acme))
+        permitted(ctx, &principal(bob), "operations.view", Some(agra))
             .await
             .unwrap()
     );
     // Nothing grants this one.
     assert!(
-        !permitted(ctx, &principal(bob), "operations.cancel", Some(acme))
+        !permitted(ctx, &principal(bob), "operations.cancel", Some(agra))
             .await
             .unwrap()
     );

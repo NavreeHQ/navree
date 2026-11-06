@@ -271,9 +271,9 @@ fn in_workspace(client: &TestClient, workspace: Uuid, path: &str) -> navree_test
 #[tokio::test]
 async fn without_a_workspace_a_resource_of_workspace_notes_asks_for_one() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    seed(&app, acme, "Acme note").await;
-    seed(&app, globex, "Globex note").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    seed(&app, agra, "Agra note").await;
+    seed(&app, gulati, "Gulati note").await;
     let editor = editor(&app).await;
 
     for path in [
@@ -315,7 +315,7 @@ async fn without_a_workspace_a_resource_of_workspace_notes_asks_for_one() {
         .assert_status(400);
     assert!(response.text().contains("Choose a workspace first"));
     // A workspace is named by a header or the panel's cookie.
-    in_workspace(&editor, acme, "/admin/api/resources/notes")
+    in_workspace(&editor, agra, "/admin/api/resources/notes")
         .send()
         .await
         .assert_status(200)
@@ -325,88 +325,88 @@ async fn without_a_workspace_a_resource_of_workspace_notes_asks_for_one() {
 #[tokio::test]
 async fn the_panel_works_in_the_workspace_of_the_request_only() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let a1 = seed(&app, acme, "Acme one").await;
-    seed(&app, acme, "Acme two").await;
-    let g1 = seed(&app, globex, "Globex one").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let a1 = seed(&app, agra, "Agra one").await;
+    seed(&app, agra, "Agra two").await;
+    let g1 = seed(&app, gulati, "Gulati one").await;
     let editor = editor(&app).await;
 
-    let body = in_workspace(&editor, acme, "/admin/api/resources/notes")
+    let body = in_workspace(&editor, agra, "/admin/api/resources/notes")
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme one", "Acme two"]);
-    let body = in_workspace(&editor, globex, "/admin/api/resources/notes")
+    assert_eq!(titles_of(&body), ["Agra one", "Agra two"]);
+    let body = in_workspace(&editor, gulati, "/admin/api/resources/notes")
         .send()
         .await
         .json_value();
-    assert_eq!(titles_of(&body), ["Globex one"]);
+    assert_eq!(titles_of(&body), ["Gulati one"]);
 
     // A record of another workspace is not found, whichever way it is asked for.
-    in_workspace(&editor, acme, &format!("/admin/api/resources/notes/{g1}"))
+    in_workspace(&editor, agra, &format!("/admin/api/resources/notes/{g1}"))
         .send()
         .await
         .assert_error(404, None);
     editor
         .patch(&format!("/admin/api/resources/notes/{g1}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Taken over" }))
         .send()
         .await
         .assert_error(404, None);
     editor
         .delete(&format!("/admin/api/resources/notes/{g1}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .send()
         .await
         .assert_error(404, None);
-    assert_eq!(note_in(&app, globex, g1).await.unwrap().title, "Globex one");
+    assert_eq!(note_in(&app, gulati, g1).await.unwrap().title, "Gulati one");
 
     // The same note, asked for in its own workspace.
-    in_workspace(&editor, acme, &format!("/admin/api/resources/notes/{a1}"))
+    in_workspace(&editor, agra, &format!("/admin/api/resources/notes/{a1}"))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.values.title", json!("Acme one"));
+        .assert_json_path("data.values.title", json!("Agra one"));
 }
 
 #[tokio::test]
 async fn records_are_made_changed_and_deleted_in_the_workspace_of_the_request() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
     let editor = editor(&app).await;
 
     let created = editor
         .post("/admin/api/resources/notes")
-        .header("X-Workspace", acme.to_string())
-        .json(&json!({ "title": "Made in Acme", "body": "text" }))
+        .header("X-Workspace", agra.to_string())
+        .json(&json!({ "title": "Made in Agra", "body": "text" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
-    let stored = match note_in(&app, acme, id).await {
+    let stored = match note_in(&app, agra, id).await {
         Some(stored) => stored,
         None => panic!(
-            "not in Acme: {created} / {:?}",
+            "not in Agra: {created} / {:?}",
             note_anywhere(&app, id).await
         ),
     };
-    assert_eq!(stored.workspace_id, acme);
-    assert_eq!(stored.title, "Made in Acme");
-    assert!(note_in(&app, globex, id).await.is_none());
+    assert_eq!(stored.workspace_id, agra);
+    assert_eq!(stored.title, "Made in Agra");
+    assert!(note_in(&app, gulati, id).await.is_none());
 
     // A form that names another workspace is refused, whatever it holds.
     editor
         .post("/admin/api/resources/notes")
-        .header("X-Workspace", acme.to_string())
-        .json(&json!({ "title": "Smuggled", "workspace_id": globex }))
+        .header("X-Workspace", agra.to_string())
+        .json(&json!({ "title": "Smuggled", "workspace_id": gulati }))
         .send()
         .await
         .assert_status(400);
     assert!(
-        in_workspace(&editor, globex, "/admin/api/resources/notes")
+        in_workspace(&editor, gulati, "/admin/api/resources/notes")
             .send()
             .await
             .json_value()["data"]
@@ -417,67 +417,67 @@ async fn records_are_made_changed_and_deleted_in_the_workspace_of_the_request() 
 
     editor
         .patch(&format!("/admin/api/resources/notes/{id}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Edited", "body": "new text" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data.title", json!("Edited"));
-    let stored = note_in(&app, acme, id).await.unwrap();
+    let stored = note_in(&app, agra, id).await.unwrap();
     assert_eq!(
         (stored.title.as_str(), stored.workspace_id),
-        ("Edited", acme)
+        ("Edited", agra)
     );
     // The workspace of a record cannot be changed from a form.
     editor
         .patch(&format!("/admin/api/resources/notes/{id}"))
-        .header("X-Workspace", acme.to_string())
-        .json(&json!({ "workspace_id": globex }))
+        .header("X-Workspace", agra.to_string())
+        .json(&json!({ "workspace_id": gulati }))
         .send()
         .await;
-    assert_eq!(note_in(&app, acme, id).await.unwrap().workspace_id, acme);
+    assert_eq!(note_in(&app, agra, id).await.unwrap().workspace_id, agra);
 
     editor
         .delete(&format!("/admin/api/resources/notes/{id}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .send()
         .await
         .assert_status(204);
-    assert!(note_in(&app, acme, id).await.is_none());
+    assert!(note_in(&app, agra, id).await.is_none());
 }
 
 #[tokio::test]
 async fn actions_run_on_the_records_of_the_workspace_of_the_request() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let mine = seed(&app, acme, "quiet").await;
-    let theirs = seed(&app, globex, "quiet too").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let mine = seed(&app, agra, "quiet").await;
+    let theirs = seed(&app, gulati, "quiet too").await;
     let editor = editor(&app).await;
 
     editor
         .post("/admin/api/resources/notes/actions/shout")
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "ids": [mine, theirs] }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("message", json!("1 notes shouted."));
-    assert_eq!(note_in(&app, acme, mine).await.unwrap().title, "QUIET");
+    assert_eq!(note_in(&app, agra, mine).await.unwrap().title, "QUIET");
     // The other workspace's note was not in the request's workspace: left alone.
     assert_eq!(
-        note_in(&app, globex, theirs).await.unwrap().title,
+        note_in(&app, gulati, theirs).await.unwrap().title,
         "quiet too"
     );
 
     editor
         .post("/admin/api/resources/notes/actions/shout")
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "ids": [theirs] }))
         .send()
         .await
         .assert_error(403, None);
     assert_eq!(
-        note_in(&app, globex, theirs).await.unwrap().title,
+        note_in(&app, gulati, theirs).await.unwrap().title,
         "quiet too"
     );
 }
@@ -489,12 +489,12 @@ async fn a_queued_action_runs_in_the_workspace_it_was_started_in() {
         .override_value::<dyn navree_contracts::Dispatcher>(fake.dispatcher())
         .build()
         .await;
-    let acme = Uuid::now_v7();
-    let id = seed(&app, acme, "LOUD").await;
+    let agra = Uuid::now_v7();
+    let id = seed(&app, agra, "LOUD").await;
     let editor = editor(&app).await;
     editor
         .post("/admin/api/resources/notes/actions/whisper")
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "ids": [id] }))
         .send()
         .await
@@ -502,8 +502,8 @@ async fn a_queued_action_runs_in_the_workspace_it_was_started_in() {
         .assert_json_path("queued", json!(true));
     let jobs = fake.dispatched::<HelmActionJob>();
     assert_eq!(jobs.len(), 1);
-    assert_eq!(jobs[0].workspace, Some(acme));
-    assert_eq!(note_in(&app, acme, id).await.unwrap().title, "LOUD");
+    assert_eq!(jobs[0].workspace, Some(agra));
+    assert_eq!(note_in(&app, agra, id).await.unwrap().title, "LOUD");
 
     use navree_contracts::{Job, JobContext};
     jobs.into_iter()
@@ -516,16 +516,16 @@ async fn a_queued_action_runs_in_the_workspace_it_was_started_in() {
         })
         .await
         .unwrap();
-    assert_eq!(note_in(&app, acme, id).await.unwrap().title, "loud");
+    assert_eq!(note_in(&app, agra, id).await.unwrap().title, "loud");
 }
 
 #[tokio::test]
 async fn metrics_are_counted_and_cached_per_workspace() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    seed(&app, acme, "one").await;
-    seed(&app, acme, "two").await;
-    seed(&app, globex, "three").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    seed(&app, agra, "one").await;
+    seed(&app, agra, "two").await;
+    seed(&app, gulati, "three").await;
     let editor = editor(&app).await;
     let value = |response: TestResponse| {
         response.assert_status(200).json_value()["value"]
@@ -534,11 +534,11 @@ async fn metrics_are_counted_and_cached_per_workspace() {
     };
     // Asked in turn, so that a cached result would show.
     for _ in 0..2 {
-        let metric = in_workspace(&editor, acme, "/admin/api/resources/notes/metrics/notes")
+        let metric = in_workspace(&editor, agra, "/admin/api/resources/notes/metrics/notes")
             .send()
             .await;
         assert_eq!(value(metric), 2.0);
-        let metric = in_workspace(&editor, globex, "/admin/api/resources/notes/metrics/notes")
+        let metric = in_workspace(&editor, gulati, "/admin/api/resources/notes/metrics/notes")
             .send()
             .await;
         assert_eq!(value(metric), 1.0);
@@ -548,9 +548,9 @@ async fn metrics_are_counted_and_cached_per_workspace() {
 #[tokio::test]
 async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    seed(&app, acme, "Acme only").await;
-    seed(&app, globex, "Globex only").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    seed(&app, agra, "Agra only").await;
+    seed(&app, gulati, "Gulati only").await;
     let editor = editor(&app).await;
     let page = |path: &str| editor.get(path).header("accept", "text/html").send();
 
@@ -558,19 +558,19 @@ async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
     let response = editor
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", acme.to_string().as_str())])
+        .form(&[("workspace", agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
     let cookie = response.set_cookie(WORKSPACE_COOKIE).expect("a cookie");
-    assert_eq!(cookie.value(), acme.to_string());
+    assert_eq!(cookie.value(), agra.to_string());
     assert!(cookie.http_only().unwrap_or(false));
     let listed = page("/admin/resources/notes")
         .await
         .assert_status(200)
         .text();
     assert!(
-        listed.contains("Acme only") && !listed.contains("Globex only"),
+        listed.contains("Agra only") && !listed.contains("Gulati only"),
         "{listed}"
     );
 
@@ -578,7 +578,7 @@ async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
     editor
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", globex.to_string().as_str())])
+        .form(&[("workspace", gulati.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -587,7 +587,7 @@ async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
         .assert_status(200)
         .text();
     assert!(
-        listed.contains("Globex only") && !listed.contains("Acme only"),
+        listed.contains("Gulati only") && !listed.contains("Agra only"),
         "{listed}"
     );
     let response = editor
@@ -602,7 +602,7 @@ async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
     let response = editor
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", "acme")])
+        .form(&[("workspace", "agra")])
         .send()
         .await
         .assert_status(303);
@@ -610,7 +610,7 @@ async fn the_form_in_the_sidebar_picks_the_workspace_of_a_browser() {
     // A header that is not a workspace id is no workspace.
     editor
         .get("/admin/api/resources/notes")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(400);
@@ -624,9 +624,9 @@ async fn a_resource_across_workspaces_is_asked_for_and_writes_in_the_workspace_o
         return;
     }
     let app = notes_app().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let a1 = seed(&app, acme, "Acme one").await;
-    let g1 = seed(&app, globex, "Globex one").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let a1 = seed(&app, agra, "Agra one").await;
+    let g1 = seed(&app, gulati, "Gulati one").await;
     let editor = editor(&app).await;
 
     // No workspace entered: every workspace's records, because the resource asked for that.
@@ -636,10 +636,10 @@ async fn a_resource_across_workspaces_is_asked_for_and_writes_in_the_workspace_o
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme one", "Globex one"]);
+    assert_eq!(titles_of(&body), ["Agra one", "Gulati one"]);
 
     // A change is written in the workspace of the record, whichever it is.
-    for (id, workspace, title) in [(a1, acme, "Acme edited"), (g1, globex, "Globex edited")] {
+    for (id, workspace, title) in [(a1, agra, "Agra edited"), (g1, gulati, "Gulati edited")] {
         editor
             .patch(&format!("/admin/api/resources/all-notes/{id}"))
             .json(&json!({ "title": title }))
@@ -653,8 +653,8 @@ async fn a_resource_across_workspaces_is_asked_for_and_writes_in_the_workspace_o
         .send()
         .await
         .assert_status(204);
-    assert!(note_in(&app, globex, g1).await.is_none());
-    assert!(note_in(&app, acme, a1).await.is_some());
+    assert!(note_in(&app, gulati, g1).await.is_none());
+    assert!(note_in(&app, agra, a1).await.is_some());
 
     // A create names its workspace.
     editor
@@ -665,21 +665,21 @@ async fn a_resource_across_workspaces_is_asked_for_and_writes_in_the_workspace_o
         .assert_status(400);
     let created = editor
         .post("/admin/api/resources/all-notes")
-        .json(&json!({ "title": "In Globex", "workspace_id": globex }))
+        .json(&json!({ "title": "In Gulati", "workspace_id": gulati }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(
-        note_in(&app, globex, id).await.unwrap().workspace_id,
-        globex
+        note_in(&app, gulati, id).await.unwrap().workspace_id,
+        gulati
     );
     // With a workspace entered, the form cannot name another.
     editor
         .post("/admin/api/resources/all-notes")
-        .header("X-Workspace", acme.to_string())
-        .json(&json!({ "title": "Mixed", "workspace_id": globex }))
+        .header("X-Workspace", agra.to_string())
+        .json(&json!({ "title": "Mixed", "workspace_id": gulati }))
         .send()
         .await
         .assert_status(400);
@@ -792,10 +792,10 @@ async fn under_row_level_security_the_panel_sees_and_changes_the_workspace_of_th
     }
     let app = rls_app(RlsDatabase::create(false)).await;
     assert_bound_by_row_level_security(&app).await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let a1 = seed(&app, acme, "Acme one").await;
-    seed(&app, acme, "Acme two").await;
-    let g1 = seed(&app, globex, "Globex one").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let a1 = seed(&app, agra, "Agra one").await;
+    seed(&app, agra, "Agra two").await;
+    let g1 = seed(&app, gulati, "Gulati one").await;
     let editor = editor(&app).await;
 
     // The database hides the other workspace from a session that names none.
@@ -822,17 +822,17 @@ async fn under_row_level_security_the_panel_sees_and_changes_the_workspace_of_th
         .send()
         .await
         .assert_status(400);
-    let body = in_workspace(&editor, acme, "/admin/api/resources/notes")
+    let body = in_workspace(&editor, agra, "/admin/api/resources/notes")
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme one", "Acme two"]);
-    in_workspace(&editor, acme, &format!("/admin/api/resources/notes/{g1}"))
+    assert_eq!(titles_of(&body), ["Agra one", "Agra two"]);
+    in_workspace(&editor, agra, &format!("/admin/api/resources/notes/{g1}"))
         .send()
         .await
         .assert_error(404, None);
-    let metric = in_workspace(&editor, globex, "/admin/api/resources/notes/metrics/notes")
+    let metric = in_workspace(&editor, gulati, "/admin/api/resources/notes/metrics/notes")
         .send()
         .await
         .assert_status(200)
@@ -842,57 +842,57 @@ async fn under_row_level_security_the_panel_sees_and_changes_the_workspace_of_th
     // Writes: make, edit, act, delete, all in the request's workspace.
     let created = editor
         .post("/admin/api/resources/notes")
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Made under RLS" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let made: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
-    assert_eq!(note_in(&app, acme, made).await.unwrap().workspace_id, acme);
-    assert!(note_in(&app, globex, made).await.is_none());
+    assert_eq!(note_in(&app, agra, made).await.unwrap().workspace_id, agra);
+    assert!(note_in(&app, gulati, made).await.is_none());
     editor
         .patch(&format!("/admin/api/resources/notes/{made}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Edited under RLS" }))
         .send()
         .await
         .assert_status(200);
     assert_eq!(
-        note_in(&app, acme, made).await.unwrap().title,
+        note_in(&app, agra, made).await.unwrap().title,
         "Edited under RLS"
     );
     editor
         .post("/admin/api/resources/notes/actions/shout")
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "ids": [a1] }))
         .send()
         .await
         .assert_status(200);
-    assert_eq!(note_in(&app, acme, a1).await.unwrap().title, "ACME ONE");
+    assert_eq!(note_in(&app, agra, a1).await.unwrap().title, "ACME ONE");
     editor
         .delete(&format!("/admin/api/resources/notes/{made}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .send()
         .await
         .assert_status(204);
-    assert!(note_in(&app, acme, made).await.is_none());
+    assert!(note_in(&app, agra, made).await.is_none());
 
     // The other workspace's note is out of reach of every write.
     editor
         .patch(&format!("/admin/api/resources/notes/{g1}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .json(&json!({ "title": "Taken over" }))
         .send()
         .await
         .assert_error(404, None);
     editor
         .delete(&format!("/admin/api/resources/notes/{g1}"))
-        .header("X-Workspace", acme.to_string())
+        .header("X-Workspace", agra.to_string())
         .send()
         .await
         .assert_error(404, None);
-    assert_eq!(note_in(&app, globex, g1).await.unwrap().title, "Globex one");
+    assert_eq!(note_in(&app, gulati, g1).await.unwrap().title, "Gulati one");
 }
 
 #[tokio::test]
@@ -902,9 +902,9 @@ async fn under_row_level_security_a_resource_across_workspaces_sees_what_the_dat
     }
     // A role that is bound by the policies: the resource sees nothing, and changes nothing.
     let bound = rls_app(RlsDatabase::create(false)).await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let a1 = seed(&bound, acme, "Acme one").await;
-    seed(&bound, globex, "Globex one").await;
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let a1 = seed(&bound, agra, "Agra one").await;
+    seed(&bound, gulati, "Gulati one").await;
     let editor_bound = editor(&bound).await;
     editor_bound
         .get("/admin/api/resources/all-notes")
@@ -918,13 +918,13 @@ async fn under_row_level_security_a_resource_across_workspaces_sees_what_the_dat
         .send()
         .await
         .assert_error(404, None);
-    assert_eq!(note_in(&bound, acme, a1).await.unwrap().title, "Acme one");
+    assert_eq!(note_in(&bound, agra, a1).await.unwrap().title, "Agra one");
 
     // A maintenance role that bypasses them sees every workspace, and
     // each write still runs inside the workspace of its record.
     let bypassing = rls_app(RlsDatabase::create(true)).await;
-    let a1 = seed(&bypassing, acme, "Acme one").await;
-    let g1 = seed(&bypassing, globex, "Globex one").await;
+    let a1 = seed(&bypassing, agra, "Agra one").await;
+    let g1 = seed(&bypassing, gulati, "Gulati one").await;
     let editor_all = editor(&bypassing).await;
     let body = editor_all
         .get("/admin/api/resources/all-notes")
@@ -932,8 +932,8 @@ async fn under_row_level_security_a_resource_across_workspaces_sees_what_the_dat
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(titles_of(&body), ["Acme one", "Globex one"]);
-    for (id, workspace, title) in [(a1, acme, "Acme edited"), (g1, globex, "Globex edited")] {
+    assert_eq!(titles_of(&body), ["Agra one", "Gulati one"]);
+    for (id, workspace, title) in [(a1, agra, "Agra edited"), (g1, gulati, "Gulati edited")] {
         editor_all
             .patch(&format!("/admin/api/resources/all-notes/{id}"))
             .json(&json!({ "title": title }))
@@ -950,17 +950,17 @@ async fn under_row_level_security_a_resource_across_workspaces_sees_what_the_dat
         .send()
         .await
         .assert_status(204);
-    assert!(note_in(&bypassing, globex, g1).await.is_none());
+    assert!(note_in(&bypassing, gulati, g1).await.is_none());
     let created = editor_all
         .post("/admin/api/resources/all-notes")
-        .json(&json!({ "title": "In Globex", "workspace_id": globex }))
+        .json(&json!({ "title": "In Gulati", "workspace_id": gulati }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = created["data"]["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(
-        note_in(&bypassing, globex, id).await.unwrap().workspace_id,
-        globex
+        note_in(&bypassing, gulati, id).await.unwrap().workspace_id,
+        gulati
     );
 }

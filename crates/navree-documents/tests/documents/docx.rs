@@ -19,7 +19,7 @@ fn a_report_reads_back_block_by_block() {
         .paragraph(
             Paragraph::new()
                 .text("Prepared for ")
-                .bold("Acme Ltd")
+                .bold("Agra Ltd")
                 .text(" by ")
                 .italic("the audit team")
                 .text("."),
@@ -36,7 +36,7 @@ fn a_report_reads_back_block_by_block() {
         .page_break()
         .paragraph(Paragraph::from("Appendix").align(Align::End))
         .paragraph(Run::new("Line one\nLine two").size(9.0).color("#555555"))
-        .header("Acme Ltd — confidential")
+        .header("Agra Ltd — confidential")
         .footer_page_numbers()
         .build()
         .unwrap();

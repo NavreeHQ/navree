@@ -13,8 +13,8 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 fn message() -> Message {
     Message::new()
-        .from("Acme Billing <billing@acme.test>")
-        .to("Ada <ada@example.com>")
+        .from("Agra Billing <billing@acme.test>")
+        .to("Anu <anu@example.com>")
         .cc("bob@example.com")
         .bcc("audit@acme.test")
         .reply_to("help@acme.test")
@@ -88,9 +88,9 @@ async fn ses_sends_simple_content_signed_with_sigv4() {
     assert_eq!(
         json_body(&request),
         json!({
-            "FromEmailAddress": "Acme Billing <billing@acme.test>",
+            "FromEmailAddress": "Agra Billing <billing@acme.test>",
             "Destination": {
-                "ToAddresses": ["Ada <ada@example.com>"],
+                "ToAddresses": ["Anu <anu@example.com>"],
                 "CcAddresses": ["bob@example.com"],
                 "BccAddresses": ["audit@acme.test"],
             },
@@ -195,8 +195,8 @@ async fn mailgun_posts_a_form_with_basic_auth() {
             .map(|(_, v)| v.as_str())
             .collect::<Vec<_>>()
     };
-    assert_eq!(field("from"), ["Acme Billing <billing@acme.test>"]);
-    assert_eq!(field("to"), ["Ada <ada@example.com>"]);
+    assert_eq!(field("from"), ["Agra Billing <billing@acme.test>"]);
+    assert_eq!(field("to"), ["Anu <anu@example.com>"]);
     assert_eq!(field("cc"), ["bob@example.com"]);
     assert_eq!(field("bcc"), ["audit@acme.test"]);
     assert_eq!(field("subject"), ["Your invoice"]);
@@ -258,8 +258,8 @@ async fn postmark_posts_json_with_the_server_token() {
     assert_eq!(
         json_body(&only_request(&server).await),
         json!({
-            "From": "Acme Billing <billing@acme.test>",
-            "To": "Ada <ada@example.com>",
+            "From": "Agra Billing <billing@acme.test>",
+            "To": "Anu <anu@example.com>",
             "Cc": "bob@example.com",
             "Bcc": "audit@acme.test",
             "Subject": "Your invoice",
@@ -319,8 +319,8 @@ async fn resend_posts_json_with_a_bearer_token() {
     assert_eq!(
         json_body(&only_request(&server).await),
         json!({
-            "from": "Acme Billing <billing@acme.test>",
-            "to": ["Ada <ada@example.com>"],
+            "from": "Agra Billing <billing@acme.test>",
+            "to": ["Anu <anu@example.com>"],
             "cc": ["bob@example.com"],
             "bcc": ["audit@acme.test"],
             "subject": "Your invoice",

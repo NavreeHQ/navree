@@ -373,8 +373,8 @@ mod tests {
             Ok(("new-pipeline".to_owned(), Target::User(user)))
         );
         assert_eq!(
-            parse_toggle("flags:off", &args(&["x", "--workspace=acme"])),
-            Ok(("x".to_owned(), Target::Workspace("acme".to_owned())))
+            parse_toggle("flags:off", &args(&["x", "--workspace=agra"])),
+            Ok(("x".to_owned(), Target::Workspace("agra".to_owned())))
         );
         for bad in [
             &[][..],

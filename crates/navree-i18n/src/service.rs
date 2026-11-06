@@ -461,14 +461,14 @@ mod tests {
         ));
         // A variable the caller forgot is a formatting error.
         assert!(matches!(
-            fixtures(Missing::Error).t("en", "deal-won", args!(owner = "Ada")),
+            fixtures(Missing::Error).t("en", "deal-won", args!(owner = "Anu")),
             Err(I18nError::Format { .. })
         ));
         assert_eq!(
             fixtures(Missing::Warn)
-                .t("en", "deal-won", args!(owner = "Ada"))
+                .t("en", "deal-won", args!(owner = "Anu"))
                 .unwrap(),
-            "Ada won {$title}."
+            "Anu won {$title}."
         );
     }
 

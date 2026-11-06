@@ -38,7 +38,7 @@ pub const SCIM_TOKEN_PREFIX: &str = "nvscim_";
 /// use navree_directory::NewConnection;
 /// use serde_json::json;
 ///
-/// let ldap = NewConnection::new("Acme AD", "ldap")
+/// let ldap = NewConnection::new("Agra AD", "ldap")
 ///     .settings(json!({
 ///         "url": "ldaps://dc1.acme.test",
 ///         "base_dn": "DC=acme,DC=test",
@@ -1020,7 +1020,7 @@ mod tests {
         assert_eq!(token.len(), 47);
         assert_eq!(hint(&token).len(), 11);
         assert!(token.starts_with(&hint(&token)));
-        let created = NewConnection::new("Acme", "scim").secret("p");
+        let created = NewConnection::new("Agra", "scim").secret("p");
         assert!(!format!("{created:?}").contains("\"p\""));
     }
 }

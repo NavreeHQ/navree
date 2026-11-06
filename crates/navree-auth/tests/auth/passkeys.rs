@@ -83,7 +83,7 @@ async fn passkey_routes_are_off_by_default() {
 async fn a_registered_passkey_signs_the_user_in() {
     let sink = Arc::new(RecordingSink::default());
     let app = passkey_app(sink.clone()).await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN);
 
@@ -93,7 +93,7 @@ async fn a_registered_passkey_signs_the_user_in() {
         .json_value();
     let public_key = &options["publicKey"];
     assert_eq!(public_key["rp"], json!({ "id": RP_ID, "name": "Navree" }));
-    assert_eq!(public_key["user"]["name"], "ada@example.com");
+    assert_eq!(public_key["user"]["name"], "anu@example.com");
     assert_eq!(
         public_key["user"]["id"],
         json!(URL_SAFE_NO_PAD.encode(user.id.as_bytes()))
@@ -138,14 +138,14 @@ async fn a_registered_passkey_signs_the_user_in() {
     assert_eq!(list["data"].as_array().unwrap().len(), 1);
 
     // Sign in, discoverable (no email) and by email.
-    for email in [None, Some("ada@example.com")] {
+    for email in [None, Some("anu@example.com")] {
         let options = login_options(&client, email).await;
         assert_eq!(options["rpId"], RP_ID);
         let assertion = authenticator.get(&options).expect("a passkey");
         let response = post(&client, "/login", None, json!({ "credential": assertion }))
             .await
             .assert_status(200)
-            .assert_json_path("user.email", json!("ada@example.com"));
+            .assert_json_path("user.email", json!("anu@example.com"));
         let (signed_in_access, _) = tokens(&response);
         client
             .get("/api/auth/me")
@@ -154,7 +154,7 @@ async fn a_registered_passkey_signs_the_user_in() {
             .await
             .assert_status(200);
     }
-    let options = login_options(&client, Some("ada@example.com")).await;
+    let options = login_options(&client, Some("anu@example.com")).await;
     assert_eq!(
         options["allowCredentials"][0]["id"],
         json!(authenticator.credential_ids()[0])
@@ -172,7 +172,7 @@ async fn a_registered_passkey_signs_the_user_in() {
 #[tokio::test]
 async fn ed25519_passkeys_work_too() {
     let app = passkey_app(Arc::new(RecordingSink::default())).await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN).ed25519();
     let created = register(&client, &access, &authenticator).await;
@@ -189,7 +189,7 @@ async fn ed25519_passkeys_work_too() {
 async fn forged_replayed_and_foreign_assertions_are_refused() {
     let sink = Arc::new(RecordingSink::default());
     let app = passkey_app(sink.clone()).await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN);
     register(&client, &access, &authenticator).await;
@@ -274,7 +274,7 @@ async fn presence_only_passkeys_keep_the_second_factor() {
         .config("auth.passkeys.origins", json!([ORIGIN]))
         .build()
         .await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     enable_two_factor(&app, &clock, &user).await;
     let client = app.client();
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN).without_user_verification();
@@ -295,7 +295,7 @@ async fn presence_only_passkeys_keep_the_second_factor() {
         .config("auth.passkeys.user_verification", "required")
         .build()
         .await;
-    let (_, strict_access, _) = signed_in(&strict, "grace@example.com").await;
+    let (_, strict_access, _) = signed_in(&strict, "gauri@example.com").await;
     let options = post(
         &strict.client(),
         "/register/options",
@@ -317,8 +317,8 @@ async fn presence_only_passkeys_keep_the_second_factor() {
 #[tokio::test]
 async fn passkeys_are_removed_by_their_owner_only() {
     let app = passkey_app(Arc::new(RecordingSink::default())).await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
-    let (_, grace_access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
+    let (_, grace_access, _) = signed_in(&app, "gauri@example.com").await;
     let client = app.client();
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN);
     let created = register(&client, &access, &authenticator).await;

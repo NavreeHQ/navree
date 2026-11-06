@@ -16,8 +16,8 @@ const TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
 #[tokio::test]
 async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
     let h = harness(with_workspaces).await;
-    let acme = h.workspace(OTHER, "acme").await;
-    let owner = Owner::Workspace(acme.id);
+    let agra = h.workspace(OTHER, "agra").await;
+    let owner = Owner::Workspace(agra.id);
     let integrations = h.integrations().await;
 
     let redirect = integrations
@@ -71,7 +71,7 @@ async fn microsoft_admin_consent_connects_a_workspace_to_its_tenant() {
     );
     let connection = completed.connection;
     assert_eq!(connection.owner_type, OwnerType::Workspace);
-    assert_eq!(connection.owner_id, Some(acme.id));
+    assert_eq!(connection.owner_id, Some(agra.id));
     assert_eq!(connection.owner(), owner);
     assert_eq!(connection.provider, "microsoft");
     assert_eq!(connection.provider_name, "Microsoft 365");
@@ -267,7 +267,7 @@ async fn a_slack_install_stores_the_team_and_its_bot_token() {
             .never_expires()
             .scopes(["chat:write", "users:read"])
             .external_id("T0123ABCD")
-            .display_name("Acme"),
+            .display_name("Agra"),
     );
     let integrations = h.integrations().await;
     let redirect = integrations
@@ -298,7 +298,7 @@ async fn a_slack_install_stores_the_team_and_its_bot_token() {
         .connection;
     assert_eq!(connection.kind, CredentialKind::OAuth);
     assert_eq!(connection.external_id.as_deref(), Some("T0123ABCD"));
-    assert_eq!(connection.display_name.as_deref(), Some("Acme"));
+    assert_eq!(connection.display_name.as_deref(), Some("Agra"));
     assert_eq!(connection.scopes, vec!["chat:write", "users:read"]);
     assert_eq!(
         h.fake.exchanged(),

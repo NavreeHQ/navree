@@ -190,12 +190,12 @@ async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_reso
     let db = app.get::<Db>().await;
     let workspaces = app.get::<Workspaces>().await;
     let uow = db.uow(None, None).await;
-    let acme = workspaces
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+    let agra = workspaces
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
-    let globex = workspaces
-        .create(&uow, bob, NewWorkspace::named("Globex"))
+    let gulati = workspaces
+        .create(&uow, bob, NewWorkspace::named("Gulati"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -207,27 +207,27 @@ async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_reso
             .header("x-workspace", workspace.to_owned());
         async move { Stream::new(request.send_stream().await) }
     };
-    let mut ada_in_acme = open(ada, &acme.slug).await;
-    let mut bob_in_globex = open(bob, &globex.slug).await;
-    // Bob names Acme, where he is no member: his stream is in no workspace.
-    let mut bob_in_acme = open(bob, &acme.slug).await;
-    for page in [&mut ada_in_acme, &mut bob_in_globex, &mut bob_in_acme] {
+    let mut ada_in_agra = open(ada, &agra.slug).await;
+    let mut bob_in_gulati = open(bob, &gulati.slug).await;
+    // Bob names Agra, where he is no member: his stream is in no workspace.
+    let mut bob_in_agra = open(bob, &agra.slug).await;
+    for page in [&mut ada_in_agra, &mut bob_in_gulati, &mut bob_in_agra] {
         assert_eq!(page.next(WAIT).await.as_deref(), Some("ui:live"));
     }
 
     let live = app.get::<Live>().await;
-    live.nudge([Topic::workspace(acme.id, "deals")])
+    live.nudge([Topic::workspace(agra.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(ada_in_acme.next(WAIT).await.as_deref(), Some("deals"));
-    assert_eq!(bob_in_globex.next(QUIET).await, None);
-    assert_eq!(bob_in_acme.next(QUIET).await, None);
+    assert_eq!(ada_in_agra.next(WAIT).await.as_deref(), Some("deals"));
+    assert_eq!(bob_in_gulati.next(QUIET).await, None);
+    assert_eq!(bob_in_agra.next(QUIET).await, None);
 
-    live.nudge([Topic::workspace(globex.id, "deals")])
+    live.nudge([Topic::workspace(gulati.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(bob_in_globex.next(WAIT).await.as_deref(), Some("deals"));
-    assert_eq!(ada_in_acme.next(QUIET).await, None);
+    assert_eq!(bob_in_gulati.next(WAIT).await.as_deref(), Some("deals"));
+    assert_eq!(ada_in_agra.next(QUIET).await, None);
 }
 
 impl Stream {
@@ -255,15 +255,15 @@ async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspa
     let workspaces = app.get::<Workspaces>().await;
     let members = app.get::<navree::workspace::Members>().await;
     let uow = db.uow(None, None).await;
-    let acme = workspaces
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+    let agra = workspaces
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     for user in [bob, cy] {
         members
             .add(
                 &uow,
-                acme.id,
+                agra.id,
                 user,
                 navree::workspace::WorkspaceRole::Member,
             )
@@ -276,7 +276,7 @@ async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspa
         let request = app
             .acting_as(principal(user))
             .get("/broadcasting/stream?topics=deals")
-            .header("x-workspace", acme.slug.clone());
+            .header("x-workspace", agra.slug.clone());
         async move { Stream::new(request.send_stream().await) }
     };
     let (mut ada_page, mut bob_page, mut cy_page) =
@@ -287,11 +287,11 @@ async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspa
 
     // Bob is removed: his stream ends, the others' go on.
     let uow = db.uow(None, None).await;
-    members.remove(&uow, acme.id, bob).await.unwrap();
+    members.remove(&uow, agra.id, bob).await.unwrap();
     uow.commit().await.unwrap();
     assert!(bob_page.closed(WAIT).await, "bob's stream stayed open");
     let live = app.get::<Live>().await;
-    live.nudge([Topic::workspace(acme.id, "deals")])
+    live.nudge([Topic::workspace(agra.id, "deals")])
         .await
         .unwrap();
     assert_eq!(ada_page.next(WAIT).await.as_deref(), Some("deals"));
@@ -299,8 +299,8 @@ async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspa
 
     // The workspace is deleted: the rest end too.
     let uow = db.uow(None, None).await;
-    workspaces.delete(&uow, acme.id).await.unwrap();
+    workspaces.delete(&uow, agra.id).await.unwrap();
     uow.commit().await.unwrap();
-    assert!(ada_page.closed(WAIT).await, "ada's stream stayed open");
+    assert!(ada_page.closed(WAIT).await, "anu's stream stayed open");
     assert!(cy_page.closed(WAIT).await, "cy's stream stayed open");
 }

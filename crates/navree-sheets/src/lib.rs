@@ -41,8 +41,8 @@
 //!     email: String,
 //! }
 //!
-//! let row = ContactRow { name: "=Ada".into(), email: "ada@example.com".into() };
-//! assert_eq!(row.cells()[0], Cell::Text("=Ada".into()));
+//! let row = ContactRow { name: "=Anu".into(), email: "anu@example.com".into() };
+//! assert_eq!(row.cells()[0], Cell::Text("=Anu".into()));
 //! let download = Download::csv("contacts", [row]);
 //! assert_eq!(download.filename(), "contacts.csv");
 //! ```

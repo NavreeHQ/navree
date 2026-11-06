@@ -774,7 +774,7 @@ impl ScrollHeight {
 /// ```
 /// use navree_ui::{ScrollArea, ScrollHeight, render};
 ///
-/// let log = ScrollArea::new("Activity").max_height(ScrollHeight::Md).children("Ada moved a deal");
+/// let log = ScrollArea::new("Activity").max_height(ScrollHeight::Md).children("Anu moved a deal");
 /// assert!(render(&log.into()).contains(r#"data-max-height="md""#));
 /// ```
 #[derive(Clone, Debug)]

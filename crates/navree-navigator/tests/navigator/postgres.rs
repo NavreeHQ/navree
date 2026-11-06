@@ -82,10 +82,10 @@ const SCHEMA: &[&str] = &[
     "CREATE TABLE navree_migrations (module text NOT NULL, name text NOT NULL, batch bigint NOT NULL, \
      applied_at timestamptz NOT NULL, PRIMARY KEY (module, name))",
     "INSERT INTO navree_migrations VALUES ('crm', 'm1_create_deals', 1, now())",
-    "INSERT INTO companies (name) VALUES ('Acme')",
+    "INSERT INTO companies (name) VALUES ('Agra')",
     "INSERT INTO deals (title, stage, amount_cents, company_id) \
      SELECT 'Deal ' || i, (ARRAY['lead', 'negotiation', 'won'])[1 + i % 3], i * 1000, 1 FROM generate_series(1, 150) i",
-    "INSERT INTO users (email, password_hash) VALUES ('ada@example.com', '$argon2id$x')",
+    "INSERT INTO users (email, password_hash) VALUES ('anu@example.com', '$argon2id$x')",
 ];
 
 #[tokio::test]
@@ -125,7 +125,7 @@ async fn postgres_queries_run_read_only_with_typed_values() {
         json!({"sql": "SELECT email, password_hash FROM users"}),
     )
     .await;
-    assert_eq!(users["rows"], json!([["ada@example.com", "[redacted]"]]));
+    assert_eq!(users["rows"], json!([["anu@example.com", "[redacted]"]]));
 
     let read_only = call(
         &navigator,

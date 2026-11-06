@@ -238,10 +238,10 @@ mod tests {
     #[test]
     fn parses_search_filters_sort_and_page() {
         let q = ListQuery::parse(
-            "search=Globex&filter%5Bstage%5D%5Bin%5D=lead&filter[stage][in]=won,lost&filter[open]=1&sort=-amount_cents&page=2&per_page=50&via[company_id]=abc&range=7",
+            "search=Gulati&filter%5Bstage%5D%5Bin%5D=lead&filter[stage][in]=won,lost&filter[open]=1&sort=-amount_cents&page=2&per_page=50&via[company_id]=abc&range=7",
         )
         .unwrap();
-        assert_eq!(q.search.as_deref(), Some("Globex"));
+        assert_eq!(q.search.as_deref(), Some("Gulati"));
         assert_eq!(q.filters["stage"], ["lead", "won", "lost"]);
         assert_eq!(q.filters["open"], ["1"]);
         assert_eq!(q.sort.as_deref(), Some("-amount_cents"));
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn names_outside_the_list_query_are_left_alone() {
         let q = ListQuery::parse(
-            "filters[stage]=won&filters%5Bstage%5D=won&filters[stage][]=won&q=acme",
+            "filters[stage]=won&filters%5Bstage%5D=won&filters[stage][]=won&q=agra",
         )
         .unwrap();
         assert_eq!(
@@ -284,16 +284,16 @@ mod tests {
             }
         );
         // The JSON API leaves them alone too: they are handler parameters.
-        let q = ListQuery::parse_api("filters[stage]=won&q=acme").unwrap();
+        let q = ListQuery::parse_api("filters[stage]=won&q=agra").unwrap();
         assert!(q.filters.is_empty());
         assert_eq!(q.search, None);
     }
 
     #[test]
     fn q_is_not_a_search() {
-        assert_eq!(ListQuery::parse("q=acme").unwrap().search, None);
-        let q = ListQuery::parse("q=acme&search=globex").unwrap();
-        assert_eq!(q.search.as_deref(), Some("globex"));
+        assert_eq!(ListQuery::parse("q=agra").unwrap().search, None);
+        let q = ListQuery::parse("q=agra&search=gulati").unwrap();
+        assert_eq!(q.search.as_deref(), Some("gulati"));
     }
 
     #[test]

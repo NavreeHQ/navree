@@ -135,19 +135,19 @@ impl Module for RoutesModule {
 async fn records_bind_by_their_route_key() {
     let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
     let deal = Deal::factory()
-        .set(Deal::SLUG, "acme-renewal")
-        .set(Deal::TITLE, "Acme renewal")
+        .set(Deal::SLUG, "agra-renewal")
+        .set(Deal::TITLE, "Agra renewal")
         .create_one(&*db)
         .await
         .unwrap();
-    assert_eq!(deal.route_key().unwrap(), Value::from("acme-renewal"));
+    assert_eq!(deal.route_key().unwrap(), Value::from("agra-renewal"));
     assert_eq!(Deal::route_key_name(), "slug");
     app.client()
-        .get("/api/deals/acme-renewal")
+        .get("/api/deals/agra-renewal")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("title", json!("Acme renewal"));
+        .assert_json_path("title", json!("Agra renewal"));
     app.client()
         .get("/api/deals/nothing-here")
         .send()
@@ -156,7 +156,7 @@ async fn records_bind_by_their_route_key() {
 
     // Without a route key: the key, read as the key's type.
     let company = Company::factory()
-        .set(Company::NAME, "Acme")
+        .set(Company::NAME, "Agra")
         .create_one(&*db)
         .await
         .unwrap();
@@ -166,7 +166,7 @@ async fn records_bind_by_their_route_key() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme"));
+        .assert_json_path("name", json!("Agra"));
     app.client()
         .get("/api/companies/not-a-number")
         .send()
@@ -286,42 +286,42 @@ async fn soft_deleted_records_bind_only_on_routes_that_opt_in() {
 #[tokio::test]
 async fn children_bind_under_their_parent_only() {
     let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
-    let acme = Company::factory()
-        .set(Company::NAME, "Acme")
+    let agra = Company::factory()
+        .set(Company::NAME, "Agra")
         .create_one(&*db)
         .await
         .unwrap();
-    let globex = Company::factory()
-        .set(Company::NAME, "Globex")
+    let gulati = Company::factory()
+        .set(Company::NAME, "Gulati")
         .create_one(&*db)
         .await
         .unwrap();
     Deal::factory()
-        .for_record(&acme, Deal::COMPANY_ID)
-        .set(Deal::SLUG, "acme-deal")
-        .set(Deal::TITLE, "Acme deal")
+        .for_record(&agra, Deal::COMPANY_ID)
+        .set(Deal::SLUG, "agra-deal")
+        .set(Deal::TITLE, "Agra deal")
         .create(&*db)
         .await
         .unwrap();
     app.client()
-        .get(&format!("/api/companies/{}/deals/acme-deal", acme.id))
+        .get(&format!("/api/companies/{}/deals/agra-deal", agra.id))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("company", json!("Acme"))
-        .assert_json_path("deal", json!("Acme deal"));
+        .assert_json_path("company", json!("Agra"))
+        .assert_json_path("deal", json!("Agra deal"));
     app.client()
-        .get(&format!("/api/companies/{}/deals/acme-deal", globex.id))
+        .get(&format!("/api/companies/{}/deals/agra-deal", gulati.id))
         .send()
         .await
         .assert_error(404, "Not Found");
     // Parameters not named after the models: the first and the last.
     app.client()
-        .get(&format!("/api/accounts/{}/items/acme-deal", acme.id))
+        .get(&format!("/api/accounts/{}/items/agra-deal", agra.id))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("deal", json!("Acme deal"));
+        .assert_json_path("deal", json!("Agra deal"));
 }
 
 #[tokio::test]

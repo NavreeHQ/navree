@@ -229,11 +229,11 @@ mod tests {
     #[test]
     fn redirect_uris_are_checked() {
         for good in [
-            "https://zapier.com/dashboard/auth/oauth/return/AcmeCRMCLIAPI/",
+            "https://zapier.com/dashboard/auth/oauth/return/AgraCRMCLIAPI/",
             "http://127.0.0.1/callback",
             "http://[::1]:8080/cb",
             "http://localhost:3000/cb",
-            "com.acme.crm:/oauth/callback",
+            "com.agra.crm:/oauth/callback",
         ] {
             assert!(check_redirect_uri(good).is_ok(), "{good}");
         }

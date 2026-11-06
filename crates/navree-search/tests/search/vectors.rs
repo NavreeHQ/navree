@@ -23,9 +23,9 @@ async fn similar_finds_records_by_meaning() {
     let rows = insert_contacts(
         &db,
         vec![
-            with_notes("Ada", "Lovelace", "struggled with onboarding", "customer"),
-            with_notes("Grace", "Hopper", "billing questions", "customer"),
-            with_notes("Alan", "Turing", "onboarding call about billing", "lead"),
+            with_notes("Anu", "Lakhotia", "struggled with onboarding", "customer"),
+            with_notes("Gauri", "Hundal", "billing questions", "customer"),
+            with_notes("Arun", "Tiwari", "onboarding call about billing", "lead"),
         ],
     )
     .await;
@@ -40,7 +40,7 @@ async fn similar_finds_records_by_meaning() {
         .iter()
         .map(|h| h.record.first_name.as_str())
         .collect();
-    assert_eq!(names, ["Ada", "Alan"]);
+    assert_eq!(names, ["Anu", "Arun"]);
     assert!(similar[0].score > 0.9 && similar[0].score <= 1.0);
 
     let customers = search
@@ -116,7 +116,7 @@ async fn deleted_records_leave_the_vector_store() {
     let search = app.get::<Search>().await;
     let rows = insert_contacts(
         &db,
-        vec![with_notes("Ada", "Lovelace", "onboarding", "lead")],
+        vec![with_notes("Anu", "Lakhotia", "onboarding", "lead")],
     )
     .await;
     settle(&app).await;

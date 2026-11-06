@@ -93,27 +93,27 @@ mod real {
 
         // Each viewer's library.
         assert_eq!(
-            visible(&db, &lib.acme).await,
-            ["Acme only", "Group handbook", "Welcome"]
+            visible(&db, &lib.agra).await,
+            ["Agra only", "Group handbook", "Welcome"]
         );
-        assert_eq!(visible(&db, &lib.globex).await, ["Globex only", "Welcome"]);
+        assert_eq!(visible(&db, &lib.gulati).await, ["Gulati only", "Welcome"]);
         assert_eq!(
             visible(&db, LibraryViewer::organization(lib.other.id)).await,
             ["Other handbook", "Welcome"]
         );
         // The scope reads the current workspace's organization in SQL.
-        let initech =
-            navree_orm::workspace::scope(lib.initech.id, Template::query().get(db.as_ref()))
+        let indrani =
+            navree_orm::workspace::scope(lib.indrani.id, Template::query().get(db.as_ref()))
                 .await
                 .unwrap();
-        assert_eq!(names(&initech), ["Group handbook", "Welcome"]);
+        assert_eq!(names(&indrani), ["Group handbook", "Welcome"]);
         assert_eq!(
             names(&Template::query().get(db.as_ref()).await.unwrap()),
             ["Welcome"]
         );
 
         // The CHECK constraint, under the hooks (a plain insert).
-        let (org, ws) = (lib.group.id, lib.acme.id);
+        let (org, ws) = (lib.group.id, lib.agra.id);
         for (scope, organization, workspace) in [
             (LibraryScope::Global, None, Some(ws)),
             (LibraryScope::Organization, None, None),
@@ -143,7 +143,7 @@ mod real {
         let client = lib.world.as_user(lib.ada);
         client
             .patch(&format!("/api/templates/{}", lib.handbook))
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .json(&json!({ "name": "Mine" }))
             .send()
             .await
@@ -151,14 +151,14 @@ mod real {
             .assert_json_path("code", json!("library_read_only"));
         let copy = client
             .post(&format!("/api/templates/{}/clone", lib.welcome))
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .send()
             .await
             .assert_status(200)
             .json::<serde_json::Value>();
         let copy_id: Uuid = serde_json::from_value(copy["id"].clone()).unwrap();
         assert_eq!(copy["cloned_from_id"], json!(lib.welcome));
-        assert_eq!(copy["workspace_id"], json!(lib.acme.id));
+        assert_eq!(copy["workspace_id"], json!(lib.agra.id));
         assert_eq!(
             TemplateBlock::query()
                 .where_(TemplateBlock::TEMPLATE_ID.eq(copy_id))
@@ -168,7 +168,7 @@ mod real {
             2
         );
         assert_eq!(events.names(), ["library.item_cloned"]);
-        let copy = LibraryRepo::<Template>::owned_by(LibraryOwner::Workspace(lib.acme.id))
+        let copy = LibraryRepo::<Template>::owned_by(LibraryOwner::Workspace(lib.agra.id))
             .find_or_fail(db.as_ref(), copy_id)
             .await
             .unwrap();
@@ -198,7 +198,7 @@ mod real {
                 .await
                 .unwrap(),
             2,
-            "the global welcome and Acme's clone"
+            "the global welcome and Agra's clone"
         );
         lib.world.app.shutdown().await.unwrap();
     }

@@ -327,7 +327,7 @@ async fn refresh_rolls_back_then_migrates() {
     let db = db(&app).await;
     Migrator::up(app.ctx()).await.unwrap();
     db.pool()
-        .execute_script("INSERT INTO companies (name) VALUES ('Acme')")
+        .execute_script("INSERT INTO companies (name) VALUES ('Agra')")
         .await
         .unwrap();
     let refreshed = Migrator::refresh(app.ctx(), None).await.unwrap();
@@ -418,7 +418,7 @@ async fn sqlite_rebuilds_keep_the_rows_that_reference_the_table() {
     let db = db(&first).await;
     db.pool()
         .execute_script(
-            "INSERT INTO companies (name) VALUES ('Acme'); \
+            "INSERT INTO companies (name) VALUES ('Agra'); \
              INSERT INTO deals (company_id, title) VALUES (1, 'Big one')",
         )
         .await

@@ -116,10 +116,10 @@ fn an_avatar_group_shows_the_most_it_may_and_counts_the_rest() {
 
 #[test]
 fn an_avatar_asks_for_its_fallback_and_loads_the_script_only_then() {
-    let plain = Avatar::image("/a.png", "Ada");
+    let plain = Avatar::image("/a.png", "Anu");
     assert!(uses(plain.clone()).is_none());
     assert!(!html(plain).contains("data-ui-fallback"));
-    let with = Avatar::image("/a.png", "Ada").fallback();
+    let with = Avatar::image("/a.png", "Anu").fallback();
     assert!(html(with.clone()).contains("data-ui-fallback"));
     let needs = uses(with);
     assert!(needs.has(Uses::PARTS) && needs.has(Uses::PARTS_STYLES));

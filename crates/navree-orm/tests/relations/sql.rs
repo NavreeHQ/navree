@@ -143,7 +143,7 @@ fn existence_queries() {
         query(
             Deal::query()
                 .doesnt_have("tags")
-                .or_where_relation("owner", User::NAME.eq("Ada"))
+                .or_where_relation("owner", User::NAME.eq("Anu"))
         )
     );
     insta::assert_snapshot!(

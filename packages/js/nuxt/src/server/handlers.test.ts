@@ -7,7 +7,7 @@ import { bffResolver, createBffHandler, createSessionGate, getNavreeSession } fr
 
 const API = "http://navree.test";
 const APP = "http://app.test";
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 
 function navreeApi() {
   return fakeNavree({
@@ -195,8 +195,8 @@ describe("getNavreeSession (server routes and server-side rendering)", () => {
     app.use(defineEventHandler(async (event) => ({ session: await getNavreeSession(event, bff) })));
     const web = toWebHandler(app);
 
-    const signedIn = await web(page2({ [ACCESS_COOKIE]: "AT1", [WORKSPACE_COOKIE]: "acme" }));
-    expect(await signedIn.json()).toEqual({ session: { user, accessToken: "AT1", workspace: "acme" } });
+    const signedIn = await web(page2({ [ACCESS_COOKIE]: "AT1", [WORKSPACE_COOKIE]: "agra" }));
+    expect(await signedIn.json()).toEqual({ session: { user, accessToken: "AT1", workspace: "agra" } });
     const anonymous = await web(page2({}));
     expect(await anonymous.json()).toEqual({ session: null });
   });

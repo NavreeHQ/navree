@@ -498,8 +498,8 @@ fn builder() -> TestAppBuilder {
         .module(TemplatesModule)
 }
 
-/// Organization `group` with workspace `acme`, the standalone `globex`,
-/// all owned by `ada`.
+/// Organization `group` with workspace `agra`, the standalone `gulati`,
+/// all owned by `anu`.
 async fn tenants(app: &TestApp, ada: Uuid) -> (Uuid, Uuid, Uuid) {
     let db = app.get::<Db>().await;
     let workspaces = app.get::<Workspaces>().await;
@@ -509,17 +509,17 @@ async fn tenants(app: &TestApp, ada: Uuid) -> (Uuid, Uuid, Uuid) {
         .create(&uow, ada, NewOrganization::named("Group"))
         .await
         .unwrap();
-    let acme = workspaces
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+    let agra = workspaces
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
-    let globex = workspaces
-        .create(&uow, ada, NewWorkspace::named("Globex"))
+    let gulati = workspaces
+        .create(&uow, ada, NewWorkspace::named("Gulati"))
         .await
         .unwrap();
-    organizations.attach(&uow, group.id, acme.id).await.unwrap();
+    organizations.attach(&uow, group.id, agra.id).await.unwrap();
     uow.commit().await.unwrap();
-    (group.id, acme.id, globex.id)
+    (group.id, agra.id, gulati.id)
 }
 
 #[tokio::test]
@@ -529,7 +529,7 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         .await
         .unwrap();
     let ada = Uuid::now_v7();
-    let (group, acme, _globex) = tenants(&app, ada).await;
+    let (group, agra, _gulati) = tenants(&app, ada).await;
     let bus = app.get::<navree::events::EventBus>().await;
     let mut cloned = bus.subscribe_json("library.item_cloned");
     let client = app.acting_as(principal(ada));
@@ -557,7 +557,7 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         .assert_json_path("own", json!(["Group handbook"]))
         .assert_json_path("catalog", json!(["Reset your password", "Welcome aboard"]));
 
-    // Acme reads the three levels as one list.
+    // Agra reads the three levels as one list.
     let names = |body: Value| -> Vec<String> {
         body.as_array()
             .unwrap()
@@ -567,7 +567,7 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     };
     let listed = client
         .get("/api/templates")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -576,13 +576,13 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         names(listed),
         ["Group handbook", "Reset your password", "Welcome aboard"]
     );
-    let globex = client
+    let gulati = client
         .get("/api/templates")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .json_value();
-    assert_eq!(names(globex), ["Reset your password", "Welcome aboard"]);
+    assert_eq!(names(gulati), ["Reset your password", "Welcome aboard"]);
 
     // Shared templates are read-only in the workspace.
     let db = app.get::<Db>().await;
@@ -598,7 +598,7 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     ] {
         let refused = client
             .patch(&path)
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .json(&json!({ "name": "Ours" }))
             .send()
             .await
@@ -611,15 +611,15 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         );
     }
 
-    // A new template joins Acme's library; cloning gives Acme its own copy.
+    // A new template joins Agra's library; cloning gives Agra its own copy.
     client
         .post("/api/templates")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "slug": "follow-up", "name": "Follow-up" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("workspace_id", json!(acme));
+        .assert_json_path("workspace_id", json!(agra));
     TemplateBlock::create(
         db.as_ref(),
         TemplateBlock {
@@ -632,14 +632,14 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     .unwrap();
     let copy = client
         .post(&format!("/api/templates/{}/clone", welcome.id))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
         .json_value();
     assert_eq!(copy["name"], "Welcome aboard (copy)");
     assert_eq!(copy["cloned_from_id"], json!(welcome.id));
-    assert_eq!(copy["workspace_id"], json!(acme));
+    assert_eq!(copy["workspace_id"], json!(agra));
     let copy_id: Uuid = serde_json::from_value(copy["id"].clone()).unwrap();
     assert_eq!(
         TemplateBlock::query()
@@ -654,21 +654,21 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     assert_eq!(event["item_id"], welcome.id.to_string());
     assert_eq!(event["clone_id"], copy_id.to_string());
     assert_eq!(event["source"], json!({ "scope": "global" }));
-    assert_eq!(event["owner"], json!({ "scope": "workspace", "id": acme }));
+    assert_eq!(event["owner"], json!({ "scope": "workspace", "id": agra }));
     assert_eq!(event["cloned_by"], json!(ada));
     client
         .patch(&format!("/api/templates/{copy_id}/name"))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Our welcome" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("name", json!("Our welcome"));
 
-    // Publishing Acme's copy to the organization, deliberately.
+    // Publishing Agra's copy to the organization, deliberately.
     client
         .post(&format!("/api/templates/{copy_id}/publish"))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -678,7 +678,7 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     // The page's reads.
     let copy = LibraryRepo::<Template>::find_visible_or_fail(
         db.as_ref(),
-        LibraryViewer::workspace(acme).in_organization(Some(group)),
+        LibraryViewer::workspace(agra).in_organization(Some(group)),
         copy_id,
     )
     .await
@@ -725,7 +725,7 @@ async fn helm_manages_the_global_templates() {
         .await
         .unwrap();
     let ada = Uuid::now_v7();
-    let (group, _acme, _globex) = tenants(&app, ada).await;
+    let (group, _agra, _gulati) = tenants(&app, ada).await;
     let db = app.get::<Db>().await;
     LibraryRepo::<Template>::create(
         db.as_ref(),

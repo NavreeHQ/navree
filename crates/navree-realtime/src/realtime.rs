@@ -1439,9 +1439,9 @@ mod tests {
 
     #[test]
     fn members_parse_string_or_number_ids() {
-        let member = Member::parse(r#"{"user_id":10,"user_info":{"name":"Ada"}}"#).unwrap();
+        let member = Member::parse(r#"{"user_id":10,"user_info":{"name":"Anu"}}"#).unwrap();
         assert_eq!(member.user_id, "10");
-        assert_eq!(member.user_info["name"], "Ada");
+        assert_eq!(member.user_info["name"], "Anu");
         let member = Member::parse(r#"{"user_id":"u1"}"#).unwrap();
         assert_eq!(
             (member.user_id.as_str(), member.user_info),

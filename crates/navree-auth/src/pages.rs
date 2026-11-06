@@ -74,7 +74,7 @@ const FORGOT_PER_MINUTE: u32 = 5;
 ///     .module(SessionModule::from_config())
 ///     .module(AuthModule::from_config())
 ///     .module(UiModule)
-///     .module(AuthPages::new().app_name("Acme CRM"))
+///     .module(AuthPages::new().app_name("Agra CRM"))
 ///     .run()
 /// # }
 /// ```

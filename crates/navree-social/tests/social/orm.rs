@@ -11,13 +11,13 @@ type Account = social_account::Model;
 #[tokio::test]
 async fn linked_accounts_are_orm_models() {
     let (app, fake) = fake_app(|b| b).await;
-    let ada = create_user(&app, "Ada", "ada@example.com").await;
+    let ada = create_user(&app, "Anu", "anu@example.com").await;
     fake.on_code(
         "github",
         "code",
         SocialUser::new("github", "583231")
-            .email(Some("ada@example.com"), true)
-            .nickname("ada"),
+            .email(Some("anu@example.com"), true)
+            .nickname("anu"),
     );
     sign_in(&app, "github", "code").await.assert_status(200);
     let db = app.get::<Db>().await;
@@ -31,7 +31,7 @@ async fn linked_accounts_are_orm_models() {
         .unwrap()
         .expect("the linked account");
     assert_eq!(linked.provider_user_id, "583231");
-    assert_eq!(linked.nickname.as_deref(), Some("ada"));
+    assert_eq!(linked.nickname.as_deref(), Some("anu"));
     let json = linked.to_value().unwrap();
     assert!(json.get("access_token").is_none(), "tokens never serialize");
     assert!(

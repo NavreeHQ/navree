@@ -31,8 +31,8 @@ use crate::{OrgRole, Selector, WorkspaceError, WorkspaceSelector};
 pub struct NewOrganization {
     /// The display name (1 to 100 characters).
     pub name: String,
-    /// The slug; derived from the name when `None` (`Acme Group` →
-    /// `acme-group`, with `-2`, `-3`, ... when taken).
+    /// The slug; derived from the name when `None` (`Agra Group` →
+    /// `agra-group`, with `-2`, `-3`, ... when taken).
     pub slug: Option<String>,
     /// An ISO 3166-1 alpha-2 country code (`GB`, any case), stored
     /// upper-case.

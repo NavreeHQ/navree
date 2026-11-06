@@ -77,8 +77,8 @@ and released together.
 ```sh
 cargo install --git https://github.com/NavreeHQ/navree navree-cli
 
-navree new acme --kit saas     # API and Next.js app: sign-in, workspaces, billing, admin
-cd acme
+navree new agra --kit saas     # API and Next.js app: sign-in, workspaces, billing, admin
+cd agra
 navree dock up                 # TimescaleDB and Mailpit
 navree migrate:fresh --seed    # tables and a demo workspace
 pnpm --dir web install

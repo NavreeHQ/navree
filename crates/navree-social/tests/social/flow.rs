@@ -18,8 +18,8 @@ use crate::support::{
 
 fn ada() -> SocialUser {
     SocialUser::new("github", "583231")
-        .name("Ada Lovelace")
-        .email(Some("ada@example.com"), true)
+        .name("Anu Lakhotia")
+        .email(Some("anu@example.com"), true)
 }
 
 #[tokio::test]
@@ -60,14 +60,14 @@ async fn the_redirect_is_the_providers_url_with_a_sealed_state_and_pkce() {
 #[tokio::test]
 async fn a_new_github_user_gets_an_account_and_tokens_and_the_state_works_once() {
     let (app, fake) = fake_app(|b| b).await;
-    fake.on_code("github", "code-ada", ada());
+    fake.on_code("github", "code-anu", ada());
     let state = state(&app, "github").await;
 
-    let response = callback(&app, "github", "code-ada", &state)
+    let response = callback(&app, "github", "code-anu", &state)
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"))
-        .assert_json_path("user.name", json!("Ada Lovelace"))
+        .assert_json_path("user.email", json!("anu@example.com"))
+        .assert_json_path("user.name", json!("Anu Lakhotia"))
         .assert_json_path("token_type", json!("Bearer"))
         .assert_json_path("expires_in", json!(900));
     let body = response.json_value();
@@ -84,15 +84,15 @@ async fn a_new_github_user_gets_an_account_and_tokens_and_the_state_works_once()
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
 
-    callback(&app, "github", "code-ada", &state)
+    callback(&app, "github", "code-anu", &state)
         .await
         .assert_error(400, "Invalid or expired state")
         .assert_error_code(400, "invalid_state");
     assert_eq!(
         fake.exchanged(),
-        [("github".to_owned(), "code-ada".to_owned())],
+        [("github".to_owned(), "code-anu".to_owned())],
         "a used state never reaches the provider"
     );
 }
@@ -163,7 +163,7 @@ async fn the_state_lifetime_is_configurable() {
 #[tokio::test]
 async fn return_to_comes_back_and_must_be_a_relative_path() {
     let (app, fake) = fake_app(|b| b).await;
-    fake.on_code("github", "code-ada", ada());
+    fake.on_code("github", "code-anu", ada());
     let state = redirect(&app, "github", "?return_to=/deals", None)
         .await
         .assert_status(200)
@@ -171,7 +171,7 @@ async fn return_to_comes_back_and_must_be_a_relative_path() {
         .as_str()
         .unwrap()
         .to_owned();
-    callback(&app, "github", "code-ada", &state)
+    callback(&app, "github", "code-anu", &state)
         .await
         .assert_status(200)
         .assert_json_path("return_to", json!("/deals"));
@@ -210,7 +210,7 @@ async fn provider_errors_are_400_and_unknown_codes_are_refused() {
 #[tokio::test]
 async fn link_flows_need_a_signed_in_user_and_states_keep_their_intent() {
     let (app, fake) = fake_app(|b| b).await;
-    fake.on_code("github", "code-ada", ada());
+    fake.on_code("github", "code-anu", ada());
     redirect(&app, "github", "?intent=link", None)
         .await
         .assert_error(401, "Sign in to connect a provider");
@@ -218,7 +218,7 @@ async fn link_flows_need_a_signed_in_user_and_states_keep_their_intent() {
         .await
         .assert_status(400);
 
-    let grace = create_user(&app, "Grace Hopper", "grace@example.com").await;
+    let grace = create_user(&app, "Gauri Hundal", "gauri@example.com").await;
     let token = access_token(&app, &grace).await;
     let link_state = redirect(&app, "github", "?intent=link", Some(&token))
         .await
@@ -228,7 +228,7 @@ async fn link_flows_need_a_signed_in_user_and_states_keep_their_intent() {
         .unwrap()
         .to_owned();
     // A link state does not sign in.
-    callback(&app, "github", "code-ada", &link_state)
+    callback(&app, "github", "code-anu", &link_state)
         .await
         .assert_error(400, "Invalid or expired state");
 
@@ -237,7 +237,7 @@ async fn link_flows_need_a_signed_in_user_and_states_keep_their_intent() {
     app.client()
         .post("/api/auth/social/github/link")
         .bearer(&token)
-        .json(&json!({ "code": "code-ada", "state": sign_in_state }))
+        .json(&json!({ "code": "code-anu", "state": sign_in_state }))
         .send()
         .await
         .assert_error(400, "Invalid or expired state");
@@ -246,7 +246,7 @@ async fn link_flows_need_a_signed_in_user_and_states_keep_their_intent() {
 #[tokio::test]
 async fn the_callback_is_counted_by_the_login_throttle() {
     let (app, fake) = fake_app(|b| b.config("auth.login_throttle_per_minute", 2)).await;
-    fake.on_code("github", "code-ada", ada());
+    fake.on_code("github", "code-anu", ada());
     callback(&app, "github", "code", "nvs1.bad")
         .await
         .assert_status(400);
@@ -257,7 +257,7 @@ async fn the_callback_is_counted_by_the_login_throttle() {
         .await
         .assert_status(429);
     assert!(refused.header("retry-after").is_some());
-    sign_in(&app, "github", "code-ada").await.assert_status(429);
+    sign_in(&app, "github", "code-anu").await.assert_status(429);
 }
 
 /// Callbacks from the addresses of one IPv6 network share the throttle.
@@ -291,11 +291,11 @@ async fn the_callback_throttle_counts_ipv6_clients_by_network() {
 #[tokio::test]
 async fn a_successful_sign_in_resets_the_throttle() {
     let (app, fake) = fake_app(|b| b.config("auth.login_throttle_per_minute", 2)).await;
-    fake.on_code("github", "code-ada", ada());
+    fake.on_code("github", "code-anu", ada());
     callback(&app, "github", "code", "nvs1.bad")
         .await
         .assert_status(400);
-    sign_in(&app, "github", "code-ada").await.assert_status(200);
+    sign_in(&app, "github", "code-anu").await.assert_status(200);
     callback(&app, "github", "code", "nvs1.bad")
         .await
         .assert_status(400);

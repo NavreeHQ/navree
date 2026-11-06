@@ -140,13 +140,13 @@ async fn model_defaults_eager_load_and_count_on_every_query() {
         .get(&t.db)
         .await
         .unwrap();
-    let acme = &accounts[0];
-    let owner = acme
+    let agra = &accounts[0];
+    let owner = agra
         .relation::<Option<Record<User>>>("owner")
         .unwrap()
         .as_ref()
         .unwrap();
-    assert_eq!(owner.name, "Ada");
+    assert_eq!(owner.name, "Anu");
     // The nested default (`owner.team`) loaded too.
     let team = owner
         .relation::<Option<Record<Team>>>("team")
@@ -154,12 +154,12 @@ async fn model_defaults_eager_load_and_count_on_every_query() {
         .as_ref()
         .unwrap();
     assert_eq!(team.id, crm.team.id);
-    assert_eq!(acme.extra::<i64>("contacts_count").unwrap(), Some(2));
+    assert_eq!(agra.extra::<i64>("contacts_count").unwrap(), Some(2));
     // Every way of reading applies them.
-    let found = Account::find_or_fail(&t.db, crm.globex.id).await.unwrap();
+    let found = Account::find_or_fail(&t.db, crm.gulati.id).await.unwrap();
     assert!(found.relation_loaded("owner"));
     assert_eq!(found.extra::<i64>("contacts_count").unwrap(), Some(1));
-    let by_filter = Account::where_(Account::NAME.eq("Acme"))
+    let by_filter = Account::where_(Account::NAME.eq("Agra"))
         .first(&t.db)
         .await
         .unwrap()
@@ -202,18 +202,18 @@ async fn model_defaults_eager_load_and_count_on_every_query() {
         .get(&t.db)
         .await
         .unwrap();
-    let globex = &users[1].loaded(User::accounts).unwrap()[0];
-    assert_eq!(globex.name, "Globex");
-    assert!(globex.relation_loaded("owner"));
-    assert_eq!(globex.extra::<i64>("contacts_count").unwrap(), Some(1));
+    let gulati = &users[1].loaded(User::accounts).unwrap()[0];
+    assert_eq!(gulati.name, "Gulati");
+    assert!(gulati.relation_loaded("owner"));
+    assert_eq!(gulati.extra::<i64>("contacts_count").unwrap(), Some(1));
     let limited = User::query()
         .with_constrained(User::accounts, |q| q.limit(1))
         .order_by(User::ID)
         .get(&t.db)
         .await
         .unwrap();
-    let acme = &limited[0].loaded(User::accounts).unwrap()[0];
-    assert_eq!(acme.extra::<i64>("contacts_count").unwrap(), Some(2));
+    let agra = &limited[0].loaded(User::accounts).unwrap()[0];
+    assert_eq!(agra.extra::<i64>("contacts_count").unwrap(), Some(2));
     // And `without` takes them off there as well.
     let plain = crm
         .ada

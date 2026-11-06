@@ -57,7 +57,7 @@ async fn forget_deletes_one_failed_job() {
     let id = h
         .queue
         .dispatch(Export {
-            contact: "ada".into(),
+            contact: "anu".into(),
             password: "p".into(),
         })
         .await

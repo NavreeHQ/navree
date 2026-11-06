@@ -102,7 +102,7 @@ async fn sms_driver(name: &str, scenario: Scenario) -> (Arc<dyn SmsDriver>, Opti
             }
             (fake.driver(), None)
         }
-        "log" => (Arc::new(LogSms::new(Some("Acme".into()))), None),
+        "log" => (Arc::new(LogSms::new(Some("Agra".into()))), None),
         "twilio" => {
             let server = answering(match scenario {
                 Scenario::Accept => {
@@ -131,7 +131,7 @@ async fn sms_driver(name: &str, scenario: Scenario) -> (Arc<dyn SmsDriver>, Opti
                 })),
             })
             .await;
-            let driver = VonageSms::new(&vonage_options(&server), &sms_options("Acme"))
+            let driver = VonageSms::new(&vonage_options(&server), &sms_options("Agra"))
                 .unwrap()
                 .with_client(local_client());
             (Arc::new(driver), Some(server))

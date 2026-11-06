@@ -823,7 +823,7 @@ mod tests {
             0xf2, 0x04,
         ];
         let mut entry = LdapEntry {
-            dn: "CN=Ada".into(),
+            dn: "CN=Anu".into(),
             ..LdapEntry::default()
         };
         entry.binary.insert("objectguid".into(), vec![bytes]);
@@ -855,8 +855,8 @@ mod tests {
     #[test]
     fn dns_compare_without_case_or_spaces() {
         assert_eq!(
-            normalize_dn("CN=Ada Lovelace, OU=People , DC=acme,DC = test"),
-            "cn=ada lovelace,ou=people,dc=acme,dc=test"
+            normalize_dn("CN=Anu Lakhotia, OU=People , DC=agra,DC = test"),
+            "cn=anu lakhotia,ou=people,dc=acme,dc=test"
         );
     }
 
@@ -864,23 +864,23 @@ mod tests {
     fn active_directory_entries_map_to_users_and_groups() {
         let users = vec![
             entry(
-                "CN=Ada Lovelace,OU=People,DC=acme,DC=test",
+                "CN=Anu Lakhotia,OU=People,DC=acme,DC=test",
                 &[
-                    ("objectGUID", &["ada-guid"]),
-                    ("userPrincipalName", &["ada@acme.test"]),
-                    ("sAMAccountName", &["ada"]),
-                    ("givenName", &["Ada"]),
-                    ("sn", &["Lovelace"]),
-                    ("displayName", &["Ada Lovelace"]),
-                    ("mail", &["ada@acme.test"]),
+                    ("objectGUID", &["anu-guid"]),
+                    ("userPrincipalName", &["anu@acme.test"]),
+                    ("sAMAccountName", &["anu"]),
+                    ("givenName", &["Anu"]),
+                    ("sn", &["Lakhotia"]),
+                    ("displayName", &["Anu Lakhotia"]),
+                    ("mail", &["anu@acme.test"]),
                     ("title", &["Principal engineer"]),
                     ("department", &["Engineering"]),
-                    ("company", &["Acme"]),
+                    ("company", &["Agra"]),
                     ("employeeID", &["1815"]),
                     ("telephoneNumber", &["+44 20 7946 0958"]),
                     (
                         "manager",
-                        &["CN=Charles Babbage, OU=People,DC=acme,DC=test"],
+                        &["CN=Chandan Bhambri, OU=People,DC=acme,DC=test"],
                     ),
                     ("userAccountControl", &["512"]),
                     ("memberOf", &["CN=Engineering,OU=Groups,DC=acme,DC=test"]),
@@ -888,7 +888,7 @@ mod tests {
                 ],
             ),
             entry(
-                "CN=Charles Babbage,OU=People,DC=acme,DC=test",
+                "CN=Chandan Bhambri,OU=People,DC=acme,DC=test",
                 &[
                     ("objectGUID", &["charles-guid"]),
                     ("sAMAccountName", &["charles"]),
@@ -909,7 +909,7 @@ mod tests {
                 (
                     "member",
                     &[
-                        "CN=Charles Babbage,OU=People,DC=acme,DC=test",
+                        "CN=Chandan Bhambri,OU=People,DC=acme,DC=test",
                         "CN=Gone,DC=x",
                     ],
                 ),
@@ -920,16 +920,16 @@ mod tests {
         assert_eq!(pulled.users.len(), 2);
         let ada = &pulled.users[0];
         // Not 16 bytes: the GUID falls back to the DN.
-        assert_eq!(ada.external_id, "CN=Ada Lovelace,OU=People,DC=acme,DC=test");
-        assert_eq!(ada.user_name, "ada@acme.test");
+        assert_eq!(ada.external_id, "CN=Anu Lakhotia,OU=People,DC=acme,DC=test");
+        assert_eq!(ada.user_name, "anu@acme.test");
         assert!(ada.active);
-        assert_eq!(ada.full_name(), "Ada Lovelace");
-        assert_eq!(ada.primary_email(), Some("ada@acme.test"));
-        assert_eq!(ada.organization.as_deref(), Some("Acme"));
+        assert_eq!(ada.full_name(), "Anu Lakhotia");
+        assert_eq!(ada.primary_email(), Some("anu@acme.test"));
+        assert_eq!(ada.organization.as_deref(), Some("Agra"));
         assert_eq!(ada.employee_number.as_deref(), Some("1815"));
         assert_eq!(
             ada.manager_id.as_deref(),
-            Some("CN=Charles Babbage,OU=People,DC=acme,DC=test")
+            Some("CN=Chandan Bhambri,OU=People,DC=acme,DC=test")
         );
         assert_eq!(
             ada.attributes["physicalDeliveryOfficeName"],
@@ -944,8 +944,8 @@ mod tests {
         assert_eq!(
             group.members,
             vec![
-                "CN=Ada Lovelace,OU=People,DC=acme,DC=test".to_owned(),
-                "CN=Charles Babbage,OU=People,DC=acme,DC=test".to_owned()
+                "CN=Anu Lakhotia,OU=People,DC=acme,DC=test".to_owned(),
+                "CN=Chandan Bhambri,OU=People,DC=acme,DC=test".to_owned()
             ]
         );
     }
@@ -1000,19 +1000,19 @@ mod tests {
     fn openldap_entries_use_entry_uuid_and_member_uid() {
         let users = vec![
             entry(
-                "uid=ada,ou=people,dc=acme,dc=test",
+                "uid=anu,ou=people,dc=acme,dc=test",
                 &[
-                    ("entryUUID", &["u-ada"]),
-                    ("uid", &["ada"]),
-                    ("cn", &["Ada Lovelace"]),
-                    ("mail", &["ada@acme.test", "countess@acme.test"]),
+                    ("entryUUID", &["u-anu"]),
+                    ("uid", &["anu"]),
+                    ("cn", &["Anu Lakhotia"]),
+                    ("mail", &["anu@acme.test", "countess@acme.test"]),
                 ],
             ),
             entry(
-                "uid=grace,ou=people,dc=acme,dc=test",
+                "uid=gauri,ou=people,dc=acme,dc=test",
                 &[
-                    ("entryUUID", &["u-grace"]),
-                    ("uid", &["grace"]),
+                    ("entryUUID", &["u-gauri"]),
+                    ("uid", &["gauri"]),
                     ("pwdAccountLockedTime", &["000001010000Z"]),
                 ],
             ),
@@ -1023,7 +1023,7 @@ mod tests {
                 &[
                     ("entryUUID", &["g-eng"]),
                     ("cn", &["engineering"]),
-                    ("uniqueMember", &["uid=ada,ou=people,dc=acme,dc=test"]),
+                    ("uniqueMember", &["uid=anu,ou=people,dc=acme,dc=test"]),
                 ],
             ),
             entry(
@@ -1037,12 +1037,12 @@ mod tests {
         ];
         let pulled = map_entries(&settings("openldap"), &users, &groups);
         let ada = &pulled.users[0];
-        assert_eq!(ada.external_id, "u-ada");
-        assert_eq!(ada.user_name, "ada");
-        assert_eq!(ada.display_name.as_deref(), Some("Ada Lovelace"));
+        assert_eq!(ada.external_id, "u-anu");
+        assert_eq!(ada.user_name, "anu");
+        assert_eq!(ada.display_name.as_deref(), Some("Anu Lakhotia"));
         assert_eq!(ada.emails.len(), 2);
         assert!(!pulled.users[1].active);
-        assert_eq!(pulled.groups[0].members, vec!["u-ada"]);
-        assert_eq!(pulled.groups[1].members, vec!["u-grace"]);
+        assert_eq!(pulled.groups[0].members, vec!["u-anu"]);
+        assert_eq!(pulled.groups[1].members, vec!["u-gauri"]);
     }
 }

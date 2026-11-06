@@ -297,7 +297,7 @@ mod tests {
         let cases = [
             (WorkspaceError::NoWorkspace, 400, "workspace_required"),
             (
-                WorkspaceError::WorkspaceNotFound("acme".into()),
+                WorkspaceError::WorkspaceNotFound("agra".into()),
                 404,
                 "workspace_not_found",
             ),
@@ -323,7 +323,7 @@ mod tests {
             ),
             (WorkspaceError::NoOrganization, 400, "organization_required"),
             (
-                WorkspaceError::OrganizationNotFound("acme".into()),
+                WorkspaceError::OrganizationNotFound("agra".into()),
                 404,
                 "organization_not_found",
             ),
@@ -381,7 +381,7 @@ mod tests {
             ),
             (WorkspaceError::DemoReadOnly, 403, "demo_read_only"),
             (
-                WorkspaceError::NotDemo("acme".into()),
+                WorkspaceError::NotDemo("agra".into()),
                 409,
                 "not_a_demo_workspace",
             ),
@@ -459,7 +459,7 @@ mod tests {
         assert_eq!(error.code, "demo_read_only");
         assert_eq!(error.body()["message"], "Demo workspaces are read-only.");
         assert_eq!(error.body()["error"], "Forbidden");
-        let error = WorkspaceError::NotDemo("acme".into()).to_app_error();
+        let error = WorkspaceError::NotDemo("agra".into()).to_app_error();
         assert_eq!(
             error.body()["message"],
             "This workspace is not a demo workspace."

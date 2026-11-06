@@ -192,9 +192,9 @@ mod tests {
         assert_eq!(
             redactor.body(
                 Some("application/x-www-form-urlencoded"),
-                "name=ada&password=x"
+                "name=anu&password=x"
             ),
-            "name=ada&password=%5Bredacted%5D"
+            "name=anu&password=%5Bredacted%5D"
         );
         assert_eq!(redactor.query("page=2&q=deals"), "page=2&q=deals");
         assert_eq!(

@@ -77,10 +77,10 @@ async fn saving_related_records_sets_the_foreign_key() {
     assert_eq!(image.imageable_type.as_deref(), Some("deal"));
     assert_eq!(image.imageable_id, Some(crm.renewal.id));
     let mut note = Record::new(Note::new("call back"));
-    crm.acme.notes().save(&t.db, &mut note).await.unwrap();
+    crm.agra.notes().save(&t.db, &mut note).await.unwrap();
     assert_eq!(note.notable_type.as_deref(), Some("company"));
     assert_eq!(
-        crm.acme.notes().first(&t.db).await.unwrap().unwrap().body,
+        crm.agra.notes().first(&t.db).await.unwrap().unwrap().body,
         "call back"
     );
     assert!(
@@ -94,26 +94,26 @@ async fn creating_related_records() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     let created = crm
-        .globex
+        .gulati
         .contacts()
         .create(
             &t.db,
             Contact {
                 name: "Erin".into(),
-                email: "erin@globex.test".into(),
+                email: "erin@gulati.test".into(),
                 ..Contact::default()
             },
         )
         .await
         .unwrap();
-    assert_eq!(created.company_id, Some(crm.globex.id));
-    crm.globex
+    assert_eq!(created.company_id, Some(crm.gulati.id));
+    crm.gulati
         .contacts()
         .create_quietly(
             &t.db,
             Contact {
                 name: "Fay".into(),
-                email: "fay@globex.test".into(),
+                email: "fay@gulati.test".into(),
                 ..Contact::default()
             },
         )
@@ -135,7 +135,7 @@ async fn creating_related_records() {
         .await
         .unwrap();
     assert_eq!(crm.platform.activities().count(&t.db).await.unwrap(), 3);
-    assert_eq!(crm.globex.contacts().count(&t.db).await.unwrap(), 3);
+    assert_eq!(crm.gulati.contacts().count(&t.db).await.unwrap(), 3);
 
     // From untyped attributes.
     let forced = crm
@@ -186,12 +186,12 @@ async fn associating_and_dissociating() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     let mut deal = Deal::find_or_fail(&t.db, crm.orphan.id).await.unwrap();
-    deal.associate(Deal::company, &crm.globex).unwrap();
-    assert_eq!(deal.company_id, Some(crm.globex.id));
+    deal.associate(Deal::company, &crm.gulati).unwrap();
+    assert_eq!(deal.company_id, Some(crm.gulati.id));
     // The loaded relation is set: no query to read it.
     assert_eq!(
         deal.loaded(Deal::company).unwrap().as_ref().unwrap().name,
-        "Globex"
+        "Gulati"
     );
     // Saving is separate.
     assert_eq!(
@@ -201,7 +201,7 @@ async fn associating_and_dissociating() {
     deal.save(&t.db).await.unwrap();
     assert_eq!(
         Deal::find_or_fail(&t.db, deal.id).await.unwrap().company_id,
-        Some(crm.globex.id)
+        Some(crm.gulati.id)
     );
 
     deal.dissociate(Deal::company)
@@ -547,7 +547,7 @@ async fn relations_mass_assign_through_the_relation_query() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     let updated = crm
-        .acme
+        .agra
         .deals()
         .update(&t.db, [Deal::STAGE.set("qualified")])
         .await

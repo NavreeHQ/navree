@@ -294,10 +294,10 @@ fn a_safe_production_configuration_passes() {
     let report = CheckReport::run(
         &ConfigSources::new()
             .set("app.key", "base64:abc")
-            .set("app.url", "https://acme.example.com")
-            .set("database.url", "postgres://u:p@db/acme")
+            .set("app.url", "https://agra.example.com")
+            .set("database.url", "postgres://u:p@db/agra")
             .set("database.max_connections", 10)
-            .set("mail.transport", "smtp://mail.acme.example.com:587")
+            .set("mail.transport", "smtp://mail.agra.example.com:587")
             .set("queue.workers", 4),
         &registrations(),
         &production(),
@@ -317,9 +317,9 @@ fn tracing_everything_to_an_exporter_and_a_public_api_reference_are_notes() {
     let safe = || {
         ConfigSources::new()
             .set("app.key", "base64:abc")
-            .set("app.url", "https://acme.example.com")
-            .set("database.url", "postgres://u:p@db/acme")
-            .set("mail.transport", "smtp://mail.acme.example.com:587")
+            .set("app.url", "https://agra.example.com")
+            .set("database.url", "postgres://u:p@db/agra")
+            .set("mail.transport", "smtp://mail.agra.example.com:587")
     };
     let report = CheckReport::run(
         &safe()

@@ -24,7 +24,7 @@ async fn tool_names(client: &mut LineClient, id: i64) -> Vec<String> {
 async fn the_process_acts_as_the_user_given_by_id() {
     let app = builder().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, rep, "Acme renewal", "lead").await;
+    let deal = insert_deal(&app, rep, "Agra renewal", "lead").await;
     let mut client = LineClient::connect(&app, &rep.to_string());
 
     let info = client.initialize("2025-11-25").await;
@@ -92,10 +92,10 @@ async fn the_user_may_be_named_by_email_with_auth_module() {
     let ada = app
         .get::<AuthService>()
         .await
-        .create_user("Ada", "ada@example.com", "a-long-password")
+        .create_user("Anu", "anu@example.com", "a-long-password")
         .await
         .expect("user");
-    let mut client = LineClient::connect(&app, "ada@example.com");
+    let mut client = LineClient::connect(&app, "anu@example.com");
     client.initialize("2025-11-25").await;
     let whoami: Value = client
         .request(1, "tools/call", json!({ "name": "whoami" }))
@@ -124,7 +124,7 @@ async fn an_email_needs_auth_module() {
     let app = builder().build().await;
     let (_client_side, server_side) = tokio::io::duplex(1024);
     let (read, write) = tokio::io::split(server_side);
-    let error = serve_stdio(app.ctx(), "ada@example.com", read, write)
+    let error = serve_stdio(app.ctx(), "anu@example.com", read, write)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("needs AuthModule"), "{error}");

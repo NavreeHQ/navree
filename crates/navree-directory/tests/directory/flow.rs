@@ -42,9 +42,9 @@ async fn the_directory_serves_scim_and_syncs_end_to_end() {
         .post("/scim/v2/Users")
         .bearer(&token)
         .json(&json!({
-            "schemas": [USER], "externalId": "e-ada", "userName": "Ada@Acme.test",
-            "name": { "givenName": "Ada", "familyName": "Lovelace" },
-            "emails": [{ "value": "ada@acme.test", "type": "work", "primary": true }]
+            "schemas": [USER], "externalId": "e-anu", "userName": "Anu@Acme.test",
+            "name": { "givenName": "Anu", "familyName": "Lakhotia" },
+            "emails": [{ "value": "anu@acme.test", "type": "work", "primary": true }]
         }))
         .send()
         .await
@@ -54,12 +54,12 @@ async fn the_directory_serves_scim_and_syncs_end_to_end() {
     client
         .post("/scim/v2/Users")
         .bearer(&token)
-        .json(&json!({ "schemas": [USER], "userName": "ada@ACME.test" }))
+        .json(&json!({ "schemas": [USER], "userName": "anu@ACME.test" }))
         .send()
         .await
         .assert_status(409);
     client
-        .get("/scim/v2/Users?filter=userName%20eq%20%22ada%40acme.test%22")
+        .get("/scim/v2/Users?filter=userName%20eq%20%22anu%40agra.test%22")
         .bearer(&token)
         .send()
         .await
@@ -96,7 +96,7 @@ async fn the_directory_serves_scim_and_syncs_end_to_end() {
         .unwrap();
     assert!(!row.active);
     assert_eq!(row.deactivated_at, Some(start()));
-    assert_eq!(row.local_id.as_deref(), Some("local-e-ada"));
+    assert_eq!(row.local_id.as_deref(), Some("local-e-anu"));
     client
         .delete(&format!("/scim/v2/Users/{ada_id}"))
         .bearer(&token)

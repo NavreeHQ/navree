@@ -203,31 +203,31 @@ async fn current_of(client: &TestClient) -> TestResponse {
 #[tokio::test]
 async fn a_member_switches_and_the_session_names_the_workspace() {
     let (world, sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
-    let response = switch(&client, "acme", "/deals?stage=won")
+    let response = switch(&client, "agra", "/deals?stage=won")
         .await
         .assert_status(303);
     assert_eq!(response.header("location"), Some("/deals?stage=won"));
     current_of(&client)
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("session"));
 
     // By id as well as by slug; the session id changes with the switch.
     let before = client.cookie(&session_cookie()).expect("a session cookie");
-    switch(&client, &globex.id.to_string(), "/")
+    switch(&client, &gulati.id.to_string(), "/")
         .await
         .assert_status(303);
     let after = client.cookie(&session_cookie()).expect("a session cookie");
     assert_ne!(before, after, "a switch gives the session a new id");
     current_of(&client)
         .await
-        .assert_json_path("slug", json!("globex"))
+        .assert_json_path("slug", json!("gulati"))
         .assert_json_path("resolver", json!("session"));
 
     let switched = sink.with_action("workspace.switched");
@@ -236,11 +236,11 @@ async fn a_member_switches_and_the_session_names_the_workspace() {
     assert_eq!(last.actor_id, Some(ada));
     assert_eq!(
         last.subject_id.as_deref(),
-        Some(globex.id.to_string().as_str())
+        Some(gulati.id.to_string().as_str())
     );
     let metadata = &last.metadata;
-    assert_eq!(metadata["from"], json!(acme.id));
-    assert_eq!(metadata["to"], json!(globex.id));
+    assert_eq!(metadata["from"], json!(agra.id));
+    assert_eq!(metadata["to"], json!(gulati.id));
 }
 
 // JSON clients get the workspace back, and an unsafe `next` never
@@ -248,22 +248,22 @@ async fn a_member_switches_and_the_session_names_the_workspace() {
 #[tokio::test]
 async fn json_switches_answer_the_workspace_and_next_stays_on_the_site() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let client = world.as_user(ada);
     client.csrf_cookie().await;
     client
         .post("/workspace/switch")
         .xsrf()
-        .json(&json!({ "workspace": "acme" }))
+        .json(&json!({ "workspace": "agra" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
-        .assert_json_path("slug", json!("acme"))
-        .assert_json_path("name", json!("Acme"));
+        .assert_json_path("id", json!(agra.id))
+        .assert_json_path("slug", json!("agra"))
+        .assert_json_path("name", json!("Agra"));
     for next in ["//evil.test/", "https://evil.test/", "/\\evil.test"] {
-        let response = switch(&client, "acme", next).await.assert_status(303);
+        let response = switch(&client, "agra", next).await.assert_status(303);
         assert_eq!(response.header("location"), Some("/"), "{next}");
     }
     // Nothing named: a 400 on `workspace`.
@@ -282,17 +282,17 @@ async fn json_switches_answer_the_workspace_and_next_stays_on_the_site() {
 #[tokio::test]
 async fn switching_into_a_workspace_of_others_is_refused() {
     let (world, sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(grace, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(grace, "Gulati").await;
     let client = world.as_user(ada);
 
-    switch(&client, "acme", "/").await.assert_status(303);
-    switch(&client, "globex", "/")
+    switch(&client, "agra", "/").await.assert_status(303);
+    switch(&client, "gulati", "/")
         .await
         .assert_error_code(403, "not_a_member");
-    switch(&client, &globex.id.to_string(), "/")
+    switch(&client, &gulati.id.to_string(), "/")
         .await
         .assert_error_code(403, "not_a_member");
     switch(&client, "no-such-workspace", "/")
@@ -301,7 +301,7 @@ async fn switching_into_a_workspace_of_others_is_refused() {
     current_of(&client)
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("session"));
     assert_eq!(sink.with_action("workspace.switched").len(), 1);
 
@@ -310,13 +310,13 @@ async fn switching_into_a_workspace_of_others_is_refused() {
         .app
         .client()
         .post("/workspace/switch")
-        .form(&[("workspace", "acme")])
+        .form(&[("workspace", "agra")])
         .send()
         .await
         .assert_status(401);
     client
         .post("/workspace/switch")
-        .form(&[("workspace", "acme")])
+        .form(&[("workspace", "agra")])
         .send()
         .await
         .assert_status(403);
@@ -327,12 +327,12 @@ async fn switching_into_a_workspace_of_others_is_refused() {
 #[tokio::test]
 async fn without_a_choice_the_next_resolver_answers() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada, "Agra").await;
     let client = world.as_user(ada);
     client
         .get("/api/switching/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -363,27 +363,27 @@ async fn defaulting_world() -> World {
 #[tokio::test]
 async fn a_browser_that_chose_nothing_is_in_its_first_workspace_when_asked() {
     let world = defaulting_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let nobody = world.user("Mallory", "mallory@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
     current_of(&client)
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("session"));
     // It keeps the choice: the session names it from now on.
     current_of(&client)
         .await
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("session"));
     // Switching still works.
-    switch(&client, "globex", "/").await.assert_status(303);
+    switch(&client, "gulati", "/").await.assert_status(303);
     current_of(&client)
         .await
-        .assert_json_path("id", json!(globex.id))
+        .assert_json_path("id", json!(gulati.id))
         .assert_json_path("resolver", json!("session"));
 
     // Someone who belongs to no workspace has none to be put in.
@@ -398,29 +398,29 @@ async fn a_browser_that_chose_nothing_is_in_its_first_workspace_when_asked() {
 #[tokio::test]
 async fn a_stale_choice_is_forgotten_and_the_next_resolver_answers() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(grace, "Globex").await;
-    world.join(globex.id, ada, "member").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(grace, "Gulati").await;
+    world.join(gulati.id, ada, "member").await;
     let client = world.as_user(ada);
 
-    switch(&client, "globex", "/").await.assert_status(303);
+    switch(&client, "gulati", "/").await.assert_status(303);
     current_of(&client)
         .await
-        .assert_json_path("slug", json!("globex"));
+        .assert_json_path("slug", json!("gulati"));
     let members = world.members().await;
     world
-        .work(|uow| async move { members.remove(&uow, globex.id, ada).await })
+        .work(|uow| async move { members.remove(&uow, gulati.id, ada).await })
         .await
         .unwrap();
     client
         .get("/api/switching/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("header"));
     // Forgotten: without the header nothing is named any more.
     current_of(&client)
@@ -445,18 +445,18 @@ async fn a_stale_choice_is_forgotten_and_the_next_resolver_answers() {
 #[tokio::test]
 async fn a_stolen_session_cookie_reaches_no_other_workspace() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
     let mallory = world.user("Mallory", "mallory@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(grace, "Globex").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(grace, "Gulati").await;
     let victim = world.as_user(ada);
-    switch(&victim, "acme", "/").await.assert_status(303);
+    switch(&victim, "agra", "/").await.assert_status(303);
     let stolen = victim
         .cookie(&session_cookie())
         .expect("the victim's cookie");
 
-    // Another user replaying the cookie: Ada's choice is not theirs.
+    // Another user replaying the cookie: Anu's choice is not theirs.
     let thief = world.as_user(mallory);
     thief.set_cookie(&session_cookie(), &stolen);
     current_of(&thief)
@@ -464,58 +464,58 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
         .assert_error_code(400, "workspace_required");
     thief
         .get("/api/switching/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error_code(403, "not_a_member");
     thief
         .get("/api/switching/deals")
-        .header("x-workspace", acme.id.to_string())
+        .header("x-workspace", agra.id.to_string())
         .send()
         .await
         .assert_error_code(403, "not_a_member");
 
-    // Replayed as Ada herself, it reaches Ada's workspaces only. The session's
-    // choice is the first resolver that names one, so a header naming Globex is
-    // not read and the request stays in Acme; switching the session into Globex
+    // Replayed as Anu herself, it reaches Anu's workspaces only. The session's
+    // choice is the first resolver that names one, so a header naming Gulati is
+    // not read and the request stays in Agra; switching the session into Gulati
     // is refused.
     let replay = world.as_user(ada);
     replay.set_cookie(&session_cookie(), &stolen);
     current_of(&replay)
         .await
-        .assert_json_path("id", json!(acme.id));
+        .assert_json_path("id", json!(agra.id));
     replay
         .get("/api/switching/current")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path("resolver", json!("session"));
     replay.csrf_cookie().await;
-    switch(&replay, &globex.id.to_string(), "/")
+    switch(&replay, &gulati.id.to_string(), "/")
         .await
         .assert_error_code(403, "not_a_member");
     current_of(&replay)
         .await
-        .assert_json_path("id", json!(acme.id));
+        .assert_json_path("id", json!(agra.id));
 
-    // Grace signs in on Ada's browser (the same cookie jar): Ada's choice is
-    // ignored, and Grace reaches her own workspace only.
+    // Gauri signs in on Anu's browser (the same cookie jar): Anu's choice is
+    // ignored, and Gauri reaches her own workspace only.
     let browser = world.app.client();
     let as_ada = browser.clone().acting_as(principal(ada));
-    switch(&as_ada, "acme", "/").await.assert_status(303);
+    switch(&as_ada, "agra", "/").await.assert_status(303);
     let as_grace = browser.clone().acting_as(principal(grace));
     current_of(&as_grace)
         .await
         .assert_error_code(400, "workspace_required");
     as_grace
         .get("/api/switching/current")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(globex.id));
+        .assert_json_path("id", json!(gulati.id));
 }
 
 // Tables follow the switch: a workspace-scoped query lists the
@@ -523,14 +523,14 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
 #[tokio::test]
 async fn tables_list_the_switched_workspace_rows_only() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let uow = world.db().await.uow(None, None).await;
     for (workspace, title) in [
-        (acme.id, "Acme renewal"),
-        (acme.id, "Acme upsell"),
-        (globex.id, "Globex pilot"),
+        (agra.id, "Agra renewal"),
+        (agra.id, "Agra upsell"),
+        (gulati.id, "Gulati pilot"),
     ] {
         WorkspaceRepo::<Deal>::insert(&uow, workspace, new_deal(Uuid::nil(), title))
             .await
@@ -539,22 +539,22 @@ async fn tables_list_the_switched_workspace_rows_only() {
     uow.commit().await.unwrap();
     let client = world.as_user(ada);
 
-    switch(&client, "acme", "/").await.assert_status(303);
+    switch(&client, "agra", "/").await.assert_status(303);
     client
         .get("/api/switching/deals")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("workspace", json!("acme"))
-        .assert_json_path("titles", json!(["Acme renewal", "Acme upsell"]));
-    switch(&client, "globex", "/").await.assert_status(303);
+        .assert_json_path("workspace", json!("agra"))
+        .assert_json_path("titles", json!(["Agra renewal", "Agra upsell"]));
+    switch(&client, "gulati", "/").await.assert_status(303);
     client
         .get("/api/switching/deals")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("workspace", json!("globex"))
-        .assert_json_path("titles", json!(["Globex pilot"]));
+        .assert_json_path("workspace", json!("gulati"))
+        .assert_json_path("titles", json!(["Gulati pilot"]));
 }
 
 // A stream opens inside the session's workspace at connect;
@@ -562,12 +562,12 @@ async fn tables_list_the_switched_workspace_rows_only() {
 #[tokio::test]
 async fn streams_open_inside_the_switched_workspace() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
-    switch(&client, "acme", "/").await.assert_status(303);
+    switch(&client, "agra", "/").await.assert_status(303);
     let first = client
         .get("/api/switching/stream")
         .header("accept", "text/event-stream")
@@ -575,18 +575,18 @@ async fn streams_open_inside_the_switched_workspace() {
         .await
         .assert_status(200);
     assert_eq!(first.header("content-type"), Some("text/event-stream"));
-    assert!(first.text().contains(&format!("data: {}", acme.id)));
-    assert!(!first.text().contains(&globex.id.to_string()));
+    assert!(first.text().contains(&format!("data: {}", agra.id)));
+    assert!(!first.text().contains(&gulati.id.to_string()));
 
-    switch(&client, "globex", "/").await.assert_status(303);
+    switch(&client, "gulati", "/").await.assert_status(303);
     let second = client
         .get("/api/switching/stream")
         .header("accept", "text/event-stream")
         .send()
         .await
         .assert_status(200);
-    assert!(second.text().contains(&format!("data: {}", globex.id)));
-    assert!(!second.text().contains(&acme.id.to_string()));
+    assert!(second.text().contains(&format!("data: {}", gulati.id)));
+    assert!(!second.text().contains(&agra.id.to_string()));
 }
 
 // The switcher lists the user's workspaces, marks the current one
@@ -605,17 +605,17 @@ async fn the_switcher_lists_the_users_workspaces() {
             .override_value::<dyn AuditSink>(sink),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
-    let hidden = world.workspace(grace, "Initech").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
+    let hidden = world.workspace(grace, "Indrani").await;
     let client = world.as_user(ada);
     client.csrf_cookie().await;
     client
         .post("/app/switch")
         .xsrf()
-        .form(&[("workspace", "globex")])
+        .form(&[("workspace", "gulati")])
         .send()
         .await
         .assert_status(303);
@@ -623,7 +623,7 @@ async fn the_switcher_lists_the_users_workspaces() {
     client
         .post("/workspace/switch")
         .xsrf()
-        .form(&[("workspace", "acme")])
+        .form(&[("workspace", "agra")])
         .send()
         .await
         .assert_status(404);
@@ -636,20 +636,20 @@ async fn the_switcher_lists_the_users_workspaces() {
         .text();
     assert_eq!(html.matches(r#"action="/app/switch""#).count(), 2, "{html}");
     assert!(
-        html.contains(&format!(r#"name="workspace" value="{}""#, acme.id)),
+        html.contains(&format!(r#"name="workspace" value="{}""#, agra.id)),
         "{html}"
     );
     assert!(
-        html.contains(&format!(r#"name="workspace" value="{}""#, globex.id)),
+        html.contains(&format!(r#"name="workspace" value="{}""#, gulati.id)),
         "{html}"
     );
     assert!(!html.contains(&hidden.id.to_string()), "{html}");
-    assert!(!html.contains("Initech"), "{html}");
+    assert!(!html.contains("Indrani"), "{html}");
     assert_eq!(html.matches(r#"aria-current="true""#).count(), 1, "{html}");
     let current = html.find(r#"aria-current="true""#).unwrap();
     assert!(
-        html[current..].contains("Globex"),
-        "the current one is Globex: {html}"
+        html[current..].contains("Gulati"),
+        "the current one is Gulati: {html}"
     );
     let token = client.cookie("XSRF-TOKEN").expect("the token cookie");
     assert!(
@@ -723,9 +723,9 @@ impl Broadcaster for RecordingBroadcaster {
 #[tokio::test]
 async fn the_live_hubs_workspace_lookup_follows_the_switch() {
     let (world, _sink) = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
     let hub = |client: &TestClient| {
         let request = client.get("/api/switching/hub-workspace");
@@ -733,12 +733,12 @@ async fn the_live_hubs_workspace_lookup_follows_the_switch() {
     };
 
     assert_eq!(hub(&client).await, Value::Null, "nothing chosen yet");
-    switch(&client, "acme", "/").await.assert_status(303);
-    assert_eq!(hub(&client).await, json!(acme.id));
-    switch(&client, "globex", "/").await.assert_status(303);
-    assert_eq!(hub(&client).await, json!(globex.id));
+    switch(&client, "agra", "/").await.assert_status(303);
+    assert_eq!(hub(&client).await, json!(agra.id));
+    switch(&client, "gulati", "/").await.assert_status(303);
+    assert_eq!(hub(&client).await, json!(gulati.id));
 
-    // Another user replaying Ada's cookie reaches none of her workspaces.
+    // Another user replaying Anu's cookie reaches none of her workspaces.
     let bob = world.user("Bob", "bob@example.com").await;
     let thief = world.as_user(bob);
     thief.set_cookie(
@@ -765,25 +765,25 @@ async fn a_switch_ends_the_users_live_subscriptions() {
             .override_value::<dyn Broadcaster>(broadcaster.clone()),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada, "Acme").await;
-    world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada, "Agra").await;
+    world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
 
-    switch(&client, "acme", "/").await.assert_status(303);
+    switch(&client, "agra", "/").await.assert_status(303);
     assert_eq!(broadcaster.ended(), [ada]);
-    switch(&client, "acme", "/").await.assert_status(303);
+    switch(&client, "agra", "/").await.assert_status(303);
     assert_eq!(
         broadcaster.ended(),
         [ada],
         "the same workspace again: nothing ends"
     );
-    switch(&client, "globex", "/").await.assert_status(303);
+    switch(&client, "gulati", "/").await.assert_status(303);
     assert_eq!(broadcaster.ended(), [ada, ada]);
 
     // A refused switch ends nothing.
     let bob = world.user("Bob", "bob@example.com").await;
-    world.workspace(bob, "Initech").await;
-    switch(&client, "initech", "/").await.assert_status(403);
+    world.workspace(bob, "Indrani").await;
+    switch(&client, "indrani", "/").await.assert_status(403);
     assert_eq!(broadcaster.ended(), [ada, ada]);
 }

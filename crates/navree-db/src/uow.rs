@@ -492,9 +492,9 @@ impl Uow {
     /// let db = Db::connect(&DbOptions { url, ..DbOptions::default() }).await?;
     /// let uow = db.uow(None, None).await;
     /// assert_eq!(uow.workspace(), None);
-    /// let acme = uuid::Uuid::now_v7();
-    /// uow.set_workspace(Some(acme));
-    /// assert_eq!(uow.workspace(), Some(acme));
+    /// let agra = uuid::Uuid::now_v7();
+    /// uow.set_workspace(Some(agra));
+    /// assert_eq!(uow.workspace(), Some(agra));
     /// # Ok(()) }
     /// ```
     pub fn workspace(&self) -> Option<Uuid> {

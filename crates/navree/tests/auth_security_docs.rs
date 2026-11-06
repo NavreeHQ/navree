@@ -148,7 +148,7 @@ pub struct PasskeysForContractors;
 impl SignInPolicy for PasskeysForContractors {
     fn check<'a>(&'a self, attempt: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
         Box::pin(async move {
-            if attempt.domain() == Some("contractors.acme.com")
+            if attempt.domain() == Some("contractors.agra.com")
                 && attempt.method != SignInMethod::Passkey
             {
                 return Err(AuthError::SignInRefused {
@@ -207,7 +207,7 @@ async fn sign_in(app: &TestApp, email: &str) -> (User, String) {
     let user = app
         .get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", email, PASSWORD)
+        .create_user("Anu Lakhotia", email, PASSWORD)
         .await
         .unwrap();
     let response = app
@@ -229,7 +229,7 @@ async fn the_sign_in_policy_example_refuses_passwords_for_contractors() {
     let app = builder().build().await;
     create_policy_tables(&app).await;
     let auth = app.get::<AuthService>().await;
-    for email in ["kim@contractors.acme.com", "ada@acme.com"] {
+    for email in ["kim@contractors.agra.com", "anu@agra.com"] {
         auth.create_user("Someone", email, PASSWORD).await.unwrap();
     }
     let login = |email: &'static str| {
@@ -242,11 +242,11 @@ async fn the_sign_in_policy_example_refuses_passwords_for_contractors() {
                 .await
         }
     };
-    login("kim@contractors.acme.com")
+    login("kim@contractors.agra.com")
         .await
         .assert_error(403, "Sign in with your passkey")
         .assert_error_code(403, "passkey_required");
-    login("ada@acme.com").await.assert_status(200);
+    login("anu@agra.com").await.assert_status(200);
 }
 
 #[tokio::test]
@@ -257,7 +257,7 @@ async fn the_session_and_impersonation_examples_work() {
         .await;
     create_policy_tables(&app).await;
     let (agent, agent_access) = sign_in(&app, "agent@example.com").await;
-    let (ada, ada_access) = sign_in(&app, "ada@example.com").await;
+    let (ada, ada_access) = sign_in(&app, "anu@example.com").await;
     let client = app.client();
 
     client
@@ -266,7 +266,7 @@ async fn the_session_and_impersonation_examples_work() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("", json!("Deleting ada@example.com"));
+        .assert_json_path("", json!("Deleting anu@example.com"));
     let info = client
         .get("/api/session-info")
         .bearer(&ada_access)
@@ -336,7 +336,7 @@ async fn the_workspace_policy_example_limits_members() {
     create_policy_tables(&app).await;
     let service = app.get::<AuthService>().await;
     let ada = service
-        .create_user("Ada", "ada@example.com", PASSWORD)
+        .create_user("Anu", "anu@example.com", PASSWORD)
         .await
         .unwrap();
     let db = app.get::<Db>().await;
@@ -355,7 +355,7 @@ async fn the_workspace_policy_example_limits_members() {
     assert!(service.two_factor_required(&ada).await.unwrap());
     app.client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200)
@@ -387,7 +387,7 @@ async fn the_passkey_testing_example_runs() {
         .build()
         .await;
     create_policy_tables(&app).await;
-    let (_, access) = sign_in(&app, "ada@example.com").await;
+    let (_, access) = sign_in(&app, "anu@example.com").await;
 
     let authenticator = VirtualAuthenticator::new("example.com", "https://app.example.com");
     let client = app.client();
@@ -455,9 +455,9 @@ fn the_totp_and_qr_example_sets_up_and_accepts_a_code_once() {
     use codes_in_your_own_code::{accept, setup};
     use navree::crypto::totp::{Secret, Totp};
 
-    let (secret, url, svg) = setup("Acme", "ada@example.com").unwrap();
-    assert!(url.starts_with("otpauth://totp/Acme:ada%40example.com?secret="));
-    assert!(url.contains(&secret) && url.ends_with("&issuer=Acme"));
+    let (secret, url, svg) = setup("Agra", "anu@example.com").unwrap();
+    assert!(url.starts_with("otpauth://totp/Agra:anu%40example.com?secret="));
+    assert!(url.contains(&secret) && url.ends_with("&issuer=Agra"));
     assert!(svg.starts_with("<?xml") && svg.contains("<svg") && svg.contains("viewBox"));
 
     // The app has the secret from the URL; the server has it from storage.

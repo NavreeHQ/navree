@@ -8,10 +8,10 @@ use crate::support::{PortalSettings, ViewPreferences, World};
 async fn set_show_and_inherit_at_every_level() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(holding.id, agra.id).await;
     let app = &world.app;
 
     app.run_command(
@@ -33,7 +33,7 @@ async fn set_show_and_inherit_at_every_level() {
     .unwrap();
     app.run_command(
         "settings:set",
-        &["portal", "welcome_text=Hi Acme", "--workspace=acme"],
+        &["portal", "welcome_text=Hi Agra", "--workspace=agra"],
     )
     .await
     .unwrap();
@@ -46,7 +46,7 @@ async fn set_show_and_inherit_at_every_level() {
             "--user",
             &ada_arg,
             "--workspace",
-            "acme",
+            "agra",
         ],
     )
     .await
@@ -59,7 +59,7 @@ async fn set_show_and_inherit_at_every_level() {
     assert_eq!(global.welcome_text, "Hello there");
     assert_eq!(global.page_size, 50);
     let mine = settings
-        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(mine.source("show_leaderboard"), Some(Source::Organization));
@@ -68,7 +68,7 @@ async fn set_show_and_inherit_at_every_level() {
     // The user's values went to the user's level, not the workspace's.
     assert!(
         settings
-            .stored::<PortalSettings>(Scope::workspace(acme.id))
+            .stored::<PortalSettings>(Scope::workspace(agra.id))
             .await
             .unwrap()
             .get("page_size")
@@ -78,14 +78,14 @@ async fn set_show_and_inherit_at_every_level() {
     // show reads every level; by id or by slug.
     for args in [
         vec!["portal"],
-        vec!["portal", "--workspace", "acme"],
+        vec!["portal", "--workspace", "agra"],
         vec!["portal", "--organization", "holding"],
-        vec!["portal", "--user", ada_arg.as_str(), "--workspace", "acme"],
+        vec!["portal", "--user", ada_arg.as_str(), "--workspace", "agra"],
     ] {
         app.run_command("settings:show", &args).await.unwrap();
     }
-    let acme_id = acme.id.to_string();
-    app.run_command("settings:show", &["portal", "--workspace", &acme_id])
+    let agra_id = agra.id.to_string();
+    app.run_command("settings:show", &["portal", "--workspace", &agra_id])
         .await
         .unwrap();
     let holding_id = holding.id.to_string();
@@ -95,12 +95,12 @@ async fn set_show_and_inherit_at_every_level() {
 
     app.run_command(
         "settings:inherit",
-        &["portal", "welcome_text", "--workspace", "acme"],
+        &["portal", "welcome_text", "--workspace", "agra"],
     )
     .await
     .unwrap();
     let workspace = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(workspace.source("welcome_text"), Some(Source::Global));
@@ -136,10 +136,10 @@ async fn set_show_and_inherit_at_every_level() {
 #[tokio::test]
 async fn mistakes_are_errors_naming_the_problem() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    world.workspace(ada, "Acme").await;
-    let other = world.workspace(ada, "Globex").await;
+    world.workspace(ada, "Agra").await;
+    let other = world.workspace(ada, "Gulati").await;
     world.attach(holding.id, other.id).await;
     let app = &world.app;
     let error = |result: Result<(), navree_kernel::BoxError>| result.unwrap_err().to_string();
@@ -158,7 +158,7 @@ async fn mistakes_are_errors_naming_the_problem() {
     );
     assert!(
         error(
-            app.run_command("settings:show", &["portal", "--user", "ada"])
+            app.run_command("settings:show", &["portal", "--user", "anu"])
                 .await
         )
         .contains("is not a user id")
@@ -168,7 +168,7 @@ async fn mistakes_are_errors_naming_the_problem() {
         error(
             app.run_command(
                 "settings:show",
-                &["portal", "--workspace", "acme", "--organization", "holding"],
+                &["portal", "--workspace", "agra", "--organization", "holding"],
             )
             .await
         )

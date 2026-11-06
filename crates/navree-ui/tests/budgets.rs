@@ -616,7 +616,7 @@ fn a_typical_crud_page_loads_its_scripts_and_at_most_22_kb_gzip_of_styles() {
         title: "Gurdaspur depot".to_owned(),
     }];
     let query = TableQuery::<Deal>::parse("/deals", "");
-    let shell = Shell::new("Acme")
+    let shell = Shell::new("Agra")
         .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
     let html = shell
         .page("Deals", "/deals")
@@ -736,7 +736,7 @@ fn a_page_with_nothing_interactive_ships_no_script() {
 
 #[test]
 fn the_buffer_is_sized_ahead_of_the_write() {
-    let shell = Shell::new("Acme")
+    let shell = Shell::new("Agra")
         .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
     let page = shell
         .page("Deals", "/deals")
@@ -1019,7 +1019,7 @@ mod times {
                 id,
                 title: format!("Deal {id}"),
                 amount: Money(id * 100),
-                owner: "Ada",
+                owner: "Anu",
             })
             .collect();
         let query = TableQuery::<Row, Filter>::parse("/deals", "per_page=1000");
@@ -1176,7 +1176,7 @@ mod times {
         use http::{HeaderMap, StatusCode};
         use navree_ui::pages::ErrorPage;
         use navree_ui::{NavGroup, NavItem, Shell, icons};
-        let shell = Shell::new("Acme").group(
+        let shell = Shell::new("Agra").group(
             NavGroup::new("Sales")
                 .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE))
                 .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),

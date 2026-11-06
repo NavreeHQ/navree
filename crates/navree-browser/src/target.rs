@@ -20,8 +20,8 @@ use serde_json::{Value, json};
 /// ```
 /// use navree_browser::Target;
 ///
-/// let renewal = Target::from("@deal-card").containing("Lovelace renewal");
-/// assert_eq!(renewal.to_string(), r#""@deal-card" containing "Lovelace renewal""#);
+/// let renewal = Target::from("@deal-card").containing("Lakhotia renewal");
+/// assert_eq!(renewal.to_string(), r#""@deal-card" containing "Lakhotia renewal""#);
 /// let second = Target::from(".card").nth(1);
 /// assert_eq!(second.to_string(), r#"".card" nth 1"#);
 /// ```
@@ -171,13 +171,13 @@ mod tests {
 
     #[test]
     fn filters_are_carried_to_the_page_and_shown() {
-        let target = Target::from("@deal-card").containing("Lovelace").nth(2);
+        let target = Target::from("@deal-card").containing("Lakhotia").nth(2);
         let json = target.to_json();
-        assert_eq!(json["containing"], "Lovelace");
+        assert_eq!(json["containing"], "Lakhotia");
         assert_eq!(json["nth"], 2);
         assert_eq!(
             target.to_string(),
-            r#""@deal-card" containing "Lovelace" nth 2"#
+            r#""@deal-card" containing "Lakhotia" nth 2"#
         );
         assert_eq!(target.as_str(), "@deal-card");
         let plain = Target::from("Save").to_json();

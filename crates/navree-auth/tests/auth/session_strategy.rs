@@ -127,14 +127,14 @@ async fn signed_in_browser(app: &TestApp, email: &str) -> (User, TestClient) {
 #[tokio::test]
 async fn signing_in_regenerates_the_session_against_fixation() {
     let app = app().await;
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let client = app.client();
     let before_token = token(&client).await;
     let before = client
         .cookie(COOKIE)
         .expect("the sign-in page starts a session");
 
-    let response = sign_in(&client, "ada@example.com", PASSWORD, false)
+    let response = sign_in(&client, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     assert_eq!(response.header("location"), Some("/deals/42"));
@@ -164,8 +164,8 @@ async fn the_session_cookie_is_httponly_secure_lax_and_host_bound() {
     use navree_testing::cookie::time::Duration as CookieDuration;
 
     let app = app().await;
-    create_user(&app, "ada@example.com").await;
-    let response = sign_in(&app.client(), "ada@example.com", PASSWORD, false)
+    create_user(&app, "anu@example.com").await;
+    let response = sign_in(&app.client(), "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     let cookie = response.set_cookie(COOKIE).expect("the session cookie");
@@ -177,7 +177,7 @@ async fn the_session_cookie_is_httponly_secure_lax_and_host_bound() {
     assert_eq!(cookie.max_age(), Some(CookieDuration::minutes(120)));
     assert!(response.set_cookie("navree_session").is_none());
 
-    let remembered = sign_in(&app.client(), "ada@example.com", PASSWORD, true)
+    let remembered = sign_in(&app.client(), "anu@example.com", PASSWORD, true)
         .await
         .assert_status(303);
     let cookie = remembered.set_cookie(COOKIE).expect("the session cookie");
@@ -197,11 +197,11 @@ async fn the_same_guards_hold_for_bearer_tokens_and_the_cookie() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&clock, &sink).await;
-    let (user, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (user, browser) = signed_in_browser(&app, "anu@example.com").await;
 
     let api = app.client();
     let (access, _) = tokens(
-        &login(&api, "ada@example.com", PASSWORD)
+        &login(&api, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -221,7 +221,7 @@ async fn the_same_guards_hold_for_bearer_tokens_and_the_cookie() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     // A bearer token wins over a cookie on the same request.
     browser
         .get("/api/probe/whoami")
@@ -287,7 +287,7 @@ async fn the_same_guards_hold_for_bearer_tokens_and_the_cookie() {
 #[tokio::test]
 async fn signing_out_ends_the_sign_in_on_the_server() {
     let app = app().await;
-    let (user, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (user, browser) = signed_in_browser(&app, "anu@example.com").await;
     let copy = app.client();
     copy.set_cookie(COOKIE, &browser.cookie(COOKIE).unwrap());
     whoami(&copy).await.assert_status(200);
@@ -311,7 +311,7 @@ async fn signing_out_ends_the_sign_in_on_the_server() {
 #[tokio::test]
 async fn a_copied_cookie_dies_when_the_sign_in_is_ended_elsewhere() {
     let app = app().await;
-    let (user, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (user, browser) = signed_in_browser(&app, "anu@example.com").await;
     let thief = app.client();
     thief.set_cookie(COOKIE, &browser.cookie(COOKIE).unwrap());
     whoami(&thief).await.assert_status(200);
@@ -319,7 +319,7 @@ async fn a_copied_cookie_dies_when_the_sign_in_is_ended_elsewhere() {
     // From another device: list the sessions and end the browser's.
     let api = app.client();
     let (access, _) = tokens(
-        &login(&api, "ada@example.com", PASSWORD)
+        &login(&api, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -354,10 +354,10 @@ async fn a_copied_cookie_dies_when_the_sign_in_is_ended_elsewhere() {
 #[tokio::test]
 async fn signing_out_everywhere_ends_the_browser_too() {
     let app = app().await;
-    let (_, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (_, browser) = signed_in_browser(&app, "anu@example.com").await;
     let api = app.client();
     let (access, _) = tokens(
-        &login(&api, "ada@example.com", PASSWORD)
+        &login(&api, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -375,7 +375,7 @@ async fn signing_out_everywhere_ends_the_browser_too() {
 #[tokio::test]
 async fn the_logout_route_signs_a_browser_out_of_its_session() {
     let app = app().await;
-    let (_, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (_, browser) = signed_in_browser(&app, "anu@example.com").await;
     browser
         .post("/api/auth/logout")
         .send()
@@ -397,14 +397,14 @@ async fn the_logout_route_signs_a_browser_out_of_its_session() {
 async fn a_password_change_ends_the_other_sessions_and_keeps_this_one() {
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&support::clock(), &sink).await;
-    let (_, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (_, browser) = signed_in_browser(&app, "anu@example.com").await;
     let other_browser = app.client();
-    sign_in(&other_browser, "ada@example.com", PASSWORD, false)
+    sign_in(&other_browser, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     let api = app.client();
     let (_, refresh_token) = tokens(
-        &login(&api, "ada@example.com", PASSWORD)
+        &login(&api, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -424,12 +424,12 @@ async fn a_password_change_ends_the_other_sessions_and_keeps_this_one() {
     refresh(&api, &refresh_token).await.assert_status(401);
     assert_eq!(sink.with_action("auth.password_changed").len(), 1);
     // The old password no longer signs in; the new one does.
-    sign_in(&app.client(), "ada@example.com", PASSWORD, false)
+    sign_in(&app.client(), "anu@example.com", PASSWORD, false)
         .await
         .assert_status(422);
     sign_in(
         &app.client(),
-        "ada@example.com",
+        "anu@example.com",
         "a brand new password",
         false,
     )
@@ -448,7 +448,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
         )
         .build()
         .await;
-    let (_, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (_, browser) = signed_in_browser(&app, "anu@example.com").await;
 
     let visitor = app.client();
     let csrf = token(&visitor).await;
@@ -461,7 +461,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
     let sent = visitor
         .post("/forgot-password")
         .header("accept", "text/html")
-        .form(&[("email", "ada@example.com"), ("_csrf", csrf.as_str())])
+        .form(&[("email", "anu@example.com"), ("_csrf", csrf.as_str())])
         .send()
         .await
         .assert_status(200)
@@ -491,7 +491,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
     let reset_token = link_param(&link, "token").expect("a token");
     let page = visitor
         .get(&format!(
-            "/reset-password?token={reset_token}&email=ada%40example.com"
+            "/reset-password?token={reset_token}&email=anu%40example.com"
         ))
         .header("accept", "text/html")
         .send()
@@ -505,7 +505,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
         .post("/reset-password")
         .header("accept", "text/html")
         .form(&[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("token", reset_token.as_str()),
             ("password", "a brand new password"),
             ("password_confirmation", "another one"),
@@ -519,7 +519,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
         .post("/reset-password")
         .header("accept", "text/html")
         .form(&[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("token", reset_token.as_str()),
             ("password", "a brand new password"),
             ("password_confirmation", "a brand new password"),
@@ -540,7 +540,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
         .post("/reset-password")
         .header("accept", "text/html")
         .form(&[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("token", reset_token.as_str()),
             ("password", "yet another password"),
             ("password_confirmation", "yet another password"),
@@ -552,7 +552,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
     assert!(again.text().contains("expired or was used already"));
     sign_in(
         &app.client(),
-        "ada@example.com",
+        "anu@example.com",
         "a brand new password",
         false,
     )
@@ -567,12 +567,12 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
 async fn sign_in_and_sign_out_need_the_csrf_token() {
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&support::clock(), &sink).await;
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let client = app.client();
     token(&client).await;
 
     for csrf in [None, Some("forged-token")] {
-        let mut form = vec![("email", "ada@example.com"), ("password", PASSWORD)];
+        let mut form = vec![("email", "anu@example.com"), ("password", PASSWORD)];
         if let Some(csrf) = csrf {
             form.push(("_csrf", csrf));
         }
@@ -592,12 +592,12 @@ async fn sign_in_and_sign_out_need_the_csrf_token() {
         .header("accept", "text/html")
         .header("sec-fetch-site", "cross-site")
         .header("origin", "https://evil.example")
-        .form(&[("email", "ada@example.com"), ("password", PASSWORD)])
+        .form(&[("email", "anu@example.com"), ("password", PASSWORD)])
         .send()
         .await
         .assert_status(403);
 
-    sign_in(&client, "ada@example.com", PASSWORD, false)
+    sign_in(&client, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     client
@@ -625,7 +625,7 @@ async fn two_factor_sign_in_on_the_cookie() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&clock, &sink).await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let secret = enable_two_factor(&app, &clock, &user).await;
     let client = app.client();
     let before = {
@@ -633,7 +633,7 @@ async fn two_factor_sign_in_on_the_cookie() {
         client.cookie(COOKIE).unwrap()
     };
 
-    let response = sign_in(&client, "ada@example.com", PASSWORD, true)
+    let response = sign_in(&client, "anu@example.com", PASSWORD, true)
         .await
         .assert_status(303);
     assert_eq!(
@@ -687,7 +687,7 @@ async fn two_factor_sign_in_on_the_cookie() {
         .await
         .unwrap();
     let other = app.client();
-    sign_in(&other, "ada@example.com", PASSWORD, false)
+    sign_in(&other, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     second_factor(&other, "recovery_code", &codes[0])
@@ -699,7 +699,7 @@ async fn two_factor_sign_in_on_the_cookie() {
         1
     );
     let third = app.client();
-    sign_in(&third, "ada@example.com", PASSWORD, false)
+    sign_in(&third, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     second_factor(&third, "recovery_code", &codes[0])
@@ -715,10 +715,10 @@ async fn two_factor_codes_on_the_cookie_are_throttled() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&clock, &sink).await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let secret = enable_two_factor(&app, &clock, &user).await;
     let client = app.client();
-    sign_in(&client, "ada@example.com", PASSWORD, false)
+    sign_in(&client, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     for _ in 0..5 {
@@ -741,10 +741,10 @@ async fn two_factor_codes_on_the_cookie_are_throttled() {
 async fn failed_browser_sign_ins_are_throttled_and_audited() {
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&support::clock(), &sink).await;
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let client = app.client();
     for _ in 0..5 {
-        let refused = sign_in(&client, "ada@example.com", "wrong password", false)
+        let refused = sign_in(&client, "anu@example.com", "wrong password", false)
             .await
             .assert_status(422)
             .text();
@@ -754,14 +754,14 @@ async fn failed_browser_sign_ins_are_throttled_and_audited() {
             "the password is never echoed"
         );
     }
-    let throttled = sign_in(&client, "ada@example.com", PASSWORD, false)
+    let throttled = sign_in(&client, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(429);
     assert!(throttled.header("retry-after").is_some());
     whoami(&client).await.assert_status(401);
     let failed = sink.with_action("auth.login_failed");
     assert_eq!(failed.len(), 5);
-    assert_eq!(failed[0].metadata["email"], "ada@example.com");
+    assert_eq!(failed[0].metadata["email"], "anu@example.com");
     assert_eq!(sink.with_action("auth.throttled").len(), 1);
     assert!(sink.with_action("auth.login").is_empty());
 }
@@ -771,7 +771,7 @@ async fn failed_browser_sign_ins_are_throttled_and_audited() {
 async fn sign_in_and_sign_out_are_audited_as_the_session_s() {
     let sink = Arc::new(RecordingSink::default());
     let app = audited(&support::clock(), &sink).await;
-    let (user, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (user, browser) = signed_in_browser(&app, "anu@example.com").await;
     let login = sink.with_action("auth.login");
     assert_eq!(login.len(), 1);
     assert_eq!(login[0].actor_id, Some(user.id));
@@ -794,13 +794,13 @@ async fn sign_in_and_sign_out_are_audited_as_the_session_s() {
 async fn remember_me_and_the_sign_in_lifetimes() {
     let clock = support::clock();
     let app = with_pages(support::clocked(&clock)).build().await;
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let remembered = app.client();
-    sign_in(&remembered, "ada@example.com", PASSWORD, true)
+    sign_in(&remembered, "anu@example.com", PASSWORD, true)
         .await
         .assert_status(303);
     let plain = app.client();
-    sign_in(&plain, "ada@example.com", PASSWORD, false)
+    sign_in(&plain, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
 
@@ -810,7 +810,7 @@ async fn remember_me_and_the_sign_in_lifetimes() {
 
     // A busy browser without "remember me": signed out after 24 hours.
     let busy = app.client();
-    sign_in(&busy, "ada@example.com", PASSWORD, false)
+    sign_in(&busy, "anu@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     for _ in 0..23 {
@@ -867,9 +867,9 @@ async fn sign_in_policies_hold_for_browsers() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    create_user(&app, "ada@sso.example.com").await;
+    create_user(&app, "anu@sso.example.com").await;
     let client = app.client();
-    let refused = sign_in(&client, "ada@sso.example.com", PASSWORD, false)
+    let refused = sign_in(&client, "anu@sso.example.com", PASSWORD, false)
         .await
         .assert_status(403)
         .text();
@@ -913,7 +913,7 @@ async fn a_browser_that_must_set_up_two_factor_reaches_the_setup_only() {
         .module(EveryoneTwoFactorModule)
         .build()
         .await;
-    let (_, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (_, browser) = signed_in_browser(&app, "anu@example.com").await;
     whoami(&browser)
         .await
         .assert_error_code(403, "two_factor_required");
@@ -974,7 +974,7 @@ async fn signing_a_browser_out_ends_its_live_subscriptions() {
         .override_value::<dyn Broadcaster>(broadcaster.clone())
         .build()
         .await;
-    let (user, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (user, browser) = signed_in_browser(&app, "anu@example.com").await;
     assert!(broadcaster.0.lock().unwrap().is_empty());
     sign_out(&browser).await.assert_status(303);
     assert_eq!(*broadcaster.0.lock().unwrap(), [user.id]);
@@ -1015,14 +1015,14 @@ async fn the_pages_keep_people_on_the_site() {
         .assert_status(303);
     assert_eq!(response.header("location"), Some("/sign-in"));
 
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let browser = app.client();
     let csrf = token(&browser).await;
     let response = browser
         .post("/sign-in")
         .header("accept", "text/html")
         .form(&[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("password", PASSWORD),
             ("next", "//evil.example/steal"),
             ("_csrf", csrf.as_str()),
@@ -1044,7 +1044,7 @@ async fn the_pages_keep_people_on_the_site() {
 #[tokio::test]
 async fn without_the_session_module_tokens_work_as_before() {
     let app = support::app().await;
-    let (_, access, _) = support::signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = support::signed_in(&app, "anu@example.com").await;
     let client = app.client();
     client
         .get("/api/probe/whoami")
@@ -1065,13 +1065,13 @@ async fn without_the_session_module_tokens_work_as_before() {
 #[tokio::test]
 async fn signing_in_again_ends_the_sign_in_the_browser_held() {
     let app = app().await;
-    let (ada, browser) = signed_in_browser(&app, "ada@example.com").await;
+    let (ada, browser) = signed_in_browser(&app, "anu@example.com").await;
     let copy = app.client();
     copy.set_cookie(COOKIE, &browser.cookie(COOKIE).unwrap());
     whoami(&copy).await.assert_status(200);
 
-    create_user(&app, "grace@example.com").await;
-    sign_in(&browser, "grace@example.com", PASSWORD, false)
+    create_user(&app, "gauri@example.com").await;
+    sign_in(&browser, "gauri@example.com", PASSWORD, false)
         .await
         .assert_status(303);
     whoami(&browser)

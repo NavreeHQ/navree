@@ -516,7 +516,7 @@ impl<M: Model> Builder<M> {
     }
 
     /// Only records with a related record through `path` matching
-    /// `filter`: `where_relation("company", Company::NAME.eq("Acme"))`.
+    /// `filter`: `where_relation("company", Company::NAME.eq("Agra"))`.
     pub fn where_relation(self, path: impl RelationPath<M>, filter: impl Into<Filter>) -> Self {
         let text = path.relation_path().into_owned();
         let filter = filter.into();
@@ -586,8 +586,8 @@ impl<M: Model> Builder<M> {
     ///
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
-    /// # async fn demo(db: Db, acme: Record<Company>) -> Result<()> {
-    /// let deals = Deal::query().where_belongs_to(&acme).get(&db).await?;
+    /// # async fn demo(db: Db, agra: Record<Company>) -> Result<()> {
+    /// let deals = Deal::query().where_belongs_to(&agra).get(&db).await?;
     /// # Ok(()) }
     /// ```
     pub fn where_belongs_to<R: Model>(self, owner: &Record<R>) -> Self {

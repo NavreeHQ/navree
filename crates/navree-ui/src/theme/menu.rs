@@ -265,8 +265,8 @@ mod tests {
     #[test]
     fn a_custom_theme_posts_its_short_form_and_shows_its_name_as_text() {
         let mine = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "<b>Acme</b>",
+            ThemeId::parse("agra").unwrap(),
+            "<b>Agra</b>",
             *Theme::OCEAN.spec(),
         )
         .unwrap();
@@ -284,6 +284,6 @@ mod tests {
             html.contains(&format!(r#"data-theme="{}""#, mine.key())),
             "{html}"
         );
-        assert!(html.contains("&lt;b&gt;Acme&lt;/b&gt;"), "{html}");
+        assert!(html.contains("&lt;b&gt;Agra&lt;/b&gt;"), "{html}");
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! Besides the RFC, it accepts what identity providers send in practice:
 //! operation names in any case (`Replace`), path-less values whose keys are
-//! paths (`{"name.givenName": "Ada"}`), `remove` on `members` with a value
+//! paths (`{"name.givenName": "Anu"}`), `remove` on `members` with a value
 //! array naming the members to remove, and `add` or `replace` with a value
 //! filter that matches nothing (`emails[type eq "work"].value`), which adds
 //! the element the filter describes.
@@ -464,10 +464,10 @@ mod tests {
 
     fn ada() -> Value {
         json!({
-            "userName": "ada@acme.test",
+            "userName": "anu@acme.test",
             "active": true,
-            "name": { "givenName": "Ada", "familyName": "Lovelace" },
-            "emails": [{ "value": "ada@acme.test", "type": "work", "primary": true }]
+            "name": { "givenName": "Anu", "familyName": "Lakhotia" },
+            "emails": [{ "value": "anu@acme.test", "type": "work", "primary": true }]
         })
     }
 
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(user["active"], json!(false));
         assert_eq!(
             user["name"],
-            json!({ "givenName": "Ada", "familyName": "King", "middleName": "Augusta" })
+            json!({ "givenName": "Anu", "familyName": "King", "middleName": "Augusta" })
         );
     }
 
@@ -522,25 +522,25 @@ mod tests {
         let user = patch(
             ada(),
             json!([{ "op": "add", "path": "emails", "value": [
-                { "value": "ada@acme.test", "type": "work", "primary": true },
-                { "value": "ada@home.test", "type": "home" }
+                { "value": "anu@acme.test", "type": "work", "primary": true },
+                { "value": "anu@home.test", "type": "home" }
             ] }]),
         )
         .unwrap();
         assert_eq!(user["emails"].as_array().unwrap().len(), 2);
-        assert_eq!(user["emails"][1]["value"], json!("ada@home.test"));
+        assert_eq!(user["emails"][1]["value"], json!("anu@home.test"));
     }
 
     #[test]
     fn filtered_paths_change_the_matching_values() {
         let user = patch(
             ada(),
-            json!([{ "op": "replace", "path": "emails[type eq \"work\"].value", "value": "lovelace@acme.test" }]),
+            json!([{ "op": "replace", "path": "emails[type eq \"work\"].value", "value": "lakhotia@acme.test" }]),
         )
         .unwrap();
         assert_eq!(
             user["emails"],
-            json!([{ "value": "lovelace@acme.test", "type": "work", "primary": true }])
+            json!([{ "value": "lakhotia@acme.test", "type": "work", "primary": true }])
         );
         let user = patch(
             user,
@@ -557,7 +557,7 @@ mod tests {
             ada(),
             json!([
                 { "op": "add", "path": "phoneNumbers[type eq \"mobile\"].value", "value": "+44 20 7946 0958" },
-                { "op": "replace", "path": "emails[type eq \"home\"].value", "value": "ada@home.test" }
+                { "op": "replace", "path": "emails[type eq \"home\"].value", "value": "anu@home.test" }
             ]),
         )
         .unwrap();
@@ -567,7 +567,7 @@ mod tests {
         );
         assert_eq!(
             user["emails"][1],
-            json!({ "type": "home", "value": "ada@home.test" })
+            json!({ "type": "home", "value": "anu@home.test" })
         );
         let error = patch(
             ada(),
@@ -588,7 +588,7 @@ mod tests {
             ]),
         )
         .unwrap();
-        assert_eq!(user["name"], json!({ "givenName": "Ada" }));
+        assert_eq!(user["name"], json!({ "givenName": "Anu" }));
         assert!(user.get("emails").is_none());
         let user = patch(ada(), json!([{ "op": "remove", "path": "active" }])).unwrap();
         assert!(user.get("active").is_none());

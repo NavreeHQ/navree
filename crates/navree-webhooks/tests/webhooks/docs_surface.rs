@@ -50,7 +50,7 @@ async fn the_documented_custom_verifier_answers_its_handshake_and_verifies() {
     let source = SourceOptions::new("partner-secret");
     let headers = http::HeaderMap::new();
     let challenge = IncomingRequest::new(&source, &headers, b"")
-        .with_url("https://api.acme.example/hooks/partner?challenge=abc");
+        .with_url("https://api.agra.example/hooks/partner?challenge=abc");
     assert_eq!(
         Partner::verify_incoming(&challenge).await,
         Ok(Verdict::Handshake(Handshake::text("abc")))
@@ -100,12 +100,12 @@ topics = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]
 auto_confirm = true
 
 [webhooks.incoming.google_pubsub]
-service_account = "gmail-push@acme-crm.iam.gserviceaccount.com"
-audience = "https://api.acme.example/api/v1/mail/gmail-push"
+service_account = "gmail-push@agra-crm.iam.gserviceaccount.com"
+audience = "https://api.agra.example/api/v1/mail/gmail-push"
 
 [webhooks.incoming.twilio]
 secret = "set-in-env"
-url = "https://api.acme.example/api/v1/sms/status"
+url = "https://api.agra.example/api/v1/sms/status"
 "#;
 
 #[test]

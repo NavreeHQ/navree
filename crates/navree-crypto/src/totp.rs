@@ -25,7 +25,7 @@
 //! let secret = Secret::generate()?;
 //! let totp = Totp::builder(secret)
 //!     .issuer("Navree")
-//!     .account("ada@example.com")
+//!     .account("anu@example.com")
 //!     .build()?;
 //!
 //! // The code the authenticator app shows at this moment, and its check.

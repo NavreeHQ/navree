@@ -891,7 +891,7 @@ fn s3_disks_are_built_through_the_facade() {
         disks: [(
             "uploads".to_owned(),
             DiskConfig::from(
-                S3Config::new("acme")
+                S3Config::new("agra")
                     .endpoint("http://127.0.0.1:9")
                     .credentials("key", "secret"),
             ),

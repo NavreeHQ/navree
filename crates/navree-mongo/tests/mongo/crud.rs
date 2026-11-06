@@ -15,10 +15,10 @@ async fn models_are_created_found_saved_and_deleted() {
         return;
     };
     let mongo = &t.db;
-    let acme = Company::create(
+    let agra = Company::create(
         mongo,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             country: Some("NO".into()),
             employees: 12,
             ..Company::default()
@@ -26,10 +26,10 @@ async fn models_are_created_found_saved_and_deleted() {
     )
     .await
     .unwrap();
-    assert!(!acme.id.is_nil(), "the ObjectId was made before the insert");
-    assert!(acme.exists() && acme.was_recently_created());
+    assert!(!agra.id.is_nil(), "the ObjectId was made before the insert");
+    assert!(agra.exists() && agra.was_recently_created());
     assert_eq!(
-        acme.created_at.nanosecond() % 1_000_000,
+        agra.created_at.nanosecond() % 1_000_000,
         0,
         "timestamps keep MongoDB's milliseconds"
     );
@@ -37,7 +37,7 @@ async fn models_are_created_found_saved_and_deleted() {
     let mut deal = Deal::create(
         mongo,
         Deal {
-            company_id: Some(acme.id),
+            company_id: Some(agra.id),
             price: Decimal::new(129_950, 2),
             stage: Stage::Qualified,
             meta: Some(DealMeta {
@@ -61,7 +61,7 @@ async fn models_are_created_found_saved_and_deleted() {
             .await
             .unwrap()
             .expect("the document");
-    assert_eq!(raw.get_object_id("company_id").unwrap(), acme.id.into());
+    assert_eq!(raw.get_object_id("company_id").unwrap(), agra.id.into());
     assert!(matches!(raw.get("price"), Some(bson::Bson::Decimal128(_))));
     assert_eq!(raw.get_str("stage").unwrap(), "qualified");
     assert_eq!(
@@ -108,8 +108,8 @@ async fn models_are_created_found_saved_and_deleted() {
         .unwrap_err();
     assert!(error.is_not_found(), "{error}");
 
-    let mut acme = acme;
-    assert!(acme.delete(mongo).await.unwrap());
+    let mut agra = agra;
+    assert!(agra.delete(mongo).await.unwrap());
     assert_eq!(Company::query().count(mongo).await.unwrap(), 0);
     t.cleanup().await;
 }
@@ -164,12 +164,12 @@ async fn manual_keys_and_duplicates() {
         .unwrap_err();
     assert!(matches!(error, OrmError::MissingKey { .. }), "{error:?}");
     let ada = Account {
-        email: "ada@example.com".into(),
-        name: "Ada".into(),
+        email: "anu@example.com".into(),
+        name: "Anu".into(),
         external: uuid::Uuid::now_v7(),
     };
     Account::create(mongo, ada.clone()).await.unwrap();
-    let found = Account::find_or_fail(mongo, "ada@example.com".to_owned())
+    let found = Account::find_or_fail(mongo, "anu@example.com".to_owned())
         .await
         .unwrap();
     assert_eq!(
@@ -182,22 +182,22 @@ async fn manual_keys_and_duplicates() {
     assert!(error.is_unique_violation(), "{error:?}");
     // ...which create_or_first recovers from.
     let existing = Account::query()
-        .create_or_first(mongo, [Account::EMAIL.set("ada@example.com")], |a| {
+        .create_or_first(mongo, [Account::EMAIL.set("anu@example.com")], |a| {
             a.name = "Someone else".into()
         })
         .await
         .unwrap();
-    assert_eq!(existing.name, "Ada");
+    assert_eq!(existing.name, "Anu");
     let (first, created) = {
         let record: Record<Account> =
-            Account::first_or_create(mongo, [Account::EMAIL.set("grace@example.com")], |a| {
-                a.name = "Grace".into()
+            Account::first_or_create(mongo, [Account::EMAIL.set("gauri@example.com")], |a| {
+                a.name = "Gauri".into()
             })
             .await
             .unwrap();
         let created = record.was_recently_created();
         (record, created)
     };
-    assert!(created && first.name == "Grace");
+    assert!(created && first.name == "Gauri");
     t.cleanup().await;
 }

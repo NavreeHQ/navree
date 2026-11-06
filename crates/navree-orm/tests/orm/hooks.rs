@@ -84,10 +84,10 @@ async fn hooks_see_and_steer_the_lifecycle() {
     let seen = Arc::new(Seen::default());
     let (_app, db, _clock) = app(vec![Box::new(Hooks(seen.clone()))]).await;
 
-    let acme = Company::create(
+    let agra = Company::create(
         &*db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             country: Some("us".into()),
             ..Company::default()
         },
@@ -95,13 +95,13 @@ async fn hooks_see_and_steer_the_lifecycle() {
     .await
     .unwrap();
     assert_eq!(
-        acme.country.as_deref(),
+        agra.country.as_deref(),
         Some("US"),
         "the saving hook changed the record"
     );
     assert_eq!(
         std::mem::take(&mut *seen.0.lock().unwrap()),
-        ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
+        ["saving Agra", "creating Agra", "created Agra", "saved Agra"]
     );
 
     let mut blocked = Record::new(Company {
@@ -112,7 +112,7 @@ async fn hooks_see_and_steer_the_lifecycle() {
     assert!(!blocked.exists());
     assert_eq!(count_rows(&db, "companies").await, 1);
 
-    let mut found = Company::find_or_fail(&*db, acme.id).await.unwrap();
+    let mut found = Company::find_or_fail(&*db, agra.id).await.unwrap();
     assert_eq!(found.extra::<bool>("seen").unwrap(), Some(true));
     seen.0.lock().unwrap().clear();
 
@@ -120,7 +120,7 @@ async fn hooks_see_and_steer_the_lifecycle() {
     found.save(&*db).await.unwrap();
     assert_eq!(
         std::mem::take(&mut *seen.0.lock().unwrap()),
-        ["saving Acme", "updating Acme", "updated Acme", "saved Acme"]
+        ["saving Agra", "updating Agra", "updated Agra", "saved Agra"]
     );
 
     assert!(

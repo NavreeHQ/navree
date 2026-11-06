@@ -18,7 +18,7 @@ use crate::{Scope, SettingsDefinition, SettingsError, SettingsGroup, Source};
 ///
 /// ```json
 /// {
-///   "data": { "show_leaderboard": true, "welcome_text": "Welcome to Acme" },
+///   "data": { "show_leaderboard": true, "welcome_text": "Welcome to Agra" },
 ///   "sources": { "show_leaderboard": "organization", "welcome_text": "workspace" },
 ///   "overridden": ["welcome_text"]
 /// }
@@ -60,7 +60,7 @@ impl ResolvedSettings {
 /// overridden}`, so a handler can return it as JSON.
 ///
 /// ```ignore
-/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(acme.id)).await?;
+/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(agra.id)).await?;
 /// if portal.show_leaderboard { /* .. */ }
 /// assert_eq!(portal.source("show_leaderboard"), Some(Source::Organization));
 /// ```

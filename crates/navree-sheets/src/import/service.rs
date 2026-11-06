@@ -1132,7 +1132,7 @@ mod tests {
     #[test]
     fn client_file_names_lose_their_directories() {
         assert_eq!(
-            display_name("C:\\Users\\ada\\recipients.csv"),
+            display_name("C:\\Users\\anu\\recipients.csv"),
             "recipients.csv"
         );
         assert_eq!(display_name("../../etc/passwd"), "passwd");

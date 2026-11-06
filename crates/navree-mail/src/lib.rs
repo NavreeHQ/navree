@@ -76,7 +76,7 @@
 //!     .module(ViewModule::for_root(ViewOptions { dirs: vec![], reload: false }))
 //!     .module(Templates)
 //!     .module(MailModule::for_root(MailOptions {
-//!         from: "Acme <hello@acme.test>".into(),
+//!         from: "Agra <hello@acme.test>".into(),
 //!         transport: TransportConfig::Array,
 //!         ..MailOptions::default()
 //!     }))
@@ -86,14 +86,14 @@
 //! let mailer = app.ctx().get::<Mailer>().await?;
 //! mailer
 //!     .send(
-//!         &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-//!             .context(json!({ "name": "Ada" })),
+//!         &TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+//!             .context(json!({ "name": "Anu" })),
 //!     )
 //!     .await?;
 //!
 //! let sent = mailer.array_transport().expect("array transport").sent();
-//! assert_eq!(sent[0].from.as_deref(), Some("Acme <hello@acme.test>"));
-//! assert_eq!(sent[0].html.as_deref(), Some("<p>Welcome, Ada!</p>"));
+//! assert_eq!(sent[0].from.as_deref(), Some("Agra <hello@acme.test>"));
+//! assert_eq!(sent[0].html.as_deref(), Some("<p>Welcome, Anu!</p>"));
 //! # Ok(())
 //! # }
 //! ```

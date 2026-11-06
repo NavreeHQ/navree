@@ -15,11 +15,11 @@ async fn endpoints_deliveries_and_attempts_are_orm_models() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(204),
     );
     let created = h
-        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/navree").events(["deal.won"]))
+        .endpoint(NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]))
         .await;
     h.emit(deal_won(None)).await;
     h.run_queue().await;
@@ -29,7 +29,7 @@ async fn endpoints_deliveries_and_attempts_are_orm_models() {
         .await
         .unwrap()
         .expect("the endpoint");
-    assert_eq!(found.url, "https://hooks.lovelace.io/navree");
+    assert_eq!(found.url, "https://hooks.lakhotia.io/navree");
     assert!(
         found.to_value().unwrap().get("secret").is_none(),
         "secrets never serialize"

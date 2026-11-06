@@ -207,7 +207,7 @@ async fn nobody_can_use_up_a_public_clients_budget() {
     let world = World::with(limits(2, 3)).await;
     let mobile = world
         .register(
-            NewClient::public("Acme mobile")
+            NewClient::public("Agra mobile")
                 .redirect_uri(support::REDIRECT_URI)
                 .scopes(["deals:read"])
                 .device(),

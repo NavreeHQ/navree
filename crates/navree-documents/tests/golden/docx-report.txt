@@ -1,6 +1,6 @@
 Quarterly audit report
 Summary
-Prepared for Acme Ltd by the audit team.
+Prepared for Agra Ltd by the audit team.
 Every control was tested
 Two findings are open
 Rotate the keys

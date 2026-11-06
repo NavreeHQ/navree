@@ -16,7 +16,7 @@ use crate::support::{self, signed_in};
 #[tokio::test]
 async fn bearer_access_token_sets_principal() {
     let app = support::app().await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     app.client()
         .get("/api/probe/whoami")
         .bearer(&access)
@@ -34,8 +34,8 @@ async fn bearer_access_token_sets_principal() {
         .assert_status(200)
         .assert_json_path("__type", json!("User"))
         .assert_json_path("id", json!(user.id))
-        .assert_json_path("name", json!("Ada Lovelace"))
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("name", json!("Anu Lakhotia"))
+        .assert_json_path("email", json!("anu@example.com"));
 }
 
 #[tokio::test]
@@ -45,7 +45,7 @@ async fn expired_or_tampered_access_token_is_401() {
         .override_value::<dyn Clock>(clock.clone())
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     client
         .get("/api/auth/me")
@@ -99,7 +99,7 @@ async fn expired_or_tampered_access_token_is_401() {
 #[tokio::test]
 async fn a_two_factor_challenge_token_is_not_an_access_token() {
     let app = support::app().await;
-    let (user, _, _) = signed_in(&app, "ada@example.com").await;
+    let (user, _, _) = signed_in(&app, "anu@example.com").await;
     let challenge = app
         .get::<JwtService>()
         .await
@@ -142,7 +142,7 @@ async fn public_route_works_without_token() {
         .assert_status(200)
         .assert_json_path("guest", json!(true));
     // A valid token on a public route authenticates the request.
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     app.client()
         .get("/api/probe/ping")
         .bearer(&access)
@@ -163,14 +163,14 @@ async fn public_route_works_without_token() {
 #[tokio::test]
 async fn current_user_is_401_once_the_user_is_deleted() {
     let app = support::app().await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     app.client()
         .get("/api/probe/user")
         .bearer(&access)
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     let db = app.get::<Db>().await;
     User::query().where_key(user.id).delete(&*db).await.unwrap();
     app.client()

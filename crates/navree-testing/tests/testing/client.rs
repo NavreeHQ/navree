@@ -13,14 +13,14 @@ async fn client_round_trip_json() {
     let response = app
         .client()
         .post("/api/demo/echo")
-        .json(&json!({ "name": "Acme", "tags": ["a", "b"] }))
+        .json(&json!({ "name": "Agra", "tags": ["a", "b"] }))
         .send()
         .await;
 
     assert_eq!(response.status(), 200);
     assert_eq!(
         response.json_value(),
-        json!({ "received": { "name": "Acme", "tags": ["a", "b"] } })
+        json!({ "received": { "name": "Agra", "tags": ["a", "b"] } })
     );
 }
 

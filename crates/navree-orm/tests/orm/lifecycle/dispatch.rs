@@ -100,9 +100,9 @@ impl Module for Both {
     }
 }
 
-fn acme() -> Company {
+fn agra() -> Company {
     Company {
-        name: "Acme".into(),
+        name: "Agra".into(),
         ..Company::default()
     }
 }
@@ -113,28 +113,28 @@ async fn listeners_see_ed_events_after_the_unit_of_work_commits() {
     let (_app, db, _clock) = app(vec![Box::new(Recording(seen.clone(), HookKind::Listener))]).await;
 
     let uow = db.uow(None, None).await;
-    let mut company = Company::create(&uow, acme()).await.unwrap();
-    assert_eq!(seen.take(), ["saving Acme", "creating Acme"]);
-    company.name = "Acme Corp".into();
+    let mut company = Company::create(&uow, agra()).await.unwrap();
+    assert_eq!(seen.take(), ["saving Agra", "creating Agra"]);
+    company.name = "Agra Corp".into();
     company.save(&uow).await.unwrap();
-    assert_eq!(seen.take(), ["saving Acme Corp", "updating Acme Corp"]);
+    assert_eq!(seen.take(), ["saving Agra Corp", "updating Agra Corp"]);
     uow.commit().await.unwrap();
     assert_eq!(
         seen.take(),
         [
-            "created Acme (committed)",
-            "saved Acme (committed)",
-            "updated Acme Corp (committed)",
-            "saved Acme Corp (committed)",
+            "created Agra (committed)",
+            "saved Agra (committed)",
+            "updated Agra Corp (committed)",
+            "saved Agra Corp (committed)",
         ],
         "each event saw the record as it was when it happened"
     );
 
     // Outside a unit of work, at once.
-    Company::create(&*db, acme()).await.unwrap();
+    Company::create(&*db, agra()).await.unwrap();
     assert_eq!(
         seen.take(),
-        ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
+        ["saving Agra", "creating Agra", "created Agra", "saved Agra"]
     );
 }
 
@@ -143,9 +143,9 @@ async fn a_rolled_back_unit_of_work_tells_listeners_nothing_happened() {
     let seen = Seen::default();
     let (_app, db, _clock) = app(vec![Box::new(Recording(seen.clone(), HookKind::Listener))]).await;
     let uow = db.uow(None, None).await;
-    Company::create(&uow, acme()).await.unwrap();
+    Company::create(&uow, agra()).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(seen.take(), ["saving Acme", "creating Acme"]);
+    assert_eq!(seen.take(), ["saving Agra", "creating Agra"]);
     assert_eq!(count_rows(&db, "companies").await, 0);
 }
 
@@ -155,10 +155,10 @@ async fn behaviours_and_transactional_listeners_run_inside_the_transaction() {
         let seen = Seen::default();
         let (_app, db, _clock) = app(vec![Box::new(Recording(seen.clone(), kind))]).await;
         let uow = db.uow(None, None).await;
-        Company::create(&uow, acme()).await.unwrap();
+        Company::create(&uow, agra()).await.unwrap();
         assert_eq!(
             seen.take(),
-            ["saving Acme", "creating Acme", "created Acme", "saved Acme"],
+            ["saving Agra", "creating Agra", "created Agra", "saved Agra"],
             "{kind:?}"
         );
         uow.commit().await.unwrap();
@@ -205,7 +205,7 @@ async fn hooks_run_inside_the_unit_of_work_of_their_operation() {
     let uow = db.uow(None, None).await;
     // Not inside `uow.scope`: the ORM makes the unit of work current for
     // its hooks, so jobs and events they dispatch join it.
-    Company::create(&uow, acme()).await.unwrap();
+    Company::create(&uow, agra()).await.unwrap();
     assert_eq!(seen.take(), ["created current=true", "saved current=true"]);
     uow.commit().await.unwrap();
 }
@@ -221,11 +221,11 @@ async fn without_events_silences_listeners_but_keeps_behaviours_and_the_audit_tr
     .await;
 
     let uow = db.uow(None, None).await;
-    let created = without_events(Company::create(&uow, acme())).await.unwrap();
+    let created = without_events(Company::create(&uow, agra())).await.unwrap();
     assert!(listener.take().is_empty());
     assert_eq!(
         behaviour.take(),
-        ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
+        ["saving Agra", "creating Agra", "created Agra", "saved Agra"]
     );
     assert_eq!(uow.changes().len(), 1, "the change is still recorded");
     uow.commit().await.unwrap();
@@ -235,11 +235,11 @@ async fn without_events_silences_listeners_but_keeps_behaviours_and_the_audit_tr
     // Nested and finished: events come back afterwards.
     without_events(async {
         without_events(async {}).await;
-        Company::create(&*db, acme()).await.unwrap();
+        Company::create(&*db, agra()).await.unwrap();
     })
     .await;
     assert!(listener.take().is_empty());
-    Company::create(&*db, acme()).await.unwrap();
+    Company::create(&*db, agra()).await.unwrap();
     assert_eq!(listener.take().len(), 4);
 }
 
@@ -307,7 +307,7 @@ async fn an_ing_listener_error_aborts_the_write_and_is_returned() {
         HookKind::Listener,
     ))])
     .await;
-    let error = Company::create(&*db, acme()).await.unwrap_err();
+    let error = Company::create(&*db, agra()).await.unwrap_err();
     assert_eq!(error.to_string(), "a Company hook failed: creating refused");
     assert_eq!(count_rows(&db, "companies").await, 0);
 }
@@ -320,14 +320,14 @@ async fn an_after_commit_listener_error_never_undoes_the_commit() {
     ))])
     .await;
     let uow = db.uow(None, None).await;
-    let created = Company::create(&uow, acme()).await.unwrap();
+    let created = Company::create(&uow, agra()).await.unwrap();
     uow.commit().await.expect("the commit succeeds");
     assert_eq!(count_rows(&db, "companies").await, 1);
     assert!(created.exists());
 
     // Outside a unit of work the "-ed" listener runs at once: its error is
     // the operation's (the row is already written).
-    let error = Company::create(&*db, acme()).await.unwrap_err();
+    let error = Company::create(&*db, agra()).await.unwrap_err();
     assert_eq!(error.to_string(), "a Company hook failed: created refused");
 }
 
@@ -365,7 +365,7 @@ async fn a_panicking_after_commit_listener_is_contained() {
 
     let (_app, db, _clock) = app(vec![Box::new(Registering)]).await;
     let uow = db.uow(None, None).await;
-    Company::create(&uow, acme()).await.unwrap();
+    Company::create(&uow, agra()).await.unwrap();
     uow.commit()
         .await
         .expect("a listener's panic does not reach the committer");

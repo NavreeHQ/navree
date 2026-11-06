@@ -13,7 +13,7 @@ async fn under_row_level_security_a_real_workspace_and_a_ghost_answer_the_same()
     let real = world
         .outsider
         .post(EVERY)
-        .json(&json!({ "title": "X", "workspace_id": world.globex }))
+        .json(&json!({ "title": "X", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_error(403, None);
@@ -138,7 +138,7 @@ async fn a_table_name_with_capitals_is_asked_about_as_that_table() {
     world
         .member
         .post("/admin/api/resources/mixed")
-        .json(&json!({ "title": "X", "workspace_id": world.globex }))
+        .json(&json!({ "title": "X", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_error_code(403, "helm_workspace_refused");

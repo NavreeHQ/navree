@@ -176,11 +176,11 @@ async fn the_form_shows_values_and_where_they_come_from() {
     assert!(form.contains("role=\"switch\""), "{form}");
 
     // A workspace, by id: its values inherit the global ones.
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let form = text(
         &page(
             &admin,
-            &format!("/admin/settings/portal?level=workspace&target={acme}"),
+            &format!("/admin/settings/portal?level=workspace&target={agra}"),
         )
         .await
         .assert_status(200),
@@ -198,7 +198,7 @@ async fn the_form_shows_values_and_where_they_come_from() {
     page(&admin, "/admin/settings/portal?level=user&target=x")
         .await
         .assert_status(400);
-    page(&admin, "/admin/settings/portal?level=workspace&target=acme")
+    page(&admin, "/admin/settings/portal?level=workspace&target=agra")
         .await
         .assert_status(400);
 }
@@ -208,8 +208,8 @@ async fn saving_stores_only_the_changed_fields() {
     let app = settings_app().await;
     let (admin_id, admin) = admin(&app, "settings-admin", &["settings.manage"]).await;
     let settings = app.get::<Settings>().await;
-    let acme = Uuid::now_v7();
-    let url = format!("/admin/settings/portal?level=workspace&target={acme}");
+    let agra = Uuid::now_v7();
+    let url = format!("/admin/settings/portal?level=workspace&target={agra}");
 
     let response = submit(
         &admin,
@@ -227,7 +227,7 @@ async fn saving_stores_only_the_changed_fields() {
     .assert_status(303);
     assert_eq!(response.header("location"), Some(url.as_str()));
 
-    let scope = Scope::workspace(acme).in_organization(None);
+    let scope = Scope::workspace(agra).in_organization(None);
     let portal = settings.resolve::<PortalSettings>(scope).await.unwrap();
     assert!(portal.show_leaderboard);
     assert_eq!(portal.page_size, 40);
@@ -268,7 +268,7 @@ async fn saving_stores_only_the_changed_fields() {
     // Inherit makes one field follow the level above again.
     submit(
         &admin,
-        &format!("/admin/settings/portal/inherit?level=workspace&target={acme}"),
+        &format!("/admin/settings/portal/inherit?level=workspace&target={agra}"),
         &[("_inherit", "page_size")],
     )
     .await
@@ -278,7 +278,7 @@ async fn saving_stores_only_the_changed_fields() {
     assert_eq!(portal.source("page_size"), Some(Source::Default));
     submit(
         &admin,
-        &format!("/admin/settings/portal/inherit?level=workspace&target={acme}"),
+        &format!("/admin/settings/portal/inherit?level=workspace&target={agra}"),
         &[("_inherit", "colour")],
     )
     .await
@@ -317,8 +317,8 @@ async fn with_no_way_to_check_the_level_of_a_workspace_is_refused() {
         .build()
         .await;
     let (_, admin) = admin(&app, "settings-admin", &["settings.manage"]).await;
-    let acme = Uuid::now_v7();
-    let url = format!("/admin/settings/portal?level=workspace&target={acme}");
+    let agra = Uuid::now_v7();
+    let url = format!("/admin/settings/portal?level=workspace&target={agra}");
     let response = page(&admin, &url).await.assert_status(403);
     assert!(
         response.text().contains("WorkspaceModule"),

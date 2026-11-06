@@ -809,10 +809,10 @@ mod tests {
 
     #[test]
     fn a_resource_made_from_a_user_reads_back_as_the_same_user() {
-        let user = DirectoryUser::new("u1", "ada@acme.test")
-            .name("Ada", "Lovelace")
-            .display_name("Ada Lovelace")
-            .email("ada@acme.test")
+        let user = DirectoryUser::new("u1", "anu@acme.test")
+            .name("Anu", "Lakhotia")
+            .display_name("Anu Lakhotia")
+            .email("anu@acme.test")
             .phone("mobile", "+44 7700 900123")
             .title("Engineer")
             .department("Engineering")

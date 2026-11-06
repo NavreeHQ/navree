@@ -30,7 +30,7 @@ async fn the_metrics_route_shows_fleets_numbers() {
     }
     h.queue
         .dispatch(Export {
-            contact: "ada".into(),
+            contact: "anu".into(),
             password: "p".into(),
         })
         .await

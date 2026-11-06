@@ -1276,7 +1276,7 @@ mod tests {
     use crate::render::render;
 
     fn shell() -> Shell {
-        Shell::new("Acme")
+        Shell::new("Agra")
             .group(NavGroup::plain().item(NavItem::new("Home", "/").icon(icons::HOUSE)))
             .group(
                 NavGroup::new("Sales")
@@ -1313,7 +1313,7 @@ mod tests {
 
     #[test]
     fn a_live_group_is_a_region_its_stream_refreshes() {
-        let live = Shell::new("Acme").group(
+        let live = Shell::new("Agra").group(
             NavGroup::new("Inbox")
                 .item(NavItem::new("Open", "/inbox").count("12"))
                 .live(
@@ -1328,7 +1328,7 @@ mod tests {
         assert!(html.contains(r#"<div data-slot="sidebar-group" id="views" data-ui-region data-ui-src="/inbox/fragments/views" data-ui-live-src="/inbox/events" data-ui-live-event="conversations">"#), "{html}");
         assert!(view.uses().has(Uses::LIVE));
         // A name an event can't have is left out: the group follows every event.
-        let html = Shell::new("Acme")
+        let html = Shell::new("Agra")
             .group(NavGroup::plain().live("v", "/v", "/e", Some("open")))
             .page("x", "/")
             .to_view()
@@ -1365,7 +1365,7 @@ mod tests {
 
     #[test]
     fn flash_cookies_round_trip() {
-        let cookie = flash_cookie_toned(ToastTone::Success, "Deal \"Acme\" created; ok").unwrap();
+        let cookie = flash_cookie_toned(ToastTone::Success, "Deal \"Agra\" created; ok").unwrap();
         let text = cookie.to_str().unwrap();
         assert!(
             !text.split(';').next().unwrap()[FLASH_COOKIE.len() + 1..].contains([' ', '"']),
@@ -1374,7 +1374,7 @@ mod tests {
         let value = text.split(';').next().unwrap().split_once('=').unwrap().1;
         let input = format!("x={value}");
         let (_, decoded) = urlencoded::parse(input.as_bytes()).next().unwrap();
-        assert_eq!(decoded, "Deal \"Acme\" created; ok");
+        assert_eq!(decoded, "Deal \"Agra\" created; ok");
     }
 
     #[test]
@@ -1500,7 +1500,7 @@ mod tests {
     #[test]
     fn an_item_can_say_whether_it_is_the_current_page() {
         // Three links to one path that differ only in their query: the path can't tell them apart.
-        let shell = Shell::new("Acme").group(
+        let shell = Shell::new("Agra").group(
             NavGroup::plain()
                 .item(NavItem::new("All", "/log").icon(icons::LIST).current(false))
                 .item(
@@ -1578,7 +1578,7 @@ mod tests {
 
     #[test]
     fn there_is_no_shape_for_initials_in_an_avatar() {
-        let html = render(&Avatar::placeholder("Ada").into());
+        let html = render(&Avatar::placeholder("Anu").into());
         assert!(!html.contains(">A<"));
         assert!(html.contains("<svg"));
     }

@@ -618,9 +618,9 @@ macro_rules! fake_floats {
 fake_floats!(f32, f64);
 
 const FIRST_NAMES: &[&str] = &[
-    "Ada", "Alan", "Amara", "Anika", "Aria", "Arjun", "Beatriz", "Bilal", "Camille", "Carlos",
+    "Anu", "Arun", "Amara", "Anika", "Aria", "Arjun", "Beatriz", "Bilal", "Camille", "Carlos",
     "Chen", "Chiara", "Dalia", "Daniel", "Diego", "Elena", "Elif", "Emeka", "Farah", "Felix",
-    "Freya", "Grace", "Hana", "Hugo", "Ines", "Isaac", "Ivan", "Jamal", "Jana", "Jonas", "Kai",
+    "Freya", "Gauri", "Hana", "Hugo", "Ines", "Isaac", "Ivan", "Jamal", "Jana", "Jonas", "Kai",
     "Kavya", "Kenji", "Lara", "Leila", "Liam", "Lucia", "Malik", "Maya", "Mei", "Mila", "Nadia",
     "Navdeep", "Neha", "Nia", "Noah", "Olga", "Omar", "Priya", "Rafael", "Rosa", "Sana", "Sofia",
     "Tariq", "Theo", "Uma", "Vera", "Wen", "Yara", "Yusuf", "Zara",

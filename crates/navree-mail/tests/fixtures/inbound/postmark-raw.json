@@ -1,24 +1,24 @@
 {
-  "FromName": "Ada Lovelace",
+  "FromName": "Anu Lakhotia",
   "MessageStream": "inbound",
-  "From": "ada@example.com",
+  "From": "anu@example.com",
   "FromFull": {
-    "Email": "ada@example.com",
-    "Name": "Ada Lovelace",
+    "Email": "anu@example.com",
+    "Name": "Anu Lakhotia",
     "MailboxHash": ""
   },
-  "To": "\"Acme Support\" <reply+abc@in.acme.test>",
+  "To": "\"Agra Support\" <reply+abc@in.acme.test>",
   "ToFull": [
     {
       "Email": "reply+abc@in.acme.test",
-      "Name": "Acme Support",
+      "Name": "Agra Support",
       "MailboxHash": "abc"
     }
   ],
-  "Cc": "grace@example.com",
+  "Cc": "gauri@example.com",
   "CcFull": [
     {
-      "Email": "grace@example.com",
+      "Email": "gauri@example.com",
       "Name": "",
       "MailboxHash": ""
     }
@@ -31,7 +31,7 @@
   "ReplyTo": "",
   "MailboxHash": "abc",
   "Date": "Tue, 27 Oct 2026 10:14:00 +0100",
-  "TextBody": "Thanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Acme Support <support@acme.test> wrote:\n> We are sending someone over.\n",
+  "TextBody": "Thanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Agra Support <support@acme.test> wrote:\n> We are sending someone over.\n",
   "HtmlBody": "<p>Thanks, the fire is out now.</p>",
   "StrippedTextReply": "Thanks, the fire is out now.",
   "Tag": "",
@@ -74,5 +74,5 @@
       "ContentID": ""
     }
   ],
-  "RawEmail": "Return-Path: <ada@example.com>\nDelivered-To: reply+abc@in.acme.test\nReceived: from mail.example.com (mail.example.com [203.0.113.7])\n\tby mx.acme.test with ESMTPS id 4F2a; Tue, 27 Oct 2026 09:14:02 +0000\nMessage-ID: <CAF2reply-0001@mail.example.com>\nIn-Reply-To: <ticket-42@acme.test>\nReferences: <ticket-41@acme.test>\n <ticket-42@acme.test>\nDate: Tue, 27 Oct 2026 10:14:00 +0100\nFrom: Ada Lovelace <ada@example.com>\nTo: Acme Support <reply+abc@in.acme.test>\nCc: grace@example.com\nReply-To: Ada at home <ada@home.example>\nSubject: Re: [#42] Printer on fire\nMIME-Version: 1.0\nContent-Type: text/plain; charset=\"UTF-8\"\nContent-Transfer-Encoding: 7bit\nX-Ticket-Client: Navree Mail Test\nX-Ticket-Client: Second Value\n\nThanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Acme Support <support@acme.test> wrote:\n> We are sending someone over.\n> Please stay away from the printer.\n"
+  "RawEmail": "Return-Path: <anu@example.com>\nDelivered-To: reply+abc@in.acme.test\nReceived: from mail.example.com (mail.example.com [203.0.113.7])\n\tby mx.acme.test with ESMTPS id 4F2a; Tue, 27 Oct 2026 09:14:02 +0000\nMessage-ID: <CAF2reply-0001@mail.example.com>\nIn-Reply-To: <ticket-42@acme.test>\nReferences: <ticket-41@acme.test>\n <ticket-42@acme.test>\nDate: Tue, 27 Oct 2026 10:14:00 +0100\nFrom: Anu Lakhotia <anu@example.com>\nTo: Agra Support <reply+abc@in.acme.test>\nCc: gauri@example.com\nReply-To: Anu at home <anu@home.example>\nSubject: Re: [#42] Printer on fire\nMIME-Version: 1.0\nContent-Type: text/plain; charset=\"UTF-8\"\nContent-Transfer-Encoding: 7bit\nX-Ticket-Client: Navree Mail Test\nX-Ticket-Client: Second Value\n\nThanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Agra Support <support@acme.test> wrote:\n> We are sending someone over.\n> Please stay away from the printer.\n"
 }

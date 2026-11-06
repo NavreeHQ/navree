@@ -74,14 +74,14 @@ async fn pdf_renders_a_template_with_data() {
     let pdf = documents
         .pdf(
             "certificates/classic",
-            json!({"name": "Ada Lovelace", "course": "Engines", "completed_on": "today"}),
+            json!({"name": "Anu Lakhotia", "course": "Engines", "completed_on": "today"}),
         )
         .await
         .unwrap();
     assert!(
         pdf.text()
             .unwrap()
-            .contains("Ada Lovelace completed Engines on today.")
+            .contains("Anu Lakhotia completed Engines on today.")
     );
     assert!(documents.engine(EngineKind::Native).is_some());
 }
@@ -180,8 +180,8 @@ async fn queue_dispatches_the_render_job() {
         .dispatcher(recorder.clone());
     let queued = documents
         .queue(
-            Render::html("<p>Export for Ada</p>").data(json!({"who": "Ada"})),
-            "exports/ada.pdf",
+            Render::html("<p>Export for Anu</p>").data(json!({"who": "Anu"})),
+            "exports/anu.pdf",
         )
         .await
         .unwrap();
@@ -196,7 +196,7 @@ async fn queue_dispatches_the_render_job() {
     assert_eq!(envelope.options.timeout_secs, 300);
     let job: RenderDocument = serde_json::from_value(envelope.payload).unwrap();
     assert_eq!(job.id, queued.id);
-    assert_eq!(job.path, "exports/ada.pdf");
+    assert_eq!(job.path, "exports/anu.pdf");
     assert_eq!(
         <RenderDocument as navree_contracts::Job>::NAME,
         "documents.render"

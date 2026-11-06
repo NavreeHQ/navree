@@ -16,19 +16,19 @@ async fn a_member_limited_to_partitions_isnt_let_in_to_see_every_partition() {
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     let partition = uow
-        .scope(partitions.create(&uow, world.acme, NewPartition::named("East")))
+        .scope(partitions.create(&uow, world.agra, NewPartition::named("East")))
         .await
         .unwrap();
     uow.scope(partitions.grant(
         &uow,
-        world.acme,
+        world.agra,
         world.member_id,
         PartitionSelector::only([partition.id]),
     ))
     .await
     .unwrap();
     uow.commit().await.unwrap();
-    in_workspace(&world.member, world.acme, NOTES)
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_error_code(403, "helm_workspace_partitions");
@@ -36,18 +36,18 @@ async fn a_member_limited_to_partitions_isnt_let_in_to_see_every_partition() {
         .member
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
     assert!(response.set_cookie(WORKSPACE_COOKIE).is_none());
     // Given every partition again, they are back.
     let uow = db.uow(None, None).await;
-    uow.scope(partitions.grant(&uow, world.acme, world.member_id, PartitionSelector::All))
+    uow.scope(partitions.grant(&uow, world.agra, world.member_id, PartitionSelector::All))
         .await
         .unwrap();
     uow.commit().await.unwrap();
-    in_workspace(&world.member, world.acme, NOTES)
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200);
@@ -73,13 +73,13 @@ async fn a_pool_of_one_connection_doesnt_stop_a_form_that_names_its_workspace() 
     let world = world(app).await;
     world
         .member
-        .set_cookie(WORKSPACE_COOKIE, &world.acme.to_string());
-    join(&world.app, world.globex, world.member_id).await;
+        .set_cookie(WORKSPACE_COOKIE, &world.agra.to_string());
+    join(&world.app, world.gulati, world.member_id).await;
     let started = std::time::Instant::now();
     world
         .member
         .post(EVERY)
-        .json(&json!({ "title": "Small pool", "workspace_id": world.globex }))
+        .json(&json!({ "title": "Small pool", "workspace_id": world.gulati }))
         .send()
         .await
         .assert_status(201);
@@ -141,28 +141,28 @@ async fn a_row_a_bound_role_can_only_read_isnt_written_through_a_resource_across
     // reads alone doesn't allow, so to a write it isn't there.
     world
         .outsider
-        .get(&format!("{EVERY}/{}", world.globex_note))
+        .get(&format!("{EVERY}/{}", world.gulati_note))
         .send()
         .await
         .assert_status(200);
     world
         .outsider
-        .patch(&format!("{EVERY}/{}", world.globex_note))
+        .patch(&format!("{EVERY}/{}", world.gulati_note))
         .json(&json!({ "title": "Read, then written" }))
         .send()
         .await
         .assert_error(404, None);
     world
         .outsider
-        .delete(&format!("{EVERY}/{}", world.globex_note))
+        .delete(&format!("{EVERY}/{}", world.gulati_note))
         .send()
         .await
         .assert_error(404, None);
     assert_eq!(
-        note_in(&world.app, world.globex, world.globex_note)
+        note_in(&world.app, world.gulati, world.gulati_note)
             .await
             .unwrap()
             .title,
-        "Globex secret"
+        "Gulati secret"
     );
 }

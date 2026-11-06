@@ -1,10 +1,10 @@
 ---
 source: crates/navree-orm/tests/render/main.rs
-expression: "query(Query::from(deals().filter(Expr::raw(\"lower(title) = ? OR amount_cents = ?\",\n[\"acme\",\n\"5\"])).filter(col(\"id\").gt(val(1_i64))).filter(Expr::raw(\"a = ? OR b = ?\",\n[1_i64, 2]).not())))"
+expression: "query(Query::from(deals().filter(Expr::raw(\"lower(title) = ? OR amount_cents = ?\",\n[\"agra\",\n\"5\"])).filter(col(\"id\").gt(val(1_i64))).filter(Expr::raw(\"a = ? OR b = ?\",\n[1_i64, 2]).not())))"
 ---
 PostgreSQL: SELECT * FROM "deals" WHERE (lower(title) = $1 OR amount_cents = $2) AND "id" > $3 AND NOT (a = $4 OR b = $5)
-  values: [String("acme"), String("5"), I64(1), I64(1), I64(2)]
+  values: [String("agra"), String("5"), I64(1), I64(1), I64(2)]
 MySQL: SELECT * FROM `deals` WHERE (lower(title) = ? OR amount_cents = ?) AND `id` > ? AND NOT (a = ? OR b = ?)
-  values: [String("acme"), String("5"), I64(1), I64(1), I64(2)]
+  values: [String("agra"), String("5"), I64(1), I64(1), I64(2)]
 SQLite: SELECT * FROM "deals" WHERE (lower(title) = ? OR amount_cents = ?) AND "id" > ? AND NOT (a = ? OR b = ?)
-  values: [String("acme"), String("5"), I64(1), I64(1), I64(2)]
+  values: [String("agra"), String("5"), I64(1), I64(1), I64(2)]

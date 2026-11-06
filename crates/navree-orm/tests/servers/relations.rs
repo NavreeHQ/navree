@@ -317,7 +317,7 @@ pub async fn relations(db: Db, server: Server) {
         db,
         User {
             team_id: Some(team.id),
-            name: "Ada".into(),
+            name: "Anu".into(),
             ..User::default()
         },
     )
@@ -333,10 +333,10 @@ pub async fn relations(db: Db, server: Server) {
     )
     .await
     .unwrap();
-    let acme = Company::create(
+    let agra = Company::create(
         db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -345,8 +345,8 @@ pub async fn relations(db: Db, server: Server) {
     Company::create(
         db,
         Company {
-            parent_id: Some(acme.id),
-            name: "Acme Labs".into(),
+            parent_id: Some(agra.id),
+            name: "Agra Labs".into(),
             ..Company::default()
         },
     )
@@ -359,10 +359,10 @@ pub async fn relations(db: Db, server: Server) {
         amount_cents: cents,
         ..Deal::default()
     };
-    let renewal = Deal::create(db, deal("Renewal", 5_000, Some(acme.id), ada.id))
+    let renewal = Deal::create(db, deal("Renewal", 5_000, Some(agra.id), ada.id))
         .await
         .unwrap();
-    let upgrade = Deal::create(db, deal("Upgrade", 25_000, Some(acme.id), bob.id))
+    let upgrade = Deal::create(db, deal("Upgrade", 25_000, Some(agra.id), bob.id))
         .await
         .unwrap();
     let platform = Deal::create(db, deal("Platform", 90_000, None, ada.id))
@@ -402,7 +402,7 @@ pub async fn relations(db: Db, server: Server) {
         .unwrap();
     assert_eq!(titles(&deals), ["Renewal", "Upgrade", "Platform"]);
     let company = deals[0].loaded(Deal::company).unwrap().as_ref().unwrap();
-    assert_eq!(company.name, "Acme");
+    assert_eq!(company.name, "Agra");
     assert_eq!(company.loaded(Company::subsidiaries).unwrap().len(), 1);
     assert!(deals[2].loaded(Deal::company).unwrap().is_none());
     assert_eq!(deals[0].loaded(Deal::activities).unwrap().len(), 3);
@@ -563,7 +563,7 @@ pub async fn relations(db: Db, server: Server) {
     assert_eq!(deals[0].loaded(Tag::deals).unwrap().len(), 2);
 
     // Polymorphic relations.
-    acme.notes()
+    agra.notes()
         .create(
             db,
             Note {
@@ -590,14 +590,14 @@ pub async fn relations(db: Db, server: Server) {
         .await
         .unwrap();
     let notable = |index: usize| notes[index].loaded(Note::notable).unwrap().clone().unwrap();
-    assert_eq!(notable(0).downcast_ref::<Company>().unwrap().name, "Acme");
+    assert_eq!(notable(0).downcast_ref::<Company>().unwrap().name, "Agra");
     assert_eq!(
         notable(1).downcast_ref::<Team>().unwrap().name,
         "Enterprise"
     );
     let about_companies = Note::query()
         .where_has_morph("notable", MorphTypes::of::<Company>(), |q, _| {
-            q.where_(col("name").eq("Acme"))
+            q.where_(col("name").eq("Agra"))
         })
         .get(db)
         .await

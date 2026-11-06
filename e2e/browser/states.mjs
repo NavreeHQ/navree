@@ -220,7 +220,7 @@ export const custom = {
     await page.waitForTimeout(1500);
     const queued = await page.request.post(`${BASE_URL}/api/demo/jobs`, {
       data: { kind: 'newsletter', count: 2500 },
-      headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'acme' },
+      headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'agra' },
     });
     if (queued.status() !== 202) throw new Error(`the burst was refused: ${queued.status()}`);
     await page.waitForTimeout(5000);
@@ -239,7 +239,7 @@ export const custom = {
     if (ctx.phase === 'after') {
       const slow = await page.request.post(`${BASE_URL}/api/demo/jobs`, {
         data: { kind: 'slow', count: 240 },
-        headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'acme' },
+        headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'agra' },
       });
       if (slow.status() !== 202) throw new Error(`the slow jobs were refused: ${slow.status()}`);
       await page.goto(BASE_URL + '/_fleet', { waitUntil: 'load' });

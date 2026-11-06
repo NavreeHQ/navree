@@ -68,7 +68,7 @@ async fn error_file(client: &TestClient, id: Uuid) -> TestResponse {
 async fn an_upload_is_staged_previewed_and_applied() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
-    let file = b"Email,Name,Age,VIP\nada@example.com,Ada Lovelace,36,yes\nnot-an-email,Bob,x,no\nalan@example.com,Alan Turing,,0\n";
+    let file = b"Email,Name,Age,VIP\nada@example.com,Anu Lakhotia,36,yes\nnot-an-email,Bob,x,no\nalan@example.com,Arun Tiwari,,0\n";
     let uploaded = upload(&admin, "contacts.csv", file, &[])
         .await
         .assert_status(202)
@@ -111,7 +111,7 @@ async fn an_upload_is_staged_previewed_and_applied() {
     assert_eq!(page["data"][0]["status"], "valid");
     assert_eq!(
         page["data"][0]["values"],
-        json!({ "age": "36", "email": "ada@example.com", "name": "Ada Lovelace", "vip": "yes" })
+        json!({ "age": "36", "email": "anu@example.com", "name": "Anu Lakhotia", "vip": "yes" })
     );
     let invalid = admin
         .get(&format!("/api/imports/{id}/rows?status=invalid"))
@@ -135,8 +135,8 @@ async fn an_upload_is_staged_previewed_and_applied() {
     assert_eq!(
         stored_contacts(&app).await,
         [
-            contact("ada@example.com", "Ada Lovelace", Some(36), true),
-            contact("alan@example.com", "Alan Turing", None, false),
+            contact("anu@example.com", "Anu Lakhotia", Some(36), true),
+            contact("arun@example.com", "Arun Tiwari", None, false),
         ]
     );
 
@@ -273,14 +273,14 @@ async fn xlsx_files_are_read_with_typed_cells() {
         &["Email".into(), "Name".into(), "Age".into(), "Vip".into()],
         &[
             vec![
-                Cell::Text("ada@example.com".into()),
-                Cell::Text("Ada".into()),
+                Cell::Text("anu@example.com".into()),
+                Cell::Text("Anu".into()),
                 Cell::Int(36),
                 Cell::Bool(true),
             ],
             vec![
-                Cell::Text("alan@example.com".into()),
-                Cell::Text("Alan".into()),
+                Cell::Text("arun@example.com".into()),
+                Cell::Text("Arun".into()),
                 Cell::Float(41.0),
                 Cell::Empty,
             ],
@@ -295,8 +295,8 @@ async fn xlsx_files_are_read_with_typed_cells() {
     assert_eq!(
         stored_contacts(&app).await,
         [
-            contact("ada@example.com", "Ada", Some(36), true),
-            contact("alan@example.com", "Alan", Some(41), false),
+            contact("anu@example.com", "Anu", Some(36), true),
+            contact("arun@example.com", "Arun", Some(41), false),
         ]
     );
 }
@@ -309,7 +309,7 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
         &app,
         &admin,
         "export.csv",
-        b"Mail;Full name\nada@example.com;Ada\nalan@example.com;Alan\n",
+        b"Mail;Full name\nada@example.com;Anu\nalan@example.com;Arun\n",
         &[],
     )
     .await;
@@ -362,7 +362,7 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
         &app,
         &admin,
         "export.csv",
-        b"FULL NAME;mail\nGrace;grace@example.com\n",
+        b"FULL NAME;mail\nGrace;gauri@example.com\n",
         &[],
     )
     .await;
@@ -381,7 +381,7 @@ async fn a_mapping_can_come_with_the_upload() {
         &app,
         &admin,
         "x.csv",
-        b"A,B\nada@example.com,Ada\n",
+        b"A,B\nada@example.com,Anu\n",
         &[("mapping", r#"{"email": "A", "name": "B"}"#)],
     )
     .await;
@@ -395,10 +395,10 @@ async fn a_mapping_can_come_with_the_upload() {
 #[tokio::test]
 async fn duplicates_are_updated_skipped_or_refused() {
     let app = support::app().await;
-    seed(&app, &[("ada@example.com", "Ada", Some(30), false)]).await;
+    seed(&app, &[("anu@example.com", "Anu", Some(30), false)]).await;
     let admin = app.acting_as(principal(ADMIN));
     let file =
-        b"Email,Name\nADA@example.com,Ada Byron\nbob@example.com,Bob\nbob@example.com,Bobby\n";
+        b"Email,Name\nADA@example.com,Anu Bains\nbob@example.com,Bob\nbob@example.com,Bobby\n";
     let record = staged(&app, &admin, "c.csv", file, &[]).await;
     assert_eq!(record["counts"]["valid"], 1, "{record}");
     assert_eq!(record["counts"]["duplicate"], 1);
@@ -430,7 +430,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
     assert_eq!(
         stored_contacts(&app).await,
         [
-            contact("ada@example.com", "Ada Byron", None, false),
+            contact("anu@example.com", "Anu Bains", None, false),
             contact("bob@example.com", "Bob", None, false),
         ]
     );
@@ -445,7 +445,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
         csv_lines(errors.bytes()),
         [
             "Row,Email,Name,Errors",
-            "2,ADA@example.com,Ada Byron,A record with this key already exists",
+            "2,ANU@example.com,Anu Bains,A record with this key already exists",
             "3,bob@example.com,Bob,A record with this key already exists",
             "4,bob@example.com,Bobby,Repeats row 3",
         ]
@@ -889,7 +889,7 @@ async fn imports_run_from_code() {
         .upload(
             &uow,
             "contacts",
-            Upload::new("c.csv", "Mail,Who\nada@example.com,Ada\n"),
+            Upload::new("c.csv", "Mail,Who\nada@example.com,Anu\n"),
             UploadOptions::default()
                 .owner(ADMIN)
                 .mapping(Mapping::new().map("email", "Mail").map("name", "Who")),

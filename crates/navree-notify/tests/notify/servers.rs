@@ -298,8 +298,8 @@ async fn preference_flow(scratch: &Scratch) {
     let db = app.get::<Db>().await;
     let preferences = app.get::<NotificationPreferences>().await;
     let notifier = app.get::<Notifier>().await;
-    let acme = Uuid::now_v7();
-    let kolkata = Person::in_zone(Some("Asia/Kolkata")).of(acme);
+    let agra = Uuid::now_v7();
+    let kolkata = Person::in_zone(Some("Asia/Kolkata")).of(agra);
 
     // Two changes keep one row per owner; the document round-trips.
     preferences
@@ -315,7 +315,7 @@ async fn preference_flow(scratch: &Scratch) {
         .unwrap();
     preferences
         .update(
-            &PreferenceOwner::workspace(acme),
+            &PreferenceOwner::workspace(agra),
             &json!({"channels": {"slack": false}}),
         )
         .await
@@ -324,18 +324,18 @@ async fn preference_flow(scratch: &Scratch) {
         NotificationPreference::query().count(&*db).await.unwrap(),
         2
     );
-    let resolved = preferences.resolve(&kolkata, Some(acme)).await.unwrap();
+    let resolved = preferences.resolve(&kolkata, Some(agra)).await.unwrap();
     assert_eq!(resolved.own, own);
     assert!(!resolved.allows("deals", Channel::Slack));
     assert!(!resolved.allows("deals", Channel::WhatsApp));
 
     // 01:30 in Kolkata: the digest mail waits for 09:00, the text for 07:00.
     notifier
-        .send(&kolkata, DealUpdate::new("Acme"))
+        .send(&kolkata, DealUpdate::new("Agra"))
         .await
         .unwrap();
     notifier
-        .send(&kolkata, Mention { by: "Ada".into() })
+        .send(&kolkata, Mention { by: "Anu".into() })
         .await
         .unwrap();
     // Both texts and the mention's mail wait for the quiet hours, the deal
@@ -355,7 +355,7 @@ async fn preference_flow(scratch: &Scratch) {
     assert_eq!(rows[0].release_at, at("2026-10-29T01:30:00Z"));
     assert_eq!(rows[3].release_at, at("2026-10-29T03:30:00Z"));
     let job = rows[3].send_job().unwrap();
-    assert_eq!(job.workspace_id, Some(acme));
+    assert_eq!(job.workspace_id, Some(agra));
     assert_eq!(job.category.as_deref(), Some("deals"));
     assert_eq!(
         NotificationDeferral::query()

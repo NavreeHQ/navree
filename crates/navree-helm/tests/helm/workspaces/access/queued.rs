@@ -48,13 +48,13 @@ async fn with_nothing_to_check_a_queued_action_is_refused_when_it_is_asked_for()
         .module(navree_helm::HelmModule::from_config())
         .build()
         .await;
-    let acme = Uuid::now_v7();
-    let note = seed(&app, acme, "Acme Note").await;
+    let agra = Uuid::now_v7();
+    let note = seed(&app, agra, "Agra Note").await;
     let editor = editor(&app).await;
     // What runs now runs as the app entered it.
     editor
         .post(&format!("{NOTES}/actions/shout"))
-        .header("x-test-entered", acme.to_string())
+        .header("x-test-entered", agra.to_string())
         .json(&json!({ "ids": [note] }))
         .send()
         .await
@@ -62,7 +62,7 @@ async fn with_nothing_to_check_a_queued_action_is_refused_when_it_is_asked_for()
     // What would run later is refused now, with the reason, and isn't queued.
     let response = editor
         .post(&format!("{NOTES}/actions/whisper"))
-        .header("x-test-entered", acme.to_string())
+        .header("x-test-entered", agra.to_string())
         .json(&json!({ "ids": [note] }))
         .send()
         .await
@@ -85,8 +85,8 @@ async fn a_user_the_gate_refuses_is_told_so_when_they_ask() {
     world
         .outsider
         .post(&format!("{NOTES}/actions/whisper"))
-        .header("x-test-entered", world.acme.to_string())
-        .json(&json!({ "ids": [world.acme_note] }))
+        .header("x-test-entered", world.agra.to_string())
+        .json(&json!({ "ids": [world.agra_note] }))
         .send()
         .await
         .assert_error_code(403, "helm_workspace_refused");
@@ -95,8 +95,8 @@ async fn a_user_the_gate_refuses_is_told_so_when_they_ask() {
     world
         .member
         .post(&format!("{NOTES}/actions/whisper"))
-        .header("x-test-entered", world.acme.to_string())
-        .json(&json!({ "ids": [world.acme_note] }))
+        .header("x-test-entered", world.agra.to_string())
+        .json(&json!({ "ids": [world.agra_note] }))
         .send()
         .await
         .assert_status(200)
@@ -112,10 +112,10 @@ async fn a_user_the_gate_refuses_is_told_so_when_they_ask() {
         .await
         .unwrap();
     assert_eq!(
-        note_in(&world.app, world.acme, world.acme_note)
+        note_in(&world.app, world.agra, world.agra_note)
             .await
             .unwrap()
             .title,
-        "acme secret"
+        "agra secret"
     );
 }

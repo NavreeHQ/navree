@@ -140,7 +140,7 @@ impl Module for NotesModule {
 async fn records_of_any_subject_are_loaded_and_checked() {
     let app = builder().module(NotesModule).build().await;
     let owner = user();
-    let mine = keep_note(owner.user_id, "Call Acme back");
+    let mine = keep_note(owner.user_id, "Call Agra back");
     let theirs = keep_note(Uuid::now_v7(), "Someone else's");
     let mcp = McpTestClient::new(app.acting_as(owner.clone()))
         .initialize()
@@ -151,7 +151,7 @@ async fn records_of_any_subject_are_loaded_and_checked() {
         .call_tool("read_note", json!({ "note_id": mine }))
         .await
         .assert_ok();
-    assert_eq!(read.text(), "Call Acme back");
+    assert_eq!(read.text(), "Call Agra back");
     mcp.call_tool("read_note", json!({ "note_id": theirs }))
         .await
         .assert_error(403, "Forbidden");
@@ -164,7 +164,7 @@ async fn records_of_any_subject_are_loaded_and_checked() {
         .read_resource(&format!("notes://{mine}"))
         .await
         .assert_ok();
-    assert_eq!(note.text().as_deref(), Some("Call Acme back"));
+    assert_eq!(note.text().as_deref(), Some("Call Agra back"));
     mcp.read_resource(&format!("notes://{theirs}"))
         .await
         .assert_error(403, "Forbidden");

@@ -519,7 +519,7 @@ async fn seed_rep_with_deal(app: &TestApp) -> (Uuid, Uuid) {
         &*db,
         Company {
             id: Uuid::now_v7(),
-            name: "Acme".to_owned(),
+            name: "Agra".to_owned(),
             deleted_at: None,
         },
     )
@@ -530,7 +530,7 @@ async fn seed_rep_with_deal(app: &TestApp) -> (Uuid, Uuid) {
         &*db,
         Deal {
             id: Uuid::now_v7(),
-            title: "Acme renewal".to_owned(),
+            title: "Agra renewal".to_owned(),
             amount_cents: 500_000,
             currency: "USD".to_owned(),
             stage: "negotiation".to_owned(),
@@ -567,9 +567,9 @@ async fn deal_by_id_respects_access() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.deal.title", json!("Acme renewal"))
+        .assert_json_path("data.deal.title", json!("Agra renewal"))
         .assert_json_path("data.deal.stage", json!("NEGOTIATION"))
-        .assert_json_path("data.deal.company.name", json!("Acme"));
+        .assert_json_path("data.deal.company.name", json!("Agra"));
 
     app.shutdown().await.unwrap();
 }
@@ -638,7 +638,7 @@ async fn the_documented_resolver_lists_moves_and_hides_margins() {
         .await;
     assert_eq!(
         response.data.into_json().unwrap(),
-        json!({ "deals": [{ "title": "Acme renewal", "amountCents": 500000 }] })
+        json!({ "deals": [{ "title": "Agra renewal", "amountCents": 500000 }] })
     );
     let too_many = schema
         .execute(

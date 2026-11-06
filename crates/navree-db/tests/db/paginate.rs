@@ -137,7 +137,7 @@ async fn page_query_clamps_per_page() {
     let defaults = page_query("/x").await.unwrap();
     assert_eq!((defaults.page, defaults.per_page), (1, 15));
 
-    let clamped = page_query("/x?per_page=500&page=3&search=acme")
+    let clamped = page_query("/x?per_page=500&page=3&search=agra")
         .await
         .unwrap();
     assert_eq!((clamped.page, clamped.per_page), (3, 100));

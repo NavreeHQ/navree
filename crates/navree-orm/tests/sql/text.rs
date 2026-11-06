@@ -23,8 +23,8 @@ fn ignoring_case_combines_with_other_conditions() {
             .where_(Company::ID.gt(3_i64))
             .where_(
                 Company::NAME
-                    .contains_ignore_case("acme")
-                    .or(Company::COUNTRY.contains_ignore_case("acme"))
+                    .contains_ignore_case("agra")
+                    .or(Company::COUNTRY.contains_ignore_case("agra"))
             )
             .where_not(Company::NAME.eq_ignore_case("ACME Holdings"))
     ));

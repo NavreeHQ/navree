@@ -41,7 +41,7 @@ async fn eager_loads_batch_one_query_per_relation_and_level() {
     assert!(selects[1].contains("FROM \"companies\""), "{}", selects[1]);
     // Integer keys are written into the statement, each once.
     assert!(
-        selects[1].contains(&format!("IN ({}, {})", crm.acme.id, crm.globex.id)),
+        selects[1].contains(&format!("IN ({}, {})", crm.agra.id, crm.gulati.id)),
         "{}",
         selects[1]
     );
@@ -49,8 +49,8 @@ async fn eager_loads_batch_one_query_per_relation_and_level() {
     assert!(selects[3].contains("FROM \"activities\""), "{}", selects[3]);
 
     assert_eq!(titles(&deals), ["Renewal", "Upgrade", "Platform", "Orphan"]);
-    assert_eq!(company_of(&deals[0]).unwrap().name, "Acme");
-    assert_eq!(company_of(&deals[2]).unwrap().name, "Globex");
+    assert_eq!(company_of(&deals[0]).unwrap().name, "Agra");
+    assert_eq!(company_of(&deals[2]).unwrap().name, "Gulati");
     // Nothing related: loaded as `None`.
     assert!(deals[3].relation_loaded("company"));
     assert!(company_of(&deals[3]).is_none());
@@ -60,7 +60,7 @@ async fn eager_loads_batch_one_query_per_relation_and_level() {
         .unwrap()
         .as_ref()
         .unwrap();
-    assert_eq!(owner.name, "Ada");
+    assert_eq!(owner.name, "Anu");
 
     let counts: Vec<usize> = deals.iter().map(|deal| activities_of(deal).len()).collect();
     assert_eq!(counts, [3, 1, 0, 0]);
@@ -139,15 +139,15 @@ async fn constrained_eager_loads_limit_per_parent() {
             q.where_(Activity::KIND.eq("call"))
         })
         .with_constrained("company", |q: Builder<Company>| {
-            q.where_(Company::NAME.ne("Acme"))
+            q.where_(Company::NAME.ne("Agra"))
         })
         .order_by(Deal::ID)
         .get(&t.db)
         .await
         .unwrap();
     assert_eq!(activities_of(&deals[0]).len(), 2);
-    assert!(company_of(&deals[0]).is_none(), "Acme is filtered out");
-    assert_eq!(company_of(&deals[2]).unwrap().name, "Globex");
+    assert!(company_of(&deals[0]).is_none(), "Agra is filtered out");
+    assert_eq!(company_of(&deals[2]).unwrap().name, "Gulati");
 
     // A constraint of the wrong type is an error naming both types.
     let error = Deal::query()
@@ -163,9 +163,9 @@ async fn eager_loads_select_columns_and_need_the_matching_keys() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
     t.log.clear();
-    let acme = Company::query()
+    let agra = Company::query()
         .with("contacts:id,company_id,name")
-        .where_key(crm.acme.id)
+        .where_key(crm.agra.id)
         .first(&t.db)
         .await
         .unwrap()
@@ -178,7 +178,7 @@ async fn eager_loads_select_columns_and_need_the_matching_keys() {
         "{}",
         selects[1]
     );
-    let contacts = acme.loaded(Company::contacts).unwrap();
+    let contacts = agra.loaded(Company::contacts).unwrap();
     assert_eq!(contacts.map(|c| c.name.clone()), ["Alice", "Carol"]);
     assert!(
         contacts.iter().all(|c| c.email.is_empty()),
@@ -252,7 +252,7 @@ async fn records_load_relations_afterwards() {
 
     deal.load(&t.db, "company.owner").await.unwrap();
     let company = company_of(&deal).unwrap();
-    assert_eq!(company.name, "Acme");
+    assert_eq!(company.name, "Agra");
     assert!(company.relation_loaded("owner"));
 
     deal.load_constrained(&t.db, Deal::activities, |q| {
@@ -272,7 +272,7 @@ async fn records_load_relations_afterwards() {
     assert_eq!(activities_of(&deal).len(), 2, "kept as loaded");
     assert_eq!(
         deal.loaded(Deal::owner).unwrap().as_ref().unwrap().name,
-        "Ada"
+        "Anu"
     );
     deal.load_missing(&t.db, ["company.contacts"])
         .await
@@ -296,7 +296,7 @@ async fn collections_load_relations_afterwards() {
     t.log.clear();
     deals.load(&t.db, "company").await.unwrap();
     assert_eq!(t.log.selects().len(), 1, "one query for every record");
-    assert_eq!(company_of(&deals[1]).unwrap().name, "Acme");
+    assert_eq!(company_of(&deals[1]).unwrap().name, "Agra");
 
     deals
         .load_constrained(&t.db, "activities", |q: Builder<Activity>| {
@@ -385,25 +385,25 @@ async fn eager_loads_respect_the_related_models_global_scopes() {
     assert!(upgrade.delete(&t.db).await.unwrap());
 
     // A soft-deleted deal is not loaded...
-    let acme = Company::query()
+    let agra = Company::query()
         .with("deals")
-        .where_key(crm.acme.id)
+        .where_key(crm.agra.id)
         .first(&t.db)
         .await
         .unwrap()
         .unwrap();
-    let deals = acme.loaded(Company::deals).unwrap();
+    let deals = agra.loaded(Company::deals).unwrap();
     assert_eq!(titles(deals), ["Renewal"]);
     // ...unless the constraint asks for trashed records.
-    let acme = Company::query()
+    let agra = Company::query()
         .with_constrained(Company::deals, |q| q.with_trashed())
-        .where_key(crm.acme.id)
+        .where_key(crm.agra.id)
         .first(&t.db)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
-        titles(acme.loaded(Company::deals).unwrap()),
+        titles(agra.loaded(Company::deals).unwrap()),
         ["Renewal", "Upgrade"]
     );
 
@@ -424,30 +424,30 @@ async fn children_get_a_snapshot_of_their_parent() {
     let crm = seed(&t.db).await;
     t.log.clear();
     // `Company::deals` names its inverse, `company`.
-    let acme = Company::query()
+    let agra = Company::query()
         .with("deals")
-        .where_key(crm.acme.id)
+        .where_key(crm.agra.id)
         .first(&t.db)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(t.log.selects().len(), 2);
-    for deal in acme.loaded(Company::deals).unwrap().iter() {
+    for deal in agra.loaded(Company::deals).unwrap().iter() {
         let parent = company_of(deal).expect("set from the parent");
-        assert_eq!(parent.id, crm.acme.id);
+        assert_eq!(parent.id, crm.agra.id);
         // A snapshot without relations: no reference cycle.
         assert!(parent.relations().is_empty());
     }
     // Querying the relation of a record sets it too.
-    let deals = crm.acme.deals().get(&t.db).await.unwrap();
+    let deals = crm.agra.deals().get(&t.db).await.unwrap();
     assert!(deals.iter().all(|deal| company_of(deal).is_some()));
     // Turned off for one query.
-    let deals = crm.acme.deals().without_inverse().get(&t.db).await.unwrap();
+    let deals = crm.agra.deals().without_inverse().get(&t.db).await.unwrap();
     assert!(deals.iter().all(|deal| !deal.relation_loaded("company")));
     // A related record made through the relation gets it as well.
-    let made = crm.acme.deals().make(Deal::new("Draft", 1)).unwrap();
-    assert_eq!(made.company_id, Some(crm.acme.id));
-    assert_eq!(company_of(&made).unwrap().name, "Acme");
+    let made = crm.agra.deals().make(Deal::new("Draft", 1)).unwrap();
+    assert_eq!(made.company_id, Some(crm.agra.id));
+    assert_eq!(company_of(&made).unwrap().name, "Agra");
 }
 
 #[tokio::test]
@@ -468,11 +468,11 @@ async fn has_one_and_relations_on_other_columns_than_keys() {
             .as_ref()
             .map(|contact| contact.name.clone())
     };
-    assert!(contact(&companies[0]).is_some(), "one of Acme's two");
+    assert!(contact(&companies[0]).is_some(), "one of Agra's two");
     assert_eq!(contact(&companies[1]), None);
     assert_eq!(contact(&companies[2]).as_deref(), Some("Dave"));
     assert_eq!(
-        crm.globex
+        crm.gulati
             .contact()
             .first(&t.db)
             .await
@@ -484,10 +484,10 @@ async fn has_one_and_relations_on_other_columns_than_keys() {
 
     // Text columns as the keys: the parent's `code`, the contacts'
     // `company_code`.
-    let mut acme = Company::find_or_fail(&t.db, crm.acme.id).await.unwrap();
-    acme.code = Some("ACM-1".into());
-    acme.save(&t.db).await.unwrap();
-    let filed = acme
+    let mut agra = Company::find_or_fail(&t.db, crm.agra.id).await.unwrap();
+    agra.code = Some("ACM-1".into());
+    agra.save(&t.db).await.unwrap();
+    let filed = agra
         .coded_contacts()
         .create(
             &t.db,
@@ -530,9 +530,9 @@ async fn has_one_and_relations_on_other_columns_than_keys() {
             .as_ref()
             .unwrap()
             .name,
-        "Acme"
+        "Agra"
     );
-    assert!(contacts[0].coded_company().is(&acme));
+    assert!(contacts[0].coded_company().is(&agra));
     let coded = Contact::query()
         .has("coded_company")
         .count(&t.db)

@@ -29,7 +29,7 @@ pub const MAX_SLUG_LEN: usize = 63;
 pub struct NewWorkspace {
     /// The display name (1 to 100 characters).
     pub name: String,
-    /// The slug; derived from the name when `None` (`Acme Inc.` → `acme-inc`,
+    /// The slug; derived from the name when `None` (`Agra Inc.` → `agra-inc`,
     /// with `-2`, `-3`, ... when taken).
     pub slug: Option<String>,
 }
@@ -717,7 +717,7 @@ mod tests {
 
     #[test]
     fn slugs_are_derived_from_names() {
-        assert_eq!(slugify("Acme Inc."), "acme-inc");
+        assert_eq!(slugify("Agra Inc."), "agra-inc");
         assert_eq!(slugify("  Zürich -- Sales  "), "z-rich-sales");
         assert_eq!(slugify("???"), "workspace");
         assert_eq!(slugify(&"a".repeat(80)).len(), 48);
@@ -725,11 +725,11 @@ mod tests {
 
     #[test]
     fn slugs_are_checked() {
-        assert!(check_slug("acme").is_ok());
-        assert!(check_slug("acme-2").is_ok());
-        assert!(check_slug("Acme").is_err());
-        assert!(check_slug("acme--x").is_err());
-        assert!(check_slug("-acme").is_err());
+        assert!(check_slug("agra").is_ok());
+        assert!(check_slug("agra-2").is_ok());
+        assert!(check_slug("Agra").is_err());
+        assert!(check_slug("agra--x").is_err());
+        assert!(check_slug("-agra").is_err());
         assert!(check_slug("").is_err());
         assert!(check_slug(&"a".repeat(64)).is_err());
         assert!(check_slug("0199a5b2-0000-7000-8000-000000000001").is_err());
@@ -737,7 +737,7 @@ mod tests {
 
     #[test]
     fn names_are_trimmed_and_checked() {
-        assert_eq!(check_name("  Acme ").unwrap(), "Acme");
+        assert_eq!(check_name("  Agra ").unwrap(), "Agra");
         assert!(check_name("   ").is_err());
         assert!(check_name(&"x".repeat(101)).is_err());
     }

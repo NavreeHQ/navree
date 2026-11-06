@@ -42,7 +42,7 @@ async fn tokens_are_stored_encrypted_and_refreshed_when_expired() {
         "github",
         "code",
         SocialUser::new("github", "1")
-            .email(Some("ada@example.com"), true)
+            .email(Some("anu@example.com"), true)
             .token(
                 ProviderToken::new("gho_access")
                     .refresh_token("ghr_refresh")
@@ -122,7 +122,7 @@ async fn a_token_without_an_expiry_or_refresh_token() {
         "github",
         "code",
         SocialUser::new("github", "1")
-            .email(Some("ada@example.com"), true)
+            .email(Some("anu@example.com"), true)
             .token(ProviderToken::new("gho_forever")),
     );
     let body = sign_in(&app, "github", "code")
@@ -147,7 +147,7 @@ async fn without_store_tokens_nothing_is_kept() {
         "github",
         "code",
         SocialUser::new("github", "1")
-            .email(Some("ada@example.com"), true)
+            .email(Some("anu@example.com"), true)
             .token(ProviderToken::new("gho_access")),
     );
     let body = sign_in(&app, "github", "code")

@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn links_are_rewritten_and_others_kept() {
         let html = r##"<p><a href="https://acme.test/a?x=1&amp;y=2">A</a> <A HREF='http://acme.test/b'>B</A>
-            <a href="mailto:ada@example.com">mail</a> <a href="#top">top</a>
+            <a href="mailto:anu@example.com">mail</a> <a href="#top">top</a>
             <a data-no-track href="https://acme.test/c">C</a> <abbr>no</abbr> <a class="x">none</a></p>"##;
         let out = rewrite_links(html, |url| format!("T({url})"));
         assert!(
@@ -197,7 +197,7 @@ mod tests {
             "{out}"
         );
         assert!(
-            out.contains(r#"<a href="mailto:ada@example.com">"#),
+            out.contains(r#"<a href="mailto:anu@example.com">"#),
             "{out}"
         );
         assert!(out.contains(r##"<a href="#top">"##), "{out}");

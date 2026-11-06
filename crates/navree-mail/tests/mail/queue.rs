@@ -10,8 +10,8 @@ use serde_json::json;
 use crate::support::{FROM, MailTemplates, array_options, dispatcher, view_module};
 
 fn welcome() -> TemplateMail {
-    TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-        .context(json!({ "name": "Ada" }))
+    TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+        .context(json!({ "name": "Anu" }))
 }
 
 async fn mailer(app: &App) -> Arc<Mailer> {
@@ -71,10 +71,10 @@ async fn queue_dispatches_send_job_and_job_sends() {
     assert!(key.starts_with("navree-mail-"), "{key}");
     let expected = Message::new()
         .from(FROM)
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Welcome")
-        .html("<p>Welcome, Ada!</p>")
-        .text("Welcome, Ada!")
+        .html("<p>Welcome, Anu!</p>")
+        .text("Welcome, Anu!")
         .idempotency_key(key);
     assert_eq!(envelope.payload["message"], json!(expected));
 

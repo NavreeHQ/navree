@@ -375,7 +375,7 @@ fn urls_read_what_apps_and_services_write() {
     let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     // %3A and a literal colon both separate issuer and account.
     for label in [
-        "Navree:ada%40example.com",
+        "Navree:anu%40example.com",
         "Navree%3Aada%40example.com",
         "Navree%3aada@example.com",
     ] {
@@ -384,19 +384,19 @@ fn urls_read_what_apps_and_services_write() {
         ))
         .unwrap();
         assert_eq!(totp.issuer(), Some("Navree"));
-        assert_eq!(totp.account(), "ada@example.com");
+        assert_eq!(totp.account(), "anu@example.com");
     }
     // The issuer from the parameter only, spaces as %20 or +.
     let totp = Totp::from_url(&format!(
-        "otpauth://totp/ada?secret={secret}&issuer=My+App%20Co"
+        "otpauth://totp/anu?secret={secret}&issuer=My+App%20Co"
     ))
     .unwrap();
     assert_eq!(totp.issuer(), Some("My App Co"));
-    assert_eq!(totp.account(), "ada");
+    assert_eq!(totp.account(), "anu");
     // Upper-case scheme and type, lower-case secret, parameters in any
     // order, an unknown parameter and a fragment.
     let totp = Totp::from_url(&format!(
-        "OTPAUTH://TOTP/Acme:bob?foo=bar&period=60&algorithm=sha256&digits=8&secret={}#top",
+        "OTPAUTH://TOTP/Agra:bob?foo=bar&period=60&algorithm=sha256&digits=8&secret={}#top",
         secret.to_lowercase()
     ))
     .unwrap();
@@ -405,7 +405,7 @@ fn urls_read_what_apps_and_services_write() {
         (8, 60, Algorithm::Sha256)
     );
     // A percent-escape in the account is decoded once.
-    let totp = Totp::from_url(&format!("otpauth://totp/Acme:100%2525?secret={secret}")).unwrap();
+    let totp = Totp::from_url(&format!("otpauth://totp/Agra:100%2525?secret={secret}")).unwrap();
     assert_eq!(totp.account(), "100%25");
 }
 
@@ -414,27 +414,27 @@ fn bad_urls_are_refused() {
     let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     for url in [
         "".to_owned(),
-        "https://totp/Acme:bob?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".to_owned(),
-        format!("otpauth://hotp/Acme:bob?secret={secret}&counter=1"),
+        "https://totp/Agra:bob?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".to_owned(),
+        format!("otpauth://hotp/Agra:bob?secret={secret}&counter=1"),
         format!("otpauth://totp?secret={secret}"),
-        "otpauth://totp/Acme:bob".to_owned(),
-        "otpauth://totp/Acme:bob?secret=".to_owned(),
-        "otpauth://totp/Acme:bob?secret=!!!!".to_owned(),
+        "otpauth://totp/Agra:bob".to_owned(),
+        "otpauth://totp/Agra:bob?secret=".to_owned(),
+        "otpauth://totp/Agra:bob?secret=!!!!".to_owned(),
         // Too short a secret (80 bits).
-        "otpauth://totp/Acme:bob?secret=GEZDGNBVGY3TQOJQ".to_owned(),
-        format!("otpauth://totp/Acme:bob?secret={secret}&digits=5"),
-        format!("otpauth://totp/Acme:bob?secret={secret}&digits=x"),
-        format!("otpauth://totp/Acme:bob?secret={secret}&period=0"),
-        format!("otpauth://totp/Acme:bob?secret={secret}&period=-5"),
-        format!("otpauth://totp/Acme:bob?secret={secret}&algorithm=MD5"),
+        "otpauth://totp/Agra:bob?secret=GEZDGNBVGY3TQOJQ".to_owned(),
+        format!("otpauth://totp/Agra:bob?secret={secret}&digits=5"),
+        format!("otpauth://totp/Agra:bob?secret={secret}&digits=x"),
+        format!("otpauth://totp/Agra:bob?secret={secret}&period=0"),
+        format!("otpauth://totp/Agra:bob?secret={secret}&period=-5"),
+        format!("otpauth://totp/Agra:bob?secret={secret}&algorithm=MD5"),
         // The label and the parameter name different issuers.
-        format!("otpauth://totp/Acme:bob?secret={secret}&issuer=Other"),
+        format!("otpauth://totp/Agra:bob?secret={secret}&issuer=Other"),
         // Invalid UTF-8 and truncated escapes.
-        format!("otpauth://totp/Acme:%FF?secret={secret}"),
-        format!("otpauth://totp/Acme:bob%?secret={secret}"),
-        format!("otpauth://totp/Acme:bob%2?secret={secret}"),
+        format!("otpauth://totp/Agra:%FF?secret={secret}"),
+        format!("otpauth://totp/Agra:bob%?secret={secret}"),
+        format!("otpauth://totp/Agra:bob%2?secret={secret}"),
         // A second colon in the account.
-        format!("otpauth://totp/Acme:a:b?secret={secret}"),
+        format!("otpauth://totp/Agra:a:b?secret={secret}"),
     ] {
         assert!(Totp::from_url(&url).is_err(), "{url}");
     }
@@ -443,9 +443,9 @@ fn bad_urls_are_refused() {
 #[test]
 fn urls_round_trip_awkward_names() {
     for (issuer, account) in [
-        ("Navree", "ada@example.com"),
-        ("My App", "grace+tag@example.org"),
-        ("Acme & Sons", "o'brien@example.com"),
+        ("Navree", "anu@example.com"),
+        ("My App", "gauri+tag@example.org"),
+        ("Agra & Sons", "o'brien@example.com"),
         ("Café 42", "zoë@exämple.com"),
         ("100%", "a b/c?d=e&f#g"),
         ("日本", "ユーザー"),

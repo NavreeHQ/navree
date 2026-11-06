@@ -31,12 +31,12 @@ use crate::{Documents, DocumentsError, Pdf};
 /// let fake = DocumentsFake::new();
 /// let documents = fake.documents(); // install with TestApp::builder().override_value(Arc::new(documents))
 /// let pdf = documents
-///     .pdf("certificates/classic", json!({ "name": "Ada", "score": 98 }))
+///     .pdf("certificates/classic", json!({ "name": "Anu", "score": 98 }))
 ///     .await
 ///     .unwrap();
-/// assert_eq!(pdf.text().unwrap(), "certificates/classic\nname: Ada\nscore: 98");
+/// assert_eq!(pdf.text().unwrap(), "certificates/classic\nname: Anu\nscore: 98");
 /// fake.assert_rendered("certificates/classic");
-/// fake.assert_rendered_with("certificates/classic", |render| render.data["name"] == "Ada");
+/// fake.assert_rendered_with("certificates/classic", |render| render.data["name"] == "Anu");
 /// # });
 /// ```
 #[derive(Clone, Debug, Default)]

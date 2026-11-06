@@ -323,7 +323,7 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
     types.push(row(4));
     for (column, value) in [
         FormulaNumber(72.0),
-        FormulaText(" Ada! ".into()),
+        FormulaText(" Anu! ".into()),
         FormulaBool(true),
         FormulaError(0x07),
         FormulaNumber(46082.0),

@@ -526,11 +526,11 @@ mod tests {
     #[test]
     fn urls_are_redacted() {
         assert_eq!(
-            redact_url("mongodb://ada:secret@db1:27017,db2:27017/crm?authSource=admin"),
-            "mongodb://ada:***@db1:27017,db2:27017/crm?authSource=admin"
+            redact_url("mongodb://anu:secret@db1:27017,db2:27017/crm?authSource=admin"),
+            "mongodb://anu:***@db1:27017,db2:27017/crm?authSource=admin"
         );
         assert_eq!(redact_url("mongodb://db/crm"), "mongodb://db/crm");
-        let options = MongoOptions::new("mongodb+srv://ada:secret@cluster.example.net/crm");
+        let options = MongoOptions::new("mongodb+srv://anu:secret@cluster.example.net/crm");
         assert!(!format!("{options:?}").contains("secret"));
     }
 
@@ -574,7 +574,7 @@ mod tests {
             "other"
         );
         let error = options
-            .client_options("mongodb://ada:pw@")
+            .client_options("mongodb://anu:pw@")
             .await
             .unwrap_err();
         assert!(!error.to_string().contains(":pw@"), "{error}");

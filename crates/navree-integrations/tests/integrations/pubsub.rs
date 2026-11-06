@@ -97,7 +97,7 @@ async fn pubsub_pushes_a_gmail_notification_to_the_route_and_the_mailbox_is_read
     // two messages it names.
     h.fake.api().on(
         Method::GET,
-        &format!("{GMAIL}/users/ada@acme.test/history*"),
+        &format!("{GMAIL}/users/anu@acme.test/history*"),
         FakeResponse::new(200).json(&json!({
             "history": [
                 { "id": "1001", "messagesAdded": [{ "message": { "id": "m1" } }] },
@@ -109,7 +109,7 @@ async fn pubsub_pushes_a_gmail_notification_to_the_route_and_the_mailbox_is_read
     for (id, subject) in [("m1", "First"), ("m2", "Second")] {
         h.fake.api().on(
             Method::GET,
-            &format!("{GMAIL}/users/ada@acme.test/messages/{id}*"),
+            &format!("{GMAIL}/users/anu@acme.test/messages/{id}*"),
             FakeResponse::new(200)
                 .json(&json!({ "id": id, "raw": URL_SAFE_NO_PAD.encode(message(subject)) })),
         );
@@ -144,7 +144,7 @@ async fn pubsub_pushes_a_gmail_notification_to_the_route_and_the_mailbox_is_read
     .await;
 
     // Gmail publishes `{emailAddress, historyId}` base64-encoded.
-    let data = json!({ "emailAddress": "ada@acme.test", "historyId": "1005" }).to_string();
+    let data = json!({ "emailAddress": "anu@acme.test", "historyId": "1005" }).to_string();
     let published = client()
         .post(format!("{pubsub}/v1/{TOPIC}:publish"))
         .json(&json!({ "messages": [{ "data": STANDARD.encode(data) }] }))

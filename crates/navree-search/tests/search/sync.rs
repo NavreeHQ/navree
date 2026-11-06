@@ -29,18 +29,18 @@ async fn inline_sync_indexes_committed_writes() {
     let app = support::app("memory", "inline").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();
     settle(&app).await;
     search.assert_indexed::<Contact>(ada.id).await;
-    assert_eq!(found(&search, "lovelace").await, [ada.id.to_string()]);
+    assert_eq!(found(&search, "lakhotia").await, [ada.id.to_string()]);
 
     // An update replaces the document.
     support::update(&db, &ada, |c| c.last_name = "Byron".into()).await;
     settle(&app).await;
-    assert!(found(&search, "lovelace").await.is_empty());
+    assert!(found(&search, "lakhotia").await.is_empty());
     assert_eq!(found(&search, "byron").await, [ada.id.to_string()]);
 
     // A soft delete removes it.
@@ -57,8 +57,8 @@ async fn deletes_and_rollbacks() {
     let [ada, grace] = insert_contacts(
         &db,
         vec![
-            new_contact("Ada", "Lovelace"),
-            new_contact("Grace", "Hopper"),
+            new_contact("Anu", "Lakhotia"),
+            new_contact("Gauri", "Hundal"),
         ],
     )
     .await
@@ -77,7 +77,7 @@ async fn deletes_and_rollbacks() {
         .unwrap();
     uow.rollback().await.unwrap();
     settle(&app).await;
-    assert_eq!(found(&search, "hopper").await, [grace.id.to_string()]);
+    assert_eq!(found(&search, "hundal").await, [grace.id.to_string()]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -89,7 +89,7 @@ async fn queued_sync_records_a_search_sync_job_in_the_commit() {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();
@@ -104,7 +104,7 @@ async fn queued_sync_records_a_search_sync_job_in_the_commit() {
     // A rolled-back unit of work queues nothing.
     fake.clear();
     let uow = db.uow(None, None).await;
-    Contact::create(&uow, new_contact("Grace", "Hopper"))
+    Contact::create(&uow, new_contact("Gauri", "Hundal"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -117,7 +117,7 @@ async fn queued_sync_jobs_run_on_the_queue_and_collapse() {
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let queue = app.get::<Queue>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();
@@ -132,7 +132,7 @@ async fn queued_sync_jobs_run_on_the_queue_and_collapse() {
 
     queue.run_pending().await.unwrap();
     assert_eq!(found(&search, "king").await, [ada.id.to_string()]);
-    assert!(found(&search, "lovelace").await.is_empty());
+    assert!(found(&search, "lakhotia").await.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -143,8 +143,8 @@ async fn sync_off_leaves_indexes_to_reindex_and_import() {
     let [ada, grace] = insert_contacts(
         &db,
         vec![
-            new_contact("Ada", "Lovelace"),
-            new_contact("Grace", "Hopper"),
+            new_contact("Anu", "Lakhotia"),
+            new_contact("Gauri", "Hundal"),
         ],
     )
     .await
@@ -165,7 +165,7 @@ async fn without_syncing_pauses_the_observer() {
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let rows = search
-        .without_syncing(insert_contacts(&db, vec![new_contact("Ada", "Lovelace")]))
+        .without_syncing(insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")]))
         .await;
     settle(&app).await;
     search.assert_not_indexed::<Contact>(rows[0].id).await;
@@ -173,7 +173,7 @@ async fn without_syncing_pauses_the_observer() {
     search.assert_indexed::<Contact>(rows[0].id).await;
 
     // Outside the block syncing is back.
-    let [grace] = insert_contacts(&db, vec![new_contact("Grace", "Hopper")])
+    let [grace] = insert_contacts(&db, vec![new_contact("Gauri", "Hundal")])
         .await
         .try_into()
         .unwrap();
@@ -186,7 +186,7 @@ async fn raw_writes_need_a_reindex() {
     let app = support::app("memory", "inline").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();
@@ -213,14 +213,14 @@ async fn hand_written_documents_read_related_rows_and_can_opt_out() {
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let workspace = Uuid::now_v7();
-    let [acme] = insert(&db, vec![new_company(workspace, "Acme Rockets")])
+    let [agra] = insert(&db, vec![new_company(workspace, "Agra Rockets")])
         .await
         .try_into()
         .unwrap();
     let [renewal] = insert(
         &db,
         vec![Deal {
-            company_id: Some(acme.id),
+            company_id: Some(agra.id),
             ..new_deal("Renewal", "negotiation", 1_000_000)
         }],
     )
@@ -248,9 +248,9 @@ async fn workspace_scoped_changes_carry_their_workspace() {
     insert(
         &db,
         vec![
-            new_company(w1, "Acme"),
-            new_company(w2, "Globex"),
-            new_company(w1, "Initech"),
+            new_company(w1, "Agra"),
+            new_company(w2, "Gulati"),
+            new_company(w1, "Indrani"),
         ],
     )
     .await;
@@ -302,7 +302,7 @@ async fn queued_sync_without_a_queue_goes_to_the_dispatcher() {
         .await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();
@@ -315,7 +315,7 @@ async fn queued_sync_without_a_queue_goes_to_the_dispatcher() {
 
     // A rolled-back unit of work dispatches nothing.
     let uow = db.uow(None, None).await;
-    Contact::create(&uow, new_contact("Grace", "Hopper"))
+    Contact::create(&uow, new_contact("Gauri", "Hundal"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -331,7 +331,7 @@ async fn queued_sync_without_a_queue_or_dispatcher_syncs_inline() {
     let app = without_a_queue().build().await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let [ada] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")])
+    let [ada] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")])
         .await
         .try_into()
         .unwrap();

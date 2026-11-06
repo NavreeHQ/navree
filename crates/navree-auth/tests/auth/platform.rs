@@ -32,7 +32,7 @@ async fn platform_login(client: &TestClient, email: &str, password: &str) -> Tes
 #[tokio::test]
 async fn platform_routes_are_off_by_default() {
     let app = support::app().await;
-    platform_login(&app.client(), "ada@example.com", PASSWORD)
+    platform_login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_error(404, None);
 }
@@ -113,7 +113,7 @@ async fn app_sessions_and_other_users_never_reach_the_platform() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = platform_app(&clock, sink.clone()).await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     enable_two_factor(&app, &clock, &user).await;
     let client = app.client();
 
@@ -131,7 +131,7 @@ async fn app_sessions_and_other_users_never_reach_the_platform() {
         .assert_error(403, "A platform session is required");
 
     // Not an administrator, or a wrong password: the same answer.
-    platform_login(&client, "ada@example.com", PASSWORD)
+    platform_login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_error(401, "Invalid credentials");
     platform_login(&client, "nobody@example.com", PASSWORD)

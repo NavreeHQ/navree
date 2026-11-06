@@ -13,7 +13,7 @@ use crate::support::World;
 async fn a_one_time_payment_is_created_paid_and_reported() {
     let world = World::new().await;
     let ada = world.user("Harpreet Kaur", "harpreet@example.in").await;
-    let acme = world.workspace(ada.id, "Grewal Traders").await;
+    let agra = world.workspace(ada.id, "Grewal Traders").await;
     let billing = world.billing().await;
     let log = world.log().await;
     assert!(billing.supports(Capability::OneTimePayments));
@@ -21,7 +21,7 @@ async fn a_one_time_payment_is_created_paid_and_reported() {
 
     let payment = billing
         .payment(Money::inr(149_900), "Annual support, Ludhiana office")
-        .billable(&acme)
+        .billable(&agra)
         .reference("INV-2026-0042")
         .customer_phone("+919876543210")
         .metadata("order", "42")
@@ -39,7 +39,7 @@ async fn a_one_time_payment_is_created_paid_and_reported() {
     let fake = world.fake().await;
     let recorded = fake.assert_payment(|p| p.reference == "INV-2026-0042");
     assert_eq!(recorded.metadata["billable_type"], "workspace");
-    assert_eq!(recorded.metadata["billable_id"], acme.id.to_string());
+    assert_eq!(recorded.metadata["billable_id"], agra.id.to_string());
     assert_eq!(recorded.metadata["order"], "42");
     assert_eq!(recorded.metadata["navree_kind"], "payment");
 
@@ -58,7 +58,7 @@ async fn a_one_time_payment_is_created_paid_and_reported() {
         json!({ "amount": 149_900, "currency": "inr" })
     );
     assert_eq!(paid["billable_type"], "workspace");
-    assert_eq!(paid["billable_id"], json!(acme.id));
+    assert_eq!(paid["billable_id"], json!(agra.id));
     assert_eq!(paid["payment_id"], json!(recorded.payment_id));
     assert_eq!(paid["metadata"]["order"], "42");
 }

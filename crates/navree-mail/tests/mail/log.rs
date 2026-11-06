@@ -48,7 +48,7 @@ async fn log_at(level: Level) -> String {
     let _guard = tracing::subscriber::set_default(subscriber);
     let message = Message::new()
         .from("app@example.com")
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Reset your password")
         .text("https://app.example.com/reset?token=tok_secret_123");
 
@@ -61,7 +61,7 @@ async fn log_at(level: Level) -> String {
 async fn log_transport_logs_the_envelope_but_not_the_body_at_info() {
     let output = log_at(Level::INFO).await;
 
-    assert!(output.contains("ada@example.com"), "{output}");
+    assert!(output.contains("anu@example.com"), "{output}");
     assert!(output.contains("Reset your password"), "{output}");
     assert!(!output.contains("tok_secret_123"), "{output}");
 }

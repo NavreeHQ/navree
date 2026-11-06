@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn rows_fill_missing_fields_with_null() {
-        let document = bson::doc! { "_id": 1, "name": "Acme", "extra": true };
+        let document = bson::doc! { "_id": 1, "name": "Agra", "extra": true };
         let columns = vec!["_id".to_owned(), "name".to_owned(), "country".to_owned()];
         let row = document_row(document.clone(), Some(&columns));
         assert_eq!(row.columns(), ["_id", "name", "country"]);

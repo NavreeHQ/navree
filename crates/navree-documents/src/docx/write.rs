@@ -992,13 +992,13 @@ mod tests {
     fn report() -> Docx {
         Docx::new()
             .title("Quarterly audit report")
-            .author("Acme Ltd")
+            .author("Agra Ltd")
             .heading(1, "Quarterly audit report")
             .heading(2, "Summary")
             .paragraph(
                 Paragraph::new()
                     .text("Prepared for ")
-                    .bold("Acme Ltd")
+                    .bold("Agra Ltd")
                     .text(" by ")
                     .italic("the audit team")
                     .text("."),
@@ -1015,7 +1015,7 @@ mod tests {
             .page_break()
             .paragraph(Paragraph::from("Appendix").align(Align::End))
             .paragraph(Run::new("Line one\nLine two").size(9.0).color("#555555"))
-            .header("Acme Ltd - confidential")
+            .header("Agra Ltd - confidential")
             .footer_page_numbers()
     }
 
@@ -1068,7 +1068,7 @@ mod tests {
         let file = report().build().unwrap();
         assert_eq!(
             file.text().unwrap(),
-            "Quarterly audit report\nSummary\nPrepared for Acme Ltd by the audit team.\n\
+            "Quarterly audit report\nSummary\nPrepared for Agra Ltd by the audit team.\n\
              Every control was tested\nTwo findings are open\nRotate the keys\nRestore a backup\n\
              Control\tStatus\nMulti-factor sign-in\tPassed\nBackups restored\tOpen\n[image]\n\u{c}\n\
              Appendix\nLine one\nLine two"

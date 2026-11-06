@@ -94,7 +94,7 @@ mod tests {
 
     fn setup() -> (Arc<Memory>, Prefixed) {
         let memory = Arc::new(Memory::new());
-        let prefixed = Prefixed::new(memory.clone(), "tenants/acme".to_owned());
+        let prefixed = Prefixed::new(memory.clone(), "tenants/agra".to_owned());
         (memory, prefixed)
     }
 
@@ -107,7 +107,7 @@ mod tests {
         upload.finish().await.unwrap();
 
         assert_eq!(
-            memory.read("tenants/acme/docs/a.txt", None).await.unwrap(),
+            memory.read("tenants/agra/docs/a.txt", None).await.unwrap(),
             "a"
         );
         assert_eq!(prefixed.read("docs/b.txt", None).await.unwrap(), "b");
@@ -121,7 +121,7 @@ mod tests {
         ));
         prefixed.delete("docs/a.txt").await.unwrap();
         assert!(matches!(
-            memory.head("tenants/acme/docs/a.txt").await,
+            memory.head("tenants/agra/docs/a.txt").await,
             Err(StoreError::NotFound)
         ));
     }
@@ -130,15 +130,15 @@ mod tests {
     async fn listings_leave_the_prefix_out_and_other_prefixes_alone() {
         let (memory, prefixed) = setup();
         memory
-            .put("tenants/acme/docs/a.txt", Bytes::from("a"))
+            .put("tenants/agra/docs/a.txt", Bytes::from("a"))
             .await
             .unwrap();
         memory
-            .put("tenants/acme/b.txt", Bytes::from("b"))
+            .put("tenants/agra/b.txt", Bytes::from("b"))
             .await
             .unwrap();
         memory
-            .put("tenants/acme2/c.txt", Bytes::from("c"))
+            .put("tenants/agra2/c.txt", Bytes::from("c"))
             .await
             .unwrap();
         memory
@@ -163,6 +163,6 @@ mod tests {
     #[test]
     fn it_names_its_prefix_and_its_store() {
         let (_, prefixed) = setup();
-        assert_eq!(prefixed.to_string(), "Prefixed(tenants/acme, Memory)");
+        assert_eq!(prefixed.to_string(), "Prefixed(tenants/agra, Memory)");
     }
 }

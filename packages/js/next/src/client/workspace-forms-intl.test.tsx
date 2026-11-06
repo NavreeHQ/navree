@@ -9,34 +9,34 @@ afterEach(() => writeWorkspaceCookie(undefined));
 
 function Switcher() {
   const { workspace, setWorkspace } = useWorkspace();
-  return <button onClick={() => setWorkspace("globex")}>{workspace ?? "none"}</button>;
+  return <button onClick={() => setWorkspace("gulati")}>{workspace ?? "none"}</button>;
 }
 
 describe("workspaces", () => {
   it("starts from the server's workspace and switches through the cookie", () => {
     const onChange = vi.fn();
     render(
-      <WorkspaceProvider initial="acme" onChange={onChange}>
+      <WorkspaceProvider initial="agra" onChange={onChange}>
         <Switcher />
       </WorkspaceProvider>,
     );
-    expect(screen.getByRole("button").textContent).toBe("acme");
+    expect(screen.getByRole("button").textContent).toBe("agra");
 
     act(() => screen.getByRole("button").click());
 
-    expect(screen.getByRole("button").textContent).toBe("globex");
-    expect(readWorkspaceCookie()).toBe("globex");
-    expect(onChange).toHaveBeenCalledWith("globex");
+    expect(screen.getByRole("button").textContent).toBe("gulati");
+    expect(readWorkspaceCookie()).toBe("gulati");
+    expect(onChange).toHaveBeenCalledWith("gulati");
   });
 
   it("reads the cookie when the server didn't say", () => {
-    writeWorkspaceCookie("initech");
+    writeWorkspaceCookie("indrani");
     render(
       <WorkspaceProvider>
         <Switcher />
       </WorkspaceProvider>,
     );
-    expect(screen.getByRole("button").textContent).toBe("initech");
+    expect(screen.getByRole("button").textContent).toBe("indrani");
     writeWorkspaceCookie(undefined);
     expect(readWorkspaceCookie()).toBeUndefined();
   });

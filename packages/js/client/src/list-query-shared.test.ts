@@ -292,7 +292,7 @@ describe("the builder", () => {
     const text = listQuery()
       .perPage(25)
       .page(2)
-      .search("  acme corp ")
+      .search("  agra corp ")
       .sort("-created_at", "name")
       .where("amount", "gte", 100)
       .where("stage", "won")
@@ -300,7 +300,7 @@ describe("the builder", () => {
       .toString();
     expect(text).toBe(
       "filter%5Bamount%5D%5Bgte%5D=100&filter%5Bamount%5D%5Blte%5D=900&filter%5Bstage%5D=won" +
-        "&sort=-created_at%2Cname&search=acme+corp&page=2&per_page=25",
+        "&sort=-created_at%2Cname&search=agra+corp&page=2&per_page=25",
     );
   });
 

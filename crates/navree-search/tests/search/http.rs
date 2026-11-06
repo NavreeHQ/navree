@@ -66,8 +66,8 @@ async fn controllers_return_search_pages() {
     insert_contacts(
         &db,
         vec![
-            new_contact("Ada", "Lovelace"),
-            new_contact("Grace", "Hopper"),
+            new_contact("Anu", "Lakhotia"),
+            new_contact("Gauri", "Hundal"),
         ],
     )
     .await;
@@ -79,11 +79,11 @@ async fn controllers_return_search_pages() {
         .await
         .assert_status(200)
         .assert_json_path("meta.total", json!(1))
-        .assert_json_path("data.0.first_name", json!("Ada"));
+        .assert_json_path("data.0.first_name", json!("Anu"));
 
     app.client()
         .get("/api/v1/contacts/search")
-        .query(&[("q", "ada"), ("by", "first_name")])
+        .query(&[("q", "anu"), ("by", "first_name")])
         .send()
         .await
         .assert_error(
@@ -105,7 +105,7 @@ async fn an_unreachable_engine_is_a_503() {
         .await;
     app.client()
         .get("/api/v1/contacts/search")
-        .query(&[("q", "ada")])
+        .query(&[("q", "anu")])
         .send()
         .await
         .assert_error(503, "Search is unavailable. Try again shortly.");

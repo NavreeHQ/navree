@@ -31,7 +31,7 @@ use crate::{
 /// if flags.active::<AiSummaries>(&scope).await? {
 ///     // ...
 /// }
-/// flags.activate::<NewPipeline>(FlagScope::workspace(acme.id)).await?;
+/// flags.activate::<NewPipeline>(FlagScope::workspace(agra.id)).await?;
 /// flags.rollout::<NewPipeline>(Rollout::percent(10).of_workspaces()).await?;
 /// ```
 ///

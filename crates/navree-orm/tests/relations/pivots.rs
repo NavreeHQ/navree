@@ -478,8 +478,8 @@ async fn polymorphic_pivots_carry_the_morph_type() {
         .await
         .unwrap();
     // The same key under another type: kept apart by the type column.
-    assert_eq!(crm.acme.id, crm.renewal.id);
-    crm.acme
+    assert_eq!(crm.agra.id, crm.renewal.id);
+    crm.agra
         .labels()
         .attach(&t.db, [crm.vip.id, crm.q1.id])
         .await
@@ -505,7 +505,7 @@ async fn polymorphic_pivots_carry_the_morph_type() {
     assert_eq!(titles(&deals), ["Renewal"]);
     let companies = crm.vip.labeled_companies().get(&t.db).await.unwrap();
     assert_eq!(companies.len(), 1);
-    assert_eq!(companies[0].name, "Acme");
+    assert_eq!(companies[0].name, "Agra");
     let tagged = Tag::query()
         .has("labeled_companies")
         .order_by(Tag::ID)
@@ -516,7 +516,7 @@ async fn polymorphic_pivots_carry_the_morph_type() {
 
     // Detaching only removes rows of the parent's type.
     assert_eq!(
-        crm.acme.labels().detach(&t.db, [crm.vip.id]).await.unwrap(),
+        crm.agra.labels().detach(&t.db, [crm.vip.id]).await.unwrap(),
         1
     );
     assert_eq!(crm.renewal.labels().count(&t.db).await.unwrap(), 2);

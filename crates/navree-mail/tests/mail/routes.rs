@@ -51,7 +51,7 @@ async fn clicks_go_through_a_signed_redirect() {
     let report = mail
         .mailer()
         .await
-        .deliver(&promo("ada@example.com"))
+        .deliver(&promo("anu@example.com"))
         .await
         .unwrap();
     let id = report.delivery_id.unwrap();
@@ -60,7 +60,7 @@ async fn clicks_go_through_a_signed_redirect() {
     let link = attribute(&html, "href");
     assert!(
         link.starts_with(&format!(
-            "https://links.acme.test/mail/t/c/{}?u=https%3A%2F%2Facme.test%2Fpromo%3Fa%3D1%26b%3D2&expires=",
+            "https://links.acme.test/mail/t/c/{}?u=https%3A%2F%2Fagra.test%2Fpromo%3Fa%3D1%26b%3D2&expires=",
             id.simple()
         )),
         "{link}"
@@ -90,7 +90,7 @@ async fn the_redirect_goes_to_the_original_link() {
     let mail = tracked().await;
     mail.mailer()
         .await
-        .send_message(promo("ada@example.com"))
+        .send_message(promo("anu@example.com"))
         .await
         .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
@@ -110,7 +110,7 @@ async fn the_open_image_records_an_open() {
     let report = mail
         .mailer()
         .await
-        .deliver(&promo("ada@example.com"))
+        .deliver(&promo("anu@example.com"))
         .await
         .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
@@ -139,7 +139,7 @@ async fn tampered_tracking_links_are_not_found() {
     let mail = tracked().await;
     mail.mailer()
         .await
-        .send_message(promo("ada@example.com"))
+        .send_message(promo("anu@example.com"))
         .await
         .unwrap();
     let html = mail.fake.sent()[0].html.clone().unwrap();
@@ -209,8 +209,8 @@ async fn sent_to_ada(mail: &MailApp) -> Uuid {
     mail.mailer()
         .await
         .deliver(
-            &TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-                .context(json!({ "name": "Ada" })),
+            &TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+                .context(json!({ "name": "Anu" })),
         )
         .await
         .unwrap()
@@ -238,7 +238,7 @@ fn mailgun_body(key: &str, timestamp: i64) -> Value {
         "event-data": {
             "event": "failed",
             "severity": "permanent",
-            "recipient": "ada@example.com",
+            "recipient": "anu@example.com",
             "timestamp": 1_793_088_000.5,
             "message": { "headers": { "message-id": "fake-1" } },
             "delivery-status": { "description": "No such user" },
@@ -277,7 +277,7 @@ async fn mailgun_events_are_verified_and_recorded() {
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         suppressions
-            .is_suppressed(None, "ada@example.com")
+            .is_suppressed(None, "anu@example.com")
             .await
             .unwrap()
     );
@@ -292,7 +292,7 @@ async fn resend_events_are_verified_with_their_svix_signature() {
     let body = json!({
         "type": "email.complained",
         "created_at": "2026-10-27T10:00:00.000Z",
-        "data": { "email_id": "fake-1", "to": ["ada@example.com"] },
+        "data": { "email_id": "fake-1", "to": ["anu@example.com"] },
     })
     .to_string();
     let timestamp = Utc::now().timestamp().to_string();
@@ -330,7 +330,7 @@ async fn postmark_events_need_the_token() {
     let body = json!({
         "RecordType": "Delivery",
         "MessageID": "fake-1",
-        "Recipient": "ada@example.com",
+        "Recipient": "anu@example.com",
         "DeliveredAt": "2026-10-27T10:00:00Z",
     });
     let basic =
@@ -358,7 +358,7 @@ async fn postmark_events_need_the_token() {
         .client()
         .post("/api/mail/webhooks/postmark?token=pm-token")
         .json(
-            &json!({ "RecordType": "Open", "MessageID": "fake-1", "Recipient": "ada@example.com" }),
+            &json!({ "RecordType": "Open", "MessageID": "fake-1", "Recipient": "anu@example.com" }),
         )
         .send()
         .await
@@ -518,7 +518,7 @@ async fn ses_messages_that_cannot_be_trusted_record_nothing() {
         bounce["Message"]
             .as_str()
             .unwrap()
-            .replace("ada@example.com", "grace@example.com")
+            .replace("anu@example.com", "gauri@example.com")
     );
     post_ses(&mail, "ses-token", &tampered)
         .await
@@ -605,7 +605,7 @@ async fn the_delivery_log_is_listed_and_shown() {
     let (mail, user) = admin().await;
     let id = sent_to_ada(&mail).await;
     mail.fake
-        .bounce(mail.app.ctx(), "ada@example.com")
+        .bounce(mail.app.ctx(), "anu@example.com")
         .await
         .unwrap();
     let client = mail.app.client().acting_as(principal(user));

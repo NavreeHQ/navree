@@ -16,10 +16,10 @@ use uuid::Uuid;
 async fn text_answers_with_who_answered_and_the_usage() {
     let fake = AiFake::new();
     let ai = fake.ai();
-    fake.respond(FakeReply::text("Acme is in negotiation.").with_usage(120, 9));
+    fake.respond(FakeReply::text("Agra is in negotiation.").with_usage(120, 9));
 
     let response = ai
-        .text("Summarize the Acme deal")
+        .text("Summarize the Agra deal")
         .system("You write two-sentence updates.")
         .model("fast")
         .max_tokens(200)
@@ -27,8 +27,8 @@ async fn text_answers_with_who_answered_and_the_usage() {
         .await
         .unwrap();
 
-    assert_eq!(response.text, "Acme is in negotiation.");
-    assert_eq!(response.to_string(), "Acme is in negotiation.");
+    assert_eq!(response.text, "Agra is in negotiation.");
+    assert_eq!(response.to_string(), "Agra is in negotiation.");
     assert_eq!(response.model, "fast");
     assert_eq!(response.provider, "fake");
     assert_eq!(response.usage.input_tokens, 120);
@@ -40,19 +40,19 @@ async fn text_answers_with_who_answered_and_the_usage() {
     assert_eq!(request.system(), Some("You write two-sentence updates."));
     assert_eq!(request.max_tokens(), 200);
     assert_eq!(request.user(), Some(Uuid::nil()));
-    assert_eq!(request.last_user_message(), "Summarize the Acme deal");
+    assert_eq!(request.last_user_message(), "Summarize the Agra deal");
     assert!(request.tools().is_empty());
 }
 
 #[tokio::test]
 async fn earlier_turns_continue_a_conversation() {
     let fake = AiFake::new();
-    fake.respond(FakeReply::text("Acme renewal options"));
+    fake.respond(FakeReply::text("Agra renewal options"));
 
     fake.ai()
         .text(vec![
-            Message::user("Draft a one-line subject for the Acme renewal email."),
-            Message::assistant("Your Acme renewal: two options for next year"),
+            Message::user("Draft a one-line subject for the Agra renewal email."),
+            Message::assistant("Your Agra renewal: two options for next year"),
             Message::user("Shorter, and without the colon."),
         ])
         .await
@@ -132,17 +132,17 @@ async fn a_request_nothing_answers_fails_naming_the_prompt() {
 async fn respond_when_answers_matching_requests_every_time() {
     let fake = AiFake::new();
     fake.respond_when(
-        |r| r.last_user_message().contains("Globex"),
-        FakeReply::text("Globex!"),
+        |r| r.last_user_message().contains("Gulati"),
+        FakeReply::text("Gulati!"),
     )
     .respond(FakeReply::text("queued"));
     let ai = fake.ai();
 
-    assert_eq!(ai.text("About Globex").await.unwrap().text, "Globex!");
-    assert_eq!(ai.text("About Globex again").await.unwrap().text, "Globex!");
+    assert_eq!(ai.text("About Gulati").await.unwrap().text, "Gulati!");
+    assert_eq!(ai.text("About Gulati again").await.unwrap().text, "Gulati!");
     assert_eq!(ai.text("Something else").await.unwrap().text, "queued");
     fake.assert_prompted(|r| r.last_user_message() == "Something else");
-    fake.assert_not_prompted(|r| r.last_user_message() == "Initech");
+    fake.assert_not_prompted(|r| r.last_user_message() == "Indrani");
     fake.assert_prompt_count(3);
 }
 

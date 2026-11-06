@@ -12,7 +12,7 @@
 //! let deals = Deal::factory()
 //!     .count(3)
 //!     .state(DealFactory::won)
-//!     .for_(Company::factory().set(Company::NAME, "Acme"), Deal::COMPANY_ID)
+//!     .for_(Company::factory().set(Company::NAME, "Agra"), Deal::COMPANY_ID)
 //!     .has(Activity::factory().count(2), Activity::DEAL_ID)
 //!     .create(&db)
 //!     .await?;

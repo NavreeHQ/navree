@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn a_custom_sheet_sets_every_token_and_nothing_else() {
         let theme = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
+            ThemeId::parse("agra").unwrap(),
             "x}body{display:none",
             *Theme::ROSE.spec(),
         )
@@ -532,8 +532,8 @@ mod tests {
     #[test]
     fn the_sheet_route_serves_a_form_and_refuses_everything_else() {
         let theme = Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::VIOLET.spec(),
         )
         .unwrap();

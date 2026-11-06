@@ -129,7 +129,7 @@ async fn admins_set_the_global_state_rollout_and_kill_switch() {
 async fn admins_manage_overrides() {
     let world = World::new().await;
     let admin = admin(&world).await;
-    let (ada, acme) = (Uuid::now_v7(), Uuid::now_v7());
+    let (ada, agra) = (Uuid::now_v7(), Uuid::now_v7());
 
     world
         .as_user(admin)
@@ -141,7 +141,7 @@ async fn admins_manage_overrides() {
     let body = world
         .as_user(admin)
         .put("/api/admin/flags/new-pipeline/overrides")
-        .json(&json!({"workspace_id": acme, "active": false}))
+        .json(&json!({"workspace_id": agra, "active": false}))
         .send()
         .await
         .assert_status(200)
@@ -151,7 +151,7 @@ async fn admins_manage_overrides() {
         body["overrides"],
         json!([
             {"flag": "new-pipeline", "scope_type": "user", "scope_id": ada, "active": true},
-            {"flag": "new-pipeline", "scope_type": "workspace", "scope_id": acme, "active": false},
+            {"flag": "new-pipeline", "scope_type": "workspace", "scope_id": agra, "active": false},
         ])
     );
     let flags = world.flags().await;

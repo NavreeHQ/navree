@@ -1111,8 +1111,8 @@ mod tests {
             not,
         };
         assert_eq!(
-            compile(like("acme%", false, false)).unwrap(),
-            doc! { "title": { "$regex": "^acme", "$options": "is" } }
+            compile(like("agra%", false, false)).unwrap(),
+            doc! { "title": { "$regex": "^agra", "$options": "is" } }
         );
         assert_eq!(
             compile(like("%1+1%", true, true)).unwrap(),
@@ -1274,11 +1274,11 @@ mod tests {
         );
         assert_eq!(
             compile(contains(
-                serde_json::json!({ "level": 2, "by": "ada" }),
+                serde_json::json!({ "level": 2, "by": "anu" }),
                 true
             ))
             .unwrap(),
-            doc! { "$nor": [{ "meta.tags.by": "ada", "meta.tags.level": 2 }] }
+            doc! { "$nor": [{ "meta.tags.by": "anu", "meta.tags.level": 2 }] }
         );
         let length = |op: &str| Where::JsonLength {
             column: ColumnRef::parse("meta->tags"),

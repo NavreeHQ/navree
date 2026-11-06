@@ -105,7 +105,7 @@ impl ImportController {
     async fn store(&self) -> Result<Json<Value>> {
         let file = ImportFile {
             id: 42,
-            body: "Ada\nGrace\nKatherine\nDorothy\nMary\nAnnie".to_owned(),
+            body: "Anu\nGauri\nKavita\nDorothy\nMary\nAnnie".to_owned(),
         };
         let report = self.imports.run(&file).await.map_err(AppError::internal)?;
         Ok(Json(json!({ "rows": report.rows })))

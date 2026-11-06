@@ -10,14 +10,14 @@ use uuid::Uuid;
 
 use crate::support::{deal_won, harness};
 
-const URL: &str = "https://hooks.lovelace.io/navree";
+const URL: &str = "https://hooks.lakhotia.io/navree";
 
 #[tokio::test]
 async fn endpoints_and_test_commands_run() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["*"])).await;
@@ -40,7 +40,7 @@ async fn endpoints_and_test_commands_run() {
     // `--workspace` needs WorkspaceModule.
     assert!(
         h.app
-            .run_command("webhooks:endpoints", &["--workspace", "acme"])
+            .run_command("webhooks:endpoints", &["--workspace", "agra"])
             .await
             .is_err()
     );
@@ -51,7 +51,7 @@ async fn a_failing_test_delivery_fails_the_command() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(500),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["*"])).await;
@@ -68,7 +68,7 @@ async fn retry_queues_one_or_every_failed_delivery() {
     let h = harness(|b| b).await;
     h.server.on_sequence(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         [
             FakeResponse::new(410),
             FakeResponse::new(410),
@@ -121,7 +121,7 @@ async fn prune_deletes_old_deliveries_and_receipts() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["*"])).await;

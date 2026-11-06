@@ -146,7 +146,7 @@ async fn folder_in(app: &TestApp, workspace: Uuid, name: &str) -> Uuid {
 async fn a_form_across_workspaces_refers_to_records_of_the_workspace_it_names() {
     let builder = crate::servers::database(TestApp::builder()).module(FiledModule);
     let world = world(with_members(builder).build().await).await;
-    join(&world.app, world.globex, world.member_id).await;
+    join(&world.app, world.gulati, world.member_id).await;
     give_role(
         &world.app,
         world.member_id,
@@ -154,18 +154,18 @@ async fn a_form_across_workspaces_refers_to_records_of_the_workspace_it_names() 
         &["helm.view", "filed.*", "folders.*"],
     )
     .await;
-    let acme_folder = folder_in(&world.app, world.acme, "Acme folder").await;
-    let globex_folder = folder_in(&world.app, world.globex, "Globex folder").await;
+    let agra_folder = folder_in(&world.app, world.agra, "Agra folder").await;
+    let gulati_folder = folder_in(&world.app, world.gulati, "Gulati folder").await;
     let member = &world.member;
-    member.set_cookie(WORKSPACE_COOKIE, &world.acme.to_string());
+    member.set_cookie(WORKSPACE_COOKIE, &world.agra.to_string());
     const FILED: &str = "/admin/api/resources/filed";
     // Another workspace's folder isn't one this form can refer to.
     member
         .post(FILED)
         .json(&json!({
             "title": "Across",
-            "workspace_id": world.globex,
-            "folder_id": acme_folder,
+            "workspace_id": world.gulati,
+            "folder_id": agra_folder,
         }))
         .send()
         .await
@@ -175,8 +175,8 @@ async fn a_form_across_workspaces_refers_to_records_of_the_workspace_it_names() 
         .post(FILED)
         .json(&json!({
             "title": "Filed",
-            "workspace_id": world.globex,
-            "folder_id": globex_folder,
+            "workspace_id": world.gulati,
+            "folder_id": gulati_folder,
         }))
         .send()
         .await
@@ -186,13 +186,13 @@ async fn a_form_across_workspaces_refers_to_records_of_the_workspace_it_names() 
     // A change is held to the workspace of its record as well.
     member
         .patch(&format!("{FILED}/{id}"))
-        .json(&json!({ "folder_id": acme_folder }))
+        .json(&json!({ "folder_id": agra_folder }))
         .send()
         .await
         .assert_status(400);
     member
         .patch(&format!("{FILED}/{id}"))
-        .json(&json!({ "folder_id": globex_folder }))
+        .json(&json!({ "folder_id": gulati_folder }))
         .send()
         .await
         .assert_status(200);

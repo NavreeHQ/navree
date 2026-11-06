@@ -19,10 +19,10 @@ async fn the_members_role_answers_for_its_workspace() {
     let support = world.user("Sam", "sam@example.test").await;
     let member = world.user("Mia", "mia@example.test").await;
     let outsider = world.user("Otto", "otto@example.test").await;
-    let acme = world.workspace(owner, "Acme").await;
-    let globex = world.workspace(outsider, "Globex").await;
-    world.join(acme.id, support, "support").await;
-    world.join(acme.id, member, "member").await;
+    let agra = world.workspace(owner, "Agra").await;
+    let gulati = world.workspace(outsider, "Gulati").await;
+    world.join(agra.id, support, "support").await;
+    world.join(agra.id, member, "member").await;
     let ctx = world.app.ctx();
     let allowed = |user: Uuid, permission: &'static str, workspace: Option<Uuid>| async move {
         permitted(ctx, &signed_in(user), permission, workspace)
@@ -31,16 +31,16 @@ async fn the_members_role_answers_for_its_workspace() {
     };
 
     // The configured role grants it in its workspace.
-    assert!(allowed(support, "operations.view", Some(acme.id)).await);
-    assert!(!allowed(support, "operations.cancel", Some(acme.id)).await);
+    assert!(allowed(support, "operations.view", Some(agra.id)).await);
+    assert!(!allowed(support, "operations.cancel", Some(agra.id)).await);
     // The owner's `all.*` covers every permission.
-    assert!(allowed(owner, "operations.cancel", Some(acme.id)).await);
+    assert!(allowed(owner, "operations.cancel", Some(agra.id)).await);
     // `member` was given `deals.*`, not operations.
-    assert!(!allowed(member, "operations.view", Some(acme.id)).await);
-    assert!(allowed(member, "deals.update", Some(acme.id)).await);
+    assert!(!allowed(member, "operations.view", Some(agra.id)).await);
+    assert!(allowed(member, "deals.update", Some(agra.id)).await);
     // Not a member: no grant, and a role elsewhere does not carry over.
-    assert!(!allowed(outsider, "operations.view", Some(acme.id)).await);
-    assert!(!allowed(support, "operations.view", Some(globex.id)).await);
+    assert!(!allowed(outsider, "operations.view", Some(agra.id)).await);
+    assert!(!allowed(support, "operations.view", Some(gulati.id)).await);
     assert!(!allowed(owner, "operations.view", Some(Uuid::now_v7())).await);
     // Workspace roles say nothing app-wide.
     assert!(!allowed(owner, "operations.view", None).await);
@@ -50,19 +50,19 @@ async fn the_members_role_answers_for_its_workspace() {
     world
         .work(|uow| async move {
             members
-                .change_role(&uow, acme.id, member, "support".into())
+                .change_role(&uow, agra.id, member, "support".into())
                 .await
         })
         .await
         .unwrap();
-    assert!(allowed(member, "operations.view", Some(acme.id)).await);
+    assert!(allowed(member, "operations.view", Some(agra.id)).await);
 }
 
 #[tokio::test]
 async fn the_check_answers_only_about_a_workspace() {
     let world = World::new().await;
     let owner = world.user("Olive", "olive@example.test").await;
-    let acme = world.workspace(owner, "Acme").await;
+    let agra = world.workspace(owner, "Agra").await;
     let checks = world
         .app
         .ctx()
@@ -85,7 +85,7 @@ async fn the_check_answers_only_about_a_workspace() {
         "no workspace: not its question"
     );
     let workspace = checks[1]
-        .check(&who, "deals.read", Some(acme.id))
+        .check(&who, "deals.read", Some(agra.id))
         .await
         .unwrap();
     assert_eq!(workspace, Some(true));
@@ -97,17 +97,17 @@ async fn an_organization_role_answers_as_it_does_behind_the_guard() {
     let owner = world.user("Olive", "olive@example.test").await;
     let ken = world.user("Ken", "ken@example.test").await;
     let linus = world.user("Linus", "linus@example.test").await;
-    let acme = world.organization(owner, "Acme").await;
+    let agra = world.organization(owner, "Agra").await;
     let uk = world.workspace(owner, "UK").await;
     let de = world.workspace(owner, "DE").await;
-    world.attach(acme.id, uk.id).await;
-    world.attach(acme.id, de.id).await;
+    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, de.id).await;
     // `partner` maps to the workspace role `viewer` (`deals.read`).
     world
-        .grant(acme.id, ken, "partner", WorkspaceSelector::All)
+        .grant(agra.id, ken, "partner", WorkspaceSelector::All)
         .await;
     world
-        .grant(acme.id, linus, "member", WorkspaceSelector::only([uk.id]))
+        .grant(agra.id, linus, "member", WorkspaceSelector::only([uk.id]))
         .await;
     let ctx = world.app.ctx();
     let allowed = |user: Uuid, permission: &'static str, workspace: Uuid| async move {

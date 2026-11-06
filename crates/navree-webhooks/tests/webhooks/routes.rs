@@ -41,7 +41,7 @@ async fn routes_app(workspaces: bool) -> Harness {
     let (client, server) = HttpClient::fake();
     server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200).text("ok"),
     );
     let clock = Arc::new(FixedClock::new(start()));
@@ -80,7 +80,7 @@ async fn every_route_requires_webhooks_manage() {
     h.app
         .acting_as(principal(OTHER))
         .post("/api/webhooks/endpoints")
-        .json(&json!({ "url": "https://hooks.lovelace.io/x", "events": ["*"] }))
+        .json(&json!({ "url": "https://hooks.lakhotia.io/x", "events": ["*"] }))
         .send()
         .await
         .assert_status(403);
@@ -102,7 +102,7 @@ async fn endpoints_are_managed_over_the_api() {
     let created = admin
         .post("/api/webhooks/endpoints")
         .json(&json!({
-            "url": "https://hooks.lovelace.io/navree",
+            "url": "https://hooks.lakhotia.io/navree",
             "events": ["deal.won"],
             "description": "Revenue dashboard",
             "headers": { "X-Team": "revenue" }
@@ -119,13 +119,13 @@ async fn endpoints_are_managed_over_the_api() {
 
     admin
         .post("/api/webhooks/endpoints")
-        .json(&json!({ "url": "http://hooks.lovelace.io/x", "events": ["*"] }))
+        .json(&json!({ "url": "http://hooks.lakhotia.io/x", "events": ["*"] }))
         .send()
         .await
         .assert_validation_error("url");
     admin
         .post("/api/webhooks/endpoints")
-        .json(&json!({ "url": "https://hooks.lovelace.io/x", "events": ["nope"] }))
+        .json(&json!({ "url": "https://hooks.lakhotia.io/x", "events": ["nope"] }))
         .send()
         .await
         .assert_validation_error("events");
@@ -273,24 +273,24 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
     let h = routes_app(true).await;
     let workspaces = h.app.get::<Workspaces>().await;
     let uow = h.app.get::<Db>().await.uow(None, None).await;
-    let acme = workspaces
+    let agra = workspaces
         .create(
             &uow,
             OTHER,
             NewWorkspace {
-                name: "Acme".to_owned(),
-                slug: Some("acme".to_owned()),
+                name: "Agra".to_owned(),
+                slug: Some("agra".to_owned()),
             },
         )
         .await
         .unwrap();
-    let globex = workspaces
+    let gulati = workspaces
         .create(
             &uow,
             OTHER,
             NewWorkspace {
-                name: "Globex".to_owned(),
-                slug: Some("globex".to_owned()),
+                name: "Gulati".to_owned(),
+                slug: Some("gulati".to_owned()),
             },
         )
         .await
@@ -301,31 +301,31 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
 
     let created = owner
         .post("/api/webhooks/endpoints")
-        .header("X-Workspace", "acme")
-        .json(&json!({ "url": "https://hooks.lovelace.io/acme", "events": ["*"] }))
+        .header("X-Workspace", "agra")
+        .json(&json!({ "url": "https://hooks.lakhotia.io/agra", "events": ["*"] }))
         .send()
         .await
         .assert_status(201)
-        .assert_json_path("workspace_id", json!(acme.id))
+        .assert_json_path("workspace_id", json!(agra.id))
         .json_value();
     let id = created["id"].as_str().unwrap().to_owned();
 
     owner
         .get("/api/webhooks/endpoints")
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data", json!([]));
     owner
         .get(&format!("/api/webhooks/endpoints/{id}"))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(404);
     owner
         .get(&format!("/api/webhooks/endpoints/{id}"))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -334,15 +334,15 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
         .send()
         .await
         .assert_status(400);
-    // ADMIN (app-wide `webhooks.manage`) is not a member of acme.
+    // ADMIN (app-wide `webhooks.manage`) is not a member of agra.
     h.app
         .acting_as(principal(ADMIN))
         .get("/api/webhooks/endpoints")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
-    let _ = globex;
+    let _ = gulati;
 }
 
 #[tokio::test]

@@ -11,9 +11,9 @@ use crate::support::{TestDb, sqlite};
 async fn seeded() -> TestDb {
     let t = sqlite().await;
     for (name, country, active, employees) in [
-        ("Acme", Some("US"), true, 120),
-        ("Globex", Some("DE"), false, 40),
-        ("Initech", Some("US"), true, 15),
+        ("Agra", Some("US"), true, 120),
+        ("Gulati", Some("DE"), false, 40),
+        ("Indrani", Some("US"), true, 15),
         ("Umbrella", None, true, 300),
     ] {
         Company::create(
@@ -508,7 +508,7 @@ async fn selects_and_extras() {
             .extra::<String>("company_name")
             .unwrap()
             .as_deref(),
-        Some("Globex")
+        Some("Gulati")
     );
 
     // Selecting fewer columns than the model has fails with a precise error.
@@ -559,7 +559,7 @@ async fn joins_groups_and_havings() {
             )
         })
         .collect();
-    assert_eq!(summary, [("Acme".to_owned(), 2), ("Globex".to_owned(), 1)]);
+    assert_eq!(summary, [("Agra".to_owned(), 2), ("Gulati".to_owned(), 1)]);
 
     let stages = Deal::query()
         .select([Deal::STAGE])
@@ -641,7 +641,7 @@ async fn unions_combine_queries() {
         .unwrap();
     let mut names = names;
     names.sort();
-    assert_eq!(names, ["Delta", "Globex"]);
+    assert_eq!(names, ["Delta", "Gulati"]);
 }
 
 #[tokio::test]
@@ -755,13 +755,13 @@ async fn aggregates_values_and_plucks() {
         .await
         .unwrap();
     assert_eq!(keyed.get("Umbrella"), Some(&300));
-    assert_eq!(keyed.keys().next().map(String::as_str), Some("Acme"));
+    assert_eq!(keyed.keys().next().map(String::as_str), Some("Agra"));
     let untyped = Company::query()
         .where_key(1_i64)
         .value(db, "name")
         .await
         .unwrap();
-    assert_eq!(untyped, Some(Value::from("Acme")));
+    assert_eq!(untyped, Some(Value::from("Agra")));
 
     assert!(
         Deal::query()
@@ -791,7 +791,7 @@ async fn keys_select_and_exclude_records() {
             .unwrap()
             .unwrap()
             .name,
-        "Globex"
+        "Gulati"
     );
     assert_eq!(
         Company::query()

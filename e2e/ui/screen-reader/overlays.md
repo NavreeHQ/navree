@@ -111,9 +111,9 @@ The UI proof app, http://127.0.0.1:8090/gallery (title "Gallery"; see [Start the
 ### Details in a dialog, and a dialog with pickers
 
 **16. A dialog filled from a table row**
-- Keys: Both readers: scroll to the section "Commands" (NVDA: NVDA+F7 and choose the table "Deals", or press T; VoiceOver: VO+U, then Tables). Move to the "Details" button in the row "Globex expansion" and press Enter. Read the dialog. Press Escape.
-- The page: a dialog titled "Deal" opens with the text "Globex expansion, worth 48,000." Focus goes to its Close button, since it has no field. Escape closes it and focus returns to that "Details" button.
-- The reader says: on the button, "Details", button, and its column "Actions" where the reader says column headers. On opening: the name "Deal", the role dialog, and the button "Close". The text "Globex expansion, worth 48,000." is available by reading on. After Escape, "Details", button. Both rows have a button called "Details". Move along the row with the table keys (NVDA: Ctrl+Alt+Left arrow; VoiceOver: VO+Left arrow inside the table) and write in the notes what you hear: the cells "Globex expansion" and "48,000" are what tell the rows apart.
+- Keys: Both readers: scroll to the section "Commands" (NVDA: NVDA+F7 and choose the table "Deals", or press T; VoiceOver: VO+U, then Tables). Move to the "Details" button in the row "Gulati expansion" and press Enter. Read the dialog. Press Escape.
+- The page: a dialog titled "Deal" opens with the text "Gulati expansion, worth 48,000." Focus goes to its Close button, since it has no field. Escape closes it and focus returns to that "Details" button.
+- The reader says: on the button, "Details", button, and its column "Actions" where the reader says column headers. On opening: the name "Deal", the role dialog, and the button "Close". The text "Gulati expansion, worth 48,000." is available by reading on. After Escape, "Details", button. Both rows have a button called "Details". Move along the row with the table keys (NVDA: Ctrl+Alt+Left arrow; VoiceOver: VO+Left arrow inside the table) and write in the notes what you hear: the cells "Gulati expansion" and "48,000" are what tell the rows apart.
 
 **17. Pickers in a dialog**
 - Keys: Both readers: open `/select`. Tab to the button "Open the dialog" (in the Command palette section) and press Enter. In the dialog press Down arrow on "Stage", then Escape, then Escape again.

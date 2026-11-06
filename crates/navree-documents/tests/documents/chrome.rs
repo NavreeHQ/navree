@@ -32,7 +32,7 @@ async fn a_template_renders_with_its_data_and_prints() {
     let pdf = engine
         .render(&Render::template("invoices/show").data(json!({
             "number": 42,
-            "customer": "Ada & Co",
+            "customer": "Anu & Co",
             "total_cents": 123456,
             "currency": "EUR",
         })))
@@ -40,12 +40,12 @@ async fn a_template_renders_with_its_data_and_prints() {
         .unwrap();
     let text = pdf.text().unwrap();
     assert!(text.contains("Invoice 42"), "{text}");
-    assert!(text.contains("Billed to Ada & Co"), "{text}");
+    assert!(text.contains("Billed to Anu & Co"), "{text}");
     // The document was served escaped, from the private origin (the mock
     // prints Latin-1 text only, so the euro sign is checked here).
     let documents = mock.seen().documents.clone();
     assert!(
-        documents[0].contains("Billed to Ada &amp; Co"),
+        documents[0].contains("Billed to Anu &amp; Co"),
         "{}",
         documents[0]
     );
@@ -72,7 +72,7 @@ async fn templates_extend_layouts_and_can_be_named_with_the_extension() {
     let mock = MockChrome::start(Behavior::default()).await;
     let pdf = engine(&mock)
         .render(&Render::template("certificates/classic.html").data(json!({
-            "name": "Grace Hopper",
+            "name": "Gauri Hundal",
             "course": "Compilers",
             "completed_on": "9 December 1906",
         })))
@@ -81,7 +81,7 @@ async fn templates_extend_layouts_and_can_be_named_with_the_extension() {
     let text = pdf.text().unwrap();
     assert!(text.contains("Certificate of completion"), "{text}");
     assert!(
-        text.contains("This certifies that Grace Hopper completed Compilers on 9 December 1906."),
+        text.contains("This certifies that Gauri Hundal completed Compilers on 9 December 1906."),
         "{text}"
     );
 }

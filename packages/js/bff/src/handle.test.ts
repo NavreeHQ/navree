@@ -5,7 +5,7 @@ import { browserRequest, fakeNavree, readSetCookies, tokenPair, type BrowserRequ
 const API = "http://navree.test";
 const APP = "http://app.test";
 const request = (path: string, options: BrowserRequestOptions = {}) => browserRequest(APP, path, options);
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 
 describe("bff.handle: one entry point for every BFF route", () => {
   const navree = () =>
@@ -87,12 +87,12 @@ describe("bff.handle: one entry point for every BFF route", () => {
 
   it("uses the app's own cookie names", async () => {
     const api = navree();
-    const bff = createBff({ apiUrl: API, fetch: api.fetch, cookieNames: { access: "acme_at", refresh: "acme_rt" } });
+    const bff = createBff({ apiUrl: API, fetch: api.fetch, cookieNames: { access: "agra_at", refresh: "agra_rt" } });
 
     const login = await bff.handle(request("/api/auth/login", { method: "POST", body: {} }));
-    expect(Object.keys(readSetCookies(login))).toEqual(["acme_at", "acme_rt"]);
+    expect(Object.keys(readSetCookies(login))).toEqual(["agra_at", "agra_rt"]);
 
-    await bff.handle(request("/api/v1/deals", { cookies: { acme_at: "AT5" } }));
+    await bff.handle(request("/api/v1/deals", { cookies: { agra_at: "AT5" } }));
     expect(api.calls[1]!.headers.get("authorization")).toBe("Bearer AT5");
   });
 });
@@ -104,27 +104,27 @@ describe("workspaces through the BFF", () => {
   it("forwards the browser's X-Workspace header", async () => {
     const api = echo();
     const bff = createBff({ apiUrl: API, fetch: api.fetch });
-    const response = await bff.proxy(request("/api/v1/deals", { headers: { "x-workspace": "acme" } }), "/api/v1/deals");
-    expect(await response.json()).toEqual({ workspace: "acme" });
+    const response = await bff.proxy(request("/api/v1/deals", { headers: { "x-workspace": "agra" } }), "/api/v1/deals");
+    expect(await response.json()).toEqual({ workspace: "agra" });
   });
 
   it("falls back to the workspace cookie, so server-rendered pages and plain links are workspace-aware", async () => {
     const api = echo();
     const bff = createBff({ apiUrl: API, fetch: api.fetch });
-    const fromCookie = await bff.proxy(request("/api/v1/deals", { cookies: { [WORKSPACE_COOKIE]: "globex" } }), "/api/v1/deals");
+    const fromCookie = await bff.proxy(request("/api/v1/deals", { cookies: { [WORKSPACE_COOKIE]: "gulati" } }), "/api/v1/deals");
     const headerWins = await bff.proxy(
-      request("/api/v1/deals", { cookies: { [WORKSPACE_COOKIE]: "globex" }, headers: { "x-workspace": "acme" } }),
+      request("/api/v1/deals", { cookies: { [WORKSPACE_COOKIE]: "gulati" }, headers: { "x-workspace": "agra" } }),
       "/api/v1/deals",
     );
-    expect(await fromCookie.json()).toEqual({ workspace: "globex" });
-    expect(await headerWins.json()).toEqual({ workspace: "acme" });
+    expect(await fromCookie.json()).toEqual({ workspace: "gulati" });
+    expect(await headerWins.json()).toEqual({ workspace: "agra" });
   });
 
   it("uses the app's workspace header name", async () => {
     const api = fakeNavree({ "GET /api/v1/deals": (call) => Response.json({ team: call.headers.get("x-team") }) });
     const bff = createBff({ apiUrl: API, fetch: api.fetch, workspaceHeader: "X-Team" });
-    const response = await bff.proxy(request("/api/v1/deals", { headers: { "x-team": "acme" } }), "/api/v1/deals");
-    expect(await response.json()).toEqual({ team: "acme" });
+    const response = await bff.proxy(request("/api/v1/deals", { headers: { "x-team": "agra" } }), "/api/v1/deals");
+    expect(await response.json()).toEqual({ team: "agra" });
   });
 });
 

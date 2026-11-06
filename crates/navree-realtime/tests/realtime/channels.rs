@@ -143,7 +143,7 @@ async fn presence_subscribe_requires_signed_channel_data() {
     let server = Server::start().await;
     let mut client = server.connect().await;
     let channel = "presence-room.1";
-    let data = r#"{"user_id":"u1","user_info":{"name":"Ada"}}"#;
+    let data = r#"{"user_id":"u1","user_info":{"name":"Anu"}}"#;
 
     // Signed without the channel data, or for other channel data.
     client
@@ -180,7 +180,7 @@ async fn presence_subscribe_requires_signed_channel_data() {
         .await;
     assert_eq!(
         succeeded.data,
-        json!({"presence": {"ids": ["u1"], "hash": {"u1": {"name": "Ada"}}, "count": 1}})
+        json!({"presence": {"ids": ["u1"], "hash": {"u1": {"name": "Anu"}}, "count": 1}})
     );
 }
 

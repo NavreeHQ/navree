@@ -172,6 +172,6 @@ pub fn deal_won(workspace_id: Option<Uuid>) -> DealWon {
     DealWon {
         deal_id: Uuid::now_v7(),
         workspace_id,
-        title: "Lovelace renewal".to_owned(),
+        title: "Lakhotia renewal".to_owned(),
     }
 }

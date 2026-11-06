@@ -92,7 +92,7 @@ impl DkimAlgorithm {
 ///
 /// let key = SigningKey::generate_ed25519().to_pkcs8_pem().unwrap();
 /// let signer = DkimSigner::from_pem("acme.test", "mail", &key).unwrap();
-/// let message = b"From: hello@acme.test\r\nTo: ada@example.com\r\nSubject: Hi\r\n\r\nHello\r\n";
+/// let message = b"From: hello@acme.test\r\nTo: anu@example.com\r\nSubject: Hi\r\n\r\nHello\r\n";
 ///
 /// let header = signer.sign(message).unwrap();
 /// assert!(header.starts_with("DKIM-Signature: v=1;\r\n\ta=ed25519-sha256;\r\n\tc=relaxed/relaxed;"));

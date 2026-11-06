@@ -35,15 +35,15 @@ async fn with_role(world: &World, workspace: Uuid, role: &str) -> TestClient {
 #[tokio::test]
 async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_refuses_it() {
     let world = world(app_with_members().await).await;
-    let viewer = with_role(&world, world.acme, "viewer").await;
-    let note = world.acme_note;
+    let viewer = with_role(&world, world.agra, "viewer").await;
+    let note = world.agra_note;
 
     let list = plain(
-        html_in(&viewer, world.acme, "/admin/resources/notes")
+        html_in(&viewer, world.agra, "/admin/resources/notes")
             .await
             .assert_status(200),
     );
-    assert!(list.contains("Acme secret"), "{list}");
+    assert!(list.contains("Agra secret"), "{list}");
     assert!(!list.contains("value=\"shout\""), "{list}");
     assert!(!list.contains("value=\"whisper\""), "{list}");
     assert!(!list.contains("name=\"ids\""), "no rows to tick: {list}");
@@ -51,20 +51,20 @@ async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_re
     let detail = plain(
         html_in(
             &viewer,
-            world.acme,
+            world.agra,
             &format!("/admin/resources/notes/{note}"),
         )
         .await
         .assert_status(200),
     );
-    assert!(detail.contains("Acme secret"), "{detail}");
+    assert!(detail.contains("Agra secret"), "{detail}");
     assert!(!detail.contains("/edit"), "{detail}");
     assert!(!detail.contains("/delete"), "{detail}");
     assert!(!detail.contains("value=\"shout\""), "{detail}");
 
     // A member of the same workspace with the same abilities is offered them.
     let list = plain(
-        html_in(&world.member, world.acme, "/admin/resources/notes")
+        html_in(&world.member, world.agra, "/admin/resources/notes")
             .await
             .assert_status(200),
     );
@@ -73,7 +73,7 @@ async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_re
     let detail = plain(
         html_in(
             &world.member,
-            world.acme,
+            world.agra,
             &format!("/admin/resources/notes/{note}"),
         )
         .await
@@ -83,7 +83,7 @@ async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_re
     assert!(detail.contains("/delete"), "{detail}");
 
     // The API says what the page shows.
-    let body = in_workspace(&viewer, world.acme, &format!("{NOTES}/{note}"))
+    let body = in_workspace(&viewer, world.agra, &format!("{NOTES}/{note}"))
         .send()
         .await
         .assert_status(200)
@@ -92,7 +92,7 @@ async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_re
         body["data"]["can"],
         json!({ "update": false, "delete": false })
     );
-    let meta = in_workspace(&viewer, world.acme, "/admin/api/resources")
+    let meta = in_workspace(&viewer, world.agra, "/admin/api/resources")
         .send()
         .await
         .assert_status(200)
@@ -128,15 +128,15 @@ async fn a_viewer_is_not_offered_what_their_role_refuses_and_the_server_still_re
         viewer
             .post(&path)
             .header("accept", "text/html")
-            .header("X-Workspace", world.acme.to_string())
+            .header("X-Workspace", world.agra.to_string())
             .form(&form)
             .send()
             .await
             .assert_status(403);
     }
     assert_eq!(
-        note_in(&world.app, world.acme, note).await.unwrap().title,
-        "Acme secret"
+        note_in(&world.app, world.agra, note).await.unwrap().title,
+        "Agra secret"
     );
 }
 
@@ -145,18 +145,18 @@ async fn the_pages_of_a_workspace_stay_shut_to_a_non_member_and_a_removed_member
     let world = world(app_with_members().await).await;
     for path in ["/admin/resources/notes", "/admin"] {
         // Someone in no workspace who names one, and the member of one who names the other.
-        html_in(&world.outsider, world.acme, path)
+        html_in(&world.outsider, world.agra, path)
             .await
             .assert_status(403);
-        html_in(&world.member, world.globex, path)
+        html_in(&world.member, world.gulati, path)
             .await
             .assert_status(403);
     }
-    html_in(&world.member, world.acme, "/admin/resources/notes")
+    html_in(&world.member, world.agra, "/admin/resources/notes")
         .await
         .assert_status(200);
-    leave(&world.app, world.acme, world.member_id).await;
-    html_in(&world.member, world.acme, "/admin/resources/notes")
+    leave(&world.app, world.agra, world.member_id).await;
+    html_in(&world.member, world.agra, "/admin/resources/notes")
         .await
         .assert_status(403);
 }
@@ -189,24 +189,24 @@ async fn counts_in(client: &TestClient, workspace: Uuid) -> TestResponse {
 #[tokio::test]
 async fn an_export_holds_the_rows_of_the_workspace_it_was_asked_in_and_nobody_elses() {
     let world = world(app_with_members().await).await;
-    let viewer = with_role(&world, world.acme, "viewer").await;
+    let viewer = with_role(&world, world.agra, "viewer").await;
     for client in [&world.member, &viewer] {
         // A member, and a role that only reads (an export reads).
-        let body = export_in(client, world.acme, "notes")
+        let body = export_in(client, world.agra, "notes")
             .await
             .assert_status(200)
             .text();
-        assert_eq!(rows_of(&body), ["Acme secret"], "{body}");
-        assert!(!body.contains("Globex secret"));
+        assert_eq!(rows_of(&body), ["Agra secret"], "{body}");
+        assert!(!body.contains("Gulati secret"));
     }
     // Someone in no workspace, and a member naming another one.
-    export_in(&world.outsider, world.acme, "notes")
+    export_in(&world.outsider, world.agra, "notes")
         .await
         .assert_status(403);
-    export_in(&world.outsider, world.globex, "notes")
+    export_in(&world.outsider, world.gulati, "notes")
         .await
         .assert_status(403);
-    export_in(&world.member, world.globex, "notes")
+    export_in(&world.member, world.gulati, "notes")
         .await
         .assert_status(403);
     // A workspace nobody made.
@@ -227,7 +227,7 @@ async fn an_export_holds_the_rows_of_the_workspace_it_was_asked_in_and_nobody_el
         .member
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -239,7 +239,7 @@ async fn an_export_holds_the_rows_of_the_workspace_it_was_asked_in_and_nobody_el
         .send()
         .await
         .assert_status(200);
-    leave(&world.app, world.acme, world.member_id).await;
+    leave(&world.app, world.agra, world.member_id).await;
     world
         .member
         .get("/admin/resources/notes/export.csv")
@@ -247,7 +247,7 @@ async fn an_export_holds_the_rows_of_the_workspace_it_was_asked_in_and_nobody_el
         .send()
         .await
         .assert_status(400);
-    export_in(&world.member, world.acme, "notes")
+    export_in(&world.member, world.agra, "notes")
         .await
         .assert_status(403);
 }
@@ -255,7 +255,7 @@ async fn an_export_holds_the_rows_of_the_workspace_it_was_asked_in_and_nobody_el
 #[tokio::test]
 async fn an_export_of_a_resource_across_workspaces_is_the_list_of_the_user() {
     let world = world(app_with_members().await).await;
-    seed(&world.app, world.globex, "Globex other").await;
+    seed(&world.app, world.gulati, "Gulati other").await;
     let listed = world
         .member
         .get("/admin/api/resources/all-notes?per_page=100")
@@ -281,38 +281,38 @@ async fn an_export_of_a_resource_across_workspaces_is_the_list_of_the_user() {
 #[tokio::test]
 async fn counts_are_per_user_and_per_workspace_and_cached_without_leaking() {
     let world = world(app_with_members().await).await;
-    // A member of both, and more notes in Globex than in Acme.
+    // A member of both, and more notes in Gulati than in Agra.
     let both = account(&world.app, "both").await;
-    join(&world.app, world.acme, both).await;
-    join(&world.app, world.globex, both).await;
+    join(&world.app, world.agra, both).await;
+    join(&world.app, world.gulati, both).await;
     give_role(&world.app, both, "editor", &["helm.view", "notes.*"]).await;
     let both = world.app.acting_as(navree_testing::principal(both));
-    seed(&world.app, world.globex, "Globex two").await;
-    seed(&world.app, world.globex, "Globex three").await;
+    seed(&world.app, world.gulati, "Gulati two").await;
+    seed(&world.app, world.gulati, "Gulati three").await;
     // Everyone who is going to ask is made first: a role given to anyone makes
     // every count be read again.
-    let viewer = with_role(&world, world.acme, "viewer").await;
+    let viewer = with_role(&world, world.agra, "viewer").await;
 
-    let in_acme = counts_in(&both, world.acme)
+    let in_agra = counts_in(&both, world.agra)
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(in_acme["counts"]["notes"]["text"], "1", "{in_acme}");
-    let in_globex = counts_in(&both, world.globex)
+    assert_eq!(in_agra["counts"]["notes"]["text"], "1", "{in_agra}");
+    let in_gulati = counts_in(&both, world.gulati)
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(in_globex["counts"]["notes"]["text"], "3", "{in_globex}");
+    assert_eq!(in_gulati["counts"]["notes"]["text"], "3", "{in_gulati}");
     // Cached, each under its own workspace: the first is not handed to the second.
-    seed(&world.app, world.acme, "Acme two").await;
-    let again = counts_in(&both, world.acme).await.json_value();
+    seed(&world.app, world.agra, "Agra two").await;
+    let again = counts_in(&both, world.agra).await.json_value();
     assert_eq!(again["counts"]["notes"]["text"], "1");
     assert_eq!(
-        counts_in(&both, world.globex).await.json_value()["counts"]["notes"]["text"],
+        counts_in(&both, world.gulati).await.json_value()["counts"]["notes"]["text"],
         "3"
     );
     // A read-only role is counted for as a member is: counting reads.
-    let seen = counts_in(&viewer, world.acme)
+    let seen = counts_in(&viewer, world.agra)
         .await
         .assert_status(200)
         .json_value();
@@ -327,24 +327,24 @@ async fn counts_are_per_user_and_per_workspace_and_cached_without_leaking() {
         .as_u64()
         .unwrap()
         .to_string();
-    let seen = counts_in(&world.member, world.acme).await.json_value();
+    let seen = counts_in(&world.member, world.agra).await.json_value();
     assert_eq!(seen["counts"]["all-notes"]["text"], json!(every));
 
     // A count is not handed to a user who may not have it.
-    counts_in(&world.outsider, world.acme)
+    counts_in(&world.outsider, world.agra)
         .await
         .assert_status(403);
-    counts_in(&world.member, world.globex)
+    counts_in(&world.member, world.gulati)
         .await
         .assert_status(403);
-    counts_in(&world.outsider, world.globex)
+    counts_in(&world.outsider, world.gulati)
         .await
         .assert_status(403);
     // A stale cookie counts for nothing: what belongs to a workspace has no count
     // outside one, and the others are counted as ever.
     world
         .outsider
-        .set_cookie(WORKSPACE_COOKIE, &world.globex.to_string());
+        .set_cookie(WORKSPACE_COOKIE, &world.gulati.to_string());
     let body = world
         .outsider
         .get("/admin/counts")
@@ -354,11 +354,11 @@ async fn counts_are_per_user_and_per_workspace_and_cached_without_leaking() {
         .json_value();
     assert!(body["counts"].get("notes").is_none(), "{body}");
     // A member who is removed is out at once, cached count or not.
-    counts_in(&world.member, world.acme)
+    counts_in(&world.member, world.agra)
         .await
         .assert_status(200);
-    leave(&world.app, world.acme, world.member_id).await;
-    counts_in(&world.member, world.acme)
+    leave(&world.app, world.agra, world.member_id).await;
+    counts_in(&world.member, world.agra)
         .await
         .assert_status(403);
 }

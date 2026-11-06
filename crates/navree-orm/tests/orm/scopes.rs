@@ -63,8 +63,8 @@ fn plain_functions_are_scopes_too() {
 async fn global_scopes_apply_unless_removed() {
     let t = sqlite().await;
     for (title, published, author) in [
-        ("Mine", true, "ada"),
-        ("Draft", false, "ada"),
+        ("Mine", true, "anu"),
+        ("Draft", false, "anu"),
         ("House", true, "house"),
         ("Theirs", true, "bob"),
     ] {

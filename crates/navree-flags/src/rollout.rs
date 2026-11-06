@@ -123,12 +123,12 @@ impl Rollout {
     ///     const NAME: &'static str = "new-pipeline";
     /// }
     ///
-    /// let acme = Uuid::now_v7();
-    /// let at_25 = Rollout::percent(25).of_workspaces().includes::<NewPipeline>(acme);
-    /// let at_50 = Rollout::percent(50).of_workspaces().includes::<NewPipeline>(acme);
+    /// let agra = Uuid::now_v7();
+    /// let at_25 = Rollout::percent(25).of_workspaces().includes::<NewPipeline>(agra);
+    /// let at_50 = Rollout::percent(50).of_workspaces().includes::<NewPipeline>(agra);
     /// assert!(!at_25 || at_50); // raising the percentage never removes anyone
-    /// assert!(Rollout::percent(100).includes::<NewPipeline>(acme));
-    /// assert!(!Rollout::percent(0).includes::<NewPipeline>(acme));
+    /// assert!(Rollout::percent(100).includes::<NewPipeline>(agra));
+    /// assert!(!Rollout::percent(0).includes::<NewPipeline>(agra));
     /// ```
     pub fn includes<F: Flag>(&self, id: Uuid) -> bool {
         self.includes_named(F::NAME, id)

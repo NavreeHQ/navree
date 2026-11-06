@@ -139,17 +139,17 @@ async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
                 "contacts",
                 &settings,
                 vec![
-                    Document::new("1").field("name", "Ada Lovelace"),
-                    Document::new("2").field("name", "Grace Hopper"),
+                    Document::new("1").field("name", "Anu Lakhotia"),
+                    Document::new("2").field("name", "Gauri Hundal"),
                 ],
             )
             .await
             .unwrap();
 
-        // "lovlace" is 0.55 similar to "Lovelace": above 0.4, below the
+        // "lovlace" is 0.55 similar to "Lakhotia": above 0.4, below the
         // PostgreSQL default of 0.6.
         assert_eq!(found(&loose, "lovlace").await, 1);
-        assert_eq!(found(&loose, "ada lovlace").await, 1);
+        assert_eq!(found(&loose, "anu lovlace").await, 1);
         assert_eq!(found(&loose, "zzzzzz").await, 0);
         // A stricter threshold is honoured, so it is set on every query.
         assert_eq!(found(&engine(0.9), "lovlace").await, 0);
@@ -201,10 +201,10 @@ async fn an_app_on_postgres_syncs_through_the_database_queue() {
         let search = app.get::<Search>().await;
         let queue = app.get::<Queue>().await;
 
-        let mut grace = new_contact("Grace", "Hopper");
+        let mut grace = new_contact("Gauri", "Hundal");
         grace.score = 7;
         grace.status = "customer".to_owned();
-        let [ada, grace] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), grace])
+        let [ada, grace] = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia"), grace])
             .await
             .try_into()
             .unwrap();
@@ -236,7 +236,7 @@ async fn an_app_on_postgres_syncs_through_the_database_queue() {
             .unwrap();
         assert_eq!(by_score, [grace.id.to_string(), ada.id.to_string()]);
         let hits = search
-            .query::<Contact>("hopper")
+            .query::<Contact>("hundal")
             .hits(PageQuery::default())
             .await
             .unwrap();

@@ -25,7 +25,7 @@ use crate::{
 /// # async fn example(app: navree_testing::TestApp) -> Result<(), navree_mail::MailError> {
 /// let fake = MailFake::new();
 /// // TestApp::builder().override_value::<dyn MailTransport>(fake.transport()) ...
-/// fake.bounce(app.ctx(), "ada@example.com").await?;
+/// fake.bounce(app.ctx(), "anu@example.com").await?;
 /// assert_eq!(fake.events().len(), 1);
 /// # Ok(())
 /// # }

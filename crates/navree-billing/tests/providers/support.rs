@@ -46,7 +46,7 @@ pub fn checkout_request(customer: Option<&str>, price: &str) -> CheckoutRequest 
         billable_type: "workspace".into(),
         billable_id: WORKSPACE,
         customer_id: customer.map(str::to_owned),
-        customer_email: Some("ada@example.com".into()),
+        customer_email: Some("anu@example.com".into()),
         plan: "pro".into(),
         interval: Interval::Monthly,
         price_id: price.into(),

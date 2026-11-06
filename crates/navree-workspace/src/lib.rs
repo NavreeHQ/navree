@@ -17,7 +17,7 @@
 //!   strings that navree-access evaluates.
 //! - **Resolution.** [`CurrentWorkspace`] (an extractor) and [`InWorkspace`]
 //!   (a route guard) find the request's workspace from a header
-//!   (`X-Workspace`), a subdomain, a path prefix (`/w/acme/...`), a JWT
+//!   (`X-Workspace`), a subdomain, a path prefix (`/w/agra/...`), a JWT
 //!   claim, the workspace's own custom domain ([`DomainWorkspace`], set
 //!   by navree-domains) or the workspace a browser switched to (`session`,
 //!   feature `session`), in the configured order, and check that the signed-in user is a
@@ -49,7 +49,7 @@
 //!   ([`WorkspaceSelector`]), so [`CurrentWorkspace`] admits a member or an
 //!   organization grant; [`AccessRequests`] lets users ask to join.
 //!   [`CurrentOrganization`] and [`InOrganization`] resolve the request's
-//!   organization (`X-Organization`, `/o/acme/...`, a subdomain or a claim)
+//!   organization (`X-Organization`, `/o/agra/...`, a subdomain or a claim)
 //!   and [`OrgRepo`] reads across the workspaces the member reaches (on
 //!   PostgreSQL, through `navree.organization`).
 //! - **Partitions** (`workspace.partitions.enabled`). An optional level

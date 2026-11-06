@@ -25,14 +25,14 @@ fn a_reply_reads_its_headers_addresses_and_text() {
     assert_eq!(
         mail.from,
         Some(Address {
-            name: Some("Ada Lovelace".into()),
-            email: "ada@example.com".into()
+            name: Some("Anu Lakhotia".into()),
+            email: "anu@example.com".into()
         })
     );
     assert_eq!(mail.to[0].email, "reply+abc@in.acme.test");
-    assert_eq!(mail.to[0].name.as_deref(), Some("Acme Support"));
-    assert_eq!(mail.cc, vec![Address::new("grace@example.com")]);
-    assert_eq!(mail.reply_to[0].email, "ada@home.example");
+    assert_eq!(mail.to[0].name.as_deref(), Some("Agra Support"));
+    assert_eq!(mail.cc, vec![Address::new("gauri@example.com")]);
+    assert_eq!(mail.reply_to[0].email, "anu@home.example");
     assert_eq!(mail.subject.as_deref(), Some("Re: [#42] Printer on fire"));
     assert_eq!(
         mail.date,
@@ -77,7 +77,7 @@ fn recipients_list_the_envelope_then_the_delivery_headers() {
     let mut mail = InboundMail::parse(fixture("reply.eml")).unwrap();
     assert_eq!(
         mail.recipients(),
-        vec!["reply+abc@in.acme.test", "grace@example.com"],
+        vec!["reply+abc@in.acme.test", "gauri@example.com"],
         "without an envelope: Delivered-To, then To and Cc, without duplicates"
     );
 
@@ -204,9 +204,9 @@ fn the_reply_text_leaves_the_quoted_message_out() {
 
     for body in [
         "Yes please.\n\n-----Original Message-----\nFrom: x@y.test\n",
-        "Yes please.\n\nOn Tue, 27 Oct 2026, Acme Support <support@acme.test>\nwrote:\n> old",
+        "Yes please.\n\nOn Tue, 27 Oct 2026, Agra Support <support@acme.test>\nwrote:\n> old",
         "Yes please.\n> quoted\n",
-        "Yes please.\n\nFrom: Acme <support@acme.test>\nSent: Monday\n",
+        "Yes please.\n\nFrom: Agra <support@acme.test>\nSent: Monday\n",
     ] {
         let raw = format!("From: a@b.test\nTo: c@d.test\nSubject: s\n\n{body}");
         assert_eq!(
@@ -269,12 +269,12 @@ fn file_names_and_names_in_any_encoding_are_decoded() {
 #[test]
 fn an_html_only_message_has_its_text_read_from_the_html() {
     let mail = InboundMail::parse(
-        "From: a@b.test\nContent-Type: text/html; charset=utf-8\n\n<html><head><style>p{}</style></head><body><p>Hello <b>there</b>,</p><p>see&nbsp;you &amp; bye<br>Ada</p></body></html>",
+        "From: a@b.test\nContent-Type: text/html; charset=utf-8\n\n<html><head><style>p{}</style></head><body><p>Hello <b>there</b>,</p><p>see&nbsp;you &amp; bye<br>Anu</p></body></html>",
     )
     .unwrap();
     assert_eq!(
         mail.text.as_deref(),
-        Some("Hello there,\nsee\u{a0}you & bye\nAda\n")
+        Some("Hello there,\nsee\u{a0}you & bye\nAnu\n")
     );
     assert!(mail.html.as_deref().unwrap().starts_with("<html>"));
     assert!(mail.attachments.is_empty());
@@ -364,14 +364,14 @@ fn a_from_that_could_be_read_two_ways_is_no_from() {
         assert_eq!(mail.from, None, "{:?}", String::from_utf8_lossy(raw));
     }
     let mail =
-        InboundMail::parse(b"X-A: 1\nFrom: ada@acme.test\nSubject: s\n\nb".to_vec()).unwrap();
+        InboundMail::parse(b"X-A: 1\nFrom: anu@acme.test\nSubject: s\n\nb".to_vec()).unwrap();
     assert_eq!(
         mail.from.unwrap().email,
-        "ada@acme.test",
+        "anu@acme.test",
         "bare LFs throughout"
     );
-    let mail = InboundMail::parse(b"From: Ada <ada@acme.test>\r\n\r\nb".to_vec()).unwrap();
-    assert_eq!(mail.from.unwrap().email, "ada@acme.test");
+    let mail = InboundMail::parse(b"From: Anu <anu@acme.test>\r\n\r\nb".to_vec()).unwrap();
+    assert_eq!(mail.from.unwrap().email, "anu@acme.test");
 }
 
 /// A `From` is an address, or a name and an address in angle brackets, and
@@ -405,17 +405,17 @@ fn a_from_that_is_not_an_address_or_a_named_address_is_no_from() {
         ";ceo@acme.test",
         "ceo@acme.test:",
         ":ceo@acme.test",
-        "Ada <ceo@acme.test",
-        "Ada ceo@acme.test>",
-        "Ada <ceo@acme.test> x",
-        "Ada <ceo@acme.test>,",
-        "Ada, <ceo@acme.test>",
-        "Ada: <ceo@acme.test>",
-        "Ada; <ceo@acme.test>",
-        "Ada > <ceo@acme.test>",
-        "Ada ) <ceo@acme.test>",
-        "Ada (x <ceo@acme.test>",
-        "Ada \"x <ceo@acme.test>",
+        "Anu <ceo@acme.test",
+        "Anu ceo@acme.test>",
+        "Anu <ceo@acme.test> x",
+        "Anu <ceo@acme.test>,",
+        "Anu, <ceo@acme.test>",
+        "Anu: <ceo@acme.test>",
+        "Anu; <ceo@acme.test>",
+        "Anu > <ceo@acme.test>",
+        "Anu ) <ceo@acme.test>",
+        "Anu (x <ceo@acme.test>",
+        "Anu \"x <ceo@acme.test>",
         "ceo@acme.test (unclosed",
         "<ceo@acme.test(x)>",
         "<ceo@(x)acme.test>",
@@ -441,7 +441,7 @@ fn a_from_that_is_not_an_address_or_a_named_address_is_no_from() {
         "ceo@.acme.test",
         ".ceo@acme.test",
         "ceo..x@acme.test",
-        "ceo@acme..test",
+        "ceo@agra..test",
         "ceo@",
         "@acme.test",
     ] {
@@ -459,21 +459,21 @@ fn an_address_or_a_named_address_is_a_from() {
         ("ceo@acme.test", None, "ceo@acme.test"),
         ("  ceo@acme.test  ", None, "ceo@acme.test"),
         ("<ceo@acme.test>", None, "ceo@acme.test"),
-        ("Ada <ceo@acme.test>", Some("Ada"), "ceo@acme.test"),
+        ("Anu <ceo@acme.test>", Some("Anu"), "ceo@acme.test"),
         (
-            "Ada Lovelace<ceo@acme.test>",
-            Some("Ada Lovelace"),
+            "Anu Lakhotia<ceo@acme.test>",
+            Some("Anu Lakhotia"),
             "ceo@acme.test",
         ),
-        ("Dr. Ada <ceo@acme.test>", Some("Dr. Ada"), "ceo@acme.test"),
+        ("Dr. Anu <ceo@acme.test>", Some("Dr. Anu"), "ceo@acme.test"),
         (
-            "\"Lovelace, Ada\" <ceo@acme.test>",
-            Some("Lovelace, Ada"),
+            "\"Lakhotia, Anu\" <ceo@acme.test>",
+            Some("Lakhotia, Anu"),
             "ceo@acme.test",
         ),
         (
-            "\"Ada \\\"The Countess\\\"\" <ceo@acme.test>",
-            Some("Ada \"The Countess\""),
+            "\"Anu \\\"The Countess\\\"\" <ceo@acme.test>",
+            Some("Anu \"The Countess\""),
             "ceo@acme.test",
         ),
         (
@@ -481,16 +481,16 @@ fn an_address_or_a_named_address_is_a_from() {
             Some("Jürgen"),
             "ceo@acme.test",
         ),
-        ("ceo@acme.test (Ada)", Some("Ada"), "ceo@acme.test"),
-        ("(Ada) ceo@acme.test", Some("Ada"), "ceo@acme.test"),
+        ("ceo@acme.test (Anu)", Some("Anu"), "ceo@acme.test"),
+        ("(Anu) ceo@acme.test", Some("Anu"), "ceo@acme.test"),
         (
-            "Ada (Work) <ceo@acme.test>",
-            Some("Ada (Work)"),
+            "Anu (Work) <ceo@acme.test>",
+            Some("Anu (Work)"),
             "ceo@acme.test",
         ),
         (
-            "Ada <ceo@acme.test> (Work)",
-            Some("Ada (Work)"),
+            "Anu <ceo@acme.test> (Work)",
+            Some("Anu (Work)"),
             "ceo@acme.test",
         ),
         // A name nobody checks, even when it looks like an address, once quoted.
@@ -505,8 +505,8 @@ fn an_address_or_a_named_address_is_a_from() {
             "a@evil.test",
         ),
         (
-            "Ada\r\n Lovelace <ceo@acme.test>",
-            Some("Ada Lovelace"),
+            "Anu\r\n Lakhotia <ceo@acme.test>",
+            Some("Anu Lakhotia"),
             "ceo@acme.test",
         ),
     ] {

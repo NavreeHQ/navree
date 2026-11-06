@@ -17,10 +17,10 @@ async fn a_new_github_user_gets_an_account_and_tokens() {
     let (social, fake) = Social::fake();
     fake.on_code(
         "github",
-        "code-ada",
+        "code-anu",
         SocialUser::new("github", "583231")
-            .name("Ada Lovelace")
-            .email(Some("ada@example.com"), true),
+            .name("Anu Lakhotia")
+            .email(Some("anu@example.com"), true),
     );
 
     let app = TestApp::builder()
@@ -49,16 +49,16 @@ async fn a_new_github_user_gets_an_account_and_tokens() {
 
     app.client()
         .post("/api/auth/social/github/callback")
-        .json(&json!({ "code": "code-ada", "state": state }))
+        .json(&json!({ "code": "code-anu", "state": state }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
 
     // The state works once.
     app.client()
         .post("/api/auth/social/github/callback")
-        .json(&json!({ "code": "code-ada", "state": state }))
+        .json(&json!({ "code": "code-anu", "state": state }))
         .send()
         .await
         .assert_error(400, "Invalid or expired state");
@@ -123,12 +123,12 @@ async fn the_sso_controller_signs_in_crm_users_only() {
     let (social, fake) = Social::fake();
     let okta = |id: &str, groups: serde_json::Value| {
         SocialUser::new("okta", id)
-            .name("Ada Lovelace")
+            .name("Anu Lakhotia")
             .email(Some(&format!("{id}@acme.test")), true)
             .raw(json!({ "sub": id, "groups": groups }))
     };
-    fake.on_code("okta", "crm", okta("ada", json!(["crm-users"])));
-    fake.on_code("okta", "other", okta("grace", json!(["finance"])));
+    fake.on_code("okta", "crm", okta("anu", json!(["crm-users"])));
+    fake.on_code("okta", "other", okta("gauri", json!(["finance"])));
     let app = TestApp::builder()
         .temp_database()
         .config("app.key", navree::crypto::generate_key())
@@ -137,7 +137,7 @@ async fn the_sso_controller_signs_in_crm_users_only() {
         .config("social.redirect_base", "https://app.acme.test/auth/callback")
         .config(
             "social.providers.okta",
-            json!({ "type": "oidc", "name": "Okta", "issuer": "https://acme.okta.com", "client_id": "0oa8f2kq1xYz3AbC4d5e" }),
+            json!({ "type": "oidc", "name": "Okta", "issuer": "https://agra.okta.com", "client_id": "0oa8f2kq1xYz3AbC4d5e" }),
         )
         .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())

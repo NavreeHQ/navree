@@ -180,20 +180,20 @@ impl fmt::Display for ScopeTarget {
 /// use navree_settings::{Scope, ScopeKind};
 /// use uuid::Uuid;
 ///
-/// let (ada, acme, holding) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+/// let (ada, agra, holding) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
 ///
 /// assert_eq!(Scope::global().target().kind, ScopeKind::Global);
 /// assert_eq!(Scope::organization(holding).target().kind, ScopeKind::Organization);
 ///
 /// // The workspace's organization is looked up when the scope is resolved,
 /// // unless you name it.
-/// let workspace = Scope::workspace(acme).in_organization(holding);
+/// let workspace = Scope::workspace(agra).in_organization(holding);
 /// assert_eq!(workspace.organization_id(), Some(holding));
 ///
 /// // A user's preferences, on top of a workspace's values.
-/// let user = Scope::user(ada).in_workspace(acme);
+/// let user = Scope::user(ada).in_workspace(agra);
 /// assert_eq!(user.target().kind, ScopeKind::User);
-/// assert_eq!(user.workspace_id(), Some(acme));
+/// assert_eq!(user.workspace_id(), Some(agra));
 /// ```
 ///
 /// Methods taking `impl Into<Scope>` also accept a `&Workspace`, a

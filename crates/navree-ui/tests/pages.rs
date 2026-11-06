@@ -189,7 +189,7 @@ impl Module for App {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<Pages>();
         let shell = || {
-            Shell::new("Acme").group(
+            Shell::new("Agra").group(
                 NavGroup::plain().item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
             )
         };
@@ -219,7 +219,7 @@ impl Module for App {
         }
         if self.shell {
             m.factory(Factory::<Shell>::new(|_| async {
-                Ok(Arc::new(Shell::new("Acme").group(NavGroup::plain().item(
+                Ok(Arc::new(Shell::new("Agra").group(NavGroup::plain().item(
                     NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE),
                 ))))
             }))

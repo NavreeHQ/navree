@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn the_mask_with_the_lowest_penalty_wins() {
-        let payload = b"otpauth://totp/Navree:ada%40example.com?secret=RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER&issuer=Navree";
+        let payload = b"otpauth://totp/Navree:anu%40example.com?secret=RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER&issuer=Navree";
         for level in EcLevel::ALL {
             let code = QrCode::encode(payload, level).unwrap();
             let version = usize::from(code.version());

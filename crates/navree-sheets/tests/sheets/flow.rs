@@ -18,11 +18,11 @@ async fn uploads_stages_applies_and_exports() {
         .config("sheets.imports.chunk_size", 2)
         .build()
         .await;
-    seed(&app, &[("ada@example.com", "Ada", Some(30), false)]).await;
+    seed(&app, &[("anu@example.com", "Anu", Some(30), false)]).await;
     let admin = app.acting_as(principal(ADMIN));
 
     let text = "البريد الإلكتروني,الاسم,Age\n\
-        ADA@example.com,آدا لوفليس,36\n\
+        ANU@example.com,آدا لوفليس,36\n\
         mohammed@example.com,محمد عبد الله,40\n\
         not-an-email,فاطمة الزهراء,31\n\
         mohammed@example.com,محمد,41\n\
@@ -74,7 +74,7 @@ async fn uploads_stages_applies_and_exports() {
     let contacts = stored_contacts(&app).await;
     assert_eq!(
         contacts[0],
-        contact("ada@example.com", "آدا لوفليس", Some(36), false)
+        contact("anu@example.com", "آدا لوفليس", Some(36), false)
     );
     assert_eq!(contacts.len(), 3);
     let errors = admin

@@ -53,9 +53,9 @@ async fn the_connection_lifecycle() {
     let db = h.app.get::<Db>().await;
     let integrations = h.integrations().await;
 
-    let acme = h.workspace(OTHER, "acme").await;
-    let group = h.organization(OTHER, "acme-group", &[acme.id]).await;
-    let workspace = Owner::Workspace(acme.id);
+    let agra = h.workspace(OTHER, "agra").await;
+    let group = h.organization(OTHER, "agra-group", &[agra.id]).await;
+    let workspace = Owner::Workspace(agra.id);
     let organization = Owner::Organization(group);
 
     // The organization's admin consent; the workspace's own OAuth install.
@@ -210,7 +210,7 @@ async fn the_mailbox_watch_lifecycle() {
     let gmail = gmail_watch(&h).await;
     h.fake.api().on(
         Method::GET,
-        &format!("{GMAIL}/users/ada@acme.test/history*"),
+        &format!("{GMAIL}/users/anu@acme.test/history*"),
         FakeResponse::new(200).json(&json!({
             "history": [{ "messagesAdded": [{ "message": { "id": "m1" } }] }],
             "historyId": "1005",
@@ -218,13 +218,13 @@ async fn the_mailbox_watch_lifecycle() {
     );
     h.fake.api().on(
         Method::GET,
-        &format!("{GMAIL}/users/ada@acme.test/messages/m1*"),
+        &format!("{GMAIL}/users/anu@acme.test/messages/m1*"),
         FakeResponse::new(200)
             .json(&json!({ "id": "m1", "raw": URL_SAFE_NO_PAD.encode(message("Gmail")) })),
     );
     assert_eq!(
         watches
-            .gmail_push(&push("ada@acme.test", "1005"))
+            .gmail_push(&push("anu@acme.test", "1005"))
             .await
             .unwrap()
             .len(),

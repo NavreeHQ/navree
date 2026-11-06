@@ -24,8 +24,8 @@ fn the_section_reads_every_setting() {
     let config = Config::load(&ConfigSources::new().set(
         "app",
         json!({
-            "name": "acme",
-            "url": "https://acme.example.com",
+            "name": "agra",
+            "url": "https://agra.example.com",
             "version": "1.4.0",
             "env": "Production",
             "key": "base64:abc",
@@ -34,8 +34,8 @@ fn the_section_reads_every_setting() {
     ))
     .expect("load");
     let app = config.app().expect("app");
-    assert_eq!(app.name.as_deref(), Some("acme"));
-    assert_eq!(app.url.as_deref(), Some("https://acme.example.com"));
+    assert_eq!(app.name.as_deref(), Some("agra"));
+    assert_eq!(app.url.as_deref(), Some("https://agra.example.com"));
     assert_eq!(app.version.as_deref(), Some("1.4.0"));
     assert_eq!(app.env, Some(Environment::Production));
     assert_eq!(
@@ -63,7 +63,7 @@ fn an_absent_section_is_all_unset() {
 #[test]
 fn the_short_environment_variables_set_the_app_keys() {
     let config = env(&[
-        ("APP_NAME", "acme"),
+        ("APP_NAME", "agra"),
         ("APP_URL", "https://acme.test"),
         ("APP_VERSION", "2.0.0"),
         ("APP_ENV", "staging"),
@@ -82,7 +82,7 @@ fn the_short_environment_variables_set_the_app_keys() {
         })
     );
     let app = config.app().expect("app");
-    assert_eq!(app.name.as_deref(), Some("acme"));
+    assert_eq!(app.name.as_deref(), Some("agra"));
     assert_eq!(app.env, Some(Environment::Staging));
     let previous: Vec<&str> = app
         .previous_keys
@@ -210,7 +210,7 @@ fn a_bad_url_is_rejected_naming_the_key() {
     }
     for good in [
         "http://localhost:3000",
-        "https://acme.example.com/",
+        "https://agra.example.com/",
         "http://127.0.0.1:8080",
     ] {
         let config = Config::load(&ConfigSources::new().set("app.url", good)).expect("load");
@@ -234,7 +234,7 @@ fn the_readers_that_must_not_fail_return_none_for_an_invalid_section() {
     let config = Config::load(
         &ConfigSources::new()
             .set("app.url", "bad")
-            .set("app.name", "acme"),
+            .set("app.name", "agra"),
     )
     .expect("load");
     assert_eq!(config.app_url(), None);
@@ -245,11 +245,11 @@ fn the_readers_that_must_not_fail_return_none_for_an_invalid_section() {
 #[test]
 fn the_readers_return_the_settings() {
     let config = env(&[
-        ("APP_NAME", "acme"),
+        ("APP_NAME", "agra"),
         ("APP_URL", "https://acme.test"),
         ("APP_VERSION", "1.2.3"),
     ]);
-    assert_eq!(config.app_name().as_deref(), Some("acme"));
+    assert_eq!(config.app_name().as_deref(), Some("agra"));
     assert_eq!(config.app_url().as_deref(), Some("https://acme.test"));
     assert_eq!(config.app_version().as_deref(), Some("1.2.3"));
 }

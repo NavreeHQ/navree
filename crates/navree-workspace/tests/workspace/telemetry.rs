@@ -47,13 +47,13 @@ impl Module for SlugModule {
 async fn requests_report_the_workspace_they_resolved() {
     let recorder = TelemetryRecorder::new();
     let world = World::with(builder().module(SlugModule).module(recorder.module())).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
 
     world
         .as_user(ada)
         .get("/api/slug")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -63,6 +63,6 @@ async fn requests_report_the_workspace_they_resolved() {
         .into_iter()
         .find(|r| r.path == "/api/slug")
         .expect("the request is reported");
-    assert_eq!(request.workspace_id, Some(acme.id.to_string()));
+    assert_eq!(request.workspace_id, Some(agra.id.to_string()));
     assert_eq!(request.user_id, Some(ada.to_string()));
 }

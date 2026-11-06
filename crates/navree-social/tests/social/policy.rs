@@ -77,15 +77,15 @@ async fn social_sign_in_is_refused_for_an_enforced_domain() {
     assert!(auth.find_by_email("bob@corp.test").await.unwrap().is_none());
 
     // An existing account of the domain, by its verified email.
-    let ada = create_user(&app, "Ada", "ada@corp.test").await;
+    let ada = create_user(&app, "Anu", "anu@corp.test").await;
     let db = app.get::<Db>().await;
     User::query()
         .where_key(ada.id)
         .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
         .await
         .unwrap();
-    fake.on_code("github", "ada", github("2", Some("ada@corp.test")));
-    sign_in(&app, "github", "ada")
+    fake.on_code("github", "anu", github("2", Some("anu@corp.test")));
+    sign_in(&app, "github", "anu")
         .await
         .assert_error_code(403, "sso_required");
 
@@ -94,21 +94,21 @@ async fn social_sign_in_is_refused_for_an_enforced_domain() {
     let social = app.get::<Social>().await;
     let uow = db.uow(None, None).await;
     social
-        .link(&uow, ada.id, &github("3", Some("ada@home.test")))
+        .link(&uow, ada.id, &github("3", Some("anu@home.test")))
         .await
         .unwrap();
     uow.commit().await.unwrap();
-    fake.on_code("github", "linked", github("3", Some("ada@home.test")));
+    fake.on_code("github", "linked", github("3", Some("anu@home.test")));
     sign_in(&app, "github", "linked")
         .await
         .assert_error_code(403, "sso_required");
 
     // Other domains are unaffected.
-    fake.on_code("github", "grace", github("4", Some("grace@example.com")));
-    sign_in(&app, "github", "grace")
+    fake.on_code("github", "gauri", github("4", Some("gauri@example.com")));
+    sign_in(&app, "github", "gauri")
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("grace@example.com"));
+        .assert_json_path("user.email", json!("gauri@example.com"));
 }
 
 #[tokio::test]
@@ -118,18 +118,18 @@ async fn no_two_factor_challenge_is_handed_out_for_an_enforced_domain() {
     let db = app.get::<Db>().await;
 
     // Linked before the domain came to sign in elsewhere.
-    let ada = create_user(&app, "Ada", "ada@corp.test").await;
+    let ada = create_user(&app, "Anu", "anu@corp.test").await;
     let uow = db.uow(None, None).await;
     social.link(&uow, ada.id, &github("1", None)).await.unwrap();
     uow.commit().await.unwrap();
     two_factor_on(&app, ada.id).await;
-    fake.on_code("github", "ada", github("1", None));
-    sign_in(&app, "github", "ada")
+    fake.on_code("github", "anu", github("1", None));
+    sign_in(&app, "github", "anu")
         .await
         .assert_error_code(403, "sso_required");
 
     // Elsewhere the challenge carries the provider for the second step.
-    let grace = create_user(&app, "Grace", "grace@example.com").await;
+    let grace = create_user(&app, "Gauri", "gauri@example.com").await;
     let uow = db.uow(None, None).await;
     social
         .link(&uow, grace.id, &github("2", None))
@@ -137,8 +137,8 @@ async fn no_two_factor_challenge_is_handed_out_for_an_enforced_domain() {
         .unwrap();
     uow.commit().await.unwrap();
     two_factor_on(&app, grace.id).await;
-    fake.on_code("github", "grace", github("2", None));
-    let body = sign_in(&app, "github", "grace")
+    fake.on_code("github", "gauri", github("2", None));
+    let body = sign_in(&app, "github", "gauri")
         .await
         .assert_status(200)
         .json_value();

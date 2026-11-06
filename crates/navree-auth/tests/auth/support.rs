@@ -102,7 +102,7 @@ pub fn first_url(text: &str) -> Option<String> {
 pub async fn create_user(app: &TestApp, email: &str) -> User {
     app.get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", email, PASSWORD)
+        .create_user("Anu Lakhotia", email, PASSWORD)
         .await
         .expect("the user is created")
 }

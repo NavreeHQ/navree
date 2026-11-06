@@ -342,9 +342,9 @@ mod tests {
 
     #[test]
     fn tokenize_splits_on_non_alphanumerics_and_lowercases() {
-        let tokens = tokenize("Ada Lovelace, ada@lovelace.io");
+        let tokens = tokenize("Anu Lakhotia, anu@lakhotia.io");
         let words: Vec<&str> = tokens.iter().map(|t| t.text.as_str()).collect();
-        assert_eq!(words, ["ada", "lovelace", "ada", "lovelace", "io"]);
+        assert_eq!(words, ["anu", "lakhotia", "anu", "lakhotia", "io"]);
         assert_eq!((tokens[1].start, tokens[1].end), (4, 12));
         assert_eq!(words_of("Émile Zoë"), ["émile", "zoë"]);
     }
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn distance_is_bounded() {
-        assert_eq!(distance_within("lovlace", "lovelace", 1), Some(1));
+        assert_eq!(distance_within("lovlace", "lakhotia", 1), Some(1));
         assert_eq!(distance_within("kitten", "sitting", 3), Some(3));
         assert_eq!(distance_within("kitten", "sitting", 2), None);
         assert_eq!(distance_within("a", "abcd", 2), None);
@@ -371,32 +371,32 @@ mod tests {
 
     #[test]
     fn match_quality_ranks_exact_prefix_and_typos() {
-        assert_eq!(match_quality("ada", "ada", false), 1.0);
-        assert_eq!(match_quality("lov", "lovelace", true), 0.9);
-        assert_eq!(match_quality("lov", "lovelace", false), 0.0);
-        assert_eq!(match_quality("lovlace", "lovelace", false), 0.7);
+        assert_eq!(match_quality("anu", "anu", false), 1.0);
+        assert_eq!(match_quality("lak", "lakhotia", true), 0.9);
+        assert_eq!(match_quality("lak", "lakhotia", false), 0.0);
+        assert_eq!(match_quality("lakhtia", "lakhotia", false), 0.7);
         assert_eq!(
-            match_quality("ada", "adb", false),
+            match_quality("anu", "adb", false),
             0.0,
             "short words need exact"
         );
-        assert_eq!(match_quality("lovek", "lovelace", true), 0.5);
+        assert_eq!(match_quality("lakhx", "lakhotia", true), 0.5);
     }
 
     #[test]
     fn the_last_word_is_a_prefix_unless_followed_by_a_space() {
-        let parsed = terms("ada lov");
+        let parsed = terms("anu lak");
         assert!(!parsed.terms[0].prefix);
         assert!(parsed.terms[1].prefix);
-        assert!(!terms("ada lov ").terms[1].prefix);
+        assert!(!terms("anu lov ").terms[1].prefix);
     }
 
     #[test]
     fn stop_words_are_dropped_and_synonyms_go_both_ways() {
-        let synonyms = BTreeMap::from([("acme".to_owned(), vec!["acme corp".to_owned()])]);
-        let parsed = QueryTerms::parse("the acme", &["the".to_owned()], &synonyms);
+        let synonyms = BTreeMap::from([("agra".to_owned(), vec!["agra corp".to_owned()])]);
+        let parsed = QueryTerms::parse("the agra", &["the".to_owned()], &synonyms);
         assert_eq!(parsed.terms.len(), 1);
-        assert_eq!(parsed.terms[0].synonyms, vec![vec!["acme", "corp"]]);
+        assert_eq!(parsed.terms[0].synonyms, vec![vec!["agra", "corp"]]);
 
         let synonyms = BTreeMap::from([("nyc".to_owned(), vec!["manhattan".to_owned()])]);
         let parsed = QueryTerms::parse("manhattan", &[], &synonyms);
@@ -409,30 +409,30 @@ mod tests {
     fn highlight_marks_matches_and_escapes_the_rest() {
         let tags = HighlightTags::default();
         assert_eq!(
-            highlight("Lovelace", &terms("lovlace"), &tags).as_deref(),
-            Some("<mark>Lovelace</mark>")
+            highlight("Lakhotia", &terms("lovlace"), &tags).as_deref(),
+            Some("<mark>Lakhotia</mark>")
         );
         assert_eq!(
-            highlight("Ada <b> & Lovelace", &terms("ada"), &tags).as_deref(),
-            Some("<mark>Ada</mark> &lt;b&gt; &amp; Lovelace")
+            highlight("Anu <b> & Lakhotia", &terms("anu"), &tags).as_deref(),
+            Some("<mark>Anu</mark> &lt;b&gt; &amp; Lakhotia")
         );
-        assert_eq!(highlight("Grace", &terms("ada"), &tags), None);
+        assert_eq!(highlight("Gauri", &terms("anu"), &tags), None);
         let em = HighlightTags {
             open: "<em>".into(),
             close: "</em>".into(),
         };
         assert_eq!(
-            highlight("ada lovelace", &terms("lov"), &em).as_deref(),
-            Some("ada <em>lovelace</em>")
+            highlight("anu lakhotia", &terms("lak"), &em).as_deref(),
+            Some("anu <em>lakhotia</em>")
         );
     }
 
     #[test]
     fn engine_marks_become_escaped_tags() {
-        let marked = format!("{MARK_OPEN}Ada{MARK_CLOSE} <3");
+        let marked = format!("{MARK_OPEN}Anu{MARK_CLOSE} <3");
         assert_eq!(
             from_marked(&marked, &HighlightTags::default()).as_deref(),
-            Some("<mark>Ada</mark> &lt;3")
+            Some("<mark>Anu</mark> &lt;3")
         );
         assert_eq!(from_marked("plain", &HighlightTags::default()), None);
     }

@@ -136,7 +136,7 @@ fn labels_tie_to_their_controls_and_addons_sit_in_the_group() {
 
 fn good() -> Vec<(String, String)> {
     [
-        ("title", "Acme"),
+        ("title", "Agra"),
         ("amount", "12,500.50"),
         ("currency", "USD"),
         ("stage", "closed_won"),
@@ -153,7 +153,7 @@ fn good() -> Vec<(String, String)> {
 #[test]
 fn a_good_submission_decodes() {
     let deal: NewDeal = decode(&good()).unwrap();
-    assert_eq!(deal.title, "Acme");
+    assert_eq!(deal.title, "Agra");
     assert_eq!(deal.amount, Money(1_250_050));
     assert_eq!(deal.stage, Stage::ClosedWon);
     assert_eq!(deal.close_date, None, "an empty optional is absent");
@@ -260,11 +260,11 @@ fn test_view_drives_a_form_with_no_browser() {
         .unwrap_err();
     assert!(errors.contains_key("title"), "{errors:?}");
     let deal = page
-        .fill("title", "Acme")
+        .fill("title", "Agra")
         .fill("amount", "1")
         .submit_as::<NewDeal>()
         .unwrap();
-    assert_eq!(deal.title, "Acme");
+    assert_eq!(deal.title, "Agra");
     assert_eq!(
         deal.stage,
         Stage::Lead,
@@ -313,7 +313,7 @@ fn rows() -> Vec<DealRow> {
         title: "A<cme".to_owned(),
         stage: "won",
         amount: Money(1234),
-        owner_name: "Ada".to_owned(),
+        owner_name: "Anu".to_owned(),
     }]
 }
 
@@ -456,7 +456,7 @@ fn a_form_can_pick_with_a_listbox_a_combobox_and_a_multi_select() {
             .post("/pick")
             .of(&value)
             .options("stage", [("won".to_owned(), "Won".to_owned())])
-            .options("owner", [("7".to_owned(), "Grace Hopper".to_owned())])
+            .options("owner", [("7".to_owned(), "Gauri Hundal".to_owned())])
             .options(
                 "tags",
                 [
@@ -473,7 +473,7 @@ fn a_form_can_pick_with_a_listbox_a_combobox_and_a_multi_select() {
         "the listbox shows the chosen label"
     );
     assert!(
-        out.contains(r#"value="Grace Hopper""#),
+        out.contains(r#"value="Gauri Hundal""#),
         "the combobox shows the label of the chosen one"
     );
     assert!(out.contains(r#"data-ui-search="/people/options""#));
@@ -507,10 +507,10 @@ fn a_picker_field_can_take_rich_choices_with_a_picture_and_words_to_find_it_by()
             .choices(
                 "owner",
                 [
-                    Choice::new("7", "Grace Hopper")
+                    Choice::new("7", "Gauri Hundal")
                         .avatar("/people/7.svg")
                         .keywords(["navy"]),
-                    Choice::new("8", "Ada Lovelace").description("Analyst"),
+                    Choice::new("8", "Anu Lakhotia").description("Analyst"),
                 ],
             )
             .into(),
@@ -521,7 +521,7 @@ fn a_picker_field_can_take_rich_choices_with_a_picture_and_words_to_find_it_by()
     );
     assert!(out.contains(r#"data-keywords="navy""#), "{out}");
     assert!(
-        out.contains(r#"value="Grace Hopper""#),
+        out.contains(r#"value="Gauri Hundal""#),
         "the chosen label shows"
     );
     assert!(
@@ -612,7 +612,7 @@ fn a_refusal_after_decoding_keeps_what_was_sent_and_shows_the_errors() {
     // Drawn as a page it is a 422 holding what was sent and the message.
     let page = refused.respond(|form| {
         View::new("Pick").body(navree_ui::Node::from(
-            form.options("owner", [("7".to_owned(), "Grace".to_owned())]),
+            form.options("owner", [("7".to_owned(), "Gauri".to_owned())]),
         ))
     });
     assert_eq!(page.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
@@ -737,7 +737,7 @@ async fn a_refused_form_shows_the_label_of_the_option_that_was_picked() {
     // Without the label the combobox can only show what it has: the posted id.
     let rejected = refused::<Pick>("stage=&owner=7").await;
     let bare = response_text(rejected).await;
-    assert!(!bare.contains("Grace Hopper"), "{bare}");
+    assert!(!bare.contains("Gauri Hundal"), "{bare}");
     assert!(
         bare.contains(r#"value="7" placeholder="Search people""#),
         "the input shows the id: {bare}"
@@ -745,14 +745,14 @@ async fn a_refused_form_shows_the_label_of_the_option_that_was_picked() {
     // The handler looks the person up from the posted id and hands the label over.
     let rejected = refused::<Pick>("stage=&owner=7").await;
     let owner = rejected.value("owner").unwrap().to_owned();
-    let rejected = rejected.options("owner", [(owner, "Grace Hopper".to_owned())]);
+    let rejected = rejected.options("owner", [(owner, "Gauri Hundal".to_owned())]);
     let html = response_text(rejected).await;
     assert!(
-        html.contains(r#"value="Grace Hopper" placeholder="Search people""#),
+        html.contains(r#"value="Gauri Hundal" placeholder="Search people""#),
         "the input shows the label: {html}"
     );
     assert!(
-        html.contains(r#"<option value="7" selected>Grace Hopper</option>"#),
+        html.contains(r#"<option value="7" selected>Gauri Hundal</option>"#),
         "{html}"
     );
     // The error is still there, and so is the status.
@@ -764,13 +764,13 @@ async fn a_refused_form_takes_rich_choices_too_and_a_custom_page_still_gets_the_
     use navree_ui::Choice;
     let rejected = refused::<Pick>("stage=&owner=7").await.choices(
         "owner",
-        [Choice::new("7", "Grace Hopper").description("Admiral")],
+        [Choice::new("7", "Gauri Hundal").description("Admiral")],
     );
     let page =
         rejected.respond(|form| View::new("Pick").body(navree_ui::Node::from(form.one_column())));
     assert_eq!(page.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
     let html = body_text(page).await;
-    assert!(html.contains("Grace Hopper"), "{html}");
+    assert!(html.contains("Gauri Hundal"), "{html}");
     assert!(html.contains("Admiral"), "{html}");
 }
 

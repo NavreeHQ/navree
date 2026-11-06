@@ -118,7 +118,7 @@ pub(crate) fn text_block(text: impl Into<String>) -> Value {
 /// ```
 /// use navree_mcp::ResourceContents;
 ///
-/// let csv = ResourceContents::text("id,title\n1,Acme", "text/csv");
+/// let csv = ResourceContents::text("id,title\n1,Agra", "text/csv");
 /// assert_eq!(csv.mime_type(), "text/csv");
 /// let pdf = ResourceContents::blob(vec![0x25, 0x50, 0x44, 0x46], "application/pdf");
 /// assert_eq!(pdf.as_bytes(), Some(&[0x25, 0x50, 0x44, 0x46][..]));

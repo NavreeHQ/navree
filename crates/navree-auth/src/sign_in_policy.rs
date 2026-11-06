@@ -312,8 +312,8 @@ mod tests {
 
     #[test]
     fn attempts_normalize_the_email_and_name_the_domain() {
-        let attempt = SignInAttempt::new("  Ada@Corp.Test ", SignInMethod::Otp);
-        assert_eq!(attempt.email, "ada@corp.test");
+        let attempt = SignInAttempt::new("  Anu@Corp.Test ", SignInMethod::Otp);
+        assert_eq!(attempt.email, "anu@corp.test");
         assert_eq!(attempt.domain(), Some("corp.test"));
         assert_eq!(attempt.audience, SignInAudience::App);
         assert_eq!(attempt.user_id, None);
@@ -333,8 +333,8 @@ mod tests {
             "Eve@ACME.test.",
             " Eve@Acme.Test ",
             "eve@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.test",
-            "eve@acme\u{3002}test",
-            "eve@acme\u{ff0e}test\u{3002}",
+            "eve@agra\u{3002}test",
+            "eve@agra\u{ff0e}test\u{3002}",
         ] {
             let attempt = SignInAttempt::new(email, SignInMethod::Otp);
             assert_eq!(attempt.domain(), Some("acme.test"), "{email}");

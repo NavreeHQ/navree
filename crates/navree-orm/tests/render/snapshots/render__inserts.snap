@@ -3,7 +3,7 @@ source: crates/navree-orm/tests/render/main.rs
 expression: statement(rows.clone())
 ---
 PostgreSQL: INSERT INTO "companies" ("name", "country") VALUES ($1, $2), ($3, DEFAULT)
-  values: [String("Acme"), Null(String), String("Globex")]
+  values: [String("Agra"), Null(String), String("Gulati")]
 MySQL: INSERT INTO `companies` (`name`, `country`) VALUES (?, ?), (?, DEFAULT)
-  values: [String("Acme"), Null(String), String("Globex")]
+  values: [String("Agra"), Null(String), String("Gulati")]
 SQLite: error: DEFAULT in a list of values (leave the column out instead) is not supported on SQLite

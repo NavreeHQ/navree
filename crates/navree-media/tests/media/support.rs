@@ -72,7 +72,7 @@ fn exif_segment(orientation: u16) -> Vec<u8> {
     segment
 }
 
-/// A PNG with a `tEXt` chunk (`Author: Ada`) before IEND.
+/// A PNG with a `tEXt` chunk (`Author: Anu`) before IEND.
 pub fn png_with_text(width: u32, height: u32) -> Vec<u8> {
     let png = image_bytes(width, height, ImageFormat::Png);
     let iend = png.len() - 12;

@@ -33,7 +33,7 @@ fn select() -> Statement {
 async fn query_logs_capture_the_statements_of_a_scope() {
     let (db, _temp) = people().await;
     let (inner_count, queries) = QueryLog::capture(async {
-        db.pool().execute(&insert("ada")).await.unwrap();
+        db.pool().execute(&insert("anu")).await.unwrap();
         let (_, inner) = QueryLog::capture(async {
             assert!(QueryLog::is_capturing());
             db.pool().fetch_all(&select()).await.unwrap()
@@ -49,10 +49,10 @@ async fn query_logs_capture_the_statements_of_a_scope() {
         "the outer capture sees the inner one's statements"
     );
     assert_eq!(queries[0].sql, INSERT);
-    assert_eq!(queries[0].values, [Value::from("ada")]);
+    assert_eq!(queries[0].values, [Value::from("anu")]);
     assert_eq!(
         queries[0].raw_sql(),
-        "INSERT INTO people (name) VALUES ('ada')"
+        "INSERT INTO people (name) VALUES ('anu')"
     );
     assert_eq!(&*queries[0].connection, "default");
     assert_eq!(queries[0].backend, Backend::Sqlite);
@@ -83,9 +83,9 @@ async fn listeners_and_hooks_see_statements_and_transactions() {
     let hook = executing.clone();
     db.before_executing(move |sql| hook.lock().unwrap().push(sql.to_owned()));
 
-    db.execute(&insert("ada")).await.unwrap();
+    db.execute(&insert("anu")).await.unwrap();
     // Every handle on the pool shares the listeners.
-    db.clone().execute(&insert("grace")).await.unwrap();
+    db.clone().execute(&insert("gauri")).await.unwrap();
     db.transaction(|uow| async move {
         uow.execute(&insert("edsger")).await?;
         Ok(())
@@ -102,8 +102,8 @@ async fn listeners_and_hooks_see_statements_and_transactions() {
     assert_eq!(
         inserts,
         [
-            "INSERT INTO people (name) VALUES ('ada')",
-            "INSERT INTO people (name) VALUES ('grace')",
+            "INSERT INTO people (name) VALUES ('anu')",
+            "INSERT INTO people (name) VALUES ('gauri')",
             "INSERT INTO people (name) VALUES ('edsger')",
         ],
         "statements in transactions too"

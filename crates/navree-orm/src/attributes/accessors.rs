@@ -21,16 +21,16 @@
 //!
 //! #[accessors]
 //! impl Person {
-//!     /// "Ada Lovelace".
+//!     /// "Anu Lakhotia".
 //!     #[accessor]
 //!     fn full_name(&self) -> String {
 //!         format!("{} {}", self.first_name, self.last_name)
 //!     }
 //! }
 //!
-//! let ada = Record::new(Person { id: 1, first_name: "Ada".into(), last_name: "Lovelace".into() });
-//! assert_eq!(ada.full_name(), "Ada Lovelace"); // still a plain method
-//! assert_eq!(ada.to_value()?["full_name"], "Ada Lovelace");
+//! let ada = Record::new(Person { id: 1, first_name: "Anu".into(), last_name: "Lakhotia".into() });
+//! assert_eq!(ada.full_name(), "Anu Lakhotia"); // still a plain method
+//! assert_eq!(ada.to_value()?["full_name"], "Anu Lakhotia");
 //! # Ok::<(), navree_orm::OrmError>(())
 //! ```
 

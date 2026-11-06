@@ -96,14 +96,14 @@ async fn a_cookie_planted_at_another_path_names_nothing_after_sign_in() {
         .await
         .unwrap()
         .id;
-    let acme = workspace(&app, user, "Acme").await.id;
+    let agra = workspace(&app, user, "Agra").await.id;
     give_role(&app, user, "editor", &["helm.view", "notes.*"]).await;
-    seed(&app, acme, "Acme secret").await;
+    seed(&app, agra, "Agra secret").await;
     let client = app.client();
     // The test client's jar keeps one cookie of a name, so the planted one is
     // put back after sign-in: what clearing `{base}` doesn't reach.
     let token = sign_in(&client, "one@navree.test").await;
-    client.set_cookie(WORKSPACE_COOKIE, &acme.to_string());
+    client.set_cookie(WORKSPACE_COOKIE, &agra.to_string());
     let response = client.get(NOTES).send().await.assert_status(400);
     assert!(response.text().contains("Choose a workspace first"));
     // The form's works, for this sign-in.
@@ -111,7 +111,7 @@ async fn a_cookie_planted_at_another_path_names_nothing_after_sign_in() {
         .post("/admin/workspace")
         .header("accept", "text/html")
         .form(&[
-            ("workspace", acme.to_string().as_str()),
+            ("workspace", agra.to_string().as_str()),
             ("_csrf", token.as_str()),
         ])
         .send()

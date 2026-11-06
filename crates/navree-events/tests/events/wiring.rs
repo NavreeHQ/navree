@@ -34,10 +34,10 @@ async fn one_listener_handles_several_events() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     bus.emit(UserDeleted { id: 7 }).await.unwrap();
 
-    assert_eq!(journal.entries(), ["audit:ada", "audit:7"]);
+    assert_eq!(journal.entries(), ["audit:anu", "audit:7"]);
 }
 
 listener!(Ghost, "ghost", [UserRegistered => |e| e.email]);

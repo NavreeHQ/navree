@@ -17,10 +17,10 @@ use uuid::Uuid;
 /// use navree_flags::FlagScope;
 /// use uuid::Uuid;
 ///
-/// let (ada, acme) = (Uuid::now_v7(), Uuid::now_v7());
-/// let scope: FlagScope = FlagScope::user(ada).workspace(acme);
+/// let (ada, agra) = (Uuid::now_v7(), Uuid::now_v7());
+/// let scope: FlagScope = FlagScope::user(ada).workspace(agra);
 /// assert_eq!(scope.user_id(), Some(ada));
-/// assert_eq!(scope.workspace_id(), Some(acme));
+/// assert_eq!(scope.workspace_id(), Some(agra));
 /// assert!(FlagScope::everyone().is_everyone());
 /// ```
 ///

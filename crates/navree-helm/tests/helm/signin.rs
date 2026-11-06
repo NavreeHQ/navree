@@ -38,7 +38,7 @@ async fn signin_app() -> (TestApp, Arc<FixedClock>) {
         .module(SessionModule::for_root(SessionOptions::default()))
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme CRM"))
+        .module(AuthPages::new().app_name("Agra CRM"))
         .module(AccessModule::for_root(options()))
         .module(CrmModule)
         .module(HelmModule::from_config())

@@ -24,7 +24,7 @@ use crate::{Disk, StorageError, StoredFile, UploadRejection, UploadRules};
 ///   "disk": "uploads",
 ///   "path": "avatars/3fQx...k9Ta.png",
 ///   "method": "PUT",
-///   "url": "https://acme-uploads.s3.eu-west-1.amazonaws.com/avatars/3fQx...k9Ta.png?X-Amz-Algorithm=...",
+///   "url": "https://agra-uploads.s3.eu-west-1.amazonaws.com/avatars/3fQx...k9Ta.png?X-Amz-Algorithm=...",
 ///   "headers": { "content-type": "image/png" },
 ///   "expires_at": "2026-10-26T12:10:00Z"
 /// }

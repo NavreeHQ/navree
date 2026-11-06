@@ -255,7 +255,7 @@ async fn ses_with_an_sns_action_delivers_the_message_in_the_notification() {
         vec!["reply+abc@in.acme.test"],
         "the receipt rule's recipients, not every destination"
     );
-    assert_eq!(received.envelope.sender.as_deref(), Some("ada@example.com"));
+    assert_eq!(received.envelope.sender.as_deref(), Some("anu@example.com"));
     assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
     assert_eq!(received.verdicts.dkim, Some(Verdict::Gray));
     assert_eq!(received.verdicts.dmarc, Some(Verdict::Fail));
@@ -551,7 +551,7 @@ async fn a_mailgun_mime_route_delivers_the_whole_message() {
     let mut form = signed_fields(chrono::Utc::now().timestamp());
     form.extend([
         ("recipient".into(), "reply+abc@in.acme.test".into()),
-        ("sender".into(), "ada@example.com".into()),
+        ("sender".into(), "anu@example.com".into()),
         ("X-Mailgun-Sflag".into(), "No".into()),
         ("X-Mailgun-Spf".into(), "Pass".into()),
         (
@@ -620,7 +620,7 @@ async fn a_mailgun_mime_route_takes_a_message_longer_than_a_form_field() {
     let mut fields = signed_fields(chrono::Utc::now().timestamp());
     fields.extend([
         ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
-        ("sender".to_owned(), "ada@example.com".to_owned()),
+        ("sender".to_owned(), "anu@example.com".to_owned()),
         ("body-mime".to_owned(), message.clone()),
     ]);
     let (content_type, body) = multipart(
@@ -649,10 +649,10 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     let mut fields = signed_fields(chrono::Utc::now().timestamp());
     fields.extend([
         ("recipient".to_owned(), "support@acme.test".to_owned()),
-        ("sender".to_owned(), "grace@example.com".to_owned()),
+        ("sender".to_owned(), "gauri@example.com".to_owned()),
         (
             "from".to_owned(),
-            "Grace Hopper <grace@example.com>".to_owned(),
+            "Gauri Hundal <gauri@example.com>".to_owned(),
         ),
         ("subject".to_owned(), "Quarterly report".to_owned()),
         (
@@ -704,7 +704,7 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     );
     assert_eq!(
         received.from.as_ref().and_then(|a| a.name.as_deref()),
-        Some("Grace Hopper")
+        Some("Gauri Hundal")
     );
     assert_eq!(received.subject.as_deref(), Some("Quarterly report"));
     assert_eq!(
@@ -991,10 +991,10 @@ async fn postmark_without_the_raw_email_is_rebuilt_from_its_fields() {
     assert_eq!(seen[0].1, "reply+abc@in.acme.test");
     assert_eq!(
         received.from.as_ref().map(ToString::to_string).as_deref(),
-        Some("Ada Lovelace <ada@example.com>")
+        Some("Anu Lakhotia <anu@example.com>")
     );
     assert_eq!(received.to[0].email, "reply+abc@in.acme.test");
-    assert_eq!(received.cc[0].email, "grace@example.com");
+    assert_eq!(received.cc[0].email, "gauri@example.com");
     assert_eq!(
         received.subject.as_deref(),
         Some("Re: [#42] Printer on fire")

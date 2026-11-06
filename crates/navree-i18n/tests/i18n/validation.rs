@@ -12,7 +12,7 @@ async fn validation_errors_are_in_the_requested_language() {
     app.client()
         .post("/api/deals/contacts")
         .header("Accept-Language", "fr-FR,fr;q=0.9")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_validation_error("first_name")
@@ -22,7 +22,7 @@ async fn validation_errors_are_in_the_requested_language() {
     app.client()
         .post("/api/deals/contacts")
         .header("Accept-Language", "fr")
-        .json(&json!({ "first_name": "", "last_name": "Lovelace", "email": "nope" }))
+        .json(&json!({ "first_name": "", "last_name": "Lakhotia", "email": "nope" }))
         .send()
         .await
         .assert_json_path(
@@ -37,7 +37,7 @@ async fn validation_errors_are_in_the_requested_language() {
     app.client()
         .post("/api/deals/contacts")
         .header("Accept-Language", "de")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_json_path(
@@ -48,7 +48,7 @@ async fn validation_errors_are_in_the_requested_language() {
     // English is unchanged.
     app.client()
         .post("/api/deals/contacts")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_json_path(
@@ -66,7 +66,7 @@ async fn validation_overrides_still_apply_in_the_default_language() {
         .await;
     app.client()
         .post("/api/deals/contacts")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_json_path("errors.first_name.0", json!("Please fill in first_name"));
@@ -74,7 +74,7 @@ async fn validation_overrides_still_apply_in_the_default_language() {
     app.client()
         .post("/api/deals/contacts")
         .header("Accept-Language", "fr")
-        .json(&json!({ "last_name": "Lovelace" }))
+        .json(&json!({ "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_json_path("errors.first_name.0", json!("prénom ne doit pas être vide"));
@@ -84,7 +84,7 @@ async fn validation_overrides_still_apply_in_the_default_language() {
 #[tokio::test]
 async fn international_types_and_rules_are_translated() {
     let app = support::builder().build().await;
-    let invalid = json!({ "first_name": "Ada", "last_name": "Lovelace", "country": "XX" });
+    let invalid = json!({ "first_name": "Anu", "last_name": "Lakhotia", "country": "XX" });
 
     // A `Country` that does not parse, in the shipped German and French.
     app.client()
@@ -112,7 +112,7 @@ async fn international_types_and_rules_are_translated() {
     app.client()
         .post("/api/deals/contacts")
         .header("Accept-Language", "pt")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "company": "<b>Acme</b>" }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia", "company": "<b>Agra</b>" }))
         .send()
         .await
         .assert_json_path(

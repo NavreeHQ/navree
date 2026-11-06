@@ -348,7 +348,7 @@ impl ArchiveModule {
 async fn app(fake: &MailFake) -> TestApp {
     TestApp::builder()
         .config("app.key", navree::crypto::generate_key())
-        .config("mail.from", "Acme Support <support@acme.test>")
+        .config("mail.from", "Agra Support <support@acme.test>")
         .config("mail.inbound.disk", "mail")
         .config("storage.default", "mail")
         .config("storage.disks.mail.driver", "memory")
@@ -390,10 +390,10 @@ async fn a_reply_lands_on_its_ticket() {
         .receive(
             app.ctx(),
             Incoming::compose()
-                .from("Ada Lovelace <ada@example.com>")
+                .from("Anu Lakhotia <anu@example.com>")
                 .to(reply_to)
                 .subject("Re: your support request")
-                .text("Thanks, that fixed it.\n\nOn Monday, Acme Support wrote:\n> Try turning it off and on.")
+                .text("Thanks, that fixed it.\n\nOn Monday, Agra Support wrote:\n> Try turning it off and on.")
                 .build(),
         )
         .await
@@ -413,7 +413,7 @@ async fn the_reply_address_of_a_notification_leads_back_to_its_ticket() {
 
     app.get::<TicketMail>()
         .await
-        .agent_replied(ticket, "ada@example.com", "We are on it.")
+        .agent_replied(ticket, "anu@example.com", "We are on it.")
         .await
         .unwrap();
     let sent = fake.sent();
@@ -424,7 +424,7 @@ async fn the_reply_address_of_a_notification_leads_back_to_its_ticket() {
     let received = inbound
         .receive(
             Incoming::compose()
-                .from("ada@example.com")
+                .from("anu@example.com")
                 .to(reply_to.to_ascii_uppercase())
                 .text("Thank you!")
                 .build(),
@@ -441,7 +441,7 @@ async fn the_reply_address_of_a_notification_leads_back_to_its_ticket() {
     let auto = inbound
         .receive(
             Incoming::compose()
-                .from("ada@example.com")
+                .from("anu@example.com")
                 .to(reply_to.clone())
                 .header("Auto-Submitted", "auto-replied")
                 .text("I am away.")
@@ -480,7 +480,7 @@ async fn support_mail_is_stored_routed_and_archived() {
         .await
         .receive(
             Incoming::compose()
-                .from("Grace <grace@example.com>")
+                .from("Gauri <gauri@example.com>")
                 .to("Support@Acme.test")
                 .subject("Invoice question")
                 .text("Where is my invoice?")
@@ -585,7 +585,7 @@ async fn the_raw_route_receives_mime() {
     let _ = fake;
 
     let raw = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test")
         .subject("Hello")
         .text("Hi")

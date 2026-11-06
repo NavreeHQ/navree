@@ -115,7 +115,7 @@ The UI proof app. See [Start the proof apps](README.md#start-the-proof-apps).
 - The reader says: each field's label as its name, with the right role. "Company" says its current text "Choose a company" and that it opens a list or is collapsed. "Cancel" is a link; "Create deal" is a button. No field is invalid.
 
 **17. Send the form with a bad value**
-- Keys: Both readers: in "Deal name" type `Ludhiana renewal`. Tab to "Company", press Enter to open the list, press the Down arrow until the reader says "Acme", press Enter. Tab to "Value" (past "Main contact") and type `lots`. Then Tab to "Create deal" and press Enter (VoiceOver: VO+Space); do not press Enter inside "Value", because focus must move from the button to the field for the reader to speak the field.
+- Keys: Both readers: in "Deal name" type `Ludhiana renewal`. Tab to "Company", press Enter to open the list, press the Down arrow until the reader says "Agra", press Enter. Tab to "Value" (past "Main contact") and type `lots`. Then Tab to "Create deal" and press Enter (VoiceOver: VO+Space); do not press Enter inside "Value", because focus must move from the button to the field for the reader to speak the field.
 - The page: the form is sent without leaving the page. The server refuses "lots". Under "Value" the message "Enter an amount of 0 or more, like 12,500." appears. The field is marked invalid and tied to the message. Focus moves to "Value". The words "1 field needs attention" are spoken by the page.
 - The reader says: the field first: "Value", edit, invalid entry (NVDA) or invalid (VoiceOver), `lots`, and its description "Enter an amount of 0 or more, like 12,500." Then, from the page's announcer, "1 field needs attention". Each of the two is spoken once, within about two seconds. The message is not spoken twice. What you typed in "Deal name" and "Company" is still there.
 
@@ -127,7 +127,7 @@ The UI proof app. See [Start the proof apps](README.md#start-the-proof-apps).
 ### JavaScript off
 
 **19. The deal form without script**
-- Keys: Turn JavaScript off and reload `/deals/new`. Both readers: type `Ludhiana renewal` in "Deal name". Tab to "Company": it is now an ordinary list; choose "Acme" with the arrow keys (on macOS press Space to open it, the Down arrow to "Acme", then Return). Tab to "Value", type `lots`, Tab to "Create deal" and press Enter.
+- Keys: Turn JavaScript off and reload `/deals/new`. Both readers: type `Ludhiana renewal` in "Deal name". Tab to "Company": it is now an ordinary list; choose "Agra" with the arrow keys (on macOS press Space to open it, the Down arrow to "Agra", then Return). Tab to "Value", type `lots`, Tab to "Create deal" and press Enter.
 - The page: the whole page loads again with the error shown. "Deal name" holds `Ludhiana renewal`. Under "Value" is "Enter an amount of 0 or more, like 12,500." Nothing says how many fields need attention, and nothing moves focus to the error ("Deal name" may take focus because it asks for focus on load).
 - The reader says: the new page's title "New deal". Find the field with Tab or the form-fields list: "Value", edit, invalid entry (or invalid), `lots`, and the description "Enter an amount of 0 or more, like 12,500." The reader does not say "1 field needs attention": that line needs script.
 

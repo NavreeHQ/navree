@@ -12,7 +12,7 @@ use crate::support::{self, Note, User, audit_rows, new_note};
 fn new_user() -> User {
     User {
         id: Uuid::now_v7(),
-        email: "ada@example.com".into(),
+        email: "anu@example.com".into(),
         password_hash: "$argon2id$hash-value".into(),
         remember_token: Some("remember-me-value".into()),
         ssn: Some("123-45-6789".into()),
@@ -54,7 +54,7 @@ async fn skipped_fields_never_stored() {
         .unwrap();
     let mut found = User::find_or_fail(&uow, created.id).await.unwrap();
     found
-        .update(&uow, |user| user.email = "ada@lovelace.dev".into())
+        .update(&uow, |user| user.email = "anu@lakhotia.dev".into())
         .await
         .unwrap();
     User::find_or_fail(&uow, created.id)
@@ -69,7 +69,7 @@ async fn skipped_fields_never_stored() {
     let log = app.get::<AuditLog>().await;
     log.record(
         AuditEntry::new(AuditKind::Security, "auth.failed")
-            .metadata(json!({"email": "ada@example.com", "password": "typed-password-value"})),
+            .metadata(json!({"email": "anu@example.com", "password": "typed-password-value"})),
     )
     .await
     .unwrap();
@@ -102,25 +102,25 @@ async fn skipped_fields_never_stored() {
     );
     assert_eq!(
         rows[0].new_values,
-        Some(json!({"id": created.id, "email": "ada@example.com", "settings": {"theme": "dark"}}))
+        Some(json!({"id": created.id, "email": "anu@example.com", "settings": {"theme": "dark"}}))
     );
     // Only secret fields changed: the update is recorded without values.
     assert_eq!(rows[1].old_values, Some(json!({})));
     assert_eq!(rows[1].new_values, Some(json!({})));
     assert_eq!(
         rows[2].old_values,
-        Some(json!({"email": "ada@example.com"}))
+        Some(json!({"email": "anu@example.com"}))
     );
     assert_eq!(
         rows[2].new_values,
-        Some(json!({"email": "ada@lovelace.dev"}))
+        Some(json!({"email": "anu@lakhotia.dev"}))
     );
     assert_eq!(
         rows[4].new_values.as_ref().and_then(|v| v.get("title")),
         Some(&json!("a")),
         "`notes.body` drops only that field"
     );
-    assert_eq!(rows[5].metadata, json!({"email": "ada@example.com"}));
+    assert_eq!(rows[5].metadata, json!({"email": "anu@example.com"}));
 }
 
 #[tokio::test]

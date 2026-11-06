@@ -17,7 +17,7 @@ async fn stored_notifications_are_orm_models() {
     let app = support::app().await;
     let notifier = app.get::<Notifier>().await;
     let (alice, bob) = (TestUser::new(), TestUser::new());
-    for (user, title) in [(&alice, "Acme"), (&alice, "Globex"), (&bob, "Initech")] {
+    for (user, title) in [(&alice, "Agra"), (&alice, "Gulati"), (&bob, "Indrani")] {
         notifier
             .send(user, DealWon::via(&[Channel::Database], title))
             .await
@@ -37,8 +37,8 @@ async fn stored_notifications_are_orm_models() {
         .unwrap();
     assert_eq!(mine.len(), 2);
     assert_eq!(mine[0].notification_type, "deal_won");
-    assert_eq!(mine[0].data["title"], json!("Acme"));
-    assert_eq!(mine[1].data["title"], json!("Globex"));
+    assert_eq!(mine[0].data["title"], json!("Agra"));
+    assert_eq!(mine[1].data["title"], json!("Gulati"));
     assert_eq!(
         Stored::query()
             .where_(Stored::NOTIFICATION_TYPE.eq("deal_won"))
@@ -56,7 +56,7 @@ async fn old_notifications_are_pruned_with_the_orm() {
     let notifier = app.get::<Notifier>().await;
     let user = TestUser::new();
     notifier
-        .send(&user, DealWon::via(&[Channel::Database], "Acme"))
+        .send(&user, DealWon::via(&[Channel::Database], "Agra"))
         .await
         .unwrap();
 

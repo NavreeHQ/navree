@@ -472,7 +472,7 @@ async fn a_provider_implements_only_what_it_offers() {
             .create_customer(&navree_billing::NewCustomer {
                 billable_type: "workspace".into(),
                 billable_id: WORKSPACE,
-                name: "Acme".into(),
+                name: "Agra".into(),
                 email: None,
                 idempotency_key: "k".into(),
             })

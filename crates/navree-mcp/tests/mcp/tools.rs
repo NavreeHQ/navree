@@ -99,8 +99,8 @@ async fn tools_carry_descriptions_schemas_titles_and_hints() {
 async fn results_are_structured_content_and_json_text() {
     let app = app().await;
     let rep = user();
-    insert_deal(&app, rep.user_id, "Acme renewal", "lead").await;
-    insert_deal(&app, Uuid::now_v7(), "Globex", "won").await;
+    insert_deal(&app, rep.user_id, "Agra renewal", "lead").await;
+    insert_deal(&app, Uuid::now_v7(), "Gulati", "won").await;
     let mcp = McpTestClient::new(app.acting_as(rep.clone()))
         .initialize()
         .await;
@@ -109,8 +109,8 @@ async fn results_are_structured_content_and_json_text() {
         .call_tool("list_deals", json!({}))
         .await
         .assert_ok()
-        .assert_json_path("0.title", json!("Acme renewal"))
-        .assert_json_path("1.title", json!("Globex"));
+        .assert_json_path("0.title", json!("Agra renewal"))
+        .assert_json_path("1.title", json!("Gulati"));
     // An array is sent as `{"result": [...]}` structured content.
     assert_eq!(result.structured().unwrap()["result"][1]["stage"], "won");
     let deals: Vec<DealResource> = result.json();
@@ -119,7 +119,7 @@ async fn results_are_structured_content_and_json_text() {
     mcp.call_tool("list_deals", json!({ "mine": true }))
         .await
         .assert_ok()
-        .assert_json_path("0.title", json!("Acme renewal"));
+        .assert_json_path("0.title", json!("Agra renewal"));
     let won = mcp
         .call_tool("list_deals", json!({ "stage": "won" }))
         .await
@@ -129,11 +129,11 @@ async fn results_are_structured_content_and_json_text() {
     let created = mcp
         .call_tool(
             "create_deal",
-            json!({ "title": "Initech", "amount_cents": 5000 }),
+            json!({ "title": "Indrani", "amount_cents": 5000 }),
         )
         .await
         .assert_ok()
-        .assert_json_path("title", json!("Initech"));
+        .assert_json_path("title", json!("Indrani"));
     // An object is its own structured content.
     assert_eq!(created.structured().unwrap()["amount_cents"], 5000);
 

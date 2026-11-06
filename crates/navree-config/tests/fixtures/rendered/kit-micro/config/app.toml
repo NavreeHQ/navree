@@ -1,4 +1,4 @@
-# Acme cloud: settings for every environment.
+# Agra cloud: settings for every environment.
 #
 # `.env` ranks above this file and holds the settings of one machine (the
 # database and broker settings Dock writes, secrets), and APP_* environment
@@ -6,7 +6,7 @@
 # Secrets never go here.
 
 [app]
-name = "acme-cloud"
+name = "agra-cloud"
 
 [http]
 # Health checks and metrics for the orchestrator: /health/live,
@@ -29,9 +29,9 @@ registration = false
 
 [micro]
 # The consumer group, the client id and the `navree-service` header.
-service = "acme-cloud"
+service = "agra-cloud"
 # tcp, nats, kafka, rabbitmq, redis or mqtt; each needs its navree feature
-# (`micro-nats`, ... in crates/acme-cloud/Cargo.toml). The broker's URL
+# (`micro-nats`, ... in crates/agra-cloud/Cargo.toml). The broker's URL
 # comes from .env (APP_MICRO__URL, written by `navree dock up`).
 transport = "nats"
 # The default deadline of `ServiceClient::send`.

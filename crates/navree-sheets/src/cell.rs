@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn values_become_cells() {
-        assert_eq!("Ada".to_cell(), Cell::Text("Ada".into()));
+        assert_eq!("Anu".to_cell(), Cell::Text("Anu".into()));
         assert_eq!(String::from("x").to_cell(), Cell::Text("x".into()));
         assert_eq!(42u32.to_cell(), Cell::Int(42));
         assert_eq!((-7i64).to_cell(), Cell::Int(-7));

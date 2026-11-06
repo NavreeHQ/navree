@@ -15,12 +15,12 @@ enum Piece {
 /// characters, `_` one character, a backslash makes the next character
 /// literal (as on PostgreSQL and MySQL), everything else is literal. The
 /// expression is anchored where the pattern does not start or end with
-/// `%`, so `acme%` is `^acme` (a prefix, which an index serves), `%acme%`
-/// is `acme`, and `acme` is `^acme\z` (no newline may follow, as with
+/// `%`, so `agra%` is `^agra` (a prefix, which an index serves), `%agra%`
+/// is `agra`, and `agra` is `^agra\z` (no newline may follow, as with
 /// `LIKE`). Run it with the `s` option, so `%` and `_` match newlines too.
 ///
 /// ```text
-/// like_regex("acme%")    == "^acme"
+/// like_regex("agra%")    == "^agra"
 /// like_regex("%a_c%")    == "a.c"
 /// like_regex("50\\%")    == "^50%\\z"
 /// like_regex("1+1=2")    == "^1\\+1=2\\z"
@@ -75,10 +75,10 @@ mod tests {
 
     #[test]
     fn patterns_become_anchored_regexes() {
-        assert_eq!(like_regex("acme"), "^acme\\z");
-        assert_eq!(like_regex("acme%"), "^acme");
-        assert_eq!(like_regex("%acme"), "acme\\z");
-        assert_eq!(like_regex("%acme%"), "acme");
+        assert_eq!(like_regex("agra"), "^agra\\z");
+        assert_eq!(like_regex("agra%"), "^agra");
+        assert_eq!(like_regex("%agra"), "agra\\z");
+        assert_eq!(like_regex("%agra%"), "agra");
         assert_eq!(like_regex("%a_c%"), "a.c");
         assert_eq!(like_regex("a%%b"), "^a.*b\\z");
         assert_eq!(like_regex("%"), "");

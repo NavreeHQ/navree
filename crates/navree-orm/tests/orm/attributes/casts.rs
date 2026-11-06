@@ -776,7 +776,7 @@ async fn newtypes_that_are_fields_need_no_cast() {
     let contact = Contact::create(
         &t.db,
         Contact {
-            email: Email::new(" Ada@Example.com "),
+            email: Email::new(" Anu@Example.com "),
             ..Contact::default()
         },
     )
@@ -784,10 +784,10 @@ async fn newtypes_that_are_fields_need_no_cast() {
     .unwrap();
     assert_eq!(
         stored_text(&t.db, "contacts", "email").await.as_deref(),
-        Some("ada@example.com")
+        Some("anu@example.com")
     );
     let found = Contact::query()
-        .where_(Contact::EMAIL.eq(Email::new("ADA@example.com")))
+        .where_(Contact::EMAIL.eq(Email::new("ANU@example.com")))
         .first(&t.db)
         .await
         .unwrap()
@@ -795,8 +795,8 @@ async fn newtypes_that_are_fields_need_no_cast() {
     assert_eq!(found.email, contact.email);
     let mut filled = Record::new(Contact::default());
     filled
-        .fill(attrs! { "email" => "Grace@Example.com" })
+        .fill(attrs! { "email" => "Gauri@Example.com" })
         .unwrap();
-    assert_eq!(filled.email, Email::new("grace@example.com"));
-    assert_eq!(filled.to_value().unwrap()["email"], "grace@example.com");
+    assert_eq!(filled.email, Email::new("gauri@example.com"));
+    assert_eq!(filled.to_value().unwrap()["email"], "gauri@example.com");
 }

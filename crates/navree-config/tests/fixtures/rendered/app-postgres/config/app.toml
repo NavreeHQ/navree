@@ -9,7 +9,7 @@ api_prefix = "/api"
 [database]
 # PostgreSQL: `navree dock up` runs it on this machine. Production sets
 # APP_DATABASE__URL instead.
-url = "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+url = "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
 # Run pending migrations at boot (handy in development; use `navree migrate`
 # in deployments).
 migrate_on_boot = true
@@ -37,7 +37,7 @@ registration = true
 resolvers = ["header"]
 
 [api]
-title = "Acme cloud API"
+title = "Agra cloud API"
 # The Lighthouse and Logbook dashboards are pages, not API routes:
 # `navree check` doesn't ask them for #[api] docs.
 undocumented = ["/_lighthouse*", "/_logbook*"]

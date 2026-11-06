@@ -14,13 +14,13 @@ use crate::support::{self, PASSWORD, RecordingSink, login, tokens};
 #[tokio::test]
 async fn login_returns_token_pair_and_user() {
     let app = support::app().await;
-    let user = support::create_user(&app, "ada@example.com").await;
-    let response = login(&app.client(), "ADA@Example.com", PASSWORD)
+    let user = support::create_user(&app, "anu@example.com").await;
+    let response = login(&app.client(), "ANU@Example.com", PASSWORD)
         .await
         .assert_status(200)
         .assert_json_path("user.__type", json!("User"))
         .assert_json_path("user.id", json!(user.id))
-        .assert_json_path("user.email", json!("ada@example.com"))
+        .assert_json_path("user.email", json!("anu@example.com"))
         .assert_json_path("token_type", json!("Bearer"))
         .assert_json_path("expires_in", json!(900));
     let (access, refresh) = tokens(&response);
@@ -38,10 +38,10 @@ async fn bad_credentials_401_and_audited() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let client = app.client();
 
-    login(&client, "ada@example.com", "wrong password")
+    login(&client, "anu@example.com", "wrong password")
         .await
         .assert_error(401, "Invalid credentials")
         .assert_error_code(401, "invalid_credentials");
@@ -61,7 +61,7 @@ async fn bad_credentials_401_and_audited() {
     assert!(!recorded.contains(PASSWORD), "{recorded}");
     assert!(sink.with_action("auth.login").is_empty());
 
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
     let ok = sink.with_action("auth.login");
@@ -75,7 +75,7 @@ async fn malformed_login_input_is_400() {
     let app = support::app().await;
     app.client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_validation_error("password");
@@ -84,15 +84,15 @@ async fn malformed_login_input_is_400() {
 #[tokio::test]
 async fn login_throttled_after_5_attempts() {
     let app = support::app().await;
-    support::create_user(&app, "ada@example.com").await;
-    support::create_user(&app, "grace@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
+    support::create_user(&app, "gauri@example.com").await;
     let client = app.client();
     for _ in 0..5 {
-        login(&client, "ada@example.com", "wrong password")
+        login(&client, "anu@example.com", "wrong password")
             .await
             .assert_error(401, "Invalid credentials");
     }
-    let throttled = login(&client, "ada@example.com", "wrong password")
+    let throttled = login(&client, "anu@example.com", "wrong password")
         .await
         .assert_error(429, None);
     let retry_after: u64 = throttled
@@ -102,11 +102,11 @@ async fn login_throttled_after_5_attempts() {
         .unwrap();
     assert!((1..=60).contains(&retry_after), "{retry_after}");
     // Even the right password waits.
-    login(&client, "ADA@example.com", PASSWORD)
+    login(&client, "ANU@example.com", PASSWORD)
         .await
         .assert_error(429, None);
     // Another account from the same address is not affected.
-    login(&client, "grace@example.com", PASSWORD)
+    login(&client, "gauri@example.com", PASSWORD)
         .await
         .assert_status(200);
 }
@@ -116,12 +116,12 @@ async fn login_throttled_after_5_attempts() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn login_throttle_holds_under_concurrency() {
     let app = support::app().await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
 
     let burst = (0..30).map(|n| {
         let client = client.clone();
-        async move { login(&client, "ada@example.com", &format!("wrong {n}")).await }
+        async move { login(&client, "anu@example.com", &format!("wrong {n}")).await }
     });
     let statuses: Vec<u16> = futures::future::join_all(burst)
         .await
@@ -141,7 +141,7 @@ async fn login_throttle_holds_under_concurrency() {
         } else {
             format!("wrong {n}")
         };
-        async move { login(&client, "ada@example.com", &password).await }
+        async move { login(&client, "anu@example.com", &password).await }
     });
     let statuses: Vec<u16> = futures::future::join_all(burst)
         .await
@@ -160,16 +160,16 @@ async fn throttled_logins_are_audited_once_per_window() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     for _ in 0..5 {
-        login(&client, "ada@example.com", "wrong password")
+        login(&client, "anu@example.com", "wrong password")
             .await
             .assert_status(401);
     }
     assert!(sink.with_action("auth.throttled").is_empty());
     for _ in 0..3 {
-        login(&client, "Ada@example.com", "wrong password")
+        login(&client, "Anu@example.com", "wrong password")
             .await
             .assert_status(429);
     }
@@ -178,7 +178,7 @@ async fn throttled_logins_are_audited_once_per_window() {
     assert_eq!(throttled[0].kind, AuditKind::Security);
     assert_eq!(
         throttled[0].metadata,
-        json!({ "flow": "login", "email": "ada@example.com" })
+        json!({ "flow": "login", "email": "anu@example.com" })
     );
     assert_eq!(throttled[0].ip.as_deref(), Some("127.0.0.1"));
     assert!(throttled[0].request_id.is_some());
@@ -187,22 +187,22 @@ async fn throttled_logins_are_audited_once_per_window() {
 #[tokio::test]
 async fn a_successful_login_resets_the_failed_attempts() {
     let app = support::app().await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     for _ in 0..4 {
-        login(&client, "ada@example.com", "wrong password")
+        login(&client, "anu@example.com", "wrong password")
             .await
             .assert_status(401);
     }
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
     for _ in 0..5 {
-        login(&client, "ada@example.com", "wrong password")
+        login(&client, "anu@example.com", "wrong password")
             .await
             .assert_status(401);
     }
-    login(&client, "ada@example.com", "wrong password")
+    login(&client, "anu@example.com", "wrong password")
         .await
         .assert_status(429);
 }
@@ -213,7 +213,7 @@ async fn a_successful_login_resets_the_failed_attempts() {
 #[tokio::test]
 async fn login_throttle_counts_ipv6_clients_by_network() {
     let app = support::app().await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let auth = app.get::<AuthService>().await;
     let from = |ip: &str| ClientMeta {
         ip: Some(ip.to_owned()),
@@ -222,7 +222,7 @@ async fn login_throttle_counts_ipv6_clients_by_network() {
     for n in 0..5 {
         let meta = from(&format!("2001:db8:1:2::{n:x}"));
         let error = auth
-            .attempt_login("ada@example.com", "wrong password", &meta)
+            .attempt_login("anu@example.com", "wrong password", &meta)
             .await
             .unwrap_err();
         assert!(matches!(error, AuthError::InvalidCredentials), "{error:?}");
@@ -230,7 +230,7 @@ async fn login_throttle_counts_ipv6_clients_by_network() {
     // A sixth address of the same /64 is refused before the password is checked.
     let sixth = from("2001:db8:1:2:aaaa:bbbb:cccc:dddd");
     let error = auth
-        .attempt_login("ada@example.com", PASSWORD, &sixth)
+        .attempt_login("anu@example.com", PASSWORD, &sixth)
         .await
         .unwrap_err();
     assert!(
@@ -240,13 +240,13 @@ async fn login_throttle_counts_ipv6_clients_by_network() {
     // Another /64, and an IPv4 client, have their own budgets.
     let other = from("2001:db8:1:3::1");
     assert!(
-        auth.attempt_login("ada@example.com", PASSWORD, &other)
+        auth.attempt_login("anu@example.com", PASSWORD, &other)
             .await
             .is_ok()
     );
     let v4 = from("192.0.2.9");
     assert!(
-        auth.attempt_login("ada@example.com", PASSWORD, &v4)
+        auth.attempt_login("anu@example.com", PASSWORD, &v4)
             .await
             .is_ok()
     );
@@ -258,10 +258,10 @@ async fn throttle_can_be_turned_off() {
         .config("auth.login_throttle_per_minute", 0)
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     for _ in 0..7 {
-        login(&client, "ada@example.com", "wrong password")
+        login(&client, "anu@example.com", "wrong password")
             .await
             .assert_status(401);
     }
@@ -270,7 +270,7 @@ async fn throttle_can_be_turned_off() {
 #[tokio::test]
 async fn login_rehashes_an_outdated_password_hash() {
     let app = support::app().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     // A hash made with other cost parameters (as after a config change).
     let old_hasher = Hasher::new(&HashingOptions {
         memory_kib: 2048,
@@ -286,7 +286,7 @@ async fn login_rehashes_an_outdated_password_hash() {
         .await
         .unwrap();
 
-    login(&app.client(), "ada@example.com", PASSWORD)
+    login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
 
@@ -305,7 +305,7 @@ async fn login_rehashes_an_outdated_password_hash() {
 #[tokio::test]
 async fn a_malformed_stored_hash_is_a_failed_login() {
     let app = support::app().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let db = app.get::<Db>().await;
     User::query()
         .where_key(user.id)
@@ -315,7 +315,7 @@ async fn a_malformed_stored_hash_is_a_failed_login() {
         )
         .await
         .unwrap();
-    login(&app.client(), "ada@example.com", PASSWORD)
+    login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_error(401, "Invalid credentials");
 }

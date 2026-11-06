@@ -57,10 +57,10 @@ async function exercise(label, transport) {
   assert.equal(greet.inputSchema.properties.name.description, 'Who to greet.');
   assert.equal(greet.annotations.readOnlyHint, true);
 
-  const greeted = await client.callTool({ name: 'greet', arguments: { name: 'Ada' } });
+  const greeted = await client.callTool({ name: 'greet', arguments: { name: 'Anu' } });
   assert.equal(greeted.isError, false);
-  assert.equal(greeted.structuredContent.greeting, 'Hello, Ada!');
-  assert.equal(JSON.parse(greeted.content[0].text).greeting, 'Hello, Ada!');
+  assert.equal(greeted.structuredContent.greeting, 'Hello, Anu!');
+  assert.equal(JSON.parse(greeted.content[0].text).greeting, 'Hello, Anu!');
 
   // A tool error is a result marked isError, with Navree's error body.
   const refused = await client.callTool({ name: 'greet', arguments: { name: '' } });

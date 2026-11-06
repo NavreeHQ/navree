@@ -846,7 +846,7 @@ impl PageSetup {
 /// let pdf = PdfDocument::new()
 ///     .title("Quarterly audit report")
 ///     .heading(1, "Quarterly audit report")
-///     .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+///     .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd").text("."))
 ///     .bullets(["Every control was tested", "Two findings are open"])
 ///     .table(
 ///         Table::new()
@@ -858,7 +858,7 @@ impl PageSetup {
 ///     .footer_page_numbers()
 ///     .build()?;
 /// let text = pdf.text()?;
-/// assert!(text.contains("Prepared for Acme Ltd."));
+/// assert!(text.contains("Prepared for Agra Ltd."));
 /// assert!(text.contains("Multi-factor sign-in Passed"));
 /// assert!(text.contains("Page 1 of 1"));
 /// # Ok(())

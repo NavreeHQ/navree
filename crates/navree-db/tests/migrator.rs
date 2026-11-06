@@ -69,7 +69,7 @@ mod m0002_create_deals {
 }
 
 /// Seeds a company (a data migration).
-mod m0003_seed_acme {
+mod m0003_seed_agra {
     use navree_schema::{Schema, SchemaResult};
 
     pub struct Migration;
@@ -77,13 +77,13 @@ mod m0003_seed_acme {
     impl navree_schema::Migration for Migration {
         async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
             schema
-                .statement("INSERT INTO companies (name) VALUES ('Acme')")
+                .statement("INSERT INTO companies (name) VALUES ('Agra')")
                 .await
         }
 
         async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
             schema
-                .statement("DELETE FROM companies WHERE name = 'Acme'")
+                .statement("DELETE FROM companies WHERE name = 'Agra'")
                 .await
         }
     }
@@ -98,7 +98,7 @@ impl Module for Crm {
             MigrationSet::new("crm")
                 .migration(navree_schema::migration!(m0001_create_companies))
                 .migration(navree_schema::migration!(m0002_create_deals))
-                .migration(navree_schema::migration!(m0003_seed_acme)),
+                .migration(navree_schema::migration!(m0003_seed_agra)),
         );
     }
 }
@@ -219,7 +219,7 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
         [
             ("crm", "m0001_create_companies", false),
             ("crm", "m0002_create_deals", false),
-            ("crm", "m0003_seed_acme", false),
+            ("crm", "m0003_seed_agra", false),
         ]
     );
 
@@ -251,7 +251,7 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     assert_eq!(statements[0][0], companies_sql, "{statements:?}");
     assert_eq!(
         statements[2],
-        ["INSERT INTO companies (name) VALUES ('Acme')"]
+        ["INSERT INTO companies (name) VALUES ('Agra')"]
     );
     assert_eq!(
         tables(&pool).await,
@@ -264,7 +264,7 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
         .unwrap();
     assert_eq!(report.migrations.len(), 3);
     assert_eq!(report.migrations[0].statements[0], companies_sql);
-    assert_eq!(companies(&pool).await, ["Acme"]);
+    assert_eq!(companies(&pool).await, ["Agra"]);
     let after = Migrator::status(ctx).await.unwrap();
     assert!(
         after
@@ -291,9 +291,9 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     assert_eq!(pretended.labels().len(), 3);
     assert_eq!(
         pretended.migrations[0].statements,
-        ["DELETE FROM companies WHERE name = 'Acme'"]
+        ["DELETE FROM companies WHERE name = 'Agra'"]
     );
-    assert_eq!(companies(&pool).await, ["Acme"]);
+    assert_eq!(companies(&pool).await, ["Agra"]);
 
     // A dump loads into an empty database, which then has nothing pending.
     let dir = TempDirGuard::new();
@@ -344,7 +344,7 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     assert_eq!(
         reverted.labels(),
         [
-            "crm/m0003_seed_acme",
+            "crm/m0003_seed_agra",
             "crm/m0002_create_deals",
             "crm/m0001_create_companies"
         ]
@@ -401,7 +401,7 @@ async fn failures(url: &str) {
     );
     assert_eq!(
         companies(&pool).await,
-        ["Acme"],
+        ["Agra"],
         "the inserted row rolled back with the migration"
     );
     app.shutdown().await.unwrap();

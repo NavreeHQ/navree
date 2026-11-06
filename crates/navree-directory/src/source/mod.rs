@@ -37,7 +37,7 @@ pub const DIRECTORY_SCOPE_SET: &str = "directory";
 ///     fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
 ///         Box::pin(async move {
 ///             let _url = request.setting("export_url");
-///             let people = vec![DirectoryUser::new("E-1001", "ada@acme.test").email("ada@acme.test")];
+///             let people = vec![DirectoryUser::new("E-1001", "anu@acme.test").email("anu@acme.test")];
 ///             Ok(Pulled::snapshot(people, Vec::new()))
 ///         })
 ///     }

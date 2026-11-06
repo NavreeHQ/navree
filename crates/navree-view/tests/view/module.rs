@@ -90,7 +90,7 @@ async fn modules_add_functions_and_filters_to_the_environment() {
     assert_eq!(
         views(&app)
             .await
-            .render("mail/shout", json!({ "name": "Ada" }))
+            .render("mail/shout", json!({ "name": "Anu" }))
             .expect("render"),
         "ADA! 5 EUR"
     );
@@ -116,9 +116,9 @@ async fn for_root_exports_views_to_every_module() {
     assert_eq!(
         greeter
             .views
-            .render("mail/welcome", json!({ "name": "Ada" }))
+            .render("mail/welcome", json!({ "name": "Anu" }))
             .expect("render"),
-        "Hello Ada"
+        "Hello Anu"
     );
     app.shutdown().await.expect("shutdown");
 }
@@ -136,9 +136,9 @@ async fn modules_contribute_embedded_templates() {
 
     assert_eq!(
         views
-            .render("mail/welcome", json!({ "name": "Ada" }))
+            .render("mail/welcome", json!({ "name": "Anu" }))
             .expect("render"),
-        "library welcome Ada"
+        "library welcome Anu"
     );
     app.shutdown().await.expect("shutdown");
 }
@@ -156,9 +156,9 @@ async fn importing_module_overrides_imported_modules_templates() {
 
     assert_eq!(
         views
-            .render("mail/welcome", json!({ "name": "Ada" }))
+            .render("mail/welcome", json!({ "name": "Anu" }))
             .expect("welcome"),
-        "app welcome Ada"
+        "app welcome Anu"
     );
     assert_eq!(
         views.render("mail/goodbye", json!({})).expect("goodbye"),
@@ -216,9 +216,9 @@ async fn from_config_reads_view_section() {
 
     assert_eq!(
         views
-            .render("mail/welcome", json!({ "name": "Ada" }))
+            .render("mail/welcome", json!({ "name": "Anu" }))
             .expect("render"),
-        "configured Ada"
+        "configured Anu"
     );
     assert!(format!("{views:?}").contains("reload: true"), "{views:?}");
     app.shutdown().await.expect("shutdown");

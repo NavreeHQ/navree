@@ -50,7 +50,7 @@ async fn seed(engine: &dyn SearchEngine, index: &str) {
     let docs = vec![
         doc(
             "1",
-            "Lovelace renewal",
+            "Lakhotia renewal",
             "Analytical Engines",
             "negotiation",
             5_000,
@@ -59,20 +59,20 @@ async fn seed(engine: &dyn SearchEngine, index: &str) {
         .workspace("w1"),
         doc(
             "2",
-            "Babbage expansion",
-            "Lovelace Analytics",
+            "Bhambri expansion",
+            "Lakhotia Analytics",
             "won",
             12_000,
         )
         .field("closes", 3_000)
         .field("signed_on", "2026-01-15")
         .workspace("w1"),
-        doc("3", "Hopper <migration>", "Navy & Co", "negotiation", 900).workspace("w1"),
-        doc("4", "Turing audit", "Bletchley", "lost", 2_000)
+        doc("3", "Hundal <migration>", "Navy & Co", "negotiation", 900).workspace("w1"),
+        doc("4", "Tiwari audit", "Bletchley", "lost", 2_000)
             .field("closes", 2_000)
             .field("signed_on", "2025-12-31")
             .workspace("w2"),
-        doc("5", "Lovelace pilot", "Bletchley", "won", 7_000)
+        doc("5", "Lakhotia pilot", "Bletchley", "won", 7_000)
             .field("signed_on", "2026-03-01")
             .workspace("w2"),
     ];
@@ -138,7 +138,7 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     let found = search(
         engine,
         index,
-        "lovelace ren",
+        "lakhotia ren",
         Filter::Const(true),
         &[],
         0,
@@ -146,11 +146,11 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     )
     .await;
     assert_eq!(ids(&found), ["1"]);
-    let found = search(engine, index, "lov", Filter::Const(true), &[], 0, 10).await;
+    let found = search(engine, index, "lak", Filter::Const(true), &[], 0, 10).await;
     assert_eq!(sorted(ids(&found)), ["1", "2", "5"]);
 
     // A match in a heavier field ranks first.
-    let found = search(engine, index, "lovelace", Filter::Const(true), &[], 0, 10).await;
+    let found = search(engine, index, "lakhotia", Filter::Const(true), &[], 0, 10).await;
     assert_eq!(found.total, 3);
     assert_eq!(
         found.hits.last().map(|h| h.id.as_str()),
@@ -160,14 +160,14 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     assert!(found.hits.iter().all(|h| (0.0..=1.0).contains(&h.score)));
 
     // Highlights mark the matches and escape the text; titles come back.
-    let found = search(engine, index, "hopper", Filter::Const(true), &[], 0, 10).await;
+    let found = search(engine, index, "hundal", Filter::Const(true), &[], 0, 10).await;
     assert_eq!(ids(&found), ["3"]);
     assert_eq!(
         found.hits[0].highlights.get("title").map(String::as_str),
-        Some("<mark>Hopper</mark> &lt;migration&gt;")
+        Some("<mark>Hundal</mark> &lt;migration&gt;")
     );
     assert!(!found.hits[0].highlights.contains_key("company_name"));
-    assert_eq!(found.hits[0].title.as_deref(), Some("Hopper <migration>"));
+    assert_eq!(found.hits[0].title.as_deref(), Some("Hundal <migration>"));
 
     // Filters.
     let won = search(engine, index, "", Filter::eq("stage", "won"), &[], 0, 10).await;
@@ -199,7 +199,7 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     let combined = search(
         engine,
         index,
-        "lovelace",
+        "lakhotia",
         Filter::All(vec![
             Filter::eq("stage", "won"),
             Filter::range("amount", ..10_000),
@@ -238,7 +238,7 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     let nothing = search(
         engine,
         index,
-        "lovelace",
+        "lakhotia",
         Filter::eq("stage", "lost"),
         &[],
         0,
@@ -318,7 +318,7 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
             &settings,
             vec![doc(
                 "1",
-                "Lovelace renewal 2027",
+                "Lakhotia renewal 2027",
                 "Analytical Engines",
                 "won",
                 5_000,

@@ -70,8 +70,8 @@ impl AsError for dyn Error + Send + Sync + 'static {
 /// let report = Report::error(&error)
 ///     .level(Level::Warning)
 ///     .context("invoice_id", 1042)
-///     .tag("provider", "acme-pay")
-///     .fingerprint(["acme-pay", "card-declined"]);
+///     .tag("provider", "agra-pay")
+///     .fingerprint(["agra-pay", "card-declined"]);
 /// assert_eq!(report.message_text(), "card declined");
 /// assert_eq!(report.level_value(), Level::Warning);
 /// ```
@@ -249,17 +249,17 @@ mod tests {
         let report = Report::message("Payment event without a customer")
             .level(Level::Warning)
             .context("invoice_id", 42)
-            .tag("provider", "acme-pay")
-            .fingerprint(["acme-pay", "card-declined"])
+            .tag("provider", "agra-pay")
+            .fingerprint(["agra-pay", "card-declined"])
             .user("0199c1d2")
             .backtrace();
         assert_eq!(report.chain, ["Payment event without a customer"]);
         assert_eq!(report.level, Level::Warning);
         assert_eq!(report.context["invoice_id"], 42);
-        assert_eq!(report.tags["provider"], "acme-pay");
+        assert_eq!(report.tags["provider"], "agra-pay");
         assert_eq!(
             report.fingerprint.as_deref(),
-            Some(&["acme-pay".to_owned(), "card-declined".to_owned()][..])
+            Some(&["agra-pay".to_owned(), "card-declined".to_owned()][..])
         );
         assert_eq!(report.user.as_deref(), Some("0199c1d2"));
         assert!(report.backtrace.is_some());

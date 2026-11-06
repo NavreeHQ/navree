@@ -17,8 +17,8 @@ const columns: NavreeColumnDef<Deal>[] = [
 ];
 
 const deals: Deal[] = [
-  { id: "d1", title: "Acme renewal", stage: "won", amount: 1200 },
-  { id: "d2", title: "Globex pilot", stage: "lead", amount: 300 },
+  { id: "d1", title: "Agra renewal", stage: "won", amount: 1200 },
+  { id: "d2", title: "Gulati pilot", stage: "lead", amount: 300 },
 ];
 const meta: PageMeta = { current_page: 2, per_page: 2, total: 5, last_page: 3 };
 
@@ -43,7 +43,7 @@ describe("DataTable", () => {
     renderTable();
     const rows = screen.getAllByRole("row");
     expect(rows).toHaveLength(3);
-    expect(within(rows[1]!).getByText("Acme renewal")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Agra renewal")).toBeTruthy();
     expect(within(rows[1]!).getByText("$1200").className).toContain("text-end");
     expect(within(rows[1]!).getByText("won").className).toContain("hidden md:table-cell");
     expect(rows[1]!.getAttribute("data-row-id")).toBe("d1");
@@ -116,7 +116,7 @@ describe("DataTable", () => {
   it("opens a row on click", () => {
     const onRowClick = vi.fn();
     renderTable({}, { onRowClick });
-    fireEvent.click(screen.getByText("Globex pilot"));
+    fireEvent.click(screen.getByText("Gulati pilot"));
     expect(onRowClick).toHaveBeenCalledWith(deals[1]);
   });
 });

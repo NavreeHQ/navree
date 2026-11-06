@@ -396,16 +396,16 @@ mod tests {
     fn graph_users_are_normalized() {
         let user = user_of(&json!({
             "id": "6e7b768e-07e2-4810-8459-485f84f8f204",
-            "userPrincipalName": "ada@acme.test",
-            "displayName": "Ada Lovelace",
-            "givenName": "Ada",
-            "surname": "Lovelace",
-            "mail": "ada@acme.test",
-            "otherMails": ["ADA@acme.test", "countess@home.test"],
+            "userPrincipalName": "anu@acme.test",
+            "displayName": "Anu Lakhotia",
+            "givenName": "Anu",
+            "surname": "Lakhotia",
+            "mail": "anu@acme.test",
+            "otherMails": ["ANU@acme.test", "countess@home.test"],
             "accountEnabled": false,
             "jobTitle": "Principal engineer",
             "department": "Engineering",
-            "companyName": "Acme",
+            "companyName": "Agra",
             "employeeId": "1815",
             "businessPhones": ["+44 20 7946 0958"],
             "mobilePhone": "+44 7700 900123",
@@ -415,16 +415,16 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(user.external_id, "6e7b768e-07e2-4810-8459-485f84f8f204");
-        assert_eq!(user.user_name, "ada@acme.test");
+        assert_eq!(user.user_name, "anu@acme.test");
         assert!(!user.active);
-        assert_eq!(user.full_name(), "Ada Lovelace");
+        assert_eq!(user.full_name(), "Anu Lakhotia");
         assert_eq!(user.emails.len(), 2);
-        assert_eq!(user.primary_email(), Some("ada@acme.test"));
+        assert_eq!(user.primary_email(), Some("anu@acme.test"));
         assert_eq!(user.emails[1].kind.as_deref(), Some("other"));
         assert_eq!(user.phone_numbers.len(), 2);
         assert_eq!(user.primary_phone(), Some("+44 20 7946 0958"));
         assert_eq!(user.title.as_deref(), Some("Principal engineer"));
-        assert_eq!(user.organization.as_deref(), Some("Acme"));
+        assert_eq!(user.organization.as_deref(), Some("Agra"));
         assert_eq!(user.employee_number.as_deref(), Some("1815"));
         assert_eq!(user.locale.as_deref(), Some("en-GB"));
         assert_eq!(user.attributes["usageLocation"], json!("GB"));

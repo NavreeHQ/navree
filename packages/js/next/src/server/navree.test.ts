@@ -8,7 +8,7 @@ import { createNavree } from "./navree.js";
 
 const API = "http://navree.test";
 const APP = "http://app.test";
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 
 /** The cookies `next/headers` returns in a server component; set per test. */
 const jar = vi.hoisted(() => ({ cookies: new Map<string, string>() }));
@@ -79,17 +79,17 @@ describe("social sign-in and the verification link", () => {
   it("are answered by the same handlers, one catch-all route per mount", async () => {
     const navree = fakeNavree({
       "GET /api/auth/social/github/redirect": () => Response.json({ url: "https://github.com/login/oauth/authorize?state=S1", state: "S1" }),
-      "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/w/acme" }),
+      "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/w/agra" }),
       "GET /api/auth/email/verify/u1/h1": () => new Response(null, { status: 204 }),
     });
     const app = createNavree({ apiUrl: API, fetch: navree.fetch, pages: { signIn: "/sign-in" } });
 
-    const start = await app.handlers.GET(browserRequest(APP, "/auth/social/github?next=/w/acme"));
+    const start = await app.handlers.GET(browserRequest(APP, "/auth/social/github?next=/w/agra"));
     expect(start.status).toBe(303);
     expect(start.headers.get("location")).toBe("https://github.com/login/oauth/authorize?state=S1");
 
     const done = await app.handlers.GET(browserRequest(APP, "/auth/callback/github?code=C&state=S1", { cookies: { navree_social: "S1" } }));
-    expect(done.headers.get("location")).toBe("/w/acme");
+    expect(done.headers.get("location")).toBe("/w/agra");
     expect(readSetCookies(done)[ACCESS_COOKIE]!.value).toBe("AT1");
 
     const verified = await app.handlers.GET(browserRequest(APP, "/api/auth/email/verify/u1/h1?signature=s"));
@@ -98,19 +98,19 @@ describe("social sign-in and the verification link", () => {
 
   it("the server entry point exports readCookie for route handlers", async () => {
     const server = await import("./index.js");
-    expect(server.readCookie(browserRequest(APP, "/", { cookies: { [WORKSPACE_COOKIE]: "acme" } }), WORKSPACE_COOKIE)).toBe("acme");
+    expect(server.readCookie(browserRequest(APP, "/", { cookies: { [WORKSPACE_COOKIE]: "agra" } }), WORKSPACE_COOKIE)).toBe("agra");
   });
 });
 
 describe("auth() in server components", () => {
   it("returns the signed-in user, the token and the workspace", async () => {
     jar.cookies.set(ACCESS_COOKIE, "AT1");
-    jar.cookies.set(WORKSPACE_COOKIE, "acme");
+    jar.cookies.set(WORKSPACE_COOKIE, "agra");
     const app = createNavree({ apiUrl: API, fetch: api().fetch });
 
     const session = await app.auth();
 
-    expect(session).toEqual({ user: { ...user, workspace: "acme" }, accessToken: "AT1", workspace: "acme" });
+    expect(session).toEqual({ user: { ...user, workspace: "agra" }, accessToken: "AT1", workspace: "agra" });
   });
 
   it("returns null without a session or when the API refuses the token", async () => {
@@ -122,7 +122,7 @@ describe("auth() in server components", () => {
 
   it("client() calls the API from the server with the session's token", async () => {
     jar.cookies.set(ACCESS_COOKIE, "AT1");
-    jar.cookies.set(WORKSPACE_COOKIE, "acme");
+    jar.cookies.set(WORKSPACE_COOKIE, "agra");
     const navree = api();
     const app = createNavree({ apiUrl: API, fetch: navree.fetch });
 
@@ -130,7 +130,7 @@ describe("auth() in server components", () => {
     const client = await app.client<Paths>();
     const body = await unwrap(client.GET("/api/v1/deals"));
 
-    expect(body).toEqual({ auth: "Bearer AT1", workspace: "acme" });
+    expect(body).toEqual({ auth: "Bearer AT1", workspace: "agra" });
   });
 });
 

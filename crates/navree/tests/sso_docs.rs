@@ -33,14 +33,14 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
     let idp = SsoFake::new();
     let sso = app.get::<Sso>().await;
     let uow = app.get::<navree::db::Db>().await.uow(None, None).await;
-    let connection = NewConnection::saml(SsoOwner::App, "Acme", idp.metadata_xml()).slug("acme");
+    let connection = NewConnection::saml(SsoOwner::App, "Agra", idp.metadata_xml()).slug("agra");
     sso.create_connection(&uow, connection).await?;
-    let domain = sso.add_domain(&uow, "acme", "acme.test").await?;
+    let domain = sso.add_domain(&uow, "agra", "acme.test").await?;
     sso.mark_domain_verified(&uow, domain.id).await?;
     uow.commit().await?;
 
     // The login route sends the browser to the identity provider...
-    let login = app.client().get("/api/sso/acme/login").send().await;
+    let login = app.client().get("/api/sso/agra/login").send().await;
     let url = login.json_value()["url"].as_str().unwrap().to_owned();
 
     // ...which posts its signed answer to the assertion consumer service.
@@ -49,7 +49,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
         .name_id("alice@acme.test")
         .attribute("groups", ["Engineering"]);
     app.client()
-        .post("/api/sso/saml/acme/acs")
+        .post("/api/sso/saml/agra/acs")
         .form(&answer.form())
         .send()
         .await
@@ -73,10 +73,10 @@ pub async fn connect_workspace(
     let connection = sso
         .create_connection(
             uow,
-            NewConnection::saml(SsoOwner::Workspace(workspace), "Acme Okta", metadata_xml)
+            NewConnection::saml(SsoOwner::Workspace(workspace), "Agra Okta", metadata_xml)
                 .provisioning(Provisioning {
                     roles: vec![RoleRule {
-                        group: "Acme Admins".to_owned(),
+                        group: "Agra Admins".to_owned(),
                         role: "admin".to_owned(),
                     }],
                     ..Provisioning::default()
@@ -139,7 +139,7 @@ async fn a_workspace_connects_and_its_admin_lists_it() -> Result<(), BoxError> {
         .create(
             &uow,
             olive.id,
-            navree::workspace::NewWorkspace::named("Acme"),
+            navree::workspace::NewWorkspace::named("Agra"),
         )
         .await?;
     let domain = connect_workspace(
@@ -169,7 +169,7 @@ async fn a_workspace_connects_and_its_admin_lists_it() -> Result<(), BoxError> {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("0.name", json!("Acme Okta"))
+        .assert_json_path("0.name", json!("Agra Okta"))
         .assert_json_path("0.provisioning.roles.0.role", json!("admin"));
     Ok(())
 }

@@ -131,7 +131,7 @@ async fn stored(app: &TestApp, user: &User) -> User {
 #[tokio::test]
 async fn two_factor_enable_confirm_and_login_challenge_flow() {
     let (app, clock, sink) = clocked_app().await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     // 1. Enable: a new secret, its otpauth URL and a QR code.
@@ -143,7 +143,7 @@ async fn two_factor_enable_confirm_and_login_challenge_flow() {
     assert!(Secret::from_base32(&secret).is_ok(), "{setup}");
     let url = setup["otpauth_url"].as_str().unwrap();
     assert!(
-        url.starts_with("otpauth://totp/Navree:ada%40example.com?secret="),
+        url.starts_with("otpauth://totp/Navree:anu%40example.com?secret="),
         "{url}"
     );
     assert!(
@@ -160,7 +160,7 @@ async fn two_factor_enable_confirm_and_login_challenge_flow() {
     assert!(!at_rest.contains(&secret), "{at_rest}");
     assert!(row.two_factor_confirmed_at.is_none());
     let (plain_access, _) = tokens(
-        &login(&client, "ada@example.com", PASSWORD)
+        &login(&client, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -189,7 +189,7 @@ async fn two_factor_enable_confirm_and_login_challenge_flow() {
     );
 
     // 3. Login now answers with a challenge instead of tokens.
-    let response = login(&client, "ada@example.com", PASSWORD)
+    let response = login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200)
         .assert_json_path("two_factor_required", json!(true))
@@ -246,9 +246,9 @@ async fn two_factor_enable_confirm_and_login_challenge_flow() {
 #[tokio::test]
 async fn challenge_token_cannot_be_used_as_access_token() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
 
     for path in ["/api/auth/me", "/api/probe/whoami"] {
         client
@@ -270,9 +270,9 @@ async fn challenge_token_cannot_be_used_as_access_token() {
 #[tokio::test]
 async fn challenge_token_expires_after_five_minutes() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     clock.advance(Duration::from_secs(300 + 31));
     verify(
         &client,
@@ -285,11 +285,11 @@ async fn challenge_token_expires_after_five_minutes() {
 #[tokio::test]
 async fn recovery_code_single_use() {
     let (app, clock, sink) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
     let first = enabled.recovery_codes[0].clone();
 
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     verify(
         &client,
         json!({ "challenge_token": challenge_token, "recovery_code": first.to_uppercase() }),
@@ -298,7 +298,7 @@ async fn recovery_code_single_use() {
     .assert_status(200)
     .assert_json_path("user.id", json!(enabled.user.id));
 
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     verify(
         &client,
         json!({ "challenge_token": challenge_token, "recovery_code": first }),
@@ -322,9 +322,9 @@ async fn recovery_code_single_use() {
 #[tokio::test]
 async fn wrong_totp_code_rejected() {
     let (app, clock, sink) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
 
     verify(
         &client,
@@ -353,7 +353,7 @@ async fn wrong_totp_code_rejected() {
     )
     .await
     .assert_status(200);
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     verify(
         &client,
         json!({ "challenge_token": challenge_token, "code": code }),
@@ -362,7 +362,7 @@ async fn wrong_totp_code_rejected() {
     .assert_error(401, "Invalid two-factor code");
 
     // A wrong code does not confirm a new setup either.
-    let (_, access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, access, _) = signed_in(&app, "gauri@example.com").await;
     let setup = post(&client, "enable", &access, json!({}))
         .await
         .json_value();
@@ -380,9 +380,9 @@ async fn wrong_totp_code_rejected() {
 #[tokio::test]
 async fn two_factor_verify_is_throttled() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     let wrong = wrong_code(&enabled.secret, &clock);
     for _ in 0..5 {
         verify(
@@ -405,9 +405,9 @@ async fn two_factor_verify_is_throttled() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_factor_throttle_holds_under_concurrency() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     let wrong = wrong_code(&enabled.secret, &clock);
 
     let burst = (0..30).map(|_| {
@@ -440,7 +440,7 @@ async fn two_factor_throttle_holds_under_concurrency() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn password_confirmation_throttle_holds_under_concurrency() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
     let burst = (0..20).map(|n| {
         let client = client.clone();
@@ -473,7 +473,7 @@ async fn password_confirmation_throttle_holds_under_concurrency() {
 #[tokio::test]
 async fn a_correct_password_confirmation_is_not_counted() {
     let (app, clock, _) = clocked_app().await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     for _ in 0..6 {
         post(&client, "disable", &access, json!({ "password": PASSWORD }))
@@ -499,7 +499,7 @@ async fn a_correct_password_confirmation_is_not_counted() {
 #[tokio::test]
 async fn disable_requires_the_password() {
     let (app, clock, sink) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
 
     post(
@@ -524,7 +524,7 @@ async fn disable_requires_the_password() {
     assert!(row.two_factor_recovery_codes.is_none());
     assert!(row.two_factor_confirmed_at.is_none());
     let (access, _) = tokens(
-        &login(&client, "ada@example.com", PASSWORD)
+        &login(&client, "anu@example.com", PASSWORD)
             .await
             .assert_status(200),
     );
@@ -535,7 +535,7 @@ async fn disable_requires_the_password() {
 #[tokio::test]
 async fn recovery_codes_can_be_regenerated() {
     let (app, clock, sink) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let client = app.client();
 
     let fresh = recovery_codes(
@@ -550,7 +550,7 @@ async fn recovery_codes_can_be_regenerated() {
             .all(|code| !enabled.recovery_codes.contains(code))
     );
 
-    let challenge_token = challenge(&client, "ada@example.com").await;
+    let challenge_token = challenge(&client, "anu@example.com").await;
     verify(
         &client,
         json!({ "challenge_token": challenge_token, "recovery_code": enabled.recovery_codes[0] }),
@@ -570,7 +570,7 @@ async fn recovery_codes_can_be_regenerated() {
     );
 
     // Without two-factor authentication there is nothing to regenerate.
-    let (_, access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, access, _) = signed_in(&app, "gauri@example.com").await;
     post(&client, "recovery-codes", &access, json!({}))
         .await
         .assert_error(400, "Two-factor authentication is not enabled");
@@ -580,7 +580,7 @@ async fn recovery_codes_can_be_regenerated() {
 async fn enable_and_confirm_follow_the_setup_state() {
     let (app, clock, _) = clocked_app().await;
     let client = app.client();
-    let (_, access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, access, _) = signed_in(&app, "gauri@example.com").await;
 
     // Confirming before enabling.
     post(&client, "confirm", &access, json!({ "code": "123456" }))
@@ -606,7 +606,7 @@ async fn enable_and_confirm_follow_the_setup_state() {
     .await
     .assert_validation_error("code");
 
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     post(&client, "enable", &enabled.access, json!({}))
         .await
         .assert_error(409, "Two-factor authentication is already enabled");
@@ -621,12 +621,12 @@ async fn enable_and_confirm_follow_the_setup_state() {
 #[tokio::test]
 async fn service_login_needs_the_second_factor() {
     let (app, clock, _) = clocked_app().await;
-    let enabled = enabled(&app, &clock, "ada@example.com").await;
+    let enabled = enabled(&app, &clock, "anu@example.com").await;
     let service = app.get::<AuthService>().await;
     let meta = ClientMeta::default();
 
     let error = service
-        .login("ada@example.com", PASSWORD, &meta)
+        .login("anu@example.com", PASSWORD, &meta)
         .await
         .expect_err("a second factor is needed");
     assert!(matches!(error, AuthError::TwoFactorRequired), "{error:?}");
@@ -635,7 +635,7 @@ async fn service_login_needs_the_second_factor() {
         user,
         challenge_token,
     } = service
-        .attempt_login("ada@example.com", PASSWORD, &meta)
+        .attempt_login("anu@example.com", PASSWORD, &meta)
         .await
         .unwrap()
     else {

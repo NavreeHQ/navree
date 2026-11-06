@@ -44,7 +44,7 @@
 //! server.on(
 //!     Method::GET,
 //!     "https://api.example.com/users/*",
-//!     FakeResponse::new(200).json(&json!({ "id": 7, "name": "Ada" })),
+//!     FakeResponse::new(200).json(&json!({ "id": 7, "name": "Anu" })),
 //! );
 //!
 //! let user: serde_json::Value = client
@@ -55,7 +55,7 @@
 //!     .error_for_status()?
 //!     .json()?;
 //!
-//! assert_eq!(user["name"], "Ada");
+//! assert_eq!(user["name"], "Anu");
 //! server.assert_sent(|r| r.header("authorization") == Some("Bearer token"));
 //! # Ok(())
 //! # }

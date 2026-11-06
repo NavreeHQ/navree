@@ -200,11 +200,11 @@ mod tests {
             "id": "00ub0oNGTSWTBKOLGLNR",
             "status": "SUSPENDED",
             "profile": {
-                "login": "ada@acme.test",
-                "email": "ada@acme.test",
+                "login": "anu@acme.test",
+                "email": "anu@acme.test",
                 "secondEmail": "countess@home.test",
-                "firstName": "Ada",
-                "lastName": "Lovelace",
+                "firstName": "Anu",
+                "lastName": "Lakhotia",
                 "title": "Principal engineer",
                 "department": "Engineering",
                 "employeeNumber": "1815",
@@ -217,7 +217,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(user.external_id, "00ub0oNGTSWTBKOLGLNR");
-        assert_eq!(user.user_name, "ada@acme.test");
+        assert_eq!(user.user_name, "anu@acme.test");
         assert!(!user.active);
         assert_eq!(user.emails.len(), 2);
         assert_eq!(user.primary_phone(), Some("+44 7700 900123"));
@@ -240,14 +240,14 @@ mod tests {
     fn link_headers_give_the_next_page() {
         assert_eq!(
             next_link(
-                "<https://acme.okta.com/api/v1/users?limit=200>; rel=\"self\", \
-                 <https://acme.okta.com/api/v1/users?after=00u2&limit=200>; rel=\"next\""
+                "<https://agra.okta.com/api/v1/users?limit=200>; rel=\"self\", \
+                 <https://agra.okta.com/api/v1/users?after=00u2&limit=200>; rel=\"next\""
             )
             .as_deref(),
-            Some("https://acme.okta.com/api/v1/users?after=00u2&limit=200")
+            Some("https://agra.okta.com/api/v1/users?after=00u2&limit=200")
         );
         assert_eq!(
-            next_link("<https://acme.okta.com/api/v1/users?limit=200>; rel=\"self\""),
+            next_link("<https://agra.okta.com/api/v1/users?limit=200>; rel=\"self\""),
             None
         );
     }

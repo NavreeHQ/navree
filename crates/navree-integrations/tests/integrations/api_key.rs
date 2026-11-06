@@ -12,7 +12,7 @@ async fn an_api_key_is_tried_on_the_health_url_then_stored_encrypted() {
     let h = harness(|b| b).await;
     h.fake.api().on(
         Method::GET,
-        "https://acme.edr.example/api/v1/health",
+        "https://agra.edr.example/api/v1/health",
         FakeResponse::new(200).json(&json!({ "status": "ok" })),
     );
     let integrations = h.integrations().await;
@@ -21,7 +21,7 @@ async fn an_api_key_is_tried_on_the_health_url_then_stored_encrypted() {
             Owner::App,
             "edr",
             NewApiKey::new("edr-key-4f2a9c")
-                .api_url("https://acme.edr.example/api")
+                .api_url("https://agra.edr.example/api")
                 .field("site_id", "17"),
         )
         .await
@@ -29,7 +29,7 @@ async fn an_api_key_is_tried_on_the_health_url_then_stored_encrypted() {
     assert_eq!(connection.kind, CredentialKind::ApiKey);
     assert_eq!(connection.provider_name, "Sentinel EDR");
     h.fake.api().assert_sent(|request| {
-        request.url().as_str() == "https://acme.edr.example/api/v1/health"
+        request.url().as_str() == "https://agra.edr.example/api/v1/health"
             && request.header("x-api-key") == Some("edr-key-4f2a9c")
     });
 
@@ -37,7 +37,7 @@ async fn an_api_key_is_tried_on_the_health_url_then_stored_encrypted() {
     assert_eq!(credentials.key.expose(), "edr-key-4f2a9c");
     assert_eq!(
         credentials.api_url.as_deref(),
-        Some("https://acme.edr.example/api")
+        Some("https://agra.edr.example/api")
     );
     assert_eq!(credentials.fields["site_id"], "17");
     assert_eq!(
@@ -59,7 +59,7 @@ async fn a_refused_or_incomplete_key_is_not_stored() {
     let h = harness(|b| b).await;
     h.fake.api().on(
         Method::GET,
-        "https://acme.edr.example/api/v1/health",
+        "https://agra.edr.example/api/v1/health",
         FakeResponse::new(401).json(&json!({ "error": "unauthorized" })),
     );
     let integrations = h.integrations().await;
@@ -67,7 +67,7 @@ async fn a_refused_or_incomplete_key_is_not_stored() {
         .connect_api_key(
             Owner::App,
             "edr",
-            NewApiKey::new("wrong").api_url("https://acme.edr.example/api"),
+            NewApiKey::new("wrong").api_url("https://agra.edr.example/api"),
         )
         .await
         .unwrap_err();
@@ -87,7 +87,7 @@ async fn a_refused_or_incomplete_key_is_not_stored() {
             .connect_api_key(
                 Owner::App,
                 "edr",
-                NewApiKey::new("  ").api_url("https://acme.edr.example/api")
+                NewApiKey::new("  ").api_url("https://agra.edr.example/api")
             )
             .await,
         Err(IntegrationsError::InvalidCredentials(_))

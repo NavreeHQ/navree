@@ -39,9 +39,9 @@ describe("mergeListQuery", () => {
   it("drops the cursor parameters with the others, and writes the canonical form", () => {
     const merged = mergeListQuery(
       new URLSearchParams("tab=open&cursor=a&before=b&limit=5&filter=1&q=old&page=2"),
-      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "acme corp" },
+      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "agra corp" },
     );
-    expect(merged.toString()).toBe("tab=open&q=old&filter%5Bstage%5D%5Bin%5D=lead%2Cwon&search=acme+corp&limit=10");
+    expect(merged.toString()).toBe("tab=open&q=old&filter%5Bstage%5D%5Bin%5D=lead%2Cwon&search=agra+corp&limit=10");
   });
 });
 
@@ -63,8 +63,8 @@ describe("useListQuery", () => {
   it("sets the search, the sort and the page", () => {
     nav.search = "page=3";
     const { result } = renderHook(() => useListQuery());
-    act(() => result.current.setSearch("acme"));
-    expect(lastUrl()).toBe("/deals?search=acme");
+    act(() => result.current.setSearch("agra"));
+    expect(lastUrl()).toBe("/deals?search=agra");
 
     act(() => result.current.toggleSort("name"));
     expect(lastUrl()).toBe("/deals?sort=name");
@@ -74,7 +74,7 @@ describe("useListQuery", () => {
   });
 
   it("clears the search and drops to the bare path when nothing is left", () => {
-    nav.search = "search=acme";
+    nav.search = "search=agra";
     const { result } = renderHook(() => useListQuery());
     act(() => result.current.setSearch(""));
     expect(lastUrl()).toBe("/deals");
@@ -93,7 +93,7 @@ describe("useListQuery", () => {
   });
 
   it("does not read names the grammar does not have", () => {
-    nav.search = "filters[stage]=won&q=acme&per=10&after=abc&f.stage=won";
+    nav.search = "filters[stage]=won&q=agra&per=10&after=abc&f.stage=won";
     const { result } = renderHook(() => useListQuery());
     expect(result.current.query).toEqual({});
     expect(result.current.problems).toEqual([]);
@@ -111,8 +111,8 @@ describe("useListQuery", () => {
     const { result } = renderHook(() => useListQuery());
     act(() => result.current.setFilter("stage", "won"));
     expect(lastUrl()).toBe("/deals?tab=open&filter[stage]=won&limit=20");
-    act(() => result.current.setSearch("acme"));
-    expect(lastUrl()).toBe("/deals?tab=open&search=acme&limit=20");
+    act(() => result.current.setSearch("agra"));
+    expect(lastUrl()).toBe("/deals?tab=open&search=agra&limit=20");
     act(() => result.current.toggleSort("name"));
     expect(lastUrl()).toBe("/deals?tab=open&sort=name&limit=20");
   });

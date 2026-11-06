@@ -28,7 +28,7 @@ fn app(sources: ConfigSources) -> AppBuilder {
         .module(SessionModule::from_config())
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme Operations"))
+        .module(AuthPages::new().app_name("Agra Operations"))
 }
 
 /// The chat client of the long-wait example.

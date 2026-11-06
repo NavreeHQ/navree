@@ -202,7 +202,7 @@ async fn requests_are_recorded_with_headers_and_bodies() {
         .post("/echo?draft=1&api_token=abc")
         .header("x-api-token", "secret")
         .bearer("not-stored")
-        .json(&json!({ "name": "Ada", "password": "hunter2" }))
+        .json(&json!({ "name": "Anu", "password": "hunter2" }))
         .send()
         .await
         .assert_status(200);
@@ -227,7 +227,7 @@ async fn requests_are_recorded_with_headers_and_bodies() {
     );
     let body = sent.body.as_ref().unwrap();
     let body: Value = serde_json::from_str(body.text.as_deref().unwrap()).unwrap();
-    assert_eq!(body, json!({ "name": "Ada", "password": "[redacted]" }));
+    assert_eq!(body, json!({ "name": "Anu", "password": "[redacted]" }));
     let answered = request.response.as_ref().expect("captured response");
     let reply = answered.body.as_ref().unwrap().text.as_deref().unwrap();
     assert!(reply.contains("\"ok\":true"), "{reply}");
@@ -344,7 +344,7 @@ async fn queries_and_data_changes_are_recorded_and_tagged() {
     let created = app
         .client()
         .post("/deals")
-        .json(&json!({ "title": "Acme renewal" }))
+        .json(&json!({ "title": "Agra renewal" }))
         .send()
         .await
         .assert_status(201)
@@ -358,7 +358,7 @@ async fn queries_and_data_changes_are_recorded_and_tagged() {
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].entity, "deals");
     assert_eq!(models[0].op, "created");
-    assert_eq!(models[0].new.as_ref().unwrap()["title"], "Acme renewal");
+    assert_eq!(models[0].new.as_ref().unwrap()["title"], "Agra renewal");
     // `tag:deal:<prefix>` finds the request that touched the deal.
     let found = logbook
         .entries(&ListQuery::new(

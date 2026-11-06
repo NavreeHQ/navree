@@ -14,31 +14,31 @@ fn advance(clock: &FixedClock, by: Duration) {
 #[tokio::test]
 async fn timestamps_come_from_the_apps_clock() {
     let (_app, db, clock) = app(Vec::new()).await;
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &*db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert_eq!(acme.created_at, epoch());
-    assert_eq!(acme.updated_at, epoch());
+    assert_eq!(agra.created_at, epoch());
+    assert_eq!(agra.updated_at, epoch());
 
     advance(&clock, Duration::minutes(5));
-    acme.name = "Acme Corp".into();
-    acme.save(&*db).await.unwrap();
-    assert_eq!(acme.created_at, epoch());
-    assert_eq!(acme.updated_at, epoch() + Duration::minutes(5));
+    agra.name = "Agra Corp".into();
+    agra.save(&*db).await.unwrap();
+    assert_eq!(agra.created_at, epoch());
+    assert_eq!(agra.updated_at, epoch() + Duration::minutes(5));
 
     // An update timestamp the caller set is kept.
     let chosen = epoch() - Duration::days(1);
-    acme.updated_at = chosen;
-    acme.employees = 3;
-    acme.save(&*db).await.unwrap();
+    agra.updated_at = chosen;
+    agra.employees = 3;
+    agra.save(&*db).await.unwrap();
     assert_eq!(
-        Company::find_or_fail(&*db, acme.id)
+        Company::find_or_fail(&*db, agra.id)
             .await
             .unwrap()
             .updated_at,
@@ -47,14 +47,14 @@ async fn timestamps_come_from_the_apps_clock() {
 
     // Touch sets it to now.
     advance(&clock, Duration::minutes(5));
-    assert!(acme.touch(&*db).await.unwrap());
-    assert_eq!(acme.updated_at, epoch() + Duration::minutes(10));
+    assert!(agra.touch(&*db).await.unwrap());
+    assert_eq!(agra.updated_at, epoch() + Duration::minutes(10));
     assert_eq!(
-        Company::find_or_fail(&*db, acme.id)
+        Company::find_or_fail(&*db, agra.id)
             .await
             .unwrap()
             .updated_at,
-        acme.updated_at
+        agra.updated_at
     );
 }
 

@@ -11,7 +11,7 @@ use crate::models::{Activity, Company, Deal, Note};
 use crate::support::sqlite;
 
 /// A rep who sees the deals they own, every activity but emails, and the
-/// companies other than Globex; it notes what it was asked.
+/// companies other than Gulati; it notes what it was asked.
 #[derive(Clone)]
 struct Rep {
     user: i64,
@@ -27,7 +27,7 @@ impl AccessFilter for Rep {
         Ok(match model.name() {
             "Deal" => Some(Deal::OWNER_ID.eq(Some(self.user))),
             "Activity" => Some(Activity::KIND.ne("email")),
-            "Company" => Some(Company::NAME.ne("Globex")),
+            "Company" => Some(Company::NAME.ne("Gulati")),
             _ => None,
         })
     }
@@ -43,14 +43,14 @@ async fn eager_loads_keep_what_the_viewer_may_read() {
     };
 
     // Every step of the path is limited.
-    let acme = Company::query()
+    let agra = Company::query()
         .with_accessible("deals.activities", &ada)
-        .where_key(crm.acme.id)
+        .where_key(crm.agra.id)
         .first(&t.db)
         .await
         .unwrap()
         .unwrap();
-    let deals = acme.loaded(Company::deals).unwrap();
+    let deals = agra.loaded(Company::deals).unwrap();
     assert_eq!(titles(deals), ["Renewal"], "Bob's Upgrade is hidden");
     let kinds: Vec<&str> = deals[0]
         .loaded(Deal::activities)
@@ -68,26 +68,26 @@ async fn eager_loads_keep_what_the_viewer_may_read() {
         .get(&t.db)
         .await
         .unwrap();
-    assert!(deals[2].loaded(Deal::company).unwrap().is_none(), "Globex");
+    assert!(deals[2].loaded(Deal::company).unwrap().is_none(), "Gulati");
     assert!(deals[0].loaded(Deal::company).unwrap().is_some());
     assert_eq!(ada.asked.lock().unwrap().last().unwrap(), "update Company");
 
     // A closure, and a `morph_to` (asked for each model it loads).
-    crm.globex
+    crm.gulati
         .notes()
         .create(&t.db, Note::new("visit"))
         .await
         .unwrap();
-    crm.acme
+    crm.agra
         .notes()
         .create(&t.db, Note::new("lunch"))
         .await
         .unwrap();
-    let hide_globex = |_: &str, model: &'static ModelMeta| -> Result<Option<Filter>> {
-        Ok((model.name() == "Company").then(|| Company::NAME.ne("Globex")))
+    let hide_gulati = |_: &str, model: &'static ModelMeta| -> Result<Option<Filter>> {
+        Ok((model.name() == "Company").then(|| Company::NAME.ne("Gulati")))
     };
     let notes = Note::query()
-        .with_accessible("notable", &hide_globex)
+        .with_accessible("notable", &hide_gulati)
         .order_by(Note::ID)
         .get(&t.db)
         .await

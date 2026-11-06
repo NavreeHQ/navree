@@ -58,9 +58,9 @@ struct Choice {
 /// use navree_ui::{Node, render};
 /// use navree_workspace::WorkspaceSwitcher;
 ///
-/// let switcher = WorkspaceSwitcher::new("Acme")
-///     .workspace("acme", "Acme", true)
-///     .workspace("globex", "Globex", false)
+/// let switcher = WorkspaceSwitcher::new("Agra")
+///     .workspace("agra", "Agra", true)
+///     .workspace("gulati", "Gulati", false)
 ///     .csrf("token")
 ///     .next("/deals");
 /// let html = render(&Node::from(switcher));
@@ -274,9 +274,9 @@ mod tests {
     #[test]
     fn each_workspace_is_a_form_that_works_without_script() {
         let html = render(&Node::from(
-            WorkspaceSwitcher::new("Acme")
-                .workspace("acme", "Acme", true)
-                .workspace("globex", "Globex <Ltd>", false)
+            WorkspaceSwitcher::new("Agra")
+                .workspace("agra", "Agra", true)
+                .workspace("gulati", "Gulati <Ltd>", false)
                 .action("/app/workspace/switch")
                 .csrf("tok")
                 .next("/deals?stage=won"),
@@ -294,7 +294,7 @@ mod tests {
             "{html}"
         );
         assert!(
-            html.contains(r#"<input type="hidden" name="workspace" value="globex">"#),
+            html.contains(r#"<input type="hidden" name="workspace" value="gulati">"#),
             "{html}"
         );
         assert!(
@@ -303,7 +303,7 @@ mod tests {
         );
         assert_eq!(html.matches(r#"aria-current="true""#).count(), 1, "{html}");
         assert!(
-            html.contains("Globex &lt;Ltd&gt;"),
+            html.contains("Gulati &lt;Ltd&gt;"),
             "names are escaped: {html}"
         );
         assert!(
@@ -326,7 +326,7 @@ mod tests {
         assert!(html.contains("No workspaces yet"), "{html}");
         assert!(html.contains(r#"id="ws""#), "{html}");
         let html = render(&Node::from(
-            WorkspaceSwitcher::new("Acme").workspace("acme", "Acme", true),
+            WorkspaceSwitcher::new("Agra").workspace("agra", "Agra", true),
         ));
         assert!(!html.contains("_csrf"), "{html}");
         assert!(!html.contains(r#"name="next""#), "{html}");

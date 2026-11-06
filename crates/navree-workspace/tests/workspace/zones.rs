@@ -17,17 +17,17 @@ use crate::support::{World, builder, org_builder};
 #[tokio::test]
 async fn new_workspaces_have_no_zone_or_country() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    assert_eq!(acme.timezone, None);
-    assert_eq!(acme.country, None);
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    assert_eq!(agra.timezone, None);
+    assert_eq!(agra.country, None);
 }
 
 #[tokio::test]
 async fn the_service_stores_normalized_zones_and_countries() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let workspaces = world.workspaces().await;
 
     let updated = {
@@ -35,7 +35,7 @@ async fn the_service_stores_normalized_zones_and_countries() {
         world
             .work(|uow| async move {
                 workspaces
-                    .set_time_zone(&uow, acme.id, Some("asia/calcutta"), Some("in"))
+                    .set_time_zone(&uow, agra.id, Some("asia/calcutta"), Some("in"))
                     .await
             })
             .await
@@ -43,13 +43,13 @@ async fn the_service_stores_normalized_zones_and_countries() {
     };
     assert_eq!(updated.timezone.as_deref(), Some("Asia/Kolkata"));
     assert_eq!(updated.country.as_deref(), Some("IN"));
-    let stored = workspaces.find(acme.id).await.unwrap().unwrap();
+    let stored = workspaces.find(agra.id).await.unwrap().unwrap();
     assert_eq!(stored.timezone.as_deref(), Some("Asia/Kolkata"));
 
     let cleared = {
         let workspaces = workspaces.clone();
         world
-            .work(|uow| async move { workspaces.set_time_zone(&uow, acme.id, None, None).await })
+            .work(|uow| async move { workspaces.set_time_zone(&uow, agra.id, None, None).await })
             .await
             .unwrap()
     };
@@ -59,15 +59,15 @@ async fn the_service_stores_normalized_zones_and_countries() {
 #[tokio::test]
 async fn unknown_zones_and_countries_are_refused() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let workspaces = world.workspaces().await;
     let error = {
         let workspaces = workspaces.clone();
         world
             .work(|uow| async move {
                 workspaces
-                    .set_time_zone(&uow, acme.id, Some("Mars/Base"), None)
+                    .set_time_zone(&uow, agra.id, Some("Mars/Base"), None)
                     .await
             })
             .await
@@ -80,7 +80,7 @@ async fn unknown_zones_and_countries_are_refused() {
     let error = world
         .work(|uow| async move {
             workspaces
-                .set_time_zone(&uow, acme.id, None, Some("Atlantis"))
+                .set_time_zone(&uow, agra.id, None, Some("Atlantis"))
                 .await
         })
         .await
@@ -94,11 +94,11 @@ async fn unknown_zones_and_countries_are_refused() {
 #[tokio::test]
 async fn the_routes_create_show_and_update_the_zone() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let client = world.as_user(ada);
     client
         .post("/api/workspaces")
-        .json(&json!({ "name": "Acme", "timezone": "Asia/Calcutta", "country": "in" }))
+        .json(&json!({ "name": "Agra", "timezone": "Asia/Calcutta", "country": "in" }))
         .send()
         .await
         .assert_status(201)
@@ -111,13 +111,13 @@ async fn the_routes_create_show_and_update_the_zone() {
         .await
         .assert_validation_error("timezone");
     client
-        .get("/api/workspaces/acme")
+        .get("/api/workspaces/agra")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("timezone", json!("Asia/Kolkata"));
     client
-        .put("/api/workspaces/acme/time-zone")
+        .put("/api/workspaces/agra/time-zone")
         .json(&json!({ "timezone": "Europe/Paris", "country": "FR" }))
         .send()
         .await
@@ -125,7 +125,7 @@ async fn the_routes_create_show_and_update_the_zone() {
         .assert_json_path("timezone", json!("Europe/Paris"))
         .assert_json_path("country", json!("FR"));
     client
-        .put("/api/workspaces/acme/time-zone")
+        .put("/api/workspaces/agra/time-zone")
         .json(&json!({ "timezone": null, "country": "AE" }))
         .send()
         .await
@@ -133,7 +133,7 @@ async fn the_routes_create_show_and_update_the_zone() {
         .assert_json_path("timezone", Value::Null)
         .assert_json_path("country", json!("AE"));
     client
-        .put("/api/workspaces/acme/time-zone")
+        .put("/api/workspaces/agra/time-zone")
         .json(&json!({ "country": "Atlantis" }))
         .send()
         .await
@@ -143,13 +143,13 @@ async fn the_routes_create_show_and_update_the_zone() {
 #[tokio::test]
 async fn members_without_update_permission_cannot_change_the_zone() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let bob = world.user("Bob", "bob@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.join(acme.id, bob, "member").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.join(agra.id, bob, "member").await;
     world
         .as_user(bob)
-        .put("/api/workspaces/acme/time-zone")
+        .put("/api/workspaces/agra/time-zone")
         .json(&json!({ "timezone": "Europe/Paris" }))
         .send()
         .await
@@ -201,9 +201,9 @@ async fn zoned_world() -> World {
 #[tokio::test]
 async fn the_request_workspace_gives_the_zone() {
     let world = zoned_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let eve = world.user("Eve", "eve@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     let gulf = world.workspace(ada, "Gulf").await;
     let workspaces = world.workspaces().await;
     {
@@ -211,7 +211,7 @@ async fn the_request_workspace_gives_the_zone() {
         world
             .work(|uow| async move {
                 workspaces
-                    .set_time_zone(&uow, acme.id, Some("Asia/Kolkata"), None)
+                    .set_time_zone(&uow, agra.id, Some("Asia/Kolkata"), None)
                     .await?;
                 workspaces
                     .set_time_zone(&uow, gulf.id, None, Some("AE"))
@@ -228,17 +228,17 @@ async fn the_request_workspace_gives_the_zone() {
         }
         request.send().await.assert_status(200).json_value()
     };
-    let body = zone(world.as_user(ada), Some("acme")).await;
+    let body = zone(world.as_user(ada), Some("agra")).await;
     assert_eq!(body["zone"], "Asia/Kolkata");
     assert_eq!(body["level"], "workspace");
-    assert_eq!(body["owner"], acme.id.to_string());
+    assert_eq!(body["owner"], agra.id.to_string());
     assert_eq!(
         zone(world.as_user(ada), Some("gulf")).await["zone"],
         "Asia/Dubai"
     );
     // Not a member, no workspace named, a guest: the default zone.
     assert_eq!(
-        zone(world.as_user(eve), Some("acme")).await["zone"],
+        zone(world.as_user(eve), Some("agra")).await["zone"],
         "Europe/London"
     );
     assert_eq!(
@@ -246,7 +246,7 @@ async fn the_request_workspace_gives_the_zone() {
         "Europe/London"
     );
     assert_eq!(
-        zone(world.app.client(), Some("acme")).await["zone"],
+        zone(world.app.client(), Some("agra")).await["zone"],
         "Europe/London"
     );
 }
@@ -254,14 +254,14 @@ async fn the_request_workspace_gives_the_zone() {
 #[tokio::test]
 async fn jobs_find_workspace_zones_and_every_owner() {
     let world = zoned_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let plain = world.workspace(ada, "Plain").await;
     let workspaces = world.workspaces().await;
     world
         .work(|uow| async move {
             workspaces
-                .set_time_zone(&uow, acme.id, Some("America/New_York"), None)
+                .set_time_zone(&uow, agra.id, Some("America/New_York"), None)
                 .await
         })
         .await
@@ -276,7 +276,7 @@ async fn jobs_find_workspace_zones_and_every_owner() {
     assert_eq!(zones.owners(ZoneLevel::Organization).await.unwrap(), []);
     assert_eq!(
         zones
-            .zone_of(ZoneLevel::Workspace, acme.id)
+            .zone_of(ZoneLevel::Workspace, agra.id)
             .await
             .unwrap()
             .name(),
@@ -293,7 +293,7 @@ async fn jobs_find_workspace_zones_and_every_owner() {
     let mut owners = zones.owners(ZoneLevel::Workspace).await.unwrap();
     owners.sort_by_key(|(id, _)| *id);
     let names: Vec<_> = owners.iter().map(|(id, zone)| (*id, zone.name())).collect();
-    let mut expected = vec![(acme.id, "America/New_York"), (plain.id, "Europe/London")];
+    let mut expected = vec![(agra.id, "America/New_York"), (plain.id, "Europe/London")];
     expected.sort_by_key(|(id, _)| *id);
     assert_eq!(names, expected);
 }
@@ -338,7 +338,7 @@ async fn probe(client: navree_testing::TestClient, header: (&str, &str)) -> Valu
 #[tokio::test]
 async fn organizations_store_checked_zones_and_countries() {
     let world = World::with(org_builder()).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let organizations = world.organizations().await;
     let created = {
         let organizations = organizations.clone();
@@ -348,7 +348,7 @@ async fn organizations_store_checked_zones_and_countries() {
                     .create(
                         &uow,
                         ada,
-                        NewOrganization::named("Acme Group")
+                        NewOrganization::named("Agra Group")
                             .timezone("asia/calcutta")
                             .country("in"),
                     )
@@ -385,7 +385,7 @@ async fn organizations_store_checked_zones_and_countries() {
     assert_eq!(stored.country.as_deref(), Some("UA"));
     world
         .as_user(ada)
-        .patch("/api/organizations/acme-group")
+        .patch("/api/organizations/agra-group")
         .json(&json!({ "timezone": "Mars/Base" }))
         .send()
         .await
@@ -395,12 +395,12 @@ async fn organizations_store_checked_zones_and_countries() {
 #[tokio::test]
 async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
     let world = zoned_org_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let eve = world.user("Eve", "eve@example.com").await;
-    let group = world.organization(ada, "Acme Group").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let group = world.organization(ada, "Agra Group").await;
+    let agra = world.workspace(ada, "Agra").await;
     let paris = world.workspace(ada, "Paris").await;
-    world.attach(group.id, acme.id).await;
+    world.attach(group.id, agra.id).await;
     world.attach(group.id, paris.id).await;
     set_org_zone(&world, group.id, Some("Asia/Kolkata"), None).await;
     let workspaces = world.workspaces().await;
@@ -414,7 +414,7 @@ async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
         .unwrap();
 
     // The workspace has no zone: its organization's.
-    let body = probe(world.as_user(ada), ("X-Workspace", "acme")).await;
+    let body = probe(world.as_user(ada), ("X-Workspace", "agra")).await;
     assert_eq!(body["zone"], "Asia/Kolkata");
     assert_eq!(body["level"], "organization");
     assert_eq!(body["owner"], group.id.to_string());
@@ -423,11 +423,11 @@ async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
     assert_eq!(body["zone"], "Europe/Paris");
     assert_eq!(body["level"], "workspace");
     // A request naming only the organization, by a member.
-    let body = probe(world.as_user(ada), ("X-Organization", "acme-group")).await;
+    let body = probe(world.as_user(ada), ("X-Organization", "agra-group")).await;
     assert_eq!(body["zone"], "Asia/Kolkata");
     assert_eq!(body["level"], "organization");
     // Not a member: the default zone.
-    let body = probe(world.as_user(eve), ("X-Organization", "acme-group")).await;
+    let body = probe(world.as_user(eve), ("X-Organization", "agra-group")).await;
     assert_eq!(body["zone"], "Europe/London");
     assert_eq!(body["level"], Value::Null);
 }
@@ -435,16 +435,16 @@ async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
 #[tokio::test]
 async fn an_organization_member_reaching_the_workspace_gets_the_organization_zone() {
     let world = zoned_org_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let bob = world.user("Bob", "bob@example.com").await;
-    let group = world.organization(ada, "Acme Group").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(group.id, acme.id).await;
+    let group = world.organization(ada, "Agra Group").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(group.id, agra.id).await;
     world
         .grant(group.id, bob, "member", WorkspaceSelector::All)
         .await;
     set_org_zone(&world, group.id, None, Some("AE")).await;
-    let body = probe(world.as_user(bob), ("X-Workspace", "acme")).await;
+    let body = probe(world.as_user(bob), ("X-Workspace", "agra")).await;
     assert_eq!(body["zone"], "Asia/Dubai");
     assert_eq!(body["level"], "organization");
 }
@@ -452,12 +452,12 @@ async fn an_organization_member_reaching_the_workspace_gets_the_organization_zon
 #[tokio::test]
 async fn jobs_inherit_the_organization_zone() {
     let world = zoned_org_world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let group = world.organization(ada, "Acme Group").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let group = world.organization(ada, "Agra Group").await;
+    let agra = world.workspace(ada, "Agra").await;
     let tokyo = world.workspace(ada, "Tokyo").await;
     let alone = world.workspace(ada, "Alone").await;
-    world.attach(group.id, acme.id).await;
+    world.attach(group.id, agra.id).await;
     world.attach(group.id, tokyo.id).await;
     set_org_zone(&world, group.id, Some("America/New_York"), None).await;
     let workspaces = world.workspaces().await;
@@ -482,7 +482,7 @@ async fn jobs_inherit_the_organization_zone() {
     );
     // A workspace without a zone or a country follows its organization.
     assert_eq!(
-        zone_of(ZoneLevel::Workspace, acme.id).await,
+        zone_of(ZoneLevel::Workspace, agra.id).await,
         "America/New_York"
     );
     assert_eq!(zone_of(ZoneLevel::Workspace, tokyo.id).await, "Asia/Tokyo");
@@ -500,7 +500,7 @@ async fn jobs_inherit_the_organization_zone() {
         .collect();
     owners.sort();
     let mut expected = vec![
-        (acme.id, "America/New_York"),
+        (agra.id, "America/New_York"),
         (tokyo.id, "Asia/Tokyo"),
         (alone.id, "Europe/London"),
     ];

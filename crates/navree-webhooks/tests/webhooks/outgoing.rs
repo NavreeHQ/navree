@@ -21,12 +21,12 @@ use uuid::Uuid;
 
 use crate::support::{DealLost, Harness, deal_won, harness};
 
-const URL: &str = "https://hooks.lovelace.io/navree";
+const URL: &str = "https://hooks.lakhotia.io/navree";
 
 fn ok(h: &Harness, status: u16) {
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(status),
     );
 }
@@ -37,7 +37,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
     ok(&h, 204);
     let created = h.endpoint(NewEndpoint::new(URL).events(["deal.won"])).await;
     let other = h
-        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/lost").events(["deal.lost"]))
+        .endpoint(NewEndpoint::new("https://hooks.lakhotia.io/lost").events(["deal.lost"]))
         .await;
 
     let event = deal_won(None);
@@ -65,7 +65,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
     let body: Value = request.json().unwrap();
     assert_eq!(body["type"], "deal.won");
     assert_eq!(body["timestamp"], "2026-10-26T08:00:00Z");
-    assert_eq!(body["data"]["deal"]["title"], "Lovelace renewal");
+    assert_eq!(body["data"]["deal"]["title"], "Lakhotia renewal");
     assert_eq!(body["data"]["deal"]["id"], json!(event.deal_id));
     assert_eq!(body["data"]["endpoints_seen"], 2);
     // Keys are sent in order: type, timestamp, data.
@@ -189,7 +189,7 @@ async fn a_success_after_failures_succeeds_and_clears_failing_since() {
     let h = harness(|b| b).await;
     h.server.on_sequence(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         [
             FakeResponse::connection_failed(),
             FakeResponse::new(503).text("busy"),
@@ -348,37 +348,37 @@ async fn a_rotated_secret_keeps_signing_for_24_hours() {
 async fn events_go_to_the_endpoints_of_their_workspace_only() {
     let h = harness(|b| b).await;
     ok(&h, 204);
-    let acme = Uuid::now_v7();
-    let globex = Uuid::now_v7();
-    let acme_endpoint = h
+    let agra = Uuid::now_v7();
+    let gulati = Uuid::now_v7();
+    let agra_endpoint = h
         .endpoint(
-            NewEndpoint::new("https://hooks.lovelace.io/acme")
+            NewEndpoint::new("https://hooks.lakhotia.io/agra")
                 .events(["deal.won"])
-                .workspace(acme),
+                .workspace(agra),
         )
         .await;
     h.endpoint(
-        NewEndpoint::new("https://hooks.lovelace.io/globex")
+        NewEndpoint::new("https://hooks.lakhotia.io/gulati")
             .events(["deal.won"])
-            .workspace(globex),
+            .workspace(gulati),
     )
     .await;
-    h.endpoint(NewEndpoint::new("https://hooks.lovelace.io/app").events(["deal.won"]))
+    h.endpoint(NewEndpoint::new("https://hooks.lakhotia.io/app").events(["deal.won"]))
         .await;
 
-    h.emit(deal_won(Some(acme))).await;
+    h.emit(deal_won(Some(agra))).await;
     h.run_queue().await;
 
     h.server.assert_sent_count(1);
     assert_eq!(
         h.server.recorded()[0].url().as_str(),
-        "https://hooks.lovelace.io/acme"
+        "https://hooks.lakhotia.io/agra"
     );
     assert_eq!(
-        h.last_delivery(acme_endpoint.endpoint.id)
+        h.last_delivery(agra_endpoint.endpoint.id)
             .await
             .workspace_id,
-        Some(acme)
+        Some(agra)
     );
 
     h.emit(deal_won(None)).await;
@@ -386,10 +386,10 @@ async fn events_go_to_the_endpoints_of_their_workspace_only() {
     h.server.assert_sent_count(2);
     assert_eq!(
         h.server.recorded()[1].url().as_str(),
-        "https://hooks.lovelace.io/app"
+        "https://hooks.lakhotia.io/app"
     );
     let webhooks = h.webhooks().await;
-    assert_eq!(webhooks.endpoints(Some(acme)).await.unwrap().len(), 1);
+    assert_eq!(webhooks.endpoints(Some(agra)).await.unwrap().len(), 1);
     assert_eq!(webhooks.endpoints(None).await.unwrap().len(), 1);
 }
 
@@ -418,13 +418,13 @@ async fn a_queue_fake_records_the_fan_out_job() {
     let fake = QueueFake::new();
     let h = harness(|b| b.override_value(Arc::new(fake.queue()))).await;
     h.endpoint(NewEndpoint::new(URL).events(["deal.won"])).await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
 
-    h.emit(deal_won(Some(acme))).await;
+    h.emit(deal_won(Some(agra))).await;
 
     fake.assert_dispatched::<FanOut>(|job| {
         job.event_type == "deal.won"
-            && job.workspace_id == Some(acme)
+            && job.workspace_id == Some(agra)
             && job.message_id.starts_with("msg_")
             && job.event.is_some()
     });
@@ -450,12 +450,12 @@ async fn jobs_run_on_the_configured_queue() {
 async fn dispatch_json_sends_registered_types_by_name() {
     let h = harness(|b| b).await;
     ok(&h, 204);
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let created = h
         .endpoint(
             NewEndpoint::new(URL)
                 .events(["export.ready"])
-                .workspace(acme),
+                .workspace(agra),
         )
         .await;
     let webhooks = h.webhooks().await;
@@ -465,7 +465,7 @@ async fn dispatch_json_sends_registered_types_by_name() {
             "export.ready",
             json!({ "export_id": 7, "url": "https://x/7.csv" }),
         )
-        .workspace(acme)
+        .workspace(agra)
         .send()
         .await
         .unwrap();
@@ -588,13 +588,13 @@ async fn endpoints_are_checked_when_they_are_created_and_updated() {
             &uow,
             created.endpoint.id,
             EndpointChanges::new()
-                .url("https://hooks.lovelace.io/v2")
+                .url("https://hooks.lakhotia.io/v2")
                 .events(["*"])
                 .description(""),
         )
         .await
         .unwrap();
-    assert_eq!(updated.url, "https://hooks.lovelace.io/v2");
+    assert_eq!(updated.url, "https://hooks.lakhotia.io/v2");
     assert_eq!(updated.events, ["*"]);
     assert_eq!(updated.description, None);
     let refused = webhooks
@@ -662,7 +662,7 @@ async fn a_failed_delivery_can_be_retried_once_more() {
     let h = harness(|b| b).await;
     h.server.on_sequence(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         [FakeResponse::new(410), FakeResponse::new(200)],
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["deal.won"])).await;
@@ -729,7 +729,7 @@ async fn send_test_posts_a_signed_test_message_at_once() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200).text("pong"),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["deal.won"])).await;
@@ -784,19 +784,19 @@ async fn secrets_are_encrypted_at_rest_with_the_app_key() {
 #[tokio::test]
 async fn deleting_a_workspace_deletes_its_endpoints() {
     let h = harness(|b| b).await;
-    let acme = Uuid::now_v7();
-    h.endpoint(NewEndpoint::new(URL).events(["*"]).workspace(acme))
+    let agra = Uuid::now_v7();
+    h.endpoint(NewEndpoint::new(URL).events(["*"]).workspace(agra))
         .await;
     h.endpoint(NewEndpoint::new(URL).events(["*"])).await;
 
     h.emit(navree_workspace::events::WorkspaceDeleted {
-        workspace_id: acme,
-        slug: "acme".to_owned(),
+        workspace_id: agra,
+        slug: "agra".to_owned(),
     })
     .await;
 
     let webhooks: Arc<Webhooks> = h.webhooks().await;
-    assert!(webhooks.endpoints(Some(acme)).await.unwrap().is_empty());
+    assert!(webhooks.endpoints(Some(agra)).await.unwrap().is_empty());
     assert_eq!(webhooks.endpoints(None).await.unwrap().len(), 1);
 }
 
@@ -842,7 +842,7 @@ async fn change_events_never_carry_the_secrets() {
         }
         assert!(!written.contains("\"previous_secret\""), "{written}");
         assert!(!written.contains("\"secret\""), "{written}");
-        assert!(written.contains("hooks.lovelace.io"), "{written}");
+        assert!(written.contains("hooks.lakhotia.io"), "{written}");
         uow.rollback().await.unwrap();
     }
 }
@@ -854,12 +854,12 @@ async fn a_failed_attempt_does_not_store_the_path_of_the_endpoint() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::connection_failed(),
     );
     let created = h
         .endpoint(
-            NewEndpoint::new("https://hooks.lovelace.io/SECRETPATH?t=QUERYSECRET")
+            NewEndpoint::new("https://hooks.lakhotia.io/SECRETPATH?t=QUERYSECRET")
                 .events(["deal.won"]),
         )
         .await;

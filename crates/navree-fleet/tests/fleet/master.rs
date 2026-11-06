@@ -575,7 +575,7 @@ async fn long_waits_raise_one_event_per_cooldown_across_masters() {
     .await;
     h.queue
         .dispatch(SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "t".into(),
         })
         .await

@@ -92,10 +92,10 @@ async fn request_scoped_listener_is_built_per_emit() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     bus.emit(UserRegistered::new("bob")).await.unwrap();
 
-    assert_eq!(journal.entries(), ["unit1:ada", "unit2:bob"]);
+    assert_eq!(journal.entries(), ["unit1:anu", "unit2:bob"]);
 }
 
 #[tokio::test]
@@ -112,7 +112,7 @@ async fn queued_request_scoped_listener_runs_in_its_own_scope() {
         .unwrap();
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
 
     let envelope = capture.envelopes().pop().expect("a dispatched job");
     let job_name = listener_job_name::<UserRegistered, PerUnit>();
@@ -133,5 +133,5 @@ async fn queued_request_scoped_listener_runs_in_its_own_scope() {
         .unwrap();
 
     // Unit 1 decided to queue; unit 2 (the job run) handled the event.
-    assert_eq!(journal.entries(), ["unit2:ada"]);
+    assert_eq!(journal.entries(), ["unit2:anu"]);
 }

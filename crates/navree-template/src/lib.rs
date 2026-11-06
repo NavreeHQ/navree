@@ -19,9 +19,9 @@
 //! let html = env
 //!     .get_template("hello.html")
 //!     .unwrap()
-//!     .render(json!({ "name": "<Ada>" }))
+//!     .render(json!({ "name": "<Anu>" }))
 //!     .unwrap();
-//! assert_eq!(html, "<main>Hello &lt;Ada&gt;!</main>");
+//! assert_eq!(html, "<main>Hello &lt;Anu&gt;!</main>");
 //! ```
 //!
 //! ## Syntax

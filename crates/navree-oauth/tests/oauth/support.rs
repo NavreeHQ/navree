@@ -238,7 +238,7 @@ impl World {
     pub async fn user(&self, email: &str, permissions: &[&str]) -> (User, String) {
         let auth = self.app.get::<AuthService>().await;
         let user = auth
-            .create_user("Ada Lovelace", email, PASSWORD)
+            .create_user("Anu Lakhotia", email, PASSWORD)
             .await
             .expect("the user is created");
         let access = self.app.get::<AccessService>().await;
@@ -283,7 +283,7 @@ impl World {
     /// A public client with [`REDIRECT_URI`] and `scopes`.
     pub async fn public_client(&self, scopes: &[&str]) -> CreatedClient {
         self.register(
-            NewClient::public("Acme mobile")
+            NewClient::public("Agra mobile")
                 .redirect_uri(REDIRECT_URI)
                 .scopes(scopes.iter().copied()),
         )

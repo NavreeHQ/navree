@@ -18,7 +18,7 @@ async fn the_bell_lists_the_signed_in_users_notifications() {
     let app = support::app().await;
     let notifier = app.get::<Notifier>().await;
     let (alice, bob) = (TestUser::new(), TestUser::new());
-    for title in ["Lovelace renewal", "Hopper expansion"] {
+    for title in ["Lakhotia renewal", "Hundal expansion"] {
         notifier
             .send(&alice, DealWon::via(&[Channel::Database], title))
             .await
@@ -37,8 +37,8 @@ async fn the_bell_lists_the_signed_in_users_notifications() {
         .assert_status(200)
         .text();
     assert!(html.contains(r#"data-unread="2""#), "{html}");
-    assert!(html.contains("Lovelace renewal"), "{html}");
-    assert!(html.contains("Hopper expansion was won"), "{html}");
+    assert!(html.contains("Lakhotia renewal"), "{html}");
+    assert!(html.contains("Hundal expansion was won"), "{html}");
     assert!(html.contains(r#"href="/deals/1""#), "{html}");
     assert!(!html.contains("Bob"), "{html}");
     assert!(html.contains("Mark all read"), "{html}");

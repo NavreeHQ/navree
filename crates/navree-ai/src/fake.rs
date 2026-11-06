@@ -193,12 +193,12 @@ struct State {
 /// # async fn main() -> Result<(), navree_ai::AiError> {
 /// let fake = AiFake::new();
 /// let ai = fake.ai();
-/// fake.respond(FakeReply::text("Acme is in negotiation."));
+/// fake.respond(FakeReply::text("Agra is in negotiation."));
 ///
-/// let summary = ai.text("Summarize the Acme deal").model("fast").await?;
+/// let summary = ai.text("Summarize the Agra deal").model("fast").await?;
 ///
-/// assert_eq!(summary.text, "Acme is in negotiation.");
-/// fake.assert_prompted(|r| r.model() == "fast" && r.last_user_message().contains("Acme"));
+/// assert_eq!(summary.text, "Agra is in negotiation.");
+/// fake.assert_prompted(|r| r.model() == "fast" && r.last_user_message().contains("Agra"));
 /// # Ok(())
 /// # }
 /// ```
@@ -578,15 +578,15 @@ mod tests {
 
     #[test]
     fn words_join_back() {
-        assert_eq!(words("Acme moved on"), ["Acme", " moved", " on"]);
-        assert_eq!(words("Acme moved on").concat(), "Acme moved on");
+        assert_eq!(words("Agra moved on"), ["Agra", " moved", " on"]);
+        assert_eq!(words("Agra moved on").concat(), "Agra moved on");
     }
 
     #[test]
     fn hashed_embeddings_are_close_for_shared_words() {
         let a = hashed_embedding("Dana wants to be live before January planning", 64);
         let b = hashed_embedding("live before January", 64);
-        let c = hashed_embedding("Globex prefers summer", 64);
+        let c = hashed_embedding("Gulati prefers summer", 64);
         let dot = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p * q).sum::<f32>();
         assert!(dot(&a, &b) > dot(&a, &c));
         assert!((dot(&a, &a) - 1.0).abs() < 1e-5);

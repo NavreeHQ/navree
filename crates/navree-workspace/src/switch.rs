@@ -326,7 +326,7 @@ mod tests {
         for (next, expected) in [
             (Some("/deals?stage=won"), "/deals?stage=won"),
             (Some("/"), "/"),
-            (Some("  /w/acme  "), "/w/acme"),
+            (Some("  /w/agra  "), "/w/agra"),
             (None, "/"),
             (Some(""), "/"),
             (Some("deals"), "/"),
@@ -358,8 +358,8 @@ mod tests {
             Some("application/x-www-form-urlencoded"),
             "/workspace/switch?workspace=from-query&next=%2Fq",
         );
-        let input = read_input(&form, b"workspace=acme&next=%2Fdeals", false).unwrap();
-        assert_eq!(input.workspace.as_deref(), Some("acme"));
+        let input = read_input(&form, b"workspace=agra&next=%2Fdeals", false).unwrap();
+        assert_eq!(input.workspace.as_deref(), Some("agra"));
         assert_eq!(input.next.as_deref(), Some("/deals"));
         let input = read_input(&form, b"", false).unwrap();
         assert_eq!(input.workspace.as_deref(), Some("from-query"));
@@ -368,9 +368,9 @@ mod tests {
         let json = parts(Some("application/json; charset=utf-8"), "/workspace/switch");
         assert!(is_json(&json));
         assert!(!is_json(&form));
-        let input = read_input(&json, br#"{"workspace": "globex"}"#, true).unwrap();
-        assert_eq!(input.workspace.as_deref(), Some("globex"));
+        let input = read_input(&json, br#"{"workspace": "gulati"}"#, true).unwrap();
+        assert_eq!(input.workspace.as_deref(), Some("gulati"));
         assert_eq!(input.next, None);
-        assert!(read_input(&json, b"workspace=acme", true).is_err());
+        assert!(read_input(&json, b"workspace=agra", true).is_err());
     }
 }

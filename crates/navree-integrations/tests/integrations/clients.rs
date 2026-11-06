@@ -74,11 +74,11 @@ async fn the_extractor_gives_a_graph_client_that_pages_through_results() {
         "https://graph.microsoft.com/v1.0/users*",
         [
             FakeResponse::new(200).json(&json!({
-                "value": [{ "id": "u1", "mail": "ada@acme.test" }],
+                "value": [{ "id": "u1", "mail": "anu@acme.test" }],
                 "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$select=id,mail&$skiptoken=X2"
             })),
             FakeResponse::new(200).json(&json!({
-                "value": [{ "id": "u2", "mail": "grace@acme.test" }]
+                "value": [{ "id": "u2", "mail": "gauri@acme.test" }]
             })),
         ],
     );
@@ -89,8 +89,8 @@ async fn the_extractor_gives_a_graph_client_that_pages_through_results() {
         .await
         .assert_status(200)
         .assert_json_path("tenant", json!(TENANT))
-        .assert_json_path("users.0.mail", json!("ada@acme.test"))
-        .assert_json_path("users.1.mail", json!("grace@acme.test"));
+        .assert_json_path("users.0.mail", json!("anu@acme.test"))
+        .assert_json_path("users.1.mail", json!("gauri@acme.test"));
     let sent = h.fake.api().recorded();
     assert_eq!(sent.len(), 2);
     assert!(sent[1].url().as_str().contains("skiptoken=X2"));
@@ -221,12 +221,12 @@ async fn api_key_clients_send_the_key_to_the_connections_own_root() {
     let h = harness(|b| b).await;
     h.fake.api().on(
         Method::GET,
-        "https://acme.edr.example/api/v1/health",
+        "https://agra.edr.example/api/v1/health",
         FakeResponse::new(200),
     );
     h.fake.api().on(
         Method::GET,
-        "https://acme.edr.example/api/v1/alerts*",
+        "https://agra.edr.example/api/v1/alerts*",
         FakeResponse::new(401),
     );
     let integrations = h.integrations().await;
@@ -234,7 +234,7 @@ async fn api_key_clients_send_the_key_to_the_connections_own_root() {
         .connect_api_key(
             Owner::App,
             "edr",
-            NewApiKey::new("edr-key").api_url("https://acme.edr.example/api"),
+            NewApiKey::new("edr-key").api_url("https://agra.edr.example/api"),
         )
         .await
         .unwrap();
@@ -242,7 +242,7 @@ async fn api_key_clients_send_the_key_to_the_connections_own_root() {
         .client(Owner::App, "edr", "default")
         .await
         .unwrap();
-    assert_eq!(edr.base_url(), Some("https://acme.edr.example/api"));
+    assert_eq!(edr.base_url(), Some("https://agra.edr.example/api"));
     let response = edr
         .get("/v1/alerts")
         .query(&[("severity", "high")])
@@ -286,11 +286,11 @@ async fn google_clients_page_with_tokens_and_reach_other_googleapis_hosts() {
         "https://admin.googleapis.com/admin/directory/v1/users*",
         [
             FakeResponse::new(200).json(&json!({
-                "users": [{ "primaryEmail": "ada@acme.test" }],
+                "users": [{ "primaryEmail": "anu@acme.test" }],
                 "nextPageToken": "p2"
             })),
             FakeResponse::new(200).json(&json!({
-                "users": [{ "primaryEmail": "grace@acme.test" }]
+                "users": [{ "primaryEmail": "gauri@acme.test" }]
             })),
         ],
     );

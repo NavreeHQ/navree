@@ -336,7 +336,7 @@ async fn a_contacts_file_is_imported_from_code() {
             Upload::new(
                 "contacts.csv",
                 "Email address,Name,Organization\n\
-                 ada@example.com,Ada Lovelace,Analytical Engines\n\
+                 anu@example.com,Anu Lakhotia,Analytical Engines\n\
                  bob@competitor.example,Bob,Rival\n",
             ),
             UploadOptions::default().owner(ADMIN),
@@ -372,7 +372,7 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"importer\"\r\n\r\ncontacts\r\n\
          --{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contacts.csv\"\r\n\r\n\
-         Email,Name\nada@example.com,Ada\ngrace@example.com,Grace\n\r\n--{boundary}--\r\n"
+         Email,Name\nada@example.com,Anu\ngrace@example.com,Gauri\n\r\n--{boundary}--\r\n"
     );
     let uploaded = client
         .post("/api/imports")
@@ -413,7 +413,7 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
         .assert_status(200);
     assert_eq!(
         csv.text(),
-        "\u{FEFF}Name,Email,Company,VIP\r\nAda,ada@example.com,,false\r\nGrace,grace@example.com,,false\r\n"
+        "\u{FEFF}Name,Email,Company,VIP\r\nAnu,anu@example.com,,false\r\nGauri,gauri@example.com,,false\r\n"
     );
     let xlsx = client
         .get("/api/v1/contacts/export.xlsx")

@@ -42,29 +42,29 @@ async fn billing_plans_checks_every_price_id() {
 #[tokio::test]
 async fn sync_pulls_the_providers_state() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
-    world.subscribe(&acme, "starter").await;
+    world.subscribe(&agra, "starter").await;
 
     // The provider changed something the local copy missed: a webhook that
     // never arrived. Cancel at the fake directly, behind Billing's back.
-    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra).await.unwrap().unwrap();
     billing
         .provider()
         .cancel_subscription(sub.provider_id.as_deref().unwrap(), false)
         .await
         .unwrap();
-    assert!(billing.subscription(&acme).await.unwrap().unwrap().valid());
+    assert!(billing.subscription(&agra).await.unwrap().unwrap().valid());
 
     world.advance_days(1);
-    let id = acme.id.to_string();
+    let id = agra.id.to_string();
     world
         .app
         .run_command("billing:sync", &["workspace", id.as_str()])
         .await
         .unwrap();
-    let synced = billing.subscription(&acme).await.unwrap().unwrap();
+    let synced = billing.subscription(&agra).await.unwrap().unwrap();
     assert_eq!(synced.status, SubscriptionStatus::Canceled);
     assert!(
         world
@@ -85,10 +85,10 @@ async fn sync_pulls_the_providers_state() {
 #[tokio::test]
 async fn events_are_listed_and_pruned() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
-    world.subscribe(&acme, "starter").await;
+    world.subscribe(&agra, "starter").await;
     world.app.run_command("billing:events", &[]).await.unwrap();
     world
         .app
@@ -124,15 +124,15 @@ async fn events_are_listed_and_pruned() {
 #[tokio::test]
 async fn invoices_are_cached_until_a_payment_event() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
     assert!(
-        billing.invoices(&acme).await.unwrap().is_empty(),
+        billing.invoices(&agra).await.unwrap().is_empty(),
         "no customer yet"
     );
-    world.subscribe(&acme, "starter").await;
-    let first = billing.invoices(&acme).await.unwrap();
+    world.subscribe(&agra, "starter").await;
+    let first = billing.invoices(&agra).await.unwrap();
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].currency, "usd");
     assert!(first[0].pdf_url.is_some() && first[0].hosted_url.is_some());
@@ -140,9 +140,9 @@ async fn invoices_are_cached_until_a_payment_event() {
 
     // The renewal's invoice.paid forgets the cache.
     world.advance_days(31);
-    world.fake().await.renew(&acme).await.unwrap();
+    world.fake().await.renew(&agra).await.unwrap();
     world.run_queue().await;
-    let second = billing.invoices(&acme).await.unwrap();
+    let second = billing.invoices(&agra).await.unwrap();
     assert_eq!(second.len(), 2);
     assert!(second[0].created_at > second[1].created_at, "newest first");
 }

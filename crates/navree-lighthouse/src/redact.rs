@@ -125,14 +125,14 @@ mod tests {
     #[test]
     fn values_are_masked_at_any_depth() {
         let value = json!({
-            "email": "ada@example.com",
+            "email": "anu@example.com",
             "password": "hunter2",
             "billing": { "IBAN": "DE00", "items": [{ "api_token": "x", "sku": "a" }] }
         });
         assert_eq!(
             redactor().value(value),
             json!({
-                "email": "ada@example.com",
+                "email": "anu@example.com",
                 "password": REDACTED,
                 "billing": { "IBAN": REDACTED, "items": [{ "api_token": REDACTED, "sku": "a" }] }
             })

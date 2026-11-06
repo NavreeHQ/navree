@@ -52,7 +52,7 @@ fn dashboard_builder() -> TestAppBuilder {
             ..AccessOptions::default()
         }))
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme Operations"))
+        .module(AuthPages::new().app_name("Agra Operations"))
 }
 
 /// The supervisors of the docs' example: `default` balances three queues
@@ -232,7 +232,7 @@ async fn a_guest_signs_in_and_comes_back_to_the_page_they_asked_for() {
     page.assert_dont_see("Failed jobs").await.unwrap();
     page.press("Sign in").await.unwrap();
     page.assert_path_is("/sign-in").await.unwrap();
-    page.assert_see("Acme Operations").await.unwrap();
+    page.assert_see("Agra Operations").await.unwrap();
     page.type_into("Email", EMAIL).await.unwrap();
     page.type_into("Password", PASSWORD).await.unwrap();
     page.press("Sign in").await.unwrap();

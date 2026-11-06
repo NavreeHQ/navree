@@ -34,18 +34,18 @@ fn the_documented_values_have_their_fields() {
         token,
         raw,
     } = SocialUser::new("github", "583231")
-        .name("Ada Lovelace")
-        .email(Some("ada@example.com"), true)
-        .avatar_url("https://avatars.test/ada")
-        .nickname("ada")
+        .name("Anu Lakhotia")
+        .email(Some("anu@example.com"), true)
+        .avatar_url("https://avatars.test/anu")
+        .nickname("anu")
         .token(ProviderToken::new("gho"))
-        .raw(json!({ "login": "ada" }));
+        .raw(json!({ "login": "anu" }));
     assert_eq!((provider.as_str(), id.as_str()), ("github", "583231"));
-    assert_eq!(name.as_deref(), Some("Ada Lovelace"));
-    assert_eq!(email.as_deref(), Some("ada@example.com"));
+    assert_eq!(name.as_deref(), Some("Anu Lakhotia"));
+    assert_eq!(email.as_deref(), Some("anu@example.com"));
     assert!(email_verified);
     assert!(avatar_url.is_some() && nickname.is_some() && token.is_some());
-    assert_eq!(raw["login"], "ada");
+    assert_eq!(raw["login"], "anu");
 
     let ProviderToken {
         access_token,
@@ -150,10 +150,10 @@ fn every_reference_key_is_read() {
                 "gitlab": { "client_id": "gl", "url": "https://gitlab.acme.test" },
                 "github": { "client_id": "gh", "url": "https://git.acme.test", "api_url": "https://git.acme.test/api/v3" },
                 "apple": {
-                    "client_id": "com.acme.web", "team_id": "T", "key_id": "K",
+                    "client_id": "com.agra.web", "team_id": "T", "key_id": "K",
                     "private_key": include_str!("fixtures/apple-authkey.p8"),
                 },
-                "okta": { "type": "oidc", "issuer": "https://acme.okta.com", "client_id": "o" },
+                "okta": { "type": "oidc", "issuer": "https://agra.okta.com", "client_id": "o" },
                 "zoho": { "type": "custom", "client_id": "z", "token_url": "https://accounts.zoho.com/oauth/v2/token" },
                 "linkedin": { "client_id": "l" },
                 "discord": { "client_id": "d" },
@@ -193,7 +193,7 @@ fn every_reference_key_is_read() {
     assert!(apple.team_id.is_some() && apple.key_id.is_some() && apple.private_key.is_some());
     assert_eq!(
         options.provider("okta").unwrap().issuer.as_deref(),
-        Some("https://acme.okta.com")
+        Some("https://agra.okta.com")
     );
 }
 

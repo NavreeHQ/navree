@@ -414,17 +414,17 @@ async fn force_destroy_loads_and_removes_each_record() {
 #[tokio::test]
 async fn models_without_soft_deletes_force_delete_plainly() {
     let t = sqlite().await;
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &t.db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert!(acme.force_delete(&t.db).await.unwrap());
-    assert!(!acme.exists());
+    assert!(agra.force_delete(&t.db).await.unwrap());
+    assert!(!agra.exists());
     let ids: Vec<i64> = {
         let mut ids = Vec::new();
         for name in ["A", "B"] {
@@ -478,34 +478,34 @@ fn member(email: &str, name: &str) -> Member {
 async fn restore_or_create_and_create_or_restore_bring_records_back() {
     let t = sqlite().await;
     create_tables(&t.db).await;
-    let mut gone = Member::create(&t.db, member("ada@example.com", "Ada"))
+    let mut gone = Member::create(&t.db, member("anu@example.com", "Anu"))
         .await
         .unwrap();
     gone.delete(&t.db).await.unwrap();
 
-    let back = Member::restore_or_create(&t.db, [Member::EMAIL.set("ada@example.com")], |m| {
+    let back = Member::restore_or_create(&t.db, [Member::EMAIL.set("anu@example.com")], |m| {
         m.name = "Someone else".into();
     })
     .await
     .unwrap();
     assert_eq!(back.id, gone.id, "the trashed record, restored");
     assert!(!back.trashed());
-    assert_eq!(back.name, "Ada", "found, so the values are not applied");
+    assert_eq!(back.name, "Anu", "found, so the values are not applied");
 
-    let new = Member::restore_or_create(&t.db, [Member::EMAIL.set("grace@example.com")], |m| {
-        m.name = "Grace".into();
+    let new = Member::restore_or_create(&t.db, [Member::EMAIL.set("gauri@example.com")], |m| {
+        m.name = "Gauri".into();
     })
     .await
     .unwrap();
     assert!(new.was_recently_created());
-    assert_eq!(new.name, "Grace");
+    assert_eq!(new.name, "Gauri");
 
     // Create first; the unique email finds the trashed record, restored.
     let mut again = Member::find_or_fail(&t.db, new.id).await.unwrap();
     again.delete(&t.db).await.unwrap();
     let restored =
-        Member::create_or_restore(&t.db, [Member::EMAIL.set("grace@example.com")], |m| {
-            m.name = "Grace".into();
+        Member::create_or_restore(&t.db, [Member::EMAIL.set("gauri@example.com")], |m| {
+            m.name = "Gauri".into();
         })
         .await
         .unwrap();

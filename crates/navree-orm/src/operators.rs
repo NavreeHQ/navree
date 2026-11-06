@@ -82,9 +82,9 @@ impl<M, T> Column<M, T> {
     /// let sql = col("name").contains_ignore_case("Équipe").to_sql(Dialect::Postgres).unwrap();
     /// assert_eq!(sql.sql, r#""name" ~ $1"#);
     /// assert_eq!(sql.values, [Value::from("[Éé][qQ][uU][iI][pP][eE]")]);
-    /// let sql = col("name").contains_ignore_case("Acme").to_sql(Dialect::Postgres).unwrap();
+    /// let sql = col("name").contains_ignore_case("Agra").to_sql(Dialect::Postgres).unwrap();
     /// assert_eq!(sql.sql, r#"LOWER("name") LIKE $1 ESCAPE E'\\'"#);
-    /// assert_eq!(sql.values, [Value::from("%acme%")]);
+    /// assert_eq!(sql.values, [Value::from("%agra%")]);
     /// ```
     pub fn contains_ignore_case(&self, text: impl Into<String>) -> Filter {
         self.ignore_case(text, IgnoreCaseMode::Contains)

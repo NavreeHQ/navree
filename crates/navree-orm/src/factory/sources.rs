@@ -296,10 +296,10 @@ impl<P: Model> ResolveParent for StoredParent<P> {
 /// ```no_run
 /// # use navree_orm::__doc_factories::*;
 /// # async fn demo(db: Db) -> Result<()> {
-/// let acme = Company::factory().set(Company::NAME, "Acme").lazy();
+/// let agra = Company::factory().set(Company::NAME, "Agra").lazy();
 /// // Three deals, one company (created with the first deal).
-/// let deals = Deal::factory().count(3).for_(acme.clone(), Deal::COMPANY_ID).create(&db).await?;
-/// let company = acme.get(&db).await?;
+/// let deals = Deal::factory().count(3).for_(agra.clone(), Deal::COMPANY_ID).create(&db).await?;
+/// let company = agra.get(&db).await?;
 /// assert!(deals.iter().all(|deal| deal.company_id == Some(company.id)));
 /// # Ok(()) }
 /// ```

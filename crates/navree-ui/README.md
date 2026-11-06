@@ -298,7 +298,7 @@ Field::new("deal-owner", "Owner").control(
     Combobox::new("owner_id")
         .placeholder("Search people")
         .search("/people/options")
-        .selected_choice(("7", "Grace Hopper")),
+        .selected_choice(("7", "Gauri Hundal")),
 )
 
 async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {

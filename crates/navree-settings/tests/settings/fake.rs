@@ -11,8 +11,8 @@ use crate::support::{NotificationSettings, PortalSettings, World, builder};
 
 #[tokio::test]
 async fn presets_resolve_like_the_real_service_and_are_not_changes() {
-    let (acme, holding, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-    let fake = SettingsFake::new().attach(acme, holding);
+    let (agra, holding, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let fake = SettingsFake::new().attach(agra, holding);
     fake.set::<PortalSettings>(Scope::global(), json!({"page_size": 50}))
         .await
         .unwrap();
@@ -22,13 +22,13 @@ async fn presets_resolve_like_the_real_service_and_are_not_changes() {
     )
     .await
     .unwrap();
-    fake.set::<PortalSettings>(Scope::user(ada), json!({"welcome_text": "Hi Ada"}))
+    fake.set::<PortalSettings>(Scope::user(ada), json!({"welcome_text": "Hi Anu"}))
         .await
         .unwrap();
 
     let settings = fake.settings();
     let portal = settings
-        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(acme))
+        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(agra))
         .await
         .unwrap();
     assert_eq!(portal.page_size, 50);
@@ -53,8 +53,8 @@ async fn writes_through_the_service_are_recorded() {
     let fake = SettingsFake::new();
     let world = World::new().await;
     let db = world.db().await;
-    let acme = Uuid::now_v7();
-    let scope = Scope::workspace(acme).in_organization(None);
+    let agra = Uuid::now_v7();
+    let scope = Scope::workspace(agra).in_organization(None);
     let actor = Uuid::now_v7();
     let uow = db.uow(Some(actor), None).await;
     let settings = fake.settings();
@@ -111,20 +111,20 @@ async fn registered_types_are_known_by_key() {
 
 #[tokio::test]
 async fn the_fake_replaces_the_service_in_a_test_app() {
-    let acme_slug = "acme";
+    let agra_slug = "agra";
     let fake = SettingsFake::new().register::<PortalSettings>();
     fake.set::<PortalSettings>(Scope::global(), json!({"welcome_text": "From the fake"}))
         .await
         .unwrap();
     let world = World::with(builder().override_value(Arc::new(fake.settings()))).await;
-    let ada = world.user("Ada").await;
-    world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    world.workspace(ada, "Agra").await;
 
     // The extractor and the routes read the fake.
     world
         .as_user(ada)
         .get("/api/portal")
-        .header("X-Workspace", acme_slug)
+        .header("X-Workspace", agra_slug)
         .send()
         .await
         .assert_status(200)
@@ -133,18 +133,18 @@ async fn the_fake_replaces_the_service_in_a_test_app() {
     world
         .as_user(ada)
         .patch("/api/settings/portal?scope=workspace")
-        .header("X-Workspace", acme_slug)
+        .header("X-Workspace", agra_slug)
         .json(&json!({"page_size": 12}))
         .send()
         .await
         .assert_status(200);
     let workspace = world.app.get::<navree_workspace::Workspaces>().await;
-    let acme = workspace.resolve(acme_slug).await.unwrap();
-    fake.assert_changed::<PortalSettings>(Scope::workspace(acme.id));
+    let agra = workspace.resolve(agra_slug).await.unwrap();
+    fake.assert_changed::<PortalSettings>(Scope::workspace(agra.id));
     let service: Arc<Settings> = world.settings().await;
     assert_eq!(
         service
-            .get::<PortalSettings>(Scope::workspace(acme.id).in_organization(None))
+            .get::<PortalSettings>(Scope::workspace(agra.id).in_organization(None))
             .await
             .unwrap()
             .page_size,

@@ -27,7 +27,7 @@ async fn chrome_prints_a_template_with_its_data() {
             &Render::template("invoices/show")
                 .data(json!({
                     "number": 42,
-                    "customer": "Ada & Co",
+                    "customer": "Anu & Co",
                     "total_cents": 123456,
                     "currency": "EUR",
                 }))
@@ -39,7 +39,7 @@ async fn chrome_prints_a_template_with_its_data() {
     assert_eq!(pdf.page_count().unwrap(), 1);
     let text = pdf.text().unwrap();
     assert!(text.contains("Invoice 42"), "{text}");
-    assert!(text.contains("Billed to Ada & Co"), "{text}");
+    assert!(text.contains("Billed to Anu & Co"), "{text}");
     assert!(text.contains("Total €1,234.56"), "{text}");
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Invoice 42"));
 

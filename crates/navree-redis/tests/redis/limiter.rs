@@ -29,14 +29,14 @@ async fn a_burst_then_one_request_per_interval() {
     let minute = Duration::from_secs(60);
 
     assert_eq!(
-        limiter.hit("exports:ada", 2, minute).await.unwrap(),
+        limiter.hit("exports:anu", 2, minute).await.unwrap(),
         RateLimit::Allowed { remaining: 1 }
     );
     assert_eq!(
-        other.hit("exports:ada", 2, minute).await.unwrap(),
+        other.hit("exports:anu", 2, minute).await.unwrap(),
         RateLimit::Allowed { remaining: 0 }
     );
-    let RateLimit::Limited { retry_after } = limiter.hit("exports:ada", 2, minute).await.unwrap()
+    let RateLimit::Limited { retry_after } = limiter.hit("exports:anu", 2, minute).await.unwrap()
     else {
         panic!("the third request is over the limit");
     };
@@ -46,7 +46,7 @@ async fn a_burst_then_one_request_per_interval() {
     );
     assert!(
         !limiter
-            .hit("exports:ada", 2, minute)
+            .hit("exports:anu", 2, minute)
             .await
             .unwrap()
             .is_allowed()
@@ -60,10 +60,10 @@ async fn a_burst_then_one_request_per_interval() {
         "keys are independent"
     );
 
-    limiter.reset("exports:ada").await.unwrap();
+    limiter.reset("exports:anu").await.unwrap();
     assert!(
         limiter
-            .hit("exports:ada", 2, minute)
+            .hit("exports:anu", 2, minute)
             .await
             .unwrap()
             .is_allowed()

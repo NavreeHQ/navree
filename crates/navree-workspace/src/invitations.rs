@@ -440,15 +440,15 @@ mod tests {
     #[test]
     fn emails_are_normalized_and_checked() {
         assert_eq!(
-            normalize_email("  Ada@Example.COM ").unwrap(),
-            "ada@example.com"
+            normalize_email("  Anu@Example.COM ").unwrap(),
+            "anu@example.com"
         );
         for bad in [
             "",
-            "ada",
-            "ada@",
+            "anu",
+            "anu@",
             "@example.com",
-            "ada@example",
+            "anu@example",
             "a b@x.com",
             "a@b@c.com",
         ] {
@@ -475,7 +475,7 @@ mod tests {
             invitation: Invitation {
                 id: Uuid::now_v7(),
                 workspace_id: Uuid::now_v7(),
-                email: "ada@example.com".into(),
+                email: "anu@example.com".into(),
                 role: "member".into(),
                 token_hash: "x".into(),
                 invited_by: None,

@@ -48,13 +48,13 @@ impl Module for PremiumModule {
 #[tokio::test]
 async fn the_overview_and_the_plans() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada.id, "Agra").await;
     let client = world.as_user(ada.id);
 
     let overview = client
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -71,7 +71,7 @@ async fn the_overview_and_the_plans() {
 
     client
         .get("/api/billing/plans")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -82,11 +82,11 @@ async fn the_overview_and_the_plans() {
 #[tokio::test]
 async fn checkout_swap_cancel_resume_invoices_and_portal() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let client = world.as_user(ada.id);
     let post =
-        |path: &str, body: Value| client.post(path).header("X-Workspace", "acme").json(&body);
+        |path: &str, body: Value| client.post(path).header("X-Workspace", "agra").json(&body);
 
     let url = post("/api/billing/checkout", json!({ "plan": "pro" }))
         .send()
@@ -100,7 +100,7 @@ async fn checkout_swap_cancel_resume_invoices_and_portal() {
     let checkout = fake.assert_checkout(|c| c.url == url);
     assert_eq!(
         checkout.customer_email.as_deref(),
-        Some("ada@example.com"),
+        Some("anu@example.com"),
         "prefilled with the signed-in user's email"
     );
     post("/api/billing/checkout", json!({ "plan": "gold" }))
@@ -128,7 +128,7 @@ async fn checkout_swap_cancel_resume_invoices_and_portal() {
 
     client
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -162,7 +162,7 @@ async fn checkout_swap_cancel_resume_invoices_and_portal() {
 
     client
         .get("/api/billing/invoices")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -194,30 +194,30 @@ async fn checkout_swap_cancel_resume_invoices_and_portal() {
     .send()
     .await
     .assert_validation_error("return_url");
-    let _ = acme;
+    let _ = agra;
 }
 
 #[tokio::test]
 async fn the_routes_need_billing_manage_in_the_workspace() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let alan = world.user("Alan", "alan@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
-    world.join(acme.id, grace.id, "member").await;
-    world.join(acme.id, alan.id, "admin").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let alan = world.user("Arun", "arun@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
+    world.join(agra.id, grace.id, "member").await;
+    world.join(agra.id, alan.id, "admin").await;
 
     world
         .as_user(grace.id)
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_error(403, None);
     world
         .as_user(alan.id)
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -231,7 +231,7 @@ async fn the_routes_need_billing_manage_in_the_workspace() {
         .app
         .client()
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_error(401, None);
@@ -286,13 +286,13 @@ async fn the_webhook_route_is_public_and_verified() {
 #[tokio::test]
 async fn subscribed_answers_402_without_a_subscription() {
     let world = World::with(builder().module(PremiumModule)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let premium = || {
         world
             .as_user(ada.id)
             .get("/api/premium")
-            .header("X-Workspace", "acme")
+            .header("X-Workspace", "agra")
     };
     premium()
         .send()
@@ -300,7 +300,7 @@ async fn subscribed_answers_402_without_a_subscription() {
         .assert_error(402, "This workspace needs an active subscription")
         .assert_error_code(402, "subscription_required");
 
-    world.billing().await.start_trial(&acme, 3).await.unwrap();
+    world.billing().await.start_trial(&agra, 3).await.unwrap();
     premium()
         .send()
         .await
@@ -310,7 +310,7 @@ async fn subscribed_answers_402_without_a_subscription() {
 
     world.advance_days(3);
     premium().send().await.assert_error(402, None);
-    world.subscribe(&acme, "starter").await;
+    world.subscribe(&agra, "starter").await;
     premium()
         .send()
         .await
@@ -322,7 +322,7 @@ async fn subscribed_answers_402_without_a_subscription() {
 #[tokio::test]
 async fn users_can_be_the_route_billable() {
     let world = World::with(platform().module(UserBilling).module(PremiumModule)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let client = world.as_user(ada.id);
     client
         .get("/api/premium")
@@ -357,12 +357,12 @@ async fn users_can_be_the_route_billable() {
 #[tokio::test]
 async fn routes_can_be_turned_off_and_two_billables_need_a_choice() {
     let world = World::with(builder().config("billing.routes", false)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada.id, "Agra").await;
     world
         .as_user(ada.id)
         .get("/api/billing")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(404);

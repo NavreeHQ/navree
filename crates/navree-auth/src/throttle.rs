@@ -195,7 +195,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn blocks_after_limit_attempts_until_the_window_ends() {
         let (throttle, clock, _) = throttle(3);
-        let key = throttle.key("ada@example.com", Some("127.0.0.1"));
+        let key = throttle.key("anu@example.com", Some("127.0.0.1"));
         for _ in 0..3 {
             throttle.attempt(&key).await.unwrap();
         }
@@ -216,7 +216,7 @@ mod tests {
     async fn parallel_attempts_never_exceed_the_limit() {
         let (throttle, _, _) = throttle(5);
         let throttle = Arc::new(throttle);
-        let key = throttle.key("ada@example.com", Some("127.0.0.1"));
+        let key = throttle.key("anu@example.com", Some("127.0.0.1"));
         let tasks: Vec<_> = (0..64)
             .map(|_| {
                 let (throttle, key) = (throttle.clone(), key.clone());
@@ -233,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn only_the_first_refusal_of_a_window_is_marked() {
         let (throttle, _, _) = throttle(1);
-        let key = throttle.key("ada@example.com", None);
+        let key = throttle.key("anu@example.com", None);
         assert_eq!(throttle.count(&key).await.unwrap(), Attempt::Allowed);
         let mut marked = Vec::new();
         for _ in 0..3 {
@@ -248,9 +248,9 @@ mod tests {
     #[tokio::test]
     async fn keys_are_separate_and_clear_resets() {
         let (throttle, _, _) = throttle(1);
-        let ada = throttle.key("ada@example.com", Some("127.0.0.1"));
-        let other_ip = throttle.key("ada@example.com", Some("10.0.0.1"));
-        let grace = throttle.key("grace@example.com", Some("127.0.0.1"));
+        let ada = throttle.key("anu@example.com", Some("127.0.0.1"));
+        let other_ip = throttle.key("anu@example.com", Some("10.0.0.1"));
+        let grace = throttle.key("gauri@example.com", Some("127.0.0.1"));
         throttle.attempt(&ada).await.unwrap();
         assert!(throttle.attempt(&ada).await.is_err());
         throttle.attempt(&other_ip).await.unwrap();
@@ -262,7 +262,7 @@ mod tests {
     #[tokio::test]
     async fn released_attempts_do_not_count() {
         let (throttle, _, _) = throttle(2);
-        let key = throttle.key("ada@example.com", None);
+        let key = throttle.key("anu@example.com", None);
         for _ in 0..5 {
             throttle.attempt(&key).await.unwrap();
             throttle.release(&key).await.unwrap();
@@ -275,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn a_limit_of_zero_never_blocks() {
         let (throttle, _, _) = throttle(0);
-        let key = throttle.key("ada@example.com", None);
+        let key = throttle.key("anu@example.com", None);
         for _ in 0..10 {
             throttle.attempt(&key).await.unwrap();
         }
@@ -284,21 +284,21 @@ mod tests {
     #[test]
     fn keys_do_not_contain_the_email_address() {
         let (throttle, _, _) = throttle(1);
-        let key = throttle.key("Ada@Example.com", Some("127.0.0.1"));
-        assert!(!key.to_lowercase().contains("ada"), "{key}");
-        assert_eq!(key, throttle.key("ada@example.com", Some("127.0.0.1")));
+        let key = throttle.key("Anu@Example.com", Some("127.0.0.1"));
+        assert!(!key.to_lowercase().contains("anu"), "{key}");
+        assert_eq!(key, throttle.key("anu@example.com", Some("127.0.0.1")));
     }
 
     #[test]
     fn ipv6_clients_share_a_key_per_network() {
         let (throttle, _, _) = throttle(1);
-        let ada = |ip| throttle.key("ada@example.com", Some(ip));
+        let ada = |ip| throttle.key("anu@example.com", Some(ip));
         assert_eq!(ada("2001:db8:1:2::1"), ada("2001:db8:1:2:ffff:eeee:dddd:1"));
         assert_ne!(ada("2001:db8:1:2::1"), ada("2001:db8:1:3::1"));
         assert_eq!(ada("192.0.2.7"), ada("::ffff:192.0.2.7"), "mapped is IPv4");
         assert_ne!(ada("192.0.2.7"), ada("192.0.2.8"));
         assert_ne!(
-            throttle.key("grace@example.com", Some("2001:db8:1:2::1")),
+            throttle.key("gauri@example.com", Some("2001:db8:1:2::1")),
             ada("2001:db8:1:2::1")
         );
         // The prefix is the one of `http.rate_limit_ipv6_prefix`.
@@ -309,8 +309,8 @@ mod tests {
             48,
         );
         assert_eq!(
-            wide.key("ada@example.com", Some("2001:db8:1:2::1")),
-            wide.key("ada@example.com", Some("2001:db8:1:9::1"))
+            wide.key("anu@example.com", Some("2001:db8:1:2::1")),
+            wide.key("anu@example.com", Some("2001:db8:1:9::1"))
         );
     }
 }

@@ -99,7 +99,7 @@ async fn grpc_calls_forward_the_calls_context() {
             TestChannel::new(&app)
                 .bearer(&user.to_string())
                 .metadata("x-request-id", "req-forwarded")
-                .metadata("x-workspace", "acme"),
+                .metadata("x-workspace", "agra"),
         );
         let reply = client
             .ping(PingRequest {
@@ -116,7 +116,7 @@ async fn grpc_calls_forward_the_calls_context() {
             "the authorization was forwarded"
         );
         assert_eq!(reply.request_id, "req-forwarded");
-        assert_eq!(reply.workspace, "acme");
+        assert_eq!(reply.workspace, "agra");
 
         let missing = client
             .ping(PingRequest {
@@ -144,7 +144,7 @@ async fn http_handlers_forward_their_requests_context() {
             .get("/api/upstream/hello")
             .bearer(&user.to_string())
             .header("x-request-id", "req-http")
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .send()
             .await
             .assert_status(200);
@@ -154,7 +154,7 @@ async fn http_handlers_forward_their_requests_context() {
                 "message": "hello",
                 "user_id": user.to_string(),
                 "request_id": "req-http",
-                "workspace": "acme",
+                "workspace": "agra",
             })
         );
 

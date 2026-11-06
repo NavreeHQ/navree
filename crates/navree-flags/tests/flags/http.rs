@@ -12,9 +12,9 @@ use crate::support::{AiSummaries, DealExport, NewPipeline, World, builder};
 async fn current_flags_resolve_for_the_user_and_the_workspace() {
     let world = World::new().await;
     let flags = world.flags().await;
-    let ada = world.user("Ada").await;
-    let grace = world.user("Grace").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    let grace = world.user("Gauri").await;
+    let agra = world.workspace(ada, "Agra").await;
 
     let body = world
         .as_user(ada)
@@ -25,7 +25,7 @@ async fn current_flags_resolve_for_the_user_and_the_workspace() {
         .json_value();
     assert_eq!(body, json!({"board": "v1", "user": ada, "workspace": null}));
 
-    flags.activate::<NewPipeline>(&acme).await.unwrap();
+    flags.activate::<NewPipeline>(&agra).await.unwrap();
     // Without naming the workspace, the workspace's override does not apply.
     world
         .as_user(ada)
@@ -37,17 +37,17 @@ async fn current_flags_resolve_for_the_user_and_the_workspace() {
     world
         .as_user(ada)
         .get("/api/v1/deals/board")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("board", json!("v2"))
-        .assert_json_path("workspace", json!(acme.id));
+        .assert_json_path("workspace", json!(agra.id));
     // A user who is not a member does not get the workspace's flags.
     world
         .as_user(grace)
         .get("/api/v1/deals/board")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -212,10 +212,10 @@ async fn default_on_flags_keep_their_routes_until_turned_off() {
 #[tokio::test]
 async fn get_flags_serves_exposed_flags_to_the_front_end() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    let agra = world.workspace(ada, "Agra").await;
     let flags = world.flags().await;
-    flags.activate::<AiSummaries>(&acme).await.unwrap();
+    flags.activate::<AiSummaries>(&agra).await.unwrap();
     flags
         .activate::<NewPipeline>(FlagScope::everyone())
         .await
@@ -224,7 +224,7 @@ async fn get_flags_serves_exposed_flags_to_the_front_end() {
     let response = world
         .as_user(ada)
         .get("/api/flags")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -262,7 +262,7 @@ async fn the_routes_can_be_turned_off() {
             .config("flags.admin_routes", false),
     )
     .await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     world
         .as_user(ada)
         .get("/api/flags")

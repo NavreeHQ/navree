@@ -18,7 +18,7 @@ use crate::support::{
 async fn access_tokens_carry_the_session_and_the_sign_in_time() {
     let clock = support::clock();
     let app = support::clocked(&clock).build().await;
-    let (_, access, refresh_token) = signed_in(&app, "ada@example.com").await;
+    let (_, access, refresh_token) = signed_in(&app, "anu@example.com").await;
     let jwt = app.get::<JwtService>().await;
     let claims = claims_of(&jwt, &access);
     let session = claims.sid.expect("a session id");
@@ -46,7 +46,7 @@ async fn access_tokens_carry_the_session_and_the_sign_in_time() {
 #[tokio::test]
 async fn sessions_are_listed_with_their_device_and_the_current_one_marked() {
     let app = support::app().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     let laptop = client
         .post("/api/auth/login")
@@ -54,12 +54,12 @@ async fn sessions_are_listed_with_their_device_and_the_current_one_marked() {
             "user-agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/131.0",
         )
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200);
     let (laptop_access, _) = tokens(&laptop);
-    let phone = login(&client, "ada@example.com", PASSWORD)
+    let phone = login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
     let (phone_access, _) = tokens(&phone);
@@ -94,7 +94,7 @@ async fn sessions_are_listed_with_their_device_and_the_current_one_marked() {
     }
 
     // Another user sees only their own.
-    let (_, grace_access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, grace_access, _) = signed_in(&app, "gauri@example.com").await;
     let body = client
         .get("/api/auth/sessions")
         .bearer(&grace_access)
@@ -113,8 +113,8 @@ async fn revoking_a_session_ends_its_refresh_tokens() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
-    let other = login(&app.client(), "ada@example.com", PASSWORD)
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
+    let other = login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
     let (other_access, other_refresh) = tokens(&other);
@@ -146,7 +146,7 @@ async fn revoking_a_session_ends_its_refresh_tokens() {
         .send()
         .await
         .assert_error(404, None);
-    let (_, grace_access, _) = signed_in(&app, "grace@example.com").await;
+    let (_, grace_access, _) = signed_in(&app, "gauri@example.com").await;
     let ada_session = claims_of(&jwt, &access).sid.unwrap();
     client
         .delete(&format!("/api/auth/sessions/{ada_session}"))
@@ -168,7 +168,7 @@ async fn recent_auth_routes_need_a_recent_sign_in_or_a_confirmation() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (_, access, refresh_token) = signed_in(&app, "ada@example.com").await;
+    let (_, access, refresh_token) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     let sensitive = |token: String| {
         let client = client.clone();
@@ -234,7 +234,7 @@ async fn recent_auth_routes_need_a_recent_sign_in_or_a_confirmation() {
 async fn confirmation_survives_refreshes() {
     let clock = support::clock();
     let app = support::clocked(&clock).build().await;
-    let (_, _, refresh_token) = signed_in(&app, "ada@example.com").await;
+    let (_, _, refresh_token) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     clock.advance(Duration::from_secs(20 * 60));
     let (access, refresh_token) =
@@ -263,7 +263,7 @@ async fn confirmation_survives_refreshes() {
 async fn confirmation_takes_a_two_factor_code() {
     let clock = support::clock();
     let app = support::clocked(&clock).build().await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     client
         .post("/api/auth/confirm")

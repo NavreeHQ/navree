@@ -746,20 +746,20 @@ mod tests {
     use navree_db::{DbOptions, Pool};
 
     fn terms(text: &str) -> QueryTerms {
-        let synonyms = BTreeMap::from([("acme".to_owned(), vec!["acme corp".to_owned()])]);
+        let synonyms = BTreeMap::from([("agra".to_owned(), vec!["agra corp".to_owned()])]);
         QueryTerms::parse(text, &[], &synonyms)
     }
 
     #[test]
     fn fts5_queries_quote_words_and_prefix_the_last() {
-        assert_eq!(fts5_query(&terms("ada lov")), "\"ada\" AND \"lov\"*");
-        assert_eq!(fts5_query(&terms("acme ")), "(\"acme\" OR \"acme corp\")");
+        assert_eq!(fts5_query(&terms("anu lov")), "\"anu\" AND \"lov\"*");
+        assert_eq!(fts5_query(&terms("agra ")), "(\"agra\" OR \"agra corp\")");
     }
 
     #[test]
     fn tsqueries_join_words_and_synonyms() {
-        assert_eq!(tsquery(&terms("ada lov")), "ada & lov:*");
-        assert_eq!(tsquery(&terms("acme ")), "(acme | acme <-> corp)");
+        assert_eq!(tsquery(&terms("anu lov")), "anu & lov:*");
+        assert_eq!(tsquery(&terms("agra ")), "(agra | agra <-> corp)");
     }
 
     fn postgres_sql(text: &str, trigram: bool) -> (String, String) {
@@ -782,7 +782,7 @@ mod tests {
 
     #[test]
     fn postgres_queries_match_every_word_and_rank_as_float8() {
-        let (select, count) = postgres_sql("ada lov", false);
+        let (select, count) = postgres_sql("anu lov", false);
         assert_eq!(
             select,
             "(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery($1::regconfig, $2), 32))::float8 AS rank \
@@ -801,7 +801,7 @@ mod tests {
 
     #[test]
     fn postgres_trigrams_let_each_word_match_on_its_own() {
-        let (select, count) = postgres_sql("ada lovlace", true);
+        let (select, count) = postgres_sql("anu lovlace", true);
         assert_eq!(
             select,
             "(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery($1::regconfig, $2), 32) \
@@ -814,7 +814,7 @@ mod tests {
             count.starts_with("FROM search_documents d WHERE d.index_name = $1 AND ("),
             "{count}"
         );
-        assert_eq!(tsquery_any(&terms("ada lovlace")), "ada | lovlace:*");
+        assert_eq!(tsquery_any(&terms("anu lovlace")), "anu | lovlace:*");
     }
 
     /// What SQLite says it does for `statement`, one line for each step.

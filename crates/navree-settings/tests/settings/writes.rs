@@ -148,8 +148,8 @@ async fn the_inherited_values_are_validated_with_the_patch() {
     )
     .await;
     let settings = world.settings().await;
-    let acme = Uuid::now_v7();
-    let scope = Scope::workspace(acme).in_organization(None);
+    let agra = Uuid::now_v7();
+    let scope = Scope::workspace(agra).in_organization(None);
     world
         .work(|uow| {
             let settings = settings.clone();
@@ -239,7 +239,7 @@ async fn patches_take_any_serializable_value() {
 async fn inherit_and_reset_make_fields_follow_the_level_above() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let acme = Scope::workspace(Uuid::now_v7()).in_organization(None);
+    let agra = Scope::workspace(Uuid::now_v7()).in_organization(None);
     update(
         &world,
         Scope::global(),
@@ -249,8 +249,8 @@ async fn inherit_and_reset_make_fields_follow_the_level_above() {
     .unwrap();
     let portal = update(
         &world,
-        acme,
-        json!({"welcome_text": "Hi Acme", "page_size": 10, "show_leaderboard": true}),
+        agra,
+        json!({"welcome_text": "Hi Agra", "page_size": 10, "show_leaderboard": true}),
     )
     .await
     .unwrap();
@@ -259,23 +259,23 @@ async fn inherit_and_reset_make_fields_follow_the_level_above() {
         ["page_size", "show_leaderboard", "welcome_text"]
     );
 
-    let portal = inherit(&world, acme, "welcome_text").await.unwrap();
+    let portal = inherit(&world, agra, "welcome_text").await.unwrap();
     assert_eq!(portal.welcome_text, "Hello");
     assert_eq!(portal.source("welcome_text"), Some(Source::Global));
     assert_eq!(portal.overridden, ["page_size", "show_leaderboard"]);
     // Inheriting a field that already inherits changes nothing.
-    let again = inherit(&world, acme, "welcome_text").await.unwrap();
+    let again = inherit(&world, agra, "welcome_text").await.unwrap();
     assert_eq!(again.overridden, ["page_size", "show_leaderboard"]);
     // An unknown field is an error naming it.
     assert!(matches!(
-        inherit(&world, acme, "colour").await,
+        inherit(&world, agra, "colour").await,
         Err(SettingsError::UnknownFields { fields, .. }) if fields == ["colour"]
     ));
 
     let portal = world
         .work(|uow| {
             let settings = settings.clone();
-            async move { settings.reset::<PortalSettings>(&uow, acme).await }
+            async move { settings.reset::<PortalSettings>(&uow, agra).await }
         })
         .await
         .unwrap();
@@ -285,7 +285,7 @@ async fn inherit_and_reset_make_fields_follow_the_level_above() {
     // The row is gone with its last field.
     assert!(
         settings
-            .stored::<PortalSettings>(acme)
+            .stored::<PortalSettings>(agra)
             .await
             .unwrap()
             .is_empty()
@@ -303,11 +303,11 @@ async fn inherit_and_reset_make_fields_follow_the_level_above() {
 #[tokio::test]
 async fn a_value_equal_to_the_inherited_one_is_still_an_override() {
     let world = World::new().await;
-    let acme = Scope::workspace(Uuid::now_v7()).in_organization(None);
+    let agra = Scope::workspace(Uuid::now_v7()).in_organization(None);
     update(&world, Scope::global(), json!({"page_size": 50}))
         .await
         .unwrap();
-    let pinned = update(&world, acme, json!({"page_size": 50}))
+    let pinned = update(&world, agra, json!({"page_size": 50}))
         .await
         .unwrap();
     assert_eq!(pinned.source("page_size"), Some(Source::Workspace));
@@ -319,7 +319,7 @@ async fn a_value_equal_to_the_inherited_one_is_still_an_override() {
     let settings = world.settings().await;
     assert_eq!(
         settings
-            .get::<PortalSettings>(acme)
+            .get::<PortalSettings>(agra)
             .await
             .unwrap()
             .page_size,
@@ -384,10 +384,10 @@ async fn writes_commit_or_roll_back_with_their_unit_of_work() {
 #[tokio::test]
 async fn changes_emit_settings_changed_after_the_commit() {
     let world = World::new().await;
-    let actor = world.user("Ada").await;
+    let actor = world.user("Anu").await;
     let settings = world.settings().await;
     let db = world.db().await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let mut events = world.events(&["settings.changed"]).await;
 
     let uow = db.uow(Some(actor), None).await;
@@ -398,7 +398,7 @@ async fn changes_emit_settings_changed_after_the_commit() {
             settings
                 .update::<PortalSettings>(
                     &uow,
-                    Scope::workspace(acme).in_organization(None),
+                    Scope::workspace(agra).in_organization(None),
                     json!({"welcome_text": "Hi", "page_size": 30}),
                 )
                 .await
@@ -416,7 +416,7 @@ async fn changes_emit_settings_changed_after_the_commit() {
         json!({
             "key": "portal",
             "scope_type": "workspace",
-            "scope_id": acme,
+            "scope_id": agra,
             "fields": ["page_size", "welcome_text"],
             "old": {},
             "new": {"welcome_text": "Hi", "page_size": 30},
@@ -427,7 +427,7 @@ async fn changes_emit_settings_changed_after_the_commit() {
     // A patch that changes nothing stored emits nothing.
     update(
         &world,
-        Scope::workspace(acme).in_organization(None),
+        Scope::workspace(agra).in_organization(None),
         json!({"page_size": 30}),
     )
     .await
@@ -442,7 +442,7 @@ async fn changes_emit_settings_changed_after_the_commit() {
                 settings
                     .inherit::<PortalSettings>(
                         &uow,
-                        Scope::workspace(acme).in_organization(None),
+                        Scope::workspace(agra).in_organization(None),
                         "welcome_text",
                     )
                     .await
@@ -460,10 +460,10 @@ async fn changes_emit_settings_changed_after_the_commit() {
 #[tokio::test]
 async fn every_change_is_audited_in_its_transaction() {
     let world = World::new().await;
-    let actor = world.user("Ada").await;
+    let actor = world.user("Anu").await;
     let settings = world.settings().await;
     let db = world.db().await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
 
     let uow = db.uow(Some(actor), Some("req-9".to_owned())).await;
     uow.scope({
@@ -477,7 +477,7 @@ async fn every_change_is_audited_in_its_transaction() {
             settings
                 .update::<PortalSettings>(
                     &uow,
-                    Scope::workspace(acme).in_organization(None),
+                    Scope::workspace(agra).in_organization(None),
                     json!({"show_leaderboard": true}),
                 )
                 .await
@@ -539,7 +539,7 @@ async fn every_change_is_audited_in_its_transaction() {
     assert_eq!(global.metadata["fields"], json!(["page_size"]));
     let workspace = &entries[1];
     assert_eq!(workspace.metadata["scope_type"], "workspace");
-    assert_eq!(workspace.metadata["scope_id"], json!(acme));
+    assert_eq!(workspace.metadata["scope_id"], json!(agra));
     let later = &entries[2];
     assert_eq!(later.old_values, Some(json!({"page_size": 30})));
     assert_eq!(later.new_values, Some(json!({"page_size": 35})));
@@ -572,44 +572,44 @@ async fn resolved_values_are_cached_and_writes_clear_the_levels_they_touch() {
     let world = World::new().await;
     let settings = world.settings().await;
     let db = world.db().await;
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
-    let acme_scope = Scope::workspace(acme).in_organization(None);
-    let globex_scope = Scope::workspace(globex).in_organization(None);
-    update(&world, acme_scope, json!({"page_size": 10}))
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
+    let agra_scope = Scope::workspace(agra).in_organization(None);
+    let gulati_scope = Scope::workspace(gulati).in_organization(None);
+    update(&world, agra_scope, json!({"page_size": 10}))
         .await
         .unwrap();
-    update(&world, globex_scope, json!({"page_size": 20}))
+    update(&world, gulati_scope, json!({"page_size": 20}))
         .await
         .unwrap();
-    assert_eq!(page_size(&settings, acme_scope).await, 10);
-    assert_eq!(page_size(&settings, globex_scope).await, 20);
+    assert_eq!(page_size(&settings, agra_scope).await, 10);
+    assert_eq!(page_size(&settings, gulati_scope).await, 20);
 
     // Another instance changes both rows: the cached values stay.
-    write_behind_the_cache(&db, "workspace", acme, json!({"page_size": 11})).await;
-    write_behind_the_cache(&db, "workspace", globex, json!({"page_size": 21})).await;
-    assert_eq!(page_size(&settings, acme_scope).await, 10);
-    assert_eq!(page_size(&settings, globex_scope).await, 20);
+    write_behind_the_cache(&db, "workspace", agra, json!({"page_size": 11})).await;
+    write_behind_the_cache(&db, "workspace", gulati, json!({"page_size": 21})).await;
+    assert_eq!(page_size(&settings, agra_scope).await, 10);
+    assert_eq!(page_size(&settings, gulati_scope).await, 20);
 
-    // A write at Acme's level clears Acme's entries only.
-    update(&world, acme_scope, json!({"show_leaderboard": true}))
+    // A write at Agra's level clears Agra's entries only.
+    update(&world, agra_scope, json!({"show_leaderboard": true}))
         .await
         .unwrap();
-    assert_eq!(page_size(&settings, acme_scope).await, 11);
-    assert_eq!(page_size(&settings, globex_scope).await, 20);
+    assert_eq!(page_size(&settings, agra_scope).await, 11);
+    assert_eq!(page_size(&settings, gulati_scope).await, 20);
 
     // A global write clears every entry of the key.
     update(&world, Scope::global(), json!({"welcome_text": "Hello"}))
         .await
         .unwrap();
-    assert_eq!(page_size(&settings, globex_scope).await, 21);
+    assert_eq!(page_size(&settings, gulati_scope).await, 21);
 
-    // A user's entry under Acme is cleared by a write at Acme's level.
+    // A user's entry under Agra is cleared by a write at Agra's level.
     let ada = Uuid::now_v7();
-    let ada_scope = Scope::user(ada).in_workspace(acme).in_organization(None);
+    let ada_scope = Scope::user(ada).in_workspace(agra).in_organization(None);
     assert_eq!(page_size(&settings, ada_scope).await, 11);
-    write_behind_the_cache(&db, "workspace", acme, json!({"page_size": 12})).await;
+    write_behind_the_cache(&db, "workspace", agra, json!({"page_size": 12})).await;
     assert_eq!(page_size(&settings, ada_scope).await, 11);
-    update(&world, acme_scope, json!({"show_leaderboard": false}))
+    update(&world, agra_scope, json!({"show_leaderboard": false}))
         .await
         .unwrap();
     assert_eq!(page_size(&settings, ada_scope).await, 12);
@@ -620,13 +620,13 @@ async fn without_a_cache_lifetime_every_read_hits_the_store() {
     let world = World::with(crate::support::builder().config("settings.cache_ttl_secs", 0)).await;
     let settings = world.settings().await;
     let db = world.db().await;
-    let acme = Uuid::now_v7();
-    let scope = Scope::workspace(acme).in_organization(None);
+    let agra = Uuid::now_v7();
+    let scope = Scope::workspace(agra).in_organization(None);
     update(&world, scope, json!({"page_size": 10}))
         .await
         .unwrap();
     assert_eq!(page_size(&settings, scope).await, 10);
-    write_behind_the_cache(&db, "workspace", acme, json!({"page_size": 11})).await;
+    write_behind_the_cache(&db, "workspace", agra, json!({"page_size": 11})).await;
     assert_eq!(page_size(&settings, scope).await, 11);
 }
 
@@ -635,8 +635,8 @@ async fn stored_values_the_type_no_longer_accepts_are_skipped() {
     let world = World::with(crate::support::builder().config("settings.cache_ttl_secs", 0)).await;
     let settings = world.settings().await;
     let db = world.db().await;
-    let acme = Uuid::now_v7();
-    let scope = Scope::workspace(acme).in_organization(None);
+    let agra = Uuid::now_v7();
+    let scope = Scope::workspace(agra).in_organization(None);
     update(&world, Scope::global(), json!({"page_size": 50}))
         .await
         .unwrap();
@@ -648,7 +648,7 @@ async fn stored_values_the_type_no_longer_accepts_are_skipped() {
     write_behind_the_cache(
         &db,
         "workspace",
-        acme,
+        agra,
         json!({"page_size": "ten", "removed": true, "welcome_text": "Hi"}),
     )
     .await;

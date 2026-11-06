@@ -128,49 +128,49 @@ async fn observers_hear_every_event_in_order() {
     let log = Log::default();
     let (_app, db, clock) = app(vec![Box::new(Observed(log.clone()))]).await;
 
-    let mut acme = Company::create(&*db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&*db, company("Agra")).await.unwrap();
     assert_eq!(
-        acme.country.as_deref(),
+        agra.country.as_deref(),
         Some("US"),
         "creating changed the record"
     );
     assert_eq!(
         log.take(),
-        ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
+        ["saving Agra", "creating Agra", "created Agra", "saved Agra"]
     );
 
-    let mut found = Company::find_or_fail(&*db, acme.id).await.unwrap();
-    assert_eq!(log.take(), ["retrieved Acme"]);
+    let mut found = Company::find_or_fail(&*db, agra.id).await.unwrap();
+    assert_eq!(log.take(), ["retrieved Agra"]);
     clock.advance(Duration::from_secs(60));
-    found.name = "Acme Corp".into();
+    found.name = "Agra Corp".into();
     found.save(&*db).await.unwrap();
     assert_eq!(
         log.take(),
         [
-            "saving Acme Corp",
-            "updating Acme Corp",
-            "updated Acme Corp (changed name, updated_at; was Acme; name changed: true)",
-            "saved Acme Corp",
+            "saving Agra Corp",
+            "updating Agra Corp",
+            "updated Agra Corp (changed name, updated_at; was Agra; name changed: true)",
+            "saved Agra Corp",
         ]
     );
 
     assert!(found.delete(&*db).await.unwrap());
-    assert_eq!(log.take(), ["deleting Acme Corp", "deleted Acme Corp"]);
+    assert_eq!(log.take(), ["deleting Agra Corp", "deleted Agra Corp"]);
 
     // `-ing` methods cancel.
     let mut blocked = Record::new(company("Blocked"));
     assert!(!blocked.save(&*db).await.unwrap());
-    acme.employees = 3;
-    acme.save(&*db).await.unwrap();
+    agra.employees = 3;
+    agra.save(&*db).await.unwrap();
     log.take();
     assert!(
-        !acme.delete(&*db).await.unwrap(),
+        !agra.delete(&*db).await.unwrap(),
         "companies with people stay"
     );
     assert_eq!(
         count_rows(&db, "companies").await,
         0,
-        "acme was deleted as found"
+        "agra was deleted as found"
     );
 }
 
@@ -178,32 +178,32 @@ async fn observers_hear_every_event_in_order() {
 async fn observers_hear_what_changed_after_the_commit() {
     let log = Log::default();
     let (_app, db, clock) = app(vec![Box::new(Observed(log.clone()))]).await;
-    let mut acme = Company::create(&*db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&*db, company("Agra")).await.unwrap();
     log.take();
 
     clock.advance(Duration::from_secs(60));
     let uow = db.uow(None, None).await;
-    acme.name = "Acme Inc".into();
-    acme.save(&uow).await.unwrap();
-    acme.employees = 12;
-    acme.save(&uow).await.unwrap();
+    agra.name = "Agra Inc".into();
+    agra.save(&uow).await.unwrap();
+    agra.employees = 12;
+    agra.save(&uow).await.unwrap();
     assert_eq!(
         log.take(),
         [
-            "saving Acme Inc",
-            "updating Acme Inc",
-            "saving Acme Inc",
-            "updating Acme Inc"
+            "saving Agra Inc",
+            "updating Agra Inc",
+            "saving Agra Inc",
+            "updating Agra Inc"
         ]
     );
     uow.commit().await.unwrap();
     assert_eq!(
         log.take(),
         [
-            "updated Acme Inc (changed name, updated_at; was Acme; name changed: true)",
-            "saved Acme Inc",
-            "updated Acme Inc (changed employees; was Acme Inc; name changed: false)",
-            "saved Acme Inc",
+            "updated Agra Inc (changed name, updated_at; was Agra; name changed: true)",
+            "saved Agra Inc",
+            "updated Agra Inc (changed employees; was Agra Inc; name changed: false)",
+            "saved Agra Inc",
         ],
         "each listener call saw the changes and the original of its own save"
     );
@@ -435,26 +435,26 @@ impl Module for CustomClosure {
 async fn closure_listeners_hear_custom_events_by_name() {
     let log = Log::default();
     let (_app, db, _clock) = app(vec![Box::new(CustomClosure(log.clone()))]).await;
-    let mut acme = Company::create(&*db, company("Acme")).await.unwrap();
-    assert_eq!(acme.fire(&*db, "archived").await.unwrap(), Flow::Continue);
-    assert_eq!(acme.fire(&*db, "published").await.unwrap(), Flow::Continue);
-    assert_eq!(log.take(), ["archived Acme"]);
+    let mut agra = Company::create(&*db, company("Agra")).await.unwrap();
+    assert_eq!(agra.fire(&*db, "archived").await.unwrap(), Flow::Continue);
+    assert_eq!(agra.fire(&*db, "published").await.unwrap(), Flow::Continue);
+    assert_eq!(log.take(), ["archived Agra"]);
 }
 
 #[tokio::test]
 async fn replicate_on_lets_listeners_change_the_copy() {
     let log = Log::default();
     let (_app, db, _clock) = app(vec![Box::new(Observed(log.clone()))]).await;
-    let acme = Company::create(&*db, company("Acme")).await.unwrap();
+    let agra = Company::create(&*db, company("Agra")).await.unwrap();
     log.take();
 
-    let copy = acme.replicate_on(&*db).await.unwrap();
-    assert_eq!(copy.name, "Acme (copy)");
+    let copy = agra.replicate_on(&*db).await.unwrap();
+    assert_eq!(copy.name, "Agra (copy)");
     assert!(!copy.exists());
     assert_eq!(copy.id, 0, "no key");
-    assert_eq!(log.take(), ["replicating Acme (copy)"]);
+    assert_eq!(log.take(), ["replicating Agra (copy)"]);
 
-    let quiet = acme.replicate_quietly();
-    assert_eq!(quiet.name, "Acme");
+    let quiet = agra.replicate_quietly();
+    assert_eq!(quiet.name, "Agra");
     assert!(log.take().is_empty());
 }

@@ -245,7 +245,7 @@ async fn vonage_statuses_and_replies_are_applied() {
     };
 
     send(
-        json!({ "message_uuid": id, "to": "14155550100", "from": "Acme", "status": "delivered", "channel": "sms" }),
+        json!({ "message_uuid": id, "to": "14155550100", "from": "Agra", "status": "delivered", "channel": "sms" }),
         VONAGE_SECRET,
     )
     .await

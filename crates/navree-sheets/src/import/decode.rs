@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn utf16_without_a_bom() {
-        let text = "name,email\nAda,ada@example.com\nAlan,alan@example.com\n";
+        let text = "name,email\nAnu,anu@example.com\nArun,arun@example.com\n";
         for little in [true, false] {
             let decoded = decode(&utf16(text, little), None).unwrap();
             assert_eq!(decoded.text, text);

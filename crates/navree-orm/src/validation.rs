@@ -274,26 +274,26 @@ mod tests {
 
     #[test]
     fn unique_counts_trashed_records_and_skips_the_ignored_one() {
-        let query = sql(unique(Deal::SLUG, "acme".to_owned()), None);
+        let query = sql(unique(Deal::SLUG, "agra".to_owned()), None);
         assert!(query.contains(r#""deals"."slug" = $1"#), "{query}");
         assert!(!query.contains(r#""deleted_at" IS NULL"#), "{query}");
 
         let query = sql(
-            unique(Deal::SLUG, "acme".to_owned()).without_trashed(),
+            unique(Deal::SLUG, "agra".to_owned()).without_trashed(),
             None,
         );
         assert!(query.contains(r#""deleted_at" IS NULL"#), "{query}");
 
         let query = sql(
-            unique(Deal::SLUG, "acme".to_owned()).ignore_path_param("deal"),
-            Some("acme-renewal"),
+            unique(Deal::SLUG, "agra".to_owned()).ignore_path_param("deal"),
+            Some("agra-renewal"),
         );
         assert!(query.contains(r#""deals"."slug" <> $2"#), "{query}");
     }
 
     #[test]
     fn exists_leaves_trashed_records_out_and_ignores_nothing() {
-        let query = sql(exists(Deal::SLUG, "acme".to_owned()), Some("acme"));
+        let query = sql(exists(Deal::SLUG, "agra".to_owned()), Some("agra"));
         assert!(query.contains(r#""deleted_at" IS NULL"#), "{query}");
         assert!(!query.contains("<>"), "{query}");
         let query = sql(
@@ -312,7 +312,7 @@ mod tests {
                 .query(None)
                 .is_none()
         );
-        let rule: AsyncRule = unique(Deal::SLUG, "acme".to_owned())
+        let rule: AsyncRule = unique(Deal::SLUG, "agra".to_owned())
             .field("slug_text")
             .into();
         assert_eq!((rule.field(), rule.rule()), ("slug_text", "unique"));

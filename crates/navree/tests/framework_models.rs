@@ -122,7 +122,7 @@ async fn models_round_trip(app: &TestApp) {
         .send_now(
             &recipient,
             DealWon {
-                title: "Acme".to_owned(),
+                title: "Agra".to_owned(),
             },
         )
         .await
@@ -132,33 +132,33 @@ async fn models_round_trip(app: &TestApp) {
         .unwrap()
         .expect("the stored notification");
     assert_eq!(stored.notification_type, "deal_won");
-    assert_eq!(stored.data, json!({ "title": "Acme" }));
+    assert_eq!(stored.data, json!({ "title": "Agra" }));
     assert_eq!(stored.notifiable_id, recipient.0.to_string());
 
     // The auth tables: a user, two sessions, one of them ended.
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada Lovelace", "ada@navree.test", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@navree.test", PASSWORD)
         .await
         .unwrap();
     let meta = ClientMeta::default();
     let (_, first) = auth
-        .login("ada@navree.test", PASSWORD, &meta)
+        .login("anu@navree.test", PASSWORD, &meta)
         .await
         .unwrap();
-    auth.login("ada@navree.test", PASSWORD, &meta)
+    auth.login("anu@navree.test", PASSWORD, &meta)
         .await
         .unwrap();
     auth.logout(Some(&first.refresh_token), ada.id, false)
         .await
         .unwrap();
     let found = User::query()
-        .where_(User::EMAIL.eq("ada@navree.test"))
+        .where_(User::EMAIL.eq("anu@navree.test"))
         .first(&db)
         .await
         .unwrap()
-        .expect("ada");
-    assert_eq!((found.id, found.name.as_str()), (ada.id, "Ada Lovelace"));
+        .expect("anu");
+    assert_eq!((found.id, found.name.as_str()), (ada.id, "Anu Lakhotia"));
     assert_eq!(found.created_at, ada.created_at);
     let live = refresh_token::Model::query()
         .where_(refresh_token::Model::USER_ID.eq(ada.id))
@@ -169,7 +169,7 @@ async fn models_round_trip(app: &TestApp) {
     assert_eq!(live, 1);
     assert_eq!(auth.sessions(ada.id, None).await.unwrap().len(), 1);
     assert_eq!(
-        auth.find_by_email("ADA@navree.test")
+        auth.find_by_email("ANU@navree.test")
             .await
             .unwrap()
             .map(|user| user.id),

@@ -12,8 +12,8 @@ const columns: NavreeColumnDef<Deal>[] = [
   { accessorKey: "amount", header: "Amount", cell: (ctx) => `$${ctx.getValue()}`, meta: { sortField: "amount_cents", align: "end" } satisfies NavreeColumnMeta },
 ];
 const deals: Deal[] = [
-  { id: "d1", title: "Acme renewal", stage: "won", amount: 1200 },
-  { id: "d2", title: "Globex pilot", stage: "lead", amount: 300 },
+  { id: "d1", title: "Agra renewal", stage: "won", amount: 1200 },
+  { id: "d2", title: "Gulati pilot", stage: "lead", amount: 300 },
 ];
 const meta: PageMeta = { current_page: 2, per_page: 2, total: 5, last_page: 3 };
 
@@ -29,7 +29,7 @@ describe("NavreeDataTable", () => {
     const rows = wrapper.findAll("tbody tr");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.attributes("data-row-id")).toBe("d1");
-    expect(rows[0]!.text()).toContain("Acme renewal");
+    expect(rows[0]!.text()).toContain("Agra renewal");
     expect(wrapper.find('[data-slot="table"]').exists()).toBe(true);
     const amount = rows[0]!.findAll("td")[2]!;
     expect(amount.text()).toBe("$1200");

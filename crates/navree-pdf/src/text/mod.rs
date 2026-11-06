@@ -1716,7 +1716,7 @@ mod tests {
 
     #[test]
     fn left_to_right_runs_keep_their_order_in_right_to_left_lines() {
-        // "مرحبا Ada Lovelace في الدورة 2026": mostly Arabic, so read from
+        // "مرحبا Anu Lakhotia في الدورة 2026": mostly Arabic, so read from
         // the right; the name and the year stay left to right.
         let visual = strings(&[
             "2026",
@@ -1725,15 +1725,15 @@ mod tests {
             " ",
             "في",
             " ",
-            "Ada",
+            "Anu",
             " ",
-            "Lovelace",
+            "Lakhotia",
             " ",
             "مرحبا",
         ]);
         assert_eq!(
             reading_order(visual).concat(),
-            "مرحبا Ada Lovelace في الدورة 2026"
+            "مرحبا Anu Lakhotia في الدورة 2026"
         );
     }
 

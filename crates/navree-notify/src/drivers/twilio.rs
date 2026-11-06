@@ -279,7 +279,7 @@ mod tests {
     fn messaging_services_are_told_apart_from_numbers() {
         assert_eq!(sender("MG123").0, "MessagingServiceSid");
         assert_eq!(sender("+15005550006").0, "From");
-        assert_eq!(sender("Acme").0, "From");
+        assert_eq!(sender("Agra").0, "From");
     }
 
     #[test]

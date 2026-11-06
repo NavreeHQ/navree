@@ -168,7 +168,7 @@ async fn fresh_drops_every_table_and_reruns() {
     for sql in [
         "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'ann')",
         "INSERT INTO companies (id, title, owner_id) VALUES \
-         (UNHEX('0199A7A0000070008000000000000002'), 'acme', UNHEX('0199A7A0000070008000000000000001'))",
+         (UNHEX('0199A7A0000070008000000000000002'), 'agra', UNHEX('0199A7A0000070008000000000000001'))",
         "CREATE TABLE stray (id INT PRIMARY KEY)",
         "CREATE TABLE roles (id VARCHAR(32) PRIMARY KEY)",
         "CREATE TABLE permissions (id VARCHAR(32) PRIMARY KEY)",

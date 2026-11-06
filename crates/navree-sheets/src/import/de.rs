@@ -600,7 +600,7 @@ mod tests {
 
     fn base() -> Vec<(&'static str, Cell)> {
         vec![
-            ("email", text("ada@example.com")),
+            ("email", text("anu@example.com")),
             ("age", text("٣٦")),
             ("score", text("3,5")),
             ("active", text("Yes")),
@@ -620,7 +620,7 @@ mod tests {
         assert_eq!(
             row,
             Row {
-                email: "ada@example.com".into(),
+                email: "anu@example.com".into(),
                 age: Some(36),
                 score: 3.5,
                 active: true,

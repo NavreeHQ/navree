@@ -282,7 +282,7 @@ for (const browserName of browsers) {
       assert.equal(await page.locator("[data-slot=field]", { has: page.locator("#f-form-owner") }).locator("[data-picker-error]").count(), 1, "the other empty one still says so");
       await page.locator("#f-form-owner").fill("gre");
       await picker("form-combo").rows.first().click();
-      await page.locator("#f-form-person").fill("grace");
+      await page.locator("#f-form-person").fill("gauri");
       await page.waitForTimeout(500);
       await picker("form-person").rows.first().click();
       await page.locator("#pick-form button[type=submit]").click();
@@ -438,25 +438,25 @@ for (const browserName of browsers) {
       const c = picker("combo-search");
       const requests = [];
       page.on("request", (r) => { if (r.url().includes("/select/people")) requests.push(new URL(r.url()).searchParams.get("q")); });
-      assert.equal(await page.locator("#f-combo-search").inputValue(), "Grace Hopper 3");
+      assert.equal(await page.locator("#f-combo-search").inputValue(), "Gauri Hundal 3");
       assert.equal(await c.value(), "3");
       await page.locator("#f-combo-search").click();
       await page.waitForFunction(() => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length === 20);
       assert.equal(await page.locator("#combo-search-list [data-action=more]").count(), 1, "Show more is offered");
       await page.locator("#f-combo-search").fill("");
       requests.length = 0;
-      await page.keyboard.type("ada", { delay: 40 });
-      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Ada"));
+      await page.keyboard.type("anu", { delay: 40 });
+      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Anu"));
       await page.waitForTimeout(400);
-      assert.deepEqual(requests, ["ada"], "typing fast sent one request");
-      assert.match((await c.texts())[0], /^Ada/);
+      assert.deepEqual(requests, ["anu"], "typing fast sent one request");
+      assert.match((await c.texts())[0], /^Anu/);
       // Show more adds the next page.
       const before = await page.locator("#combo-search-list [role=option]:not([data-action])").count();
       await page.locator("#combo-search-list [data-action=more]").click();
       await page.waitForFunction((n) => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length > n, before);
       // Picking a found option puts it in the carrier.
       await c.rows.first().click();
-      assert.match(await page.locator("#f-combo-search").inputValue(), /^Ada /);
+      assert.match(await page.locator("#f-combo-search").inputValue(), /^Anu /);
       assert.match(String(await c.value()), /^\d+$/);
       await close();
     });
@@ -474,7 +474,7 @@ for (const browserName of browsers) {
       await page.keyboard.type("gr");
       await page.waitForTimeout(400);
       await page.keyboard.type("ace love");
-      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Grace Love"));
+      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Gauri Love"));
       const fast = await c.texts();
       await page.waitForTimeout(1500);
       assert.deepEqual(await c.texts(), fast, "the slow reply for 'gr' did not replace the newer list");
@@ -491,12 +491,12 @@ for (const browserName of browsers) {
         await route.continue();
       });
       await page.locator("#f-combo-search").fill("");
-      await page.keyboard.type("alan");
+      await page.keyboard.type("arun");
       await page.waitForFunction(() => document.querySelector("#combo-search-list")?.getAttribute("aria-busy") === "true");
       assert.match(await c.note.innerText(), /Searching/);
       assert.ok((await c.rows.count()) > 0, "the old rows stay");
       await page.keyboard.type(" t");
-      assert.equal(await page.locator("#f-combo-search").inputValue(), "alan t", "typing was not blocked");
+      assert.equal(await page.locator("#f-combo-search").inputValue(), "arun t", "typing was not blocked");
       await page.waitForFunction(() => document.querySelector("#combo-search-list")?.getAttribute("aria-busy") !== "true", null, { timeout: 5000 });
       await close();
     });
@@ -510,15 +510,15 @@ for (const browserName of browsers) {
         else await route.continue();
       });
       await page.locator("#f-combo-search").click();
-      await page.locator("#f-combo-search").fill("grace");
+      await page.locator("#f-combo-search").fill("gauri");
       await page.waitForFunction(() => /Couldn't load/.test(document.querySelector("#combo-search [data-slot=select-note]")?.textContent || ""));
       assert.equal(await c.value(), "3", "the choice is kept");
-      assert.equal(await page.locator("#f-combo-search").inputValue(), "grace");
+      assert.equal(await page.locator("#f-combo-search").inputValue(), "gauri");
       assert.equal(await page.locator("#combo-search-list [data-action=retry]").count(), 1);
       fail = false;
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
-      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]:not([data-action])")?.textContent.startsWith("Grace"));
+      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]:not([data-action])")?.textContent.startsWith("Gauri"));
       await close();
     });
 
@@ -716,11 +716,11 @@ for (const browserName of browsers) {
       const m = picker("multi-search");
       assert.deepEqual(await m.value(), ["1"]);
       await page.locator("#f-multi-search").click();
-      await page.keyboard.type("grace love");
-      await page.waitForFunction(() => document.querySelector("#multi-search-list [role=option]")?.textContent.startsWith("Grace"));
+      await page.keyboard.type("gauri love");
+      await page.waitForFunction(() => document.querySelector("#multi-search-list [role=option]")?.textContent.startsWith("Gauri"));
       await page.keyboard.press("Enter");
       assert.equal(await m.chips.count(), 2);
-      assert.equal(await m.chips.nth(1).locator("[data-slot=chip-text]").innerText().then((t) => t.startsWith("Grace")), true);
+      assert.equal(await m.chips.nth(1).locator("[data-slot=chip-text]").innerText().then((t) => t.startsWith("Gauri")), true);
       assert.equal((await m.value()).length, 2);
       await close();
     });
@@ -824,9 +824,9 @@ for (const browserName of browsers) {
     test("Palette: a server source adds groups of links, and nothing found says so", async () => {
       const { page, close } = await open("/select");
       await page.keyboard.press("Control+k");
-      await page.keyboard.type("grace");
+      await page.keyboard.type("gauri");
       await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
-      assert.match(await page.locator("#palette [data-slot=command-remote]").innerText(), /Grace/);
+      assert.match(await page.locator("#palette [data-slot=command-remote]").innerText(), /Gauri/);
       await page.keyboard.press("Escape");
       await page.keyboard.press("Control+k");
       await page.keyboard.type("zzzzqq");
@@ -863,7 +863,7 @@ for (const browserName of browsers) {
       await page.waitForFunction(() => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length === 20);
       await clock(page, "/select/people");
       await page.locator("#f-combo-search").fill("");
-      await page.keyboard.type("ada", { delay: 30 });
+      await page.keyboard.type("anu", { delay: 30 });
       await page.waitForFunction(() => window.__clock.fetches.length >= 1);
       const first = await page.evaluate(() => {
         const last = window.__clock.input.at(-1);
@@ -1031,8 +1031,8 @@ for (const browserName of browsers) {
       // At the limit again, the rows of a new search come in off.
       await page.locator("#multi-cap-list [role=option]:not([data-action])").nth(2).click();
       await page.locator("#f-multi-cap").focus();
-      await page.keyboard.type("grace");
-      await page.waitForFunction(() => document.querySelector("#multi-cap-list [role=option]")?.textContent.startsWith("Grace"));
+      await page.keyboard.type("gauri");
+      await page.waitForFunction(() => document.querySelector("#multi-cap-list [role=option]")?.textContent.startsWith("Gauri"));
       rows = await state();
       assert.ok(rows.length > 3, JSON.stringify(rows));
       for (const r of rows) if (r.selected === "false") assert.equal(r.off, true, `a row of the new answer is on at the limit: ${JSON.stringify(r)}`);
@@ -1137,7 +1137,7 @@ for (const browserName of browsers) {
     test("A palette that was closed starts again: what the server answered for the last text is gone", async () => {
       const { page, close } = await open("/select");
       await page.keyboard.press("Control+k");
-      await page.keyboard.type("grace");
+      await page.keyboard.type("gauri");
       await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
       await page.keyboard.press("Escape");
       await page.keyboard.press("Control+k");
@@ -1304,14 +1304,14 @@ for (const browserName of browsers) {
     test("An open palette keeps the server's answers when it is drawn again, and doesn't say how many results again", async () => {
       const { page, close } = await open("/select");
       await page.keyboard.press("Control+k");
-      const answered = page.waitForResponse((r) => r.url().includes("/select/palette-search") && new URL(r.url()).searchParams.get("q") === "grace");
-      await page.keyboard.type("grace");
+      const answered = page.waitForResponse((r) => r.url().includes("/select/palette-search") && new URL(r.url()).searchParams.get("q") === "gauri");
+      await page.keyboard.type("gauri");
       await answered;
       await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
       await page.waitForFunction(() => /result/.test(document.querySelector("#palette [data-slot=select-status]")?.textContent || ""));
       await page.waitForTimeout(700);
       const before = await inPalette(page);
-      assert.ok(before.rows.some((r) => /Grace/.test(r)), JSON.stringify(before.rows));
+      assert.ok(before.rows.some((r) => /Gauri/.test(r)), JSON.stringify(before.rows));
       await listen(page, "#palette [data-slot=select-status]");
       await redraw(page, "palette");
       assert.deepEqual(await inPalette(page), before, "the answers, the text and the row on are as they were");
@@ -1598,8 +1598,8 @@ for (const browserName of browsers) {
     test("A chosen option can show a shorter label in the button than in the list", async () => {
       const { page, close } = await open("/select");
       await page.locator("#f-select-rich").click();
-      await page.locator("#select-rich-list [role=option]", { hasText: "Ada Lovelace" }).click();
-      assert.equal(await page.locator("#f-select-rich").innerText(), "Ada");
+      await page.locator("#select-rich-list [role=option]", { hasText: "Anu Lakhotia" }).click();
+      assert.equal(await page.locator("#f-select-rich").innerText(), "Anu");
       await close();
     });
 
@@ -1613,8 +1613,8 @@ for (const browserName of browsers) {
       await page.keyboard.press("Enter");
       await page.locator("#derived-owner").fill("ger");
       await picker("derived-owner-picker").rows.first().click();
-      await page.locator("#derived-person").fill("alan");
-      await page.waitForFunction(() => document.querySelector("#derived-person-picker-list [role=option]")?.textContent.startsWith("Alan"));
+      await page.locator("#derived-person").fill("arun");
+      await page.waitForFunction(() => document.querySelector("#derived-person-picker-list [role=option]")?.textContent.startsWith("Arun"));
       await page.keyboard.press("Enter");
       await page.locator("#derived-countries").click();
       await page.keyboard.type("fra");
@@ -1740,7 +1740,7 @@ for (const browserName of browsers) {
       },
       "the palette with results from the server": async ({ page }) => {
         await page.keyboard.press("Control+k");
-        await page.keyboard.type("grace");
+        await page.keyboard.type("gauri");
         await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
       },
       "a combobox in a dialog": async ({ page }) => {

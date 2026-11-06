@@ -32,16 +32,16 @@ async fn surface(ctx: &AppContext) -> Result<(), BrowserError> {
 
     // Targets.
     let target: Target = Target::from("@deal-card")
-        .containing("Lovelace renewal")
+        .containing("Lakhotia renewal")
         .nth(0);
 
     // Actions.
-    page.type_into("Title", "Lovelace renewal").await?;
+    page.type_into("Title", "Lakhotia renewal").await?;
     page.append("Notes", " Call back Monday.").await?;
     page.select("Stage", "Negotiation").await?;
     page.check("Send me a summary").await?;
     page.uncheck("Send me a summary").await?;
-    page.attach("Logo", "tests/fixtures/acme.png").await?;
+    page.attach("Logo", "tests/fixtures/agra.png").await?;
     page.press("Save").await?;
     page.click(target.clone()).await?;
     page.keys("Control+K").await?;
@@ -55,12 +55,12 @@ async fn surface(ctx: &AppContext) -> Result<(), BrowserError> {
     // Assertions.
     page.assert_see("Deal saved").await?;
     page.assert_dont_see("Something went wrong").await?;
-    page.assert_see_in("[data-stage=won]", "Lovelace renewal")
+    page.assert_see_in("[data-stage=won]", "Lakhotia renewal")
         .await?;
     page.assert_path_is("/deals").await?;
     page.assert_query_has("stage", "won").await?;
     page.assert_title("Deals · Navree CRM").await?;
-    page.assert_value("Title", "Lovelace renewal").await?;
+    page.assert_value("Title", "Lakhotia renewal").await?;
     page.assert_visible("@toast").await?;
     page.assert_missing("@spinner").await?;
     page.assert_count("@deal-card", 3).await?;

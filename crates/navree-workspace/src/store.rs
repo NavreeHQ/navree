@@ -137,10 +137,10 @@ mod tests {
     #[test]
     fn only_changed_fields_are_kept() {
         let (before, after) = changed_fields(
-            json!({"name": "Acme", "slug": "acme"}),
-            json!({"name": "Acme Inc", "slug": "acme"}),
+            json!({"name": "Agra", "slug": "agra"}),
+            json!({"name": "Agra Inc", "slug": "agra"}),
         );
-        assert_eq!(serde_json::Value::from(before), json!({"name": "Acme"}));
-        assert_eq!(serde_json::Value::from(after), json!({"name": "Acme Inc"}));
+        assert_eq!(serde_json::Value::from(before), json!({"name": "Agra"}));
+        assert_eq!(serde_json::Value::from(after), json!({"name": "Agra Inc"}));
     }
 }

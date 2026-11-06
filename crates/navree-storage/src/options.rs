@@ -28,7 +28,7 @@ use crate::path::normalize;
 ///
 /// [storage.disks.uploads]
 /// driver = "s3"
-/// bucket = "acme-uploads"
+/// bucket = "agra-uploads"
 /// region = "eu-west-1"
 ///
 /// [storage.disks.scratch]
@@ -160,7 +160,7 @@ impl From<AzureConfig> for DiskConfig {
 /// ```toml
 /// [storage.disks.uploads]
 /// driver = "s3"
-/// bucket = "acme-uploads"
+/// bucket = "agra-uploads"
 /// region = "eu-west-1"
 /// access_key = "AKIA..."            # or AWS_ACCESS_KEY_ID, or an IAM role
 /// secret_key = "..."                # or AWS_SECRET_ACCESS_KEY
@@ -168,7 +168,7 @@ impl From<AzureConfig> for DiskConfig {
 ///
 /// [storage.disks.r2]
 /// driver = "s3"
-/// bucket = "acme-media"
+/// bucket = "agra-media"
 /// endpoint = "https://<account-id>.r2.cloudflarestorage.com"
 /// region = "auto"
 /// ```
@@ -203,7 +203,7 @@ pub struct S3Config {
     /// path-style with an `endpoint` (MinIO and other stores reached by IP
     /// or a single host), virtual-hosted-style on AWS.
     pub path_style: Option<bool>,
-    /// A key prefix: every path of the disk lives under it (`tenants/acme`).
+    /// A key prefix: every path of the disk lives under it (`tenants/agra`).
     pub prefix: Option<String>,
     /// The URL the bucket (or the prefix) is publicly served from, such as
     /// a CDN, for [`Disk::url`](crate::Disk::url).
@@ -267,7 +267,7 @@ impl S3Config {
 /// ```toml
 /// [storage.disks.media]
 /// driver = "gcs"
-/// bucket = "acme-media"
+/// bucket = "agra-media"
 /// service_account_path = "/run/secrets/gcs.json"   # optional
 /// ```
 ///
@@ -309,7 +309,7 @@ impl GcsConfig {
 /// ```toml
 /// [storage.disks.archive]
 /// driver = "azure"
-/// account = "acmestorage"
+/// account = "agrastorage"
 /// container = "archive"
 /// access_key = "..."   # or AZURE_STORAGE_ACCOUNT_KEY, or a managed identity
 /// ```
@@ -512,7 +512,7 @@ mod tests {
         let mut options = StorageOptions::default();
         options.disks.insert(
             "uploads".to_owned(),
-            S3Config::new("acme-uploads")
+            S3Config::new("agra-uploads")
                 .credentials("AKIAEXAMPLE", "s3cr3t-value")
                 .into(),
         );
@@ -520,7 +520,7 @@ mod tests {
             "media".to_owned(),
             GcsConfig {
                 service_account_key: Some(Secret::new("gcs-key-value".to_owned())),
-                ..GcsConfig::new("acme-media")
+                ..GcsConfig::new("agra-media")
             }
             .into(),
         );
@@ -528,7 +528,7 @@ mod tests {
             "archive".to_owned(),
             AzureConfig {
                 access_key: Some(Secret::new("azure-key-value".to_owned())),
-                ..AzureConfig::new("acmestorage", "archive")
+                ..AzureConfig::new("agrastorage", "archive")
             }
             .into(),
         );

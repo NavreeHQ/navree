@@ -174,7 +174,7 @@ Use the UI proof app at `http://127.0.0.1:8090/`, JavaScript on.
 - The reader says: nothing is announced as the chart loads. When you read the card after it loaded, the chart is an image named "Revenue by month, rising from 12 to 61".
 
 **26. A region that refreshes every five seconds**
-- Keys: both readers: move the cursor to the first line of the card "Activity" ("Ada moved Acme renewal to Proposal"). Do not press any key for 30 seconds.
+- Keys: both readers: move the cursor to the first line of the card "Activity" ("Anu moved Agra renewal to Proposal"). Do not press any key for 30 seconds.
 - The page: the region fetches the same two lines every five seconds. The text does not change.
 - The reader says: nothing. The lines are not read again, the cursor stays on the first line, and no live phrase is spoken.
 

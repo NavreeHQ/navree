@@ -58,10 +58,10 @@
 //! lighthouse.capture(
 //!     Report::error(&error)
 //!         .level(Level::Warning)
-//!         .tag("provider", "acme-pay")
-//!         .fingerprint(["acme-pay", "card-declined"]),
+//!         .tag("provider", "agra-pay")
+//!         .fingerprint(["agra-pay", "card-declined"]),
 //! );
-//! assert_eq!(fake.reports()[0].tags["provider"], "acme-pay");
+//! assert_eq!(fake.reports()[0].tags["provider"], "agra-pay");
 //! ```
 #![forbid(unsafe_code)]
 

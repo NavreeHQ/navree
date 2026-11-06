@@ -21,8 +21,8 @@ use crate::user::{DirectoryGroup, DirectoryUser};
 ///
 /// let (directory, fake) = Directory::fake();
 /// // TestApp::builder()...override_value(Arc::new(directory))
-/// fake.user(DirectoryUser::new("u1", "ada@acme.test").email("ada@acme.test"))
-///     .user(DirectoryUser::new("u2", "grace@acme.test"))
+/// fake.user(DirectoryUser::new("u1", "anu@acme.test").email("anu@acme.test"))
+///     .user(DirectoryUser::new("u2", "gauri@acme.test"))
 ///     .group(DirectoryGroup::new("g1", "Engineering").members(["u1", "u2"]));
 /// // The next pull answers with a delta instead of the snapshot.
 /// fake.next_pull(Pulled::delta(vec![], vec![]).removed_user("u2"));
@@ -205,18 +205,18 @@ mod tests {
     #[test]
     fn the_fake_keeps_a_directory() {
         let (fake, _state) = DirectoryFake::new();
-        fake.user(DirectoryUser::new("u1", "ada"))
-            .user(DirectoryUser::new("u2", "grace"))
-            .user(DirectoryUser::new("u1", "ada.lovelace"))
+        fake.user(DirectoryUser::new("u1", "anu"))
+            .user(DirectoryUser::new("u2", "gauri"))
+            .user(DirectoryUser::new("u1", "anu.lakhotia"))
             .group(DirectoryGroup::new("g1", "Engineering").members(["u1", "u2"]));
         let snapshot = fake.snapshot();
         assert_eq!(snapshot.users.len(), 2);
-        assert_eq!(snapshot.users[0].user_name, "ada.lovelace");
+        assert_eq!(snapshot.users[0].user_name, "anu.lakhotia");
         fake.remove_user("u2");
         assert_eq!(fake.snapshot().groups[0].members, vec!["u1"]);
         fake.remove_group("g1");
         assert!(fake.snapshot().groups.is_empty());
-        fake.users([DirectoryUser::new("u9", "alan")]);
+        fake.users([DirectoryUser::new("u9", "arun")]);
         fake.groups([DirectoryGroup::new("g9", "Ops")]);
         assert_eq!(fake.snapshot().users[0].external_id, "u9");
         assert!(format!("{fake:?}").contains("users: 1"));

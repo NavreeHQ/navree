@@ -61,25 +61,25 @@ fn expected() -> (Vec<UserCore>, Vec<GroupCore>) {
         vec![
             user(
                 ADA,
-                "ada@acme.test",
+                "anu@acme.test",
                 true,
-                "Ada Lovelace",
+                "Anu Lakhotia",
                 Some("Principal engineer"),
                 "Engineering",
             ),
             user(
                 ALAN,
-                "alan@acme.test",
+                "arun@acme.test",
                 true,
-                "Alan Turing",
+                "Arun Tiwari",
                 None,
                 "Research",
             ),
             user(
                 GRACE,
-                "grace@acme.test",
+                "gauri@acme.test",
                 false,
-                "Grace Hopper",
+                "Gauri Hundal",
                 Some("Rear admiral"),
                 "Navy",
             ),
@@ -183,24 +183,24 @@ async fn the_fake_gives_the_directory() {
     let h = harness(|b| b).await;
     h.fake()
         .user(
-            DirectoryUser::new(ADA, "ada@acme.test")
-                .name("Ada", "Lovelace")
-                .email("ada@acme.test")
+            DirectoryUser::new(ADA, "anu@acme.test")
+                .name("Anu", "Lakhotia")
+                .email("anu@acme.test")
                 .title("Principal engineer")
                 .department("Engineering"),
         )
         .user(
-            DirectoryUser::new(GRACE, "grace@acme.test")
-                .name("Grace", "Hopper")
-                .email("grace@acme.test")
+            DirectoryUser::new(GRACE, "gauri@acme.test")
+                .name("Gauri", "Hundal")
+                .email("gauri@acme.test")
                 .title("Rear admiral")
                 .department("Navy")
                 .inactive(),
         )
         .user(
-            DirectoryUser::new(ALAN, "alan@acme.test")
-                .name("Alan", "Turing")
-                .email("alan@acme.test")
+            DirectoryUser::new(ALAN, "arun@acme.test")
+                .name("Arun", "Tiwari")
+                .email("arun@acme.test")
                 .department("Research"),
         )
         .group(DirectoryGroup::new(ENG, "Engineering").members([ADA, GRACE]))
@@ -239,27 +239,27 @@ fn graph_users() -> [Value; 3] {
     [
         graph_user(
             ADA,
-            "ada@acme.test",
-            "Ada",
-            "Lovelace",
+            "anu@acme.test",
+            "Anu",
+            "Lakhotia",
             true,
             Some("Principal engineer"),
             "Engineering",
         ),
         graph_user(
             GRACE,
-            "grace@acme.test",
-            "Grace",
-            "Hopper",
+            "gauri@acme.test",
+            "Gauri",
+            "Hundal",
             false,
             Some("Rear admiral"),
             "Navy",
         ),
         graph_user(
             ALAN,
-            "alan@acme.test",
-            "Alan",
-            "Turing",
+            "arun@acme.test",
+            "Arun",
+            "Tiwari",
             true,
             None,
             "Research",
@@ -385,8 +385,8 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
         .unwrap();
     h.log.clear();
 
-    // Round two: Ada's title changed (Graph sends only the changed
-    // property), Alan was deleted, Grace left Engineering.
+    // Round two: Anu's title changed (Graph sends only the changed
+    // property), Arun was deleted, Gauri left Engineering.
     let base = mock.uri();
     Mock::given(method("GET"))
         .and(path("/v1.0/users/delta"))
@@ -450,7 +450,7 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
     );
 
     // Round three: the delta link expired (410), so the source starts over
-    // with a snapshot, which brings Alan back.
+    // with a snapshot, which brings Arun back.
     Mock::given(method("GET"))
         .and(path("/v1.0/users/delta"))
         .and(query_param("$deltatoken", "users-d2"))
@@ -544,8 +544,8 @@ async fn google_workspace_gives_the_directory() {
         .and(header("authorization", "Bearer google-token"))
         .respond_with(ok(json!({
             "users": [
-                google_user(ADA, "ada@acme.test", "Ada", "Lovelace", false, Some("Principal engineer"), "Engineering"),
-                google_user(GRACE, "grace@acme.test", "Grace", "Hopper", true, Some("Rear admiral"), "Navy")
+                google_user(ADA, "anu@acme.test", "Anu", "Lakhotia", false, Some("Principal engineer"), "Engineering"),
+                google_user(GRACE, "gauri@acme.test", "Gauri", "Hundal", true, Some("Rear admiral"), "Navy")
             ],
             "nextPageToken": "page-2"
         })))
@@ -555,7 +555,7 @@ async fn google_workspace_gives_the_directory() {
         .and(path("/google/admin/directory/v1/users"))
         .and(query_param("pageToken", "page-2"))
         .respond_with(ok(json!({
-            "users": [google_user(ALAN, "alan@acme.test", "Alan", "Turing", false, None, "Research")]
+            "users": [google_user(ALAN, "arun@acme.test", "Arun", "Tiwari", false, None, "Research")]
         })))
         .mount(&mock)
         .await;
@@ -622,7 +622,7 @@ async fn google_workspace_gives_the_directory() {
         .await
         .create_connection(
             Owner::App,
-            NewConnection::new("Acme Google Workspace", "google")
+            NewConnection::new("Agra Google Workspace", "google")
                 .settings(json!({ "admin_email": "admin@acme.test" })),
         )
         .await
@@ -665,18 +665,18 @@ async fn okta_gives_the_directory() {
             ok(json!([
                 okta_user(
                     ADA,
-                    "ada@acme.test",
-                    "Ada",
-                    "Lovelace",
+                    "anu@acme.test",
+                    "Anu",
+                    "Lakhotia",
                     "ACTIVE",
                     Some("Principal engineer"),
                     "Engineering"
                 ),
                 okta_user(
                     GRACE,
-                    "grace@acme.test",
-                    "Grace",
-                    "Hopper",
+                    "gauri@acme.test",
+                    "Gauri",
+                    "Hundal",
                     "SUSPENDED",
                     Some("Rear admiral"),
                     "Navy"
@@ -698,9 +698,9 @@ async fn okta_gives_the_directory() {
         .and(query_param("after", "p2"))
         .respond_with(ok(json!([okta_user(
             ALAN,
-            "alan@acme.test",
-            "Alan",
-            "Turing",
+            "arun@acme.test",
+            "Arun",
+            "Tiwari",
             "ACTIVE",
             None,
             "Research"
@@ -795,32 +795,32 @@ fn active_directory() -> Vec<Entry> {
     };
     vec![
         person(
-            "CN=Ada Lovelace,OU=People,DC=acme,DC=test",
+            "CN=Anu Lakhotia,OU=People,DC=acme,DC=test",
             ADA,
-            "ada@acme.test",
-            "Ada",
-            "Lovelace",
+            "anu@acme.test",
+            "Anu",
+            "Lakhotia",
             "512",
         )
         .attr("title", &["Principal engineer"])
         .attr("department", &["Engineering"])
         .attr("memberOf", &["CN=Engineering,OU=Groups,DC=acme,DC=test"]),
         person(
-            "CN=Grace Hopper,OU=People,DC=acme,DC=test",
+            "CN=Gauri Hundal,OU=People,DC=acme,DC=test",
             GRACE,
-            "grace@acme.test",
-            "Grace",
-            "Hopper",
+            "gauri@acme.test",
+            "Gauri",
+            "Hundal",
             "514",
         )
         .attr("title", &["Rear admiral"])
         .attr("department", &["Navy"]),
         person(
-            "CN=Alan Turing,OU=People,DC=acme,DC=test",
+            "CN=Arun Tiwari,OU=People,DC=acme,DC=test",
             ALAN,
-            "alan@acme.test",
-            "Alan",
-            "Turing",
+            "arun@acme.test",
+            "Arun",
+            "Tiwari",
             "66048",
         )
         .attr("department", &["Research"]),
@@ -828,7 +828,7 @@ fn active_directory() -> Vec<Entry> {
             .attr("objectClass", &["top", "group"])
             .binary("objectGUID", guid(ENG))
             .attr("cn", &["Engineering"])
-            .attr("member", &["CN=Grace Hopper,OU=People,DC=acme,DC=test"]),
+            .attr("member", &["CN=Gauri Hundal,OU=People,DC=acme,DC=test"]),
         Entry::new("CN=Operations,OU=Groups,DC=acme,DC=test")
             .attr("objectClass", &["top", "group"])
             .binary("objectGUID", guid(OPS))
@@ -836,7 +836,7 @@ fn active_directory() -> Vec<Entry> {
             .attr(
                 "member",
                 &[
-                    "CN=Alan Turing, OU=People, DC=acme, DC=test",
+                    "CN=Arun Tiwari, OU=People, DC=acme, DC=test",
                     "CN=Engineering,OU=Groups,DC=acme,DC=test",
                 ],
             ),
@@ -882,7 +882,7 @@ async fn ldap_connections_may_not_reach_the_apps_own_network_by_default() {
 }
 
 pub(crate) async fn ldap_connection(h: &Harness, settings: Value, secret: Option<&str>) -> Uuid {
-    let mut connection = NewConnection::new("Acme AD", "ldap").settings(settings);
+    let mut connection = NewConnection::new("Agra AD", "ldap").settings(settings);
     if let Some(secret) = secret {
         connection = connection.secret(secret);
     }
@@ -919,7 +919,7 @@ async fn active_directory_gives_the_directory_through_paged_searches() {
     let ada = h.directory().await.user(id, ADA).await.unwrap().unwrap();
     assert_eq!(
         ada.user.attributes["dn"],
-        json!("CN=Ada Lovelace,OU=People,DC=acme,DC=test")
+        json!("CN=Anu Lakhotia,OU=People,DC=acme,DC=test")
     );
 }
 
@@ -983,13 +983,13 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
             .attr("mail", &[&format!("{uid}@acme.test")])
     };
     let entries = vec![
-        person("ada", ADA, "Ada", "Lovelace")
+        person("anu", ADA, "Anu", "Lakhotia")
             .attr("title", &["Principal engineer"])
             .attr("departmentNumber", &["Engineering"]),
-        person("grace", GRACE, "Grace", "Hopper")
+        person("gauri", GRACE, "Gauri", "Hundal")
             .attr("title", &["Rear admiral"])
             .attr("pwdAccountLockedTime", &["000001010000Z"]),
-        person("alan", ALAN, "Alan", "Turing"),
+        person("arun", ALAN, "Arun", "Tiwari"),
         Entry::new("cn=engineering,ou=groups,dc=acme,dc=test")
             .attr("objectClass", &["groupOfUniqueNames"])
             .attr("entryUUID", &[ENG])
@@ -997,8 +997,8 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
             .attr(
                 "uniqueMember",
                 &[
-                    "uid=ada,ou=people,dc=acme,dc=test",
-                    "uid=grace,ou=people,dc=acme,dc=test",
+                    "uid=anu,ou=people,dc=acme,dc=test",
+                    "uid=gauri,ou=people,dc=acme,dc=test",
                 ],
             ),
         Entry::new("cn=operations,ou=groups,dc=acme,dc=test")
@@ -1032,9 +1032,9 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
     assert_eq!(
         names,
         vec![
-            ("ada@acme.test", true),
-            ("alan@acme.test", true),
-            ("grace@acme.test", false)
+            ("anu@acme.test", true),
+            ("arun@acme.test", true),
+            ("gauri@acme.test", false)
         ]
     );
     assert_eq!(groups, expected().1);

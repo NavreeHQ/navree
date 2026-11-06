@@ -16,11 +16,11 @@ describe("social sign-in: the start", () => {
     const api = fakeNavree({ "GET /api/auth/social/github/redirect": () => Response.json(authorize) });
     const bff = createBff({ apiUrl: API, fetch: api.fetch, secureCookies: true });
 
-    const response = await bff.socialRedirect(get("/auth/social/github?next=/w/acme"), "github");
+    const response = await bff.socialRedirect(get("/auth/social/github?next=/w/agra"), "github");
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(authorize.url);
-    expect(new URL(api.calls[0]!.url).search).toBe("?return_to=%2Fw%2Facme");
+    expect(new URL(api.calls[0]!.url).search).toBe("?return_to=%2Fw%2Fagra");
     const cookies = readSetCookies(response);
     expect(cookies[SOCIAL_COOKIE]!.value).toBe("S1");
     expect(cookies[SOCIAL_COOKIE]!.attrs).toEqual(
@@ -32,7 +32,7 @@ describe("social sign-in: the start", () => {
     const api = fakeNavree({ "GET /api/auth/social/github/redirect": () => Response.json(authorize) });
     const bff = createBff({ apiUrl: API, fetch: api.fetch });
 
-    for (const next of ["//evil.example/x", "https://evil.example", "/\\evil.example", "w/acme"]) {
+    for (const next of ["//evil.example/x", "https://evil.example", "/\\evil.example", "w/agra"]) {
       await bff.socialRedirect(get(`/auth/social/github?next=${encodeURIComponent(next)}`), "github");
     }
     await bff.socialRedirect(get("/auth/social/github"), "github");
@@ -97,14 +97,14 @@ describe("social sign-in: the callback", () => {
 
   it("exchanges the code, stores the tokens like a password sign-in and lands on the page the sign-in started from", async () => {
     const api = fakeNavree({
-      "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/w/acme" }),
+      "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/w/agra" }),
     });
     const bff = createBff({ apiUrl: API, fetch: api.fetch, secureCookies: false });
 
     const response = await bff.socialCallback(callback(), "github");
 
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/w/acme");
+    expect(response.headers.get("location")).toBe("/w/agra");
     expect(JSON.parse(api.calls[0]!.body)).toEqual({ code: "C1", state: "S1" });
     const cookies = readSetCookies(response);
     expect(cookies[ACCESS_COOKIE]).toMatchObject({ value: "AT1" });
@@ -127,13 +127,13 @@ describe("social sign-in: the callback", () => {
   it("continues at the two-factor page for an account with two-factor on, with the challenge in its own cookie", async () => {
     const api = fakeNavree({
       "POST /api/auth/social/github/callback": () =>
-        Response.json({ two_factor_required: true, challenge_token: "CHALLENGE", expires_in: 300, return_to: "/w/acme" }),
+        Response.json({ two_factor_required: true, challenge_token: "CHALLENGE", expires_in: 300, return_to: "/w/agra" }),
     });
     const bff = createBff({ apiUrl: API, fetch: api.fetch });
 
     const response = await bff.socialCallback(callback(), "github");
 
-    expect(response.headers.get("location")).toBe("/two-factor?next=%2Fw%2Facme");
+    expect(response.headers.get("location")).toBe("/two-factor?next=%2Fw%2Fagra");
     const cookies = readSetCookies(response);
     expect(cookies[CHALLENGE_COOKIE]).toMatchObject({ value: "CHALLENGE" });
     expect(cookies[CHALLENGE_COOKIE]!.attrs).toEqual(expect.arrayContaining(["Path=/api/auth/2fa", "Max-Age=300", "HttpOnly"]));

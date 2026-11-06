@@ -58,12 +58,12 @@ async fn unique_rule_rejects_existing_and_ignores_self(scratch: Scratch) {
 
 async fn exists_rule(scratch: Scratch) {
     let app = database_app(&scratch).await;
-    let acme = Uuid::now_v7();
-    insert(&app, "companies", acme, "Acme").await;
+    let agra = Uuid::now_v7();
+    insert(&app, "companies", agra, "Agra").await;
 
     app.client()
         .post("/db/deals")
-        .json(&json!({ "title": "Big deal", "company_id": acme }))
+        .json(&json!({ "title": "Big deal", "company_id": agra }))
         .send()
         .await
         .assert_status(200);
@@ -94,7 +94,7 @@ async fn table_rules_can_leave_soft_deleted_rows_out(scratch: Scratch) {
     let app = database_app(&scratch).await;
     let db = app.get::<Db>().await;
     let (live, gone) = (Uuid::now_v7(), Uuid::now_v7());
-    insert(&app, "companies", live, "Acme").await;
+    insert(&app, "companies", live, "Agra").await;
     insert(&app, "companies", gone, "Bharat Traders").await;
     db.execute(&Statement::portable(
         "UPDATE companies SET deleted_at = ? WHERE id = ?",
@@ -134,7 +134,7 @@ async fn table_rules_can_leave_soft_deleted_rows_out(scratch: Scratch) {
         "a deleted company holds no name"
     );
     assert!(
-        !free("Acme")
+        !free("Agra")
             .without_deleted("deleted_at")
             .passes(&*db)
             .await
@@ -181,7 +181,7 @@ async fn rejects_bad_identifier_in_rule(scratch: Scratch) {
         ("1companies", "name"),
         ("public.companies", "name"),
     ] {
-        let error = AsyncRule::exists("name", table, column, "Acme")
+        let error = AsyncRule::exists("name", table, column, "Agra")
             .passes(&*db)
             .await
             .unwrap_err();
@@ -194,7 +194,7 @@ async fn rejects_bad_identifier_in_rule(scratch: Scratch) {
     // Through HTTP it is a server error, and no SQL ran.
     app.client()
         .post("/db/sneaky")
-        .json(&json!({ "name": "Acme" }))
+        .json(&json!({ "name": "Agra" }))
         .send()
         .await
         .assert_error(500, "Internal server error");
@@ -205,13 +205,13 @@ async fn rejects_bad_identifier_in_rule(scratch: Scratch) {
 
 async fn async_rules_on_query_and_form(scratch: Scratch) {
     let app = database_app(&scratch).await;
-    let acme = Uuid::now_v7();
-    insert(&app, "companies", acme, "Acme").await;
+    let agra = Uuid::now_v7();
+    insert(&app, "companies", agra, "Agra").await;
     let missing = Uuid::now_v7().to_string();
 
     app.client()
         .get("/db/deals")
-        .query(&[("title", "x"), ("company_id", &acme.to_string())])
+        .query(&[("title", "x"), ("company_id", &agra.to_string())])
         .send()
         .await
         .assert_status(200);
@@ -229,7 +229,7 @@ async fn async_rules_on_query_and_form(scratch: Scratch) {
 
     app.client()
         .post("/db/deals-form")
-        .form(&[("title", "x"), ("company_id", &acme.to_string())])
+        .form(&[("title", "x"), ("company_id", &agra.to_string())])
         .send()
         .await
         .assert_status(200);
@@ -310,7 +310,7 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
         rule().skipped_when(true).passes_in(&uow).await.unwrap(),
         "a null value passes"
     );
-    let plain = AsyncRule::exists("name", "companies", "name", "Acme");
+    let plain = AsyncRule::exists("name", "companies", "name", "Agra");
     assert!(!plain.passes_in(&uow).await.unwrap());
 }
 
@@ -322,8 +322,8 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
     insert(&app, "users", alice, "alice@example.com").await;
     insert(&app, "users", bob, "bob@example.com").await;
-    let acme = Uuid::now_v7();
-    insert(&app, "companies", acme, "Acme").await;
+    let agra = Uuid::now_v7();
+    insert(&app, "companies", agra, "Agra").await;
 
     let failed = |response: navree_testing::TestResponse| response.assert_status(200).json_value();
     let taken = app
@@ -367,7 +367,7 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
         failed(missing),
         json!({ "failed": [["company_id", "exists"]] })
     );
-    for company in [json!(acme), json!(null)] {
+    for company in [json!(agra), json!(null)] {
         let found = app
             .client()
             .post("/db/checked/deals")

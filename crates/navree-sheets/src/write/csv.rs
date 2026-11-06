@@ -79,7 +79,7 @@ const FORMULA_STARTS: &[char] = &[
 ///
 /// assert_eq!(escape_formula("=HYPERLINK(\"http://x\")"), "'=HYPERLINK(\"http://x\")");
 /// assert_eq!(escape_formula("@SUM(A1)"), "'@SUM(A1)");
-/// assert_eq!(escape_formula("Ada Lovelace"), "Ada Lovelace");
+/// assert_eq!(escape_formula("Anu Lakhotia"), "Anu Lakhotia");
 /// ```
 pub fn escape_formula(text: &str) -> Cow<'_, str> {
     match text.chars().next() {

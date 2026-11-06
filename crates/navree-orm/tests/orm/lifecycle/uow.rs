@@ -113,7 +113,7 @@ async fn listeners_dispatch_inside_their_unit_of_work_or_after_it() {
     Company::create(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )

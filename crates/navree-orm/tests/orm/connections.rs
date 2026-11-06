@@ -315,7 +315,7 @@ async fn orm_statements_reach_query_logs_listeners_and_hooks() {
     Company::create(
         db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             active: true,
             ..Company::default()
         },

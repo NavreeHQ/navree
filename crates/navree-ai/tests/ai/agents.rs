@@ -813,21 +813,21 @@ async fn a_streamed_run_sends_tool_events_text_and_done() {
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
-        FakeReply::tool_call("list_notes", json!({ "query": "Acme" })),
-        FakeReply::text("No notes about Acme.").with_usage(50, 6),
+        FakeReply::tool_call("list_notes", json!({ "query": "Agra" })),
+        FakeReply::text("No notes about Agra.").with_usage(50, 6),
     ]);
 
     let stream = ai
         .agent::<NotesAssistant>()
         .acting_as_user(dana)
         .conversation(None)
-        .stream("Any notes about Acme?")
+        .stream("Any notes about Agra?")
         .await
         .unwrap();
     let events: Vec<StreamEvent> = stream.map(Result::unwrap).collect().await;
 
     assert!(
-        matches!(&events[0], StreamEvent::ToolCall { tool, arguments, .. } if tool == "list_notes" && arguments["query"] == "Acme")
+        matches!(&events[0], StreamEvent::ToolCall { tool, arguments, .. } if tool == "list_notes" && arguments["query"] == "Agra")
     );
     assert!(
         matches!(&events[1], StreamEvent::ToolResult { tool, ok: true, .. } if tool == "list_notes")
@@ -839,7 +839,7 @@ async fn a_streamed_run_sends_tool_events_text_and_done() {
             _ => None,
         })
         .collect();
-    assert_eq!(text, "No notes about Acme.");
+    assert_eq!(text, "No notes about Agra.");
     match events.last().unwrap() {
         StreamEvent::Done(done) => {
             assert!(done.conversation_id.is_some());

@@ -27,15 +27,15 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
     let new_york = Person::in_zone(Some("America/New_York"));
 
     notifier
-        .send(&kolkata, DealUpdate::new("Acme"))
+        .send(&kolkata, DealUpdate::new("Agra"))
         .await
         .unwrap();
     notifier
-        .send(&kolkata, DealUpdate::new("Globex"))
+        .send(&kolkata, DealUpdate::new("Gulati"))
         .await
         .unwrap();
     notifier
-        .send(&new_york, DealUpdate::new("Initech"))
+        .send(&new_york, DealUpdate::new("Indrani"))
         .await
         .unwrap();
 
@@ -74,10 +74,10 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
     let text = mail[0].text.as_deref().unwrap();
     assert!(text.starts_with("2 notifications"), "{text}");
     assert!(
-        text.contains("- Deal update: Acme\n  Acme was won."),
+        text.contains("- Deal update: Agra\n  Agra was won."),
         "{text}"
     );
-    assert!(text.contains("- Deal update: Globex"), "{text}");
+    assert!(text.contains("- Deal update: Gulati"), "{text}");
 
     clock.set(at("2026-10-29T13:00:00Z"));
     let released = notifier.release_due().await.unwrap();
@@ -108,20 +108,20 @@ async fn a_persons_digest_choice_beats_the_notifications() {
     .await;
 
     notifier
-        .send(&weekly, DealUpdate::new("Acme"))
+        .send(&weekly, DealUpdate::new("Agra"))
         .await
         .unwrap();
     notifier
-        .send(&instant, DealUpdate::new("Acme"))
+        .send(&instant, DealUpdate::new("Agra"))
         .await
         .unwrap();
     // A mention has no digest of its own; the weekly person's applies.
     notifier
-        .send(&weekly, Mention { by: "Ada".into() })
+        .send(&weekly, Mention { by: "Anu".into() })
         .await
         .unwrap();
 
-    assert_eq!(subjects(&app).await, ["Deal update: Acme"]);
+    assert_eq!(subjects(&app).await, ["Deal update: Agra"]);
     let rows = held(&app).await;
     assert_eq!(rows.len(), 2);
     // Monday 2 November, 09:00 UTC.
@@ -137,7 +137,7 @@ async fn a_persons_digest_choice_beats_the_notifications() {
     let mail = support::sent_mail(&app).await;
     let text = mail[1].text.as_deref().unwrap();
     assert!(
-        text.contains("Deal update: Acme") && text.contains("Ada mentioned you"),
+        text.contains("Deal update: Agra") && text.contains("Anu mentioned you"),
         "{text}"
     );
 }
@@ -159,11 +159,11 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
     }
 
     notifier
-        .send(&tokyo, Mention { by: "Ada".into() })
+        .send(&tokyo, Mention { by: "Anu".into() })
         .await
         .unwrap();
     notifier
-        .send(&london, Mention { by: "Ada".into() })
+        .send(&london, Mention { by: "Anu".into() })
         .await
         .unwrap();
 
@@ -171,7 +171,7 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
     assert_eq!(support::rows(&app).await.len(), 2);
     // London is awake: its text and mail went out.
     assert_eq!(fakes.sms.sent_to("+447400123456").len(), 1);
-    assert_eq!(subjects(&app).await, ["Ada mentioned you"]);
+    assert_eq!(subjects(&app).await, ["Anu mentioned you"]);
     // Tokyo's wait for 07:00 there (22:00 UTC).
     assert!(fakes.sms.sent_to("+819012345678").is_empty());
     let rows = held(&app).await;
@@ -193,7 +193,7 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
     assert_eq!(fakes.sms.sent_to("+819012345678").len(), 1);
     assert_eq!(
         subjects(&app).await,
-        ["Ada mentioned you", "Ada mentioned you"]
+        ["Anu mentioned you", "Anu mentioned you"]
     );
     assert!(held(&app).await.is_empty());
 }
@@ -202,16 +202,16 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
 async fn the_workspaces_quiet_hours_apply_unless_a_person_sets_their_own() {
     let (app, _clock, fakes) = timed_app("2026-10-28T23:00:00Z").await;
     let notifier = app.get::<Notifier>().await;
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     prefer(
         &app,
-        &navree_notify::PreferenceOwner::workspace(acme),
+        &navree_notify::PreferenceOwner::workspace(agra),
         json!({"quiet_hours": {"start": "22:00", "end": "06:00"}}),
     )
     .await;
-    let member = Person::in_zone(Some("UTC")).of(acme);
+    let member = Person::in_zone(Some("UTC")).of(agra);
     let night_owl = Person::in_zone(Some("UTC"))
-        .of(acme)
+        .of(agra)
         .phone("+44 7400 123456");
     // An empty period of one's own: no quiet hours.
     prefer(
@@ -222,11 +222,11 @@ async fn the_workspaces_quiet_hours_apply_unless_a_person_sets_their_own() {
     .await;
 
     notifier
-        .send(&member, Mention { by: "Ada".into() })
+        .send(&member, Mention { by: "Anu".into() })
         .await
         .unwrap();
     notifier
-        .send(&night_owl, Mention { by: "Ada".into() })
+        .send(&night_owl, Mention { by: "Anu".into() })
         .await
         .unwrap();
 
@@ -314,12 +314,12 @@ async fn send_windows_wait_for_the_next_slot_in_each_zone() {
 #[tokio::test]
 async fn the_zone_comes_from_time_module_when_the_person_has_none() {
     let (builder, _clock, _fakes) = timed(NotifyOptions::default(), "2026-10-28T20:00:00Z");
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     let ada = Person::in_zone(None);
-    let bob = Person::in_zone(None).of(acme);
+    let bob = Person::in_zone(None).of(agra);
     let carol = Person::in_zone(None);
     let users = ZonesFake::new(ZoneLevel::User).owner(ZoneOwner::new(ada.id).zone("Asia/Kolkata"));
-    let workspaces = ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(acme).country("AE"));
+    let workspaces = ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(agra).country("AE"));
     let app = builder
         .module(TimeModule::for_root(TimeOptions {
             default_zone: "America/New_York".to_owned(),
@@ -332,7 +332,7 @@ async fn the_zone_comes_from_time_module_when_the_person_has_none() {
     let notifier = app.get::<Notifier>().await;
     for person in [&ada, &bob, &carol] {
         notifier
-            .send(person, DealUpdate::new("Acme"))
+            .send(person, DealUpdate::new("Agra"))
             .await
             .unwrap();
     }
@@ -354,7 +354,7 @@ async fn turning_a_channel_off_drops_what_is_held() {
     let (app, clock, _fakes) = timed_app("2026-10-28T08:00:00Z").await;
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
-    notifier.send(&ada, DealUpdate::new("Acme")).await.unwrap();
+    notifier.send(&ada, DealUpdate::new("Agra")).await.unwrap();
     assert_eq!(held(&app).await.len(), 1);
 
     prefer(
@@ -392,9 +392,9 @@ async fn releases_are_queued_with_notify_queue() {
         .await;
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
-    notifier.send(&ada, DealUpdate::new("Acme")).await.unwrap();
+    notifier.send(&ada, DealUpdate::new("Agra")).await.unwrap();
     notifier
-        .send(&ada, DealUpdate::new("Globex"))
+        .send(&ada, DealUpdate::new("Gulati"))
         .await
         .unwrap();
     // The database and SMS channels were queued; the mail is held.
@@ -449,7 +449,7 @@ async fn a_failed_release_is_tried_again_then_dropped() {
     )
     .await;
     notifier
-        .send(&tokyo, Mention { by: "Ada".into() })
+        .send(&tokyo, Mention { by: "Anu".into() })
         .await
         .unwrap();
     assert_eq!(held(&app).await.len(), 1);
@@ -486,7 +486,7 @@ async fn held_deliveries_join_the_unit_of_work() {
 
     let uow = db.uow(None, None).await;
     notifier
-        .send_in(&uow, &ada, DealUpdate::new("Acme"))
+        .send_in(&uow, &ada, DealUpdate::new("Agra"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -495,7 +495,7 @@ async fn held_deliveries_join_the_unit_of_work() {
 
     let uow = db.uow(None, None).await;
     notifier
-        .send_in(&uow, &ada, DealUpdate::new("Acme"))
+        .send_in(&uow, &ada, DealUpdate::new("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -508,7 +508,7 @@ async fn the_release_command_runs_and_the_schedule_is_registered() {
     let (app, clock, _fakes) = timed_app("2026-10-28T08:00:00Z").await;
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
-    notifier.send(&ada, DealUpdate::new("Acme")).await.unwrap();
+    notifier.send(&ada, DealUpdate::new("Agra")).await.unwrap();
     clock.set(at("2026-10-28T09:00:00Z") + TimeDelta::seconds(5));
 
     let command = app
@@ -550,9 +550,9 @@ async fn without_a_database_nothing_is_held() {
         .await;
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
-    let mut update = DealUpdate::new("Acme");
+    let mut update = DealUpdate::new("Agra");
     update.channels = vec![Channel::Mail];
     notifier.send(&ada, update).await.unwrap();
     // The digest needs the database: the mail went out at once.
-    assert_eq!(subjects(&app).await, ["Deal update: Acme"]);
+    assert_eq!(subjects(&app).await, ["Deal update: Agra"]);
 }

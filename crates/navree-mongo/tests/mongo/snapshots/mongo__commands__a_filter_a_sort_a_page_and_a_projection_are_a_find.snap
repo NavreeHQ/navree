@@ -1,5 +1,5 @@
 ---
 source: crates/navree-mongo/tests/mongo/commands.rs
-expression: "show(&Deal::query().select([Deal::TITLE.expr(),\nDeal::AMOUNT.expr()]).add_select([(Deal::STAGE,\n\"status\")]).where_(Deal::STAGE.eq(Stage::Won)).where_(Deal::COMPANY_ID.eq(acme())).order_by_desc(Deal::AMOUNT).order_by(Deal::ID).for_page(3,\n25))"
+expression: "show(&Deal::query().select([Deal::TITLE.expr(),\nDeal::AMOUNT.expr()]).add_select([(Deal::STAGE,\n\"status\")]).where_(Deal::STAGE.eq(Stage::Won)).where_(Deal::COMPANY_ID.eq(agra())).order_by_desc(Deal::AMOUNT).order_by(Deal::ID).for_page(3,\n25))"
 ---
 db.deals.find({"stage": "won", "company_id": {"$oid": "65f1a2b3c4d5e6f708091a2b"}, "deleted_at": null}, {"title": 1, "amount": 1, "status": "$stage", "_id": 0}).sort({"amount": -1, "_id": 1}).skip(50).limit(25)

@@ -86,13 +86,13 @@ async fn actions_assertions_waits_and_reading() -> Result<(), BrowserError> {
     let browser = Browser::launch().await?;
     let page = browser.visit(server.url("/playground")).await?;
     let logo = std::env::temp_dir().join(format!(
-        "navree-test-browser-acme-{}.png",
+        "navree-test-browser-agra-{}.png",
         std::process::id()
     ));
     std::fs::write(&logo, b"png").expect("a fixture file");
 
     // Actions.
-    page.type_into("Name", "Lovelace renewal").await?; // clears, then types
+    page.type_into("Name", "Lakhotia renewal").await?; // clears, then types
     page.append("Memo", " back Monday.").await?; // types without clearing
     page.select("Stage", "Negotiation").await?; // by text or value
     page.check("Send me a summary").await?;
@@ -113,7 +113,7 @@ async fn actions_assertions_waits_and_reading() -> Result<(), BrowserError> {
         .await?;
     page.assert_path_is("/playground").await?;
     page.assert_title("Playground · Fixture").await?;
-    page.assert_value("Name", "Lovelace renewal").await?;
+    page.assert_value("Name", "Lakhotia renewal").await?;
     page.assert_visible("@toast").await?;
     page.assert_missing("@spinner").await?;
     page.assert_count("@card", 3).await?;

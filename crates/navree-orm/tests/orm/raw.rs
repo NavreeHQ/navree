@@ -10,7 +10,7 @@ use crate::models::Company;
 use crate::support::sqlite;
 
 async fn seed(db: &navree_db::Db) {
-    for (name, employees) in [("Acme", 5), ("Globex", 50), ("Initech", 15)] {
+    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Indrani", 15)] {
         Company::create(
             db,
             Company {
@@ -41,7 +41,7 @@ async fn raw_selects_return_rows_one_row_or_one_value() {
         .iter()
         .map(|row| row.get::<String>("name").unwrap())
         .collect();
-    assert_eq!(names, ["Globex", "Initech"]);
+    assert_eq!(names, ["Gulati", "Indrani"]);
 
     let first = select_one(
         &t.db,
@@ -50,7 +50,7 @@ async fn raw_selects_return_rows_one_row_or_one_value() {
     .await
     .unwrap()
     .unwrap();
-    assert_eq!(first.get::<String>("name").unwrap(), "Acme");
+    assert_eq!(first.get::<String>("name").unwrap(), "Agra");
     assert!(
         select_one(&t.db, raw("SELECT name FROM companies WHERE id = ?", [99]))
             .await
@@ -126,7 +126,7 @@ async fn raw_statements_join_the_unit_of_work() {
     let t = sqlite().await;
     seed(&t.db).await;
     let uow = t.db.uow(None, None).await;
-    statement(&uow, raw("DELETE FROM companies WHERE name = ?", ["Acme"]))
+    statement(&uow, raw("DELETE FROM companies WHERE name = ?", ["Agra"]))
         .await
         .unwrap();
     let left: Option<i64> = scalar(&uow, raw("SELECT COUNT(*) FROM companies", [] as [i64; 0]))
@@ -151,9 +151,9 @@ async fn raw_fragments_fit_conditions_selects_and_orders() {
     assert_eq!(
         companies.map(|c| (c.name.clone(), c.extra::<i64>("doubled").unwrap())),
         [
-            ("Globex".to_owned(), Some(100)),
-            ("Initech".to_owned(), Some(30)),
-            ("Acme".to_owned(), Some(10))
+            ("Gulati".to_owned(), Some(100)),
+            ("Indrani".to_owned(), Some(30)),
+            ("Agra".to_owned(), Some(10))
         ]
     );
     assert_eq!(Company::meta().table(), "companies");

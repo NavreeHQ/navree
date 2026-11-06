@@ -190,9 +190,9 @@ impl Stream {
     }
 }
 
-// Ada owns Acme and is a viewer in Globex. She signs in and her first page is
-// in Acme (the oldest of her workspaces), where she may create deals; after
-// she switches, her page is in Globex, where she may not; the live hub tells
+// Anu owns Agra and is a viewer in Gulati. She signs in and her first page is
+// in Agra (the oldest of her workspaces), where she may create deals; after
+// she switches, her page is in Gulati, where she may not; the live hub tells
 // her window only about the workspace she is in; and the audit trail has the
 // sign-in and the switch.
 #[tokio::test]
@@ -212,7 +212,7 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
     let workspaces = app.get::<Workspaces>().await;
     let members = app.get::<Members>().await;
     let uow = db.uow(None, None).await;
-    let acme = workspaces
+    let agra = workspaces
         .create(
             &uow,
             ada.id,
@@ -220,7 +220,7 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
         )
         .await
         .unwrap();
-    let globex = workspaces
+    let gulati = workspaces
         .create(
             &uow,
             grace.id,
@@ -229,10 +229,10 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
         .await
         .unwrap();
     members
-        .add(&uow, globex.id, ada.id, WorkspaceRole::Viewer)
+        .add(&uow, gulati.id, ada.id, WorkspaceRole::Viewer)
         .await
         .unwrap();
-    // A workspace of somebody else's, that Ada does not belong to.
+    // A workspace of somebody else's, that Anu does not belong to.
     workspaces
         .create(
             &uow,
@@ -278,11 +278,11 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
             .await,
     );
     assert_eq!(stream.next(WAIT).await.as_deref(), Some("ui:live"));
-    live.nudge([Topic::workspace(globex.id, "deals")])
+    live.nudge([Topic::workspace(gulati.id, "deals")])
         .await
         .unwrap();
     assert_eq!(stream.next(QUIET).await, None, "not the other workspace");
-    live.nudge([Topic::workspace(acme.id, "deals")])
+    live.nudge([Topic::workspace(agra.id, "deals")])
         .await
         .unwrap();
     assert_eq!(stream.next(WAIT).await.as_deref(), Some("deals"));

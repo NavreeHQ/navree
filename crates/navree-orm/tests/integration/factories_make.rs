@@ -65,13 +65,13 @@ fn states_run_in_order_after_the_definition() {
 #[test]
 fn set_fixes_one_column_and_when_applies_states_conditionally() {
     let company = Company::factory()
-        .set(Company::NAME, "Acme")
+        .set(Company::NAME, "Agra")
         .set(Company::COUNTRY, "NL")
         .when(true, |f| f.state(CompanyFactory::large))
         .when(false, |f| f.set(Company::NAME, "Never"))
         .make_one()
         .unwrap();
-    assert_eq!(company.name, "Acme");
+    assert_eq!(company.name, "Agra");
     assert_eq!(company.country.as_deref(), Some("NL"));
     assert_eq!(company.employees, 10_000);
 }
@@ -171,7 +171,7 @@ fn seeded_factories_build_the_same_records() {
 #[test]
 fn raw_gives_the_generated_values_without_empty_keys_and_timestamps() {
     let raw = Company::factory()
-        .set(Company::NAME, "Acme")
+        .set(Company::NAME, "Agra")
         .raw_one()
         .unwrap();
     let columns: Vec<&str> = raw.iter().map(|(column, _)| *column).collect();
@@ -179,9 +179,9 @@ fn raw_gives_the_generated_values_without_empty_keys_and_timestamps() {
         columns,
         ["name", "country", "employees", "verified", "profile"]
     );
-    assert_eq!(raw.get("name"), Some(&Value::from("Acme")));
-    assert_eq!(raw.to_json()["name"], "Acme");
-    assert_eq!(serde_json::to_value(&raw).unwrap()["name"], "Acme");
+    assert_eq!(raw.get("name"), Some(&Value::from("Agra")));
+    assert_eq!(raw.to_json()["name"], "Agra");
+    assert_eq!(serde_json::to_value(&raw).unwrap()["name"], "Agra");
 
     let trashed = Company::factory().trashed().raw_one().unwrap();
     assert!(
@@ -281,23 +281,23 @@ fn trashed_fails_for_a_model_without_soft_deletes() {
 
 #[test]
 fn make_uses_stored_and_recycled_parents_and_leaves_factory_parents_empty() {
-    let mut acme = Record::new(Company {
+    let mut agra = Record::new(Company {
         id: 7,
-        name: "Acme".into(),
+        name: "Agra".into(),
         ..Company::default()
     });
-    acme.sync_original();
+    agra.sync_original();
     // A factory parent cannot be created without the database.
     let orphan = Deal::factory().make_one().unwrap();
     assert_eq!(orphan.company_id, None);
     // A stored record is known.
     let owned = Deal::factory()
-        .for_(&acme, Deal::COMPANY_ID)
+        .for_(&agra, Deal::COMPANY_ID)
         .make_one()
         .unwrap();
     assert_eq!(owned.company_id, Some(7));
     // A recycled record replaces the definition's parent factory.
-    let recycled = Deal::factory().recycle(&acme).count(3).make().unwrap();
+    let recycled = Deal::factory().recycle(&agra).count(3).make().unwrap();
     assert!(recycled.iter().all(|deal| deal.company_id == Some(7)));
 }
 

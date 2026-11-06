@@ -44,7 +44,7 @@ const STANDARD_FIELDS: &[&str] = &[
 /// use navree_mail::Incoming;
 ///
 /// let incoming = Incoming::compose()
-///     .from("Ada Lovelace <ada@example.com>")
+///     .from("Anu Lakhotia <anu@example.com>")
 ///     .to("reply+k5q2@in.acme.test")
 ///     .subject("Re: [#42] Printer on fire")
 ///     .text("Thanks, the fire is out now.")
@@ -100,7 +100,7 @@ impl Compose {
         self
     }
 
-    /// `From` (`ada@example.com` or `Ada <ada@example.com>`).
+    /// `From` (`anu@example.com` or `Anu <anu@example.com>`).
     #[must_use]
     pub fn from(mut self, address: impl Into<String>) -> Self {
         self.from = Some(address.into());
@@ -498,7 +498,7 @@ fn address_list(addresses: &[String]) -> Option<String> {
     Some(encoded.join(", "))
 }
 
-/// `Ada <ada@example.com>` with a non-ASCII name as an encoded word.
+/// `Anu <anu@example.com>` with a non-ASCII name as an encoded word.
 fn encode_address(address: &str) -> String {
     let address = single_line(address);
     match address.rsplit_once('<') {
@@ -517,7 +517,7 @@ fn encode_address(address: &str) -> String {
     }
 }
 
-/// `ada@example.com` from `Ada <ada@example.com>`.
+/// `anu@example.com` from `Anu <anu@example.com>`.
 fn bare(address: &str) -> String {
     match address.rsplit_once('<') {
         Some((_, rest)) => rest.trim_end().trim_end_matches('>').trim().to_owned(),
@@ -574,11 +574,11 @@ mod tests {
             )
         );
         assert_eq!(
-            encode_address("Ada <ada@example.com>"),
-            "\"Ada\" <ada@example.com>"
+            encode_address("Anu <anu@example.com>"),
+            "\"Anu\" <anu@example.com>"
         );
-        assert_eq!(encode_address("ada@example.com"), "ada@example.com");
-        assert_eq!(bare("Ada <ada@example.com>"), "ada@example.com");
+        assert_eq!(encode_address("anu@example.com"), "anu@example.com");
+        assert_eq!(bare("Anu <anu@example.com>"), "anu@example.com");
     }
 
     #[test]

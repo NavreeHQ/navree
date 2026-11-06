@@ -26,7 +26,7 @@ pub enum TemplateSource {
 /// use serde_json::json;
 ///
 /// let render = Render::template("certificates/classic")
-///     .data(json!({ "name": "Ada Lovelace", "course": "Analytical Engines" }))
+///     .data(json!({ "name": "Anu Lakhotia", "course": "Analytical Engines" }))
 ///     .locale("ar");
 /// assert_eq!(render.engine, None); // `documents.engine` decides
 ///
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn a_render_round_trips_through_json() {
         let render = Render::template("certificates/classic")
-            .data(json!({"name": "Ada"}))
+            .data(json!({"name": "Anu"}))
             .locale("hi")
             .engine(EngineKind::Native)
             .title("Certificate");

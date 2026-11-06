@@ -134,7 +134,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
 #[test]
 fn the_message_has_its_documented_members() {
     let mail =
-        InboundMail::parse("From: Ada <ada@example.com>\r\nTo: b@acme.test\r\n\r\nHi\r\n").unwrap();
+        InboundMail::parse("From: Anu <anu@example.com>\r\nTo: b@acme.test\r\n\r\nHi\r\n").unwrap();
     let InboundMail {
         id,
         source,

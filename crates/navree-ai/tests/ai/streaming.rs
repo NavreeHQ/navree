@@ -29,7 +29,7 @@ async fn body_text(stream: TextStream) -> (http::HeaderMap, String) {
 #[tokio::test]
 async fn a_stream_yields_text_then_done() {
     let fake = AiFake::new();
-    fake.respond(FakeReply::text("Acme moved to negotiation.").with_usage(912, 41));
+    fake.respond(FakeReply::text("Agra moved to negotiation.").with_usage(912, 41));
 
     let mut stream = fake.ai().stream("Summarize").model("fast").await.unwrap();
     let mut text = String::new();
@@ -42,7 +42,7 @@ async fn a_stream_yields_text_then_done() {
         }
     }
 
-    assert_eq!(text, "Acme moved to negotiation.");
+    assert_eq!(text, "Agra moved to negotiation.");
     let done = done.unwrap();
     assert_eq!(done.model, "fast");
     assert_eq!(done.usage.input_tokens, 912);
@@ -52,7 +52,7 @@ async fn a_stream_yields_text_then_done() {
 #[tokio::test]
 async fn the_response_is_server_sent_events() {
     let fake = AiFake::new();
-    fake.respond(FakeReply::text("Acme moved on.").with_usage(5, 3));
+    fake.respond(FakeReply::text("Agra moved on.").with_usage(5, 3));
 
     let stream = fake.ai().stream("Summarize").model("fast").await.unwrap();
     let (headers, body) = body_text(stream).await;
@@ -61,7 +61,7 @@ async fn the_response_is_server_sent_events() {
     assert_eq!(headers["cache-control"], "no-cache");
     assert_eq!(headers["x-accel-buffering"], "no");
     assert!(
-        body.starts_with("event: text\ndata: {\"text\":\"Acme\"}\n\n"),
+        body.starts_with("event: text\ndata: {\"text\":\"Agra\"}\n\n"),
         "{body}"
     );
     assert!(
@@ -286,7 +286,7 @@ async fn a_text_stream_is_served_through_the_http_pipeline() {
         .build()
         .await;
     let fake = app.get::<Ai>().await.fake().unwrap();
-    fake.respond(FakeReply::text("Acme is close."));
+    fake.respond(FakeReply::text("Agra is close."));
 
     let response = app
         .client()
@@ -300,7 +300,7 @@ async fn a_text_stream_is_served_through_the_http_pipeline() {
     assert_eq!(response.header("x-accel-buffering"), Some("no"));
     let body = response.text();
     assert!(
-        body.contains("event: text\ndata: {\"text\":\"Acme\"}"),
+        body.contains("event: text\ndata: {\"text\":\"Agra\"}"),
         "{body}"
     );
     assert!(body.contains("event: done"), "{body}");

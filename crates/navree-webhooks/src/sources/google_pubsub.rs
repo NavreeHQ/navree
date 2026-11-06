@@ -234,10 +234,10 @@ mod tests {
     }
 
     fn body() -> Vec<u8> {
-        // `data` is `{"emailAddress":"ada@example.com","historyId":"9876543210"}`.
+        // `data` is `{"emailAddress":"anu@example.com","historyId":"9876543210"}`.
         serde_json::to_vec(&json!({
             "message": {
-                "data": STANDARD.encode(br#"{"emailAddress":"ada@example.com","historyId":"9876543210"}"#),
+                "data": STANDARD.encode(br#"{"emailAddress":"anu@example.com","historyId":"9876543210"}"#),
                 "messageId": "2070443601311540",
                 "message_id": "2070443601311540",
                 "publishTime": "2026-10-26T07:59:55.749Z",

@@ -74,46 +74,46 @@ fn jwt(claims: Value) -> String {
 #[tokio::test]
 async fn every_resolver_finds_the_workspace() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let client = world.as_user(ada);
 
     client
         .get("/api/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("slug", json!("acme"))
+        .assert_json_path("slug", json!("agra"))
         .assert_json_path("role", json!("owner"))
         .assert_json_path("resolver", json!("header"));
     client
         .get("/api/current")
-        .header("x-workspace", acme.id.to_string())
+        .header("x-workspace", agra.id.to_string())
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("id", json!(agra.id))
         .assert_json_path(
             "mail_scope",
-            json!({ "workspace_id": acme.id, "organization_id": null }),
+            json!({ "workspace_id": agra.id, "organization_id": null }),
         );
     client
-        .get("/api/w/acme/current")
+        .get("/api/w/agra/current")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("resolver", json!("path"));
     client
         .get("/api/current")
-        .header("host", "acme.app.test")
+        .header("host", "agra.app.test")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("resolver", json!("subdomain"));
     client
         .get("/api/current")
-        .bearer(&jwt(json!({ "sub": ada, "workspace": "acme" })))
+        .bearer(&jwt(json!({ "sub": ada, "workspace": "agra" })))
         .send()
         .await
         .assert_status(200)
@@ -129,32 +129,32 @@ async fn the_header_wins_by_default_and_the_order_is_configurable() {
             .module(CurrentModule),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    world.workspace(ada, "Acme").await;
-    world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    world.workspace(ada, "Agra").await;
+    world.workspace(ada, "Gulati").await;
     world
         .as_user(ada)
         .get("/api/current")
-        .header("host", "globex.app.test")
-        .header("x-workspace", "acme")
+        .header("host", "gulati.app.test")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("slug", json!("globex"));
+        .assert_json_path("slug", json!("gulati"));
 }
 
 #[tokio::test]
 async fn errors_follow_the_framework_shape() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let eve = world.user("Eve", "eve@example.com").await;
-    world.workspace(ada, "Acme").await;
+    world.workspace(ada, "Agra").await;
 
     world
         .app
         .client()
         .get("/api/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(401, "Unauthorized");
@@ -167,14 +167,14 @@ async fn errors_follow_the_framework_shape() {
     world
         .as_user(ada)
         .get("/api/current")
-        .header("x-workspace", "initech")
+        .header("x-workspace", "indrani")
         .send()
         .await
         .assert_error(404, "Workspace not found.");
     world
         .as_user(eve)
         .get("/api/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.")
@@ -184,16 +184,16 @@ async fn errors_follow_the_framework_shape() {
 #[tokio::test]
 async fn the_role_comes_from_the_membership() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(grace, "Globex").await;
-    world.join(acme.id, grace, "viewer").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(grace, "Gulati").await;
+    world.join(agra.id, grace, "viewer").await;
 
     let client = world.as_user(grace);
     client
         .get("/api/current")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_json_path("role", json!("viewer"))
@@ -203,7 +203,7 @@ async fn the_role_comes_from_the_membership() {
         );
     client
         .get("/api/current")
-        .header("x-workspace", globex.slug.as_str())
+        .header("x-workspace", gulati.slug.as_str())
         .send()
         .await
         .assert_json_path("role", json!("owner"))
@@ -248,11 +248,11 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
             .module(PinModule),
     )
     .await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
-    let pin = acme.id.to_string();
+    let pin = agra.id.to_string();
 
     // Naming no workspace: the pinned one.
     client
@@ -261,12 +261,12 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("slug", json!("acme"));
+        .assert_json_path("slug", json!("agra"));
     // Naming the pinned one: fine.
     client
         .get("/api/current")
         .header("x-test-pin", pin.as_str())
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -274,13 +274,13 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
     client
         .get("/api/current")
         .header("x-test-pin", pin.as_str())
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_error(403, "This token is limited to another workspace.")
         .assert_error_code(403, "token_workspace_mismatch");
     client
-        .get("/api/w/globex/current")
+        .get("/api/w/gulati/current")
         .header("x-test-pin", pin.as_str())
         .send()
         .await
@@ -288,7 +288,7 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
     // Without a pin, nothing changes.
     client
         .get("/api/current")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200);
@@ -304,16 +304,16 @@ fn requested_workspace_reads_the_configured_resolvers_without_loading_anything()
     let header = parts(
         http::Request::builder()
             .uri("/api/deals")
-            .header("X-Workspace", "acme"),
+            .header("X-Workspace", "agra"),
     );
     assert_eq!(
         requested_workspace(&config, &header),
-        Some((ResolverKind::Header, "acme".to_owned()))
+        Some((ResolverKind::Header, "agra".to_owned()))
     );
-    let path = parts(http::Request::builder().uri("/api/w/globex/deals"));
+    let path = parts(http::Request::builder().uri("/api/w/gulati/deals"));
     assert_eq!(
         requested_workspace(&config, &path),
-        Some((ResolverKind::Path, "globex".to_owned()))
+        Some((ResolverKind::Path, "gulati".to_owned()))
     );
     let none = parts(http::Request::builder().uri("/api/deals"));
     assert_eq!(requested_workspace(&config, &none), None);

@@ -44,7 +44,7 @@ async fn verify(world: &World, token: &str) -> Value {
 #[tokio::test]
 async fn id_tokens_carry_the_claims_of_the_scopes() {
     let world = World::new().await;
-    let (user, token) = world.user("ada@acme.test", &["deals.read"]).await;
+    let (user, token) = world.user("anu@acme.test", &["deals.read"]).await;
     let client = world
         .public_client(&["openid", "profile", "email", "deals:read"])
         .await;
@@ -57,8 +57,8 @@ async fn id_tokens_carry_the_claims_of_the_scopes() {
     assert_eq!(claims["sub"], json!(user.id));
     assert_eq!(claims["aud"], json!(client.client.id));
     assert_eq!(claims["nonce"], "n-0S6_WzA2Mj");
-    assert_eq!(claims["name"], "Ada Lovelace");
-    assert_eq!(claims["email"], "ada@acme.test");
+    assert_eq!(claims["name"], "Anu Lakhotia");
+    assert_eq!(claims["email"], "anu@acme.test");
     assert_eq!(claims["email_verified"], false);
     let iat = claims["iat"].as_i64().unwrap();
     assert_eq!(claims["exp"].as_i64().unwrap() - iat, 3600);
@@ -76,7 +76,7 @@ async fn id_tokens_carry_the_claims_of_the_scopes() {
 #[tokio::test]
 async fn userinfo_returns_the_same_claims() {
     let world = World::new().await;
-    let (user, token) = world.user("ada@acme.test", &["deals.read"]).await;
+    let (user, token) = world.user("anu@acme.test", &["deals.read"]).await;
     let client = world
         .public_client(&["openid", "profile", "email", "deals:read"])
         .await;
@@ -99,8 +99,8 @@ async fn userinfo_returns_the_same_claims() {
             .await
             .assert_status(200)
             .assert_json_path("sub", json!(user.id))
-            .assert_json_path("name", json!("Ada Lovelace"))
-            .assert_json_path("email", json!("ada@acme.test"))
+            .assert_json_path("name", json!("Anu Lakhotia"))
+            .assert_json_path("email", json!("anu@acme.test"))
             .assert_json_path("email_verified", json!(false));
     }
     // Without openid: insufficient_scope. Without a token: 401.
@@ -213,7 +213,7 @@ async fn the_issuer_and_path_are_configurable() {
 async fn rotated_keys_stay_in_the_jwks() {
     let (old, new) = (SigningKey25519::generate(), SigningKey25519::generate());
     let before = World::with(builder().config("oauth.signing_key", old.encode())).await;
-    let (_, token) = before.user("ada@acme.test", &[]).await;
+    let (_, token) = before.user("anu@acme.test", &[]).await;
     let client = before.public_client(&["openid"]).await;
     let tokens = authorize(&before.client(), client.client.id, &token, &["openid"]).await;
     let id_token = tokens.id_token.unwrap();
@@ -270,7 +270,7 @@ async fn options_in_code_work_like_configuration() {
         .send()
         .await
         .assert_json_path("keys.0.kid", json!(key.kid()));
-    let (_, token) = world.user("ada@acme.test", &["deals.read"]).await;
+    let (_, token) = world.user("anu@acme.test", &["deals.read"]).await;
     let client = world.public_client(&["deals:read"]).await;
     let tokens = authorize(&world.client(), client.client.id, &token, &["deals:read"]).await;
     world
@@ -387,7 +387,7 @@ async fn an_rsa_key_in_one_environment_line_signs_too() {
 async fn moving_to_rs256_keeps_tokens_signed_with_the_old_key() {
     let old = SigningKey25519::generate();
     let before = World::with(builder().config("oauth.signing_key", old.encode())).await;
-    let (_, token) = before.user("ada@acme.test", &[]).await;
+    let (_, token) = before.user("anu@acme.test", &[]).await;
     let client = before.public_client(&["openid"]).await;
     let tokens = authorize(&before.client(), client.client.id, &token, &["openid"]).await;
     let old_token = tokens.id_token.unwrap();

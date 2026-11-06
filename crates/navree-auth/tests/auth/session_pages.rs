@@ -89,14 +89,14 @@ async fn the_setup_page_sets_two_factor_up_for_a_user_a_policy_requires_it_of() 
         .module(EveryoneTwoFactorModule)
         .build()
         .await;
-    create_user(&app, "ada@example.com").await;
+    create_user(&app, "anu@example.com").await;
     let browser = app.client();
 
     let response = post_form(
         &browser,
         "/sign-in",
         &[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("password", PASSWORD),
             ("next", "/deals/42"),
         ],
@@ -243,7 +243,7 @@ async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = passwordless_app(&clock, sink.clone()).await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let browser = app.client();
 
     let page = open(&browser, "/sign-in/link")
@@ -254,7 +254,7 @@ async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
     let sent = post_form(
         &browser,
         "/sign-in/link",
-        &[("email", "ada@example.com"), ("next", "/deals/42")],
+        &[("email", "anu@example.com"), ("next", "/deals/42")],
     )
     .await
     .assert_status(200)
@@ -321,13 +321,13 @@ async fn an_emailed_code_signs_a_browser_in() {
     let clock = support::clock();
     let sink = Arc::new(RecordingSink::default());
     let app = passwordless_app(&clock, sink.clone()).await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let browser = app.client();
 
     let asked = post_form(
         &browser,
         "/sign-in/code",
-        &[("email", "ada@example.com"), ("next", "/deals/42")],
+        &[("email", "anu@example.com"), ("next", "/deals/42")],
     )
     .await
     .assert_status(200)
@@ -349,7 +349,7 @@ async fn an_emailed_code_signs_a_browser_in() {
     let wrong = post_form(
         &browser,
         "/sign-in/code/verify",
-        &[("email", "ada@example.com"), ("code", "000000")],
+        &[("email", "anu@example.com"), ("code", "000000")],
     )
     .await
     .assert_status(422)
@@ -361,7 +361,7 @@ async fn an_emailed_code_signs_a_browser_in() {
         &browser,
         "/sign-in/code/verify",
         &[
-            ("email", "ada@example.com"),
+            ("email", "anu@example.com"),
             ("code", code.as_str()),
             ("remember", "true"),
             ("next", "/deals/42"),
@@ -386,11 +386,11 @@ async fn an_emailed_code_signs_a_browser_in() {
 async fn the_passwordless_pages_ask_for_the_second_factor() {
     let clock = support::clock();
     let app = passwordless_app(&clock, Arc::new(RecordingSink::default())).await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let secret = enable_two_factor(&app, &clock, &user).await;
     let browser = app.client();
 
-    post_form(&browser, "/sign-in/link", &[("email", "ada@example.com")])
+    post_form(&browser, "/sign-in/link", &[("email", "anu@example.com")])
         .await
         .assert_status(200);
     let mails = sent_mail(&app).await;
@@ -448,7 +448,7 @@ async fn post_json(client: &TestClient, path: &str, body: Value) -> TestResponse
 async fn a_passkey_signs_a_browser_in_through_the_page_routes() {
     let sink = Arc::new(RecordingSink::default());
     let app = passkey_app(sink.clone()).await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let authenticator = VirtualAuthenticator::new(RP_ID, ORIGIN);
 
     // The passkey is registered through the token API, as an app's
@@ -561,7 +561,7 @@ async fn a_single_page_app_signs_in_with_json_on_the_cookie() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let user = create_user(&app, "ada@example.com").await;
+    let user = create_user(&app, "anu@example.com").await;
     let two = create_user(&app, "bob@example.com").await;
     let secret = enable_two_factor(&app, &clock, &two).await;
     let spa = app.client();
@@ -569,14 +569,14 @@ async fn a_single_page_app_signs_in_with_json_on_the_cookie() {
 
     // No token, no sign-in.
     spa.post("/api/auth/session/login")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(403);
     post_json(
         &spa,
         "/api/auth/session/login",
-        json!({ "email": "ada@example.com", "password": "wrong password" }),
+        json!({ "email": "anu@example.com", "password": "wrong password" }),
     )
     .await
     .assert_error_code(401, "invalid_credentials");
@@ -585,7 +585,7 @@ async fn a_single_page_app_signs_in_with_json_on_the_cookie() {
     let body = post_json(
         &spa,
         "/api/auth/session/login",
-        json!({ "email": "ada@example.com", "password": PASSWORD, "remember": true }),
+        json!({ "email": "anu@example.com", "password": PASSWORD, "remember": true }),
     )
     .await
     .assert_status(200)
@@ -653,7 +653,7 @@ async fn impersonation_app(sink: Arc<RecordingSink>) -> (TestApp, User, User, Te
     .await;
     let admin = create_user(&app, "admin@example.com").await;
     grant_role(&app, admin.id, "support", &["users.impersonate"]).await;
-    let target = create_user(&app, "ada@example.com").await;
+    let target = create_user(&app, "anu@example.com").await;
     let browser = app.client();
     post_form(
         &browser,
@@ -782,13 +782,13 @@ async fn the_json_session_routes_exist_only_with_the_session_layer() {
     let app = support::app().await;
     app.client()
         .post("/api/auth/session/login")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(404);
     // The token routes are as they were.
-    create_user(&app, "ada@example.com").await;
-    support::login(&app.client(), "ada@example.com", PASSWORD)
+    create_user(&app, "anu@example.com").await;
+    support::login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
 }

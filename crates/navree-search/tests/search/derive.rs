@@ -64,9 +64,9 @@ async fn the_derived_document_holds_the_key_and_marked_fields() {
     let id = Uuid::now_v7();
     let record = Record::from(Contact {
         id,
-        first_name: "Ada".into(),
-        last_name: "Lovelace".into(),
-        email: Some("ada@lovelace.io".into()),
+        first_name: "Anu".into(),
+        last_name: "Lakhotia".into(),
+        email: Some("anu@lakhotia.io".into()),
         title: None,
         status: "customer".into(),
         owner_id: Uuid::nil(),
@@ -80,7 +80,7 @@ async fn the_derived_document_holds_the_key_and_marked_fields() {
     assert_eq!(document.id(), id.to_string());
     assert_eq!(
         document.get("email_address"),
-        Some(&json!("ada@lovelace.io"))
+        Some(&json!("anu@lakhotia.io"))
     );
     assert_eq!(document.get("title"), Some(&json!(null)));
     assert_eq!(document.get("score"), Some(&json!(7)));

@@ -531,7 +531,7 @@ pub struct ImportRowRecord {
     pub row: u64,
     /// Where it is.
     pub status: RowStatus,
-    /// The values read for each field (`{"email": "ada@example.com"}`).
+    /// The values read for each field (`{"email": "anu@example.com"}`).
     #[schema(value_type = Object)]
     pub values: BTreeMap<String, Value>,
     /// Messages by field (`{"email": ["email must be a valid email address"]}`);

@@ -911,7 +911,7 @@ mod tests {
 
     #[test]
     fn like_patterns_become_globs() {
-        assert_eq!(like_to_glob("Acme%"), "Acme*");
+        assert_eq!(like_to_glob("Agra%"), "Agra*");
         assert_eq!(like_to_glob("a_c"), "a?c");
         assert_eq!(like_to_glob("50*?["), "50[*][?][[]");
     }

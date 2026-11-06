@@ -20,7 +20,7 @@ DT_DATABASE_URL=postgres://... PORT=8097 ui-table-proof serve  # http://127.0.0.
 | `/empty`, `/one` | No rows, and one row. |
 | `/failed`, `/skeleton` | Rows that could not load, and a first load on its way. |
 
-The deal names on these pages come from the proof app's own data (for example "Globex renewal 10"). The steps name a row by its place, not by its name.
+The deal names on these pages come from the proof app's own data (for example "Gulati renewal 10"). The steps name a row by its place, not by its name.
 
 ## Before you start
 
@@ -28,7 +28,7 @@ The deal names on these pages come from the proof app's own data (for example "G
 2. Use a window at least 1280 pixels wide, so no column is hidden. JavaScript is on, except in part H.
 3. Open the speech viewer (NVDA) or the caption panel (VoiceOver). See the README.
 4. NVDA: start in browse mode. VoiceOver: start with VO on the page, not interacting.
-5. With the data reset, the numbers are: 137 deals; the stage "Won" has 28; a search for "globex" finds 26.
+5. With the data reset, the numbers are: 137 deals; the stage "Won" has 28; a search for "gulati" finds 26.
 
 ## Steps
 
@@ -84,8 +84,8 @@ The deal names on these pages come from the proof app's own data (for example "G
 - The reader says: after Escape, "Stage options", button. The chip link is named "Remove filter Stage: Won". After it is pressed, "Showing 1 to 10 of 137 results" is said once.
 
 **10. Search and hear the result count**
-- Keys: both readers: Tab to the search box, named "Search". Type `globex` in one go. NVDA switches to focus mode in the box by itself; if the letters are not typed, press NVDA+Space.
-- The page: after the typing pauses (a tenth of a second or more), the rows are replaced with the matches. Focus stays in the box and the typed text is kept. A chip "Search: globex" appears. The count reads "Showing 1 to 10 of 26 results".
+- Keys: both readers: Tab to the search box, named "Search". Type `gulati` in one go. NVDA switches to focus mode in the box by itself; if the letters are not typed, press NVDA+Space.
+- The page: after the typing pauses (a tenth of a second or more), the rows are replaced with the matches. Focus stays in the box and the typed text is kept. A chip "Search: gulati" appears. The count reads "Showing 1 to 10 of 26 results".
 - The reader says: "Search", search edit, and each typed letter. After the pause, the count "Showing 1 to 10 of 26 results" is said once. If you type slowly, the count may be said for the letters typed so far; each different count is said once, the last one is 26, and none is repeated.
 
 **11. Search with no match, then clear**
@@ -198,7 +198,7 @@ Run the reset command from "Before you start" first, then reload `/deals?per_pag
 Turn JavaScript off in the browser, run the reset command from "Before you start", and open `/deals?per_page=10`.
 
 **30. Sort, page, search and act with full page loads**
-- Keys: both readers: Tab to the link "Amount" and press Enter. Then reach "Page 2" and press Enter. Then Tab to the search box, type `globex`, Tab on to the button "Apply" and press Enter. Then Tab to the first row's box and press Space, and Tab to the button "Archive" and press Enter. Turn JavaScript on again afterwards.
+- Keys: both readers: Tab to the link "Amount" and press Enter. Then reach "Page 2" and press Enter. Then Tab to the search box, type `gulati`, Tab on to the button "Apply" and press Enter. Then Tab to the first row's box and press Space, and Tab to the button "Archive" and press Enter. Turn JavaScript on again afterwards.
 - The page: each link loads a whole new page, with no live update and no busy state. Without script, nothing is sent while you type: the button "Apply" (shown only without script) sends the form and the page reloads with the 26 results. The bar over the table shows as soon as a box is ticked, with an empty count; "Archive" posts the form and the page loads again with a toast.
 - The reader says: after each load, the reader's own page-load speech (the title, and where it starts). The sort state is still conveyed by the "Amount" header (sorted ascending) when you read the headers as in step 5. The button "Apply" is named and reachable. The count under the table is ordinary text, once, when you reach it: "Showing 1 to 10 of 26 results". The row box is checked and "Archive" is named. After the post, the toast is found as text in the region named "Notifications" and reads "Done: 1 deals (selected)."
 

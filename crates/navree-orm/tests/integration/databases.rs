@@ -31,7 +31,7 @@ static NOTES: Template = Template::new("integration notes", |template| {
             "CREATE TABLE authors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)",
             "CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL REFERENCES authors (id), body TEXT NOT NULL)",
             "CREATE TABLE navree_migrations (version TEXT PRIMARY KEY)",
-            "INSERT INTO authors (name) VALUES ('Ada')",
+            "INSERT INTO authors (name) VALUES ('Anu')",
             "INSERT INTO navree_migrations (version) VALUES ('m0001')",
         ] {
             conn.execute_script(sql).await?;
@@ -94,7 +94,7 @@ async fn truncation_empties_every_table_but_the_kept_ones() {
     // Counters start over.
     test.db()
         .pool()
-        .execute_script("INSERT INTO authors (name) VALUES ('Grace')")
+        .execute_script("INSERT INTO authors (name) VALUES ('Gauri')")
         .await
         .unwrap();
     let first = table("authors")

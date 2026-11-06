@@ -132,7 +132,7 @@ async fn the_fake_plays_the_provider() {
     mailer
         .send_message(
             navree_mail::Message::new()
-                .to("ada@example.com")
+                .to("anu@example.com")
                 .cc("bob@example.com")
                 .subject("One")
                 .text("1"),
@@ -151,7 +151,7 @@ async fn the_fake_plays_the_provider() {
 
     assert_eq!(mail.fake.sent().len(), 2);
     assert_eq!(mail.fake.sent_to("BOB@example.com").len(), 2);
-    assert_eq!(mail.fake.sent_to("ada@example.com")[0].subject, "One");
+    assert_eq!(mail.fake.sent_to("anu@example.com")[0].subject, "One");
 
     // The event goes to the last message sent to the recipient.
     let delivery = mail

@@ -78,7 +78,7 @@ impl FromStr for MailEventKind {
 ///     "RecordType": "Bounce",
 ///     "MessageID": "b7bc2f4a",
 ///     "Type": "HardBounce",
-///     "Email": "ada@example.com",
+///     "Email": "anu@example.com",
 ///     "Description": "The server was unable to deliver your message",
 ///     "BouncedAt": "2026-10-27T10:00:00Z"
 /// }));

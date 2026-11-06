@@ -32,7 +32,7 @@ pub async fn placeholders_scripts_and_keys(scratch: Scratch) {
 
     let insert = Statement::portable(
         "INSERT INTO companies (name, country) VALUES (?, ?)",
-        ["Acme".into(), Value::Null(navree_db::Kind::String)],
+        ["Agra".into(), Value::Null(navree_db::Kind::String)],
     );
     let done = db.execute(&insert).await.unwrap();
     assert_eq!(done.rows_affected, 1);
@@ -44,16 +44,16 @@ pub async fn placeholders_scripts_and_keys(scratch: Scratch) {
         let row = db
             .fetch_one(&Statement::portable(
                 "INSERT INTO companies (name, country) VALUES (?, ?) RETURNING id, name",
-                ["Globex".into(), "DE".into()],
+                ["Gulati".into(), "DE".into()],
             ))
             .await
             .unwrap();
         assert_eq!(row.get::<i64>("id").unwrap(), 2);
-        assert_eq!(row.get::<String>("name").unwrap(), "Globex");
+        assert_eq!(row.get::<String>("name").unwrap(), "Gulati");
     } else {
         db.execute(&Statement::portable(
             "INSERT INTO companies (name, country) VALUES (?, ?)",
-            ["Globex".into(), "DE".into()],
+            ["Gulati".into(), "DE".into()],
         ))
         .await
         .unwrap();
@@ -74,7 +74,7 @@ pub async fn placeholders_scripts_and_keys(scratch: Scratch) {
         ),
     };
     let name: String = db.fetch_scalar(&native).await.unwrap();
-    assert_eq!(name, "Globex");
+    assert_eq!(name, "Gulati");
     let other = if backend == Backend::Postgres {
         Backend::MySql
     } else {
@@ -141,9 +141,9 @@ pub async fn errors_are_classified(scratch: Scratch) {
     script(&db, &schema(backend)).await;
     let add_company =
         |name: &str| Statement::portable("INSERT INTO companies (name) VALUES (?)", [name.into()]);
-    db.execute(&add_company("Acme")).await.unwrap();
+    db.execute(&add_company("Agra")).await.unwrap();
 
-    let unique = db.execute(&add_company("Acme")).await.unwrap_err();
+    let unique = db.execute(&add_company("Agra")).await.unwrap_err();
     assert_eq!(unique.kind(), ErrorKind::UniqueViolation, "{unique:?}");
     assert!(unique.is_unique_violation());
     assert!(unique.code().is_some());

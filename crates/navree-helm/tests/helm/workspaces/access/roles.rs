@@ -22,16 +22,16 @@ async fn add_with_role(world: &World, workspace: Uuid, user: Uuid, role: &str) {
     uow.commit().await.unwrap();
 }
 
-/// Every write of the resource at `base`, on Acme, is refused as read-only.
+/// Every write of the resource at `base`, on Agra, is refused as read-only.
 async fn assert_read_only(world: &World, client: &TestClient, base: &str) {
-    let acme = world.acme;
-    let note = world.acme_note;
+    let agra = world.agra;
+    let note = world.agra_note;
     let mut writes = vec![
         (
             "create",
             client
                 .post(base)
-                .json(&json!({ "title": "By a viewer", "workspace_id": acme })),
+                .json(&json!({ "title": "By a viewer", "workspace_id": agra })),
         ),
         (
             "update",
@@ -58,7 +58,7 @@ async fn assert_read_only(world: &World, client: &TestClient, base: &str) {
     }
     for (what, request) in writes {
         let request = if base == NOTES {
-            request.header("X-Workspace", acme.to_string())
+            request.header("X-Workspace", agra.to_string())
         } else {
             request
         };
@@ -76,16 +76,16 @@ async fn assert_read_only(world: &World, client: &TestClient, base: &str) {
         );
     }
     assert_eq!(
-        note_in(&world.app, acme, note).await.unwrap().title,
-        "Acme secret"
+        note_in(&world.app, agra, note).await.unwrap().title,
+        "Agra secret"
     );
 }
 
 #[tokio::test]
 async fn a_viewer_reads_and_doesnt_write_whatever_they_hold_app_wide() {
     let world = world(app_with_members().await).await;
-    let viewer = with_role(&world, world.acme, "viewer").await;
-    in_workspace(&viewer, world.acme, NOTES)
+    let viewer = with_role(&world, world.agra, "viewer").await;
+    in_workspace(&viewer, world.agra, NOTES)
         .send()
         .await
         .assert_status(200)
@@ -94,8 +94,8 @@ async fn a_viewer_reads_and_doesnt_write_whatever_they_hold_app_wide() {
     // A member with the same abilities writes.
     world
         .member
-        .patch(&format!("{NOTES}/{}", world.acme_note))
-        .header("X-Workspace", world.acme.to_string())
+        .patch(&format!("{NOTES}/{}", world.agra_note))
+        .header("X-Workspace", world.agra.to_string())
         .json(&json!({ "title": "By a member" }))
         .send()
         .await
@@ -105,18 +105,18 @@ async fn a_viewer_reads_and_doesnt_write_whatever_they_hold_app_wide() {
 #[tokio::test]
 async fn a_viewer_doesnt_write_through_a_resource_across_workspaces() {
     let world = world(app_with_members().await).await;
-    let viewer = with_role(&world, world.acme, "viewer").await;
+    let viewer = with_role(&world, world.agra, "viewer").await;
     assert_read_only(&world, &viewer, EVERY).await;
 }
 
 #[tokio::test]
 async fn a_viewer_chooses_the_workspace_and_then_only_reads_it() {
     let world = world(app_with_members().await).await;
-    let viewer = with_role(&world, world.acme, "viewer").await;
+    let viewer = with_role(&world, world.agra, "viewer").await;
     let response = viewer
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await
         .assert_status(303);
@@ -148,15 +148,15 @@ async fn a_queued_action_refuses_a_member_who_became_a_viewer() {
     world
         .member
         .post(&format!("{NOTES}/actions/whisper"))
-        .header("X-Workspace", world.acme.to_string())
-        .json(&json!({ "ids": [world.acme_note] }))
+        .header("X-Workspace", world.agra.to_string())
+        .json(&json!({ "ids": [world.agra_note] }))
         .send()
         .await
         .assert_status(200);
     let members = world.app.get::<Members>().await;
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    uow.scope(members.change_role(&uow, world.acme, world.member_id, WorkspaceRole::Viewer))
+    uow.scope(members.change_role(&uow, world.agra, world.member_id, WorkspaceRole::Viewer))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -173,11 +173,11 @@ async fn a_queued_action_refuses_a_member_who_became_a_viewer() {
         .expect_err("a viewer's action");
     assert!(error.to_string().contains("may not"), "{error}");
     assert_eq!(
-        note_in(&world.app, world.acme, world.acme_note)
+        note_in(&world.app, world.agra, world.agra_note)
             .await
             .unwrap()
             .title,
-        "Acme secret"
+        "Agra secret"
     );
 }
 
@@ -191,7 +191,7 @@ async fn a_role_with_no_permissions_of_its_own_is_read_only() {
         .build()
         .await;
     let world = world(app).await;
-    let auditor = with_role(&world, world.acme, "auditor").await;
+    let auditor = with_role(&world, world.agra, "auditor").await;
     assert_read_only(&world, &auditor, NOTES).await;
 }
 
@@ -209,10 +209,10 @@ async fn workspace_roles_decide_for_the_models_they_name() {
         .build()
         .await;
     let world = world(app).await;
-    let name = world.acme.to_string();
-    let note = world.acme_note;
+    let name = world.agra.to_string();
+    let note = world.agra_note;
     // A viewer the app lets update notes updates them, and nothing else.
-    let viewer = with_role(&world, world.acme, "viewer").await;
+    let viewer = with_role(&world, world.agra, "viewer").await;
     viewer
         .patch(&format!("{NOTES}/{note}"))
         .header("X-Workspace", name.clone())
@@ -247,12 +247,12 @@ async fn workspace_roles_decide_for_the_models_they_name() {
         .send()
         .await
         .assert_status(403);
-    in_workspace(&world.member, world.acme, NOTES)
+    in_workspace(&world.member, world.agra, NOTES)
         .send()
         .await
         .assert_status(200);
     // A role of the app's own writes what it names.
-    let clerk = with_role(&world, world.acme, "clerk").await;
+    let clerk = with_role(&world, world.agra, "clerk").await;
     clerk
         .post(NOTES)
         .header("X-Workspace", name.clone())
@@ -262,7 +262,7 @@ async fn workspace_roles_decide_for_the_models_they_name() {
         .assert_status(201);
     // The mapping doesn't take the place of the app-wide ability.
     let reader = account(&world.app, "reader").await;
-    add_with_role(&world, world.acme, reader, "clerk").await;
+    add_with_role(&world, world.agra, reader, "clerk").await;
     give_role(&world.app, reader, "reader", &["helm.view", "notes.read"]).await;
     world
         .app

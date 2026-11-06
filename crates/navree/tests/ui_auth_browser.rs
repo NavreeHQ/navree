@@ -121,13 +121,13 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme CRM"))
+        .module(AuthPages::new().app_name("Agra CRM"))
         .module(PagesModule)
         .build()
         .await;
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada Lovelace", "ada@example.com", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@example.com", PASSWORD)
         .await
         .unwrap();
     let meta = ClientMeta::default();
@@ -139,7 +139,7 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
     let db = app.get::<Db>().await;
     let workspaces = app.get::<Workspaces>().await;
     let uow = db.uow(None, None).await;
-    for name in ["Acme", "Globex"] {
+    for name in ["Agra", "Gulati"] {
         workspaces
             .create(&uow, ada.id, NewWorkspace::named(name))
             .await
@@ -155,8 +155,8 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
     page.assert_see("Sign in").await?;
     page.press("Sign in").await?;
     page.assert_path_is("/sign-in").await?;
-    page.assert_see("Acme CRM").await?;
-    page.type_into("Email", "ada@example.com").await?;
+    page.assert_see("Agra CRM").await?;
+    page.type_into("Email", "anu@example.com").await?;
     page.type_into("Password", PASSWORD).await?;
     page.check("Keep me signed in on this device").await?;
     page.press("Sign in").await?;
@@ -180,18 +180,18 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
         "JavaScript never reads the session cookie"
     );
 
-    // Switch to Acme, then to Globex; the page follows.
+    // Switch to Agra, then to Gulati; the page follows.
     page.click("Choose a workspace").await?;
-    page.press("Acme").await?;
+    page.press("Agra").await?;
     page.assert_path_is("/home").await?;
     let deals = browser.visit(server.url("/deals")).await?;
-    deals.assert_see("Working in Acme").await?;
+    deals.assert_see("Working in Agra").await?;
     let home = browser.visit(server.url("/home")).await?;
-    home.click("Acme").await?;
-    home.press("Globex").await?;
+    home.click("Agra").await?;
+    home.press("Gulati").await?;
     home.assert_path_is("/home").await?;
     let deals = browser.visit(server.url("/deals")).await?;
-    deals.assert_see("Working in Globex").await?;
+    deals.assert_see("Working in Gulati").await?;
 
     // Sign out: back to the sign-in page, and the pages are closed again.
     let home = browser.visit(server.url("/home")).await?;

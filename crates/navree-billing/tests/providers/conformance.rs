@@ -65,8 +65,8 @@ async fn fake_case() -> Case {
     let billable = BillableRef {
         billable_type: "workspace".into(),
         billable_id: WORKSPACE,
-        name: "Acme".into(),
-        email: Some("ada@example.com".into()),
+        name: "Agra".into(),
+        email: Some("anu@example.com".into()),
     };
     let checkout = billing
         .checkout(&billable, "pro")
@@ -207,7 +207,7 @@ async fn stripe_case() -> Case {
 
 async fn paddle_case() -> Case {
     let server = MockServer::start().await;
-    let sub = "/subscriptions/sub_01j8acme";
+    let sub = "/subscriptions/sub_01j8agra";
     let ok = |data| ResponseTemplate::new(200).set_body_json(pfx::envelope(data));
     Mock::given(method("POST"))
         .and(path("/transactions"))
@@ -246,7 +246,7 @@ async fn paddle_case() -> Case {
             pfx::subscription("active", "pri_pro_m", 2),
         ),
         (
-            "/customers/ctm_01j8acme/portal-sessions".to_owned(),
+            "/customers/ctm_01j8agra/portal-sessions".to_owned(),
             pfx::portal_session(),
         ),
         (
@@ -293,8 +293,8 @@ async fn paddle_case() -> Case {
     Case {
         name: "paddle",
         provider: Arc::new(provider),
-        customer: "ctm_01j8acme".into(),
-        subscription: "sub_01j8acme".into(),
+        customer: "ctm_01j8agra".into(),
+        subscription: "sub_01j8agra".into(),
         base_item: None,
         base_price: "pri_pro_m".into(),
         other_price: "pri_business_m".into(),

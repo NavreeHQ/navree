@@ -128,18 +128,18 @@ async fn a_browsers_stream_follows_its_session_workspace() {
     let app = app().await;
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada Lovelace", "ada@example.com", PASSWORD)
+        .create_user("Anu Lakhotia", "anu@example.com", PASSWORD)
         .await
         .unwrap();
     let db = app.get::<Db>().await;
     let workspaces = app.get::<Workspaces>().await;
     let uow = db.uow(None, None).await;
-    let acme = workspaces
-        .create(&uow, ada.id, NewWorkspace::named("Acme"))
+    let agra = workspaces
+        .create(&uow, ada.id, NewWorkspace::named("Agra"))
         .await
         .unwrap();
-    let globex = workspaces
-        .create(&uow, ada.id, NewWorkspace::named("Globex"))
+    let gulati = workspaces
+        .create(&uow, ada.id, NewWorkspace::named("Gulati"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -155,42 +155,42 @@ async fn a_browsers_stream_follows_its_session_workspace() {
     post(
         &browser,
         "/sign-in",
-        &[("email", "ada@example.com"), ("password", PASSWORD)],
+        &[("email", "anu@example.com"), ("password", PASSWORD)],
     )
     .await
     .assert_status(303);
-    post(&browser, "/workspace/switch", &[("workspace", "acme")])
+    post(&browser, "/workspace/switch", &[("workspace", "agra")])
         .await
         .assert_status(303);
 
-    let mut in_acme = open(&browser).await;
-    assert_eq!(in_acme.next(WAIT).await.as_deref(), Some("ui:live"));
-    live.nudge([Topic::workspace(acme.id, "deals")])
+    let mut in_agra = open(&browser).await;
+    assert_eq!(in_agra.next(WAIT).await.as_deref(), Some("ui:live"));
+    live.nudge([Topic::workspace(agra.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(in_acme.next(WAIT).await.as_deref(), Some("deals"));
-    live.nudge([Topic::workspace(globex.id, "deals")])
+    assert_eq!(in_agra.next(WAIT).await.as_deref(), Some("deals"));
+    live.nudge([Topic::workspace(gulati.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(in_acme.next(QUIET).await, None);
+    assert_eq!(in_agra.next(QUIET).await, None);
 
-    // The switch closes the open stream; the page's next one is in Globex.
-    post(&browser, "/workspace/switch", &[("workspace", "globex")])
+    // The switch closes the open stream; the page's next one is in Gulati.
+    post(&browser, "/workspace/switch", &[("workspace", "gulati")])
         .await
         .assert_status(303);
-    assert!(in_acme.ended(WAIT).await, "the old stream is closed");
-    let mut in_globex = open(&browser).await;
-    assert_eq!(in_globex.next(WAIT).await.as_deref(), Some("ui:live"));
-    live.nudge([Topic::workspace(acme.id, "deals")])
+    assert!(in_agra.ended(WAIT).await, "the old stream is closed");
+    let mut in_gulati = open(&browser).await;
+    assert_eq!(in_gulati.next(WAIT).await.as_deref(), Some("ui:live"));
+    live.nudge([Topic::workspace(agra.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(in_globex.next(QUIET).await, None);
-    live.nudge([Topic::workspace(globex.id, "deals")])
+    assert_eq!(in_gulati.next(QUIET).await, None);
+    live.nudge([Topic::workspace(gulati.id, "deals")])
         .await
         .unwrap();
-    assert_eq!(in_globex.next(WAIT).await.as_deref(), Some("deals"));
+    assert_eq!(in_gulati.next(WAIT).await.as_deref(), Some("deals"));
 
     // Signing out closes it as well.
     post(&browser, "/sign-out", &[]).await.assert_status(303);
-    assert!(in_globex.ended(WAIT).await, "signing out closes the stream");
+    assert!(in_gulati.ended(WAIT).await, "signing out closes the stream");
 }

@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "acme-cloud"
+    "name": "agra-cloud"
   },
   "auth": {
     "registration": "false"
@@ -8,7 +8,7 @@
   "database": {
     "max_connections": "20",
     "migrate_on_boot": true,
-    "url": "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+    "url": "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
   },
   "http": {
     "addr": "0.0.0.0:8080"
@@ -23,7 +23,7 @@
       "max_attempts": 5
     },
     "request_timeout_ms": 5000,
-    "service": "acme-cloud",
+    "service": "agra-cloud",
     "transport": "nats",
     "url": "nats://127.0.0.1:4222"
   },

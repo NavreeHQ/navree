@@ -80,14 +80,14 @@ async fn user(app: &TestApp, name: &str, email: &str) -> Uuid {
 #[tokio::test]
 async fn current_user_is_the_viewers_record() {
     let app = app().await;
-    let ada = user(&app, "Ada", "ada@navree.test").await;
+    let ada = user(&app, "Anu", "anu@navree.test").await;
     app.acting_as(principal(ada))
         .post("/graphql")
         .json(&json!({ "query": "{ myEmail }" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.myEmail", json!("ada@navree.test"));
+        .assert_json_path("data.myEmail", json!("anu@navree.test"));
 
     // A principal whose user is gone is not signed in.
     app.acting_as(principal(Uuid::now_v7()))
@@ -102,14 +102,14 @@ async fn current_user_is_the_viewers_record() {
 #[tokio::test]
 async fn workspace_comes_from_the_request_and_checks_the_membership() {
     let app = app().await;
-    let ada = user(&app, "Ada", "ada@navree.test").await;
-    let grace = user(&app, "Grace", "grace@navree.test").await;
+    let ada = user(&app, "Anu", "anu@navree.test").await;
+    let grace = user(&app, "Gauri", "gauri@navree.test").await;
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     let workspace = app
         .get::<Workspaces>()
         .await
-        .create(&uow, ada, NewWorkspace::named("Acme"))
+        .create(&uow, ada, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -121,7 +121,7 @@ async fn workspace_comes_from_the_request_and_checks_the_membership() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.workspaceName", json!("Acme"));
+        .assert_json_path("data.workspaceName", json!("Agra"));
 
     app.acting_as(principal(grace))
         .post("/graphql")
@@ -143,13 +143,13 @@ async fn workspace_comes_from_the_request_and_checks_the_membership() {
 #[tokio::test]
 async fn read_only_demos_answer_queries_and_refuse_mutations() {
     let app = app().await;
-    let ada = user(&app, "Ada", "ada@navree.test").await;
+    let ada = user(&app, "Anu", "anu@navree.test").await;
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     let demo = app
         .get::<DemoWorkspaces>()
         .await
-        .create(&uow, ada, NewWorkspace::named("Acme demo"))
+        .create(&uow, ada, NewWorkspace::named("Agra demo"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -163,7 +163,7 @@ async fn read_only_demos_answer_queries_and_refuse_mutations() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.workspaceName", json!("Acme demo"));
+        .assert_json_path("data.workspaceName", json!("Agra demo"));
     assert_eq!(read.header("x-navree-demo"), Some("read_only"));
     client
         .post("/graphql")

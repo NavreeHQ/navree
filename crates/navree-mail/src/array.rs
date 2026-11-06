@@ -20,7 +20,7 @@ use crate::{MailError, MailTransport, Message};
 /// # async fn main() -> Result<(), navree_mail::MailError> {
 /// let transport = ArrayTransport::new();
 /// let shared: Arc<dyn MailTransport> = Arc::new(transport.clone());
-/// shared.send(&Message::new().to("ada@example.com").subject("Hi")).await?;
+/// shared.send(&Message::new().to("anu@example.com").subject("Hi")).await?;
 /// transport.assert_sent(|m| m.subject == "Hi");
 /// # Ok(())
 /// # }

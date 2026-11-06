@@ -677,7 +677,7 @@ mod tests {
                 token: "hunter2-token".to_owned(),
             },
             &OtpVerifyInput {
-                email: "ada@example.com".to_owned(),
+                email: "anu@example.com".to_owned(),
                 code: "hunter2".to_owned(),
             },
             &ExchangeInput {

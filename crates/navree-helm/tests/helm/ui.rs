@@ -113,13 +113,13 @@ async fn pages_are_strict_and_escape_values() {
 async fn the_list_page_shows_rows_filters_actions_and_metrics() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
-    let globex = company(&app, "Globex", None).await;
+    let gulati = company(&app, "Gulati", None).await;
     deal(
         &app,
         DealSeed {
-            title: "Globex renewal",
+            title: "Gulati renewal",
             amount_cents: 1_250_000,
-            company: Some(globex.id),
+            company: Some(gulati.id),
             ..DealSeed::default()
         },
     )
@@ -131,7 +131,7 @@ async fn the_list_page_shows_rows_filters_actions_and_metrics() {
         .replace("&#x2f;", "/");
     for expected in [
         "<h1>Deals</h1>",
-        "Globex renewal",
+        "Gulati renewal",
         "$12,500.00",
         "aria-sort=\"descending\"",
         "name=\"filter[stage][in]\"",
@@ -152,13 +152,13 @@ async fn the_list_page_shows_rows_filters_actions_and_metrics() {
 async fn record_pages_show_fields_actions_and_relations() {
     let app = app().await;
     let (rep_id, rep) = user(&app, "rep").await;
-    let globex = company(&app, "Globex", Some("Springfield")).await;
+    let gulati = company(&app, "Gulati", Some("Springfield")).await;
     let own = deal(
         &app,
         DealSeed {
-            title: "Globex renewal",
+            title: "Gulati renewal",
             owner: Some(rep_id),
-            company: Some(globex.id),
+            company: Some(gulati.id),
             ..DealSeed::default()
         },
     )
@@ -168,10 +168,10 @@ async fn record_pages_show_fields_actions_and_relations() {
         .assert_status(200)
         .text()
         .replace("&#x2f;", "/");
-    assert!(html.contains("<h1>Globex renewal</h1>"));
+    assert!(html.contains("<h1>Gulati renewal</h1>"));
     assert!(html.contains(&format!(
         "href=\"/admin/resources/companies/{}\"",
-        globex.id
+        gulati.id
     )));
     assert!(
         html.contains("<strong>Secret</strong> notes"),
@@ -181,7 +181,7 @@ async fn record_pages_show_fields_actions_and_relations() {
     assert!(!html.contains("/delete\""), "reps may not delete");
     assert!(html.contains("value=\"fail\""));
 
-    let html = page(&rep, &format!("/admin/resources/companies/{}", globex.id))
+    let html = page(&rep, &format!("/admin/resources/companies/{}", gulati.id))
         .await
         .assert_status(200)
         .text()
@@ -190,8 +190,8 @@ async fn record_pages_show_fields_actions_and_relations() {
         html.contains("Deals <span class=\"muted count\">1</span>"),
         "{html}"
     );
-    assert!(html.contains("Globex renewal"));
-    assert!(html.contains(&format!("via%5Bcompany_id%5D={}", globex.id)));
+    assert!(html.contains("Gulati renewal"));
+    assert!(html.contains(&format!("via%5Bcompany_id%5D={}", gulati.id)));
 }
 
 #[tokio::test]
@@ -227,7 +227,7 @@ async fn forms_create_and_update_records() {
         &rep,
         "/admin/resources/deals",
         &[
-            ("title", "Hooli pilot"),
+            ("title", "Hariyali pilot"),
             ("amount_cents", "1,250.75"),
             ("currency", "USD"),
             ("stage", "lead"),
@@ -284,7 +284,7 @@ async fn forms_create_and_update_records() {
         &rep,
         &url,
         &[
-            ("title", "Hooli pilot, phase 2"),
+            ("title", "Hariyali pilot, phase 2"),
             ("amount_cents", "99"),
             ("priority", "false"),
         ],
@@ -292,7 +292,7 @@ async fn forms_create_and_update_records() {
     .await
     .assert_status(303);
     let saved = reload(&app, id).await.unwrap();
-    assert_eq!(saved.title, "Hooli pilot, phase 2");
+    assert_eq!(saved.title, "Hariyali pilot, phase 2");
     assert_eq!(saved.amount_cents, 9900);
     assert!(!saved.priority);
 
@@ -465,7 +465,7 @@ async fn the_dashboard_shows_metrics_or_a_hint() {
 async fn assets_are_public_and_cached_for_good() {
     let app = builder()
         .config("helm.accent", "#ff8800")
-        .config("helm.title", "Acme CRM")
+        .config("helm.title", "Agra CRM")
         .build()
         .await;
     let response = app
@@ -502,7 +502,7 @@ async fn assets_are_public_and_cached_for_good() {
         .assert_status(404);
     let (_, rep) = user(&app, "rep").await;
     let html = page(&rep, "/admin").await.text().replace("&#x2f;", "/");
-    assert!(html.contains("<title>Dashboard · Acme CRM</title>"));
+    assert!(html.contains("<title>Dashboard · Agra CRM</title>"));
 }
 
 #[tokio::test]

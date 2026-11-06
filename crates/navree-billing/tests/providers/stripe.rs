@@ -60,8 +60,8 @@ async fn customers_and_checkouts_are_authenticated_form_posts_on_the_pinned_vers
         .create_customer(&navree_billing::NewCustomer {
             billable_type: "workspace".into(),
             billable_id: WORKSPACE,
-            name: "Acme".into(),
-            email: Some("ada@example.com".into()),
+            name: "Agra".into(),
+            email: Some("anu@example.com".into()),
             idempotency_key: "navree-customer-test-1".into(),
         })
         .await
@@ -79,8 +79,8 @@ async fn customers_and_checkouts_are_authenticated_form_posts_on_the_pinned_vers
 
     let requests = server.received_requests().await.unwrap();
     let created = form(&requests[0]);
-    assert_eq!(field(&created, "name"), Some("Acme"));
-    assert_eq!(field(&created, "email"), Some("ada@example.com"));
+    assert_eq!(field(&created, "name"), Some("Agra"));
+    assert_eq!(field(&created, "email"), Some("anu@example.com"));
     assert_eq!(
         field(&created, "metadata[billable_type]"),
         Some("workspace")

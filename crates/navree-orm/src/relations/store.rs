@@ -355,8 +355,8 @@ mod tests {
     #[test]
     fn values_are_typed_replaced_cloned_and_taken() {
         let mut relations = Relations::new();
-        relations.set("owner", Some("ada".to_owned()));
-        relations.set("owner", Some("grace".to_owned()));
+        relations.set("owner", Some("anu".to_owned()));
+        relations.set("owner", Some("gauri".to_owned()));
         assert_eq!(relations.names().collect::<Vec<_>>(), ["owner"]);
         let copy = relations.clone();
         relations
@@ -365,7 +365,7 @@ mod tests {
             .replace("linus".into());
         assert_eq!(
             copy.get::<Option<String>>("owner").unwrap().as_deref(),
-            Some("grace")
+            Some("gauri")
         );
         assert!(relations.take::<u8>("owner").is_none());
         assert_eq!(relations.len(), 1, "a take of another type leaves it");

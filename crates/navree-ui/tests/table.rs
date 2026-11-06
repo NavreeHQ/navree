@@ -50,7 +50,7 @@ fn deal(id: i64) -> Deal {
         hot: false,
         company: None,
         notes: None,
-        owner: "Ada".into(),
+        owner: "Anu".into(),
     }
 }
 
@@ -126,9 +126,9 @@ fn hrefs(html: &str) -> Vec<String> {
 
 #[test]
 fn the_url_is_read_and_written_with_one_spelling() {
-    let raw = "sort=stage,-closed&search=ada+b&filter[title][contains]=x&filter[stage][in]=won,lead&filter[amount][gte]=10&filter[amount][lte]=20&filter[closed][gte]=2026-01-01&filter[hot]=true&per_page=50&page=3&density=compact&cols=title,stage,owner&w=title:240&open=7";
+    let raw = "sort=stage,-closed&search=anu+b&filter[title][contains]=x&filter[stage][in]=won,lead&filter[amount][gte]=10&filter[amount][lte]=20&filter[closed][gte]=2026-01-01&filter[hot]=true&per_page=50&page=3&density=compact&cols=title,stage,owner&w=title:240&open=7";
     let query = q(raw);
-    assert_eq!(query.search(), Some("ada b"));
+    assert_eq!(query.search(), Some("anu b"));
     assert_eq!(query.page(), 3);
     assert_eq!(query.per_page(), 50);
     assert_eq!(
@@ -170,7 +170,7 @@ fn the_url_is_read_and_written_with_one_spelling() {
         "filter%5Bclosed%5D%5Bgte%5D=2026-01-01",
         "filter%5Bhot%5D=true",
         "sort=stage%2C-closed",
-        "search=ada+b",
+        "search=anu+b",
         "page=3",
         "per_page=50",
         "density=compact",
@@ -302,7 +302,7 @@ fn every_filter_kind_round_trips_in_the_shared_grammar() {
 fn the_list_part_is_written_as_a_list_query_is() {
     use navree_http::list::ListQuery;
     let query = q(
-        "per_page=50&page=3&search=ada+b&sort=-closed&filter[hot]=true&filter[amount][lte]=20&filter[amount][gte]=10&filter[stage][in]=won,lead&filter[title][contains]=x",
+        "per_page=50&page=3&search=anu+b&sort=-closed&filter[hot]=true&filter[amount][lte]=20&filter[amount][gte]=10&filter[stage][in]=won,lead&filter[title][contains]=x",
     );
     let written = query.query_string();
     let (list, problems) = ListQuery::parse_lenient(&written);
@@ -312,7 +312,7 @@ fn the_list_part_is_written_as_a_list_query_is() {
         written,
         "the same state is the same string in Rust and in the browser"
     );
-    assert_eq!(list.search.as_deref(), Some("ada b"));
+    assert_eq!(list.search.as_deref(), Some("anu b"));
     assert_eq!(list.page, Some(3));
     assert_eq!(list.per_page, Some(50));
     assert_eq!(list.sort.len(), 1);
@@ -322,7 +322,7 @@ fn the_list_part_is_written_as_a_list_query_is() {
 
 #[test]
 fn search_and_sort_are_the_list_querys() {
-    assert_eq!(q("search=%20%20ada%20").search(), Some("ada"));
+    assert_eq!(q("search=%20%20anu%20").search(), Some("anu"));
     assert_eq!(q("search=").search(), None);
     assert_eq!(q("search=a%00b").search(), None, "a NUL is refused");
     let query = q("sort=-amount,title,-closed,stage,hot");
@@ -352,7 +352,7 @@ fn search_and_sort_are_the_list_querys() {
 #[test]
 fn the_old_names_are_no_longer_read() {
     let query = q(
-        "q=ada&per=50&f.title=x&f.stage=won&f.amount.min=1&f.amount.max=9&f.hot=true&f.amount.empty=1&after=abc&before=def",
+        "q=anu&per=50&f.title=x&f.stage=won&f.amount.min=1&f.amount.max=9&f.hot=true&f.amount.empty=1&after=abc&before=def",
     );
     assert_eq!(query.search(), None);
     assert_eq!(query.per_page(), 25);
@@ -360,7 +360,7 @@ fn the_old_names_are_no_longer_read() {
     assert_eq!(query.after(), None);
     assert_eq!(query.before(), None);
     assert_eq!(query.href(), "/deals");
-    let query = feed("q=ada&per=50&f.title=x&after=abc");
+    let query = feed("q=anu&per=50&f.title=x&after=abc");
     assert_eq!(query.search(), None);
     assert_eq!(query.per_page(), 25);
     assert!(query.filters().is_empty());
@@ -563,10 +563,10 @@ fn a_cursor_table_reads_cursor_before_and_limit() {
 
 #[test]
 fn a_cursor_tables_links_and_page_size_use_the_same_names() {
-    let query = feed("limit=50&search=ada");
+    let query = feed("limit=50&search=anu");
     let rows = vec![Feed {
         id: 1,
-        title: "Ada".into(),
+        title: "Anu".into(),
     }];
     let mut page = TablePage::new(rows, 0);
     page.next = Some("n1".into());
@@ -576,17 +576,17 @@ fn a_cursor_tables_links_and_page_size_use_the_same_names() {
     assert!(
         links
             .iter()
-            .any(|href| href == "/feed?search=ada&cursor=n1&limit=50"),
+            .any(|href| href == "/feed?search=anu&cursor=n1&limit=50"),
         "next: {links:?}"
     );
     assert!(
         links
             .iter()
-            .any(|href| href == "/feed?search=ada&before=p1&limit=50"),
+            .any(|href| href == "/feed?search=anu&before=p1&limit=50"),
         "previous: {links:?}"
     );
     assert!(
-        links.iter().any(|href| href == "/feed?search=ada&limit=50"),
+        links.iter().any(|href| href == "/feed?search=anu&limit=50"),
         "first: {links:?}"
     );
     assert!(html.contains(r#"name="limit""#), "the page size: {html}");
@@ -809,7 +809,7 @@ fn no_rows_with_no_filter_is_not_no_rows_with_a_filter() {
 #[test]
 fn chips_and_clear_links_write_the_shared_names() {
     let html = draw(
-        &q("filter[stage][in]=won&search=ada&filter[amount][gte]=5&page=2&per_page=50"),
+        &q("filter[stage][in]=won&search=anu&filter[amount][gte]=5&page=2&per_page=50"),
         &[deal(1)],
         1,
     );
@@ -819,8 +819,8 @@ fn chips_and_clear_links_write_the_shared_names() {
     // Each chip's link leaves that one thing out, goes back to page 1 and keeps the rest.
     for want in [
         format!("/deals?{stage}&{amount}&per_page=50"),
-        format!("/deals?{amount}&search=ada&per_page=50"),
-        format!("/deals?{stage}&search=ada&per_page=50"),
+        format!("/deals?{amount}&search=anu&per_page=50"),
+        format!("/deals?{stage}&search=anu&per_page=50"),
         "/deals?per_page=50".to_owned(),
     ] {
         assert!(links.contains(&want), "{want} in {links:?}");
@@ -835,21 +835,21 @@ fn chips_and_clear_links_write_the_shared_names() {
 
 #[test]
 fn the_export_link_carries_the_state_in_the_shared_names() {
-    let query = q("search=ada&filter[hot]=true&per_page=50&page=2&sort=-closed");
+    let query = q("search=anu&filter[hot]=true&per_page=50&page=2&sort=-closed");
     let rows = vec![deal(1)];
     let html = render(
         &DataTable::new("deals", &query, &rows)
             .export("/deals/export")
             .into(),
     );
-    let want = "/deals/export?filter%5Bhot%5D=true&sort=-closed&search=ada&per_page=50";
+    let want = "/deals/export?filter%5Bhot%5D=true&sort=-closed&search=anu&per_page=50";
     assert!(hrefs(&html).iter().any(|href| href == want), "{html}");
 }
 
 #[test]
 fn the_toolbar_controls_are_named_in_the_shared_grammar() {
     let html = draw(
-        &q("filter[title][contains]=ada&search=x&per_page=50"),
+        &q("filter[title][contains]=anu&search=x&per_page=50"),
         &[deal(1)],
         1,
     );
@@ -879,7 +879,7 @@ fn the_toolbar_controls_are_named_in_the_shared_grammar() {
         "{html}"
     );
     // The page size and the values in force are what the controls show.
-    assert!(html.contains(r#"value="ada""#), "{html}");
+    assert!(html.contains(r#"value="anu""#), "{html}");
     assert!(html.contains(r#"value="x""#), "{html}");
 }
 
@@ -1019,7 +1019,7 @@ fn state_without_a_control_rides_along_in_the_form() {
 
 #[test]
 fn filters_are_drawn_where_they_were_asked_for() {
-    let query = q("filter[title][contains]=ada");
+    let query = q("filter[title][contains]=anu");
     let rows = vec![deal(1)];
     let html = render(&DataTable::new("deals", &query, &rows).filter_row().into());
     assert!(html.contains("data-slot=\"filter-row\""), "{html}");
@@ -1265,7 +1265,7 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
     let row = |id: i64, code: &str, amount: Option<i64>| Local {
         id,
         name: format!("Deal {id}"),
-        company: "Acme".into(),
+        company: "Agra".into(),
         code: code.into(),
         amount,
         closed: chrono::NaiveDate::from_ymd_opt(2026, 1, u32::try_from(id).unwrap()),
@@ -1295,7 +1295,7 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
     assert!(html.contains(r#"data-v="2026-01-01""#), "{html}");
     assert!(!html.contains(r#"data-v="Deal"#), "{html}");
     assert!(!html.contains(r#"data-v="A1""#), "{html}");
-    assert!(!html.contains(r#"data-v="Acme""#), "{html}");
+    assert!(!html.contains(r#"data-v="Agra""#), "{html}");
 }
 
 #[test]

@@ -93,14 +93,14 @@ mod tests {
     async fn bodies_need_the_form_content_type() {
         let login = form(post(
             Some("application/x-www-form-urlencoded"),
-            "email=ada%40example.com&remember=true",
+            "email=anu%40example.com&remember=true",
         ))
         .await
         .unwrap();
         assert_eq!(
             login,
             Login {
-                email: "ada@example.com".into(),
+                email: "anu@example.com".into(),
                 remember: Some(true)
             }
         );

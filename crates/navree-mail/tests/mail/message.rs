@@ -10,7 +10,7 @@ use serde_json::json;
 fn base() -> Message {
     Message::new()
         .from("App <app@example.com>")
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hello")
         .text("Hi")
 }
@@ -51,13 +51,13 @@ fn extra_headers_are_checked() {
 #[test]
 fn recipients_and_sender_domain() {
     let message = Message::new()
-        .from("Acme <Hello@ACME.test>")
-        .to("ada@example.com")
+        .from("Agra <Hello@ACME.test>")
+        .to("anu@example.com")
         .cc("bob@example.com")
         .bcc("log@example.com");
     assert_eq!(
         message.recipients().collect::<Vec<_>>(),
-        ["ada@example.com", "bob@example.com", "log@example.com"]
+        ["anu@example.com", "bob@example.com", "log@example.com"]
     );
     assert_eq!(message.sender_domain().as_deref(), Some("acme.test"));
     assert_eq!(Message::new().sender_domain(), None);
@@ -87,15 +87,15 @@ fn new_fields_are_left_out_of_the_json_when_unused() {
 #[test]
 fn template_mail_takes_its_locale_from_the_context_and_names_its_template() {
     let views = Views::from_templates([("mail/hello.html", "<p>{{ name }}</p>")]).expect("views");
-    let mail = TemplateMail::new("ada@example.com", "Hi", "mail/hello")
-        .context(json!({ "name": "Ada", "locale": "ar-EG" }));
+    let mail = TemplateMail::new("anu@example.com", "Hi", "mail/hello")
+        .context(json!({ "name": "Anu", "locale": "ar-EG" }));
 
     let message = mail.build(&views).expect("build");
     assert_eq!(message.locale.as_deref(), Some("ar-EG"));
     assert_eq!(mail.template(), Some("mail/hello"));
 
-    let without = TemplateMail::new("ada@example.com", "Hi", "mail/hello")
-        .context(json!({ "name": "Ada" }))
+    let without = TemplateMail::new("anu@example.com", "Hi", "mail/hello")
+        .context(json!({ "name": "Anu" }))
         .build(&views)
         .expect("build");
     assert_eq!(without.locale, None);

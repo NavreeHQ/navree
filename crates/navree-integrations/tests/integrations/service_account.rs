@@ -10,8 +10,8 @@ use crate::support::{PEM, harness, service_account, with_workspaces};
 #[tokio::test]
 async fn a_service_account_connects_and_acts_as_the_admin() {
     let h = harness(with_workspaces).await;
-    let acme = h.workspace(crate::support::OTHER, "acme").await;
-    let owner = Owner::Workspace(acme.id);
+    let agra = h.workspace(crate::support::OTHER, "agra").await;
+    let owner = Owner::Workspace(agra.id);
     let integrations = h.integrations().await;
 
     let connection = integrations

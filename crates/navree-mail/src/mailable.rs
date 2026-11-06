@@ -121,11 +121,11 @@ impl<M: Mailable> Mailable for Held<M> {
 ///     ("mail/welcome.html", "<p>Hi {{ name }}</p>"),
 ///     ("mail/welcome.txt", "Hi {{ name }}"),
 /// ])?;
-/// let message = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-///     .context(json!({ "name": "Ada" }))
+/// let message = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+///     .context(json!({ "name": "Anu" }))
 ///     .build(&views)?;
-/// assert_eq!(message.html.as_deref(), Some("<p>Hi Ada</p>"));
-/// assert_eq!(message.text.as_deref(), Some("Hi Ada"));
+/// assert_eq!(message.html.as_deref(), Some("<p>Hi Anu</p>"));
+/// assert_eq!(message.text.as_deref(), Some("Hi Anu"));
 /// # Ok(())
 /// # }
 /// ```

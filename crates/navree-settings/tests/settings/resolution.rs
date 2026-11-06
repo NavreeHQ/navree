@@ -24,11 +24,11 @@ async fn set(world: &World, scope: Scope, patch: serde_json::Value) {
 async fn nothing_stored_resolves_to_the_defaults() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu").await;
+    let agra = world.workspace(ada, "Agra").await;
 
     let portal = settings
-        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(portal.value, PortalSettings::default());
@@ -56,20 +56,20 @@ async fn nothing_stored_resolves_to_the_defaults() {
 async fn the_inheritance_matrix() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(holding.id, agra.id).await;
 
     let levels = [
         (Scope::global(), Source::Global),
         (Scope::organization(holding.id), Source::Organization),
-        (Scope::workspace(acme.id), Source::Workspace),
-        (Scope::user(ada).in_workspace(acme.id), Source::User),
+        (Scope::workspace(agra.id), Source::Workspace),
+        (Scope::user(ada).in_workspace(agra.id), Source::User),
     ];
     // Resolved for the user in the workspace (the full chain), and for each
     // level on its own.
-    let user_scope = Scope::user(ada).in_workspace(acme.id);
+    let user_scope = Scope::user(ada).in_workspace(agra.id);
     for mask in 0u8..16 {
         for (bit, (scope, source)) in levels.iter().enumerate() {
             if mask & (1 << bit) != 0 {
@@ -123,7 +123,7 @@ async fn the_inheritance_matrix() {
 
         // The workspace on its own skips the user's level.
         let workspace = settings
-            .resolve::<PortalSettings>(Scope::workspace(acme.id))
+            .resolve::<PortalSettings>(Scope::workspace(agra.id))
             .await
             .unwrap();
         let expected_for_workspace = (0..3)
@@ -155,11 +155,11 @@ async fn the_inheritance_matrix() {
 async fn every_field_reports_its_own_source() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     // The workspace as attached: it carries its organization.
-    let acme = world.attach(holding.id, acme.id).await;
+    let agra = world.attach(holding.id, agra.id).await;
 
     set(
         &world,
@@ -175,26 +175,26 @@ async fn every_field_reports_its_own_source() {
     .await;
     set(
         &world,
-        Scope::workspace(acme.id),
-        json!({"welcome_text": "Welcome to Acme"}),
+        Scope::workspace(agra.id),
+        json!({"welcome_text": "Welcome to Agra"}),
     )
     .await;
     set(
         &world,
-        Scope::user(ada).in_workspace(acme.id),
+        Scope::user(ada).in_workspace(agra.id),
         json!({"page_size": 10}),
     )
     .await;
 
     let portal = settings
-        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::user(ada).in_workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(
         portal.value,
         PortalSettings {
             show_leaderboard: true,
-            welcome_text: "Welcome to Acme".to_owned(),
+            welcome_text: "Welcome to Agra".to_owned(),
             page_size: 10,
         }
     );
@@ -213,7 +213,7 @@ async fn every_field_reports_its_own_source() {
     assert_eq!(
         serde_json::to_value(&portal).unwrap(),
         json!({
-            "data": {"show_leaderboard": true, "welcome_text": "Welcome to Acme", "page_size": 10},
+            "data": {"show_leaderboard": true, "welcome_text": "Welcome to Agra", "page_size": 10},
             "sources": {"page_size": "user", "show_leaderboard": "organization", "welcome_text": "workspace"},
             "overridden": ["page_size"],
         })
@@ -221,7 +221,7 @@ async fn every_field_reports_its_own_source() {
 
     // The workspace's own view: its override, its organization's, the
     // global value.
-    let workspace = settings.resolve::<PortalSettings>(&acme).await.unwrap();
+    let workspace = settings.resolve::<PortalSettings>(&agra).await.unwrap();
     assert_eq!(workspace.overridden, ["welcome_text"]);
     assert_eq!(workspace.source("page_size"), Some(Source::Global));
     assert_eq!(
@@ -232,14 +232,14 @@ async fn every_field_reports_its_own_source() {
 
     // By key, as JSON (what the routes and commands use).
     let by_key = settings
-        .resolve_key("portal", Scope::workspace(acme.id))
+        .resolve_key("portal", Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(
         by_key.source("show_leaderboard"),
         Some(Source::Organization)
     );
-    assert_eq!(by_key.data["welcome_text"], "Welcome to Acme");
+    assert_eq!(by_key.data["welcome_text"], "Welcome to Agra");
     assert!(matches!(
         settings.resolve_key("nope", Scope::global()).await,
         Err(SettingsError::UnknownKey(key)) if key == "nope"
@@ -250,10 +250,10 @@ async fn every_field_reports_its_own_source() {
 async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.attach(holding.id, agra.id).await;
 
     // Notifications: global and workspace only.
     let error = world
@@ -290,7 +290,7 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
                 settings
                     .update::<NotificationSettings>(
                         &uow,
-                        Scope::workspace(acme.id),
+                        Scope::workspace(agra.id),
                         json!({"daily_digest": true}),
                     )
                     .await
@@ -301,7 +301,7 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
     // A user in the workspace reads the workspace's values: the user level
     // is skipped.
     let notifications = settings
-        .resolve::<NotificationSettings>(Scope::user(ada).in_workspace(acme.id))
+        .resolve::<NotificationSettings>(Scope::user(ada).in_workspace(agra.id))
         .await
         .unwrap();
     assert!(notifications.daily_digest);
@@ -326,13 +326,13 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
         .await
         .unwrap();
     let mine = settings
-        .resolve::<ViewPreferences>(Scope::user(ada).in_workspace(acme.id))
+        .resolve::<ViewPreferences>(Scope::user(ada).in_workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(mine.theme, "dark");
     assert_eq!(mine.source("theme"), Some(Source::User));
     let workspace = settings
-        .resolve::<ViewPreferences>(Scope::workspace(acme.id))
+        .resolve::<ViewPreferences>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(workspace.theme, "");
@@ -364,9 +364,9 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
 async fn a_workspace_scope_finds_its_organization() {
     let world = World::new().await;
     let settings = world.settings().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let holding = world.organization(ada, "Holding").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let agra = world.workspace(ada, "Agra").await;
     // An `&Organization` is a scope.
     let holding_scope = Scope::from(&holding);
     set(
@@ -378,7 +378,7 @@ async fn a_workspace_scope_finds_its_organization() {
 
     // Not attached yet: the organization's values do not apply.
     let before = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(before.source("welcome_text"), Some(Source::Default));
@@ -386,34 +386,34 @@ async fn a_workspace_scope_finds_its_organization() {
 
     // Attached: the lookup (cached) is forgotten and the organization's
     // values apply.
-    world.attach(holding.id, acme.id).await;
+    world.attach(holding.id, agra.id).await;
     let attached = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(attached.welcome_text, "Hello from the holding");
     assert_eq!(attached.source("welcome_text"), Some(Source::Organization));
     assert_eq!(attached.scope.organization_id(), Some(holding.id));
     assert_eq!(
-        settings.complete(Scope::workspace(acme.id)).await.unwrap(),
-        Scope::workspace(acme.id).in_organization(holding.id)
+        settings.complete(Scope::workspace(agra.id)).await.unwrap(),
+        Scope::workspace(agra.id).in_organization(holding.id)
     );
 
     // Detached: back to the global values.
     let organizations = world.app.get::<Organizations>().await;
     world
-        .work(|uow| async move { organizations.detach(&uow, holding.id, acme.id).await })
+        .work(|uow| async move { organizations.detach(&uow, holding.id, agra.id).await })
         .await
         .unwrap();
     let detached = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id))
         .await
         .unwrap();
     assert_eq!(detached.source("welcome_text"), Some(Source::Default));
 
     // A named organization is used as given, without a lookup.
     let named = settings
-        .resolve::<PortalSettings>(Scope::workspace(acme.id).in_organization(holding.id))
+        .resolve::<PortalSettings>(Scope::workspace(agra.id).in_organization(holding.id))
         .await
         .unwrap();
     assert_eq!(named.source("welcome_text"), Some(Source::Organization));

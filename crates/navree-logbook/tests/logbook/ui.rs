@@ -407,13 +407,13 @@ async fn mail_opens_as_sandboxed_html() {
         at: Utc::now(),
         context: EventContext::default(),
         event: TelemetryEvent::MailSent(MailSent {
-            to: vec!["ada@example.com".into()],
+            to: vec!["anu@example.com".into()],
             cc: Vec::new(),
             bcc: Vec::new(),
             from: None,
             subject: "Welcome".into(),
             text: Some("Hi".into()),
-            html: Some("<h1>Hi Ada</h1>".into()),
+            html: Some("<h1>Hi Anu</h1>".into()),
             transport: "log".into(),
             duration: Duration::from_millis(1),
         }),
@@ -437,7 +437,7 @@ async fn mail_opens_as_sandboxed_html() {
             .unwrap()
             .contains("sandbox")
     );
-    assert_eq!(page.text(), "<h1>Hi Ada</h1>");
+    assert_eq!(page.text(), "<h1>Hi Anu</h1>");
     let detail = app
         .client()
         .get(&format!("/_logbook/entries/{}", mail.id))

@@ -193,7 +193,7 @@ mod tests {
             notification_type: "deal_won".to_owned(),
             category: Some("deals".to_owned()),
             mail: TemplateMail {
-                to: vec!["ada@example.com".to_owned()],
+                to: vec!["anu@example.com".to_owned()],
                 subject: format!("Deal won: {title}"),
                 template: "mail/deal-won".to_owned(),
                 context: json!({"title": title}),
@@ -206,9 +206,9 @@ mod tests {
     fn the_language_is_not_the_function_an_app_with_translations_has() {
         let mut views = views();
         views.configure(|env| env.add_function("locale", || "fr".to_owned()));
-        let items = [item("Acme")];
+        let items = [item("Agra")];
         let options = DigestOptions::default();
-        let to = ["ada@example.com".to_owned()];
+        let to = ["anu@example.com".to_owned()];
         let message = DigestMail {
             to: &to,
             digest: Digest::Daily,
@@ -224,9 +224,9 @@ mod tests {
 
     #[test]
     fn one_mail_lists_every_item() {
-        let items = [item("Acme"), item("Globex")];
+        let items = [item("Agra"), item("Gulati")];
         let options = DigestOptions::default();
-        let to = ["ada@example.com".to_owned()];
+        let to = ["anu@example.com".to_owned()];
         let message = DigestMail {
             to: &to,
             digest: Digest::Daily,
@@ -236,25 +236,25 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.to, ["ada@example.com"]);
+        assert_eq!(message.to, ["anu@example.com"]);
         assert_eq!(message.subject, "Your notifications");
         let text = message.text.unwrap();
         assert!(text.starts_with("2 notifications"), "{text}");
-        assert!(text.contains("- Deal won: Acme\n  Acme was won."), "{text}");
+        assert!(text.contains("- Deal won: Agra\n  Agra was won."), "{text}");
         assert!(
-            text.contains("- Deal won: Globex\n  Globex was won."),
+            text.contains("- Deal won: Gulati\n  Gulati was won."),
             "{text}"
         );
         let html = message.html.unwrap();
         assert!(
-            html.contains("<h2 style=\"font-size: 15px; margin: 0 0 4px\">Deal won: Acme</h2>"),
+            html.contains("<h2 style=\"font-size: 15px; margin: 0 0 4px\">Deal won: Agra</h2>"),
             "{html}"
         );
     }
 
     #[test]
     fn a_workspace_restyles_the_digest() {
-        let items = [item("Acme")];
+        let items = [item("Agra")];
         let options = DigestOptions {
             subject: "{{ count }} update{% if count != 1 %}s{% endif %} ({{ digest }})".to_owned(),
             ..DigestOptions::default()
@@ -262,11 +262,11 @@ mod tests {
         let mut overrides = NotificationOverrides::default();
         overrides
             .style
-            .insert("footer".to_owned(), json!("Acme Corp, Pune"));
+            .insert("footer".to_owned(), json!("Agra Corp, Pune"));
         overrides
             .style
             .insert("brand_color".to_owned(), json!("#0F766E"));
-        let to = ["ada@example.com".to_owned()];
+        let to = ["anu@example.com".to_owned()];
         let message = DigestMail {
             to: &to,
             digest: Digest::Weekly,
@@ -277,13 +277,13 @@ mod tests {
         .build(&views())
         .unwrap();
         assert_eq!(message.subject, "1 update (weekly)");
-        assert!(message.text.as_deref().unwrap().contains("Acme Corp, Pune"));
+        assert!(message.text.as_deref().unwrap().contains("Agra Corp, Pune"));
         assert!(message.html.as_deref().unwrap().contains("color: #0F766E"));
 
         overrides.templates.insert(
             DIGEST_TYPE.to_owned(),
             MailOverride {
-                subject: Some("Acme digest".to_owned()),
+                subject: Some("Agra digest".to_owned()),
                 text: Some("{% for item in items %}* {{ item.subject }}{% endfor %}".to_owned()),
                 html: None,
             },
@@ -297,7 +297,7 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.subject, "Acme digest");
-        assert_eq!(message.text.as_deref(), Some("* Deal won: Acme"));
+        assert_eq!(message.subject, "Agra digest");
+        assert_eq!(message.text.as_deref(), Some("* Deal won: Agra"));
     }
 }

@@ -1,4 +1,4 @@
--brand = Acme CRM
+-brand = Agra CRM
 
 welcome = Welcome to { -brand }, { $name }!
 mail-footer = Sent by { -brand }.

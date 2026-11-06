@@ -101,11 +101,11 @@ async fn valid_wraps_a_valid_input_with_the_json_field_errors() {
 
     app.client()
         .post("/lines/users")
-        .body("name=Ada\nemail=ada@example.com\nage=36\ntags=[\"x\"]")
+        .body("name=Anu\nemail=anu@example.com\nage=36\ntags=[\"x\"]")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("ok.name", json!("Ada"));
+        .assert_json_path("ok.name", json!("Anu"));
 
     let response = app
         .client()
@@ -126,7 +126,7 @@ async fn valid_wraps_a_valid_input_with_the_json_field_errors() {
     let response = app
         .client()
         .post("/lines/users")
-        .body("name=Ada\nemail=ada@example.com\ntags=[\"x\"]")
+        .body("name=Anu\nemail=anu@example.com\ntags=[\"x\"]")
         .send()
         .await
         .assert_error(400, None);

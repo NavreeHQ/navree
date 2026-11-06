@@ -98,11 +98,11 @@ impl<M: Model> ErasedRecord for Record<M> {
 /// # use navree_orm::__doc_models::*;
 /// use navree_orm::relations::AnyRecord;
 ///
-/// let any = AnyRecord::new(Record::new(Company { name: "Acme".into(), ..Company::default() }));
+/// let any = AnyRecord::new(Record::new(Company { name: "Agra".into(), ..Company::default() }));
 /// assert_eq!(any.model_name(), "Company");
 /// assert_eq!(any.morph_name(), "company");
 /// assert!(any.is::<Company>());
-/// assert_eq!(any.downcast_ref::<Company>().unwrap().name, "Acme");
+/// assert_eq!(any.downcast_ref::<Company>().unwrap().name, "Agra");
 /// assert!(any.downcast_ref::<Deal>().is_none());
 /// let company: Record<Company> = any.downcast().ok().unwrap();
 /// # let _ = company;

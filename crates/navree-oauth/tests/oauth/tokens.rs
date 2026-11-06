@@ -156,7 +156,7 @@ async fn handlers_read_the_token_with_oauth_token() {
         .bearer(&read.access_token)
         .send()
         .await
-        .assert_json_path("oauth.client_name", json!("Acme mobile"))
+        .assert_json_path("oauth.client_name", json!("Agra mobile"))
         .assert_json_path("oauth.scopes", json!(["deals:read"]))
         .assert_json_path("oauth.user_id", json!(user.id))
         .assert_json_path("oauth.workspace_id", json!(null));

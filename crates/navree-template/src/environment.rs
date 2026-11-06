@@ -150,8 +150,8 @@ struct Loaded {
 ///
 /// let mut env = Environment::new();
 /// env.add_template("hello.html", "<p>Hello {{ name }}!</p>").unwrap();
-/// let html = env.get_template("hello.html").unwrap().render(json!({ "name": "<Ada>" })).unwrap();
-/// assert_eq!(html, "<p>Hello &lt;Ada&gt;!</p>");
+/// let html = env.get_template("hello.html").unwrap().render(json!({ "name": "<Anu>" })).unwrap();
+/// assert_eq!(html, "<p>Hello &lt;Anu&gt;!</p>");
 /// ```
 pub struct Environment {
     templates: BTreeMap<String, Arc<Compiled>>,

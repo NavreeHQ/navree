@@ -18,7 +18,7 @@ async fn app() -> TestApp {
         }))
         .build()
         .await;
-    seed(&app, &[("ada@example.com", "Ada", Some(36), true)]).await;
+    seed(&app, &[("anu@example.com", "Anu", Some(36), true)]).await;
     app
 }
 

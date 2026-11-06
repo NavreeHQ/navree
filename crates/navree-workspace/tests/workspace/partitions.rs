@@ -9,27 +9,27 @@ use crate::support::{World, org_builder};
 #[tokio::test]
 async fn partitions_are_created_renamed_listed_and_deleted() {
     let world = World::with(org_builder()).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let other = world.workspace(ada, "Other").await;
     let partitions = world.partitions().await;
     let mut events = world
         .events(&["workspace.partition_created", "workspace.partition_deleted"])
         .await;
 
-    let uk = world.partition(acme.id, "acme.co.uk").await;
-    assert_eq!(uk.slug, "acme-co-uk");
-    assert_eq!(uk.name, "acme.co.uk");
-    assert_eq!(uk.workspace_id, acme.id);
-    let de = world.partition(acme.id, "acme.de").await;
+    let uk = world.partition(agra.id, "agra.co.uk").await;
+    assert_eq!(uk.slug, "agra-co-uk");
+    assert_eq!(uk.name, "agra.co.uk");
+    assert_eq!(uk.workspace_id, agra.id);
+    let de = world.partition(agra.id, "agra.de").await;
     // Slugs are unique per workspace, not across workspaces.
-    let elsewhere = world.partition(other.id, "acme.co.uk").await;
-    assert_eq!(elsewhere.slug, "acme-co-uk");
+    let elsewhere = world.partition(other.id, "agra.co.uk").await;
+    assert_eq!(elsewhere.slug, "agra-co-uk");
     let service = partitions.clone();
     let taken = world
         .work(|uow| async move {
             service
-                .create(&uow, acme.id, NewPartition::named("UK").slug("acme-co-uk"))
+                .create(&uow, agra.id, NewPartition::named("UK").slug("agra-co-uk"))
                 .await
         })
         .await;
@@ -41,17 +41,17 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
     let derived = world
         .work(|uow| async move {
             service
-                .create(&uow, acme.id, NewPartition::named("acme.co.uk"))
+                .create(&uow, agra.id, NewPartition::named("agra.co.uk"))
                 .await
         })
         .await
         .unwrap();
-    assert_eq!(derived.slug, "acme-co-uk-2");
+    assert_eq!(derived.slug, "agra-co-uk-2");
     let service = partitions.clone();
     let empty = world
         .work(|uow| async move {
             service
-                .create(&uow, acme.id, NewPartition::named(" "))
+                .create(&uow, agra.id, NewPartition::named(" "))
                 .await
         })
         .await;
@@ -62,21 +62,21 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
 
     assert_eq!(
         partitions
-            .list(acme.id)
+            .list(agra.id)
             .await
             .unwrap()
             .iter()
             .map(|p| p.name.as_str())
             .collect::<Vec<_>>(),
-        ["acme.co.uk", "acme.co.uk", "acme.de"]
+        ["agra.co.uk", "agra.co.uk", "agra.de"]
     );
     assert_eq!(
-        partitions.resolve(acme.id, "acme-de").await.unwrap().id,
+        partitions.resolve(agra.id, "agra-de").await.unwrap().id,
         de.id
     );
     assert_eq!(
         partitions
-            .resolve(acme.id, &uk.id.to_string())
+            .resolve(agra.id, &uk.id.to_string())
             .await
             .unwrap()
             .id,
@@ -84,26 +84,26 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
     );
     // Another workspace's partition is not found here.
     assert!(matches!(
-        partitions.resolve(acme.id, &elsewhere.id.to_string()).await,
+        partitions.resolve(agra.id, &elsewhere.id.to_string()).await,
         Err(WorkspaceError::PartitionNotFound(_))
     ));
 
     let service = partitions.clone();
     let renamed = world
-        .work(|uow| async move { service.rename(&uow, acme.id, de.id, "acme.de (EU)").await })
+        .work(|uow| async move { service.rename(&uow, agra.id, de.id, "agra.de (EU)").await })
         .await
         .unwrap();
-    assert_eq!(renamed.name, "acme.de (EU)");
-    assert_eq!(renamed.slug, "acme-de");
+    assert_eq!(renamed.name, "agra.de (EU)");
+    assert_eq!(renamed.slug, "agra-de");
 
     let service = partitions.clone();
     world
-        .work(|uow| async move { service.delete(&uow, acme.id, derived.id).await })
+        .work(|uow| async move { service.delete(&uow, agra.id, derived.id).await })
         .await
         .unwrap();
     let service = partitions.clone();
     let wrong_workspace = world
-        .work(|uow| async move { service.delete(&uow, acme.id, elsewhere.id).await })
+        .work(|uow| async move { service.delete(&uow, agra.id, elsewhere.id).await })
         .await;
     assert!(matches!(
         wrong_workspace,
@@ -120,37 +120,37 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
             "workspace.partition_deleted"
         ]
     );
-    assert_eq!(drained[0].1["slug"], json!("acme-co-uk"));
+    assert_eq!(drained[0].1["slug"], json!("agra-co-uk"));
 }
 
 #[tokio::test]
 async fn members_see_all_partitions_or_only_their_grants() {
     let world = World::with(org_builder()).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
     let other = world.workspace(ada, "Other").await;
-    world.join(acme.id, grace, "member").await;
-    let uk = world.partition(acme.id, "acme.co.uk").await;
-    let de = world.partition(acme.id, "acme.de").await;
+    world.join(agra.id, grace, "member").await;
+    let uk = world.partition(agra.id, "agra.co.uk").await;
+    let de = world.partition(agra.id, "agra.de").await;
     let foreign = world.partition(other.id, "other.com").await;
     let partitions = world.partitions().await;
     let mut events = world.events(&["workspace.partition_access_changed"]).await;
 
     assert_eq!(
-        partitions.access(acme.id, grace).await.unwrap(),
+        partitions.access(agra.id, grace).await.unwrap(),
         Selector::All
     );
     world
-        .limit_partitions(acme.id, grace, PartitionSelector::only([uk.id]))
+        .limit_partitions(agra.id, grace, PartitionSelector::only([uk.id]))
         .await;
     assert_eq!(
-        partitions.access(acme.id, grace).await.unwrap(),
+        partitions.access(agra.id, grace).await.unwrap(),
         Selector::Only(vec![uk.id])
     );
     assert_eq!(
         partitions
-            .visible(acme.id, &partitions.access(acme.id, grace).await.unwrap())
+            .visible(agra.id, &partitions.access(agra.id, grace).await.unwrap())
             .await
             .unwrap()
             .iter()
@@ -161,7 +161,7 @@ async fn members_see_all_partitions_or_only_their_grants() {
     let member = world
         .members()
         .await
-        .find(acme.id, grace)
+        .find(agra.id, grace)
         .await
         .unwrap()
         .unwrap();
@@ -173,7 +173,7 @@ async fn members_see_all_partitions_or_only_their_grants() {
     let foreign_grant = world
         .work(|uow| async move {
             service
-                .grant(&uow, acme.id, grace, PartitionSelector::only([foreign.id]))
+                .grant(&uow, agra.id, grace, PartitionSelector::only([foreign.id]))
                 .await
         })
         .await;
@@ -188,7 +188,7 @@ async fn members_see_all_partitions_or_only_their_grants() {
     let owner = world
         .work(|uow| async move {
             service
-                .grant(&uow, acme.id, ada, PartitionSelector::only([uk.id]))
+                .grant(&uow, agra.id, ada, PartitionSelector::only([uk.id]))
                 .await
         })
         .await;
@@ -201,18 +201,18 @@ async fn members_see_all_partitions_or_only_their_grants() {
     // Deleting a partition drops its grants.
     let service = partitions.clone();
     world
-        .work(|uow| async move { service.delete(&uow, acme.id, uk.id).await })
+        .work(|uow| async move { service.delete(&uow, agra.id, uk.id).await })
         .await
         .unwrap();
     assert_eq!(
-        partitions.access(acme.id, grace).await.unwrap(),
+        partitions.access(agra.id, grace).await.unwrap(),
         Selector::Only(vec![])
     );
     world
-        .limit_partitions(acme.id, grace, PartitionSelector::All)
+        .limit_partitions(agra.id, grace, PartitionSelector::All)
         .await;
     assert_eq!(
-        partitions.access(acme.id, grace).await.unwrap(),
+        partitions.access(agra.id, grace).await.unwrap(),
         Selector::All
     );
     let _ = de;

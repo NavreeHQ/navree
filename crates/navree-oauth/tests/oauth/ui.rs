@@ -24,7 +24,7 @@ async fn the_page_shows_the_request_and_the_decisions_go_back_to_the_client() {
         .await
         .assert_status(200)
         .text();
-    assert!(page.contains("Authorize Acme mobile"), "{page}");
+    assert!(page.contains("Authorize Agra mobile"), "{page}");
     assert!(
         page.contains("deals:read") && page.contains("Read your deals"),
         "{page}"

@@ -25,7 +25,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::Sha256;
 
-/// `billing.acme_pay`.
+/// `billing.agra_pay`.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct AcmeOptions {
@@ -35,18 +35,18 @@ struct AcmeOptions {
 
 /// A UPI gateway shaped like the Indian ones: amounts in paise, UPI intent
 /// links, notes as metadata, webhooks signed with an HMAC of the body.
-struct AcmePay {
+struct AgraPay {
     secret: Option<Secret<String>>,
     vpa: String,
 }
 
-impl AcmePay {
-    fn new(context: &ProviderContext) -> Result<AcmePay, BoxError> {
-        let options: AcmeOptions = context.section("billing.acme_pay")?;
+impl AgraPay {
+    fn new(context: &ProviderContext) -> Result<AgraPay, BoxError> {
+        let options: AcmeOptions = context.section("billing.agra_pay")?;
         if options.vpa.is_empty() {
-            return Err("billing.acme_pay.vpa is required".into());
+            return Err("billing.agra_pay.vpa is required".into());
         }
-        Ok(AcmePay {
+        Ok(AgraPay {
             secret: options.webhook_secret,
             vpa: options.vpa,
         })
@@ -59,9 +59,9 @@ fn hmac_hex(secret: &str, body: &[u8]) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
-impl BillingProvider for AcmePay {
+impl BillingProvider for AgraPay {
     fn name(&self) -> &'static str {
-        "acme_pay"
+        "agra_pay"
     }
 
     fn capabilities(&self) -> &'static [Capability] {
@@ -74,7 +74,7 @@ impl BillingProvider for AcmePay {
     ) -> BoxFuture<'a, Result<ProviderPayment, ProviderError>> {
         Box::pin(async move {
             let url = format!(
-                "upi://pay?pa={}&pn=Acme&am={}&cu={}&tr={}",
+                "upi://pay?pa={}&pn=Agra&am={}&cu={}&tr={}",
                 self.vpa,
                 request.amount.major(),
                 request.amount.currency_code(),
@@ -97,7 +97,7 @@ impl BillingProvider for AcmePay {
 
     fn webhook_event_id(&self, headers: &HeaderMap) -> Option<String> {
         headers
-            .get("x-acme-event-id")
+            .get("x-agra-event-id")
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned)
     }
@@ -111,10 +111,10 @@ impl BillingProvider for AcmePay {
     ) -> Result<(), WebhookError> {
         let secret = self.secret.as_ref().ok_or(WebhookError::NoSecret)?;
         let signature = headers
-            .get("x-acme-signature")
-            .ok_or(WebhookError::MissingSignature("x-acme-signature"))?
+            .get("x-agra-signature")
+            .ok_or(WebhookError::MissingSignature("x-agra-signature"))?
             .to_str()
-            .map_err(|_| WebhookError::MalformedSignature("x-acme-signature"))?;
+            .map_err(|_| WebhookError::MalformedSignature("x-agra-signature"))?;
         if signature == hmac_hex(secret.expose(), body) {
             Ok(())
         } else {
@@ -124,7 +124,7 @@ impl BillingProvider for AcmePay {
 
     fn parse_webhook(&self, body: &[u8]) -> Result<WebhookEvent, ProviderError> {
         let decode = |message: &str| ProviderError::Decode {
-            provider: "acme_pay",
+            provider: "agra_pay",
             message: message.to_owned(),
         };
         let event: Value = serde_json::from_slice(body).map_err(|_| decode("not JSON"))?;
@@ -187,18 +187,18 @@ impl BillingProvider for Liar {
     }
 }
 
-fn acme_pay() -> impl navree_kernel::Module {
-    BillingModule::provider("acme_pay", |context: ProviderContext| async move {
-        AcmePay::new(&context)
+fn agra_pay() -> impl navree_kernel::Module {
+    BillingModule::provider("agra_pay", |context: ProviderContext| async move {
+        AgraPay::new(&context)
     })
 }
 
 fn app() -> TestAppBuilder {
     crate::servers::database(TestApp::builder())
         .config("billing.routes", false)
-        .config("billing.provider", "acme_pay")
-        .config("billing.acme_pay.vpa", "acmepay@icici")
-        .config("billing.acme_pay.webhook_secret", "acme_whsec_1")
+        .config("billing.provider", "agra_pay")
+        .config("billing.agra_pay.vpa", "agrapay@icici")
+        .config("billing.agra_pay.webhook_secret", "agra_whsec_1")
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(BillingModule::from_config())
@@ -221,18 +221,18 @@ fn captured(reference: &str) -> Value {
 fn signed(body: &[u8], event_id: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
-        "x-acme-signature",
-        HeaderValue::from_str(&hmac_hex("acme_whsec_1", body)).unwrap(),
+        "x-agra-signature",
+        HeaderValue::from_str(&hmac_hex("agra_whsec_1", body)).unwrap(),
     );
-    headers.insert("x-acme-event-id", HeaderValue::from_str(event_id).unwrap());
+    headers.insert("x-agra-event-id", HeaderValue::from_str(event_id).unwrap());
     headers
 }
 
 #[tokio::test]
 async fn a_registered_provider_takes_upi_payments_and_its_own_webhooks() {
-    let app = app().module(acme_pay()).build().await;
+    let app = app().module(agra_pay()).build().await;
     let billing = app.get::<Billing>().await;
-    assert_eq!(billing.provider().name(), "acme_pay");
+    assert_eq!(billing.provider().name(), "agra_pay");
     assert!(billing.supports(Capability::Upi));
     assert!(!billing.supports(Capability::Subscriptions));
 
@@ -247,7 +247,7 @@ async fn a_registered_provider_takes_upi_payments_and_its_own_webhooks() {
     assert_eq!(
         payment.next_action,
         Some(PaymentAction::UpiIntent {
-            url: "upi://pay?pa=acmepay@icici&pn=Acme&am=1499.00&cu=INR&tr=INV-2026-0042".into()
+            url: "upi://pay?pa=agrapay@icici&pn=Agra&am=1499.00&cu=INR&tr=INV-2026-0042".into()
         })
     );
     // What the provider does not do answers Unsupported.
@@ -276,7 +276,7 @@ async fn a_registered_provider_takes_upi_payments_and_its_own_webhooks() {
     assert!(!receipt.duplicate);
     assert_eq!(receipt.provider_event_id, "evt_hdr_1", "the header's id");
     let event = paid.try_recv().unwrap();
-    assert_eq!(event["provider"], "acme_pay");
+    assert_eq!(event["provider"], "agra_pay");
     assert_eq!(event["status"], "paid");
     assert_eq!(event["method"], "upi");
     assert_eq!(event["reference"], "INV-2026-0042");
@@ -298,7 +298,7 @@ async fn a_registered_provider_takes_upi_payments_and_its_own_webhooks() {
 
     // Its own scheme refuses a body it did not sign.
     let mut forged = signed(&body, "evt_hdr_2");
-    forged.insert("x-acme-signature", HeaderValue::from_static("00ff"));
+    forged.insert("x-agra-signature", HeaderValue::from_static("00ff"));
     let error = billing.receive_webhook(&forged, &body).await.unwrap_err();
     assert!(
         matches!(
@@ -321,7 +321,7 @@ async fn boot_error(builder: TestAppBuilder) -> String {
 #[tokio::test]
 async fn registration_mistakes_fail_the_boot() {
     let error = boot_error(app()).await;
-    assert!(error.contains("billing.provider is `acme_pay`"), "{error}");
+    assert!(error.contains("billing.provider is `agra_pay`"), "{error}");
     assert!(error.contains("BillingModule::provider"), "{error}");
 
     let error = boot_error(app().module(BillingModule::provider(
@@ -332,20 +332,20 @@ async fn registration_mistakes_fail_the_boot() {
     assert!(error.contains("built-in"), "{error}");
 
     let error = boot_error(app().module(BillingModule::provider(
-        "acme_pay",
+        "agra_pay",
         |_: ProviderContext| async { Ok::<_, BoxError>(Liar) },
     )))
     .await;
     assert!(error.contains("names itself `someone_else`"), "{error}");
 
-    let error = boot_error(app().module(acme_pay()).module(BillingModule::provider(
-        "acme_pay",
+    let error = boot_error(app().module(agra_pay()).module(BillingModule::provider(
+        "agra_pay",
         |_: ProviderContext| async { Ok::<_, BoxError>(Liar) },
     )))
     .await;
     assert!(error.contains("registered 2 times"), "{error}");
 
     // The provider's own checks fail the boot too.
-    let error = boot_error(app().config("billing.acme_pay.vpa", "").module(acme_pay())).await;
-    assert!(error.contains("billing.acme_pay.vpa"), "{error}");
+    let error = boot_error(app().config("billing.agra_pay.vpa", "").module(agra_pay())).await;
+    assert!(error.contains("billing.agra_pay.vpa"), "{error}");
 }

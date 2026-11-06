@@ -15,7 +15,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 const deal: components["schemas"]["Deal"] = {
   __type: "Deal",
   id: "d1",
-  title: "Acme renewal",
+  title: "Agra renewal",
   stage: "won",
   amount_cents: 120000,
   owner_id: null,
@@ -36,11 +36,11 @@ function recording(respond: (request: Request) => Response | Promise<Response>, 
 
 describe("cookie mode (the default: a browser behind a backend-for-frontend)", () => {
   it("sends same-origin credentials, Accept: application/json, a request id, and no Authorization", async () => {
-    const { client, requests } = recording(() => json({ __type: "User", id: "u1", name: "Ada", email: "a@x.test" }));
+    const { client, requests } = recording(() => json({ __type: "User", id: "u1", name: "Anu", email: "a@x.test" }));
 
     const user = await unwrap(client.GET("/api/auth/me"));
 
-    expect(user.name).toBe("Ada");
+    expect(user.name).toBe("Anu");
     const [request] = requests;
     expect(request!.url).toBe(`${BASE}/api/auth/me`);
     expect(request!.credentials).toBe("same-origin");
@@ -96,29 +96,29 @@ describe("bearer mode (servers, scripts, mobile)", () => {
 
 describe("workspaces", () => {
   it("sends X-Workspace from a value or a function", async () => {
-    let slug: string | undefined = "acme";
+    let slug: string | undefined = "agra";
     const { client, requests } = recording(() => json(deal), { workspace: () => slug });
     await client.GET("/api/v1/deals/{id}", { params: { path: { id: "d1" } } });
     slug = undefined;
     await client.GET("/api/v1/deals/{id}", { params: { path: { id: "d1" } } });
 
-    expect(requests[0]!.headers.get("x-workspace")).toBe("acme");
+    expect(requests[0]!.headers.get("x-workspace")).toBe("agra");
     expect(requests[1]!.headers.get("x-workspace")).toBeNull();
   });
 
   it("uses the app's own header name (workspace.header)", async () => {
-    const { client, requests } = recording(() => json(deal), { workspace: "acme", workspaceHeader: "X-Team" });
+    const { client, requests } = recording(() => json(deal), { workspace: "agra", workspaceHeader: "X-Team" });
     await client.GET("/api/v1/deals/{id}", { params: { path: { id: "d1" } } });
-    expect(requests[0]!.headers.get("x-team")).toBe("acme");
+    expect(requests[0]!.headers.get("x-team")).toBe("agra");
   });
 
   it("lets a request override the workspace and other headers", async () => {
-    const { client, requests } = recording(() => json(deal), { workspace: "acme", headers: { "Accept-Language": "fr" } });
+    const { client, requests } = recording(() => json(deal), { workspace: "agra", headers: { "Accept-Language": "fr" } });
     await client.GET("/api/v1/deals/{id}", {
       params: { path: { id: "d1" } },
-      headers: { "X-Workspace": "globex" },
+      headers: { "X-Workspace": "gulati" },
     });
-    expect(requests[0]!.headers.get("x-workspace")).toBe("globex");
+    expect(requests[0]!.headers.get("x-workspace")).toBe("gulati");
     expect(requests[0]!.headers.get("accept-language")).toBe("fr");
   });
 });
@@ -139,7 +139,7 @@ describe("list queries", () => {
     const query = listQuery().where("stage", "won").where("amount_cents", "gte", 1000).sort("-created_at").page(2).perPage(25);
     const page = await unwrap(client.GET("/api/v1/deals", { params: { query: query.toQuery() } }));
 
-    expect(page.data[0]!.title).toBe("Acme renewal");
+    expect(page.data[0]!.title).toBe("Agra renewal");
     expect(decodeURIComponent(new URL(requests[0]!.url).search)).toBe(
       "?filter[stage]=won&filter[amount_cents][gte]=1000&sort=-created_at&page=2&per_page=25",
     );
@@ -220,14 +220,14 @@ describe("raw requests (exports, streams, channel authorization)", () => {
         request.url.endsWith("/export")
           ? new Response("id,title\r\n", { headers: { "content-type": "text/csv" } })
           : new Response(null, { status: 401 }),
-      { workspace: "acme", onUnauthorized },
+      { workspace: "agra", onUnauthorized },
     );
 
     const csv = await client.raw("/api/v1/deals/export", { headers: { Accept: "text/csv" } });
     expect(await csv.text()).toBe("id,title\r\n");
     expect(requests[0]!.url).toBe(`${BASE}/api/v1/deals/export`);
     expect(requests[0]!.headers.get("accept")).toBe("text/csv");
-    expect(requests[0]!.headers.get("x-workspace")).toBe("acme");
+    expect(requests[0]!.headers.get("x-workspace")).toBe("agra");
     expect(requests[0]!.credentials).toBe("same-origin");
 
     await client.raw("/broadcasting/auth", { method: "POST" });

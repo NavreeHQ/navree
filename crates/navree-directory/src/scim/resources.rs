@@ -671,16 +671,16 @@ mod tests {
         json!({
             "schemas": [USER_SCHEMA, ENTERPRISE_USER_SCHEMA],
             "externalId": "8f6c9a1e-5d2b-4c3a-9e8f-7a6b5c4d3e2f",
-            "userName": "ada@acme.test",
+            "userName": "anu@acme.test",
             "active": "True",
-            "displayName": "Ada Lovelace",
+            "displayName": "Anu Lakhotia",
             "title": "Principal engineer",
             "preferredLanguage": "en-GB",
             "password": "Secret!123",
             "id": "client-chosen",
             "meta": { "resourceType": "User" },
-            "name": { "givenName": "Ada", "familyName": "Lovelace", "formatted": "Ada Lovelace" },
-            "emails": [{ "primary": "true", "type": "work", "value": "ada@acme.test" }],
+            "name": { "givenName": "Anu", "familyName": "Lakhotia", "formatted": "Anu Lakhotia" },
+            "emails": [{ "primary": "true", "type": "work", "value": "anu@acme.test" }],
             "phoneNumbers": [{ "type": "mobile", "value": "+44 20 7946 0958" }],
             "addresses": [{ "type": "work", "country": "GB" }],
             ENTERPRISE_USER_SCHEMA: {
@@ -698,7 +698,7 @@ mod tests {
         assert!(stored.get("password").is_none());
         assert!(stored.get("id").is_none());
         assert!(stored.get("meta").is_none());
-        assert_eq!(stored["userName"], json!("ada@acme.test"));
+        assert_eq!(stored["userName"], json!("anu@acme.test"));
         assert!(stored_resource(&json!([1])).is_err());
     }
 
@@ -708,12 +708,12 @@ mod tests {
         let (user, has_external_id) = user_from_resource(&stored).unwrap();
         assert!(has_external_id);
         assert_eq!(user.external_id, "8f6c9a1e-5d2b-4c3a-9e8f-7a6b5c4d3e2f");
-        assert_eq!(user.user_name, "ada@acme.test");
+        assert_eq!(user.user_name, "anu@acme.test");
         assert!(user.active);
-        assert_eq!(user.given_name.as_deref(), Some("Ada"));
-        assert_eq!(user.family_name.as_deref(), Some("Lovelace"));
-        assert_eq!(user.display_name.as_deref(), Some("Ada Lovelace"));
-        assert_eq!(user.primary_email(), Some("ada@acme.test"));
+        assert_eq!(user.given_name.as_deref(), Some("Anu"));
+        assert_eq!(user.family_name.as_deref(), Some("Lakhotia"));
+        assert_eq!(user.display_name.as_deref(), Some("Anu Lakhotia"));
+        assert_eq!(user.primary_email(), Some("anu@acme.test"));
         assert!(user.emails[0].primary);
         assert_eq!(user.primary_phone(), Some("+44 20 7946 0958"));
         assert_eq!(user.title.as_deref(), Some("Principal engineer"));
@@ -730,7 +730,7 @@ mod tests {
         );
         assert_eq!(
             user.attributes["name"],
-            json!({ "formatted": "Ada Lovelace" })
+            json!({ "formatted": "Anu Lakhotia" })
         );
         assert_eq!(
             user.attributes[ENTERPRISE_USER_SCHEMA],
@@ -761,12 +761,12 @@ mod tests {
             "emails must be an array"
         );
         let (user, has_external_id) =
-            user_from_resource(&json!({ "userName": "grace", "active": false })).unwrap();
+            user_from_resource(&json!({ "userName": "gauri", "active": false })).unwrap();
         assert!(!has_external_id);
         assert!(!user.active);
         assert_eq!(user.external_id, "");
         let (user, _) = user_from_resource(&json!({
-            "userName": "alan",
+            "userName": "arun",
             "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": { "manager": "m-1" }
         }))
         .unwrap();
@@ -780,7 +780,7 @@ mod tests {
             "displayName": "Engineering",
             "externalId": "grp-eng",
             "description": "Builders",
-            "members": [{ "value": "u1", "display": "Ada" }, { "value": "u2" }, { "value": "u1" }]
+            "members": [{ "value": "u1", "display": "Anu" }, { "value": "u2" }, { "value": "u1" }]
         }))
         .unwrap();
         assert_eq!(group.display_name, "Engineering");
@@ -831,7 +831,7 @@ mod tests {
         );
         assert_eq!(rendered["meta"]["version"], json!("W/\"abc123\""));
         assert_eq!(rendered["groups"], json!([]));
-        assert_eq!(rendered["userName"], json!("ada@acme.test"));
+        assert_eq!(rendered["userName"], json!("anu@acme.test"));
         assert!(rendered.get("password").is_none());
     }
 
@@ -840,8 +840,8 @@ mod tests {
         let user = json!({
             "schemas": [USER_SCHEMA],
             "id": "u1",
-            "userName": "ada",
-            "name": { "givenName": "Ada", "familyName": "Lovelace" },
+            "userName": "anu",
+            "name": { "givenName": "Anu", "familyName": "Lakhotia" },
             "emails": [{ "value": "a@acme.test", "type": "work" }],
             "meta": { "resourceType": "User" }
         });
@@ -851,13 +851,13 @@ mod tests {
             json!({
                 "schemas": [USER_SCHEMA],
                 "id": "u1",
-                "userName": "ada",
-                "name": { "givenName": "Ada" }
+                "userName": "anu",
+                "name": { "givenName": "Anu" }
             })
         );
         let core =
             Projection::new(Some(&format!("{USER_SCHEMA}:userName")), None).apply(user.clone());
-        assert_eq!(core["userName"], json!("ada"));
+        assert_eq!(core["userName"], json!("anu"));
         assert!(core.get("name").is_none());
         let without = Projection::new(None, Some("emails.type,meta,id")).apply(user);
         assert_eq!(without["emails"], json!([{ "value": "a@acme.test" }]));

@@ -68,7 +68,7 @@ pub struct Contact {
 
 #[accessors]
 impl Contact {
-    /// "Ada <ada@example.com>".
+    /// "Anu <anu@example.com>".
     #[accessor]
     pub fn display(&self) -> String {
         format!("{} <{}>", self.name, self.email)
@@ -106,8 +106,8 @@ impl Resource<Contact> for ContactCard {
 fn ada() -> Contact {
     Contact {
         id: 1,
-        name: "Ada".into(),
-        email: "ada@example.com".into(),
+        name: "Anu".into(),
+        email: "anu@example.com".into(),
         phone: "555-0100".into(),
         tier: Tier::Pro,
         nickname: None,
@@ -123,7 +123,7 @@ fn records_become_resources_with_their_subject_type() {
         contact.to_resource::<ContactCard>(),
         ContactCard {
             id: 1,
-            label: "Ada <ada@example.com>".into(),
+            label: "Anu <anu@example.com>".into(),
             tier: Tier::Pro
         }
     );
@@ -134,12 +134,12 @@ fn records_become_resources_with_their_subject_type() {
     );
     assert_eq!(
         contact.to_resource_json_as::<ContactCard>(),
-        json!({"id": 1, "label": "Ada <ada@example.com>", "tier": "pro", "__type": "Contact"})
+        json!({"id": 1, "label": "Anu <anu@example.com>", "tier": "pro", "__type": "Contact"})
     );
     let own = contact.to_resource_json().unwrap();
     assert_eq!(own["__type"], "Contact");
     assert!(own.get("phone").is_none(), "visibility applies");
-    assert_eq!(own["display"], "Ada <ada@example.com>");
+    assert_eq!(own["display"], "Anu <anu@example.com>");
 
     let contacts: Collection<Contact> =
         vec![Record::new(ada()), Record::new(Contact { id: 2, ..ada() })].into();
@@ -169,7 +169,7 @@ fn masks_keep_the_permitted_columns_the_key_and_the_type() {
     let permitted = vec!["name".to_owned(), "email".to_owned()];
     assert_eq!(
         contact.to_value_masked(Some(&permitted)).unwrap(),
-        json!({"id": 1, "name": "Ada", "mail": "ada@example.com", "__type": "Contact"}),
+        json!({"id": 1, "name": "Anu", "mail": "anu@example.com", "__type": "Contact"}),
         "permitted fields name columns; the output uses serde's keys"
     );
     let everything = contact.to_value_masked(None).unwrap();
@@ -179,7 +179,7 @@ fn masks_keep_the_permitted_columns_the_key_and_the_type() {
         contacts
             .to_value_masked(Some(&["display".to_owned()]))
             .unwrap(),
-        json!([{"id": 1, "display": "Ada <ada@example.com>", "__type": "Contact"}])
+        json!([{"id": 1, "display": "Anu <anu@example.com>", "__type": "Contact"}])
     );
     assert_eq!(
         navree_api::mask_fields(
@@ -330,7 +330,7 @@ async fn the_openapi_document_carries_model_and_page_schemas() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.display", json!("Ada <ada@example.com>"))
+        .assert_json_path("data.0.display", json!("Anu <anu@example.com>"))
         .assert_json_path("meta.total", json!(1));
     app.client()
         .get("/api/contacts/1")
@@ -338,7 +338,7 @@ async fn the_openapi_document_carries_model_and_page_schemas() {
         .await
         .assert_status(200)
         .assert_json_path("__type", json!("Contact"))
-        .assert_json_path("label", json!("Ada <ada@example.com>"));
+        .assert_json_path("label", json!("Anu <anu@example.com>"));
 }
 
 #[tokio::test]

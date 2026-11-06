@@ -20,10 +20,10 @@ use crate::{PartitionSelector, WorkspaceError, WorkspaceRole};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NewPartition {
     /// The display name (1 to 100 characters), such as a domain
-    /// (`acme.co.uk`) or a region.
+    /// (`agra.co.uk`) or a region.
     pub name: String,
     /// The slug, unique in the workspace; derived from the name when `None`
-    /// (`acme.co.uk` → `acme-co-uk`, with `-2`, `-3`, ... when taken).
+    /// (`agra.co.uk` → `agra-co-uk`, with `-2`, `-3`, ... when taken).
     pub slug: Option<String>,
 }
 

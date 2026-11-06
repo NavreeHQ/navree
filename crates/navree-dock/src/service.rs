@@ -690,7 +690,7 @@ mod tests {
         assert_eq!(image_repository("redis@sha256:abc"), "redis");
         assert!(has_timescaledb("timescale/timescaledb:2.31.0-pg17"));
         assert!(has_timescaledb("timescale/timescaledb-ha:pg17"));
-        assert!(has_timescaledb("ghcr.io/acme/timescaledb:17"));
+        assert!(has_timescaledb("ghcr.io/agra/timescaledb:17"));
         assert!(!has_timescaledb("postgres:17"));
         assert!(!has_timescaledb("postgis/postgis:17-3.5"));
         assert!(is_timescaledb_image("timescale/timescaledb:2.31.0-pg17"));

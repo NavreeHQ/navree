@@ -20,7 +20,7 @@ async fn a_run_starts_when_its_unit_of_work_commits() {
     let workflows = h.workflows().await;
     let uow = h.db().await.uow(None, None).await;
     let id = workflows
-        .start(&uow, Greet { name: "Ada".into() })
+        .start(&uow, Greet { name: "Anu".into() })
         .await
         .unwrap();
     // Inside the transaction, nothing ran yet.
@@ -29,7 +29,7 @@ async fn a_run_starts_when_its_unit_of_work_commits() {
     // No job dispatcher: the run executed inline after the commit.
     let run = workflows.run(id).await.unwrap();
     assert_eq!(run.status, RunStatus::Completed);
-    assert_eq!(run.output, Some(json!("Hello, Ada")));
+    assert_eq!(run.output, Some(json!("Hello, Anu")));
     assert_eq!(run.workflow, "greet");
     assert_eq!(run.version, 1);
     assert_eq!(run.finished_at, Some(start()));
@@ -38,7 +38,7 @@ async fn a_run_starts_when_its_unit_of_work_commits() {
     assert_eq!(details.steps.len(), 1);
     assert_eq!(details.steps[0].key, "hello");
     assert_eq!(details.steps[0].kind, StepKind::Step);
-    assert_eq!(details.steps[0].output, Some(json!("Hello, Ada")));
+    assert_eq!(details.steps[0].output, Some(json!("Hello, Anu")));
 }
 
 #[tokio::test]
@@ -47,7 +47,7 @@ async fn a_rolled_back_start_never_runs() {
     let workflows = h.workflows().await;
     let uow = h.db().await.uow(None, None).await;
     let id = workflows
-        .start(&uow, Greet { name: "Ada".into() })
+        .start(&uow, Greet { name: "Anu".into() })
         .await
         .unwrap();
     uow.rollback().await.unwrap();

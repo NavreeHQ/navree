@@ -52,10 +52,10 @@ async fn under_schema_isolation_a_create_across_workspaces_never_lands_in_the_sh
         .build()
         .await;
     let owner = account(&app, "owner").await;
-    let acme = workspace(&app, owner, "Acme").await.id;
-    let globex = workspace(&app, owner, "Globex").await.id;
+    let agra = workspace(&app, owner, "Agra").await.id;
+    let gulati = workspace(&app, owner, "Gulati").await.id;
     let member_id = account(&app, "member").await;
-    join(&app, acme, member_id).await;
+    join(&app, agra, member_id).await;
     let outsider_id = account(&app, "outsider").await;
     give_role(&app, member_id, "editor", &["helm.view", "notes.*"]).await;
     give_role(&app, outsider_id, "editor", &["helm.view", "notes.*"]).await;
@@ -78,7 +78,7 @@ async fn under_schema_isolation_a_create_across_workspaces_never_lands_in_the_sh
 
     // Someone who isn't in the workspace gets a clear refusal, the same for one
     // that doesn't exist.
-    for target in [globex, Uuid::now_v7()] {
+    for target in [gulati, Uuid::now_v7()] {
         outsider
             .post(EVERY)
             .json(&json!({ "title": "From outside", "workspace_id": target }))
@@ -91,14 +91,14 @@ async fn under_schema_isolation_a_create_across_workspaces_never_lands_in_the_sh
     // A member's goes in the workspace's schema, and is found there.
     let created = member
         .post(EVERY)
-        .json(&json!({ "title": "From a member", "workspace_id": acme }))
+        .json(&json!({ "title": "From a member", "workspace_id": agra }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id = created["data"]["id"].as_str().unwrap().to_owned();
     assert_eq!(in_public("From a member").await, 0);
-    in_workspace(&member, acme, &format!("{NOTES}/{id}"))
+    in_workspace(&member, agra, &format!("{NOTES}/{id}"))
         .send()
         .await
         .assert_status(200);

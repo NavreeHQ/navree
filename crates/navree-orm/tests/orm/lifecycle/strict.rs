@@ -124,7 +124,7 @@ async fn whole_rows_are_unaffected_and_defaulted_fields_always_default() {
     let account = strict::scope(Strictness::strict(), async {
         crate::models::Account::from_row(&navree_orm::Row::from_values(vec![
             ("account_id".into(), navree_orm::Value::I32(1)),
-            ("display_name".into(), navree_orm::Value::from("Ada")),
+            ("display_name".into(), navree_orm::Value::from("Anu")),
         ]))
     })
     .await

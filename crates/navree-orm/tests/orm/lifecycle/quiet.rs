@@ -81,21 +81,21 @@ async fn quiet_writes_reach_the_database_and_the_audit_trail_only() {
     let (_app, db, clock) = app(vec![Box::new(Listening(heard.clone()))]).await;
     let uow = db.uow(None, None).await;
 
-    let mut acme = Company::create_quietly(
+    let mut agra = Company::create_quietly(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    assert!(acme.exists());
-    let mut globex = Company::query()
+    assert!(agra.exists());
+    let mut gulati = Company::query()
         .create_quietly(
             &uow,
             Company {
-                name: "Globex".into(),
+                name: "Gulati".into(),
                 ..Company::default()
             },
         )
@@ -103,28 +103,28 @@ async fn quiet_writes_reach_the_database_and_the_audit_trail_only() {
         .unwrap();
 
     clock.advance(Duration::from_secs(5));
-    acme.name = "Acme Corp".into();
-    assert!(acme.save_quietly(&uow).await.unwrap());
+    agra.name = "Agra Corp".into();
+    assert!(agra.save_quietly(&uow).await.unwrap());
     assert!(
-        acme.update_quietly(&uow, |c| c.employees = 9)
+        agra.update_quietly(&uow, |c| c.employees = 9)
             .await
             .unwrap()
     );
     clock.advance(Duration::from_secs(5));
-    assert!(acme.touch_quietly(&uow).await.unwrap());
+    assert!(agra.touch_quietly(&uow).await.unwrap());
     assert!(
-        acme.increment_quietly(&uow, Company::EMPLOYEES, 3)
+        agra.increment_quietly(&uow, Company::EMPLOYEES, 3)
             .await
             .unwrap()
     );
-    assert_eq!(acme.employees, 12);
+    assert_eq!(agra.employees, 12);
     assert!(
-        acme.decrement_quietly(&uow, Company::EMPLOYEES, 2)
+        agra.decrement_quietly(&uow, Company::EMPLOYEES, 2)
             .await
             .unwrap()
     );
-    assert_eq!(acme.employees, 10);
-    assert!(globex.delete_quietly(&uow).await.unwrap());
+    assert_eq!(agra.employees, 10);
+    assert!(gulati.delete_quietly(&uow).await.unwrap());
 
     assert!(heard.take().is_empty(), "no listener heard anything");
     assert_eq!(
@@ -138,12 +138,12 @@ async fn quiet_writes_reach_the_database_and_the_audit_trail_only() {
         "nothing waited for the commit either"
     );
     assert_eq!(count_rows(&db, "companies").await, 1);
-    let stored = Company::find_or_fail(&*db, acme.id).await.unwrap();
-    assert_eq!((stored.name.as_str(), stored.employees), ("Acme Corp", 10));
+    let stored = Company::find_or_fail(&*db, agra.id).await.unwrap();
+    assert_eq!((stored.name.as_str(), stored.employees), ("Agra Corp", 10));
 
     // The loud versions are heard.
-    acme.name = "Acme Inc".into();
-    acme.save(&*db).await.unwrap();
+    agra.name = "Agra Inc".into();
+    agra.save(&*db).await.unwrap();
     assert_eq!(heard.take(), ["saving", "updating", "updated"]);
 }
 
@@ -168,7 +168,7 @@ async fn several_columns_step_in_one_statement_quietly_or_not() {
     );
     deal.discard_changes();
 
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &*db,
         Company {
             name: "Steps".into(),
@@ -180,34 +180,34 @@ async fn several_columns_step_in_one_statement_quietly_or_not() {
     .unwrap();
     heard.take();
     assert!(
-        acme.increment_each(&*db, [(Company::EMPLOYEES, 5)])
+        agra.increment_each(&*db, [(Company::EMPLOYEES, 5)])
             .await
             .unwrap()
     );
-    assert_eq!(acme.employees, 15);
+    assert_eq!(agra.employees, 15);
     assert_eq!(heard.take(), ["updating", "updated"]);
     assert!(
-        acme.decrement_each_quietly(&*db, [(Company::EMPLOYEES, 4)])
+        agra.decrement_each_quietly(&*db, [(Company::EMPLOYEES, 4)])
             .await
             .unwrap()
     );
     assert!(
-        acme.increment_each_quietly(&*db, [(Company::EMPLOYEES, 1)])
+        agra.increment_each_quietly(&*db, [(Company::EMPLOYEES, 1)])
             .await
             .unwrap()
     );
     assert!(heard.take().is_empty());
-    assert_eq!(acme.employees, 12);
-    assert!(acme.is_clean());
+    assert_eq!(agra.employees, 12);
+    assert!(agra.is_clean());
     assert_eq!(
-        Company::find_or_fail(&*db, acme.id)
+        Company::find_or_fail(&*db, agra.id)
             .await
             .unwrap()
             .employees,
         12
     );
 
-    let error = acme
+    let error = agra
         .increment_each(&*db, Vec::<(navree_orm::Column<Company, i32>, i32)>::new())
         .await
         .unwrap_err();

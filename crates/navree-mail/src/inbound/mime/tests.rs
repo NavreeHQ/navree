@@ -384,11 +384,11 @@ fn header_values_decode() {
     );
     assert_eq!(text(b"  "), None);
     assert_eq!(
-        addresses(b" Ada\r\n Lovelace <ada@example.com>, b@c.test", 2),
+        addresses(b" Anu\r\n Lakhotia <anu@example.com>, b@c.test", 2),
         Ok(vec![
             Mailbox {
-                name: Some("Ada Lovelace".to_owned()),
-                email: "ada@example.com".to_owned()
+                name: Some("Anu Lakhotia".to_owned()),
+                email: "anu@example.com".to_owned()
             },
             Mailbox {
                 name: None,

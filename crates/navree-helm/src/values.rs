@@ -386,8 +386,8 @@ mod tests {
             Err(Invalid("boolean"))
         );
         assert_eq!(
-            to_input(Shape::Text, &json!("Globex"), None),
-            Ok(json!("Globex"))
+            to_input(Shape::Text, &json!("Gulati"), None),
+            Ok(json!("Gulati"))
         );
         assert_eq!(
             to_input(Shape::Uuid, &json!("nope"), None),

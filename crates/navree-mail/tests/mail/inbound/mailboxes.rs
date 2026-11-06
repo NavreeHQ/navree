@@ -19,7 +19,7 @@ use super::{Seen, fixture, inbound_app};
 
 fn reply(to: &str) -> Incoming {
     Incoming::compose()
-        .from("Ada <ada@example.com>")
+        .from("Anu <anu@example.com>")
         .to(to)
         .subject("Re: [#42] Printer on fire")
         .text("Thanks!")
@@ -64,7 +64,7 @@ async fn exact_addresses_win_over_patterns_and_wildcards() {
     );
 
     inbound.receive(reply("vip@in.acme.test")).await.unwrap();
-    inbound.receive(reply("ada@in.acme.test")).await.unwrap();
+    inbound.receive(reply("anu@in.acme.test")).await.unwrap();
 
     let seen = mail.seen();
     assert_eq!(seen[0].0, "vip@in.acme.test");
@@ -76,7 +76,7 @@ async fn the_envelope_finds_mailboxes_the_headers_hide() {
     let mail = inbound_app(&["archive@in.acme.test"], |b| b).await;
 
     let incoming = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("team@example.com")
         .envelope_to("archive@in.acme.test")
         .text("bcc'd")
@@ -126,7 +126,7 @@ async fn the_event_describes_a_handled_message() {
     assert_eq!(event["mailbox"], "reply+{token}@in.acme.test");
     assert_eq!(event["address"], "reply+x@in.acme.test");
     assert_eq!(event["message_id"], "multi-0002@example.com");
-    assert_eq!(event["from"], "grace@example.com");
+    assert_eq!(event["from"], "gauri@example.com");
     assert_eq!(event["attachments"], 2);
     assert_eq!(event["stored"]["disk"], "mail");
     assert!(event.get("text").is_none(), "no bodies in the event");
@@ -337,7 +337,7 @@ async fn injectable_mailboxes_get_their_dependencies() {
     let entries = log.get::<ReplyLog>().await.unwrap();
     assert_eq!(
         entries.0.lock().unwrap().clone(),
-        vec!["ada@example.com -> tickets@acme.test"]
+        vec!["anu@example.com -> tickets@acme.test"]
     );
 }
 
@@ -385,7 +385,7 @@ async fn messages_over_the_limit_are_refused() {
     })
     .await;
     let big = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test")
         .text("x".repeat(600))
         .build();
@@ -411,7 +411,7 @@ async fn messages_over_the_reading_limits_are_unparseable() {
 
     // The message, its multipart and two attachments: four parts.
     let parts = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test")
         .text("see attached")
         .attach("a.txt", "text/plain", b"a".to_vec())
@@ -424,7 +424,7 @@ async fn messages_over_the_reading_limits_are_unparseable() {
     );
 
     let mut compose = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test");
     for index in 0..20 {
         compose = compose.header(format!("X-Trace-{index}"), "hop");
@@ -436,7 +436,7 @@ async fn messages_over_the_reading_limits_are_unparseable() {
     );
 
     let crowd = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test")
         .cc("a@example.com")
         .cc("b@example.com")
@@ -455,7 +455,7 @@ async fn messages_over_the_reading_limits_are_unparseable() {
 
     // Within the limits the same pipeline takes the message.
     let fine = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("support@acme.test")
         .text("hello")
         .build();

@@ -36,7 +36,7 @@ const STATES = [
   ["dashboard, lazy region loading then filled", "/", async (page) => page.locator("#revenue [data-slot=bars]").waitFor()],
   ["form, empty", "/deals/new"],
   ["form, with errors", "/deals/new", async (page) => {
-    await page.fill("[name=title]", "Acme");
+    await page.fill("[name=title]", "Agra");
     await page.selectOption("[name=company_id]", { index: 1 });
     await page.fill("[name=amount]", "lots");
     await page.getByRole("button", { name: "Create deal" }).click();
@@ -86,7 +86,7 @@ const STATES = [
     await page.locator("#ui-user-menu").waitFor();
   }],
   ["toast showing", "/deals/new", async (page) => {
-    await page.fill("[name=title]", "Acme");
+    await page.fill("[name=title]", "Agra");
     await page.selectOption("[name=company_id]", { index: 1 });
     await page.fill("[name=amount]", "100");
     await page.getByRole("button", { name: "Create deal" }).click();

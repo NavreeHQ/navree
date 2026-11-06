@@ -972,9 +972,9 @@ impl<M: Model> Record<M> {
     ///
     /// ```no_run
     /// # use navree_orm::__doc_models::*;
-    /// # async fn demo(uow: Uow, mut deal: Record<Deal>, acme: Record<Company>) -> Result<()> {
-    /// deal.associate(Deal::company, &acme)?;
-    /// assert_eq!(deal.company_id, Some(acme.id));
+    /// # async fn demo(uow: Uow, mut deal: Record<Deal>, agra: Record<Company>) -> Result<()> {
+    /// deal.associate(Deal::company, &agra)?;
+    /// assert_eq!(deal.company_id, Some(agra.id));
     /// deal.save(&uow).await?;
     /// # Ok(()) }
     /// ```

@@ -185,7 +185,7 @@ async fn meilisearch_writes_wait_for_their_task() {
             &settings(),
             vec![
                 Document::new("a1")
-                    .field("last_name", "Lovelace")
+                    .field("last_name", "Lakhotia")
                     .workspace("w1"),
             ],
         )
@@ -197,7 +197,7 @@ async fn meilisearch_writes_wait_for_their_task() {
     let sent = &requests_to(&server, "POST", "/indexes/crm_contacts/documents").await[0];
     assert_eq!(
         body(sent),
-        json!([{ "id": "a1", "_workspace": "w1", "last_name": "Lovelace" }])
+        json!([{ "id": "a1", "_workspace": "w1", "last_name": "Lakhotia" }])
     );
     engine
         .delete("crm_contacts", &["a1".to_owned()])
@@ -212,8 +212,8 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
         .and(path("/indexes/crm_contacts/search"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "hits": [
-                { "id": "a1", "_rankingScore": 0.94, "last_name": "Lovelace",
-                  "_formatted": { "last_name": format!("{OPEN}Lovelace{CLOSE} <3"), "email": "x" } },
+                { "id": "a1", "_rankingScore": 0.94, "last_name": "Lakhotia",
+                  "_formatted": { "last_name": format!("{OPEN}Lakhotia{CLOSE} <3"), "email": "x" } },
                 { "id": 2, "_rankingScore": 0.5 }
             ],
             "totalHits": 12, "page": 2, "hitsPerPage": 2
@@ -255,10 +255,10 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
             .highlights
             .get("last_name")
             .map(String::as_str),
-        Some("<mark>Lovelace</mark> &lt;3")
+        Some("<mark>Lakhotia</mark> &lt;3")
     );
     assert!(!results.hits[0].highlights.contains_key("email"));
-    assert_eq!(results.hits[0].title.as_deref(), Some("Lovelace"));
+    assert_eq!(results.hits[0].title.as_deref(), Some("Lakhotia"));
     assert_eq!(results.hits[1].id, "2");
     let sent = body(&requests_to(&server, "POST", "/indexes/crm_contacts/search").await[0]);
     assert_eq!(sent["q"], "lovlace");
@@ -338,11 +338,11 @@ async fn an_app_on_meilisearch_syncs_and_searches() {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    let rows = insert_contacts(&db, vec![new_contact("Ada", "Lovelace")]).await;
+    let rows = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia")]).await;
     settle(&app).await;
     let sent = requests_to(&server, "POST", "/indexes/contacts/documents").await;
     assert_eq!(sent.len(), 1);
-    assert_eq!(body(&sent[0])[0]["last_name"], "Lovelace");
+    assert_eq!(body(&sent[0])[0]["last_name"], "Lakhotia");
     assert_eq!(body(&sent[0])[0]["id"], rows[0].id.to_string());
 
     Mock::given(method("POST"))
@@ -355,7 +355,7 @@ async fn an_app_on_meilisearch_syncs_and_searches() {
         .await;
     let search = app.get::<Search>().await;
     let page = search
-        .query::<Contact>("lovelace")
+        .query::<Contact>("lakhotia")
         .paginate(navree_db::PageQuery::default())
         .await
         .unwrap();
@@ -364,7 +364,7 @@ async fn an_app_on_meilisearch_syncs_and_searches() {
         1,
         "records gone from the database are dropped"
     );
-    assert_eq!(page.data[0].first_name, "Ada");
+    assert_eq!(page.data[0].first_name, "Anu");
 }
 
 /// Meilisearch compares only numbers in ranges, so an access rule with a
@@ -379,9 +379,9 @@ async fn access_rules_meilisearch_cannot_run_filter_the_loaded_rows() {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    let mut grace = new_contact("Grace", "Hopper");
+    let mut grace = new_contact("Gauri", "Hundal");
     grace.status = "customer".into();
-    let rows = insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), grace]).await;
+    let rows = insert_contacts(&db, vec![new_contact("Anu", "Lakhotia"), grace]).await;
     Mock::given(method("POST"))
         .and(path("/indexes/contacts/search"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -396,7 +396,7 @@ async fn access_rules_meilisearch_cannot_run_filter_the_loaded_rows() {
     let search = app.get::<Search>().await;
     let scope = |rules: Rules| Accessible::<Contact, Read>::new(Arc::new(rules.build()));
 
-    // `status > "d"`: Ada (a lead) only.
+    // `status > "d"`: Anu (a lead) only.
     let mut rules = Rules::new();
     rules.can(READ, "Contact").when(field("status").gt("d"));
     let page = search
@@ -457,7 +457,7 @@ fn deal_settings() -> IndexSettings {
         .text("company_name", 2)
         .filter("stage")
         .sort("amount")
-        .synonyms("acme", ["acme corp"])
+        .synonyms("agra", ["agra corp"])
 }
 
 #[tokio::test]
@@ -465,9 +465,9 @@ async fn typesense_builds_collections_behind_aliases() {
     let server = MockServer::start().await;
     mount_typesense_collection(&server).await;
     Mock::given(method("PUT"))
-        .and(path("/collections/crm_deals/synonyms/acme"))
+        .and(path("/collections/crm_deals/synonyms/agra"))
         .and(body_partial_json(
-            json!({"synonyms": ["acme", "acme corp"]}),
+            json!({"synonyms": ["agra", "agra corp"]}),
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
         .expect(1)
@@ -550,10 +550,10 @@ async fn typesense_searches_and_fails_over_between_nodes() {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "found": 3,
             "hits": [
-                { "document": { "id": "1", "title": "Acme renewal" }, "text_match": 1000,
-                  "highlight": { "title": { "value": format!("{OPEN}Acme{CLOSE} renewal") } } },
+                { "document": { "id": "1", "title": "Agra renewal" }, "text_match": 1000,
+                  "highlight": { "title": { "value": format!("{OPEN}Agra{CLOSE} renewal") } } },
                 { "document": { "id": "2" }, "text_match": 500,
-                  "highlights": [ { "field": "company_name", "value": format!("{OPEN}Acme{CLOSE} Corp") } ] }
+                  "highlights": [ { "field": "company_name", "value": format!("{OPEN}Agra{CLOSE} Corp") } ] }
             ]
         })))
         .mount(&server)
@@ -577,7 +577,7 @@ async fn typesense_searches_and_fails_over_between_nodes() {
             "crm_deals",
             EngineQuery {
                 settings: &settings,
-                text: "acme",
+                text: "agra",
                 filter: &filter,
                 sort: &[SortBy {
                     field: "amount".into(),
@@ -596,17 +596,17 @@ async fn typesense_searches_and_fails_over_between_nodes() {
     assert_eq!(results.hits[1].score, 0.5);
     assert_eq!(
         results.hits[0].highlights["title"],
-        "<mark>Acme</mark> renewal"
+        "<mark>Agra</mark> renewal"
     );
     assert_eq!(
         results.hits[1].highlights["company_name"],
-        "<mark>Acme</mark> Corp"
+        "<mark>Agra</mark> Corp"
     );
-    assert_eq!(results.hits[0].title.as_deref(), Some("Acme renewal"));
+    assert_eq!(results.hits[0].title.as_deref(), Some("Agra renewal"));
     let sent = &requests_to(&server, "GET", "/collections/crm_deals/documents/search").await[0];
     let params: std::collections::HashMap<String, String> =
         sent.url.query_pairs().into_owned().collect();
-    assert_eq!(params["q"], "acme");
+    assert_eq!(params["q"], "agra");
     assert_eq!(params["query_by"], "title,company_name");
     assert_eq!(params["query_by_weights"], "3,2");
     assert_eq!(params["filter_by"], "(stage:=`won` && amount:>=100)");

@@ -103,13 +103,13 @@ async fn failures_report_the_closest_rows() {
     let test = sqlite().await;
     let db = &test.db;
     Company::factory()
-        .set(Company::NAME, "Acme")
+        .set(Company::NAME, "Agra")
         .set(Company::COUNTRY, "NL")
         .create(db)
         .await
         .unwrap();
     Company::factory()
-        .set(Company::NAME, "Globex")
+        .set(Company::NAME, "Gulati")
         .set(Company::COUNTRY, "DE")
         .create(db)
         .await
@@ -117,12 +117,12 @@ async fn failures_report_the_closest_rows() {
     let message = panic_message(assert_database_has(
         db,
         "companies",
-        [("name", "Acme"), ("country", "DE")],
+        [("name", "Agra"), ("country", "DE")],
     ))
     .await;
     assert!(
         message.starts_with(
-            r#"assert_database_has: no row of `companies` matches name = "Acme", country = "DE"."#
+            r#"assert_database_has: no row of `companies` matches name = "Agra", country = "DE"."#
         ),
         "{message}"
     );
@@ -135,10 +135,10 @@ async fn failures_report_the_closest_rows() {
         "{message}"
     );
 
-    let missing = panic_message(assert_database_missing(db, "companies", [("name", "Acme")])).await;
+    let missing = panic_message(assert_database_missing(db, "companies", [("name", "Agra")])).await;
     assert!(
         missing.starts_with(
-            r#"assert_database_missing: 1 row(s) of `companies` match name = "Acme":"#
+            r#"assert_database_missing: 1 row(s) of `companies` match name = "Agra":"#
         ),
         "{missing}"
     );
@@ -155,7 +155,7 @@ async fn failures_report_the_closest_rows() {
     );
     assert!(filtered.contains("the first:"), "{filtered}");
 
-    let typo = panic_message(assert_database_has(db, "companies", [("nmae", "Acme")])).await;
+    let typo = panic_message(assert_database_has(db, "companies", [("nmae", "Agra")])).await;
     assert!(
         typo.starts_with("`companies` has no column `nmae` (it has: id, name,"),
         "{typo}"
@@ -188,20 +188,20 @@ async fn counts_and_empty_tables() {
 async fn records_exist_go_missing_and_soft_delete() {
     let test = sqlite().await;
     let db = &test.db;
-    let mut acme = Company::factory().create_one(db).await.unwrap();
-    assert_model_exists(db, &acme).await;
-    assert_not_soft_deleted(db, &acme).await;
-    acme.delete(db).await.unwrap();
-    assert_soft_deleted(db, &acme).await;
-    assert_model_exists(db, &acme).await;
-    let message = panic_message(assert_model_missing(db, &acme)).await;
+    let mut agra = Company::factory().create_one(db).await.unwrap();
+    assert_model_exists(db, &agra).await;
+    assert_not_soft_deleted(db, &agra).await;
+    agra.delete(db).await.unwrap();
+    assert_soft_deleted(db, &agra).await;
+    assert_model_exists(db, &agra).await;
+    let message = panic_message(assert_model_missing(db, &agra)).await;
     assert!(message.contains("soft-deleted rows stay"), "{message}");
-    let message = panic_message(assert_not_soft_deleted(db, &acme)).await;
+    let message = panic_message(assert_not_soft_deleted(db, &agra)).await;
     assert_eq!(
         message,
         format!(
             "assert_not_soft_deleted: Company {} is soft-deleted",
-            acme.id
+            agra.id
         )
     );
 

@@ -103,7 +103,7 @@ async fn tables_columns_keys_and_alterations() {
     let foreign = schema.foreign_keys("deals").await.unwrap();
     assert_eq!(foreign[0].on_delete, Some(ReferentialAction::Cascade));
 
-    exec(&conn, "INSERT INTO companies (name) VALUES ('Acme')").await;
+    exec(&conn, "INSERT INTO companies (name) VALUES ('Agra')").await;
     exec(
         &conn,
         "INSERT INTO deals (company_id, title, amount, notes) VALUES (1, 'Big', 12.5, 'hello world')",
@@ -281,7 +281,7 @@ async fn dumps_load_into_an_empty_database_and_dump_the_same() {
         "CREATE PROCEDURE close_deal(IN deal BIGINT) BEGIN DELETE FROM deals WHERE id = deal; SELECT 1; END",
     )
     .await;
-    exec(&conn, "INSERT INTO companies (name) VALUES ('Acme')").await;
+    exec(&conn, "INSERT INTO companies (name) VALUES ('Agra')").await;
     exec(
         &conn,
         "INSERT INTO navree_migrations VALUES ('crm', 'm0001_create_companies', 1, '2026-10-27 10:00:00')",

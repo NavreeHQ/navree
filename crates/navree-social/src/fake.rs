@@ -74,7 +74,7 @@ impl FakeState {
 /// fake.on_code(
 ///     "github",
 ///     "code-ada",
-///     SocialUser::new("github", "583231").email(Some("ada@example.com"), true),
+///     SocialUser::new("github", "583231").email(Some("anu@example.com"), true),
 /// );
 /// fake.on_code_error("github", "code-denied", "access_denied");
 /// assert!(fake.exchanged().is_empty());

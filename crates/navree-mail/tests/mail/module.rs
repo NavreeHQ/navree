@@ -43,8 +43,8 @@ impl Module for UsersModule {
 }
 
 fn welcome() -> TemplateMail {
-    TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-        .context(json!({ "name": "Ada" }))
+    TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+        .context(json!({ "name": "Anu" }))
 }
 
 async fn mailer(app: &App) -> Arc<Mailer> {
@@ -68,9 +68,9 @@ async fn for_root_exports_mailer_to_every_module() {
     let array = welcomer.mailer.array_transport().expect("array transport");
     array.assert_sent(|m| {
         m.from.as_deref() == Some(FROM)
-            && m.to == ["ada@example.com"]
-            && m.html.as_deref() == Some("<p>Welcome, Ada!</p>")
-            && m.text.as_deref() == Some("Welcome, Ada!")
+            && m.to == ["anu@example.com"]
+            && m.html.as_deref() == Some("<p>Welcome, Anu!</p>")
+            && m.text.as_deref() == Some("Welcome, Anu!")
     });
 }
 
@@ -78,7 +78,7 @@ async fn for_root_exports_mailer_to_every_module() {
 async fn assert_reads_section_mail(module: impl Module) {
     let config = ConfigSources::new().set(
         "mail",
-        json!({ "from": "Acme <hello@acme.test>", "transport": "array" }),
+        json!({ "from": "Agra <hello@acme.test>", "transport": "array" }),
     );
     let app = Navree::app()
         .module(ConfigModule::for_root(config))
@@ -93,7 +93,7 @@ async fn assert_reads_section_mail(module: impl Module) {
     mailer.send(&welcome()).await.expect("send");
 
     let array = mailer.array_transport().expect("array transport");
-    array.assert_sent(|m| m.from.as_deref() == Some("Acme <hello@acme.test>"));
+    array.assert_sent(|m| m.from.as_deref() == Some("Agra <hello@acme.test>"));
 }
 
 #[tokio::test]

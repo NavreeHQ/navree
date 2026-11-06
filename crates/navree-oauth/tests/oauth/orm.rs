@@ -41,7 +41,7 @@ async fn clients_and_personal_access_tokens_are_orm_models() {
             .pluck(&db, Client::NAME)
             .await
             .unwrap(),
-        ["Acme mobile"],
+        ["Agra mobile"],
         "public clients have no secret"
     );
 

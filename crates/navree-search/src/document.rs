@@ -13,11 +13,11 @@ use serde_json::Value;
 /// use navree_search::Document;
 ///
 /// let doc = Document::new(42)
-///     .field("title", "Lovelace renewal")
+///     .field("title", "Lakhotia renewal")
 ///     .field("amount_cents", 1_200_000)
 ///     .field("company_name", None::<String>);
 /// assert_eq!(doc.id(), "42");
-/// assert_eq!(doc.get("title"), Some(&serde_json::json!("Lovelace renewal")));
+/// assert_eq!(doc.get("title"), Some(&serde_json::json!("Lakhotia renewal")));
 /// assert_eq!(doc.get("company_name"), Some(&serde_json::Value::Null));
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -121,7 +121,7 @@ mod tests {
     fn documents_hold_serialized_fields() {
         let id = uuid::Uuid::nil();
         let doc = Document::new(id)
-            .field("name", "Ada")
+            .field("name", "Anu")
             .field("count", 3)
             .workspace("w1");
         assert_eq!(doc.id(), id.to_string());

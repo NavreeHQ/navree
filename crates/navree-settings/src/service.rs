@@ -28,15 +28,15 @@ use crate::{
 /// global) and pass a scope:
 ///
 /// ```ignore
-/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(acme.id)).await?;
+/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(agra.id)).await?;
 /// portal.show_leaderboard;                    // the value
 /// portal.source("show_leaderboard");         // Some(Source::Organization)
 ///
 /// settings
-///     .update::<PortalSettings>(&uow, Scope::workspace(acme.id), json!({"welcome_text": "Hi"}))
+///     .update::<PortalSettings>(&uow, Scope::workspace(agra.id), json!({"welcome_text": "Hi"}))
 ///     .await?;
 /// settings
-///     .inherit::<PortalSettings>(&uow, Scope::workspace(acme.id), "welcome_text")
+///     .inherit::<PortalSettings>(&uow, Scope::workspace(agra.id), "welcome_text")
 ///     .await?;
 /// ```
 ///

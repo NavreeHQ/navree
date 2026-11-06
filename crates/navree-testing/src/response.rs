@@ -24,7 +24,7 @@ const MAX_SHOWN_BODY: usize = 8 * 1024;
 ///     .send()
 ///     .await
 ///     .assert_status(200)
-///     .assert_json_path("data.0.title", json!("Acme renewal"));
+///     .assert_json_path("data.0.title", json!("Agra renewal"));
 /// # }
 /// ```
 #[derive(Clone, Debug)]

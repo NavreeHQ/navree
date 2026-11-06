@@ -512,12 +512,12 @@ mod extractors {
 async fn extractors_forwarded() {
     let (_app, router) = boot(extractors::NotesModule).await;
 
-    let (status, body) = send(&router, as_alice("GET", "/api/notes/7?q=acme")).await;
+    let (status, body) = send(&router, as_alice("GET", "/api/notes/7?q=agra")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        serde_json::json!({ "id": 7, "q": "acme", "greeting": "hi" })
+        serde_json::json!({ "id": 7, "q": "agra", "greeting": "hi" })
     );
 
     let request = Request::builder()
@@ -536,7 +536,7 @@ async fn extractors_forwarded() {
     );
 
     // Extractor rejections still render as errors: `id` is not a number.
-    let (status, _) = send(&router, as_alice("GET", "/api/notes/x?q=acme")).await;
+    let (status, _) = send(&router, as_alice("GET", "/api/notes/x?q=agra")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 

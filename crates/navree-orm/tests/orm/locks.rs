@@ -9,10 +9,10 @@ use crate::support::sqlite;
 #[tokio::test]
 async fn locking_reads_join_the_unit_of_work() {
     let t = sqlite().await;
-    let acme = Company::create(
+    let agra = Company::create(
         &t.db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -46,10 +46,10 @@ async fn locking_reads_join_the_unit_of_work() {
     );
     assert!(!uow.lock_for_update(), "SQLite has no row locks");
 
-    let mut record = Company::find_or_fail(&uow, acme.id).await.unwrap();
+    let mut record = Company::find_or_fail(&uow, agra.id).await.unwrap();
     record.name = "changed in memory".into();
     record.refresh_for_update(&uow).await.unwrap();
-    assert_eq!(record.name, "Acme", "reloaded from the row");
+    assert_eq!(record.name, "Agra", "reloaded from the row");
     assert!(record.is_clean());
     uow.commit().await.unwrap();
 

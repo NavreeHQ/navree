@@ -1124,7 +1124,7 @@ mod tests {
             billable_type: "workspace".into(),
             billable_id: Uuid::nil(),
             customer_id: Some("cus_1".into()),
-            customer_email: Some("ada@example.com".into()),
+            customer_email: Some("anu@example.com".into()),
             plan: "pro".into(),
             interval: crate::plan::Interval::Monthly,
             price_id: "price_pro".into(),
@@ -1421,7 +1421,7 @@ mod tests {
         let form = checkout_form(&coupon);
         assert_eq!(field(&form, "discounts[0][coupon]"), Some("LAUNCH"));
         assert_eq!(field(&form, "allow_promotion_codes"), None);
-        assert_eq!(field(&form, "customer_email"), Some("ada@example.com"));
+        assert_eq!(field(&form, "customer_email"), Some("anu@example.com"));
         coupon.coupon = Some("promo_123".into());
         let form = checkout_form(&coupon);
         assert_eq!(

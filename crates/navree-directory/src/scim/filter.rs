@@ -262,7 +262,7 @@ pub enum Filter {
 }
 
 impl Filter {
-    /// Parses a filter (`userName eq "ada@acme.test"`).
+    /// Parses a filter (`userName eq "anu@acme.test"`).
     pub fn parse(text: &str) -> Result<Filter, FilterError> {
         if text.len() > MAX_FILTER_LEN {
             return Err(FilterError(format!(
@@ -704,14 +704,14 @@ mod tests {
         json!({
             "schemas": [USER_SCHEMA],
             "id": "2819c223-7f76-453a-919d-413861904646",
-            "externalId": "Ada-1",
-            "userName": "Ada@Acme.test",
+            "externalId": "Anu-1",
+            "userName": "Anu@Acme.test",
             "active": true,
-            "name": { "givenName": "Ada", "familyName": "Lovelace" },
+            "name": { "givenName": "Anu", "familyName": "Lakhotia" },
             "title": "Engineer",
             "emails": [
-                { "value": "ada@acme.test", "type": "work", "primary": true },
-                { "value": "ada@home.test", "type": "home" }
+                { "value": "anu@acme.test", "type": "work", "primary": true },
+                { "value": "anu@home.test", "type": "home" }
             ],
             "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
                 "employeeNumber": "701984",
@@ -813,12 +813,12 @@ mod tests {
 
     #[test]
     fn comparisons_ignore_case_except_for_ids() {
-        assert!(matches(r#"userName eq "ada@acme.test""#));
-        assert!(matches(r#"USERNAME EQ "ADA@ACME.TEST""#));
-        assert!(matches(r#"externalId eq "Ada-1""#));
-        assert!(!matches(r#"externalId eq "ada-1""#));
+        assert!(matches(r#"userName eq "anu@acme.test""#));
+        assert!(matches(r#"USERNAME EQ "ANU@ACME.TEST""#));
+        assert!(matches(r#"externalId eq "Anu-1""#));
+        assert!(!matches(r#"externalId eq "anu-1""#));
         assert!(!matches(r#"id eq "2819C223-7F76-453A-919D-413861904646""#));
-        assert!(matches(r#"name.familyName sw "love""#));
+        assert!(matches(r#"name.familyName sw "lakh""#));
         assert!(matches(r#"title ew "neer""#));
         assert!(matches(r#"title co "gin""#));
         assert!(matches(r#"title ne "Manager""#));
@@ -834,10 +834,10 @@ mod tests {
     #[test]
     fn multi_valued_attributes_match_any_element() {
         assert!(matches(r#"emails co "home.test""#));
-        assert!(matches(r#"emails.value eq "ada@home.test""#));
+        assert!(matches(r#"emails.value eq "anu@home.test""#));
         assert!(matches(r#"emails.type eq "work""#));
-        assert!(matches(r#"emails[type eq "work" and value co "acme"]"#));
-        assert!(!matches(r#"emails[type eq "home" and value co "acme"]"#));
+        assert!(matches(r#"emails[type eq "work" and value co "agra"]"#));
+        assert!(!matches(r#"emails[type eq "home" and value co "agra"]"#));
         assert!(matches(r#"emails[primary eq true]"#));
     }
 
@@ -872,14 +872,14 @@ mod tests {
             r#"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value pr"#
         ));
         assert!(matches(
-            r#"urn:ietf:params:scim:schemas:core:2.0:User:userName sw "ada""#
+            r#"urn:ietf:params:scim:schemas:core:2.0:User:userName sw "anu""#
         ));
     }
 
     #[test]
     fn simple_equality_is_recognized() {
-        let filter = Filter::parse(r#"userName eq "ada@acme.test""#).unwrap();
-        assert_eq!(filter.simple_eq(), Some(("userName", "ada@acme.test")));
+        let filter = Filter::parse(r#"userName eq "anu@acme.test""#).unwrap();
+        assert_eq!(filter.simple_eq(), Some(("userName", "anu@acme.test")));
         assert_eq!(
             Filter::parse(r#"displayName eq "Engineering""#)
                 .unwrap()
@@ -887,11 +887,11 @@ mod tests {
             Some(("displayName", "Engineering"))
         );
         assert_eq!(
-            Filter::parse(r#"userName co "ada""#).unwrap().simple_eq(),
+            Filter::parse(r#"userName co "anu""#).unwrap().simple_eq(),
             None
         );
         assert_eq!(
-            Filter::parse(r#"name.givenName eq "Ada""#)
+            Filter::parse(r#"name.givenName eq "Anu""#)
                 .unwrap()
                 .simple_eq(),
             None

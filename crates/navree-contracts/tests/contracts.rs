@@ -303,10 +303,10 @@ async fn job_registration_runs_typed_handler() {
         job_id: "job-1".into(),
         attempt: 2,
     };
-    (registration.run)(json!({"user": "ada"}), ctx.clone())
+    (registration.run)(json!({"user": "anu"}), ctx.clone())
         .await
         .expect("handler");
-    assert_eq!(*outbox.0.lock().unwrap(), ["welcome ada (job-1 attempt 2)"]);
+    assert_eq!(*outbox.0.lock().unwrap(), ["welcome anu (job-1 attempt 2)"]);
 
     let error = (registration.run)(json!({"nobody": true}), ctx)
         .await
@@ -346,7 +346,7 @@ async fn dispatch_serializes_job_into_envelope() {
     let dispatcher: Arc<dyn Dispatcher> = capture.clone();
 
     let first = dispatcher
-        .dispatch(SendWelcome { user: "ada".into() })
+        .dispatch(SendWelcome { user: "anu".into() })
         .await
         .unwrap();
     let second = dispatcher
@@ -357,7 +357,7 @@ async fn dispatch_serializes_job_into_envelope() {
 
     let envelopes = capture.0.lock().unwrap();
     assert_eq!(envelopes[0].job_type, "mail.welcome");
-    assert_eq!(envelopes[0].payload, json!({"user": "ada"}));
+    assert_eq!(envelopes[0].payload, json!({"user": "anu"}));
     assert_eq!(envelopes[0].options, SendWelcome::options());
     assert_eq!(envelopes[0].delay_secs, None);
     assert_eq!(envelopes[0].unique_key, None);
@@ -371,7 +371,7 @@ async fn dispatch_later_rounds_delay_up_to_whole_seconds() {
     let dispatcher: Arc<dyn Dispatcher> = capture.clone();
     dispatcher
         .dispatch_later(
-            SendWelcome { user: "ada".into() },
+            SendWelcome { user: "anu".into() },
             Duration::from_millis(1500),
         )
         .await

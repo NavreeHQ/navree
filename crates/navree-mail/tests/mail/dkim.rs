@@ -13,8 +13,8 @@ use sha2::{Digest as _, Sha256};
 
 const RSA_KEY: &str = include_str!("../fixtures/dkim-rsa-2048.pem");
 
-const MESSAGE: &[u8] = b"From: Acme <hello@acme.test>\r\n\
-    To: ada@example.com\r\n\
+const MESSAGE: &[u8] = b"From: Agra <hello@acme.test>\r\n\
+    To: anu@example.com\r\n\
     Subject:   Your   invoice\r\n\
     X-Ignored: not signed\r\n\
     \r\n\
@@ -40,7 +40,7 @@ fn parse(header: &str) -> (String, Vec<u8>) {
 /// The canonical input of [`MESSAGE`] for `h=from:subject:to`.
 fn signing_input(unsigned: &str) -> Vec<u8> {
     format!(
-        "from:Acme <hello@acme.test>\r\nsubject:Your invoice\r\nto:ada@example.com\r\ndkim-signature:{unsigned}"
+        "from:Agra <hello@acme.test>\r\nsubject:Your invoice\r\nto:anu@example.com\r\ndkim-signature:{unsigned}"
     )
     .into_bytes()
 }
@@ -148,13 +148,13 @@ fn smtp_signs_mail_from_its_domain() {
     let message = |from: &str| {
         Message::new()
             .from(from)
-            .to("ada@example.com")
+            .to("anu@example.com")
             .subject("Hi")
             .text("Hello")
     };
 
     let signed = transport
-        .signed_bytes(&message("Acme <hello@acme.test>"))
+        .signed_bytes(&message("Agra <hello@acme.test>"))
         .expect("sign")
         .expect("signed");
     let text = String::from_utf8(signed).expect("text");
@@ -163,7 +163,7 @@ fn smtp_signs_mail_from_its_domain() {
         "{text}"
     );
     assert!(
-        text.contains("\r\nFrom: Acme <hello@acme.test>\r\n"),
+        text.contains("\r\nFrom: Agra <hello@acme.test>\r\n"),
         "{text}"
     );
 

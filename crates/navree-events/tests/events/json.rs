@@ -46,11 +46,11 @@ async fn event_sink_publish_reaches_json_subscribers() {
         .get::<dyn EventSink>()
         .await
         .unwrap();
-    sink.publish("user.registered", json!({ "email": "ada" }))
+    sink.publish("user.registered", json!({ "email": "anu" }))
         .await
         .unwrap();
 
-    assert_eq!(next(&mut registered).await, json!({ "email": "ada" }));
+    assert_eq!(next(&mut registered).await, json!({ "email": "anu" }));
     assert!(matches!(deleted.try_recv(), Err(TryRecvError::Empty)));
 }
 
@@ -65,10 +65,10 @@ async fn emit_reaches_json_subscribers() {
     let mut first = bus.subscribe_json("user.registered");
     let mut second = bus.subscribe_json("user.registered");
 
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
 
-    assert_eq!(next(&mut first).await, json!({ "email": "ada" }));
-    assert_eq!(next(&mut second).await, json!({ "email": "ada" }));
+    assert_eq!(next(&mut first).await, json!({ "email": "anu" }));
+    assert_eq!(next(&mut second).await, json!({ "email": "anu" }));
 }
 
 listener!(Greeter, "greeter", [UserRegistered => |e| e.email]);
@@ -97,11 +97,11 @@ async fn event_sink_publish_runs_typed_listeners() {
     let app = greeting_app(&journal).await;
     let sink = app.ctx().get::<dyn EventSink>().await.unwrap();
 
-    sink.publish("user.registered", json!({ "email": "ada" }))
+    sink.publish("user.registered", json!({ "email": "anu" }))
         .await
         .unwrap();
 
-    assert_eq!(journal.entries(), ["greeter:ada"]);
+    assert_eq!(journal.entries(), ["greeter:anu"]);
 }
 
 #[tokio::test]

@@ -14,7 +14,7 @@ fn show(query: &impl ToMongo) -> String {
     format!("{:#}", query.to_mongo().unwrap())
 }
 
-fn acme() -> ObjectId {
+fn agra() -> ObjectId {
     ObjectId::parse("65f1a2b3c4d5e6f708091a2b").unwrap()
 }
 
@@ -25,7 +25,7 @@ fn a_filter_a_sort_a_page_and_a_projection_are_a_find() {
             .select([Deal::TITLE.expr(), Deal::AMOUNT.expr()])
             .add_select([(Deal::STAGE, "status")])
             .where_(Deal::STAGE.eq(Stage::Won))
-            .where_(Deal::COMPANY_ID.eq(acme()))
+            .where_(Deal::COMPANY_ID.eq(agra()))
             .order_by_desc(Deal::AMOUNT)
             .order_by(Deal::ID)
             .for_page(3, 25)
@@ -94,7 +94,7 @@ fn conditions_become_query_operators() {
 
 #[test]
 fn global_scopes_join_the_filter() {
-    let workspace = acme();
+    let workspace = agra();
     let scoped = WORKSPACE.sync_scope(workspace, || {
         show(&Note::query().where_(Note::BODY.eq("hi")))
     });

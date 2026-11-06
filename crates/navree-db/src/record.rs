@@ -42,7 +42,7 @@
 //! assert_eq!(SuppressionRow::COLUMNS, ["id", "workspace_id", "email", "created_at"]);
 //! let select = SuppressionRow::select()
 //!     .filter(Filter::any().is_null("workspace_id").eq("workspace_id", Uuid::nil()))
-//!     .eq("email", "ada@example.com")
+//!     .eq("email", "anu@example.com")
 //!     .order_by_desc("created_at");
 //! assert_eq!(
 //!     select.statement(Backend::Postgres).unwrap().for_backend(Backend::Postgres).unwrap().sql(),
@@ -1070,7 +1070,7 @@ mod tests {
         assert_eq!(Deal::KEY, "id");
         let deal = Deal {
             id: Uuid::nil(),
-            title: "Acme".into(),
+            title: "Agra".into(),
             owner_id: None,
             kind: "new".into(),
             secret: "s".into(),
@@ -1141,7 +1141,7 @@ mod tests {
     fn writes_are_built_from_the_columns() {
         let deal = Deal {
             id: Uuid::nil(),
-            title: "Acme".into(),
+            title: "Agra".into(),
             owner_id: None,
             kind: "new".into(),
             secret: "s".into(),

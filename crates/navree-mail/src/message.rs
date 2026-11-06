@@ -11,14 +11,14 @@ use crate::{Attachment, MailError};
 
 /// A rendered email, ready for a [`MailTransport`](crate::MailTransport).
 ///
-/// Addresses are `"ada@example.com"` or `"Ada Lovelace <ada@example.com>"`.
+/// Addresses are `"anu@example.com"` or `"Anu Lakhotia <anu@example.com>"`.
 /// Build one with the chainable setters, which share the field names:
 ///
 /// ```
 /// use navree_mail::Message;
 ///
 /// let message = Message::new()
-///     .to("Ada <ada@example.com>")
+///     .to("Anu <anu@example.com>")
 ///     .cc("team@example.com")
 ///     .subject("Your invoice")
 ///     .html("<p>Thanks!</p>")
@@ -27,7 +27,7 @@ use crate::{Attachment, MailError};
 ///     .metadata("invoice", "42")
 ///     .attach("invoice-42.pdf", "application/pdf", b"%PDF-1.7 ...".to_vec())
 ///     .locale("en");
-/// assert_eq!(message.to, ["Ada <ada@example.com>"]);
+/// assert_eq!(message.to, ["Anu <anu@example.com>"]);
 /// assert_eq!(message.from, None); // the Mailer fills in its default sender
 /// ```
 ///
@@ -218,7 +218,7 @@ impl Message {
     }
 
     /// The domain of the sender's address, in lower case (`acme.test` for
-    /// `Acme <hello@acme.test>`), if the sender parses.
+    /// `Agra <hello@acme.test>`), if the sender parses.
     pub fn sender_domain(&self) -> Option<String> {
         let mailbox = self.from.as_deref()?.parse::<Mailbox>().ok()?;
         Some(mailbox.email.domain().to_ascii_lowercase())
@@ -299,8 +299,8 @@ pub(crate) fn mailbox(field: &'static str, address: &str) -> Result<Mailbox, Mai
         })
 }
 
-/// The bare address of `address` (`ada@example.com` for `Ada
-/// <ada@example.com>`), lower-cased; `address` itself, trimmed and
+/// The bare address of `address` (`anu@example.com` for `Anu
+/// <anu@example.com>`), lower-cased; `address` itself, trimmed and
 /// lower-cased, when it does not parse.
 pub(crate) fn bare_address(address: &str) -> String {
     match address.parse::<Mailbox>() {

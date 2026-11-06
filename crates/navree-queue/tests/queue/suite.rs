@@ -234,19 +234,19 @@ pub async fn panicking_job_counts_as_failure(driver: QueueDriver) {
 
 pub async fn unique_job_deduplicated(driver: QueueDriver) {
     let h = harness(driver).await;
-    let acme = || UniqueReport {
-        account: "acme".into(),
+    let agra = || UniqueReport {
+        account: "agra".into(),
     };
 
-    let first = h.queue.dispatch(acme()).await.unwrap();
-    let again = h.queue.dispatch(acme()).await.unwrap();
+    let first = h.queue.dispatch(agra()).await.unwrap();
+    let again = h.queue.dispatch(agra()).await.unwrap();
     assert_eq!(again, first, "a duplicate gets the pending job's id");
     let dispatcher = h.app.get::<dyn Dispatcher>().await;
-    assert_eq!(dispatcher.dispatch(acme()).await.unwrap(), first);
+    assert_eq!(dispatcher.dispatch(agra()).await.unwrap(), first);
     let other = h
         .queue
         .dispatch(UniqueReport {
-            account: "globex".into(),
+            account: "gulati".into(),
         })
         .await
         .unwrap();
@@ -255,13 +255,13 @@ pub async fn unique_job_deduplicated(driver: QueueDriver) {
 
     // Once the 60 s window has passed, an identical job is queued again.
     h.advance(61);
-    let after_window = h.queue.dispatch(acme()).await.unwrap();
+    let after_window = h.queue.dispatch(agra()).await.unwrap();
     assert_ne!(after_window, first);
     assert_eq!(h.queue.pending_count("default").await.unwrap(), 3);
 
     // A finished job no longer blocks its duplicates.
     assert_eq!(h.drain().await.succeeded, 3);
-    let after_run = h.queue.dispatch(acme()).await.unwrap();
+    let after_run = h.queue.dispatch(agra()).await.unwrap();
     assert_ne!(after_run, after_window);
     assert_eq!(h.queue.pending_count("default").await.unwrap(), 1);
 }

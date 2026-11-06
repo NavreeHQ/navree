@@ -9,7 +9,7 @@ use crate::support::World;
 #[tokio::test]
 async fn users_save_their_locale() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
 
     // Nothing saved: the header decides.
     world
@@ -64,7 +64,7 @@ async fn users_save_their_locale() {
 #[tokio::test]
 async fn an_unsupported_locale_is_a_400_in_the_request_language() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     world
         .as_user(ada)
         .put("/api/me/locale")
@@ -96,22 +96,22 @@ async fn the_workspace_locale_applies_to_its_members() {
     let world = World::new().await;
     let owner = world.user("Owner").await;
     let outsider = world.user("Outsider").await;
-    let acme = world.workspace(owner, "Acme").await;
+    let agra = world.workspace(owner, "Agra").await;
     let i18n = world.app.get::<I18n>().await;
     let saved = world
         .work(|uow| {
             let i18n = i18n.clone();
-            async move { i18n.set_workspace_locale(&uow, acme.id, "de").await }
+            async move { i18n.set_workspace_locale(&uow, agra.id, "de").await }
         })
         .await
         .unwrap();
     assert_eq!(saved.tag(), "de");
-    assert_eq!(i18n.workspace_locale(acme.id).await.unwrap().tag(), "de");
+    assert_eq!(i18n.workspace_locale(agra.id).await.unwrap().tag(), "de");
 
     let member = world
         .as_user(owner)
         .get("/api/deals/mine")
-        .header("X-Workspace", acme.slug.as_str())
+        .header("X-Workspace", agra.slug.as_str())
         .send()
         .await
         .text();
@@ -120,7 +120,7 @@ async fn the_workspace_locale_applies_to_its_members() {
     let other = world
         .as_user(outsider)
         .get("/api/deals/mine")
-        .header("X-Workspace", acme.slug.as_str())
+        .header("X-Workspace", agra.slug.as_str())
         .header("Accept-Language", "fr")
         .send()
         .await
@@ -137,7 +137,7 @@ async fn the_workspace_locale_applies_to_its_members() {
     let own = world
         .as_user(owner)
         .get("/api/deals/mine")
-        .header("X-Workspace", acme.slug.as_str())
+        .header("X-Workspace", agra.slug.as_str())
         .send()
         .await
         .text();
@@ -148,7 +148,7 @@ async fn the_workspace_locale_applies_to_its_members() {
 #[tokio::test]
 async fn saving_checks_the_locale() {
     let world = World::new().await;
-    let ada = world.user("Ada").await;
+    let ada = world.user("Anu").await;
     let i18n = world.app.get::<I18n>().await;
     let error = world
         .work(|uow| {

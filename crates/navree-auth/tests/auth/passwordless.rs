@@ -50,7 +50,7 @@ async fn passwordless_routes_are_off_by_default() {
     for path in ["/api/auth/magic-link", "/api/auth/otp"] {
         app.client()
             .post(path)
-            .json(&json!({ "email": "ada@example.com" }))
+            .json(&json!({ "email": "anu@example.com" }))
             .send()
             .await
             .assert_error(404, None);
@@ -66,12 +66,12 @@ async fn a_magic_link_signs_in_once() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
 
     client
         .post("/api/auth/magic-link")
-        .json(&json!({ "email": "Ada@Example.com" }))
+        .json(&json!({ "email": "Anu@Example.com" }))
         .send()
         .await
         .assert_status(202)
@@ -92,7 +92,7 @@ async fn a_magic_link_signs_in_once() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
     let (access, _) = tokens(&response);
     assert!(!access.is_empty());
     // The address counts as verified now.
@@ -115,7 +115,7 @@ async fn a_magic_link_signs_in_once() {
 async fn magic_links_expire_are_throttled_and_say_nothing_about_unknown_addresses() {
     let clock = support::clock();
     let app = mail_app(&clock).build().await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     let request = |email: &'static str| {
         let client = client.clone();
@@ -134,8 +134,8 @@ async fn magic_links_expire_are_throttled_and_say_nothing_about_unknown_addresse
         .assert_json_path("message", json!(SENT));
     assert!(sent_mail(&app).await.is_empty());
 
-    request("ada@example.com").await.assert_status(202);
-    request("ada@example.com").await.assert_status(202);
+    request("anu@example.com").await.assert_status(202);
+    request("anu@example.com").await.assert_status(202);
     assert_eq!(sent_mail(&app).await.len(), 1, "one mail per minute");
     // Without a URL the mail carries the token itself.
     let text = last_text(&app).await;
@@ -155,7 +155,7 @@ async fn magic_links_expire_are_throttled_and_say_nothing_about_unknown_addresse
         .assert_error(401, "Invalid or expired sign-in code");
 
     // A new link replaces the old one.
-    request("ada@example.com").await.assert_status(202);
+    request("anu@example.com").await.assert_status(202);
     let db = app.get::<Db>().await;
     let rows = login_token::Model::all(&*db).await.unwrap().into_vec();
     assert_eq!(rows.len(), 1);
@@ -181,14 +181,14 @@ async fn an_emailed_code_signs_in_and_wrong_guesses_burn_it() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     let send_code = || {
         let client = client.clone();
         async move {
             client
                 .post("/api/auth/otp")
-                .json(&json!({ "email": "ada@example.com" }))
+                .json(&json!({ "email": "anu@example.com" }))
                 .send()
                 .await
                 .assert_status(202)
@@ -199,7 +199,7 @@ async fn an_emailed_code_signs_in_and_wrong_guesses_burn_it() {
         async move {
             client
                 .post("/api/auth/otp/verify")
-                .json(&json!({ "email": "ada@example.com", "code": code }))
+                .json(&json!({ "email": "anu@example.com", "code": code }))
                 .send()
                 .await
         }
@@ -213,7 +213,7 @@ async fn an_emailed_code_signs_in_and_wrong_guesses_burn_it() {
     verify(code.clone())
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
     verify(code)
         .await
         .assert_error(401, "Invalid or expired sign-in code");
@@ -259,11 +259,11 @@ async fn code_guesses_are_throttled_per_address_and_ip() {
         .config("auth.otp.max_attempts", 10)
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     let client = app.client();
     client
         .post("/api/auth/otp")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(202);
@@ -271,7 +271,7 @@ async fn code_guesses_are_throttled_per_address_and_ip() {
     for _ in 0..3 {
         let status = client
             .post("/api/auth/otp/verify")
-            .json(&json!({ "email": "ada@example.com", "code": "99999999" }))
+            .json(&json!({ "email": "anu@example.com", "code": "99999999" }))
             .send()
             .await
             .status()
@@ -285,19 +285,19 @@ async fn code_guesses_are_throttled_per_address_and_ip() {
 async fn passwordless_sign_ins_keep_the_second_factor() {
     let clock = support::clock();
     let app = mail_app(&clock).build().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let secret = enable_two_factor(&app, &clock, &user).await;
     let client = app.client();
     client
         .post("/api/auth/otp")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(202);
     let code = code_in(&last_text(&app).await);
     let challenge: Value = client
         .post("/api/auth/otp/verify")
-        .json(&json!({ "email": "ada@example.com", "code": code }))
+        .json(&json!({ "email": "anu@example.com", "code": code }))
         .send()
         .await
         .assert_status(200)
@@ -312,5 +312,5 @@ async fn passwordless_sign_ins_keep_the_second_factor() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
 }

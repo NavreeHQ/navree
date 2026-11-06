@@ -162,14 +162,14 @@ fn decoding_errors_name_the_model_the_column_and_the_cause() {
 fn defaulted_fields_read_their_default_when_the_row_lacks_them() {
     let row = Row::from_values(vec![
         ("account_id".into(), Value::I32(4)),
-        ("display_name".into(), Value::from("Ada")),
+        ("display_name".into(), Value::from("Anu")),
     ]);
     let account = Account::from_row(&row).unwrap();
     assert_eq!(
         account,
         Account {
             account_id: 4,
-            name: "Ada".into(),
+            name: "Anu".into(),
             score: 0
         }
     );

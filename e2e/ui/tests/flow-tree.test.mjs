@@ -178,15 +178,15 @@ inBrowsers(({ open, browserName }) => {
     const { page, close } = await open("/flow");
     await focusFirst(page, "#t-single");
     await page.keyboard.press("ArrowDown");
-    assert.equal(await focusedText(page), "Ada");
-    assert.equal(await item(page, "#t-single", "Grace").getAttribute("aria-selected"), "true", "moving chose nothing");
+    assert.equal(await focusedText(page), "Anu");
+    assert.equal(await item(page, "#t-single", "Gauri").getAttribute("aria-selected"), "true", "moving chose nothing");
     await page.keyboard.press("Space");
-    assert.equal(await item(page, "#t-single", "Ada").getAttribute("aria-selected"), "true");
-    assert.equal(await item(page, "#t-single", "Grace").getAttribute("aria-selected"), "false");
+    assert.equal(await item(page, "#t-single", "Anu").getAttribute("aria-selected"), "true");
+    assert.equal(await item(page, "#t-single", "Gauri").getAttribute("aria-selected"), "false");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
-    assert.equal(await item(page, "#t-single", "Grace").getAttribute("aria-selected"), "true");
-    assert.equal(await page.locator("#t-single input:checked").evaluate((e) => e.value), "sales/grace");
+    assert.equal(await item(page, "#t-single", "Gauri").getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#t-single input:checked").evaluate((e) => e.value), "sales/gauri");
     await close();
   });
 
@@ -405,15 +405,15 @@ inBrowsers(({ open, browserName }) => {
   test("the chosen nodes post as the tree's name, and the server reads them back", async () => {
     const { page, close } = await open("/flow");
     await item(page, "#t-multi", "Web").locator("input").click();
-    await item(page, "#t-single", "Ada").locator("input").click();
+    await item(page, "#t-single", "Anu").locator("input").click();
     await Promise.all([page.waitForURL("**/flow/echo"), page.click("#t-post")]);
     const posted = (await page.locator("#posted").innerText()).split("\n");
-    for (const line of ["access=eng/api", "access=eng/web", "owner=sales/ada"]) assert.ok(posted.includes(line), `${line} in ${posted}`);
+    for (const line of ["access=eng/api", "access=eng/web", "owner=sales/anu"]) assert.ok(posted.includes(line), `${line} in ${posted}`);
     assert.ok(!posted.includes("access=eng/old"), "a disabled choice posts nothing");
     assert.ok(!posted.includes("access=eng"), "and the parent that has one is half chosen, so it is not posted");
     const judged = await page.locator("#judged").innerText();
     assert.match(judged, /access: 2 chosen: eng\/web \| eng\/api/);
-    assert.match(judged, /owner: 1 chosen: sales\/ada/);
+    assert.match(judged, /owner: 1 chosen: sales\/anu/);
     await close();
   });
 

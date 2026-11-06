@@ -12,7 +12,7 @@ import { useOperation } from "./operation.js";
 import { createRealtimeController, installRealtime, useChannel, useRealtimeState } from "./realtime.js";
 import { createWorkspace } from "./workspace.js";
 
-const user = { __type: "User", id: "u1", name: "Ada" };
+const user = { __type: "User", id: "u1", name: "Anu" };
 
 describe("createNavreeAuth", () => {
   function api(routes: Record<string, () => Response>) {
@@ -73,13 +73,13 @@ describe("createNavreeAuth", () => {
 
 describe("createWorkspace", () => {
   it("reads and writes the workspace cookie, then reports the switch", () => {
-    const cookie = ref<string | null | undefined>("acme");
+    const cookie = ref<string | null | undefined>("agra");
     const onChange = vi.fn();
     const workspace = createWorkspace(cookie, onChange);
-    expect(workspace.workspace.value).toBe("acme");
-    workspace.setWorkspace("globex");
-    expect(cookie.value).toBe("globex");
-    expect(onChange).toHaveBeenCalledWith("globex");
+    expect(workspace.workspace.value).toBe("agra");
+    workspace.setWorkspace("gulati");
+    expect(cookie.value).toBe("gulati");
+    expect(onChange).toHaveBeenCalledWith("gulati");
     workspace.setWorkspace(undefined);
     expect(cookie.value).toBeNull();
     expect(workspace.workspace.value).toBeUndefined();
@@ -176,8 +176,8 @@ describe("useListQuery", () => {
     const { router, state } = await setup("/deals?tab=open&page=3");
     await state().setFilter("stage", "won");
     expect(router.currentRoute.value.fullPath).toBe("/deals?tab=open&filter[stage]=won");
-    await state().setSearch("acme");
-    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "acme" });
+    await state().setSearch("agra");
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "agra" });
     await state().toggleSort("name");
     expect(router.currentRoute.value.query.sort).toBe("name");
     await state().setPage(2);
@@ -191,9 +191,9 @@ describe("useListQuery", () => {
   it("replaces every list parameter, the cursor ones too, and writes the canonical form", () => {
     const merged = mergeListQuery(
       { tab: "open", cursor: "a", before: "b", limit: "5", filter: "1", q: "old", page: "2" },
-      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "acme corp" },
+      { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "agra corp" },
     );
-    expect(merged).toEqual({ tab: "open", q: "old", "filter[stage][in]": "lead,won", search: "acme corp", limit: "10" });
+    expect(merged).toEqual({ tab: "open", q: "old", "filter[stage][in]": "lead,won", search: "agra corp", limit: "10" });
     expect(Object.keys(merged)).toEqual(["tab", "q", "filter[stage][in]", "search", "limit"]);
   });
 
@@ -208,7 +208,7 @@ describe("useListQuery", () => {
   });
 
   it("does not read names the grammar does not have", async () => {
-    const { state } = await setup("/deals?q=acme&per=10&after=abc&f.stage=won&filters[stage]=won");
+    const { state } = await setup("/deals?q=agra&per=10&after=abc&f.stage=won&filters[stage]=won");
     expect(state().query.value).toEqual({ per_page: 25 });
     expect(state().problems.value).toEqual([]);
   });
@@ -223,10 +223,10 @@ describe("useListQuery", () => {
     const { router, state } = await setup("/deals?cursor=abc&before=def&limit=20&tab=open");
     await state().setFilter("stage", "won");
     expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", limit: "20" });
-    await state().setSearch("acme");
-    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "acme", limit: "20" });
+    await state().setSearch("agra");
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "agra", limit: "20" });
     await state().toggleSort("name");
-    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "acme", sort: "name", limit: "20" });
+    expect(router.currentRoute.value.query).toEqual({ tab: "open", "filter[stage]": "won", search: "agra", sort: "name", limit: "20" });
   });
 
   it("writes an operator filter and a list as `in`", async () => {

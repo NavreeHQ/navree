@@ -237,7 +237,7 @@ async fn service_calls(billing: &Billing, workspace: &Workspace) -> Result<(), B
         .await?;
     let organization = organizations::Organization {
         id: Uuid::now_v7(),
-        legal_name: "Acme Holdings".into(),
+        legal_name: "Agra Holdings".into(),
         billing_email: None,
     };
     assert_eq!(organization.billable_id(), organization.id);
@@ -271,14 +271,14 @@ async fn upgrading_starts_a_pro_trial() {
     let owner = app
         .get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", "ada@example.com", "password123")
+        .create_user("Anu Lakhotia", "anu@example.com", "password123")
         .await
         .unwrap();
     let uow = app.get::<Db>().await.uow(None, None).await;
     let workspace = app
         .get::<Workspaces>()
         .await
-        .create(&uow, owner.id, NewWorkspace::named("Acme"))
+        .create(&uow, owner.id, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -286,7 +286,7 @@ async fn upgrading_starts_a_pro_trial() {
     let response = app
         .acting_as(principal(owner.id))
         .post("/api/v1/billing/upgrade")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({ "plan": "pro", "yearly": false }))
         .send()
         .await
@@ -296,7 +296,7 @@ async fn upgrading_starts_a_pro_trial() {
     let fake = billing.fake().expect("the fake provider");
     let checkout = fake.assert_checkout(|c| c.plan == "pro" && c.trial_days == Some(14));
     assert_eq!(response.json_value()["url"], json!(checkout.url));
-    assert_eq!(checkout.customer_email.as_deref(), Some("ada@example.com"));
+    assert_eq!(checkout.customer_email.as_deref(), Some("anu@example.com"));
 
     fake.complete_checkout(&checkout.id).await.unwrap();
     app.get::<Queue>().await.run_pending().await.unwrap();
@@ -308,14 +308,14 @@ async fn upgrading_starts_a_pro_trial() {
     let deal = Uuid::now_v7();
     app.acting_as(principal(owner.id))
         .post(&format!("/api/v1/deals/{deal}/summary"))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
     // Unknown plans are a 400 naming the field; a second checkout a 409.
     app.acting_as(principal(owner.id))
         .post("/api/v1/billing/upgrade")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({ "plan": "pro", "yearly": false }))
         .send()
         .await
@@ -328,7 +328,7 @@ async fn upgrading_starts_a_pro_trial() {
     let warnings = app.get::<Warnings>().await;
     assert_eq!(
         *warnings.0.lock().unwrap(),
-        [("ada@example.com".to_owned(), 1000)]
+        [("anu@example.com".to_owned(), 1000)]
     );
 }
 
@@ -352,19 +352,19 @@ async fn a_workspace_without_a_subscription_gets_a_402() {
     let owner = app
         .get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", "ada@example.com", "password123")
+        .create_user("Anu Lakhotia", "anu@example.com", "password123")
         .await
         .unwrap();
     let uow = app.get::<Db>().await.uow(None, None).await;
     app.get::<Workspaces>()
         .await
-        .create(&uow, owner.id, NewWorkspace::named("Acme"))
+        .create(&uow, owner.id, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
     app.acting_as(principal(owner.id))
         .post(&format!("/api/v1/deals/{}/summary", Uuid::now_v7()))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_error(402, "This workspace needs an active subscription")

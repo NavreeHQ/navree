@@ -126,40 +126,40 @@ async fn world() -> World {
 #[tokio::test]
 async fn route_permissions_use_the_role_in_the_current_workspace() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
-    world.join(acme.id, grace, "member").await;
-    world.join(globex.id, grace, "viewer").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
+    world.join(agra.id, grace, "member").await;
+    world.join(gulati.id, grace, "viewer").await;
     let client = world.as_user(grace);
 
-    // A member has `deals.*` in Acme; a viewer only `deals.read` in Globex.
+    // A member has `deals.*` in Agra; a viewer only `deals.read` in Gulati.
     client
         .post("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "title": "Big one" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("workspace_id", json!(acme.id));
+        .assert_json_path("workspace_id", json!(agra.id));
     client
         .post("/api/deals")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .json(&json!({ "title": "Nope" }))
         .send()
         .await
         .assert_error(403, None);
     client
         .get("/api/deals")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("data", json!([]));
     client
         .get("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -168,13 +168,13 @@ async fn route_permissions_use_the_role_in_the_current_workspace() {
     // Roles are the workspace role; non-members are refused before any check.
     client
         .get("/api/deals/admin-report")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(403, None);
     world
         .join(
-            acme.id,
+            agra.id,
             world.user("Linus", "linus@example.com").await,
             "admin",
         )
@@ -183,7 +183,7 @@ async fn route_permissions_use_the_role_in_the_current_workspace() {
     world
         .as_user(eve)
         .get("/api/deals")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");
@@ -191,7 +191,7 @@ async fn route_permissions_use_the_role_in_the_current_workspace() {
     // Without the guard the global (empty) permissions apply.
     client
         .get("/api/deals/unguarded")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(403, None);
@@ -200,15 +200,15 @@ async fn route_permissions_use_the_role_in_the_current_workspace() {
 #[tokio::test]
 async fn the_abilities_function_sees_the_workspace() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let grace = world.user("Grace", "grace@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    world.join(acme.id, grace, "viewer").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let grace = world.user("Gauri", "gauri@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    world.join(agra.id, grace, "viewer").await;
 
     let response = world
         .as_user(grace)
         .get("/api/deals/abilities")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -231,7 +231,7 @@ async fn the_abilities_function_sees_the_workspace() {
     world
         .as_user(grace)
         .get("/api/deals/report")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200);
@@ -240,9 +240,9 @@ async fn the_abilities_function_sees_the_workspace() {
 #[tokio::test]
 async fn records_of_another_workspace_are_not_found() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let insert = |workspace: Uuid, title: &str| {
         let world = &world;
         let title = title.to_owned();
@@ -256,34 +256,34 @@ async fn records_of_another_workspace_are_not_found() {
             created
         }
     };
-    let ours = insert(acme.id, "Ours").await;
-    let theirs = insert(globex.id, "Theirs").await;
+    let ours = insert(agra.id, "Ours").await;
+    let theirs = insert(gulati.id, "Theirs").await;
     let client = world.as_user(ada);
 
     client
         .patch(&format!("/api/deals/{}", ours.id))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("title", json!("Ours"));
-    // Ada owns both workspaces (`all.*`), so only the workspace check
-    // stands between Acme's request and Globex's record.
+    // Anu owns both workspaces (`all.*`), so only the workspace check
+    // stands between Agra's request and Gulati's record.
     client
         .patch(&format!("/api/deals/{}", theirs.id))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(404, None);
     client
         .get(&format!("/api/deals/{}", theirs.id))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_error(404, None);
     client
         .get(&format!("/api/deals/{}", theirs.id))
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200);
@@ -292,64 +292,64 @@ async fn records_of_another_workspace_are_not_found() {
 #[tokio::test]
 async fn the_repository_scopes_every_query() {
     let world = world().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let globex = world.workspace(ada, "Globex").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada, "Agra").await;
+    let gulati = world.workspace(ada, "Gulati").await;
     let uow = world.db().await.uow(None, None).await;
-    let created = WorkspaceRepo::<Deal>::insert(&uow, acme.id, new_deal(globex.id, "Acme deal"))
+    let created = WorkspaceRepo::<Deal>::insert(&uow, agra.id, new_deal(gulati.id, "Agra deal"))
         .await
         .unwrap();
-    assert_eq!(created.workspace_id, acme.id, "insert sets the workspace");
+    assert_eq!(created.workspace_id, agra.id, "insert sets the workspace");
     assert!(
-        WorkspaceRepo::<Deal>::find(&uow, globex.id, created.id)
+        WorkspaceRepo::<Deal>::find(&uow, gulati.id, created.id)
             .await
             .unwrap()
             .is_none()
     );
     let mut stolen = Record::from(Deal {
         id: created.id,
-        workspace_id: globex.id,
+        workspace_id: gulati.id,
         title: "Stolen".into(),
     });
-    let moved = WorkspaceRepo::<Deal>::update(&uow, globex.id, &mut stolen).await;
+    let moved = WorkspaceRepo::<Deal>::update(&uow, gulati.id, &mut stolen).await;
     assert!(
         matches!(moved, Err(OrmError::ModelNotFound { .. })),
         "{moved:?}"
     );
-    let mut renamed = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
+    let mut renamed = WorkspaceRepo::<Deal>::find_or_fail(&uow, agra.id, created.id)
         .await
         .unwrap();
-    renamed.workspace_id = globex.id;
+    renamed.workspace_id = gulati.id;
     renamed.title = "Renamed".into();
-    WorkspaceRepo::<Deal>::update(&uow, acme.id, &mut renamed)
+    WorkspaceRepo::<Deal>::update(&uow, agra.id, &mut renamed)
         .await
         .unwrap();
-    assert_eq!(renamed.workspace_id, acme.id, "the workspace cannot change");
+    assert_eq!(renamed.workspace_id, agra.id, "the workspace cannot change");
     assert_eq!(renamed.title, "Renamed");
-    let stored = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
+    let stored = WorkspaceRepo::<Deal>::find_or_fail(&uow, agra.id, created.id)
         .await
         .unwrap();
     assert_eq!(
         (stored.workspace_id, stored.title.as_str()),
-        (acme.id, "Renamed")
+        (agra.id, "Renamed")
     );
     // A record built from a model replaces the stored values.
     let mut replaced = Record::from(Deal {
         id: created.id,
-        workspace_id: globex.id,
+        workspace_id: gulati.id,
         title: "Replaced".into(),
     });
-    WorkspaceRepo::<Deal>::update(&uow, acme.id, &mut replaced)
+    WorkspaceRepo::<Deal>::update(&uow, agra.id, &mut replaced)
         .await
         .unwrap();
-    assert_eq!(replaced.workspace_id, acme.id);
+    assert_eq!(replaced.workspace_id, agra.id);
     assert_eq!(replaced.title, "Replaced");
-    let refused = WorkspaceRepo::<Deal>::delete(&uow, globex.id, replaced.clone()).await;
+    let refused = WorkspaceRepo::<Deal>::delete(&uow, gulati.id, replaced.clone()).await;
     assert!(
         matches!(refused, Err(OrmError::ModelNotFound { .. })),
         "{refused:?}"
     );
-    WorkspaceRepo::<Deal>::delete(&uow, acme.id, replaced)
+    WorkspaceRepo::<Deal>::delete(&uow, agra.id, replaced)
         .await
         .unwrap();
     assert_eq!(

@@ -85,7 +85,7 @@ async fn presence_lists_agree_across_processes() {
     a.join(&mut ada_on_a, ada, ROOM).await;
     members_become(&b.realtime, ROOM, &[ada]).await;
 
-    // Bob joins on the other process and sees Ada, who sees him arrive.
+    // Bob joins on the other process and sees Anu, who sees him arrive.
     let mut bob_on_b = b.connect().await;
     let joined = b.join(&mut bob_on_b, bob, ROOM).await;
     assert_eq!(joined.data["presence"]["count"], 2, "{:?}", joined.data);
@@ -98,7 +98,7 @@ async fn presence_lists_agree_across_processes() {
     members_become(&a.realtime, ROOM, &[ada, bob]).await;
     assert_eq!(a.realtime.members(ROOM), b.realtime.members(ROOM));
 
-    // A second connection of Ada, on B, is not a new member anywhere.
+    // A second connection of Anu, on B, is not a new member anywhere.
     let mut ada_on_b = b.connect().await;
     b.join(&mut ada_on_b, ada, ROOM).await;
     bob_on_b.expect_silence(QUIET).await;
@@ -107,7 +107,7 @@ async fn presence_lists_agree_across_processes() {
     bob_on_b.expect_silence(QUIET).await;
     members_become(&a.realtime, ROOM, &[ada, bob]).await;
 
-    // Bob leaving B is announced to Ada's remaining connection.
+    // Bob leaving B is announced to Anu's remaining connection.
     drop(bob_on_b);
     let removed = ada_on_b.expect("pusher_internal:member_removed").await;
     assert_eq!(removed.data, json!({ "user_id": bob.to_string() }));
@@ -154,7 +154,7 @@ async fn disconnecting_a_user_closes_their_sockets_everywhere() {
     let mut other_on_b = b.connect().await;
     b.join(&mut other_on_b, bob, "private-crm.deals").await;
 
-    assert_eq!(a.realtime.disconnect_user(ada), 0, "no socket of Ada on A");
+    assert_eq!(a.realtime.disconnect_user(ada), 0, "no socket of Anu on A");
     ada_on_b.expect_error(4009).await;
     assert_eq!(ada_on_b.expect_close().await, 4009);
     other_on_b.assert_alive().await;

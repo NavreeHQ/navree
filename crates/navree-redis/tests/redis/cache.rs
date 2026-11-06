@@ -107,7 +107,7 @@ async fn counters_increment_atomically_and_keep_their_ttl() {
         .unwrap();
     assert!(ttl > 0, "the counter kept its TTL ({ttl})");
 
-    cache.put("name", &"ada", MINUTE).await.unwrap();
+    cache.put("name", &"anu", MINUTE).await.unwrap();
     assert!(matches!(
         cache.increment("name", 1).await,
         Err(CacheError::NotAnInteger { .. })

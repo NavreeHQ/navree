@@ -76,7 +76,7 @@ async fn regenerate_changes_id_keeps_data() {
 async fn old_session_cookie_is_dead_after_regenerate() {
     let app = support::app().await;
     let client = app.client();
-    support::put(&client, "user", json!("ada")).await;
+    support::put(&client, "user", json!("anu")).await;
     let old_cookie = client.cookie(COOKIE).unwrap();
     client
         .post("/api/probe/regenerate")
@@ -100,7 +100,7 @@ async fn invalidate_clears() {
     let app = support::app().await;
     let store = app.get::<dyn SessionStore>().await;
     let client = app.client();
-    let id = support::put(&client, "user", json!("ada")).await;
+    let id = support::put(&client, "user", json!("anu")).await;
     let old_token = client.cookie(XSRF).unwrap();
 
     let response = client
@@ -188,7 +188,7 @@ async fn expired_session_is_new() {
     let app = app_with_clock(clock.clone()).await;
     let store = app.get::<dyn SessionStore>().await;
     let client = app.client();
-    let id = support::put(&client, "user", json!("ada")).await;
+    let id = support::put(&client, "user", json!("anu")).await;
 
     clock.advance(Duration::from_secs(121 * 60));
     let (current, value) = support::get(&client, "user").await;
@@ -205,7 +205,7 @@ async fn activity_extends_the_session() {
     let clock = clock();
     let app = app_with_clock(clock.clone()).await;
     let client = app.client();
-    let id = support::put(&client, "user", json!("ada")).await;
+    let id = support::put(&client, "user", json!("anu")).await;
 
     // Within a minute of the last write nothing is written again.
     clock.advance(Duration::from_secs(30));
@@ -227,7 +227,7 @@ async fn activity_extends_the_session() {
     clock.advance(Duration::from_secs(100 * 60));
     let (current, value) = support::get(&client, "user").await;
     assert_eq!(current, id, "200 minutes after login, still active");
-    assert_eq!(value, json!("ada"));
+    assert_eq!(value, json!("anu"));
 }
 
 // "remember me" keeps the session, and its cookies, for the
@@ -238,7 +238,7 @@ async fn a_remembered_session_outlives_the_configured_lifetime() {
     let app = app_with_clock(clock.clone()).await;
     let store = app.get::<dyn SessionStore>().await;
     let client = app.client();
-    let id = support::put(&client, "user", json!("ada")).await;
+    let id = support::put(&client, "user", json!("anu")).await;
     let response = client
         .post("/api/probe/remember")
         .xsrf()
@@ -268,7 +268,7 @@ async fn a_remembered_session_outlives_the_configured_lifetime() {
     clock.advance(Duration::from_secs(5 * 3600));
     let (current, value) = support::get(&client, "user").await;
     assert_eq!(current, id, "the remembered session is still there");
-    assert_eq!(value, json!("ada"));
+    assert_eq!(value, json!("anu"));
 
     // Thirty-one idle days: gone.
     clock.advance(Duration::from_secs(31 * 24 * 3600));

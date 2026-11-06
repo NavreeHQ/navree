@@ -125,7 +125,7 @@ async fn with_public_key() -> Setup {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     Setup {
         app,
         clock,
@@ -143,11 +143,11 @@ async fn exchange_is_off_without_trusted_issuers() {
 #[tokio::test]
 async fn a_signed_token_signs_its_user_in_once() {
     let s = with_public_key().await;
-    let token = s.issuer.sign(&claims(&s.clock, "Ada@Example.com"));
+    let token = s.issuer.sign(&claims(&s.clock, "Anu@Example.com"));
     let response = exchange(&s.app, &token)
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
     let (access, _) = tokens(&response);
     s.app
         .client()
@@ -171,7 +171,7 @@ async fn a_signed_token_signs_its_user_in_once() {
 async fn tokens_that_fail_a_check_are_refused_with_the_reason_audited() {
     let s = with_public_key().await;
     let now = s.clock.now().timestamp();
-    let base = claims(&s.clock, "ada@example.com");
+    let base = claims(&s.clock, "anu@example.com");
     let with = |key: &str, value: Value| {
         let mut claims = base.clone();
         claims["jti"] = json!(uuid::Uuid::now_v7().to_string());
@@ -250,8 +250,8 @@ async fn the_kill_switch_refuses_an_issuer() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
-    exchange(&app, &issuer.sign(&claims(&clock, "ada@example.com")))
+    support::create_user(&app, "anu@example.com").await;
+    exchange(&app, &issuer.sign(&claims(&clock, "anu@example.com")))
         .await
         .assert_error(401, "Invalid token");
     assert_eq!(
@@ -280,22 +280,22 @@ async fn key_sets_are_fetched_cached_and_refetched_for_new_keys() {
         .override_value::<HttpClient>(Arc::new(http))
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
 
-    exchange(&app, &first.sign(&claims(&clock, "ada@example.com")))
+    exchange(&app, &first.sign(&claims(&clock, "anu@example.com")))
         .await
         .assert_status(200);
-    exchange(&app, &first.sign(&claims(&clock, "ada@example.com")))
+    exchange(&app, &first.sign(&claims(&clock, "anu@example.com")))
         .await
         .assert_status(200);
     server.assert_sent_count(1);
 
     // A token with an unknown kid fetches again (once a minute at most).
-    exchange(&app, &second.sign(&claims(&clock, "ada@example.com")))
+    exchange(&app, &second.sign(&claims(&clock, "anu@example.com")))
         .await
         .assert_error(401, "Invalid token");
     clock.advance(Duration::from_secs(61));
-    exchange(&app, &second.sign(&claims(&clock, "ada@example.com")))
+    exchange(&app, &second.sign(&claims(&clock, "anu@example.com")))
         .await
         .assert_status(200);
     server.assert_sent_count(2);

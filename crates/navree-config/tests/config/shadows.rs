@@ -158,7 +158,7 @@ fn several_keys_are_reported_in_key_order() {
 #[test]
 fn the_message_names_the_key_and_both_sources_and_no_value() {
     let dir = dir();
-    let env = "APP_DATABASE__URL=postgres://user:hunter2@db/acme\n";
+    let env = "APP_DATABASE__URL=postgres://user:hunter2@db/agra\n";
     let file = "[database]\nurl = \"sqlite://other-secret.db\"\n";
 
     let config = dotenv_over_file(&dir, env, file);
@@ -204,7 +204,7 @@ fn equal_values_conflict_with_nothing() {
 #[test]
 fn keys_only_one_of_them_sets_are_not_reported() {
     let dir = dir();
-    let env = "APP_KEY=base64:abc\nAPP_MAIL__FROM=\"Acme <hello@acme.test>\"\n";
+    let env = "APP_KEY=base64:abc\nAPP_MAIL__FROM=\"Agra <hello@acme.test>\"\n";
     let file = "[http]\naddr = \"127.0.0.1:8080\"\n[mail]\ntransport = \"log\"\n";
     assert!(dotenv_over_file(&dir, env, file).shadowed().is_empty());
     assert!(file_over_dotenv(&dir, env, file).shadowed().is_empty());
@@ -250,8 +250,8 @@ fn only_dotenv_against_a_file_is_reported() {
 #[test]
 fn the_short_name_of_an_app_setting_is_the_same_key_as_app_dot_name() {
     // `APP_URL` in `.env` is `app.url`; `[app] url` in the file is the same key.
-    let env = "APP_URL=https://from-dotenv.test\nAPP_NAME=acme\n";
-    let file = "[app]\nurl = \"https://from-file.test\"\nname = \"acme\"\n";
+    let env = "APP_URL=https://from-dotenv.test\nAPP_NAME=agra\n";
+    let file = "[app]\nurl = \"https://from-file.test\"\nname = \"agra\"\n";
 
     let dir = dir();
     let config = file_over_dotenv(&dir, env, file);

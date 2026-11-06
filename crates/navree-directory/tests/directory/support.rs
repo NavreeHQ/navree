@@ -330,7 +330,7 @@ impl Harness {
     pub async fn connection(&self, source: &str) -> Uuid {
         self.directory()
             .await
-            .create_connection(Owner::App, NewConnection::new("Acme directory", source))
+            .create_connection(Owner::App, NewConnection::new("Agra directory", source))
             .await
             .unwrap()
             .connection
@@ -341,7 +341,7 @@ impl Harness {
     pub async fn scim(&self, owner: Owner) -> CreatedConnection {
         self.directory()
             .await
-            .create_connection(owner, NewConnection::new("Acme Entra ID", "scim"))
+            .create_connection(owner, NewConnection::new("Agra Entra ID", "scim"))
             .await
             .unwrap()
     }

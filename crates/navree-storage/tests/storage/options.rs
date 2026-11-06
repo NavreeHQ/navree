@@ -18,7 +18,7 @@ fn s3_disks_parse_every_key() {
         "disks": {
             "uploads": {
                 "driver": "s3",
-                "bucket": "acme-uploads",
+                "bucket": "agra-uploads",
                 "region": "eu-west-1",
                 "endpoint": "https://acct.r2.cloudflarestorage.com",
                 "access_key": "AKIA123",
@@ -33,7 +33,7 @@ fn s3_disks_parse_every_key() {
     let DiskConfig::S3(s3) = &options.disks["uploads"] else {
         panic!("an s3 disk");
     };
-    assert_eq!(s3.bucket, "acme-uploads");
+    assert_eq!(s3.bucket, "agra-uploads");
     assert_eq!(s3.region.as_deref(), Some("eu-west-1"));
     assert_eq!(
         s3.endpoint.as_deref(),
@@ -48,7 +48,7 @@ fn s3_disks_parse_every_key() {
     assert_eq!(options.disks["uploads"].driver(), "s3");
 
     // The builder gives the same disk.
-    let built = S3Config::new("acme-uploads")
+    let built = S3Config::new("agra-uploads")
         .region("eu-west-1")
         .endpoint("https://acct.r2.cloudflarestorage.com")
         .credentials("AKIA123", "s3cr3t")
@@ -71,7 +71,7 @@ fn secrets_never_show_in_debug_output() {
         "disks": {
             "uploads": { "driver": "s3", "bucket": "b", "access_key": "AKIA", "secret_key": "hunter2" },
             "media": { "driver": "gcs", "bucket": "b", "service_account_key": "{\"private_key\": \"hunter3\"}" },
-            "archive": { "driver": "azure", "account": "acme", "container": "c", "access_key": "hunter4" },
+            "archive": { "driver": "azure", "account": "agra", "container": "c", "access_key": "hunter4" },
         }
     }));
     let debug = format!("{options:?}");
@@ -88,14 +88,14 @@ fn gcs_and_azure_disks_parse() {
         "disks": {
             "media": {
                 "driver": "gcs",
-                "bucket": "acme-media",
+                "bucket": "agra-media",
                 "service_account_path": "/run/secrets/gcs.json",
                 "endpoint": "http://127.0.0.1:4443",
                 "prefix": "site",
             },
             "archive": {
                 "driver": "azure",
-                "account": "acmestorage",
+                "account": "agrastorage",
                 "bucket": "archive",
                 "access_key": "a2V5",
                 "endpoint": "http://127.0.0.1:10000/devstoreaccount1",
@@ -105,7 +105,7 @@ fn gcs_and_azure_disks_parse() {
     let DiskConfig::Gcs(gcs) = &options.disks["media"] else {
         panic!("a gcs disk");
     };
-    assert_eq!(gcs.bucket, "acme-media");
+    assert_eq!(gcs.bucket, "agra-media");
     assert_eq!(
         gcs.service_account_path.as_deref(),
         Some(std::path::Path::new("/run/secrets/gcs.json"))
@@ -114,17 +114,17 @@ fn gcs_and_azure_disks_parse() {
     let DiskConfig::Azure(azure) = &options.disks["archive"] else {
         panic!("an azure disk");
     };
-    assert_eq!(azure.account.as_deref(), Some("acmestorage"));
+    assert_eq!(azure.account.as_deref(), Some("agrastorage"));
     assert_eq!(
         azure.container, "archive",
         "`bucket` is another name for `container`"
     );
     assert_eq!(azure.access_key.as_ref().unwrap().expose(), "a2V5");
-    assert_eq!(GcsConfig::new("acme-media").bucket, "acme-media");
-    let azure = AzureConfig::new("acmestorage", "archive");
+    assert_eq!(GcsConfig::new("agra-media").bucket, "agra-media");
+    let azure = AzureConfig::new("agrastorage", "archive");
     assert_eq!(
         (azure.account.as_deref(), azure.container.as_str()),
-        (Some("acmestorage"), "archive")
+        (Some("agrastorage"), "archive")
     );
 }
 
@@ -233,7 +233,7 @@ async fn s3_disks_come_from_the_config_and_its_environment_variables() {
         "storage",
         json!({
             "default": "uploads",
-            "disks": { "uploads": { "driver": "s3", "bucket": "acme", "endpoint": "http://127.0.0.1:9", "access_key": "k", "secret_key": "s" } },
+            "disks": { "uploads": { "driver": "s3", "bucket": "agra", "endpoint": "http://127.0.0.1:9", "access_key": "k", "secret_key": "s" } },
         }),
     );
     let builder = Navree::app()

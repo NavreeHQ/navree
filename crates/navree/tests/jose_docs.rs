@@ -58,7 +58,7 @@ mod assertion {
     pub fn partner_assertion(pem: &str, key_id: &str, now: i64) -> Result<String, JoseError> {
         let key = SigningKey::from_pem(pem)?.with_kid(key_id);
         key.sign_jwt(&Assertion {
-            iss: "acme",
+            iss: "agra",
             aud: "https://api.partner.example",
             iat: now,
             exp: now + 300,
@@ -94,7 +94,7 @@ fn the_partner_assertion_is_an_es256_jwt() {
 #[test]
 fn custom_headers_sign_with_sign_json() -> Result<(), JoseError> {
     let key = SigningKey::generate_es256().with_kid("KEYID");
-    let claims = json!({"iss": "TEAMID", "sub": "com.acme.web"});
+    let claims = json!({"iss": "TEAMID", "sub": "com.agra.web"});
     let thumbprint = "x5t-value";
 
     // Sign in with Apple wants `{"alg":"ES256","kid":"<key id>"}`, no `typ`.
@@ -454,7 +454,7 @@ async fn the_jwks_endpoint_publishes_public_keys_only() {
     // A client verifies both keys' tokens against the published set.
     let published: JwkSet = serde_json::from_value(body).unwrap();
     for key in [&current, &previous] {
-        let token = key.sign_jwt(&json!({"sub": "ada"})).unwrap();
+        let token = key.sign_jwt(&json!({"sub": "anu"})).unwrap();
         let jws = Jws::parse(&token).unwrap();
         assert_eq!(
             jws.verify_with(&published).unwrap().kid.as_deref(),

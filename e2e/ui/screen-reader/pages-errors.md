@@ -66,8 +66,8 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 
 **7. The sign-in form**
 - Keys: both readers: open `/sign-in`, read down, then Tab through the form. Press Enter on "Sign in".
-- The page: a form with one field and one button. The field holds the name "Ada". Enter signs in and goes to the home page.
-- The reader says: the title "Sign in"; a heading "Sign in"; the field "Name", edit, required, with the value "Ada"; the button "Sign in". After Enter the new page's title is spoken as for any new page. You are signed in for the next steps.
+- The page: a form with one field and one button. The field holds the name "Anu". Enter signs in and goes to the home page.
+- The reader says: the title "Sign in"; a heading "Sign in"; the field "Name", edit, required, with the value "Anu"; the button "Sign in". After Enter the new page's title is spoken as for any new page. You are signed in for the next steps.
 
 ### Errors in the shell (signed in)
 
@@ -111,7 +111,7 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 **15. Locked and missing rows in a table**
 - Keys: NVDA: open `/pages/rows`, browse mode, move into the table and use Ctrl+Alt+Down arrow. VoiceOver: VO+Shift+Down arrow to interact with the table, then VO+Down arrow.
 - The page: a table of deals where two rows cannot show their deal. Each such row is one cell across both columns.
-- The reader says: the caption "Deals, one of which you can no longer open"; a table of 2 columns; the headers "Name" and "Amount". Rows in order: "Acme", "1,200.00"; then one cell, "You no longer have access to this row."; "Globex", "3,400.00"; one cell, "This deal doesn't exist, or it was removed."; one cell beginning "No results"; "Initech", "9,900.00". None of the three single cells is spoken as a link, button or check box.
+- The reader says: the caption "Deals, one of which you can no longer open"; a table of 2 columns; the headers "Name" and "Amount". Rows in order: "Agra", "1,200.00"; then one cell, "You no longer have access to this row."; "Gulati", "3,400.00"; one cell, "This deal doesn't exist, or it was removed."; one cell beginning "No results"; "Indrani", "9,900.00". None of the three single cells is spoken as a link, button or check box.
 
 ### Regions
 
@@ -169,7 +169,7 @@ Not every headline may be heard (the announcer is one line, and a later one can 
 **23. After a session ended**
 - Keys: both readers: in a private window open `/sign-in?next=%2Fpages`, read down, press Enter on "Sign in".
 - The page: a notice sits above the form. Enter signs in and goes back to the page `/pages`.
-- The reader says: the title "Sign in"; the notice "You've been signed out" and "Sign in again to carry on where you were." (a status); the field "Name", required, "Ada"; the button "Sign in". After Enter, the title "States".
+- The reader says: the title "Sign in"; the notice "You've been signed out" and "Sign in again to carry on where you were." (a status); the field "Name", required, "Anu"; the button "Sign in". After Enter, the title "States".
 
 **24. An address that would leave the site**
 - Keys: both readers: in a private window open `/sign-in?next=%2F%2Fevil.example%2Fx`, press Enter on "Sign in". Then read the address (Ctrl+L; VoiceOver: Command+L).
@@ -213,7 +213,7 @@ Not every headline may be heard (the announcer is one line, and a later one can 
 | 4 | Generic 500 words and reference; none of the secret words | | | |
 | 5 | "Try again in 12 seconds." and one "Try again" link | | | |
 | 6 | Extra line, then "Reload" and "Go to home" | | | |
-| 7 | Field "Name", required, "Ada"; button "Sign in"; signed in after | | | |
+| 7 | Field "Name", required, "Anu"; button "Sign in"; signed in after | | | |
 | 8 | Shell stays; heading is short title; Tab: Try again, Go to home, Copy reference | | | |
 | 9 | "Copied" once; button name and focus stay | | | |
 | 10 | Title "Page not found" once; shell stays; focus in main | | | |

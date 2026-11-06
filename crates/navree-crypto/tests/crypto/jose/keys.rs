@@ -22,7 +22,7 @@ fn apple_p8_keys_load_and_sign_es256() {
     let token = key
         .sign_json(
             &key.header(),
-            &json!({"iss": "TEAMID", "sub": "com.acme.web"}),
+            &json!({"iss": "TEAMID", "sub": "com.agra.web"}),
         )
         .unwrap();
     let jws = Jws::parse(&token).unwrap();

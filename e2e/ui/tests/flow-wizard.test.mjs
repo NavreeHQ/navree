@@ -44,7 +44,7 @@ inBrowsers(({ open, browserName }) => {
     await moveTo(page, "next", "contact");
   };
   const second = async (page) => {
-    await page.fill("[name=email]", "ada@example.com");
+    await page.fill("[name=email]", "anu@example.com");
     await page.fill("[name=code]", "correct horse");
     await moveTo(page, "next", "extras");
   };
@@ -102,20 +102,20 @@ inBrowsers(({ open, browserName }) => {
   test("Back and the stepper keep what was typed, valid or not, and show no error for a step not tried", async () => {
     const { page, close } = await open("/flow/wizard/start");
     await first(page);
-    await page.fill("[name=email]", "ada@");
+    await page.fill("[name=email]", "anu@");
     await moveTo(page, "back", "basics");
     assert.equal(await page.inputValue("[name=title]"), "Annual plan");
     // The stepper takes the half typed step back, with the half typed email in it.
     await moveTo(page, "goto:contact", "contact");
-    assert.equal(await page.inputValue("[name=email]"), "ada@");
+    assert.equal(await page.inputValue("[name=email]"), "anu@");
     assert.deepEqual(await errors(page), [], "it was not tried");
     // Tried, it says what is wrong.
     await page.fill("[name=code]", "123456");
     await noChecks(page);
     await go(page, "next");
     await page.waitForSelector("[data-slot=field-error]");
-    assert.deepEqual(await errors(page), ["Enter an email address like ada@example.com."]);
-    assert.equal(await page.inputValue("[name=email]"), "ada@");
+    assert.deepEqual(await errors(page), ["Enter an email address like anu@example.com."]);
+    assert.equal(await page.inputValue("[name=email]"), "anu@");
     await close();
   });
 
@@ -128,7 +128,7 @@ inBrowsers(({ open, browserName }) => {
     assert.equal((await states(page))[1], "done");
     await moveTo(page, "goto:contact", "contact");
     assert.equal(await page.inputValue("[name=code]"), "");
-    assert.equal(await page.inputValue("[name=email]"), "ada@example.com");
+    assert.equal(await page.inputValue("[name=email]"), "anu@example.com");
     assert.ok(!(await page.content()).includes("correct horse"));
     await close();
   });
@@ -146,7 +146,7 @@ inBrowsers(({ open, browserName }) => {
     await moveTo(page, "next", "review");
     const text = await page.locator("[data-slot=wizard-review]").innerText();
     assert.match(text, /A new customer/);
-    assert.match(text, /ada@example\.com/);
+    assert.match(text, /anu@example\.com/);
     assert.match(text, /Annual plan/);
     assert.doesNotMatch(text, /correct horse/);
     // The contact step has a password that is never kept, and is as done here as in the stepper.
@@ -227,7 +227,7 @@ inBrowsers(({ open, browserName }) => {
     const b = await context.newPage();
     await b.goto(`${BASE}/flow/wizard/${id}/contact`);
     // Window A moves on.
-    await a.fill("[name=email]", "ada@example.com");
+    await a.fill("[name=email]", "anu@example.com");
     await a.fill("[name=code]", "correct horse");
     await moveTo(a, "next", "extras");
     // Window B, drawn before that, posts its own answer.
@@ -239,7 +239,7 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await heading(b), "Extras", "it shows the draft as it is now");
     // B's post changed nothing: A's answer is the one kept.
     await b.goto(`${BASE}/flow/wizard/${id}/contact`);
-    assert.equal(await b.inputValue("[name=email]"), "ada@example.com");
+    assert.equal(await b.inputValue("[name=email]"), "anu@example.com");
     await close();
   });
 
@@ -297,9 +297,9 @@ inBrowsers(({ open, browserName }) => {
     const sent = await page.request.post(`${BASE}/flow/wizard/${id}/contact`, { data: `_rev=${rev}&_wizard=next&email=bad&code=correct%20horse`, headers: { "content-type": "application/x-www-form-urlencoded" }, maxRedirects: 0 });
     assert.equal(sent.status(), 303);
     await page.goto(`${BASE}/flow/wizard/${id}/contact`);
-    assert.deepEqual(await errors(page), ["Enter an email address like ada@example.com."]);
+    assert.deepEqual(await errors(page), ["Enter an email address like anu@example.com."]);
     assert.equal(await page.inputValue("[name=email]"), "bad");
-    await page.fill("[name=email]", "ada@example.com");
+    await page.fill("[name=email]", "anu@example.com");
     await page.fill("[name=code]", "correct horse");
     await Promise.all([page.waitForURL(/\/extras$/), page.click("button[name=_wizard][value=next]:not([hidden])")]);
     await Promise.all([page.waitForURL(/\/terms$/), page.click("[data-slot=step-trigger][value='goto:terms']")]);

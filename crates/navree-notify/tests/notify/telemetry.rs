@@ -39,7 +39,7 @@ async fn every_delivered_channel_is_reported() {
     let id = app
         .get::<Notifier>()
         .await
-        .send_now(&user, DealWon::via(&ALL, "Acme renewal"))
+        .send_now(&user, DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
 
@@ -57,7 +57,7 @@ async fn notifications_in_a_unit_of_work_are_reported_after_commit() {
     let notifier = app.get::<Notifier>().await;
     let uow = app.get::<Db>().await.uow(None, None).await;
     notifier
-        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
     assert!(
@@ -74,7 +74,7 @@ async fn a_rolled_back_unit_of_work_reports_nothing() {
     let notifier = app.get::<Notifier>().await;
     let uow = app.get::<Db>().await.uow(None, None).await;
     notifier
-        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();

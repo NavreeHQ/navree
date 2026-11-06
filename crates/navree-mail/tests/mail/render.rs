@@ -15,7 +15,7 @@ fn mailer(options: RenderOptions) -> (Mailer, ArrayTransport) {
 
 fn html_mail(html: &str) -> Message {
     Message::new()
-        .to("ada@example.com")
+        .to("anu@example.com")
         .subject("Hi")
         .html(html)
 }
@@ -58,14 +58,14 @@ async fn a_text_body_is_generated_from_html_only_mail() {
 
     mailer
         .send_message(html_mail(
-            "<h1>Welcome</h1><p>Hi <b>Ada</b>,</p><p><a href=\"https://acme.test/start\">Get started</a></p>",
+            "<h1>Welcome</h1><p>Hi <b>Anu</b>,</p><p><a href=\"https://acme.test/start\">Get started</a></p>",
         ))
         .await
         .expect("send");
 
     let text = transport.sent().remove(0).text.expect("text");
     assert!(text.contains("Welcome"), "{text}");
-    assert!(text.contains("Hi Ada,"), "{text}");
+    assert!(text.contains("Hi Anu,"), "{text}");
     assert!(text.contains("[Get started][1]"), "{text}");
     assert!(text.ends_with("[1]: https://acme.test/start"), "{text}");
 }

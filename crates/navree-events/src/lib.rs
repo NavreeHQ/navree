@@ -80,7 +80,7 @@
 //!     .await?;
 //!
 //! let bus = app.ctx().get::<EventBus>().await?;
-//! bus.emit(UserRegistered { email: "ada@example.com".into() }).await?;
+//! bus.emit(UserRegistered { email: "anu@example.com".into() }).await?;
 //!
 //! app.shutdown().await?;
 //! # Ok(())

@@ -52,7 +52,7 @@ const X_XSRF_TOKEN: &str = "x-xsrf-token";
 /// client
 ///     .post("/api/v1/login")
 ///     .xsrf()
-///     .json(&json!({ "email": "ada@example.com", "password": "secret" }))
+///     .json(&json!({ "email": "anu@example.com", "password": "secret" }))
 ///     .send()
 ///     .await
 ///     .assert_status(200);

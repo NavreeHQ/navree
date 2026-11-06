@@ -54,7 +54,7 @@ impl Notification for DealWon {
     }
 
     fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
-        Some(json!({ "message": t!("deal-won", owner = "Ada", title = self.title.as_str()) }))
+        Some(json!({ "message": t!("deal-won", owner = "Anu", title = self.title.as_str()) }))
     }
 }
 
@@ -105,7 +105,7 @@ async fn notifications_render_in_the_recipients_saved_locale() {
                 .send(
                     &Recipient { id },
                     DealWon {
-                        title: "Lovelace renewal".into(),
+                        title: "Lakhotia renewal".into(),
                     },
                 )
                 .await
@@ -121,10 +121,10 @@ async fn notifications_render_in_the_recipients_saved_locale() {
         .array_transport()
         .unwrap()
         .sent();
-    assert_eq!(mail[0].subject, "Affaire gagnée : Lovelace renewal");
-    assert_eq!(mail[0].text.as_deref(), Some("Envoyé par Acme CRM."));
-    assert_eq!(mail[1].subject, "You won Lovelace renewal");
-    assert_eq!(mail[1].text.as_deref(), Some("Sent by Acme CRM."));
+    assert_eq!(mail[0].subject, "Affaire gagnée : Lakhotia renewal");
+    assert_eq!(mail[0].text.as_deref(), Some("Envoyé par Agra CRM."));
+    assert_eq!(mail[1].subject, "You won Lakhotia renewal");
+    assert_eq!(mail[1].text.as_deref(), Some("Sent by Agra CRM."));
 
     let db = world.app.get::<Db>().await;
     let rows = db
@@ -135,11 +135,11 @@ async fn notifications_render_in_the_recipients_saved_locale() {
         .unwrap();
     assert_eq!(
         rows[0].get::<Value>("data").unwrap(),
-        json!({ "message": "Ada a gagné Lovelace renewal." })
+        json!({ "message": "Anu a gagné Lakhotia renewal." })
     );
     assert_eq!(
         rows[1].get::<Value>("data").unwrap(),
-        json!({ "message": "Ada won Lovelace renewal." })
+        json!({ "message": "Anu won Lakhotia renewal." })
     );
     world.app.shutdown().await.unwrap();
 }

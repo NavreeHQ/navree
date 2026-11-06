@@ -256,18 +256,18 @@ mod tests {
     fn google_users_are_normalized() {
         let user = user_of(&json!({
             "id": "104857300203849504382",
-            "primaryEmail": "ada@acme.test",
-            "name": { "givenName": "Ada", "familyName": "Lovelace", "fullName": "Ada Lovelace" },
+            "primaryEmail": "anu@acme.test",
+            "name": { "givenName": "Anu", "familyName": "Lakhotia", "fullName": "Anu Lakhotia" },
             "suspended": false,
             "archived": true,
             "emails": [
-                { "address": "ada@acme.test", "primary": true },
+                { "address": "anu@acme.test", "primary": true },
                 { "address": "countess@home.test", "type": "home" }
             ],
             "phones": [{ "value": "+44 20 7946 0958", "type": "work", "primary": true }],
             "organizations": [
                 { "title": "Analyst", "department": "Finance" },
-                { "title": "Principal engineer", "department": "Engineering", "name": "Acme", "primary": true }
+                { "title": "Principal engineer", "department": "Engineering", "name": "Agra", "primary": true }
             ],
             "externalIds": [{ "type": "organization", "value": "1815" }],
             "relations": [{ "type": "manager", "value": "charles@acme.test" }],
@@ -276,15 +276,15 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(user.external_id, "104857300203849504382");
-        assert_eq!(user.user_name, "ada@acme.test");
+        assert_eq!(user.user_name, "anu@acme.test");
         assert!(!user.active);
-        assert_eq!(user.full_name(), "Ada Lovelace");
+        assert_eq!(user.full_name(), "Anu Lakhotia");
         assert_eq!(user.emails.len(), 2);
         assert_eq!(user.emails[1].kind.as_deref(), Some("home"));
         assert_eq!(user.primary_phone(), Some("+44 20 7946 0958"));
         assert_eq!(user.title.as_deref(), Some("Principal engineer"));
         assert_eq!(user.department.as_deref(), Some("Engineering"));
-        assert_eq!(user.organization.as_deref(), Some("Acme"));
+        assert_eq!(user.organization.as_deref(), Some("Agra"));
         assert_eq!(user.employee_number.as_deref(), Some("1815"));
         assert_eq!(user.manager_id.as_deref(), Some("charles@acme.test"));
         assert_eq!(user.locale.as_deref(), Some("en-GB"));

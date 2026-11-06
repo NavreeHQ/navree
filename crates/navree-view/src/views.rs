@@ -150,10 +150,10 @@ impl Views {
     ///     .render_source(
     ///         "welcome.html",
     ///         r#"{% extends "layouts/mail.html" %}{% block body %}Hi {{ name }}{% endblock %}"#,
-    ///         json!({ "name": "Ada" }),
+    ///         json!({ "name": "Anu" }),
     ///     )
     ///     .unwrap();
-    /// assert_eq!(html, "<main>Hi Ada</main>");
+    /// assert_eq!(html, "<main>Hi Anu</main>");
     /// ```
     pub fn render_source(
         &self,
@@ -188,7 +188,7 @@ impl Views {
     ///
     /// let mut views = Views::from_templates([("hi.txt", "{{ shout(name) }}")]).unwrap();
     /// views.configure(|env| env.add_function("shout", |name: &str| name.to_uppercase()));
-    /// assert_eq!(views.render("hi", json!({ "name": "ada" })).unwrap(), "ADA");
+    /// assert_eq!(views.render("hi", json!({ "name": "anu" })).unwrap(), "ANU");
     /// ```
     pub fn configure(&mut self, configure: impl FnOnce(&mut Environment)) {
         configure(&mut self.env);

@@ -26,7 +26,7 @@ mod gcs {
             service_account_key: Some(key.to_string().into()),
             endpoint: Some(server.uri()),
             prefix: prefix.map(str::to_owned),
-            ..GcsConfig::new("acme-media")
+            ..GcsConfig::new("agra-media")
         };
         Storage::new(&single_disk("media", config.into()), SIGNING_KEY)
             .unwrap()
@@ -43,7 +43,7 @@ mod gcs {
     async fn files_go_to_the_bucket_with_a_bearer_token() {
         let server = MockServer::start().await;
         // The object name (prefix and path) is one percent-encoded segment.
-        let object_path = "/acme%2Dmedia/site%2Freports%2Fq1%2Ecsv";
+        let object_path = "/agra%2Dmedia/site%2Freports%2Fq1%2Ecsv";
         Mock::given(method("PUT"))
             .and(path(object_path))
             .and(header_exists("authorization"))
@@ -92,7 +92,7 @@ mod gcs {
         );
         let url = &upload.url;
         assert!(
-            url.starts_with(&format!("{}/acme-media/site/avatars/a.png?", server.uri())),
+            url.starts_with(&format!("{}/agra-media/site/avatars/a.png?", server.uri())),
             "{url}"
         );
         for param in [
@@ -130,7 +130,7 @@ mod gcs {
     async fn the_service_account_key_must_be_valid() {
         let config = GcsConfig {
             service_account_key: Some("not json".to_owned().into()),
-            ..GcsConfig::new("acme-media")
+            ..GcsConfig::new("agra-media")
         };
         let error = Storage::new(&single_disk("media", config.into()), SIGNING_KEY).unwrap_err();
         assert!(error.to_string().contains("disk `media`"), "{error}");

@@ -238,21 +238,21 @@ impl Module for TemplatesModule {
     }
 }
 
-/// Organization `Group` with workspaces Acme and Initech, organization
-/// `Other` with Hooli, and the standalone Globex, each with library items.
+/// Organization `Group` with workspaces Agra and Indrani, organization
+/// `Other` with Hariyali, and the standalone Gulati, each with library items.
 pub struct Fixture {
     pub world: World,
     pub ada: Uuid,
     pub group: Organization,
     pub other: Organization,
-    pub acme: Workspace,
-    pub initech: Workspace,
-    pub globex: Workspace,
+    pub agra: Workspace,
+    pub indrani: Workspace,
+    pub gulati: Workspace,
     pub welcome: Uuid,
     pub handbook: Uuid,
     pub other_handbook: Uuid,
-    pub acme_only: Uuid,
-    pub globex_only: Uuid,
+    pub agra_only: Uuid,
+    pub gulati_only: Uuid,
 }
 
 async fn create(db: &Db, owner: LibraryOwner, slug: &str, name: &str) -> Uuid {
@@ -278,20 +278,20 @@ async fn fixture() -> Fixture {
 /// templates module.
 pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
     let world = World::with(builder.module(TemplatesModule)).await;
-    let ada = world.user("Ada", "ada@example.com").await;
+    let ada = world.user("Anu", "anu@example.com").await;
     let group = world.organization(ada, "Group").await;
     let other = world.organization(ada, "Other").await;
-    let acme = world.workspace(ada, "Acme").await;
-    let initech = world.workspace(ada, "Initech").await;
-    let hooli = world.workspace(ada, "Hooli").await;
-    let globex = world.workspace(ada, "Globex").await;
-    world.attach(group.id, acme.id).await;
-    world.attach(group.id, initech.id).await;
-    world.attach(other.id, hooli.id).await;
+    let agra = world.workspace(ada, "Agra").await;
+    let indrani = world.workspace(ada, "Indrani").await;
+    let hariyali = world.workspace(ada, "Hariyali").await;
+    let gulati = world.workspace(ada, "Gulati").await;
+    world.attach(group.id, agra.id).await;
+    world.attach(group.id, indrani.id).await;
+    world.attach(other.id, hariyali.id).await;
     let workspaces = world.workspaces().await;
-    let acme = workspaces.find(acme.id).await.unwrap().unwrap();
-    let initech = workspaces.find(initech.id).await.unwrap().unwrap();
-    let globex = workspaces.find(globex.id).await.unwrap().unwrap();
+    let agra = workspaces.find(agra.id).await.unwrap().unwrap();
+    let indrani = workspaces.find(indrani.id).await.unwrap().unwrap();
+    let gulati = workspaces.find(gulati.id).await.unwrap().unwrap();
     let db = world.db().await;
     let welcome = create(&db, LibraryOwner::Global, "welcome", "Welcome").await;
     let handbook = create(
@@ -308,12 +308,12 @@ pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
         "Other handbook",
     )
     .await;
-    let acme_only = create(&db, LibraryOwner::Workspace(acme.id), "acme", "Acme only").await;
-    let globex_only = create(
+    let agra_only = create(&db, LibraryOwner::Workspace(agra.id), "agra", "Agra only").await;
+    let gulati_only = create(
         &db,
-        LibraryOwner::Workspace(globex.id),
-        "globex",
-        "Globex only",
+        LibraryOwner::Workspace(gulati.id),
+        "gulati",
+        "Gulati only",
     )
     .await;
     for body in ["Hello", "Bye"] {
@@ -333,14 +333,14 @@ pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
         ada,
         group,
         other,
-        acme,
-        initech,
-        globex,
+        agra,
+        indrani,
+        gulati,
         welcome,
         handbook,
         other_handbook,
-        acme_only,
-        globex_only,
+        agra_only,
+        gulati_only,
     }
 }
 
@@ -367,14 +367,14 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     assert_eq!(
-        visible(&db, &lib.acme).await,
-        ["Acme only", "Group handbook", "Welcome"]
+        visible(&db, &lib.agra).await,
+        ["Agra only", "Group handbook", "Welcome"]
     );
     assert_eq!(
-        visible(&db, &lib.initech).await,
+        visible(&db, &lib.indrani).await,
         ["Group handbook", "Welcome"]
     );
-    assert_eq!(visible(&db, &lib.globex).await, ["Globex only", "Welcome"]);
+    assert_eq!(visible(&db, &lib.gulati).await, ["Gulati only", "Welcome"]);
     assert_eq!(
         visible(&db, LibraryViewer::organization(lib.group.id)).await,
         ["Group handbook", "Welcome"]
@@ -390,8 +390,8 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
         ["Group handbook"]
     );
     assert_eq!(
-        owned(&db, LibraryOwner::Workspace(lib.acme.id)).await,
-        ["Acme only"]
+        owned(&db, LibraryOwner::Workspace(lib.agra.id)).await,
+        ["Agra only"]
     );
     assert_eq!(owned(&db, LibraryOwner::Global).await, ["Welcome"]);
     assert_eq!(
@@ -404,7 +404,7 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
         ["Welcome"]
     );
 
-    let found = LibraryRepo::<Template>::find_visible(db.as_ref(), &lib.acme, lib.handbook)
+    let found = LibraryRepo::<Template>::find_visible(db.as_ref(), &lib.agra, lib.handbook)
         .await
         .unwrap()
         .expect("the organization's handbook");
@@ -413,13 +413,13 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
         LibraryOwner::Organization(lib.group.id)
     );
     assert!(
-        LibraryRepo::<Template>::find_visible(db.as_ref(), &lib.acme, lib.globex_only)
+        LibraryRepo::<Template>::find_visible(db.as_ref(), &lib.agra, lib.gulati_only)
             .await
             .unwrap()
             .is_none()
     );
     let missing =
-        LibraryRepo::<Template>::find_visible_or_fail(db.as_ref(), &lib.acme, lib.other_handbook)
+        LibraryRepo::<Template>::find_visible_or_fail(db.as_ref(), &lib.agra, lib.other_handbook)
             .await
             .unwrap_err();
     assert_eq!(missing.to_app_error().status.as_u16(), 404);
@@ -436,22 +436,22 @@ async fn queries_see_what_the_current_workspace_sees() {
     );
     assert_eq!(Template::query().count(db.as_ref()).await.unwrap(), 1);
     // A task working for a workspace sees its library.
-    let acme = navree_orm::workspace::scope(lib.acme.id, Template::query().get(db.as_ref()))
+    let agra = navree_orm::workspace::scope(lib.agra.id, Template::query().get(db.as_ref()))
         .await
         .unwrap();
-    assert_eq!(names(&acme), ["Acme only", "Group handbook", "Welcome"]);
-    let globex = navree_orm::workspace::scope(lib.globex.id, Template::query().get(db.as_ref()))
+    assert_eq!(names(&agra), ["Agra only", "Group handbook", "Welcome"]);
+    let gulati = navree_orm::workspace::scope(lib.gulati.id, Template::query().get(db.as_ref()))
         .await
         .unwrap();
-    assert_eq!(names(&globex), ["Globex only", "Welcome"]);
+    assert_eq!(names(&gulati), ["Gulati only", "Welcome"]);
     // A unit of work that entered a workspace.
     let uow = db.uow(None, None).await;
-    uow.set_workspace(Some(lib.initech.id));
+    uow.set_workspace(Some(lib.indrani.id));
     assert_eq!(
         names(&Template::query().get(&uow).await.unwrap()),
         ["Group handbook", "Welcome"]
     );
-    assert!(Template::find(&uow, lib.acme_only).await.unwrap().is_none());
+    assert!(Template::find(&uow, lib.agra_only).await.unwrap().is_none());
     uow.rollback().await.unwrap();
     // The scope can be left out on purpose.
     assert_eq!(
@@ -467,21 +467,21 @@ async fn queries_see_what_the_current_workspace_sees() {
     let client = lib.world.as_user(lib.ada);
     client
         .get("/api/templates")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data", json!(["Acme only", "Group handbook", "Welcome"]));
+        .assert_json_path("data", json!(["Agra only", "Group handbook", "Welcome"]));
     client
         .get("/api/templates")
-        .header("x-workspace", "globex")
+        .header("x-workspace", "gulati")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data", json!(["Globex only", "Welcome"]));
+        .assert_json_path("data", json!(["Gulati only", "Welcome"]));
     client
-        .get(&format!("/api/templates/{}", lib.globex_only))
-        .header("x-workspace", "acme")
+        .get(&format!("/api/templates/{}", lib.gulati_only))
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(404);
@@ -491,7 +491,7 @@ async fn queries_see_what_the_current_workspace_sees() {
 async fn the_check_constraint_refuses_contradicting_owners() {
     let lib = fixture().await;
     let db = lib.world.db().await;
-    let (org, ws) = (lib.group.id.to_string(), lib.acme.id.to_string());
+    let (org, ws) = (lib.group.id.to_string(), lib.agra.id.to_string());
     // UUIDs are 16 bytes on MySQL.
     let mysql = db.backend() == navree_db::Backend::MySql;
     let uuid = |id: &str| {
@@ -542,7 +542,7 @@ async fn the_check_constraint_refuses_contradicting_owners() {
     // The ORM refuses them before the database does, naming the field.
     let contradicting = Template {
         scope: LibraryScope::Global,
-        workspace_id: Some(lib.acme.id),
+        workspace_id: Some(lib.agra.id),
         slug: "bad".into(),
         name: "Bad".into(),
         ..Template::default()
@@ -578,7 +578,7 @@ async fn inside_a_workspace_shared_items_are_read_only() {
     let rename = |id: Uuid, name: &'static str| {
         client
             .patch(&format!("/api/templates/{id}"))
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .json(&json!({ "name": name }))
             .send()
     };
@@ -593,35 +593,35 @@ async fn inside_a_workspace_shared_items_are_read_only() {
             );
         client
             .delete(&format!("/api/templates/{shared}"))
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .send()
             .await
             .assert_status(403)
             .assert_json_path("code", json!("library_read_only"));
     }
-    rename(lib.acme_only, "Acme's own")
+    rename(lib.agra_only, "Agra's own")
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme's own"));
+        .assert_json_path("name", json!("Agra's own"));
     // The checked route says the same before trying.
     client
         .patch(&format!("/api/templates/{}/checked", lib.welcome))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Mine" }))
         .send()
         .await
         .assert_status(403)
         .assert_json_path("code", json!("library_read_only"));
     client
-        .patch(&format!("/api/templates/{}/checked", lib.globex_only))
-        .header("x-workspace", "acme")
+        .patch(&format!("/api/templates/{}/checked", lib.gulati_only))
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Mine" }))
         .send()
         .await
         .assert_status(404);
     client
-        .patch(&format!("/api/templates/{}/checked", lib.acme_only))
-        .header("x-workspace", "acme")
+        .patch(&format!("/api/templates/{}/checked", lib.agra_only))
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Checked" }))
         .send()
         .await
@@ -630,14 +630,14 @@ async fn inside_a_workspace_shared_items_are_read_only() {
     // A new item joins the workspace's library.
     let created = client
         .post("/api/templates")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "slug": "notes", "name": "Notes" }))
         .send()
         .await
         .assert_status(200)
         .json::<Value>();
     assert_eq!(created["scope"], "workspace");
-    assert_eq!(created["workspace_id"], json!(lib.acme.id));
+    assert_eq!(created["workspace_id"], json!(lib.agra.id));
     assert_eq!(created["organization_id"], Value::Null);
 
     // Nothing shared changed.
@@ -661,7 +661,7 @@ async fn inside_a_workspace_shared_items_are_read_only() {
 async fn the_guard_keeps_a_workspace_to_its_own_items() {
     let lib = fixture().await;
     let db = lib.world.db().await;
-    let acme = lib.acme.id;
+    let agra = lib.agra.id;
     let any = |id| {
         Template::query()
             .without_global_scope::<LibraryVisibility>()
@@ -669,13 +669,13 @@ async fn the_guard_keeps_a_workspace_to_its_own_items() {
     };
 
     // Another workspace's item, however it was read: a 404.
-    let mut theirs = any(lib.globex_only).await.unwrap();
+    let mut theirs = any(lib.gulati_only).await.unwrap();
     theirs.name = "Taken".into();
-    let error = navree_orm::workspace::scope(acme, theirs.save(db.as_ref()))
+    let error = navree_orm::workspace::scope(agra, theirs.save(db.as_ref()))
         .await
         .unwrap_err();
     assert!(error.is_not_found(), "{error}");
-    let error = navree_orm::workspace::scope(acme, theirs.delete(db.as_ref()))
+    let error = navree_orm::workspace::scope(agra, theirs.delete(db.as_ref()))
         .await
         .unwrap_err();
     assert!(error.is_not_found(), "{error}");
@@ -688,17 +688,17 @@ async fn the_guard_keeps_a_workspace_to_its_own_items() {
         ..Template::default()
     };
     let error = navree_orm::workspace::scope(
-        acme,
+        agra,
         LibraryRepo::<Template>::create(db.as_ref(), LibraryOwner::Global, global.clone()),
     )
     .await
     .unwrap_err();
     assert_eq!(error.to_app_error().code, "library_read_only");
-    let mut own = any(lib.acme_only).await.unwrap();
+    let mut own = any(lib.agra_only).await.unwrap();
     own.set_library_owner(LibraryOwner::Organization(lib.group.id))
         .unwrap();
     let error = WorkspaceError::from(
-        navree_orm::workspace::scope(acme, own.save(db.as_ref()))
+        navree_orm::workspace::scope(agra, own.save(db.as_ref()))
             .await
             .unwrap_err(),
     );
@@ -706,7 +706,7 @@ async fn the_guard_keeps_a_workspace_to_its_own_items() {
 
     // `unguarded` lifts the workspace rules for a deliberate write.
     let published = navree_orm::workspace::scope(
-        acme,
+        agra,
         unguarded(LibraryRepo::<Template>::create(
             db.as_ref(),
             LibraryOwner::Organization(lib.group.id),
@@ -742,7 +742,7 @@ async fn cloning_copies_an_item_into_the_workspace() {
     let client = lib.world.as_user(lib.ada);
     let copy = client
         .post(&format!("/api/templates/{}/clone", lib.welcome))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)
@@ -750,7 +750,7 @@ async fn cloning_copies_an_item_into_the_workspace() {
     let copy_id: Uuid = serde_json::from_value(copy["id"].clone()).unwrap();
     assert_ne!(copy_id, lib.welcome);
     assert_eq!(copy["scope"], "workspace");
-    assert_eq!(copy["workspace_id"], json!(lib.acme.id));
+    assert_eq!(copy["workspace_id"], json!(lib.agra.id));
     assert_eq!(copy["organization_id"], Value::Null);
     assert_eq!(copy["cloned_from_id"], json!(lib.welcome));
     assert_eq!(copy["name"], "Welcome (copy)");
@@ -778,35 +778,35 @@ async fn cloning_copies_an_item_into_the_workspace() {
             "item_id": lib.welcome.to_string(),
             "clone_id": copy_id.to_string(),
             "source": { "scope": "global" },
-            "owner": { "scope": "workspace", "id": lib.acme.id },
+            "owner": { "scope": "workspace", "id": lib.agra.id },
             "cloned_by": lib.ada,
         })
     );
 
-    // The copy is Acme's: in its library, editable there, unseen elsewhere.
+    // The copy is Agra's: in its library, editable there, unseen elsewhere.
     client
         .get("/api/templates")
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_json_path(
             "data",
-            json!(["Acme only", "Group handbook", "Welcome", "Welcome (copy)"]),
+            json!(["Agra only", "Group handbook", "Welcome", "Welcome (copy)"]),
         );
     client
         .patch(&format!("/api/templates/{copy_id}"))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Our welcome" }))
         .send()
         .await
         .assert_status(200);
     client
         .get("/api/templates")
-        .header("x-workspace", "initech")
+        .header("x-workspace", "indrani")
         .send()
         .await
         .assert_json_path("data", json!(["Group handbook", "Welcome"]));
-    let copy = LibraryRepo::<Template>::find_visible_or_fail(db.as_ref(), &lib.acme, copy_id)
+    let copy = LibraryRepo::<Template>::find_visible_or_fail(db.as_ref(), &lib.agra, copy_id)
         .await
         .unwrap();
     assert_eq!(copy.cloned_from().unwrap(), Some(lib.welcome));
@@ -821,18 +821,18 @@ async fn cloning_copies_an_item_into_the_workspace() {
     // Organization items clone too; the clones of an item are found back.
     client
         .post(&format!("/api/templates/{}/clone", lib.handbook))
-        .header("x-workspace", "initech")
+        .header("x-workspace", "indrani")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("name", json!("Group handbook (copy)"));
-    let initech_clones = navree_orm::workspace::scope(
-        lib.initech.id,
+    let indrani_clones = navree_orm::workspace::scope(
+        lib.indrani.id,
         LibraryRepo::<Template>::clones_of(lib.handbook).count(db.as_ref()),
     )
     .await
     .unwrap();
-    assert_eq!(initech_clones, 1);
+    assert_eq!(indrani_clones, 1);
     assert_eq!(
         LibraryRepo::<Template>::clones_of(lib.welcome)
             .without_global_scope::<LibraryVisibility>()
@@ -847,10 +847,10 @@ async fn cloning_copies_an_item_into_the_workspace() {
 async fn clones_need_an_item_the_target_sees() {
     let lib = fixture().await;
     let client = lib.world.as_user(lib.ada);
-    for invisible in [lib.globex_only, lib.other_handbook] {
+    for invisible in [lib.gulati_only, lib.other_handbook] {
         client
             .post(&format!("/api/templates/{invisible}/clone"))
-            .header("x-workspace", "acme")
+            .header("x-workspace", "agra")
             .send()
             .await
             .assert_status(404);
@@ -899,7 +899,7 @@ async fn clones_need_an_item_the_target_sees() {
     // to its organization, never to another one.
     let published = LibraryRepo::<Template>::clone_to(
         &uow,
-        lib.acme_only,
+        lib.agra_only,
         LibraryOwner::Organization(lib.group.id),
     )
     .await
@@ -908,10 +908,10 @@ async fn clones_need_an_item_the_target_sees() {
         published.library_owner().unwrap(),
         LibraryOwner::Organization(lib.group.id)
     );
-    assert_eq!(published.cloned_from().unwrap(), Some(lib.acme_only));
+    assert_eq!(published.cloned_from().unwrap(), Some(lib.agra_only));
     for (item, organization) in [
-        (lib.acme_only, lib.other.id),
-        (lib.globex_only, lib.group.id),
+        (lib.agra_only, lib.other.id),
+        (lib.gulati_only, lib.group.id),
     ] {
         let error =
             LibraryRepo::<Template>::clone_to(&uow, item, LibraryOwner::Organization(organization))
@@ -920,7 +920,7 @@ async fn clones_need_an_item_the_target_sees() {
         assert_eq!(error.to_app_error().status.as_u16(), 404);
     }
     // The global library takes global items only.
-    let error = LibraryRepo::<Template>::clone_to(&uow, lib.acme_only, LibraryOwner::Global)
+    let error = LibraryRepo::<Template>::clone_to(&uow, lib.agra_only, LibraryOwner::Global)
         .await
         .unwrap_err();
     assert_eq!(error.to_app_error().status.as_u16(), 404);
@@ -928,8 +928,8 @@ async fn clones_need_an_item_the_target_sees() {
 
     // Inside a workspace, cloning for someone else is refused.
     let uow = db.uow(None, None).await;
-    uow.set_workspace(Some(lib.acme.id));
-    let error = LibraryRepo::<Template>::clone_into(&uow, lib.welcome, lib.globex.id)
+    uow.set_workspace(Some(lib.agra.id));
+    let error = LibraryRepo::<Template>::clone_into(&uow, lib.welcome, lib.gulati.id)
         .await
         .unwrap_err();
     assert_eq!(error.to_app_error().code, "library_read_only");
@@ -942,7 +942,7 @@ async fn a_rolled_back_clone_leaves_nothing() {
     let mut events = lib.world.events(&["library.item_cloned"]).await;
     let db = lib.world.db().await;
     let uow = db.uow(Some(lib.ada), None).await;
-    let copy = LibraryRepo::<Template>::clone_into(&uow, lib.welcome, lib.acme.id)
+    let copy = LibraryRepo::<Template>::clone_into(&uow, lib.welcome, lib.agra.id)
         .await
         .unwrap();
     uow.rollback().await.unwrap();

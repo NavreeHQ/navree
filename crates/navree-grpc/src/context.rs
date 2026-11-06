@@ -115,14 +115,14 @@ mod tests {
             http::header::AUTHORIZATION,
             HeaderValue::from_static("Bearer t"),
         );
-        headers.insert(&X_WORKSPACE, HeaderValue::from_static("acme"));
+        headers.insert(&X_WORKSPACE, HeaderValue::from_static("agra"));
         let id = RequestId::parse_or_generate(Some("req-1"));
         let context = CallContext::of(&headers, Some(&id), None);
         let seen = context
             .scope(async { CallContext::current().expect("inside the scope") })
             .await;
         assert_eq!(seen.authorization.unwrap(), "Bearer t");
-        assert_eq!(seen.workspace.unwrap(), "acme");
+        assert_eq!(seen.workspace.unwrap(), "agra");
         assert_eq!(seen.request_id.as_deref(), Some(id.as_str()));
         assert!(CallContext::current().is_none());
     }

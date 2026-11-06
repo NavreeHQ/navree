@@ -145,7 +145,7 @@ fn save_sample(name: &str, pdf: &Pdf) {
 async fn a_template_renders_with_its_data_and_its_layout() {
     let pdf = engine()
         .render(&Render::template("certificates/classic").data(json!({
-            "name": "Ada Lovelace",
+            "name": "Anu Lakhotia",
             "course": "Analytical Engines",
             "completed_on": "26 October 2026",
         })))
@@ -156,7 +156,7 @@ async fn a_template_renders_with_its_data_and_its_layout() {
     assert_eq!(
         pdf.text().unwrap(),
         "Certificate of completion\n\
-         This certifies that Ada Lovelace completed Analytical Engines on 26 October 2026."
+         This certifies that Anu Lakhotia completed Analytical Engines on 26 October 2026."
     );
     // `{% extends %}` brought the layout's <title> and @page rule.
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Certificate"));
@@ -168,14 +168,14 @@ async fn a_template_renders_with_its_data_and_its_layout() {
     // The name may carry the extension.
     let pdf = engine()
         .render(&Render::template("certificates/classic.html").data(json!({
-            "name": "Grace Hopper", "course": "Compilers", "completed_on": "today",
+            "name": "Gauri Hundal", "course": "Compilers", "completed_on": "today",
         })))
         .await
         .unwrap();
     assert!(
         pdf.text()
             .unwrap()
-            .contains("Grace Hopper completed Compilers")
+            .contains("Gauri Hundal completed Compilers")
     );
 }
 
@@ -197,7 +197,7 @@ async fn unknown_and_broken_templates_name_the_file() {
     ));
     // An undefined variable: the file and the line.
     match engine()
-        .render(&Render::template("broken").data(json!({"name": "Ada"})))
+        .render(&Render::template("broken").data(json!({"name": "Anu"})))
         .await
     {
         Err(DocumentsError::Template {
@@ -231,13 +231,13 @@ async fn embedded_templates_render_and_files_override_them() {
     );
     let engine = NativeEngine::new(templates);
     let pdf = engine
-        .render(&Render::template("receipts/simple").data(json!({"name": "Ada"})))
+        .render(&Render::template("receipts/simple").data(json!({"name": "Anu"})))
         .await
         .unwrap();
-    assert_eq!(pdf.text().unwrap(), "Receipt for Ada");
+    assert_eq!(pdf.text().unwrap(), "Receipt for Anu");
     let pdf = engine
         .render(&Render::template("certificates/classic").data(json!({
-            "name": "Ada", "course": "x", "completed_on": "y",
+            "name": "Anu", "course": "x", "completed_on": "y",
         })))
         .await
         .unwrap();
@@ -248,7 +248,7 @@ async fn embedded_templates_render_and_files_override_them() {
 async fn the_html_subset_prints() {
     let html = r#"
         <h1>Quarterly <em>audit</em></h1>
-        <p>Prepared for <strong>Acme Ltd</strong> by <a href="https://audit.example/q3">the audit team</a>.<br>Second line.</p>
+        <p>Prepared for <strong>Agra Ltd</strong> by <a href="https://audit.example/q3">the audit team</a>.<br>Second line.</p>
         <ul><li>Every control was tested<li>Two findings are open
             <ol><li>Rotate the keys</li><li>Restore a backup</li></ol></li></ul>
         <hr>
@@ -260,7 +260,7 @@ async fn the_html_subset_prints() {
           </tbody>
         </table>
         <p>Run <code>queue:work</code> on every node.</p>
-        <img src="/images/acme-logo.png" alt="Acme">
+        <img src="/images/agra-logo.png" alt="Agra">
         <img src="/images/photo.jpg" width="50%">
         <img src="missing.png"><img src="https://tracker.example/pixel.png">
         <div class="page-break"></div>
@@ -271,7 +271,7 @@ async fn the_html_subset_prints() {
     assert_eq!(
         pages[0],
         "Quarterly audit\n\
-         Prepared for Acme Ltd by the audit team.\n\
+         Prepared for Agra Ltd by the audit team.\n\
          Second line.\n\
          • Every control was tested\n\
          • Two findings are open\n\
@@ -327,9 +327,9 @@ async fn fonts_are_embedded_as_subsets() {
 
 #[tokio::test]
 async fn the_pdf_is_tagged_and_carries_its_metadata() {
-    let html = r#"<html lang="en-GB"><head><title>Audit</title><meta name="author" content="Acme audit team"></head>
+    let html = r#"<html lang="en-GB"><head><title>Audit</title><meta name="author" content="Agra audit team"></head>
         <body><h1>Audit</h1><p>Body text.</p><ul><li>One</li></ul>
-        <table><tr><th>A</th></tr><tr><td>1</td></tr></table><img src="/images/acme-logo.png" alt="Acme"></body></html>"#;
+        <table><tr><th>A</th></tr><tr><td>1</td></tr></table><img src="/images/agra-logo.png" alt="Agra"></body></html>"#;
     let pdf = engine().render(&Render::html(html)).await.unwrap();
     let document = load(&pdf);
     let catalog = catalog(&document);
@@ -342,7 +342,7 @@ async fn the_pdf_is_tagged_and_carries_its_metadata() {
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Audit"));
     assert_eq!(
         info(&document, b"Author").as_deref(),
-        Some("Acme audit team")
+        Some("Agra audit team")
     );
     assert!(catalog.has(b"Outlines"), "headings make the outline");
     // The structure: every kind the HTML used.
@@ -547,7 +547,7 @@ async fn headers_and_footers_number_the_pages() {
         .map(|i| format!("<tr><td>Control {i}</td><td>Passed</td></tr>"))
         .collect();
     let html = format!(
-        "<header><p>Acme audit</p></header>\
+        "<header><p>Agra audit</p></header>\
          <table><thead><tr><th>Control</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table>\
          <footer><p>Page <span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span></p></footer>"
     );
@@ -558,7 +558,7 @@ async fn headers_and_footers_number_the_pages() {
     let mut seen = 0;
     for (index, page) in pages.iter().enumerate() {
         let lines: Vec<&str> = page.lines().collect();
-        assert_eq!(lines[0], "Acme audit");
+        assert_eq!(lines[0], "Agra audit");
         assert_eq!(lines[1], "Control Status", "the header row repeats");
         assert_eq!(
             *lines.last().unwrap(),
@@ -873,10 +873,10 @@ async fn sample_invoice() {
         "due": "26 November 2026",
         "currency": "EUR",
         "company": {
-            "name": "Acme Security Ltd",
+            "name": "Agra Security Ltd",
             "street": "12 Harbour Road",
             "city": "Dublin D02 X285, Ireland",
-            "email": "billing@acme.example",
+            "email": "billing@agra.example",
             "iban": "IE29 AIBK 9311 5212 3456 78",
             "bic": "AIBKIE2D",
         },
@@ -891,11 +891,11 @@ async fn sample_invoice() {
         "vat_rate": 20,
         "vat_cents": vat,
         "total_cents": subtotal + vat,
-        "pay_url": "https://pay.acme.example/INV-2026-0042",
+        "pay_url": "https://pay.agra.example/INV-2026-0042",
         "terms": "Payment is due within 30 days of the invoice date. Late payments carry \
                   interest at 8 percentage points above the reference rate, as the late \
                   payment directive allows. Questions about this invoice go to \
-                  billing@acme.example; quote the invoice number.",
+                  billing@agra.example; quote the invoice number.",
     });
     let pdf = engine()
         .render(&Render::template("samples/invoice").data(&data))
@@ -922,7 +922,7 @@ async fn sample_invoice() {
     assert_eq!(images(&document), 1);
     assert_eq!(
         links(&document),
-        vec!["https://pay.acme.example/INV-2026-0042"]
+        vec!["https://pay.agra.example/INV-2026-0042"]
     );
 }
 
@@ -971,7 +971,7 @@ fn report() -> PdfDocument {
     }
     PdfDocument::new()
         .title("Quarterly security review")
-        .author("Acme audit team")
+        .author("Agra audit team")
         .locale("en")
         .header(
             Paragraph::new()
@@ -984,7 +984,7 @@ fn report() -> PdfDocument {
         .paragraph(
             Paragraph::new()
                 .text("Prepared for ")
-                .bold("Acme Ltd")
+                .bold("Agra Ltd")
                 .text(" by the audit team, ")
                 .italic("27 October 2026")
                 .text("."),
@@ -1028,8 +1028,8 @@ fn report() -> PdfDocument {
             Paragraph::new()
                 .text("The full evidence pack is at ")
                 .link(
-                    "security.acme.example/q3",
-                    "https://security.acme.example/q3",
+                    "security.agra.example/q3",
+                    "https://security.agra.example/q3",
                 )
                 .text("."),
         )
@@ -1045,7 +1045,7 @@ async fn sample_report() {
     let count = pages.len();
     assert!(count >= 4, "{count}");
     assert!(
-        pages[0].contains("Prepared for Acme Ltd by the audit team, 27 October 2026."),
+        pages[0].contains("Prepared for Agra Ltd by the audit team, 27 October 2026."),
         "{}",
         pages[0]
     );
@@ -1077,10 +1077,10 @@ async fn sample_report() {
     let document = load(&pdf);
     assert_eq!(
         info(&document, b"Author").as_deref(),
-        Some("Acme audit team")
+        Some("Agra audit team")
     );
     assert_eq!(images(&document), 1);
-    assert_eq!(links(&document), vec!["https://security.acme.example/q3"]);
+    assert_eq!(links(&document), vec!["https://security.agra.example/q3"]);
     assert!(fonts(&document).iter().all(|(_, embedded)| *embedded));
 }
 

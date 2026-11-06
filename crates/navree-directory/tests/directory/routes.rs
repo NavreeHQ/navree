@@ -38,7 +38,7 @@ async fn admins_manage_scim_connections() {
 
     let created = admin
         .post("/api/directory/connections")
-        .json(&json!({ "name": "Acme Entra ID", "source": "scim" }))
+        .json(&json!({ "name": "Agra Entra ID", "source": "scim" }))
         .send()
         .await
         .assert_status(201);
@@ -154,13 +154,13 @@ async fn bad_input_gets_its_code() {
 async fn syncs_run_as_operations_and_report_their_changes() {
     let h = harness(with_queue).await;
     h.fake()
-        .user(DirectoryUser::new("u1", "ada@acme.test").email("ada@acme.test"))
-        .user(DirectoryUser::new("u2", "grace@acme.test"))
+        .user(DirectoryUser::new("u1", "anu@acme.test").email("anu@acme.test"))
+        .user(DirectoryUser::new("u2", "gauri@acme.test"))
         .group(DirectoryGroup::new("g1", "Engineering").members(["u1", "u2"]));
     let admin = h.app.acting_as(principal(ADMIN));
     let id = admin
         .post("/api/directory/connections")
-        .json(&json!({ "name": "Acme AD", "source": "ldap", "sync_interval_mins": 30 }))
+        .json(&json!({ "name": "Agra AD", "source": "ldap", "sync_interval_mins": 30 }))
         .send()
         .await
         .assert_status(201)
@@ -207,7 +207,7 @@ async fn syncs_run_as_operations_and_report_their_changes() {
         .assert_json_path("meta.total", json!(3))
         .assert_json_path("meta.last_page", json!(2))
         .assert_json_path("data.0.status", json!("planned"))
-        .assert_json_path("data.0.label", json!("ada@acme.test"));
+        .assert_json_path("data.0.label", json!("anu@acme.test"));
 
     // The real sync, through the queue.
     let run = admin
@@ -238,7 +238,7 @@ async fn syncs_run_as_operations_and_report_their_changes() {
             "meta",
             json!({ "current_page": 2, "per_page": 1, "total": 2, "last_page": 2 }),
         )
-        .assert_json_path("data.0.user.user_name", json!("grace@acme.test"))
+        .assert_json_path("data.0.user.user_name", json!("gauri@acme.test"))
         .assert_json_path("data.0.local_id", json!("local-u2"));
     admin
         .get(&format!("/api/directory/connections/{id}/groups"))
@@ -293,7 +293,7 @@ async fn a_held_run_is_approved() {
 #[tokio::test]
 async fn the_commands_sync_list_and_rotate() {
     let h = harness(with_queue).await;
-    h.fake().user(DirectoryUser::new("u1", "ada@acme.test"));
+    h.fake().user(DirectoryUser::new("u1", "anu@acme.test"));
     let id = h.connection("ldap").await;
     h.app
         .run_command("directory:sync", &[&id.to_string(), "--dry-run"])

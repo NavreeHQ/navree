@@ -160,7 +160,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
     let (client, server) = HttpClient::fake();
     server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(204),
     );
     let app = app(client).await;
@@ -171,7 +171,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
         .await
         .create_endpoint(
             &uow,
-            NewEndpoint::new("https://hooks.lovelace.io/navree").events(["deal.won"]),
+            NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]),
         )
         .await
         .unwrap();
@@ -198,7 +198,7 @@ async fn webhooks_that_are_not_events_are_dispatched_by_name() {
     let (client, server) = HttpClient::fake();
     server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200),
     );
     let app = app(client).await;
@@ -208,7 +208,7 @@ async fn webhooks_that_are_not_events_are_dispatched_by_name() {
     webhooks
         .create_endpoint(
             &uow,
-            NewEndpoint::new("https://hooks.lovelace.io/exports")
+            NewEndpoint::new("https://hooks.lakhotia.io/exports")
                 .events(["export.ready"])
                 .workspace(workspace_id),
         )

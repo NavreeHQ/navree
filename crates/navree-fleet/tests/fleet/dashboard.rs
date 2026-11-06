@@ -60,7 +60,7 @@ async fn fail_one_export(h: &Harness) -> String {
     let id = h
         .queue
         .dispatch(Export {
-            contact: "ada".into(),
+            contact: "anu".into(),
             password: "hunter2".into(),
         })
         .await
@@ -211,7 +211,7 @@ async fn jobs_are_listed_with_redacted_payloads() {
     let id = h.queue.dispatch(Record::new("secretive")).await.unwrap();
     h.queue
         .dispatch(crate::support::SendDigest {
-            user: "ada".into(),
+            user: "anu".into(),
             api_token: "tok_123".into(),
         })
         .await
@@ -278,7 +278,7 @@ async fn failed_jobs_are_read_by_viewers_and_handled_by_operators() {
         .json_value();
     assert_eq!(failed["data"].as_array().unwrap().len(), 2);
     assert_eq!(failed["data"][0]["payload"]["password"], json!(REDACTED));
-    assert_eq!(failed["data"][0]["payload"]["contact"], json!("ada"));
+    assert_eq!(failed["data"][0]["payload"]["contact"], json!("anu"));
     assert_eq!(failed["data"][0]["error"], json!("the mail server is down"));
     viewer
         .get(&format!("/_fleet/api/failed/{first}"))

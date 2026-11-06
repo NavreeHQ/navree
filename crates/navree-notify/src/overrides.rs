@@ -214,10 +214,10 @@ mod tests {
 
     fn mail() -> TemplateMail {
         TemplateMail {
-            to: vec!["ada@example.com".to_owned()],
-            subject: "Deal won: Acme".to_owned(),
+            to: vec!["anu@example.com".to_owned()],
+            subject: "Deal won: Agra".to_owned(),
             template: "mail/deal-won".to_owned(),
-            context: json!({"title": "Acme"}),
+            context: json!({"title": "Agra"}),
         }
     }
 
@@ -243,12 +243,12 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.subject, "Deal won: Acme");
+        assert_eq!(message.subject, "Deal won: Agra");
         assert_eq!(
             message.html.as_deref(),
-            Some("<p style=\"color: #0F766E\">Acme was won.</p>")
+            Some("<p style=\"color: #0F766E\">Agra was won.</p>")
         );
-        assert_eq!(message.text.as_deref(), Some("Acme was won."));
+        assert_eq!(message.text.as_deref(), Some("Agra was won."));
         // Without overrides, `style` is an empty object.
         let message = StyledMail {
             mail: &mail,
@@ -257,7 +257,7 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.html.as_deref(), Some("<p>Acme was won.</p>"));
+        assert_eq!(message.html.as_deref(), Some("<p>Agra was won.</p>"));
     }
 
     #[test]
@@ -278,11 +278,11 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.subject, "We won Acme!");
-        assert_eq!(message.html.as_deref(), Some("<main><b>Acme</b></main>"));
+        assert_eq!(message.subject, "We won Agra!");
+        assert_eq!(message.html.as_deref(), Some("<main><b>Agra</b></main>"));
         // The text part keeps the type's own template.
-        assert_eq!(message.text.as_deref(), Some("Acme was won."));
-        assert_eq!(message.to, ["ada@example.com"]);
+        assert_eq!(message.text.as_deref(), Some("Agra was won."));
+        assert_eq!(message.to, ["anu@example.com"]);
 
         // A type whose own template is missing still sends the override.
         let bare = TemplateMail {
@@ -296,8 +296,8 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.html.as_deref(), Some("<main><b>Acme</b></main>"));
-        assert_eq!(message.to, ["ada@example.com"]);
+        assert_eq!(message.html.as_deref(), Some("<main><b>Agra</b></main>"));
+        assert_eq!(message.to, ["anu@example.com"]);
     }
 
     #[test]
@@ -315,8 +315,8 @@ mod tests {
         }
         .build(&views())
         .unwrap();
-        assert_eq!(message.subject, "Deal won: Acme");
-        assert_eq!(message.text.as_deref(), Some("Acme was won."));
+        assert_eq!(message.subject, "Deal won: Agra");
+        assert_eq!(message.text.as_deref(), Some("Agra was won."));
     }
 
     #[test]

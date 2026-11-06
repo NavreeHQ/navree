@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// ```toml
 /// [helm]
 /// path = "/admin"               # where the panel is served
-/// title = "Acme CRM"            # the header and the browser tab
+/// title = "Agra CRM"            # the header and the browser tab
 /// logo = "/brand/logo.svg"      # a URL, served by your app or a CDN
 /// accent = "#3dff8f"            # buttons, links and focus rings
 /// per_page = 25                 # rows per page on lists
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// export_max_secs = 1800        # how long a list's CSV file may take to send
 /// ```
 ///
-/// From the environment: `APP_HELM__TITLE="Acme CRM"`,
+/// From the environment: `APP_HELM__TITLE="Agra CRM"`,
 /// `APP_HELM__PER_PAGE=50`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
 #[config(key = "helm", docs = "/docs/tools/helm/", validate = Self::check_values)]
@@ -189,13 +189,13 @@ mod tests {
         let sources = ConfigSources::new().env_vars(
             "APP_",
             [
-                ("APP_HELM__TITLE", "Acme CRM"),
+                ("APP_HELM__TITLE", "Agra CRM"),
                 ("APP_HELM__PER_PAGE", "50"),
                 ("APP_HELM__DASHBOARD", "false"),
             ],
         );
         let options: HelmOptions = Config::load(&sources).unwrap().typed().unwrap();
-        assert_eq!(options.title, "Acme CRM");
+        assert_eq!(options.title, "Agra CRM");
         assert_eq!(options.per_page, 50);
         assert!(!options.dashboard);
         assert_eq!(options.path, "/admin");

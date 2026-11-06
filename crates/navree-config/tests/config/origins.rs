@@ -23,7 +23,7 @@ fn a_dotenv_value_names_its_file_line_and_variable() {
     let env = write(
         &dir,
         ".env",
-        "# comment\n\nAPP_MAIL__FROM=\"Acme <hello@acme.test>\"\nAPP_LOG__LEVEL=debug\n",
+        "# comment\n\nAPP_MAIL__FROM=\"Agra <hello@acme.test>\"\nAPP_LOG__LEVEL=debug\n",
     );
     let config = Config::load(&ConfigSources::new().dotenv(&env)).expect("load");
     let file = env.display().to_string();

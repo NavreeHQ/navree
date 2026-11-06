@@ -111,13 +111,13 @@ async fn in_a_workspace_the_app_entered_with_no_gate_an_export_is_refused_as_a_p
         .module(navree_helm::HelmModule::from_config())
         .build()
         .await;
-    let acme = Uuid::now_v7();
-    seed_many(&app, acme, 600).await;
+    let agra = Uuid::now_v7();
+    seed_many(&app, agra, 600).await;
     let editor = editor(&app).await;
     let list = editor
         .get("/admin/resources/notes")
         .header("accept", "text/html")
-        .header("x-test-entered", acme.to_string())
+        .header("x-test-entered", agra.to_string())
         .send()
         .await
         .assert_status(200)
@@ -126,7 +126,7 @@ async fn in_a_workspace_the_app_entered_with_no_gate_an_export_is_refused_as_a_p
     let csv = editor
         .get(CSV)
         .header("accept", "text/html")
-        .header("x-test-entered", acme.to_string())
+        .header("x-test-entered", agra.to_string())
         .send_stream()
         .await;
     let (status, lines, error) = drain(csv).await;
@@ -138,13 +138,13 @@ async fn in_a_workspace_the_app_entered_with_no_gate_an_export_is_refused_as_a_p
 async fn in_a_workspace_the_app_entered_an_export_asks_the_gate_first() {
     let builder = crate::servers::database(TestApp::builder()).module(AppEnters);
     let world = world(with_members(builder).build().await).await;
-    seed_many(&world.app, world.acme, 600).await;
+    seed_many(&world.app, world.agra, 600).await;
     // The gate doesn't know them: the page says so before any row.
     let outsider = world
         .outsider
         .get(CSV)
         .header("accept", "text/html")
-        .header("x-test-entered", world.acme.to_string())
+        .header("x-test-entered", world.agra.to_string())
         .send_stream()
         .await;
     let (status, _, error) = drain(outsider).await;
@@ -155,7 +155,7 @@ async fn in_a_workspace_the_app_entered_an_export_asks_the_gate_first() {
         .member
         .get(CSV)
         .header("accept", "text/html")
-        .header("x-test-entered", world.acme.to_string())
+        .header("x-test-entered", world.agra.to_string())
         .send_stream()
         .await;
     let (status, lines, error) = drain(member).await;
@@ -166,11 +166,11 @@ async fn in_a_workspace_the_app_entered_an_export_asks_the_gate_first() {
 #[tokio::test]
 async fn staff_whose_permission_goes_lose_an_open_export() {
     let (world, staff) = staff_world().await;
-    seed_many(&world.app, world.globex, 1100).await;
+    seed_many(&world.app, world.gulati, 1100).await;
     let response = staff
         .get(CSV)
         .header("accept", "text/html")
-        .header("X-Workspace", world.globex.to_string())
+        .header("X-Workspace", world.gulati.to_string())
         .send_stream()
         .await;
     assert_eq!(response.status(), 200);
@@ -209,7 +209,7 @@ async fn the_entry_of_an_export_says_which_workspace() {
         .member
         .get(CSV)
         .header("accept", "text/html")
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await
         .assert_status(200)
@@ -234,7 +234,7 @@ async fn the_entry_of_an_export_says_which_workspace() {
     let entry = serde_json::to_value(entry).unwrap();
     assert_eq!(
         entry["metadata"]["workspace"],
-        world.acme.to_string(),
+        world.agra.to_string(),
         "{entry}"
     );
 }
@@ -243,37 +243,37 @@ async fn the_entry_of_an_export_says_which_workspace() {
 async fn a_credential_limited_to_a_workspace_reads_only_its_count() {
     let builder = crate::servers::database(TestApp::builder()).module(Pin);
     let world = world(with_members(builder).build().await).await;
-    join(&world.app, world.globex, world.member_id).await;
-    seed(&world.app, world.globex, "Globex two").await;
-    seed(&world.app, world.globex, "Globex three").await;
-    // Across workspaces, in Acme: everything the role of the database shows.
+    join(&world.app, world.gulati, world.member_id).await;
+    seed(&world.app, world.gulati, "Gulati two").await;
+    seed(&world.app, world.gulati, "Gulati three").await;
+    // Across workspaces, in Agra: everything the role of the database shows.
     let unpinned = world
         .member
         .get("/admin/counts")
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await
         .json_value();
     let across = unpinned["counts"]["all-notes"]["value"].as_u64().unwrap();
-    // The same user held to Acme gets what its list shows, not that number.
+    // The same user held to Agra gets what its list shows, not that number.
     let pinned = world
         .member
         .get("/admin/counts")
-        .header("x-test-pin", world.acme.to_string())
+        .header("x-test-pin", world.agra.to_string())
         .send()
         .await
         .json_value();
     let list = world
         .member
         .get("/admin/api/resources/all-notes")
-        .header("x-test-pin", world.acme.to_string())
+        .header("x-test-pin", world.agra.to_string())
         .send()
         .await
         .json_value();
     let rows = list["data"].as_array().unwrap().len() as u64;
     assert_eq!(rows, 1, "{list}");
     assert_eq!(pinned["counts"]["all-notes"]["value"], rows, "{pinned}");
-    // (A role row-level security binds sees only Acme either way.)
+    // (A role row-level security binds sees only Agra either way.)
     assert!(across >= rows, "{across}");
 }
 
@@ -367,7 +367,7 @@ async fn upload_world() -> (World, std::path::PathBuf, TestClient) {
     let db = world.app.get::<Db>().await;
     let viewer_id = account(&world.app, "viewer").await;
     let uow = db.uow(None, None).await;
-    uow.scope(members.add(&uow, world.acme, viewer_id, WorkspaceRole::parse("viewer")))
+    uow.scope(members.add(&uow, world.agra, viewer_id, WorkspaceRole::parse("viewer")))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -397,7 +397,7 @@ async fn an_upload_with_no_workspace_stores_nothing() {
 async fn an_upload_a_role_refuses_stores_nothing_whichever_way_it_names_the_workspace() {
     let (world, dir, viewer) = upload_world().await;
     let by_header = post_upload(&viewer, "H")
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await;
     assert_eq!(by_header.status(), 403);
@@ -405,7 +405,7 @@ async fn an_upload_a_role_refuses_stores_nothing_whichever_way_it_names_the_work
     viewer
         .post("/admin/workspace")
         .header("accept", "text/html")
-        .form(&[("workspace", world.acme.to_string().as_str())])
+        .form(&[("workspace", world.agra.to_string().as_str())])
         .send()
         .await;
     let by_cookie = post_upload(&viewer, "C").send().await;
@@ -419,14 +419,14 @@ async fn a_failed_create_leaves_no_file_behind() {
     let (world, dir, _) = upload_world().await;
     // Too long a title: the form comes back.
     let failed = post_upload(&world.member, &"x".repeat(30))
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await;
     assert_eq!(failed.status(), 400);
     assert_eq!(files_in(&dir), 0);
     // A good one keeps its file.
     let made = post_upload(&world.member, "Fine")
-        .header("X-Workspace", world.acme.to_string())
+        .header("X-Workspace", world.agra.to_string())
         .send()
         .await;
     assert_eq!(made.status(), 303);

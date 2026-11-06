@@ -71,7 +71,7 @@ impl Browser {
 #[test]
 fn a_browser_decrypts_what_encrypt_sealed_for_its_subscription() {
     let browser = Browser::new();
-    let payload = br#"{"title":"Deal won","body":"Acme renewal was won"}"#;
+    let payload = br#"{"title":"Deal won","body":"Agra renewal was won"}"#;
 
     let body = webpush::encrypt(&browser.public, &browser.auth, payload).unwrap();
 

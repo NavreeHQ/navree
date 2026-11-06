@@ -312,7 +312,7 @@ async fn app_with_sink(sink: Arc<RecordingSink>) -> TestApp {
 async fn injectable_fields_and_module_wiring_resolve_through_the_facade() {
     let app = app().await;
     let greeter = app.get::<Greeter>().await;
-    assert_eq!(greeter.greet("ada").await, "Hello, ADA!");
+    assert_eq!(greeter.greet("anu").await, "Hello, ADA!");
     assert_eq!(greeter.greeted.load(Ordering::Relaxed), 1);
     // `exports = [Greeter]` makes it visible to the root; `Shouter` came
     // through `imports = [ShoutModule]`.
@@ -412,7 +412,7 @@ async fn controller_routes_mount_with_prefix_version_and_access() {
 async fn public_and_authenticated_routes_answer() {
     let app = app().await;
     app.client()
-        .get("/api/v1/greetings/ada")
+        .get("/api/v1/greetings/anu")
         .send()
         .await
         .assert_status(200)

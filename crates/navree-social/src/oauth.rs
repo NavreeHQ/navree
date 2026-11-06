@@ -880,9 +880,9 @@ mod tests {
             id_token_user(&google, outsider, &SocialCallback::default()),
             Err(SocialError::NotAllowed(_))
         ));
-        let member = json!({ "sub": "1", "hd": "acme.test", "email": "a@acme.test", "email_verified": true, "name": "Ada", "picture": "https://p/1" });
+        let member = json!({ "sub": "1", "hd": "acme.test", "email": "a@acme.test", "email_verified": true, "name": "Anu", "picture": "https://p/1" });
         let user = id_token_user(&google, member, &SocialCallback::default()).unwrap();
-        assert_eq!(user.name.as_deref(), Some("Ada"));
+        assert_eq!(user.name.as_deref(), Some("Anu"));
         assert_eq!(user.avatar_url.as_deref(), Some("https://p/1"));
         assert!(user.email_verified);
     }
@@ -891,19 +891,19 @@ mod tests {
     fn apple_names_come_from_the_first_callback() {
         assert_eq!(
             apple_name(Some(&json!(
-                "{\"name\":{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"}}"
+                "{\"name\":{\"firstName\":\"Anu\",\"lastName\":\"Lakhotia\"}}"
             ))),
-            Some("Ada Lovelace".to_owned())
+            Some("Anu Lakhotia".to_owned())
         );
         assert_eq!(
-            apple_name(Some(&json!({ "name": { "firstName": "Ada" } }))),
-            Some("Ada".to_owned())
+            apple_name(Some(&json!({ "name": { "firstName": "Anu" } }))),
+            Some("Anu".to_owned())
         );
         assert_eq!(apple_name(Some(&json!("not json"))), None);
         assert_eq!(apple_name(None), None);
         let apple_claims = json!({ "sub": "001.abc", "email": "x@privaterelay.appleid.com", "email_verified": "true" });
         let callback = SocialCallback {
-            user: Some(json!({ "name": { "firstName": "Ada", "lastName": "Lovelace" } })),
+            user: Some(json!({ "name": { "firstName": "Anu", "lastName": "Lakhotia" } })),
             ..SocialCallback::default()
         };
         let apple = entry("apple", |c| {
@@ -914,31 +914,31 @@ mod tests {
             ));
         });
         let user = id_token_user(&apple, apple_claims, &callback).unwrap();
-        assert_eq!(user.name.as_deref(), Some("Ada Lovelace"));
+        assert_eq!(user.name.as_deref(), Some("Anu Lakhotia"));
         assert!(user.email_verified, "Apple's \"true\" string counts");
     }
 
     #[test]
     fn github_prefers_the_primary_verified_email() {
         let github = entry("github", |_| {});
-        let profile = json!({ "id": 583231, "login": "ada", "name": null, "email": "public@ada.test", "avatar_url": "https://a/1" });
+        let profile = json!({ "id": 583231, "login": "anu", "name": null, "email": "public@anu.test", "avatar_url": "https://a/1" });
         let emails = [
-            json!({ "email": "old@ada.test", "primary": false, "verified": true }),
-            json!({ "email": "ada@example.com", "primary": true, "verified": true }),
+            json!({ "email": "old@anu.test", "primary": false, "verified": true }),
+            json!({ "email": "anu@example.com", "primary": true, "verified": true }),
         ];
         let user = github_profile(&github, profile.clone(), &emails).unwrap();
         assert_eq!(user.id, "583231");
         assert_eq!(
             user.name.as_deref(),
-            Some("ada"),
+            Some("anu"),
             "the login when there is no name"
         );
-        assert_eq!(user.email.as_deref(), Some("ada@example.com"));
+        assert_eq!(user.email.as_deref(), Some("anu@example.com"));
         assert!(user.email_verified);
         let unverified =
-            [json!({ "email": "ada@example.com", "primary": true, "verified": false })];
+            [json!({ "email": "anu@example.com", "primary": true, "verified": false })];
         let user = github_profile(&github, profile.clone(), &unverified).unwrap();
-        assert_eq!(user.email.as_deref(), Some("public@ada.test"));
+        assert_eq!(user.email.as_deref(), Some("public@anu.test"));
         assert!(!user.email_verified);
     }
 

@@ -21,7 +21,7 @@ async fn app_is_released_after_graceful_shutdown() {
         .await
         .unwrap();
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     drop(bus);
 
     app.shutdown().await.unwrap();
@@ -43,7 +43,7 @@ async fn emit_after_shutdown_fails() {
     let bus = app.ctx().get::<EventBus>().await.unwrap();
 
     app.shutdown().await.unwrap();
-    let error = bus.emit(UserRegistered::new("ada")).await.unwrap_err();
+    let error = bus.emit(UserRegistered::new("anu")).await.unwrap_err();
 
     assert!(
         matches!(
@@ -64,7 +64,7 @@ async fn app_is_released_when_dropped_without_shutdown() {
         .await
         .unwrap();
     let bus = app.ctx().get::<EventBus>().await.unwrap();
-    bus.emit(UserRegistered::new("ada")).await.unwrap();
+    bus.emit(UserRegistered::new("anu")).await.unwrap();
     drop(bus);
 
     drop(app);
@@ -86,7 +86,7 @@ async fn emit_after_the_app_is_dropped_fails() {
     let bus = app.ctx().get::<EventBus>().await.unwrap();
 
     drop(app);
-    let error = bus.emit(UserRegistered::new("ada")).await.unwrap_err();
+    let error = bus.emit(UserRegistered::new("anu")).await.unwrap_err();
 
     assert!(
         matches!(

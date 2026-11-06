@@ -60,10 +60,10 @@ impl Controller for DocumentsController {
                         .0
                         .pdf(
                             "certificates/classic",
-                            json!({"name": "Ada Lovelace", "course": "Engines", "completed_on": "today"}),
+                            json!({"name": "Anu Lakhotia", "course": "Engines", "completed_on": "today"}),
                         )
                         .await?;
-                    Ok::<_, AppError>(pdf.download("certificate-ada.pdf"))
+                    Ok::<_, AppError>(pdf.download("certificate-anu.pdf"))
                 }
             })
             .public(),
@@ -106,7 +106,7 @@ impl Controller for DocumentsController {
             RouteDef::on(Method::GET, "/embedded", move || {
                 let this = embedded.clone();
                 async move {
-                    let pdf = this.0.pdf("receipts/simple", json!({"name": "Grace"})).await?;
+                    let pdf = this.0.pdf("receipts/simple", json!({"name": "Gauri"})).await?;
                     Ok::<_, AppError>(pdf)
                 }
             })
@@ -162,14 +162,14 @@ async fn handlers_render_and_download_documents() {
     assert_eq!(response.header("content-type"), Some("application/pdf"));
     assert_eq!(
         response.header("content-disposition"),
-        Some("attachment; filename=\"certificate-ada.pdf\"")
+        Some("attachment; filename=\"certificate-anu.pdf\"")
     );
     assert_eq!(response.header("cache-control"), Some("private, no-store"));
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
     assert!(
         pdf.text()
             .unwrap()
-            .contains("Ada Lovelace completed Engines on today.")
+            .contains("Anu Lakhotia completed Engines on today.")
     );
 
     let response = app
@@ -274,7 +274,7 @@ async fn modules_embed_templates() {
         .await
         .assert_status(200);
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
-    assert!(pdf.text().unwrap().contains("Receipt for Grace"));
+    assert!(pdf.text().unwrap().contains("Receipt for Gauri"));
     assert!(
         !app.get::<Documents>()
             .await
@@ -343,8 +343,8 @@ async fn queued_renders_run_on_a_worker() {
         .post("/documents/exports")
         .json(&json!({
             "template": "certificates/classic",
-            "data": {"name": "Ada", "course": "Engines", "completed_on": "today"},
-            "path": "exports/ada.pdf",
+            "data": {"name": "Anu", "course": "Engines", "completed_on": "today"},
+            "path": "exports/anu.pdf",
         }))
         .send()
         .await
@@ -398,7 +398,7 @@ async fn documents_render_writes_a_pdf_file() {
     let data = dir.path().join("data.json");
     std::fs::write(
         &data,
-        r#"{"name": "Grace Hopper", "course": "Compilers", "completed_on": "today"}"#,
+        r#"{"name": "Gauri Hundal", "course": "Compilers", "completed_on": "today"}"#,
     )
     .unwrap();
     let out = dir.path().join("certificate.pdf");
@@ -420,7 +420,7 @@ async fn documents_render_writes_a_pdf_file() {
     assert!(
         pdf.text()
             .unwrap()
-            .contains("Grace Hopper completed Compilers")
+            .contains("Gauri Hundal completed Compilers")
     );
     let error = app
         .run_command(

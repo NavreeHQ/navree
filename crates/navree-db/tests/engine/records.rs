@@ -85,7 +85,7 @@ pub async fn records_round_trip(scratch: Scratch) {
     let workspace = Uuid::now_v7();
     let start = now();
 
-    let ada = contact("ada@example.com", Some(workspace), start);
+    let ada = contact("anu@example.com", Some(workspace), start);
     record::insert(&db, &ada).await.unwrap();
     let found = record::find::<Contact, _>(&db, ada.id).await.unwrap();
     assert_eq!(found.as_ref(), Some(&ada), "every column reads back");
@@ -106,7 +106,7 @@ pub async fn records_round_trip(scratch: Scratch) {
         );
         record::insert(&db, &row).await.unwrap();
     }
-    let duplicate = record::insert(&db, &contact("ada@example.com", None, start))
+    let duplicate = record::insert(&db, &contact("anu@example.com", None, start))
         .await
         .unwrap_err();
     assert_eq!(duplicate.kind(), ErrorKind::UniqueViolation);
@@ -121,14 +121,14 @@ pub async fn records_round_trip(scratch: Scratch) {
     );
     assert_eq!(visible.count(&db).await.unwrap(), 11);
     let some = Contact::select()
-        .filter(Filter::all().is_in("email", ["ada@example.com", "c3@example.com", "nobody@x"]))
+        .filter(Filter::all().is_in("email", ["anu@example.com", "c3@example.com", "nobody@x"]))
         .order_by("email")
         .all(&db)
         .await
         .unwrap();
     assert_eq!(
         some.iter().map(|c| c.email.as_str()).collect::<Vec<_>>(),
-        ["ada@example.com", "c3@example.com"]
+        ["anu@example.com", "c3@example.com"]
     );
     assert_eq!(
         Contact::select()
@@ -180,7 +180,7 @@ pub async fn records_round_trip(scratch: Scratch) {
 
     // Every column by key.
     let mut changed = ada.clone();
-    changed.name = "Ada Lovelace".to_owned();
+    changed.name = "Anu Lakhotia".to_owned();
     changed.active = false;
     changed.visits = 3;
     changed.tags = serde_json::json!({"vip": true});
@@ -219,28 +219,28 @@ pub async fn records_round_trip(scratch: Scratch) {
 
     // Upserts by the unique email: a new row, then an update of two
     // columns of the existing one (its id and other columns stay).
-    let grace = contact("grace@example.com", None, start);
+    let grace = contact("gauri@example.com", None, start);
     record::upsert(&db, &grace, &["email"], &["name", "visits"])
         .await
         .unwrap();
-    let mut again = contact("grace@example.com", Some(workspace), start);
-    again.name = "Grace Hopper".to_owned();
+    let mut again = contact("gauri@example.com", Some(workspace), start);
+    again.name = "Gauri Hundal".to_owned();
     again.visits = 9;
     record::upsert(&db, &again, &["email"], &["name", "visits"])
         .await
         .unwrap();
     let stored = Contact::select()
-        .eq("email", "grace@example.com")
+        .eq("email", "gauri@example.com")
         .one(&db)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(stored.id, grace.id);
     assert_eq!(stored.workspace_id, None);
-    assert_eq!((stored.name.as_str(), stored.visits), ("Grace Hopper", 9));
+    assert_eq!((stored.name.as_str(), stored.visits), ("Gauri Hundal", 9));
     record::upsert(
         &db,
-        &contact("grace@example.com", None, start),
+        &contact("gauri@example.com", None, start),
         &["email"],
         &[],
     )
@@ -248,7 +248,7 @@ pub async fn records_round_trip(scratch: Scratch) {
     .unwrap();
     assert_eq!(
         Contact::select()
-            .eq("email", "grace@example.com")
+            .eq("email", "gauri@example.com")
             .count(&db)
             .await
             .unwrap(),
@@ -279,10 +279,10 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
         let start = now();
 
         let uow = db.uow(None, None).await;
-        let ada = contact("ada@example.com", None, start);
+        let ada = contact("anu@example.com", None, start);
         record::insert_recorded(&uow, &ada).await.unwrap();
         let mut renamed = ada.clone();
-        renamed.name = "Ada Lovelace".to_owned();
+        renamed.name = "Anu Lakhotia".to_owned();
         renamed.secret = "resealed".to_owned();
         record::update_recorded(&uow, &ada, &renamed).await.unwrap();
         record::update_recorded(&uow, &renamed, &renamed)
@@ -298,12 +298,12 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
         assert_eq!(changes[0].entity, "contacts");
         assert_eq!(changes[0].id, ada.id.to_string());
         let created = changes[0].new.as_ref().unwrap();
-        assert_eq!(created["email"], "ada@example.com");
+        assert_eq!(created["email"], "anu@example.com");
         assert!(created.get("secret").is_none(), "skipped fields stay out");
         assert_eq!(changes[1].op, ChangeOp::Updated);
         assert_eq!(
             changes[1].new.as_ref().unwrap(),
-            &serde_json::json!({"name": "Ada Lovelace"})
+            &serde_json::json!({"name": "Anu Lakhotia"})
         );
         // Reads in the unit of work see its writes.
         assert!(
@@ -379,7 +379,7 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
 pub async fn read_executor_follows_the_unit_of_work(scratch: Scratch) {
     let db = scratch.db().await;
     contacts(&db, scratch.server.backend()).await;
-    let ada = contact("ada@example.com", None, now());
+    let ada = contact("anu@example.com", None, now());
     let uow = db.uow(None, None).await;
     let inner = db.clone();
     let row = ada.clone();

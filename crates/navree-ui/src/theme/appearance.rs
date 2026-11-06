@@ -377,8 +377,8 @@ mod tests {
 
     fn custom() -> Theme {
         Theme::custom(
-            ThemeId::parse("acme").unwrap(),
-            "Acme",
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
             *Theme::OCEAN.spec(),
         )
         .unwrap()

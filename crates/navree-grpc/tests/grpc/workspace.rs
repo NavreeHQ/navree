@@ -130,24 +130,24 @@ fn ping() -> PingRequest {
 #[tokio::test]
 async fn current_workspace_comes_from_the_x_workspace_metadata() {
     let app = app().await;
-    let ada = user(&app, "ada").await;
+    let ada = user(&app, "anu").await;
     let bob = user(&app, "bob").await;
-    let acme = workspace(&app, ada, "Acme").await;
+    let agra = workspace(&app, ada, "Agra").await;
     let member = || TestChannel::new(&app).acting_as(principal(ada));
 
     // By slug and by id.
-    let mut by_slug = PingClient::new(member().metadata("x-workspace", &acme.slug));
+    let mut by_slug = PingClient::new(member().metadata("x-workspace", &agra.slug));
     let reply = by_slug.ping(ping()).await.unwrap().into_inner();
-    assert_eq!(reply.message, acme.slug);
-    assert_eq!(reply.workspace, acme.id.to_string());
-    let mut by_id = PingClient::new(member().metadata("x-workspace", &acme.id.to_string()));
+    assert_eq!(reply.message, agra.slug);
+    assert_eq!(reply.workspace, agra.id.to_string());
+    let mut by_id = PingClient::new(member().metadata("x-workspace", &agra.id.to_string()));
     let reply = by_id.ping(ping()).await.unwrap().into_inner();
-    assert_eq!(reply.message, acme.slug);
+    assert_eq!(reply.message, agra.slug);
 
     // A caller outside the workspace, an unknown workspace, none at all.
     let stranger = TestChannel::new(&app)
         .acting_as(principal(bob))
-        .metadata("x-workspace", &acme.slug);
+        .metadata("x-workspace", &agra.slug);
     let status = PingClient::new(stranger).ping(ping()).await.unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
     assert_eq!(status.message(), "You are not a member of this workspace.");

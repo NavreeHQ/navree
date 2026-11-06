@@ -145,7 +145,7 @@ mod tests {
             "event-data": {
                 "id": "CPgfbmQMTCKtHW6uIWtuVe",
                 "event": "delivered",
-                "recipient": "ada@example.com",
+                "recipient": "anu@example.com",
             },
         }))
         .unwrap()

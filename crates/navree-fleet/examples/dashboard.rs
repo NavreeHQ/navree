@@ -250,7 +250,7 @@ async fn main() -> Result<(), BoxError> {
             ..AccessOptions::default()
         }))
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme Operations"))
+        .module(AuthPages::new().app_name("Agra Operations"))
         .module(FleetModule::from_config())
         .module(DemoModule)
         .boot()

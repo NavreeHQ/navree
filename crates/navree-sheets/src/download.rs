@@ -54,7 +54,7 @@ enum DownloadBody {
 /// }
 ///
 /// async fn export() -> Download {
-///     let rows = vec![ContactRow { name: "Ada".into(), email: "ada@example.com".into() }];
+///     let rows = vec![ContactRow { name: "Anu".into(), email: "anu@example.com".into() }];
 ///     Download::csv("contacts.csv", rows)
 /// }
 /// # let _ = navree_http::RouteDef::on(http::Method::GET, "/export", export);

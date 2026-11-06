@@ -13,13 +13,13 @@ async fn fake_records_and_responds() {
         "https://api.example.com/users*",
         FakeResponse::new(201)
             .header("x-trace", "abc")
-            .json(&json!({ "id": 7, "name": "Ada" })),
+            .json(&json!({ "id": 7, "name": "Anu" })),
     );
 
     let response = client
         .post("https://api.example.com/users")
-        .header("x-tenant", "acme")
-        .json(&json!({ "name": "Ada" }))
+        .header("x-tenant", "agra")
+        .json(&json!({ "name": "Anu" }))
         .send()
         .await
         .unwrap();
@@ -34,9 +34,9 @@ async fn fake_records_and_responds() {
     let request = &recorded[0];
     assert_eq!(request.method(), &Method::POST);
     assert_eq!(request.url().as_str(), "https://api.example.com/users");
-    assert_eq!(request.header("x-tenant"), Some("acme"));
+    assert_eq!(request.header("x-tenant"), Some("agra"));
     assert_eq!(request.header("content-type"), Some("application/json"));
-    assert_eq!(request.json::<Value>().unwrap(), json!({ "name": "Ada" }));
+    assert_eq!(request.json::<Value>().unwrap(), json!({ "name": "Anu" }));
     server.assert_sent(|r| r.method() == Method::POST && r.url().path() == "/users");
 }
 

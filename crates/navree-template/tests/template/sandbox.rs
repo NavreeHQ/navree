@@ -23,7 +23,7 @@ impl Account {
 fn only_serialized_fields_exist() {
     let env = view_env();
     let account = Account {
-        name: "ada",
+        name: "anu",
         password: "hunter2",
     };
     let ctx = json!({ "a": account });

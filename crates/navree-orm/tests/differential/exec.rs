@@ -278,5 +278,5 @@ fn values_normalize() {
     );
     assert_eq!(text("2026-10-27".to_owned()), Json::from("2026-10-27"));
     assert_eq!(text("[3, 4]".to_owned()), serde_json::json!([3, 4]));
-    assert_eq!(text("Acme".to_owned()), Json::from("Acme"));
+    assert_eq!(text("Agra".to_owned()), Json::from("Agra"));
 }

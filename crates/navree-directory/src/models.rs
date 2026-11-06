@@ -237,7 +237,7 @@ mod tests {
             secret: Some("nvc1.ciphertext".into()),
             scim_token_hash: Some("ab12".into()),
             cursor: Some("https://graph.microsoft.com/v1.0/users/delta?$deltatoken=x".into()),
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Connection::default()
         };
         let debug = format!("{row:?}");

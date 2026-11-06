@@ -15,17 +15,17 @@ use crate::role::{RoleTable, check_permission, check_role_name};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResolverKind {
-    /// A request header ([`WorkspaceConfig::header`], `X-Workspace: acme`).
+    /// A request header ([`WorkspaceConfig::header`], `X-Workspace: agra`).
     Header,
     /// The subdomain under [`WorkspaceConfig::base_domain`]
-    /// (`acme.app.example.com`). Finds nothing while `base_domain` is unset.
+    /// (`agra.app.example.com`). Finds nothing while `base_domain` is unset.
     Subdomain,
     /// The path segment after [`WorkspaceConfig::path_prefix`]
-    /// (`/api/w/acme/deals`).
+    /// (`/api/w/agra/deals`).
     Path,
     /// A claim of the request's bearer JWT ([`WorkspaceConfig::claim`]).
     Claim,
-    /// The workspace's own verified domain (`crm.acme-corp.com`), matched
+    /// The workspace's own verified domain (`crm.agra-corp.com`), matched
     /// by navree-domains' `DomainsModule`, which marks the request with a
     /// [`DomainWorkspace`](crate::DomainWorkspace). Finds nothing without
     /// that module, or for a host that is not a verified custom domain.
@@ -152,8 +152,8 @@ pub struct OrgRoleOptions {
 /// enabled = true
 /// resolvers = ["header", "path", "subdomain", "claim"]
 /// header = "X-Organization"
-/// # base_domain = "partners.example.com"   # acme.partners.example.com -> acme
-/// path_prefix = "/o"                       # /api/o/acme/reports -> acme
+/// # base_domain = "partners.example.com"   # agra.partners.example.com -> agra
+/// path_prefix = "/o"                       # /api/o/agra/reports -> agra
 /// claim = "organization"
 ///
 /// [workspace.organizations.roles.partner]  # an app-defined role
@@ -217,7 +217,7 @@ impl OrganizationOptions {
 /// [workspace.partitions]
 /// enabled = true
 /// resolvers = ["header", "claim"]   # header, path or claim
-/// header = "X-Partition"            # X-Partition: acme-co-uk (a slug or an id)
+/// header = "X-Partition"            # X-Partition: agra-co-uk (a slug or an id)
 /// path_prefix = "/p"
 /// claim = "partition"
 /// ```
@@ -466,9 +466,9 @@ pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
 /// resolvers = ["header", "path", "subdomain", "claim"]  # order; or "header,path"
 /// # "domain" (first, usually) names a workspace by its custom domain (navree-domains)
 /// # "session" names the workspace a browser switched to (Navree UI pages)
-/// header = "X-Workspace"          # X-Workspace: acme (a slug or an id)
-/// # base_domain = "app.example.com"  # acme.app.example.com -> acme
-/// path_prefix = "/w"              # /api/w/acme/deals -> acme
+/// header = "X-Workspace"          # X-Workspace: agra (a slug or an id)
+/// # base_domain = "app.example.com"  # agra.app.example.com -> agra
+/// path_prefix = "/w"              # /api/w/agra/deals -> agra
 /// claim = "workspace"             # a claim of the bearer JWT
 /// isolation = "row"               # row | schema | database
 /// routes = true                   # /api/workspaces and /api/invitations

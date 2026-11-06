@@ -82,7 +82,7 @@ fn constants_variants_and_the_event_have_their_documented_values() {
     );
     assert_ne!(DemoIntent::Read, DemoIntent::Write);
     assert!(matches!(
-        WorkspaceError::NotDemo("acme".into()),
+        WorkspaceError::NotDemo("agra".into()),
         WorkspaceError::NotDemo(_)
     ));
 }

@@ -375,13 +375,13 @@ mod tests {
         assert!(one_of(&["a", "b"])("b").is_ok());
         assert!(one_of(&["a", "b"])("c").is_err());
         assert!(confirmed(&"x".to_owned())(&"x".to_owned()).is_ok());
-        assert!(email(&Box::<str>::from("ada@example.com")).is_ok());
+        assert!(email(&Box::<str>::from("anu@example.com")).is_ok());
     }
 
     #[test]
     fn built_in_text_rules() {
-        assert!(email("ada@example.com").is_ok());
-        assert_eq!(email("ada@").unwrap_err().key(), Some("email"));
+        assert!(email("anu@example.com").is_ok());
+        assert_eq!(email("anu@").unwrap_err().key(), Some("email"));
         assert!(url("https://example.com").is_ok());
         assert_eq!(
             url("example.com").unwrap_err().message(),
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn names_in_any_script() {
         for name in [
-            "Ada Lovelace",
+            "Anu Lakhotia",
             "अमृतपाल सिंह",
             "مُحَمَّد",
             "فاطمه\u{200c}زهرا",
@@ -452,13 +452,13 @@ mod tests {
             " ",
             "-'.",
             "123",
-            "Ada!",
-            "Ada😀",
+            "Anu!",
+            "Anu😀",
             "<b>",
             "a\u{0300}\u{0301}\u{0302}\u{0303}\u{0304}",
-            "Ada\u{0}",
-            "Ada\u{202e}",
-            "Ada\u{a0}Lovelace",
+            "Anu\u{0}",
+            "Anu\u{202e}",
+            "Anu\u{a0}Lakhotia",
         ] {
             assert!(!is_unicode_name(name), "{name:?}");
         }
@@ -467,7 +467,7 @@ mod tests {
             "a\u{0300}\u{0301}\u{0302}\u{0303}b\u{0300}"
         ));
         assert!(unicode_name(&None::<String>).is_ok());
-        assert!(unicode_name("Ada 2").is_ok());
+        assert!(unicode_name("Anu 2").is_ok());
     }
 
     #[test]

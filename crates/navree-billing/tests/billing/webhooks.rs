@@ -21,12 +21,12 @@ fn signed(secret: &str, timestamp: i64, body: &[u8]) -> HeaderMap {
 #[tokio::test]
 async fn a_completed_checkout_becomes_a_subscription_on_trial() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
     let log = world.log().await;
 
-    let checkout = billing.checkout(&acme, "pro").create().await.unwrap();
+    let checkout = billing.checkout(&agra, "pro").create().await.unwrap();
     world
         .fake()
         .await
@@ -34,13 +34,13 @@ async fn a_completed_checkout_becomes_a_subscription_on_trial() {
         .await
         .unwrap();
     // Stored, not processed until the queue runs.
-    assert!(billing.subscription(&acme).await.unwrap().is_none());
+    assert!(billing.subscription(&agra).await.unwrap().is_none());
     let events = billing.events(false).await.unwrap();
     assert_eq!(events.len(), 3);
     assert!(events.iter().all(|e| e.processed_at.is_none()));
     world.run_queue().await;
 
-    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra).await.unwrap().unwrap();
     assert!(sub.on_trial() && sub.on_plan("pro") && sub.valid());
     assert_eq!(sub.status, SubscriptionStatus::Trialing);
     assert_eq!(sub.quantity, 1);
@@ -48,8 +48,8 @@ async fn a_completed_checkout_becomes_a_subscription_on_trial() {
         sub.trial_ends_at,
         Some(crate::support::start() + chrono::TimeDelta::days(14))
     );
-    assert!(billing.subscribed(&acme, "pro").await.unwrap());
-    assert!(!billing.subscribed(&acme, "business").await.unwrap());
+    assert!(billing.subscribed(&agra, "pro").await.unwrap());
+    assert!(!billing.subscribed(&agra, "business").await.unwrap());
     let events = billing.events(false).await.unwrap();
     assert!(
         events
@@ -62,7 +62,7 @@ async fn a_completed_checkout_becomes_a_subscription_on_trial() {
     assert_eq!(names, ["subscription.created", "invoice.paid"]);
     let created = &emitted[0].1;
     assert_eq!(created["billable_type"], "workspace");
-    assert_eq!(created["billable_id"], json!(acme.id));
+    assert_eq!(created["billable_id"], json!(agra.id));
     assert_eq!(created["subscription_id"], json!(sub.id));
     assert_eq!(created["plan"], "pro");
     let paid = &emitted[1].1;
@@ -74,10 +74,10 @@ async fn a_completed_checkout_becomes_a_subscription_on_trial() {
 #[tokio::test]
 async fn a_redelivered_event_is_stored_and_processed_once() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
-    world.subscribe(&acme, "starter").await;
+    world.subscribe(&agra, "starter").await;
     world.log().await.take();
 
     let fake = world.fake().await;
@@ -87,7 +87,7 @@ async fn a_redelivered_event_is_stored_and_processed_once() {
         "type": "invoice.paid",
         "created": crate::support::start().timestamp(),
         "data": { "object": {
-            "id": "in_manual", "customer": billing.customer(&acme).await.unwrap().unwrap().provider_customer_id,
+            "id": "in_manual", "customer": billing.customer(&agra).await.unwrap().unwrap().provider_customer_id,
             "amount_paid": 2900, "currency": "usd", "status": "paid"
         } }
     }))
@@ -176,10 +176,10 @@ async fn bad_signatures_and_payloads_are_refused() {
 #[tokio::test]
 async fn older_events_do_not_overwrite_newer_state() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
-    let sub = world.subscribe(&acme, "starter").await;
+    let sub = world.subscribe(&agra, "starter").await;
     let fake = world.fake().await;
     let provider_id = sub.provider_id.clone().unwrap();
     let customer = sub.provider_customer_id.clone().unwrap();
@@ -207,7 +207,7 @@ async fn older_events_do_not_overwrite_newer_state() {
     send(now + 20, object("active", "price_business_m")).await;
     send(now + 10, object("past_due", "price_starter_m")).await;
     world.run_queue().await;
-    let current = billing.subscription(&acme).await.unwrap().unwrap();
+    let current = billing.subscription(&agra).await.unwrap().unwrap();
     assert!(current.on_plan("business"));
     assert_eq!(current.status, SubscriptionStatus::Active);
 
@@ -215,7 +215,7 @@ async fn older_events_do_not_overwrite_newer_state() {
     send(now + 30, object("canceled", "price_business_m")).await;
     send(now + 25, object("active", "price_business_m")).await;
     world.run_queue().await;
-    let ended = billing.subscription(&acme).await.unwrap().unwrap();
+    let ended = billing.subscription(&agra).await.unwrap().unwrap();
     assert_eq!(ended.status, SubscriptionStatus::Canceled);
     assert!(!ended.valid());
 }
@@ -304,17 +304,17 @@ async fn a_failing_event_records_its_error_and_retries() {
 #[tokio::test]
 async fn the_trial_ending_and_failed_payments_reach_listeners() {
     let world = World::new().await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
-    world.subscribe(&acme, "pro").await;
+    world.subscribe(&agra, "pro").await;
     let log = world.log().await;
     log.take();
     let fake = world.fake().await;
 
     world.advance_days(14);
-    fake.fail_next_payment(&acme);
-    fake.end_trial(&acme).await.unwrap();
+    fake.fail_next_payment(&agra);
+    fake.end_trial(&agra).await.unwrap();
     world.run_queue().await;
     let names = log.names();
     assert_eq!(
@@ -325,7 +325,7 @@ async fn the_trial_ending_and_failed_payments_reach_listeners() {
             "invoice.payment_failed"
         ]
     );
-    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra).await.unwrap().unwrap();
     assert!(
         sub.past_due() && sub.valid(),
         "past due within the grace days"
@@ -333,7 +333,7 @@ async fn the_trial_ending_and_failed_payments_reach_listeners() {
     assert_eq!(sub.past_due_since, Some(world.clock_now()));
 
     world.advance_days(8);
-    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra).await.unwrap().unwrap();
     assert!(sub.past_due() && !sub.valid(), "past the grace days");
 }
 
@@ -341,13 +341,13 @@ async fn the_trial_ending_and_failed_payments_reach_listeners() {
 #[tokio::test]
 async fn the_jobs_go_on_the_configured_queue() {
     let world = World::with(crate::support::builder().config("billing.queue", "billing")).await;
-    let ada = world.user("Ada", "ada@example.com").await;
-    let acme = world.workspace(ada.id, "Acme").await;
+    let ada = world.user("Anu", "anu@example.com").await;
+    let agra = world.workspace(ada.id, "Agra").await;
     let billing = world.billing().await;
     let queue = world.app.get::<navree_queue::Queue>().await;
     // The seat listener's job for the owner joining is on `default`.
     let default_before = queue.pending_count("default").await.unwrap();
-    let checkout = billing.checkout(&acme, "starter").create().await.unwrap();
+    let checkout = billing.checkout(&agra, "starter").create().await.unwrap();
     world
         .fake()
         .await
@@ -369,7 +369,7 @@ async fn the_jobs_go_on_the_configured_queue() {
         .await
         .unwrap();
     assert_eq!((stats.processed, stats.succeeded), (3, 3));
-    assert!(billing.subscribed(&acme, "starter").await.unwrap());
+    assert!(billing.subscribed(&agra, "starter").await.unwrap());
 }
 
 /// Without a queue module the job runs at once, inside the webhook request.
@@ -396,13 +396,13 @@ async fn without_a_queue_the_event_is_processed_at_once() {
         .build()
         .await;
     let billing = app.get::<Billing>().await;
-    let acme = BillableRef {
+    let agra = BillableRef {
         billable_type: "organization".into(),
         billable_id: uuid::Uuid::now_v7(),
-        name: "Acme".into(),
+        name: "Agra".into(),
         email: Some("billing@acme.test".into()),
     };
-    let checkout = billing.checkout(&acme, "starter").create().await.unwrap();
+    let checkout = billing.checkout(&agra, "starter").create().await.unwrap();
     billing
         .fake()
         .unwrap()
@@ -410,7 +410,7 @@ async fn without_a_queue_the_event_is_processed_at_once() {
         .await
         .unwrap();
 
-    let sub = billing.subscription(&acme).await.unwrap().unwrap();
+    let sub = billing.subscription(&agra).await.unwrap().unwrap();
     assert!(sub.valid() && sub.on_plan("starter"));
     assert!(
         billing

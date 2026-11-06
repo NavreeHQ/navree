@@ -78,19 +78,19 @@ async fn a_route_limits_the_bodies_valid_reads() {
 
     app.client()
         .post("/limited/users")
-        .json(&json!({ "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .json(&json!({ "name": "Anu", "email": "anu@example.com", "age": 36, "tags": ["x"] }))
         .send()
         .await
         .assert_status(200);
     app.client()
         .post("/limited/users")
-        .json(&json!({ "name": "A".repeat(100), "email": "ada@example.com", "age": 36, "tags": ["x"] }))
+        .json(&json!({ "name": "A".repeat(100), "email": "anu@example.com", "age": 36, "tags": ["x"] }))
         .send()
         .await
         .assert_error(413, None);
     app.client()
         .post("/limited/subscribe")
-        .form(&[("email", "ada@example.com")])
+        .form(&[("email", "anu@example.com")])
         .send()
         .await
         .assert_status(200);

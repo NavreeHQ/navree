@@ -146,9 +146,9 @@
 //!     .await?;
 //!
 //! let notifier = app.ctx().get::<Notifier>().await?;
-//! let owner = User { id: uuid::Uuid::now_v7(), email: "ada@example.com".into() };
+//! let owner = User { id: uuid::Uuid::now_v7(), email: "anu@example.com".into() };
 //! notifier
-//!     .send(&owner, DealWon { deal_id: "42".into(), title: "Acme renewal".into() })
+//!     .send(&owner, DealWon { deal_id: "42".into(), title: "Agra renewal".into() })
 //!     .await?;
 //! # Ok(())
 //! # }

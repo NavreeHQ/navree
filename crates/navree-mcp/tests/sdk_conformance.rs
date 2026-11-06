@@ -129,7 +129,7 @@ async fn the_official_typescript_sdk_speaks_to_the_server() {
         .await;
     let auth = app.get::<AuthService>().await;
     let ada = auth
-        .create_user("Ada", "ada@example.com", "a-long-password")
+        .create_user("Anu", "anu@example.com", "a-long-password")
         .await
         .expect("user");
     let token = auth

@@ -153,12 +153,12 @@ async fn unicode_name_rejects_symbols_markup_and_digit_only_input() {
     for name in [
         "<script>alert(1)</script>",
         "Robert'); DROP TABLE students;--",
-        "Ada 😀",
-        "@ada",
+        "Anu 😀",
+        "@anu",
         "   ",
         // Digits alone (Arabic-Indic here) name nobody.
         "١٢٣",
-        "Ada\tLovelace",
+        "Anu\tLakhotia",
         // "Zalgo" text: a run of more than four combining marks.
         "Z\u{0301}\u{0302}\u{0303}\u{0304}\u{0305}algo",
     ] {
@@ -182,7 +182,7 @@ async fn unicode_name_rejects_symbols_markup_and_digit_only_input() {
     let response = app
         .client()
         .post("/intl/people")
-        .json(&json!({ "name": "Ada", "nickname": "<b>" }))
+        .json(&json!({ "name": "Anu", "nickname": "<b>" }))
         .send()
         .await
         .assert_error(400, None);

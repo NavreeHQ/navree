@@ -57,7 +57,7 @@ fn every_event() -> Vec<TelemetryEvent> {
             error: None,
         }),
         TelemetryEvent::MailSent(MailSent {
-            to: vec!["ada@example.com".into()],
+            to: vec!["anu@example.com".into()],
             cc: Vec::new(),
             bcc: Vec::new(),
             from: Some("crm@example.com".into()),

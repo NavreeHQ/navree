@@ -490,7 +490,7 @@ async fn create_deal(app: &TestApp, owner: uuid::Uuid, title: &str) -> Deal {
     let db = app.get::<navree::db::Db>().await;
     let company = Company {
         id: uuid::Uuid::now_v7(),
-        name: "Globex".into(),
+        name: "Gulati".into(),
         ..Company::default()
     };
     Company::insert(&*db, [company.clone()]).await.unwrap();
@@ -515,11 +515,11 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
     let app = boot_app().await;
     let priya = create_user(&app, "priya@example.com", "rep").await;
     let tom = create_user(&app, "tom@example.com", "rep").await;
-    let toms_deal = create_deal(&app, tom.id, "Globex renewal").await;
+    let toms_deal = create_deal(&app, tom.id, "Gulati renewal").await;
 
     let rep = app.acting_as(principal(priya.id));
     rep.get("/admin/api/resources/deals")
-        .query(&[("search", "Globex")])
+        .query(&[("search", "Gulati")])
         .send()
         .await
         .assert_status(200)
@@ -536,7 +536,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 async fn the_docs_resource_serves_its_screens() {
     let app = boot_app().await;
     let priya = create_user(&app, "priya@example.com", "rep").await;
-    let own = create_deal(&app, priya.id, "Initech upgrade").await;
+    let own = create_deal(&app, priya.id, "Indrani upgrade").await;
     let rep = app.acting_as(principal(priya.id));
 
     let body = rep
@@ -547,17 +547,17 @@ async fn the_docs_resource_serves_its_screens() {
         .json_value();
     assert_eq!(body["data"]["display"]["amount_cents"], "$12,500.00");
     assert_eq!(body["data"]["display"]["stage"], "Lead");
-    assert_eq!(body["data"]["display"]["company_id"], "Globex");
+    assert_eq!(body["data"]["display"]["company_id"], "Gulati");
     assert_eq!(body["data"]["display"]["owner_id"], "Priya");
     assert_eq!(body["data"]["values"]["probability"], "10%");
 
     // Saving through the service, with the DTO's validation rules.
     rep.patch(&format!("/admin/api/resources/deals/{}", own.id))
-        .json(&json!({ "title": "Initech upgrade, phase 2" }))
+        .json(&json!({ "title": "Indrani upgrade, phase 2" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.title", json!("Initech upgrade, phase 2"));
+        .assert_json_path("data.title", json!("Indrani upgrade, phase 2"));
 
     rep.post("/admin/api/resources/deals/actions/mark-won")
         .json(&json!({ "ids": [own.id] }))

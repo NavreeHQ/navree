@@ -25,7 +25,7 @@ static SCHEMA: Template = Template::new("servers", |template| {
         for sql in statements {
             conn.execute_script(sql).await?;
         }
-        conn.execute_script("INSERT INTO authors (name) VALUES ('Ada')")
+        conn.execute_script("INSERT INTO authors (name) VALUES ('Anu')")
             .await?;
         conn.execute_script("INSERT INTO navree_migrations (version) VALUES ('m0001')")
             .await?;
@@ -90,7 +90,7 @@ async fn copies_truncation_and_cleanup(server: TestServer, first: TestDb, second
     first
         .db()
         .pool()
-        .execute_script("INSERT INTO authors (name) VALUES ('Grace')")
+        .execute_script("INSERT INTO authors (name) VALUES ('Gauri')")
         .await
         .unwrap();
     let restarted = table("authors")

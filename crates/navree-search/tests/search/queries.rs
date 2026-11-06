@@ -13,22 +13,22 @@ use crate::support::{
     self, Company, Contact, Deal, ids, insert, insert_contacts, new_company, new_contact, settle,
 };
 
-/// Ada, Grace and Alan; Ada and Alan owned by `owner`, Grace a customer.
+/// Anu, Gauri and Arun; Anu and Arun owned by `owner`, Gauri a customer.
 async fn seeded(engine: &str) -> (navree_testing::TestApp, Uuid, Vec<Contact>) {
     let app = support::app(engine, "inline").await;
     let db = app.get::<Db>().await;
     let owner = Uuid::now_v7();
-    let mut ada = new_contact("Ada", "Lovelace");
+    let mut ada = new_contact("Anu", "Lakhotia");
     ada.owner_id = owner;
     ada.score = 30;
-    ada.title = Some("Countess of Lovelace".into());
-    let mut grace = new_contact("Grace", "Hopper");
+    ada.title = Some("Countess of Lakhotia".into());
+    let mut grace = new_contact("Gauri", "Hundal");
     grace.status = "customer".into();
     grace.score = 50;
-    let mut alan = new_contact("Alan", "Turing");
+    let mut alan = new_contact("Arun", "Tiwari");
     alan.owner_id = owner;
     alan.score = 10;
-    alan.email = Some("alan@lovelace-labs.io".into());
+    alan.email = Some("arun@lakhotia-labs.io".into());
     let rows = insert_contacts(&db, vec![ada, grace, alan]).await;
     settle(&app).await;
     (app, owner, rows)
@@ -40,12 +40,12 @@ async fn paginate_returns_models_in_relevance_order() {
         let (app, _, rows) = seeded(engine).await;
         let search = app.get::<Search>().await;
         let page = search
-            .query::<Contact>("lovelace")
+            .query::<Contact>("lakhotia")
             .paginate(PageQuery::new(1, 15))
             .await
             .unwrap();
         // PostgreSQL's text parser keeps an email address as one token, so
-        // Alan's `alan@lovelace-labs.io` does not match there.
+        // Arun's `arun@lakhotia-labs.io` does not match there.
         let expected: Vec<String> = if engine == "postgres" && Server::current() == Server::Postgres
         {
             vec![rows[0].id.to_string()]
@@ -91,14 +91,14 @@ async fn hits_carry_scores_and_highlights() {
     assert!(page.data[0].score > 0.0 && page.data[0].score <= 1.0);
     assert_eq!(
         page.data[0].highlights.get("last_name").map(String::as_str),
-        Some("<mark>Lovelace</mark>")
+        Some("<mark>Lakhotia</mark>")
     );
     let json = serde_json::to_value(&page).unwrap();
-    assert_eq!(json["data"][0]["first_name"], "Ada");
+    assert_eq!(json["data"][0]["first_name"], "Anu");
     assert!(json["data"][0]["_score"].is_number());
     assert_eq!(
         json["data"][0]["_highlights"]["last_name"],
-        "<mark>Lovelace</mark>"
+        "<mark>Lakhotia</mark>"
     );
 
     let page = search
@@ -109,7 +109,7 @@ async fn hits_carry_scores_and_highlights() {
         .unwrap();
     assert_eq!(
         page.data[0].highlights["title"],
-        "<em>Countess</em> of Lovelace"
+        "<em>Countess</em> of Lakhotia"
     );
 }
 
@@ -148,8 +148,8 @@ async fn filters_and_sorts_use_declared_fields() {
     assert_eq!(scored, 2);
 
     let error = search
-        .query::<Contact>("ada")
-        .filter("first_name", "Ada")
+        .query::<Contact>("anu")
+        .filter("first_name", "Anu")
         .ids(1)
         .await
         .unwrap_err();
@@ -201,7 +201,7 @@ async fn rules_on_unindexed_columns_filter_the_loaded_rows() {
     let mut rules = Rules::new();
     rules
         .can(READ, "Contact")
-        .when(field("last_name").eq("Hopper"));
+        .when(field("last_name").eq("Hundal"));
     let scope = Accessible::<Contact, Read>::new(Arc::new(rules.build()));
     let page = search
         .query::<Contact>("")
@@ -220,17 +220,17 @@ async fn workspace_scoped_indexes_need_a_workspace() {
     let (w1, w2) = (Uuid::now_v7(), Uuid::now_v7());
     let companies = insert(
         &db,
-        vec![new_company(w1, "Acme"), new_company(w2, "Acme Europe")],
+        vec![new_company(w1, "Agra"), new_company(w2, "Agra Europe")],
     )
     .await;
     settle(&app).await;
-    let error = search.query::<Company>("acme").ids(10).await.unwrap_err();
+    let error = search.query::<Company>("agra").ids(10).await.unwrap_err();
     assert!(
         matches!(error, SearchError::WorkspaceRequired { .. }),
         "{error}"
     );
     let found = search
-        .query::<Company>("acme")
+        .query::<Company>("agra")
         .workspace(w2)
         .ids(10)
         .await
@@ -293,11 +293,11 @@ async fn across_merges_indexes_by_score() {
     let (app, _, rows) = seeded("memory").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let [lovelace_deal] = insert(
+    let [lakhotia_deal] = insert(
         &db,
         vec![Deal {
             id: Uuid::now_v7(),
-            title: "Lovelace renewal".into(),
+            title: "Lakhotia renewal".into(),
             company_id: None,
             stage: "won".into(),
             amount_cents: 5,
@@ -315,7 +315,7 @@ async fn across_merges_indexes_by_score() {
         Arc::new(rules.build())
     };
     let results = search
-        .across("lovelace")
+        .across("lakhotia")
         .include::<Contact>(Accessible::<Contact, Read>::new(all("Contact")))
         .include::<Deal>(Accessible::<Deal, Read>::new(all("Deal")))
         .limit(10)
@@ -327,16 +327,16 @@ async fn across_merges_indexes_by_score() {
         .map(|h| (h.kind.as_str(), h.id.as_str()))
         .collect();
     assert_eq!(results.len(), 3, "{kinds:?}");
-    assert!(kinds.contains(&("Deal", lovelace_deal.id.to_string().as_str())));
+    assert!(kinds.contains(&("Deal", lakhotia_deal.id.to_string().as_str())));
     assert!(results.windows(2).all(|w| w[0].score >= w[1].score));
     let ada = results
         .iter()
         .find(|h| h.id == rows[0].id.to_string())
         .unwrap();
-    assert_eq!(ada.title.as_deref(), Some("Ada"));
+    assert_eq!(ada.title.as_deref(), Some("Anu"));
     let uow = db.uow(None, None).await;
     let loaded = ada.load::<Contact>(&uow).await.unwrap().unwrap();
-    assert_eq!(loaded.last_name, "Lovelace");
+    assert_eq!(loaded.last_name, "Lakhotia");
     assert!(
         ada.load::<Deal>(&uow).await.unwrap().is_none(),
         "another kind"
@@ -344,7 +344,7 @@ async fn across_merges_indexes_by_score() {
     uow.rollback().await.unwrap();
 
     let limited = search
-        .across("lovelace")
+        .across("lakhotia")
         .include(Accessible::<Contact, Read>::new(all("Contact")))
         .include(Accessible::<Deal, Read>::new(Arc::new(
             Rules::new().build(),

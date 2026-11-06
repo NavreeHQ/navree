@@ -98,15 +98,15 @@ async fn ai_sdk_page(
     let _: String = response.to_string();
 
     ai.text(vec![
-        Message::user("Draft a one-line subject for the Acme renewal email."),
-        Message::assistant("Your Acme renewal: two options for next year"),
+        Message::user("Draft a one-line subject for the Agra renewal email."),
+        Message::assistant("Your Agra renewal: two options for next year"),
         Message::user("Shorter, and without the colon."),
     ])
     .await?;
 
     let _: ContractLike = ai
         .structured::<ContractLike>("Extract the commercial terms from this contract.")
-        .attach(Attachment::from_disk(&disk, "contracts/acme.pdf").await?)
+        .attach(Attachment::from_disk(&disk, "contracts/agra.pdf").await?)
         .model("smart")
         .await?;
     let _: FollowUpEmail = ai
@@ -610,7 +610,7 @@ async fn the_fake_api() {
     let _ = FakeReply::tool_call("move_deal", json!({ "deal_id": 1 }));
 
     let response = ai
-        .text("Summarize Acme")
+        .text("Summarize Agra")
         .model("fast")
         .max_tokens(77)
         .user(Uuid::nil())
@@ -629,12 +629,12 @@ async fn the_fake_api() {
     assert_eq!(first.model(), "fast");
     assert_eq!(first.system(), None);
     assert_eq!(first.messages().len(), 1);
-    assert_eq!(first.last_user_message(), "Summarize Acme");
+    assert_eq!(first.last_user_message(), "Summarize Agra");
     assert!(first.tools().is_empty());
     assert_eq!(first.max_tokens(), 77);
     assert_eq!(first.user(), Some(Uuid::nil()));
-    fake.assert_prompted(|r| r.last_user_message().contains("Acme"));
-    fake.assert_not_prompted(|r| r.last_user_message().contains("Globex"));
+    fake.assert_prompted(|r| r.last_user_message().contains("Agra"));
+    fake.assert_not_prompted(|r| r.last_user_message().contains("Gulati"));
     fake.assert_prompt_count(requests.len());
     fake.assert_tool_not_called("move_deal");
     assert!(fake.tool_results("move_deal").is_empty());

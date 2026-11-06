@@ -261,8 +261,8 @@ mod tests {
         let now = Utc::now();
         let workspace = Workspace {
             id: Uuid::now_v7(),
-            name: "Acme".into(),
-            slug: "acme".into(),
+            name: "Agra".into(),
+            slug: "agra".into(),
             owner_id: Uuid::now_v7(),
             organization_id: None,
             timezone: None,
@@ -274,15 +274,15 @@ mod tests {
         let reference = BillableRef::of(&workspace);
         assert_eq!(reference.billable_type, "workspace");
         assert_eq!(reference.billable_id, workspace.id);
-        assert_eq!(reference.name, "Acme");
+        assert_eq!(reference.name, "Agra");
         assert_eq!(reference.email, None);
         assert_eq!(workspace.billable_ref(), reference);
         assert_eq!(reference.billable_ref(), reference);
 
         let user = User {
             id: Uuid::now_v7(),
-            name: "Ada".into(),
-            email: "ada@example.com".into(),
+            name: "Anu".into(),
+            email: "anu@example.com".into(),
             password_hash: String::new(),
             email_verified_at: None,
             two_factor_secret: None,
@@ -293,7 +293,7 @@ mod tests {
         };
         let reference = user.billable_ref();
         assert_eq!(reference.billable_type, "user");
-        assert_eq!(reference.email.as_deref(), Some("ada@example.com"));
+        assert_eq!(reference.email.as_deref(), Some("anu@example.com"));
         let current = CurrentUser(user.clone());
         assert_eq!(current.billable_ref(), reference);
         assert_eq!(BillableRef::new("user", user.id).billable_id, user.id);

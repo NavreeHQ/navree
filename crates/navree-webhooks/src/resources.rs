@@ -20,7 +20,7 @@ use crate::entity::{attempt, delivery, endpoint};
 /// use navree_webhooks::NewEndpoint;
 /// # let workspace_id = uuid::Uuid::nil();
 ///
-/// let new = NewEndpoint::new("https://hooks.lovelace.io/navree")
+/// let new = NewEndpoint::new("https://hooks.lakhotia.io/navree")
 ///     .events(["deal.won", "deal.lost"])
 ///     .workspace(workspace_id)
 ///     .description("Revenue dashboard")
@@ -84,7 +84,7 @@ impl NewEndpoint {
 /// use navree_webhooks::EndpointChanges;
 ///
 /// let changes = EndpointChanges::new()
-///     .url("https://hooks.lovelace.io/v2")
+///     .url("https://hooks.lakhotia.io/v2")
 ///     .events(["*"]);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ToSchema)]

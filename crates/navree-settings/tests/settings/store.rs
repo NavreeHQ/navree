@@ -33,9 +33,9 @@ fn row(key: &str, scope: ScopeTarget, values: Value) -> StoredSetting {
 
 /// The contract every store keeps.
 pub async fn contract(store: &dyn SettingsStore) {
-    let (acme, globex, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-    let workspace = ScopeTarget::new(ScopeKind::Workspace, acme);
-    let other = ScopeTarget::new(ScopeKind::Workspace, globex);
+    let (agra, gulati, ada) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let workspace = ScopeTarget::new(ScopeKind::Workspace, agra);
+    let other = ScopeTarget::new(ScopeKind::Workspace, gulati);
     let user = ScopeTarget::new(ScopeKind::User, ada);
 
     assert!(
@@ -53,9 +53,9 @@ pub async fn contract(store: &dyn SettingsStore) {
         json!({"page_size": 50, "welcome_text": "Hello"}),
     );
     store.save(None, &global).await.unwrap();
-    let mut acme_row = row("portal", workspace, json!({"show_leaderboard": true}));
-    acme_row.updated_by = Some(ada);
-    store.save(None, &acme_row).await.unwrap();
+    let mut agra_row = row("portal", workspace, json!({"show_leaderboard": true}));
+    agra_row.updated_by = Some(ada);
+    store.save(None, &agra_row).await.unwrap();
     store
         .save(None, &row("portal", other, json!({"page_size": 10})))
         .await
@@ -81,8 +81,8 @@ pub async fn contract(store: &dyn SettingsStore) {
         .await
         .unwrap();
     loaded.sort_by_key(|row| row.scope.kind);
-    assert_eq!(loaded, [global.clone(), acme_row.clone()]);
-    assert_eq!(acme_row.overridden_fields(), ["show_leaderboard"]);
+    assert_eq!(loaded, [global.clone(), agra_row.clone()]);
+    assert_eq!(agra_row.overridden_fields(), ["show_leaderboard"]);
 
     // Saving again replaces the row.
     let replaced = row(
@@ -162,13 +162,13 @@ async fn rows_keep_the_documented_columns() {
     let world = World::new().await;
     let db: Arc<Db> = world.db().await;
     let store = DatabaseSettingsStore::new(db.clone());
-    let acme = Uuid::now_v7();
+    let agra = Uuid::now_v7();
     store
         .save(
             None,
             &row(
                 "portal",
-                ScopeTarget::new(ScopeKind::Workspace, acme),
+                ScopeTarget::new(ScopeKind::Workspace, agra),
                 json!({"welcome_text": "Hi", "page_size": 10}),
             ),
         )
@@ -197,7 +197,7 @@ async fn rows_keep_the_documented_columns() {
     assert_eq!(global.get::<Uuid>("scope_id").unwrap(), Uuid::nil());
     let workspace = &rows[1];
     assert_eq!(workspace.get::<String>("key").unwrap(), "portal");
-    assert_eq!(workspace.get::<Uuid>("scope_id").unwrap(), acme);
+    assert_eq!(workspace.get::<Uuid>("scope_id").unwrap(), agra);
     assert_eq!(
         workspace.get::<Value>("value").unwrap(),
         json!({"welcome_text": "Hi", "page_size": 10})

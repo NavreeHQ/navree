@@ -73,7 +73,7 @@ fn ids(page: &Value) -> Vec<String> {
 #[tokio::test]
 async fn the_runs_page_lists_shows_cancels_and_retries() {
     let h = routed().await;
-    let done = h.start(Greet { name: "Ada".into() }).await;
+    let done = h.start(Greet { name: "Anu".into() }).await;
     let sleeping = h.start(Onboarding { user_id: 7 }).await;
     let admin = as_user(&h, ADMIN);
     let viewer = as_user(&h, VIEWER);
@@ -125,7 +125,7 @@ async fn the_runs_page_lists_shows_cancels_and_retries() {
         .assert_status(200)
         .json_value();
     assert_eq!(shown["status"], "completed");
-    assert_eq!(shown["output"], "Hello, Ada");
+    assert_eq!(shown["output"], "Hello, Anu");
     assert_eq!(shown["steps"][0]["key"], "hello");
     viewer
         .get(&format!("/api/workflows/runs/{}", Uuid::nil()))
@@ -428,10 +428,10 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
     })
     .await;
     let workspaces = h.app.get::<Workspaces>().await;
-    let (acme, globex) = h
+    let (agra, gulati) = h
         .in_uow(|uow| async move {
             let mut created = Vec::new();
-            for slug in ["acme", "globex"] {
+            for slug in ["agra", "gulati"] {
                 let workspace = workspaces
                     .create(
                         &uow,
@@ -453,62 +453,62 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
 
     let created = owner
         .post("/api/automations")
-        .header("X-Workspace", "acme")
-        .json(&json!({"name": "Acme follow-up", "definition": follow_up()}))
+        .header("X-Workspace", "agra")
+        .json(&json!({"name": "Agra follow-up", "definition": follow_up()}))
         .send()
         .await
         .assert_status(201)
         .json_value();
-    assert_eq!(created["workspace_id"], acme.to_string());
+    assert_eq!(created["workspace_id"], agra.to_string());
     let id = created["id"].as_str().unwrap().to_owned();
-    let in_globex = owner
+    let in_gulati = owner
         .get("/api/automations")
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(in_globex["data"], json!([]));
+    assert_eq!(in_gulati["data"], json!([]));
     owner
         .get(&format!("/api/automations/{id}"))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_error_code(404, "automation_not_found");
     owner
         .get(&format!("/api/automations/{id}"))
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
 
-    // Runs too: a run of acme is listed and shown in acme only.
+    // Runs too: a run of agra is listed and shown in agra only.
     let run = h
         .workflows()
         .await
         .spawn_with(
             Onboarding { user_id: 1 },
-            StartOptions::new().workspace(acme),
+            StartOptions::new().workspace(agra),
         )
         .await
         .unwrap();
     let listed = owner
         .get("/api/workflows/runs")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .json_value();
     assert_eq!(ids(&listed), [run.to_string()]);
     let listed = owner
         .get("/api/workflows/runs")
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .json_value();
     assert_eq!(listed["data"], json!([]));
     owner
         .post(&format!("/api/workflows/runs/{run}/cancel"))
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_error_code(404, "workflow_run_not_found");
@@ -520,15 +520,15 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
         .assert_status(400);
     as_user(&h, VIEWER)
         .get("/api/automations")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(403);
 
-    // Deleting acme cancels its runs and deletes its automations.
+    // Deleting agra cancels its runs and deletes its automations.
     h.emit(WorkspaceDeleted {
-        workspace_id: acme,
-        slug: "acme".to_owned(),
+        workspace_id: agra,
+        slug: "agra".to_owned(),
     })
     .await;
     assert_eq!(h.status(run).await, RunStatus::Cancelled);
@@ -539,7 +539,7 @@ async fn in_an_app_with_workspaces_the_routes_act_on_the_request_workspace() {
             .await
             .is_err()
     );
-    let _ = globex;
+    let _ = gulati;
 }
 
 #[tokio::test]

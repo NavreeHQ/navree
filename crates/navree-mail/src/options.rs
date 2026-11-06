@@ -13,7 +13,7 @@ use crate::{RenderOptions, TransportConfig};
 ///
 /// ```toml
 /// [mail]
-/// from = "Acme <hello@acme.test>"   # APP_MAIL__FROM
+/// from = "Agra <hello@acme.test>"   # APP_MAIL__FROM
 /// queue = "mail"                    # APP_MAIL__QUEUE (queue for Mailer::queue)
 ///
 /// [mail.transport]                  # or APP_MAIL__TRANSPORT=smtps://user:pass@smtp.acme.test
@@ -39,7 +39,7 @@ use crate::{RenderOptions, TransportConfig};
 #[config(key = "mail", docs = "/docs/digging-deeper/mail/", validate = Self::check)]
 #[serde(default)]
 pub struct MailOptions {
-    /// The default sender, `hello@example.com` or `Acme <hello@acme.test>`
+    /// The default sender, `hello@example.com` or `Agra <hello@acme.test>`
     /// (default `hello@example.com`). Empty means no default: every message
     /// must then set its own sender.
     pub from: String,

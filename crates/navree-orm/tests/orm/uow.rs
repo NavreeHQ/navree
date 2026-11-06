@@ -16,17 +16,17 @@ use crate::support::{count_rows, sqlite};
 async fn writes_record_change_events_with_the_stored_values() {
     let t = sqlite().await;
     let uow = t.db.uow(None, Some("req-1".into())).await;
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
     .await
     .unwrap();
-    acme.name = "Acme Corp".into();
-    acme.save(&uow).await.unwrap();
+    agra.name = "Agra Corp".into();
+    agra.save(&uow).await.unwrap();
     let mut deal = Deal::create(
         &uow,
         Deal {
@@ -37,7 +37,7 @@ async fn writes_record_change_events_with_the_stored_values() {
     .await
     .unwrap();
     deal.delete(&uow).await.unwrap();
-    acme.delete(&uow).await.unwrap();
+    agra.delete(&uow).await.unwrap();
 
     let changes = uow.changes();
     let ops: Vec<(String, ChangeOp)> = changes.iter().map(|c| (c.entity.clone(), c.op)).collect();
@@ -53,11 +53,11 @@ async fn writes_record_change_events_with_the_stored_values() {
     );
     let created = &changes[0];
     assert_eq!(created.id, "1");
-    assert_eq!(created.new.as_ref().unwrap()["name"], "Acme");
+    assert_eq!(created.new.as_ref().unwrap()["name"], "Agra");
     assert!(created.old.is_none());
     let updated = &changes[1];
-    assert_eq!(updated.old.as_ref().unwrap()["name"], "Acme");
-    assert_eq!(updated.new.as_ref().unwrap()["name"], "Acme Corp");
+    assert_eq!(updated.old.as_ref().unwrap()["name"], "Agra");
+    assert_eq!(updated.new.as_ref().unwrap()["name"], "Agra Corp");
     assert_eq!(
         updated
             .new
@@ -215,10 +215,10 @@ async fn units_of_work_run_the_orm() {
     let t = sqlite().await;
     let db = t.db.clone();
     let uow = db.uow(None, None).await;
-    let acme = Company::create(
+    let agra = Company::create(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -255,7 +255,7 @@ async fn units_of_work_run_the_orm() {
     {
         let mut cursor = Company::query().cursor(&uow);
         let first = cursor.try_next().await.unwrap().unwrap();
-        assert_eq!(first.id, acme.id);
+        assert_eq!(first.id, agra.id);
         let busy = Company::query().count(&uow).await.unwrap_err();
         assert!(
             busy.to_string().contains("busy streaming a cursor"),

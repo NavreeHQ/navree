@@ -9,7 +9,7 @@ fn a_composed_message_parses_back() {
     let incoming = Incoming::compose()
         .from("Jürgen Müller <juergen@example.de>")
         .to("reply+abc@in.acme.test")
-        .cc("Grace <grace@example.com>")
+        .cc("Gauri <gauri@example.com>")
         .reply_to("home@example.de")
         .subject("Grüße zum Ticket")
         .text("Danke schön!\nBis bald.")
@@ -27,7 +27,7 @@ fn a_composed_message_parses_back() {
     assert_eq!(incoming.source, "test");
     assert_eq!(
         incoming.envelope.recipients,
-        vec!["reply+abc@in.acme.test", "grace@example.com"]
+        vec!["reply+abc@in.acme.test", "gauri@example.com"]
     );
     assert_eq!(
         incoming.envelope.sender.as_deref(),
@@ -41,7 +41,7 @@ fn a_composed_message_parses_back() {
         Some("Jürgen Müller")
     );
     assert_eq!(mail.to[0].email, "reply+abc@in.acme.test");
-    assert_eq!(mail.cc[0].name.as_deref(), Some("Grace"));
+    assert_eq!(mail.cc[0].name.as_deref(), Some("Gauri"));
     assert_eq!(mail.reply_to[0].email, "home@example.de");
     assert_eq!(mail.subject.as_deref(), Some("Grüße zum Ticket"));
     assert_eq!(
@@ -76,7 +76,7 @@ fn a_composed_message_parses_back() {
 #[test]
 fn envelope_recipients_override_the_headers() {
     let incoming = Incoming::compose()
-        .from("ada@example.com")
+        .from("anu@example.com")
         .to("all@acme.test")
         .envelope_to("hidden@in.acme.test")
         .text("hi")

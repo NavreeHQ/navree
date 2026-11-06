@@ -178,7 +178,7 @@ pub use value::validate_json;
 /// }
 ///
 /// let contact = CreateContact {
-///     name: "Ada".into(),
+///     name: "Anu".into(),
 ///     email: None,
 ///     age: Some(12),
 ///     tags: vec!["vip".into(), String::new()],

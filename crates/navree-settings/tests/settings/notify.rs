@@ -122,12 +122,12 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
     let world = world().await;
     let owner = world.user("Owner").await;
     let holding = world.organization(owner, "Holding").await;
-    let acme = world.workspace(owner, "Acme").await;
-    world.attach(holding.id, acme.id).await;
+    let agra = world.workspace(owner, "Agra").await;
+    world.attach(holding.id, agra.id).await;
     let other = world.workspace(owner, "Other").await;
     let settings: std::sync::Arc<Settings> = world.settings().await;
 
-    let (org_scope, acme_scope) = (Scope::organization(holding.id), Scope::workspace(acme.id));
+    let (org_scope, agra_scope) = (Scope::organization(holding.id), Scope::workspace(agra.id));
     let global = settings.clone();
     world
         .work(|uow| async move {
@@ -148,8 +148,8 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
             global
                 .update::<NotificationTemplates>(
                     &uow,
-                    acme_scope,
-                    json!({"templates": {"deal_won": {"subject": "Acme won {{ title }}!"}}}),
+                    agra_scope,
+                    json!({"templates": {"deal_won": {"subject": "Agra won {{ title }}!"}}}),
                 )
                 .await
         })
@@ -157,7 +157,7 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
         .unwrap();
 
     let notifier = world.app.get::<Notifier>().await;
-    for workspace in [Some(acme.id), Some(other.id), None] {
+    for workspace in [Some(agra.id), Some(other.id), None] {
         notifier
             .send(
                 &Rep {
@@ -165,7 +165,7 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
                     workspace,
                 },
                 DealWon {
-                    title: "Initech".into(),
+                    title: "Indrani".into(),
                 },
             )
             .await
@@ -180,23 +180,23 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
         .unwrap()
         .sent();
     assert_eq!(sent.len(), 3);
-    // Acme: its own subject, its organization's color and footer.
-    assert_eq!(sent[0].subject, "Acme won Initech!");
+    // Agra: its own subject, its organization's color and footer.
+    assert_eq!(sent[0].subject, "Agra won Indrani!");
     assert_eq!(
         sent[0].html.as_deref(),
-        Some("<p style=\"color: #0F766E\">Initech was won.</p>")
+        Some("<p style=\"color: #0F766E\">Indrani was won.</p>")
     );
     assert_eq!(
         sent[0].text.as_deref(),
-        Some("Initech was won.\nHolding Group, Pune")
+        Some("Indrani was won.\nHolding Group, Pune")
     );
     // Another workspace and mail outside any: the global values.
     for mail in &sent[1..] {
-        assert_eq!(mail.subject, "Deal won: Initech");
-        assert_eq!(mail.html.as_deref(), Some("<p>Initech was won.</p>"));
+        assert_eq!(mail.subject, "Deal won: Indrani");
+        assert_eq!(mail.html.as_deref(), Some("<p>Indrani was won.</p>"));
         assert_eq!(
             mail.text.as_deref(),
-            Some("Initech was won.\nSent by Navree")
+            Some("Indrani was won.\nSent by Navree")
         );
     }
 }

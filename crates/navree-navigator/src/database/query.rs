@@ -292,13 +292,13 @@ mod tests {
         let result = QueryResult::new(
             vec!["email".into(), "password_hash".into()],
             vec![
-                vec![Value::from("ada@example.com"), Value::from("$argon2id$...")],
+                vec![Value::from("anu@example.com"), Value::from("$argon2id$...")],
                 vec![Value::from("bob@example.com"), Value::Null],
             ],
             Instant::now(),
         );
         assert_eq!(result.rows[0][1], "[redacted]");
-        assert_eq!(result.rows[0][0], "ada@example.com");
+        assert_eq!(result.rows[0][0], "anu@example.com");
         assert_eq!(result.rows[1][1], Value::Null, "nulls stay null");
     }
 

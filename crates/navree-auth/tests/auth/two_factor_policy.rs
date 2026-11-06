@@ -45,12 +45,12 @@ impl Module for StaffPolicyModule {
 #[tokio::test]
 async fn without_rules_nobody_is_limited() {
     let app = support::app().await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let jwt = app.get::<JwtService>().await;
     assert_eq!(claims_of(&jwt, &access).typ, TokenType::Access);
     let service = app.get::<AuthService>().await;
     let user = service
-        .find_by_email("ada@example.com")
+        .find_by_email("anu@example.com")
         .await
         .unwrap()
         .unwrap();
@@ -64,10 +64,10 @@ async fn a_policy_limits_sessions_to_the_setup_until_two_factor_is_on() {
         .module(StaffPolicyModule)
         .build()
         .await;
-    let user = support::create_user(&app, "ada@staff.example.com").await;
+    let user = support::create_user(&app, "anu@staff.example.com").await;
     let client = app.client();
 
-    let response = login(&client, "ada@staff.example.com", PASSWORD)
+    let response = login(&client, "anu@staff.example.com", PASSWORD)
         .await
         .assert_status(200)
         .assert_json_path("two_factor_setup_required", json!(true));
@@ -131,7 +131,7 @@ async fn a_policy_limits_sessions_to_the_setup_until_two_factor_is_on() {
         .assert_status(200);
 
     // Other users are not affected.
-    let (_, other, _) = signed_in(&app, "grace@example.com").await;
+    let (_, other, _) = signed_in(&app, "gauri@example.com").await;
     assert_eq!(claims_of(&jwt, &other).typ, TokenType::Access);
     let _ = user;
 }
@@ -143,7 +143,7 @@ async fn required_roles_need_two_factor_and_a_new_requirement_applies_at_refresh
         .config("auth.two_factor.required_for", json!(["admin"]))
         .build()
         .await;
-    let (user, access, refresh_token) = signed_in(&app, "ada@example.com").await;
+    let (user, access, refresh_token) = signed_in(&app, "anu@example.com").await;
     let jwt = app.get::<JwtService>().await;
     assert_eq!(claims_of(&jwt, &access).typ, TokenType::Access);
 
@@ -166,7 +166,7 @@ async fn required_roles_need_two_factor_and_a_new_requirement_applies_at_refresh
             .assert_status(200),
     );
     assert_eq!(claims_of(&jwt, &full).typ, TokenType::Access);
-    login(&app.client(), "ada@example.com", PASSWORD)
+    login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_status(200)
         .assert_json_path("two_factor_required", json!(true));
@@ -175,9 +175,9 @@ async fn required_roles_need_two_factor_and_a_new_requirement_applies_at_refresh
 #[tokio::test]
 async fn setup_tokens_still_sign_out() {
     let app = support::builder().module(StaffPolicyModule).build().await;
-    support::create_user(&app, "ada@staff.example.com").await;
+    support::create_user(&app, "anu@staff.example.com").await;
     let (access, refresh_token) = tokens(
-        &login(&app.client(), "ada@staff.example.com", PASSWORD)
+        &login(&app.client(), "anu@staff.example.com", PASSWORD)
             .await
             .assert_status(200),
     );

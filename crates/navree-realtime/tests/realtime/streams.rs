@@ -131,46 +131,46 @@ async fn a_user_topic_reaches_only_that_user() {
 
 #[tokio::test]
 async fn a_workspace_topic_reaches_only_the_members_of_that_workspace() {
-    let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
+    let (agra, gulati) = (Uuid::now_v7(), Uuid::now_v7());
     let (ada, bob, cy) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-    let workspaces = Workspaces::new([(acme, vec![ada]), (globex, vec![bob, cy])]);
+    let workspaces = Workspaces::new([(agra, vec![ada]), (gulati, vec![bob, cy])]);
     let server = Server::serve(app(options()).module(workspaces.module())).await;
-    let (in_acme, in_globex) = (acme.to_string(), globex.to_string());
+    let (in_agra, in_gulati) = (agra.to_string(), gulati.to_string());
 
-    let (mut ada_in_acme, _) = server
-        .listen("topics=deals", Some(ada), &[("x-workspace", &in_acme)])
+    let (mut ada_in_agra, _) = server
+        .listen("topics=deals", Some(ada), &[("x-workspace", &in_agra)])
         .await;
-    let (mut bob_in_globex, _) = server
-        .listen("topics=deals", Some(bob), &[("x-workspace", &in_globex)])
+    let (mut bob_in_gulati, _) = server
+        .listen("topics=deals", Some(bob), &[("x-workspace", &in_gulati)])
         .await;
     // Cy names a workspace she is not a member of: her stream is in none.
-    let (mut cy_in_acme, _) = server
-        .listen("topics=deals", Some(cy), &[("x-workspace", &in_acme)])
+    let (mut cy_in_agra, _) = server
+        .listen("topics=deals", Some(cy), &[("x-workspace", &in_agra)])
         .await;
     // A guest naming a workspace is in none either.
-    let (mut guest_in_acme, _) = server
-        .listen("topics=deals", None, &[("x-workspace", &in_acme)])
+    let (mut guest_in_agra, _) = server
+        .listen("topics=deals", None, &[("x-workspace", &in_agra)])
         .await;
     assert_eq!(
         server
             .realtime
-            .listeners(&Topic::workspace(acme, "deals").channel()),
+            .listeners(&Topic::workspace(agra, "deals").channel()),
         1,
-        "only Ada listens in Acme"
+        "only Anu listens in Agra"
     );
 
     let live = live(&server).await;
-    live.nudge([Topic::workspace(acme, "deals")]).await.unwrap();
-    ada_in_acme.expect("deals").await;
-    for page in [&mut bob_in_globex, &mut cy_in_acme, &mut guest_in_acme] {
+    live.nudge([Topic::workspace(agra, "deals")]).await.unwrap();
+    ada_in_agra.expect("deals").await;
+    for page in [&mut bob_in_gulati, &mut cy_in_agra, &mut guest_in_agra] {
         page.expect_silence(QUIET).await;
     }
 
-    live.nudge([Topic::workspace(globex, "deals")])
+    live.nudge([Topic::workspace(gulati, "deals")])
         .await
         .unwrap();
-    bob_in_globex.expect("deals").await;
-    for page in [&mut ada_in_acme, &mut cy_in_acme, &mut guest_in_acme] {
+    bob_in_gulati.expect("deals").await;
+    for page in [&mut ada_in_agra, &mut cy_in_agra, &mut guest_in_agra] {
         page.expect_silence(QUIET).await;
     }
 }
@@ -470,17 +470,17 @@ async fn a_resumed_stream_is_told_only_what_its_reader_may_hear() {
     drop(page);
     server
         .realtime
-        .broadcast([Topic::user(bob, "inbox").channel()], "for-bob", json!({}))
+        .broadcast([Topic::user(bob, "inbox").channel()], "for-bal", json!({}))
         .unwrap();
     server
         .realtime
-        .broadcast([Topic::user(ada, "inbox").channel()], "for-ada", json!({}))
+        .broadcast([Topic::user(ada, "inbox").channel()], "for-anu", json!({}))
         .unwrap();
     let (mut back, first) = server
         .listen("topics=inbox", Some(ada), &[("last-event-id", &last)])
         .await;
     assert_eq!(first.event, "ui:resumed");
-    assert_eq!(back.expect("inbox").await.data, "for-ada");
+    assert_eq!(back.expect("inbox").await.data, "for-anu");
     back.expect_silence(QUIET).await;
 }
 

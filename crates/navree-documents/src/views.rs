@@ -120,11 +120,11 @@ mod tests {
     #[test]
     fn template_variables_add_locale_and_direction() {
         let render = Render::template("x")
-            .data(json!({"name": "Ada"}))
+            .data(json!({"name": "Anu"}))
             .locale("ar");
         assert_eq!(
             template_context(&render),
-            json!({"name": "Ada", "locale": "ar", "dir": "rtl"})
+            json!({"name": "Anu", "locale": "ar", "dir": "rtl"})
         );
         let render = Render::template("x").data(json!({"locale": "custom"}));
         assert_eq!(
@@ -153,11 +153,11 @@ mod tests {
         let (path, html) = views
             .document(
                 &templates,
-                &Render::template("greeting").data(json!({"name": "Ada"})),
+                &Render::template("greeting").data(json!({"name": "Anu"})),
             )
             .unwrap();
         assert_eq!(path, "greeting.html");
-        assert_eq!(html, "<p>Hello Ada</p>");
+        assert_eq!(html, "<p>Hello Anu</p>");
         let inline = views
             .document(&templates, &Render::html("<b>x</b>"))
             .unwrap();

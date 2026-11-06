@@ -207,7 +207,7 @@ for (const browserName of browsers) {
         assert.equal(await f.e164.inputValue(), e164, dialled);
       }
       // The last one, posted: the server reads the text in the country now chosen.
-      await page.locator("#contact-name").fill("Ada Lovelace");
+      await page.locator("#contact-name").fill("Anu Lakhotia");
       await page.getByRole("button", { name: "Save contact" }).click();
       await page.waitForSelector("[data-proof=mobile]");
       assert.equal(await page.locator("[data-proof=mobile] [data-fact=e164]").textContent(), "+61412345678");
@@ -289,7 +289,7 @@ for (const browserName of browsers) {
 
     test("the server reads the number in the chosen country and writes it back", async () => {
       const { page, field, problems, close } = await open("/phone");
-      await page.locator("#contact-name").fill("Ada Lovelace");
+      await page.locator("#contact-name").fill("Anu Lakhotia");
       await typed(page, field("mobile"), "07400123456");
       await page.getByRole("button", { name: "Save contact" }).click();
       await page.waitForSelector("[data-proof=mobile]");
@@ -307,7 +307,7 @@ for (const browserName of browsers) {
     test("a number not valid in the chosen country is an error on the field", async () => {
       const { page, field, problems, close } = await open("/phone");
       const f = field("mobile");
-      await page.locator("#contact-name").fill("Ada Lovelace");
+      await page.locator("#contact-name").fill("Anu Lakhotia");
       await f.trigger.click();
       await f.search.fill("france");
       await page.keyboard.press("Enter");
@@ -330,7 +330,7 @@ for (const browserName of browsers) {
       assert.equal(await f.select.isVisible(), true);
       assert.equal(await f.trigger.isVisible(), false);
       assert.equal(await f.e164.isDisabled(), true, "no stale E.164 posts");
-      await page.locator("#contact-name").fill("Ada Lovelace");
+      await page.locator("#contact-name").fill("Anu Lakhotia");
       await f.select.selectOption("IN");
       await f.input.fill("098765 43210");
       await page.getByRole("button", { name: "Save contact" }).click();

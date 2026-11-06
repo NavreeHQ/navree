@@ -276,9 +276,9 @@ mod tests {
         assert_eq!(
             with_query(
                 "https://app.test/reset",
-                &[("token", "a b"), ("email", "ada+x@example.com")]
+                &[("token", "a b"), ("email", "anu+x@example.com")]
             ),
-            "https://app.test/reset?token=a+b&email=ada%2Bx%40example.com"
+            "https://app.test/reset?token=a+b&email=anu%2Bx%40example.com"
         );
         assert_eq!(
             with_query("https://app.test/reset?lang=en", &[("token", "t")]),
@@ -289,8 +289,8 @@ mod tests {
     #[test]
     fn html_is_escaped() {
         assert_eq!(
-            escape_html(r#"<b>"Ada" & 'Grace'</b>"#),
-            "&lt;b&gt;&quot;Ada&quot; &amp; &#39;Grace&#39;&lt;/b&gt;"
+            escape_html(r#"<b>"Anu" & 'Gauri'</b>"#),
+            "&lt;b&gt;&quot;Anu&quot; &amp; &#39;Gauri&#39;&lt;/b&gt;"
         );
     }
 

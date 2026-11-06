@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::support::{deal_won, harness, start};
 
-const URL: &str = "https://hooks.lovelace.io/navree";
+const URL: &str = "https://hooks.lakhotia.io/navree";
 
 #[tokio::test]
 async fn the_delivery_log_is_declared_time_series() {
@@ -76,7 +76,7 @@ async fn pruning_takes_a_delivery_s_attempts_however_late() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["*"])).await;
@@ -124,12 +124,12 @@ async fn deleting_an_endpoint_deletes_its_deliveries_and_attempts() {
     let h = harness(|b| b).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(200),
     );
     let created = h.endpoint(NewEndpoint::new(URL).events(["*"])).await;
     let kept = h
-        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/other").events(["*"]))
+        .endpoint(NewEndpoint::new("https://hooks.lakhotia.io/other").events(["*"]))
         .await;
     h.emit(deal_won(None)).await;
     h.run_queue().await;

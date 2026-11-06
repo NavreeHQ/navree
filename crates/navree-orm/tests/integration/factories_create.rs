@@ -50,14 +50,14 @@ async fn definition_parents_are_created_one_per_record() {
 #[tokio::test]
 async fn states_and_sets_override_a_definitions_parent() {
     let test = sqlite().await;
-    let acme = Company::factory().create_one(&test.db).await.unwrap();
+    let agra = Company::factory().create_one(&test.db).await.unwrap();
     let deals = Deal::factory()
         .count(2)
-        .set(Deal::COMPANY_ID, acme.id)
+        .set(Deal::COMPANY_ID, agra.id)
         .create(&test.db)
         .await
         .unwrap();
-    assert!(deals.iter().all(|d| d.company_id == Some(acme.id)));
+    assert!(deals.iter().all(|d| d.company_id == Some(agra.id)));
     assert_eq!(
         count_rows(&test.db, "companies").await,
         1,
@@ -71,7 +71,7 @@ async fn for_shares_one_parent_across_the_batch() {
     let deals = Deal::factory()
         .count(3)
         .for_(
-            Company::factory().set(Company::NAME, "Acme"),
+            Company::factory().set(Company::NAME, "Agra"),
             Deal::COMPANY_ID,
         )
         .create(&test.db)
@@ -81,7 +81,7 @@ async fn for_shares_one_parent_across_the_batch() {
     let company = Company::find_or_fail(&test.db, deals[0].company_id.unwrap())
         .await
         .unwrap();
-    assert_eq!(company.name, "Acme");
+    assert_eq!(company.name, "Agra");
     assert!(deals.iter().all(|d| d.company_id == Some(company.id)));
 
     // A stored parent, by typed column or by the factory's name for it.

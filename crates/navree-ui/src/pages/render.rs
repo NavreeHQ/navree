@@ -59,7 +59,7 @@ pub const STATE_HEADER: &str = "x-navree-state";
 ///
 /// async fn shell_for(user: Option<Uuid>) -> Option<Shell> {
 ///     user.map(|_| {
-///         Shell::new("Acme").group(
+///         Shell::new("Agra").group(
 ///             NavGroup::plain().item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)),
 ///         )
 ///     })

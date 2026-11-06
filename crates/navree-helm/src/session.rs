@@ -300,7 +300,7 @@ mod tests {
             .body(())
             .unwrap();
         assert_eq!(request_host(&request), "::1");
-        assert!(is_loopback("localhost") && is_loopback("127.0.0.1") && !is_loopback("acme.com"));
+        assert!(is_loopback("localhost") && is_loopback("127.0.0.1") && !is_loopback("agra.com"));
     }
 
     #[test]

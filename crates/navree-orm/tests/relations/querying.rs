@@ -61,7 +61,7 @@ async fn relations_take_every_builder_method() {
         .unwrap();
     assert_eq!(latest.len(), 1);
     let nested = crm
-        .acme
+        .agra
         .deals()
         .with("activities")
         .has("activities")
@@ -72,7 +72,7 @@ async fn relations_take_every_builder_method() {
     assert_eq!(titles(&nested), ["Renewal", "Upgrade"]);
     assert!(nested[0].relation_loaded("activities"));
     let big = crm
-        .acme
+        .agra
         .deals()
         .where_has(Deal::activities, |q| q.where_(Activity::MINUTES.gte(60)))
         .get(&t.db)
@@ -182,7 +182,7 @@ async fn retrieval_on_relations() {
 
     // A belongs-to and a many-to-many: keys qualified by the related table.
     let company = crm.renewal.company().first(&t.db).await.unwrap().unwrap();
-    assert_eq!(company.name, "Acme");
+    assert_eq!(company.name, "Agra");
     assert_eq!(
         crm.renewal
             .company()
@@ -191,7 +191,7 @@ async fn retrieval_on_relations() {
             .unwrap()
             .unwrap()
             .id,
-        crm.acme.id
+        crm.agra.id
     );
     crm.renewal
         .tags()
@@ -297,12 +297,12 @@ async fn whether_a_record_is_the_related_one() {
     let crm = seed(&t.db).await;
     // A belongs-to compares keys: no query.
     t.log.clear();
-    assert!(crm.renewal.company().is(&crm.acme));
-    assert!(crm.renewal.company().is_not(&crm.globex));
-    assert!(!crm.orphan.company().is(&crm.acme));
+    assert!(crm.renewal.company().is(&crm.agra));
+    assert!(crm.renewal.company().is_not(&crm.gulati));
+    assert!(!crm.orphan.company().is(&crm.agra));
     assert!(t.log.take().is_empty());
     let other_model_same_key = Company {
-        id: crm.acme.id,
+        id: crm.agra.id,
         ..Company::named("Copy")
     };
     assert!(crm.renewal.company().is(&Record::new(other_model_same_key)));
@@ -441,7 +441,7 @@ async fn mass_updates_and_touches_of_related_records() {
     let hot = Tag::find_or_fail(&t.db, crm.hot.id).await.unwrap();
     assert_eq!(hot.updated_at, crm.hot.updated_at, "not attached");
     // A relation to a model without update timestamps touches nothing.
-    assert_eq!(crm.acme.contacts().touch(&t.db).await.unwrap(), 0);
+    assert_eq!(crm.agra.contacts().touch(&t.db).await.unwrap(), 0);
 }
 
 #[tokio::test]
@@ -480,11 +480,11 @@ async fn unsaved_related_records_carry_the_foreign_key() {
     assert!(!made.exists());
     assert_eq!(made.deal_id, Some(crm.renewal.id));
     let many = crm
-        .acme
+        .agra
         .contacts()
         .make_many([Contact::default(), Contact::default()])
         .unwrap();
-    assert!(many.iter().all(|c| c.company_id == Some(crm.acme.id)));
+    assert!(many.iter().all(|c| c.company_id == Some(crm.agra.id)));
     let note = crm.renewal.notes().make(Note::new("hi")).unwrap();
     assert_eq!(note.notable_type.as_deref(), Some("deal"));
     assert_eq!(note.notable_id, Some(crm.renewal.id));
@@ -495,7 +495,7 @@ async fn unsaved_related_records_carry_the_foreign_key() {
 async fn find_or_create_on_relations_fills_the_foreign_key() {
     let t = sqlite().await;
     let crm = seed(&t.db).await;
-    let contacts = || crm.globex.contacts();
+    let contacts = || crm.gulati.contacts();
 
     let found = contacts()
         .first_or_new(&t.db, [Contact::NAME.set("Dave")], |_| {})
@@ -504,27 +504,27 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
     assert!(found.exists());
     let new = contacts()
         .first_or_new(&t.db, [Contact::NAME.set("Erin")], |c| {
-            c.email = "erin@globex.test".into();
+            c.email = "erin@gulati.test".into();
         })
         .await
         .unwrap();
     assert!(!new.exists());
-    assert_eq!(new.company_id, Some(crm.globex.id));
-    assert_eq!(new.email, "erin@globex.test");
+    assert_eq!(new.company_id, Some(crm.gulati.id));
+    assert_eq!(new.email, "erin@gulati.test");
 
-    // Alice works at Acme: not found through Globex's contacts.
+    // Alice works at Agra: not found through Gulati's contacts.
     let created = contacts()
         .first_or_create(&t.db, [Contact::NAME.set("Alice")], |c| {
-            c.email = "alice@globex.test".into();
+            c.email = "alice@gulati.test".into();
         })
         .await
         .unwrap();
     assert!(created.exists() && created.was_recently_created());
-    assert_eq!(created.company_id, Some(crm.globex.id));
+    assert_eq!(created.company_id, Some(crm.gulati.id));
 
     // A unique violation returns the record that is there.
     let first = contacts()
-        .create_or_first(&t.db, [Contact::EMAIL.set("dave@globex.test")], |c| {
+        .create_or_first(&t.db, [Contact::EMAIL.set("dave@gulati.test")], |c| {
             c.name = "Dave again".into();
         })
         .await
@@ -578,7 +578,7 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
 
     let blank = contacts().find_or_new(&t.db, 999_i64).await.unwrap();
     assert!(!blank.exists());
-    assert_eq!(blank.company_id, Some(crm.globex.id));
+    assert_eq!(blank.company_id, Some(crm.gulati.id));
 
     // On a many-to-many relation, the pivot row is made too.
     let tag = crm
@@ -614,7 +614,7 @@ async fn restore_or_create_on_relations_of_soft_deleting_models() {
     upgrade.delete(&t.db).await.unwrap();
 
     let restored = crm
-        .acme
+        .agra
         .deals()
         .restore_or_create(&t.db, [Deal::TITLE.set("Upgrade")], |_| {})
         .await
@@ -622,13 +622,13 @@ async fn restore_or_create_on_relations_of_soft_deleting_models() {
     assert_eq!(restored.id, crm.upgrade.id);
     assert!(!restored.trashed());
     let new = crm
-        .acme
+        .agra
         .deals()
         .create_or_restore(&t.db, [Deal::TITLE.set("Expansion")], |d| {
             d.stage = "lead".into();
         })
         .await
         .unwrap();
-    assert_eq!(new.company_id, Some(crm.acme.id));
-    assert_eq!(crm.acme.deals().count(&t.db).await.unwrap(), 3);
+    assert_eq!(new.company_id, Some(crm.agra.id));
+    assert_eq!(crm.agra.deals().count(&t.db).await.unwrap(), 3);
 }

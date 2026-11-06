@@ -196,7 +196,7 @@ pub async fn savepoints_and_settings_in_units_of_work(scratch: Scratch) {
     let attempt = uow.savepoint().await.unwrap();
     attempt.execute(&add_deal("tried")).await.unwrap();
     attempt.rollback().await.unwrap();
-    let applied = uow.set_local("navree.workspace", "acme").await.unwrap();
+    let applied = uow.set_local("navree.workspace", "agra").await.unwrap();
     assert_eq!(applied, backend != Backend::Sqlite);
     match backend {
         Backend::Postgres => {
@@ -206,14 +206,14 @@ pub async fn savepoints_and_settings_in_units_of_work(scratch: Scratch) {
                 ))
                 .await
                 .unwrap();
-            assert_eq!(workspace, "acme");
+            assert_eq!(workspace, "agra");
         }
         Backend::MySql => {
             let workspace: String = uow
                 .fetch_scalar(&Statement::text("SELECT @navree_workspace"))
                 .await
                 .unwrap();
-            assert_eq!(workspace, "acme");
+            assert_eq!(workspace, "agra");
         }
         Backend::Sqlite => {}
     }

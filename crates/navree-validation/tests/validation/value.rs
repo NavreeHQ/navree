@@ -18,12 +18,12 @@ fn body(error: &AppError) -> Value {
 #[tokio::test]
 async fn valid_input_deserializes() {
     let user: CreateUser = validate_value(
-        json!({ "name": "Ada", "email": "ada@example.com", "age": 36, "tags": ["math"] }),
+        json!({ "name": "Anu", "email": "anu@example.com", "age": 36, "tags": ["math"] }),
         None,
     )
     .await
     .expect("valid");
-    assert_eq!(user.name, "Ada");
+    assert_eq!(user.name, "Anu");
 }
 
 #[tokio::test]
@@ -48,7 +48,7 @@ async fn rule_failures_are_400s_with_field_errors() {
 
 #[tokio::test]
 async fn serde_failures_name_the_field() {
-    let error = validate_value::<CreateUser>(json!({ "email": "ada@example.com" }), None)
+    let error = validate_value::<CreateUser>(json!({ "email": "anu@example.com" }), None)
         .await
         .map(drop)
         .expect_err("missing name");
@@ -75,7 +75,7 @@ async fn the_apps_messages_apply() {
         .await;
     let ctx: AppContext = app.ctx().clone();
     let error = validate_value::<CreateUser>(
-        json!({ "name": "Ada", "email": "nope", "age": 30, "tags": ["x"] }),
+        json!({ "name": "Anu", "email": "nope", "age": 30, "tags": ["x"] }),
         Some(&ctx),
     )
     .await

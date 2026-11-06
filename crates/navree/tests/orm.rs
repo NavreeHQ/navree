@@ -52,7 +52,7 @@ async fn models_work_through_the_facade() {
     let ada: Record<Contact> = Contact::create(
         &uow,
         Contact {
-            name: "Ada".into(),
+            name: "Anu".into(),
             ..Contact::default()
         },
     )
@@ -61,8 +61,8 @@ async fn models_work_through_the_facade() {
     Contact::create(
         &uow,
         Contact {
-            name: "Grace".into(),
-            email: Some("grace@example.com".into()),
+            name: "Gauri".into(),
+            email: Some("gauri@example.com".into()),
             ..Contact::default()
         },
     )
@@ -80,7 +80,7 @@ async fn models_work_through_the_facade() {
         .get(&db)
         .await
         .unwrap();
-    assert_eq!(with_email.map(|c| c.name.clone()), ["Grace"]);
+    assert_eq!(with_email.map(|c| c.name.clone()), ["Gauri"]);
     let query: Builder<Contact> = Contact::query().where_(col("name").like("a%"));
     assert_eq!(query.clone().count(&db).await.unwrap(), 1);
     assert!(
@@ -92,7 +92,7 @@ async fn models_work_through_the_facade() {
     );
     assert_eq!(
         Contact::find_or_fail(&db, ada.id).await.unwrap().name,
-        "Ada"
+        "Anu"
     );
 }
 
@@ -143,17 +143,17 @@ async fn relations_work_through_the_facade() {
     ] {
         db.pool().execute_script(statement).await.unwrap();
     }
-    let acme = Customer::create(
+    let agra = Customer::create(
         &db,
         Customer {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Customer::default()
         },
     )
     .await
     .unwrap();
-    for name in ["Ada", "Grace"] {
-        acme.people()
+    for name in ["Anu", "Gauri"] {
+        agra.people()
             .create(
                 &db,
                 Person {
@@ -173,7 +173,7 @@ async fn relations_work_through_the_facade() {
     assert_eq!(customers[0].loaded(Customer::people).unwrap().len(), 2);
     let people = Person::query()
         .with(Person::customer)
-        .where_relation("customer", col("name").eq("Acme"))
+        .where_relation("customer", col("name").eq("Agra"))
         .get(&db)
         .await
         .unwrap();
@@ -185,7 +185,7 @@ async fn relations_work_through_the_facade() {
             .as_ref()
             .unwrap()
             .name,
-        "Acme"
+        "Agra"
     );
 }
 
@@ -208,7 +208,7 @@ async fn navree_test_gives_each_test_a_copy_of_the_template(db: TestDb) {
     Contact::create(
         db.db(),
         Contact {
-            name: "Ada".into(),
+            name: "Anu".into(),
             ..Contact::default()
         },
     )

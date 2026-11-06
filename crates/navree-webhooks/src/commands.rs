@@ -192,8 +192,8 @@ mod tests {
     #[test]
     fn flags_and_positionals_are_read() {
         assert_eq!(
-            flag(&args(&["--workspace", "acme"]), "workspace").unwrap(),
-            Some("acme".to_owned())
+            flag(&args(&["--workspace", "agra"]), "workspace").unwrap(),
+            Some("agra".to_owned())
         );
         assert_eq!(
             flag(&args(&["--days=7"]), "days").unwrap(),

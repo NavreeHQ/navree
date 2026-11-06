@@ -106,15 +106,15 @@ async fn github_reads_the_primary_verified_email() {
     idp.mount_get(
         "/api/user",
         200,
-        json!({ "id": 583231, "login": "ada", "name": "Ada Lovelace", "email": "public@ada.test", "avatar_url": "https://avatars.test/ada" }),
+        json!({ "id": 583231, "login": "anu", "name": "Anu Lakhotia", "email": "public@anu.test", "avatar_url": "https://avatars.test/anu" }),
     )
     .await;
     idp.mount_get(
         "/api/user/emails",
         200,
         json!([
-            { "email": "old@ada.test", "primary": false, "verified": true },
-            { "email": "ada@example.com", "primary": true, "verified": true },
+            { "email": "old@anu.test", "primary": false, "verified": true },
+            { "email": "anu@example.com", "primary": true, "verified": true },
         ]),
     )
     .await;
@@ -127,8 +127,8 @@ async fn github_reads_the_primary_verified_email() {
     callback(&app, "github", json!({ "code": "code-1", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"))
-        .assert_json_path("user.name", json!("Ada Lovelace"));
+        .assert_json_path("user.email", json!("anu@example.com"))
+        .assert_json_path("user.name", json!("Anu Lakhotia"));
 
     let token = &idp.requests_to("/login/oauth/access_token").await[0];
     assert_token_request(token, "github", "gh-client", "code-1", &url);
@@ -194,10 +194,10 @@ fn google_claims(nonce: &str) -> Value {
         "iss": "https://accounts.google.com",
         "aud": "google-client",
         "sub": "109876543210",
-        "email": "ada@acme.test",
+        "email": "anu@acme.test",
         "email_verified": true,
-        "name": "Ada Lovelace",
-        "picture": "https://lh3.test/ada.png",
+        "name": "Anu Lakhotia",
+        "picture": "https://lh3.test/anu.png",
         "hd": "acme.test",
         "iat": now(),
         "exp": now() + 3600,
@@ -238,7 +238,7 @@ async fn google_id_tokens_are_verified() {
     callback(&app, "google", json!({ "code": "g-1", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@acme.test"));
+        .assert_json_path("user.email", json!("anu@acme.test"));
     assert_token_request(
         &idp.requests_to("/token").await[0],
         "google",
@@ -340,13 +340,13 @@ async fn google_fills_a_missing_email_from_userinfo() {
     idp.mount_get(
         "/userinfo",
         200,
-        json!({ "sub": "109876543210", "email": "ada@acme.test", "email_verified": true }),
+        json!({ "sub": "109876543210", "email": "anu@acme.test", "email_verified": true }),
     )
     .await;
     callback(&app, "google", json!({ "code": "g", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@acme.test"));
+        .assert_json_path("user.email", json!("anu@acme.test"));
 }
 
 #[tokio::test]
@@ -356,7 +356,7 @@ async fn apple_signs_its_client_secret_and_keeps_the_first_name() {
     let app = app(
         "apple",
         json!({
-            "client_id": "com.acme.web",
+            "client_id": "com.agra.web",
             "team_id": "TEAM123456",
             "key_id": "KEY1234567",
             "private_key": APPLE_P8,
@@ -373,7 +373,7 @@ async fn apple_signs_its_client_secret_and_keeps_the_first_name() {
     let nonce = query_param(&url, "nonce").unwrap();
     let claims = json!({
         "iss": idp.uri(),
-        "aud": "com.acme.web",
+        "aud": "com.agra.web",
         "sub": "001234.5f0b.1234",
         "email": "x7k2@privaterelay.appleid.com",
         "email_verified": "true",
@@ -394,12 +394,12 @@ async fn apple_signs_its_client_secret_and_keeps_the_first_name() {
         json!({
             "code": "c-apple",
             "state": state,
-            "user": "{\"name\":{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"},\"email\":\"x7k2@privaterelay.appleid.com\"}",
+            "user": "{\"name\":{\"firstName\":\"Anu\",\"lastName\":\"Lakhotia\"},\"email\":\"x7k2@privaterelay.appleid.com\"}",
         }),
     )
     .await
     .assert_status(200)
-    .assert_json_path("user.name", json!("Ada Lovelace"))
+    .assert_json_path("user.name", json!("Anu Lakhotia"))
     .assert_json_path("user.email", json!("x7k2@privaterelay.appleid.com"));
 
     // The client secret is an ES256 JWT signed with the .p8 key.
@@ -410,7 +410,7 @@ async fn apple_signs_its_client_secret_and_keeps_the_first_name() {
     let claims: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap();
     assert_eq!(header, json!({ "alg": "ES256", "kid": "KEY1234567" }));
     assert_eq!(claims["iss"], "TEAM123456");
-    assert_eq!(claims["sub"], "com.acme.web");
+    assert_eq!(claims["sub"], "com.agra.web");
     assert_eq!(claims["aud"], idp.uri());
     assert!(claims["exp"].as_i64().unwrap() > claims["iat"].as_i64().unwrap());
     let der: Vec<u8> = STANDARD
@@ -443,9 +443,9 @@ fn microsoft_claims(idp: &Idp, tid: &str, nonce: &str) -> Value {
         "aud": "ms-client",
         "sub": "AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ",
         "oid": "00000000-0000-0000-66f3-3332eca7ea81",
-        "name": "Ada Lovelace",
-        "email": "ada@contoso.test",
-        "preferred_username": "ada@contoso.test",
+        "name": "Anu Lakhotia",
+        "email": "anu@contoso.test",
+        "preferred_username": "anu@contoso.test",
         "iat": now(),
         "exp": now() + 3600,
         "nonce": nonce,
@@ -478,7 +478,7 @@ async fn microsoft_checks_the_tenant_and_does_not_trust_the_email() {
     callback(&app, "microsoft", json!({ "code": "m-1", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@contoso.test"))
+        .assert_json_path("user.email", json!("anu@contoso.test"))
         .assert_json_path("user.email_verified_at", Value::Null);
 
     // A personal account is refused by `organizations`.
@@ -499,11 +499,11 @@ async fn microsoft_checks_the_tenant_and_does_not_trust_the_email() {
         .assert_error(403, "Sign in with a work or school Microsoft account");
 
     // An unverified email never links to an existing user.
-    create_user(&app, "Grace", "grace@contoso.test").await;
+    create_user(&app, "Gauri", "gauri@contoso.test").await;
     let (state, url) = start(&app, "microsoft").await;
     let mut grace = microsoft_claims(&idp, tid, &query_param(&url, "nonce").unwrap());
-    grace["sub"] = json!("grace-sub");
-    grace["email"] = json!("grace@contoso.test");
+    grace["sub"] = json!("gauri-sub");
+    grace["email"] = json!("gauri@contoso.test");
     idp.mount_post_once(
         "/organizations/oauth2/v2.0/token",
         200,
@@ -528,7 +528,7 @@ async fn gitlab_reads_userinfo_on_a_self_hosted_instance() {
     idp.mount_get(
         "/oauth/userinfo",
         200,
-        json!({ "sub": "42", "name": "Ada Lovelace", "nickname": "ada", "email": "ada@example.com", "email_verified": true, "picture": "https://gitlab.test/ada.png" }),
+        json!({ "sub": "42", "name": "Anu Lakhotia", "nickname": "anu", "email": "anu@example.com", "email_verified": true, "picture": "https://gitlab.test/anu.png" }),
     )
     .await;
     let (state, url) = start(&app, "gitlab").await;
@@ -540,7 +540,7 @@ async fn gitlab_reads_userinfo_on_a_self_hosted_instance() {
     callback(&app, "gitlab", json!({ "code": "c", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
 }
 
 #[tokio::test]
@@ -566,7 +566,7 @@ async fn slack_errors_and_workspaces() {
         json!({ "ok": true, "access_token": "xoxp-1", "token_type": "Bearer" }),
     )
     .await;
-    let profile = |team: &str| json!({ "ok": true, "sub": "U0R7JM", "email": "ada@acme.test", "email_verified": true, "name": "Ada", "https://slack.com/team_id": team });
+    let profile = |team: &str| json!({ "ok": true, "sub": "U0R7JM", "email": "anu@acme.test", "email_verified": true, "name": "Anu", "https://slack.com/team_id": team });
     idp.mount_get_once("/api/openid.connect.userInfo", 200, profile("T9999"))
         .await;
     let (state, _) = start(&app, "slack").await;
@@ -605,14 +605,14 @@ async fn linkedin_reads_userinfo() {
     idp.mount_get(
         "/v2/userinfo",
         200,
-        json!({ "sub": "782bbtaQ", "given_name": "Ada", "family_name": "Lovelace", "email": "ada@example.com", "email_verified": true, "picture": "https://media.licdn.test/ada" }),
+        json!({ "sub": "782bbtaQ", "given_name": "Anu", "family_name": "Lakhotia", "email": "anu@example.com", "email_verified": true, "picture": "https://media.licdn.test/anu" }),
     )
     .await;
     let (state, _) = start(&app, "linkedin").await;
     callback(&app, "linkedin", json!({ "code": "c", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.name", json!("Ada Lovelace"));
+        .assert_json_path("user.name", json!("Anu Lakhotia"));
 }
 
 #[tokio::test]
@@ -623,13 +623,13 @@ async fn discord_links_only_verified_emails() {
         json!({ "client_id": "dc-client", "client_secret": "s", "url": idp.uri() }),
     )
     .await;
-    create_user(&app, "Ada", "ada@example.com").await;
+    create_user(&app, "Anu", "anu@example.com").await;
     idp.mount_post("/api/oauth2/token", 200, json!({ "access_token": "dc", "token_type": "Bearer", "expires_in": 604800, "refresh_token": "r", "scope": "identify email" }))
         .await;
     idp.mount_get_once(
         "/api/users/@me",
         200,
-        json!({ "id": "80351110224678912", "username": "ada", "global_name": "Ada", "email": "ada@example.com", "verified": false }),
+        json!({ "id": "80351110224678912", "username": "anu", "global_name": "Anu", "email": "anu@example.com", "verified": false }),
     )
     .await;
     let (state, url) = start(&app, "discord").await;
@@ -643,7 +643,7 @@ async fn discord_links_only_verified_emails() {
     idp.mount_get_once(
         "/api/users/@me",
         200,
-        json!({ "id": "80351110224678912", "username": "ada", "email": "ada@example.com", "verified": true }),
+        json!({ "id": "80351110224678912", "username": "anu", "email": "anu@example.com", "verified": true }),
     )
     .await;
     let (state, _) = start(&app, "discord").await;
@@ -676,7 +676,7 @@ async fn x_uses_basic_authentication_and_the_confirmed_email() {
     idp.mount_get(
         "/2/users/me",
         200,
-        json!({ "data": { "id": "2244994945", "name": "Ada Lovelace", "username": "ada", "confirmed_email": "ada@example.com" } }),
+        json!({ "data": { "id": "2244994945", "name": "Anu Lakhotia", "username": "anu", "confirmed_email": "anu@example.com" } }),
     )
     .await;
     let (state, url) = start(&app, "x").await;
@@ -687,7 +687,7 @@ async fn x_uses_basic_authentication_and_the_confirmed_email() {
     callback(&app, "x", json!({ "code": "c", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
     let token = &idp.requests_to("/2/oauth2/token").await[0];
     assert_eq!(
         token
@@ -752,7 +752,7 @@ async fn oidc_providers_are_read_from_their_discovery_document() {
         "iss": idp.uri(),
         "aud": "okta-client",
         "sub": "00u1a2b3",
-        "name": "Ada Lovelace",
+        "name": "Anu Lakhotia",
         "groups": ["crm-users"],
         "iat": now(),
         "exp": now() + 3600,
@@ -767,7 +767,7 @@ async fn oidc_providers_are_read_from_their_discovery_document() {
     idp.mount_get(
         "/oauth2/v1/userinfo",
         200,
-        json!({ "sub": "00u1a2b3", "email": "ada@acme.test", "email_verified": true }),
+        json!({ "sub": "00u1a2b3", "email": "anu@acme.test", "email_verified": true }),
     )
     .await;
 
@@ -776,7 +776,7 @@ async fn oidc_providers_are_read_from_their_discovery_document() {
         .user("okta", &navree_social::SocialCallback::new("code", state))
         .await
         .unwrap();
-    assert_eq!(profile.email.as_deref(), Some("ada@acme.test"));
+    assert_eq!(profile.email.as_deref(), Some("anu@acme.test"));
     assert_eq!(profile.raw["groups"], json!(["crm-users"]));
     assert_eq!(social.provider_name("okta").unwrap(), "Okta");
     // Basic authentication, as the discovery document allows.
@@ -900,7 +900,7 @@ async fn custom_providers_plug_in_with_for_feature() {
     idp.mount_get(
         "/oauth/user/info",
         200,
-        json!({ "ZUID": 800012345, "Display_Name": "Ada Lovelace", "Email": "ada@zoho.test" }),
+        json!({ "ZUID": 800012345, "Display_Name": "Anu Lakhotia", "Email": "anu@zoho.test" }),
     )
     .await;
     let (state, url) = start(&app, "zoho").await;
@@ -915,7 +915,7 @@ async fn custom_providers_plug_in_with_for_feature() {
     callback(&app, "zoho", json!({ "code": "z", "state": state }))
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@zoho.test"));
+        .assert_json_path("user.email", json!("anu@zoho.test"));
     let token = &idp.requests_to("/oauth/v2/token").await[0];
     assert_eq!(
         form_field(token, "client_secret").as_deref(),

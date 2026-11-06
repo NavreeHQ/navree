@@ -37,7 +37,7 @@ async fn queued_send_dispatches_job_and_job_delivers() {
     let user = TestUser::new();
 
     let id = notifier
-        .send(&user, DealWon::via(&ALL, "Acme renewal"))
+        .send(&user, DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
 
@@ -83,7 +83,7 @@ async fn a_retried_database_job_stores_the_notification_once() {
     let notifier = app.get::<Notifier>().await;
 
     notifier
-        .send(&TestUser::new(), DealWon::via(&[Channel::Database], "Acme"))
+        .send(&TestUser::new(), DealWon::via(&[Channel::Database], "Agra"))
         .await
         .unwrap();
     let job = dispatcher.jobs().remove(0);
@@ -99,7 +99,7 @@ async fn send_now_delivers_even_when_queueing() {
     let notifier = app.get::<Notifier>().await;
 
     notifier
-        .send_now(&TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
+        .send_now(&TestUser::new(), DealWon::via(&ALL, "Agra renewal"))
         .await
         .unwrap();
 
@@ -117,7 +117,7 @@ async fn queueing_without_a_dispatcher_delivers_now() {
     notifier
         .send(
             &TestUser::new(),
-            DealWon::via(&[Channel::Database, Channel::Mail], "Acme renewal"),
+            DealWon::via(&[Channel::Database, Channel::Mail], "Agra renewal"),
         )
         .await
         .unwrap();

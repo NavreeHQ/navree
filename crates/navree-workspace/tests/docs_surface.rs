@@ -53,37 +53,37 @@ async fn organizations_methods(
     user: Uuid,
     uk: Uuid,
 ) -> Result<(), WorkspaceError> {
-    let acme = organizations
+    let agra = organizations
         .create(
             uow,
             user,
-            NewOrganization::named("Acme Group")
+            NewOrganization::named("Agra Group")
                 .country("gb")
                 .timezone("Europe/London"),
         )
         .await?;
-    let _: (String, Option<String>, Option<String>) = (acme.slug, acme.country, acme.timezone);
+    let _: (String, Option<String>, Option<String>) = (agra.slug, agra.country, agra.timezone);
     organizations
-        .create(uow, user, NewOrganization::named("Acme").slug("acme"))
+        .create(uow, user, NewOrganization::named("Agra").slug("agra"))
         .await?;
     organizations
         .update(
             uow,
-            acme.id,
+            agra.id,
             OrganizationChanges {
-                name: Some("Acme".into()),
+                name: Some("Agra".into()),
                 country: Some(None),
                 timezone: None,
             },
         )
         .await?;
-    organizations.rename(uow, acme.id, "Acme").await?;
-    organizations.attach(uow, acme.id, uk).await?;
-    organizations.detach(uow, acme.id, uk).await?;
-    organizations.transfer_ownership(uow, acme.id, user).await?;
-    organizations.find(acme.id).await?;
-    organizations.find_by_slug("acme").await?;
-    organizations.resolve("acme").await?;
+    organizations.rename(uow, agra.id, "Agra").await?;
+    organizations.attach(uow, agra.id, uk).await?;
+    organizations.detach(uow, agra.id, uk).await?;
+    organizations.transfer_ownership(uow, agra.id, user).await?;
+    organizations.find(agra.id).await?;
+    organizations.find_by_slug("agra").await?;
+    organizations.resolve("agra").await?;
     for OrgMembership {
         organization,
         role,
@@ -92,12 +92,12 @@ async fn organizations_methods(
     {
         let _: (Uuid, OrgRole, WorkspaceSelector) = (organization.id, role, workspaces);
     }
-    organizations.workspaces(acme.id).await?;
-    organizations.visible_workspaces(acme.id, user).await?;
-    organizations.membership(acme.id, user).await?;
+    organizations.workspaces(agra.id).await?;
+    organizations.visible_workspaces(agra.id, user).await?;
+    organizations.membership(agra.id, user).await?;
     organizations.all().await?;
-    organizations.enter(uow, acme.id).await?;
-    organizations.delete(uow, acme.id).await
+    organizations.enter(uow, agra.id).await?;
+    organizations.delete(uow, agra.id).await
 }
 
 /// `OrgMembers` and the selectors.
@@ -251,22 +251,22 @@ async fn partitions_methods(
     grace: Uuid,
 ) -> Result<(), WorkspaceError> {
     let uk = partitions
-        .create(uow, workspace, NewPartition::named("acme.co.uk"))
+        .create(uow, workspace, NewPartition::named("agra.co.uk"))
         .await?;
     let _: String = uk.slug;
     partitions
-        .create(uow, workspace, NewPartition::named("acme.de").slug("de"))
+        .create(uow, workspace, NewPartition::named("agra.de").slug("de"))
         .await?;
     partitions
         .grant(uow, workspace, grace, PartitionSelector::only([uk.id]))
         .await?;
-    partitions.rename(uow, workspace, uk.id, "acme.uk").await?;
+    partitions.rename(uow, workspace, uk.id, "agra.uk").await?;
     partitions.list(workspace).await?;
     partitions
         .visible(workspace, &PartitionSelector::All)
         .await?;
     partitions.find(workspace, uk.id).await?;
-    partitions.resolve(workspace, "acme-co-uk").await?;
+    partitions.resolve(workspace, "agra-co-uk").await?;
     let _: PartitionSelector = partitions.access(workspace, grace).await?;
     partitions.enter(uow, uk.id).await?;
     partitions.delete(uow, workspace, uk.id).await
@@ -305,12 +305,12 @@ async fn partition_requests(
         partition.id(),
         Contact {
             id: Uuid::now_v7(),
-            name: "Ada".into(),
+            name: "Anu".into(),
             ..Contact::default()
         },
     )
     .await?;
-    created.name = "Grace".into();
+    created.name = "Gauri".into();
     PartitionRepo::<Contact>::update(&uow, workspace, selector, &mut created).await?;
     PartitionRepo::<Contact>::delete(&uow, workspace, selector, found).await?;
     Ok(())

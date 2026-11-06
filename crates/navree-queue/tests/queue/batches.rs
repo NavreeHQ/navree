@@ -279,7 +279,7 @@ pub async fn concurrent_workers_finish_a_batch_once(driver: QueueDriver) {
 pub async fn unique_jobs_in_a_batch_all_count(driver: QueueDriver) {
     let h = harness_with(one_worker(driver)).await;
     let report = || UniqueReport {
-        account: "acme".into(),
+        account: "agra".into(),
     };
 
     let batch = h
@@ -289,7 +289,7 @@ pub async fn unique_jobs_in_a_batch_all_count(driver: QueueDriver) {
         .unwrap();
     assert_eq!(batch.total_jobs, 2);
     h.drain().await;
-    assert_eq!(h.journal.labels(), ["acme", "acme"]);
+    assert_eq!(h.journal.labels(), ["agra", "agra"]);
     assert!(
         h.queue
             .find_batch(&batch.id)

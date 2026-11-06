@@ -187,7 +187,7 @@ mod tests {
             )
             .expect("one item is allowed");
         let html = render(
-            &crate::Shell::new("Acme")
+            &crate::Shell::new("Agra")
                 .group(group)
                 .page("x", "/")
                 .to_view()

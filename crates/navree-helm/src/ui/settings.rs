@@ -793,9 +793,9 @@ mod tests {
 
     #[test]
     fn selections_read_and_write_the_query() {
-        let selection = Selection::read(Some("level=workspace&target=acme&other=x"));
+        let selection = Selection::read(Some("level=workspace&target=agra&other=x"));
         assert_eq!(selection.level.as_deref(), Some("workspace"));
-        assert_eq!(selection.target.as_deref(), Some("acme"));
+        assert_eq!(selection.target.as_deref(), Some("agra"));
         let empty = Selection::read(Some("level=&target=%20"));
         assert!(empty.level.is_none() && empty.target.is_none());
         assert_eq!(

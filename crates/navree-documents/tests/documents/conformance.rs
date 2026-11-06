@@ -23,7 +23,7 @@ async fn conformance(case: Case<'_>) {
     let kind = engine.kind();
     let extension = kind.extension();
     let data = json!({
-        "name": "Ada Lovelace",
+        "name": "Anu Lakhotia",
         "course": "Analytical Engines",
         "completed_on": "26 October 2026",
     });
@@ -40,7 +40,7 @@ async fn conformance(case: Case<'_>) {
         assert!(pdf.starts_with(b"%PDF-"), "{kind}");
         assert!(pdf.page_count().unwrap() >= 1, "{kind}");
         let text = pdf.text().unwrap();
-        assert!(text.contains("Ada Lovelace"), "{kind}: {text}");
+        assert!(text.contains("Anu Lakhotia"), "{kind}: {text}");
         if case.prints_sentence {
             assert!(
                 text.contains("completed Analytical Engines on 26 October 2026"),

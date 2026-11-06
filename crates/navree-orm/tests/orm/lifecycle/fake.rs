@@ -45,10 +45,10 @@ async fn the_fake_records_events_instead_of_running_listeners() {
     crate::support::create_tables(&db).await;
 
     let uow = db.uow(None, None).await;
-    let mut acme = Company::create(
+    let mut agra = Company::create(
         &uow,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             ..Company::default()
         },
     )
@@ -61,10 +61,10 @@ async fn the_fake_records_events_instead_of_running_listeners() {
     fake.assert_fired_times::<Company>(ModelEvent::Saved, 1);
     assert_eq!(
         fake.keys::<Company>(ModelEvent::Created),
-        [acme.id.to_string()]
+        [agra.id.to_string()]
     );
 
-    acme.delete_quietly(&*db).await.unwrap();
+    agra.delete_quietly(&*db).await.unwrap();
     fake.assert_not_fired::<Company>(ModelEvent::Deleted);
 
     let names: Vec<String> = fake

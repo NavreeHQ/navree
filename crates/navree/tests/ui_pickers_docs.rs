@@ -242,7 +242,7 @@ impl Module for PickersModule {
     fn register(&self, m: &mut ModuleBuilder) {
         // The app's one shell, which `AppShell` reads.
         m.factory(Factory::<navree::ui::Shell>::new(|_| async {
-            Ok(Arc::new(navree::ui::Shell::new("Acme")))
+            Ok(Arc::new(navree::ui::Shell::new("Agra")))
         }))
         .exports::<navree::ui::Shell>();
         m.controller::<Pages>();
@@ -264,9 +264,9 @@ async fn app() -> TestApp {
     ))
     .await
     .unwrap();
-    // Grace and Alan are in the caller's team; Ada is in another one.
+    // Gauri and Arun are in the caller's team; Anu is in another one.
     db.execute(&Statement::text(
-        "INSERT INTO pickers_people (id, team_id, name, email) VALUES          (7, 1, 'Grace Hopper', 'grace@example.test'),          (8, 1, 'Alan Turing', 'alan@example.test'),          (9, 2, 'Ada Lovelace', 'ada@example.test')",
+        "INSERT INTO pickers_people (id, team_id, name, email) VALUES          (7, 1, 'Gauri Hundal', 'gauri@example.test'),          (8, 1, 'Arun Tiwari', 'arun@example.test'),          (9, 2, 'Anu Lakhotia', 'anu@example.test')",
     ))
     .await
     .unwrap();
@@ -284,11 +284,11 @@ async fn a_searched_list_answers_from_the_database_and_the_palette_gets_links() 
         .assert_status(200)
         .text();
     assert!(list.contains(r#"data-value="7""#), "{list}");
-    assert!(list.contains("Grace Hopper"), "{list}");
-    assert!(!list.contains("Alan Turing"), "{list}");
+    assert!(list.contains("Gauri Hundal"), "{list}");
+    assert!(!list.contains("Arun Tiwari"), "{list}");
     let palette = app
         .client()
-        .get("/palette/search?q=alan")
+        .get("/palette/search?q=arun")
         .send()
         .await
         .assert_status(200)
@@ -327,7 +327,7 @@ async fn a_post_naming_someone_who_is_not_there_is_refused_and_a_real_one_is_tak
 #[tokio::test]
 async fn a_refused_form_comes_back_with_the_name_of_the_person_picked() {
     let app = app().await;
-    // The title is empty, so the form is refused; the person did pick Grace.
+    // The title is empty, so the form is refused; the person did pick Gauri.
     let page = app
         .client()
         .post("/deals")
@@ -338,11 +338,11 @@ async fn a_refused_form_comes_back_with_the_name_of_the_person_picked() {
         .assert_status(422)
         .text();
     assert!(
-        page.contains(r#"value="Grace Hopper" placeholder="Search people""#),
+        page.contains(r#"value="Gauri Hundal" placeholder="Search people""#),
         "{page}"
     );
     assert!(
-        page.contains(r#"<option value="7" selected>Grace Hopper</option>"#),
+        page.contains(r#"<option value="7" selected>Gauri Hundal</option>"#),
         "{page}"
     );
     // Someone who is not there leaves the id, as before.
@@ -364,7 +364,7 @@ async fn a_refused_form_comes_back_with_the_name_of_the_person_picked() {
 #[tokio::test]
 async fn a_refused_form_never_names_someone_outside_the_callers_scope() {
     let app = app().await;
-    // Ada (9) is in another team. The post names her; the refusal shows what was posted, the
+    // Anu (9) is in another team. The post names her; the refusal shows what was posted, the
     // id, and no name: the label comes only from the caller's own scoped query.
     let page = app
         .client()
@@ -379,17 +379,17 @@ async fn a_refused_form_never_names_someone_outside_the_callers_scope() {
         page.contains(r#"value="9" placeholder="Search people""#),
         "{page}"
     );
-    assert!(!page.contains("Ada Lovelace"), "{page}");
-    assert!(!page.contains("ada@example.test"), "{page}");
+    assert!(!page.contains("Anu Lakhotia"), "{page}");
+    assert!(!page.contains("anu@example.test"), "{page}");
     // Her name is not in the search either, and the check of what was picked refuses her.
     let list = app
         .client()
-        .get("/people/options?q=ada")
+        .get("/people/options?q=anu")
         .send()
         .await
         .assert_status(200)
         .text();
-    assert!(!list.contains("Ada Lovelace"), "{list}");
+    assert!(!list.contains("Anu Lakhotia"), "{list}");
     let refused = app
         .client()
         .post("/picked")
@@ -413,7 +413,7 @@ async fn a_refused_form_never_names_someone_outside_the_callers_scope() {
         .await
         .assert_status(422)
         .text();
-    assert!(page.contains("Alan Turing"), "{page}");
+    assert!(page.contains("Arun Tiwari"), "{page}");
 }
 
 // The report page of `components/date-range-picker.mdx` compiles as written, reads the

@@ -226,9 +226,9 @@ impl fmt::Debug for ClientCredentials {
 /// let created = clients
 ///     .create(
 ///         &uow,
-///         NewClient::confidential("Ada's reporting script")
+///         NewClient::confidential("Anu's reporting script")
 ///             .owner(user.id)
-///             .redirect_uri("https://reports.lovelace.io/callback")
+///             .redirect_uri("https://reports.lakhotia.io/callback")
 ///             .scopes(["deals:read"]),
 ///     )
 ///     .await?;

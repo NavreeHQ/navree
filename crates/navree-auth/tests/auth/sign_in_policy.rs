@@ -109,9 +109,9 @@ async fn a_policy_sees_one_spelling_of_the_domain() {
     // Emails from an identity provider or a social provider reach the
     // service as they were sent (the login form is stricter).
     for email in [
-        "ada@CORP.test.",
-        "ada@\u{ff43}orp.test",
-        "ada@corp\u{3002}test",
+        "anu@CORP.test.",
+        "anu@\u{ff43}orp.test",
+        "anu@corp\u{3002}test",
     ] {
         let error = auth
             .attempt_login(email, "wrong", &ClientMeta::default())
@@ -133,14 +133,14 @@ async fn a_policy_sees_one_spelling_of_the_domain() {
 #[tokio::test]
 async fn a_policy_refuses_login_and_registration_for_its_accounts() {
     let s = setup(|b| b).await;
-    support::create_user(&s.app, "ada@corp.test").await;
-    support::create_user(&s.app, "grace@example.com").await;
+    support::create_user(&s.app, "anu@corp.test").await;
+    support::create_user(&s.app, "gauri@example.com").await;
 
     // The check runs on the lower-cased email, before the password.
     s.app
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "Ada@Corp.test", "password": "wrong" }))
+        .json(&json!({ "email": "Anu@Corp.test", "password": "wrong" }))
         .send()
         .await
         .assert_error(403, "Sign in with Corp SSO")
@@ -148,7 +148,7 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
     s.app
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "grace@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "gauri@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200);
@@ -162,11 +162,11 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
 
     let auth = s.app.get::<AuthService>().await;
     assert!(matches!(
-        auth.check_password_sign_in("ADA@corp.test").await,
+        auth.check_password_sign_in("ANU@corp.test").await,
         Err(AuthError::SignInRefused { .. })
     ));
     assert!(
-        auth.check_password_sign_in("grace@example.com")
+        auth.check_password_sign_in("gauri@example.com")
             .await
             .is_ok()
     );
@@ -181,13 +181,13 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
         refused[0].metadata,
         json!({
             "method": "password",
-            "email": "ada@corp.test",
+            "email": "anu@corp.test",
             "code": "sso_required",
             "audience": "app",
         })
     );
     let first = &s.seen.attempts()[0];
-    assert_eq!(first.email, "ada@corp.test");
+    assert_eq!(first.email, "anu@corp.test");
     assert_eq!(first.method, SignInMethod::Password);
     assert_eq!(first.audience, SignInAudience::App);
 }
@@ -195,7 +195,7 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
 #[tokio::test]
 async fn sign_in_asks_the_policy_with_the_method_of_other_crates() {
     let s = setup(|b| b).await;
-    let ada = support::create_user(&s.app, "ada@corp.test").await;
+    let ada = support::create_user(&s.app, "anu@corp.test").await;
     let auth = s.app.get::<AuthService>().await;
     let meta = ClientMeta::default();
 
@@ -239,7 +239,7 @@ async fn sign_in_asks_the_policy_with_the_method_of_other_crates() {
 async fn the_second_step_of_a_two_factor_sign_in_asks_again_with_the_first_method() {
     let clock = support::clock();
     let s = setup(|b| b.override_value::<dyn navree_contracts::Clock>(clock.clone())).await;
-    let grace = support::create_user(&s.app, "grace@example.com").await;
+    let grace = support::create_user(&s.app, "gauri@example.com").await;
     let secret = enable_two_factor(&s.app, &clock, &grace).await;
     let auth = s.app.get::<AuthService>().await;
 
@@ -346,8 +346,8 @@ async fn without_break_glass_platform_sign_in_obeys_the_policy() {
 async fn without_a_policy_every_account_may_sign_in() {
     let app = support::app().await;
     let auth = app.get::<AuthService>().await;
-    assert!(auth.check_password_sign_in("ada@corp.test").await.is_ok());
-    let attempt = SignInAttempt::new("ada@corp.test", SignInMethod::Passkey);
+    assert!(auth.check_password_sign_in("anu@corp.test").await.is_ok());
+    let attempt = SignInAttempt::new("anu@corp.test", SignInMethod::Passkey);
     assert!(
         auth.check_sign_in(&attempt, &ClientMeta::default())
             .await

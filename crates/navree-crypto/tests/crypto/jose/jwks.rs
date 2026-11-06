@@ -113,7 +113,7 @@ fn publishing_a_set_shows_only_public_keys() {
     // after a round trip through JSON, as a client would fetch it.
     let fetched: JwkSet = serde_json::from_value(published).unwrap();
     for key in [&current, &previous] {
-        let token = key.sign_jwt(&json!({"sub": "ada"})).unwrap();
+        let token = key.sign_jwt(&json!({"sub": "anu"})).unwrap();
         let jws = Jws::parse(&token).unwrap();
         assert_eq!(jws.verify_with(&fetched).unwrap().kid.as_deref(), key.kid());
     }

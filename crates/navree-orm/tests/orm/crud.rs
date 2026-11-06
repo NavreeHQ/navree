@@ -19,8 +19,8 @@ fn company(name: &str) -> Company {
 #[tokio::test]
 async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
     let t = sqlite().await;
-    let first = Company::create(&t.db, company("Acme")).await.unwrap();
-    let second = Company::create(&t.db, company("Globex")).await.unwrap();
+    let first = Company::create(&t.db, company("Agra")).await.unwrap();
+    let second = Company::create(&t.db, company("Gulati")).await.unwrap();
     assert_eq!((first.id, second.id), (1, 2));
     assert!(first.exists());
     assert!(first.was_recently_created());
@@ -33,7 +33,7 @@ async fn create_reads_back_a_database_assigned_key_and_fills_timestamps() {
     assert!(!first.was_changed(), "an insert records no changes");
 
     let found = Company::find(&t.db, 1).await.unwrap().unwrap();
-    assert_eq!(found.name, "Acme");
+    assert_eq!(found.name, "Agra");
     assert_eq!(found.created_at, first.created_at);
     assert!(!found.was_recently_created());
 }
@@ -114,20 +114,20 @@ async fn an_application_key_must_be_set() {
 #[tokio::test]
 async fn save_updates_only_the_dirty_columns() {
     let t = sqlite().await;
-    let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&t.db, company("Agra")).await.unwrap();
     // Someone else changes another column meanwhile.
     t.db.pool()
         .execute_script("UPDATE companies SET employees = 50 WHERE id = 1")
         .await
         .unwrap();
-    acme.name = "Acme Corp".into();
-    assert!(acme.save(&t.db).await.unwrap());
+    agra.name = "Agra Corp".into();
+    assert!(agra.save(&t.db).await.unwrap());
     let stored = Company::find_or_fail(&t.db, 1).await.unwrap();
-    assert_eq!(stored.name, "Acme Corp");
+    assert_eq!(stored.name, "Agra Corp");
     assert_eq!(stored.employees, 50, "untouched columns are not written");
-    assert!(acme.was_changed_on(["name"]));
-    assert!(acme.was_changed_on([Company::UPDATED_AT]));
-    assert!(!acme.was_changed_on([Company::EMPLOYEES]));
+    assert!(agra.was_changed_on(["name"]));
+    assert!(agra.was_changed_on([Company::UPDATED_AT]));
+    assert!(!agra.was_changed_on([Company::EMPLOYEES]));
 
     // A clean record writes nothing (and reports success).
     let before = stored.updated_at;
@@ -142,8 +142,8 @@ async fn save_updates_only_the_dirty_columns() {
 #[tokio::test]
 async fn update_changes_and_saves_a_stored_record_only() {
     let t = sqlite().await;
-    let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
-    assert!(acme.update(&t.db, |c| c.employees = 12).await.unwrap());
+    let mut agra = Company::create(&t.db, company("Agra")).await.unwrap();
+    assert!(agra.update(&t.db, |c| c.employees = 12).await.unwrap());
     assert_eq!(Company::find_or_fail(&t.db, 1).await.unwrap().employees, 12);
 
     let mut fresh = Record::new(company("Unsaved"));
@@ -155,13 +155,13 @@ async fn update_changes_and_saves_a_stored_record_only() {
 #[tokio::test]
 async fn delete_removes_the_row_and_destroy_deletes_by_key() {
     let t = sqlite().await;
-    let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&t.db, company("Agra")).await.unwrap();
     for name in ["B", "C", "D"] {
         Company::create(&t.db, company(name)).await.unwrap();
     }
-    assert!(acme.delete(&t.db).await.unwrap());
-    assert!(!acme.exists());
-    assert!(!acme.delete(&t.db).await.unwrap(), "already gone");
+    assert!(agra.delete(&t.db).await.unwrap());
+    assert!(!agra.exists());
+    assert!(!agra.delete(&t.db).await.unwrap(), "already gone");
     assert_eq!(count_rows(&t.db, "companies").await, 3);
 
     assert_eq!(Company::destroy(&t.db, [2_i64, 3, 99]).await.unwrap(), 2);
@@ -172,26 +172,26 @@ async fn delete_removes_the_row_and_destroy_deletes_by_key() {
 #[tokio::test]
 async fn refresh_and_fresh_reload_from_the_database() {
     let t = sqlite().await;
-    let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&t.db, company("Agra")).await.unwrap();
     t.db.pool()
         .execute_script("UPDATE companies SET name = 'Renamed' WHERE id = 1")
         .await
         .unwrap();
-    let fresh = acme.fresh(&t.db).await.unwrap().unwrap();
+    let fresh = agra.fresh(&t.db).await.unwrap().unwrap();
     assert_eq!(fresh.name, "Renamed");
-    assert_eq!(acme.name, "Acme", "fresh leaves the record alone");
+    assert_eq!(agra.name, "Agra", "fresh leaves the record alone");
 
-    acme.name = "Local".into();
-    acme.refresh(&t.db).await.unwrap();
-    assert_eq!(acme.name, "Renamed");
-    assert!(acme.is_clean());
+    agra.name = "Local".into();
+    agra.refresh(&t.db).await.unwrap();
+    assert_eq!(agra.name, "Renamed");
+    assert!(agra.is_clean());
 
     t.db.pool()
         .execute_script("DELETE FROM companies")
         .await
         .unwrap();
-    assert!(acme.fresh(&t.db).await.unwrap().is_none());
-    let error = acme.refresh(&t.db).await.unwrap_err();
+    assert!(agra.fresh(&t.db).await.unwrap().is_none());
+    let error = agra.refresh(&t.db).await.unwrap_err();
     assert!(error.is_not_found());
     assert_eq!(error.to_string(), "no Company found for key 1");
 
@@ -226,29 +226,29 @@ async fn replicate_copies_the_columns_without_key_and_timestamps() {
 #[tokio::test]
 async fn increment_and_decrement_change_the_row_and_the_record() {
     let t = sqlite().await;
-    let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
+    let mut agra = Company::create(&t.db, company("Agra")).await.unwrap();
     t.db.pool()
         .execute_script("UPDATE companies SET employees = 10 WHERE id = 1")
         .await
         .unwrap();
     // The record holds 0, the row 10: the database does the arithmetic.
-    assert!(acme.increment(&t.db, Company::EMPLOYEES, 5).await.unwrap());
-    assert_eq!(acme.employees, 5);
+    assert!(agra.increment(&t.db, Company::EMPLOYEES, 5).await.unwrap());
+    assert_eq!(agra.employees, 5);
     assert_eq!(Company::find_or_fail(&t.db, 1).await.unwrap().employees, 15);
-    assert!(acme.was_changed_on([Company::EMPLOYEES]));
-    assert!(acme.is_clean());
+    assert!(agra.was_changed_on([Company::EMPLOYEES]));
+    assert!(agra.is_clean());
 
-    acme.decrement_with(
+    agra.decrement_with(
         &t.db,
         Company::EMPLOYEES,
         2,
-        [Company::NAME.set("Acme Ltd")],
+        [Company::NAME.set("Agra Ltd")],
     )
     .await
     .unwrap();
-    assert_eq!(acme.name, "Acme Ltd");
+    assert_eq!(agra.name, "Agra Ltd");
     let stored = Company::find_or_fail(&t.db, 1).await.unwrap();
-    assert_eq!((stored.employees, stored.name.as_str()), (13, "Acme Ltd"));
+    assert_eq!((stored.employees, stored.name.as_str()), (13, "Agra Ltd"));
 
     let error = Record::new(company("New"))
         .increment(&t.db, Company::EMPLOYEES, 1)

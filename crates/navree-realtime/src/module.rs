@@ -199,7 +199,7 @@ pub enum ChannelDecision {
     /// `user_info`.
     Allow,
     /// The user may subscribe; on a presence channel `user_info` is shown to
-    /// the other members (`{"name": "Ada"}`). On a private channel this is
+    /// the other members (`{"name": "Anu"}`). On a private channel this is
     /// the same as [`Allow`](ChannelDecision::Allow).
     Presence(Value),
 }

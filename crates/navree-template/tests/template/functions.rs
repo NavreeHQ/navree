@@ -22,7 +22,7 @@ fn closures_take_converted_arguments() {
         a + b + c + d + e
     });
     env.add_test("big", |a: i64| a > 10);
-    env.add_global("brand", "Acme");
+    env.add_global("brand", "Agra");
     env.add_global("count", 3);
     for (source, expected) in [
         ("{{ 'a'|shout }}", "A"),
@@ -37,7 +37,7 @@ fn closures_take_converted_arguments() {
         ("{{ zero() }}", "0"),
         ("{{ five(1, 2, 3, 4, 5) }}", "15"),
         ("{{ 11 is big }}{{ 9 is big }}", "TrueFalse"),
-        ("{{ brand }}{{ count }}", "Acme3"),
+        ("{{ brand }}{{ count }}", "Agra3"),
     ] {
         assert_eq!(
             env.render_str("t.txt", source, json!({})).expect(source),

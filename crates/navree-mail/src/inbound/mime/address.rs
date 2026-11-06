@@ -1,7 +1,7 @@
 //! Address lists (RFC 5322 section 3.4): `From`, `To`, `Cc`, `Reply-To`.
 //! Groups are flattened, display names decoded (encoded words, quoted
 //! strings), and a comment stands in for a missing display name
-//! (`ada@example.com (Ada Lovelace)`).
+//! (`anu@example.com (Anu Lakhotia)`).
 //!
 //! The list is read token by token and each mailbox built as it goes, so
 //! what is held is the mailboxes themselves, at most `max` of them.
@@ -17,7 +17,7 @@ pub(crate) struct Mailbox {
 
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
-    /// An atom (`Ada`, `ada@example.com`).
+    /// An atom (`Anu`, `anu@example.com`).
     Atom(String),
     /// An encoded word, decoded.
     Encoded(String),
@@ -436,43 +436,43 @@ mod tests {
     #[test]
     fn mailboxes_with_and_without_names() {
         for (value, expected) in [
-            ("ada@example.com", vec![mailbox(None, "ada@example.com")]),
+            ("anu@example.com", vec![mailbox(None, "anu@example.com")]),
             (
-                " Ada Lovelace <ada@example.com>",
-                vec![mailbox(Some("Ada Lovelace"), "ada@example.com")],
+                " Anu Lakhotia <anu@example.com>",
+                vec![mailbox(Some("Anu Lakhotia"), "anu@example.com")],
             ),
             (
-                "\"Lovelace, Ada\" <ada@example.com>",
-                vec![mailbox(Some("Lovelace, Ada"), "ada@example.com")],
+                "\"Lakhotia, Anu\" <anu@example.com>",
+                vec![mailbox(Some("Lakhotia, Anu"), "anu@example.com")],
             ),
-            ("<ada@example.com>", vec![mailbox(None, "ada@example.com")]),
+            ("<anu@example.com>", vec![mailbox(None, "anu@example.com")]),
             (
-                "ada@example.com (Ada Lovelace)",
-                vec![mailbox(Some("Ada Lovelace"), "ada@example.com")],
-            ),
-            (
-                "Ada (Work) <ada@example.com>",
-                vec![mailbox(Some("Ada (Work)"), "ada@example.com")],
+                "anu@example.com (Anu Lakhotia)",
+                vec![mailbox(Some("Anu Lakhotia"), "anu@example.com")],
             ),
             (
-                "\"Ada \\\"The Countess\\\" L\" <ada@example.com>",
-                vec![mailbox(Some("Ada \"The Countess\" L"), "ada@example.com")],
+                "Anu (Work) <anu@example.com>",
+                vec![mailbox(Some("Anu (Work)"), "anu@example.com")],
             ),
             (
-                "Ada\r\n Lovelace <ada@example.com>",
-                vec![mailbox(Some("Ada Lovelace"), "ada@example.com")],
+                "\"Anu \\\"The Countess\\\" L\" <anu@example.com>",
+                vec![mailbox(Some("Anu \"The Countess\" L"), "anu@example.com")],
             ),
             (
-                "< ada @ example.com >",
-                vec![mailbox(None, "ada@example.com")],
+                "Anu\r\n Lakhotia <anu@example.com>",
+                vec![mailbox(Some("Anu Lakhotia"), "anu@example.com")],
             ),
             (
-                "ada@example.com <ada@example.com>",
-                vec![mailbox(Some("ada@example.com"), "ada@example.com")],
+                "< anu @ example.com >",
+                vec![mailbox(None, "anu@example.com")],
             ),
             (
-                "Ada Lovelace ada@example.com",
-                vec![mailbox(Some("Ada Lovelace"), "ada@example.com")],
+                "anu@example.com <anu@example.com>",
+                vec![mailbox(Some("anu@example.com"), "anu@example.com")],
+            ),
+            (
+                "Anu Lakhotia anu@example.com",
+                vec![mailbox(Some("Anu Lakhotia"), "anu@example.com")],
             ),
             (
                 "postmaster (The Postmaster)",
@@ -553,14 +553,14 @@ mod tests {
             "ceo@acme.test",
             " ceo@acme.test ",
             "<ceo@acme.test>",
-            "Ada <ceo@acme.test>",
-            "Dr. Ada L. <ceo@acme.test>",
-            "\"Lovelace, Ada\" <ceo@acme.test>",
+            "Anu <ceo@acme.test>",
+            "Dr. Anu L. <ceo@acme.test>",
+            "\"Lakhotia, Anu\" <ceo@acme.test>",
             "\"ceo@acme.test\" <a@evil.test>",
             "=?utf-8?Q?J=C3=BCrgen?= <ceo@acme.test>",
-            "ceo@acme.test (Ada)",
-            "(Ada) <ceo@acme.test>",
-            "Ada (Work) <ceo@acme.test> (Home)",
+            "ceo@acme.test (Anu)",
+            "(Anu) <ceo@acme.test>",
+            "Anu (Work) <ceo@acme.test> (Home)",
             "J\u{fffd}rgen <ceo@acme.test>",
         ] {
             assert!(is_clear_mailbox(clear.as_bytes()), "{clear:?}");
@@ -568,8 +568,8 @@ mod tests {
         for unclear in [
             "",
             "()",
-            "Ada",
-            "Ada ceo@acme.test",
+            "Anu",
+            "Anu ceo@acme.test",
             "ceo@acme.test ceo@acme.test",
             "ceo@acme.test, a@evil.test",
             "ceo@acme.test,",
@@ -583,15 +583,15 @@ mod tests {
             "ceo@acme.test\"x\"",
             "\"x",
             "(x",
-            "Ada <ceo@acme.test",
-            "Ada <ceo@acme.test> <a@evil.test>",
-            "Ada <ceo@acme.test> Lovelace",
+            "Anu <ceo@acme.test",
+            "Anu <ceo@acme.test> <a@evil.test>",
+            "Anu <ceo@acme.test> Lakhotia",
             "<@evil.test:ceo@acme.test>",
             "<ceo@acme.test(x)>",
             "< ceo@acme.test >",
             "a@evil.test <ceo@acme.test>",
-            "Ada\\ <ceo@acme.test>",
-            "[Ada] <ceo@acme.test>",
+            "Anu\\ <ceo@acme.test>",
+            "[Anu] <ceo@acme.test>",
             "ceo@acme.test (a, b)",
             "ceo@acme.test (\"x\")",
             "ceo@acme.test (a (b))",
@@ -612,8 +612,8 @@ mod tests {
     fn a_clear_mailbox_is_read_as_the_one_mailbox_it_holds() {
         for (value, name, email) in [
             ("ceo@acme.test", None, "ceo@acme.test"),
-            ("Ada <ceo@acme.test>", Some("Ada"), "ceo@acme.test"),
-            ("ceo@acme.test (Ada)", Some("Ada"), "ceo@acme.test"),
+            ("Anu <ceo@acme.test>", Some("Anu"), "ceo@acme.test"),
+            ("ceo@acme.test (Anu)", Some("Anu"), "ceo@acme.test"),
             (
                 "\"x@y.test\" <ceo@acme.test>",
                 Some("x@y.test"),

@@ -55,8 +55,8 @@ fn all() -> Vec<(&'static str, Node)> {
         "attachment",
         Attachment::new("a.pdf").meta("2 MB").href("/a.pdf").into(),
     ));
-    out.push(("avatar", Avatar::image("/a.png", "Ada").into()));
-    out.push(("avatar", Avatar::placeholder("Ada").size(Size::Sm).into()));
+    out.push(("avatar", Avatar::image("/a.png", "Anu").into()));
+    out.push(("avatar", Avatar::placeholder("Anu").size(Size::Sm).into()));
     out.push((
         "badge",
         Badge::new("New").variant(BadgeVariant::Success).into(),
@@ -65,7 +65,7 @@ fn all() -> Vec<(&'static str, Node)> {
         "breadcrumb",
         Breadcrumb::new()
             .link("Deals", "/deals")
-            .current("Acme")
+            .current("Agra")
             .into(),
     ));
     out.push(("bubble", Bubble::new(BubbleSide::End, "hi").into()));
@@ -103,7 +103,7 @@ fn all() -> Vec<(&'static str, Node)> {
     out.push((
         "message",
         Message::new(BubbleSide::Start)
-            .header("Ada")
+            .header("Anu")
             .content(Bubble::new(BubbleSide::Start, "hi"))
             .footer("Now")
             .into(),

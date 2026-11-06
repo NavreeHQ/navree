@@ -161,14 +161,14 @@ fn fill_sets_the_fillable_columns_and_leaves_the_rest() {
     let mut member = Record::new(Member::default());
     member
         .fill(attrs! {
-            "name" => "Ada",
-            "email" => "  Ada@Example.COM ",
+            "name" => "Anu",
+            "email" => "  Anu@Example.COM ",
             "is_admin" => true,
             "nonsense" => 1,
         })
         .unwrap();
-    assert_eq!(member.name, "Ada");
-    assert_eq!(member.email, "ada@example.com", "through the mutator");
+    assert_eq!(member.name, "Anu");
+    assert_eq!(member.email, "anu@example.com", "through the mutator");
     assert!(!member.is_admin, "not fillable: left out");
 }
 
@@ -272,7 +272,7 @@ fn unknown_columns_and_paths_into_plain_columns_never_reach_the_model() {
 async fn a_failing_discard_policy_refuses_before_changing_anything() {
     let mut member = Record::new(Member::default());
     let error = with_discard_policy(DiscardPolicy::Fail, async {
-        member.fill(attrs! { "name" => "Ada", "is_admin" => true, "nope" => 1 })
+        member.fill(attrs! { "name" => "Anu", "is_admin" => true, "nope" => 1 })
     })
     .await
     .unwrap_err();
@@ -304,11 +304,11 @@ async fn a_reporting_discard_policy_calls_its_handler() {
     let mut member = Record::new(Member::default());
     with_discard_policy(handler, async {
         member
-            .fill(attrs! { "name" => "Ada", "is_admin" => true })
+            .fill(attrs! { "name" => "Anu", "is_admin" => true })
             .unwrap();
     })
     .await;
-    assert_eq!(member.name, "Ada");
+    assert_eq!(member.name, "Anu");
     assert_eq!(
         *seen.lock().unwrap(),
         [("Member".to_owned(), vec!["is_admin".to_owned()])]
@@ -322,7 +322,7 @@ async fn the_strict_mode_for_discarded_attributes_decides_without_a_policy() {
     // Strict: refused before anything changes.
     let mut member = Record::new(Member::default());
     let error = strict::scope(Strictness::strict(), async {
-        member.fill(attrs! { "name" => "Ada", "is_admin" => true })
+        member.fill(attrs! { "name" => "Anu", "is_admin" => true })
     })
     .await
     .unwrap_err();
@@ -335,11 +335,11 @@ async fn the_strict_mode_for_discarded_attributes_decides_without_a_policy() {
     // Lenient: left out.
     strict::scope(Strictness::lenient(), async {
         member
-            .fill(attrs! { "name" => "Ada", "is_admin" => true })
+            .fill(attrs! { "name" => "Anu", "is_admin" => true })
             .unwrap();
     })
     .await;
-    assert_eq!(member.name, "Ada");
+    assert_eq!(member.name, "Anu");
     assert!(!member.is_admin);
 
     // A handler tolerates them, and sees the violation.
@@ -379,13 +379,13 @@ async fn the_strict_mode_for_discarded_attributes_decides_without_a_policy() {
     strict::scope(Strictness::strict(), async {
         with_discard_policy(DiscardPolicy::Ignore, async {
             other
-                .fill(attrs! { "name" => "Grace", "is_admin" => true })
+                .fill(attrs! { "name" => "Gauri", "is_admin" => true })
                 .unwrap();
         })
         .await;
     })
     .await;
-    assert_eq!(other.name, "Grace");
+    assert_eq!(other.name, "Gauri");
 }
 
 #[tokio::test]
@@ -524,8 +524,8 @@ fn json_paths_edit_json_columns_by_value() {
 #[test]
 fn mutators_also_run_through_generated_setters_and_set_attribute() {
     let mut member = Member::default();
-    member.set_email(" Grace@Example.com");
-    assert_eq!(member.email, "grace@example.com");
+    member.set_email(" Gauri@Example.com");
+    assert_eq!(member.email, "gauri@example.com");
     let mut record = Record::new(Member::default());
     record.set_attribute("email", "LINUS@example.com").unwrap();
     assert_eq!(record.email, "linus@example.com");
@@ -537,20 +537,20 @@ fn mutators_also_run_through_generated_setters_and_set_attribute() {
 #[tokio::test]
 async fn mutators_can_write_several_columns() {
     let t = sqlite(SCHEMA).await;
-    let person = Person::create_from(&t.db, attrs! { "full_name" => "  Ada   King Lovelace " })
+    let person = Person::create_from(&t.db, attrs! { "full_name" => "  Anu   King Lakhotia " })
         .await
         .unwrap();
-    assert_eq!(person.full_name, "Ada King Lovelace");
+    assert_eq!(person.full_name, "Anu Kaur Lakhotia");
     let mut stored = Person::find_or_fail(&t.db, person.id).await.unwrap();
     assert_eq!(
         (stored.first_name.as_str(), stored.last_name.as_str()),
-        ("Ada", "King Lovelace"),
+        ("Anu", "King Lakhotia"),
         "set by the mutator, though not fillable"
     );
-    stored.set_full_name("Grace Hopper");
+    stored.set_full_name("Gauri Hundal");
     assert!(stored.is_dirty_on(["first_name"]) && stored.is_dirty_on(["last_name"]));
     stored.fill(attrs! { "first_name" => "x" }).unwrap();
-    assert_eq!(stored.first_name, "Grace", "not fillable: left out");
+    assert_eq!(stored.first_name, "Gauri", "not fillable: left out");
 }
 
 #[test]
@@ -579,7 +579,7 @@ async fn records_are_created_and_updated_from_attributes() {
     let t = sqlite(SCHEMA).await;
     let member = Member::create_from(
         &t.db,
-        attrs! { "name" => "Ada", "email" => "ADA@X.IO", "joined_at" => "2026-01-02T03:04:05Z", "is_admin" => true },
+        attrs! { "name" => "Anu", "email" => "ANU@X.IO", "joined_at" => "2026-01-02T03:04:05Z", "is_admin" => true },
     )
     .await
     .unwrap();
@@ -587,7 +587,7 @@ async fn records_are_created_and_updated_from_attributes() {
     let stored = Member::find_or_fail(&t.db, member.id).await.unwrap();
     assert_eq!(
         (stored.name.as_str(), stored.email.as_str(), stored.is_admin),
-        ("Ada", "ada@x.io", false)
+        ("Anu", "anu@x.io", false)
     );
 
     let forced = Member::force_create(&t.db, attrs! { "name" => "Root", "is_admin" => true })
@@ -616,13 +616,13 @@ async fn records_are_created_and_updated_from_attributes() {
     let mut stored = stored;
     assert!(
         stored
-            .update_attributes(&t.db, attrs! { "name" => "Ada L." })
+            .update_attributes(&t.db, attrs! { "name" => "Anu L." })
             .await
             .unwrap()
     );
     assert_eq!(
         Member::find_or_fail(&t.db, member.id).await.unwrap().name,
-        "Ada L."
+        "Anu L."
     );
     let mut unsaved = Record::new(Member::default());
     assert!(

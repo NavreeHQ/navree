@@ -99,11 +99,11 @@ impl BillingModule {
     ///     WebhookError, WebhookEvent};
     /// use navree_kernel::BoxError;
     ///
-    /// struct AcmePay;
+    /// struct AgraPay;
     ///
-    /// impl BillingProvider for AcmePay {
+    /// impl BillingProvider for AgraPay {
     ///     fn name(&self) -> &'static str {
-    ///         "acme_pay"
+    ///         "agra_pay"
     ///     }
     ///
     ///     fn verify_webhook(
@@ -117,12 +117,12 @@ impl BillingModule {
     ///     }
     ///
     ///     fn parse_webhook(&self, _body: &[u8]) -> Result<WebhookEvent, ProviderError> {
-    ///         Err(ProviderError::Unsupported { provider: "acme_pay", operation: "webhooks" })
+    ///         Err(ProviderError::Unsupported { provider: "agra_pay", operation: "webhooks" })
     ///     }
     /// }
     ///
-    /// let module = BillingModule::provider("acme_pay", |_context: ProviderContext| async {
-    ///     Ok::<_, BoxError>(AcmePay)
+    /// let module = BillingModule::provider("agra_pay", |_context: ProviderContext| async {
+    ///     Ok::<_, BoxError>(AgraPay)
     /// });
     /// # let _ = module;
     /// ```

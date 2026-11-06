@@ -81,7 +81,7 @@ async fn the_facade_derives_and_searches() {
         &uow,
         Note {
             id: uuid::Uuid::now_v7(),
-            title: "Lovelace renewal".into(),
+            title: "Lakhotia renewal".into(),
             pinned: true,
         },
     )
@@ -91,11 +91,11 @@ async fn the_facade_derives_and_searches() {
     let search = app.get::<Search>().await;
     search.flush_pending().await.unwrap();
     let page = search
-        .query::<Note>("lovelace")
+        .query::<Note>("lakhotia")
         .filter("pinned", true)
         .paginate(PageQuery::default())
         .await
         .unwrap();
     assert_eq!(page.meta.total, 1);
-    assert_eq!(page.data[0].title, "Lovelace renewal");
+    assert_eq!(page.data[0].title, "Lakhotia renewal");
 }

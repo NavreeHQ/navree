@@ -41,7 +41,7 @@ pub(crate) fn serve_command() -> CommandSpec {
     .stdio()
 }
 
-/// The value of `--user` (`--user ada@example.com` or `--user=...`).
+/// The value of `--user` (`--user anu@example.com` or `--user=...`).
 fn user_argument(args: &[String]) -> Result<String, BoxError> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -495,12 +495,12 @@ mod tests {
     #[test]
     fn the_user_comes_from_the_flag() {
         assert_eq!(
-            user_argument(&args(&["--user", "ada@example.com"])).unwrap(),
-            "ada@example.com"
+            user_argument(&args(&["--user", "anu@example.com"])).unwrap(),
+            "anu@example.com"
         );
         assert_eq!(
-            user_argument(&args(&["--user=ada@example.com"])).unwrap(),
-            "ada@example.com"
+            user_argument(&args(&["--user=anu@example.com"])).unwrap(),
+            "anu@example.com"
         );
         assert!(user_argument(&args(&[])).is_err());
         assert!(user_argument(&args(&["--user"])).is_err());

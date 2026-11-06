@@ -46,7 +46,7 @@ async fn repeated_channels_deliver_once() {
                     Channel::Database,
                     Channel::Mail,
                 ],
-                "Acme",
+                "Agra",
             ),
         )
         .await
@@ -100,7 +100,7 @@ async fn every_failed_channel_is_reported_and_the_others_still_deliver() {
             &TestUser::new(),
             DealWon::via(
                 &[Channel::Mail, Channel::Database, Channel::Broadcast],
-                "Acme",
+                "Agra",
             ),
         )
         .await

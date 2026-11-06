@@ -29,9 +29,9 @@
 //!
 //! let html = views.render(
 //!     "mail/invoice",
-//!     json!({ "name": "Ada & Co", "total": 123456, "currency": "EUR", "due": "2026-11-01" }),
+//!     json!({ "name": "Anu & Co", "total": 123456, "currency": "EUR", "due": "2026-11-01" }),
 //! )?;
-//! assert_eq!(html, "<p>Ada &amp; Co, you owe €1,234.56 by 1 November.</p>");
+//! assert_eq!(html, "<p>Anu &amp; Co, you owe €1,234.56 by 1 November.</p>");
 //! # Ok(())
 //! # }
 //! ```

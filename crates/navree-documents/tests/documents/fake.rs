@@ -11,13 +11,13 @@ async fn the_fake_renders_any_name_and_records_it() {
     let pdf = documents
         .pdf(
             "certificates/classic",
-            json!({"name": "Ada", "score": 98, "passed": true}),
+            json!({"name": "Anu", "score": 98, "passed": true}),
         )
         .await
         .unwrap();
     assert_eq!(
         pdf.text().unwrap(),
-        "certificates/classic\nname: Ada\npassed: true\nscore: 98"
+        "certificates/classic\nname: Anu\npassed: true\nscore: 98"
     );
     documents
         .render(&Render::html("<p>x</p>").locale("ar").title("Inline"))
@@ -47,11 +47,11 @@ fn assert_rendered_fails_with_what_was_rendered() {
 async fn assert_rendered_with_fails_when_no_render_matches() {
     let fake = DocumentsFake::new();
     fake.documents()
-        .pdf("certificates/classic", json!({"name": "Ada"}))
+        .pdf("certificates/classic", json!({"name": "Anu"}))
         .await
         .unwrap();
     fake.assert_rendered_with("certificates/classic", |render| {
-        render.data["name"] == "Grace"
+        render.data["name"] == "Gauri"
     });
 }
 

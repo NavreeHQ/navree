@@ -60,7 +60,7 @@ async fn constraint_errors_map_to_conflicts() {
     let orphan = db
         .pool()
         .execute_script(&format!(
-            "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'acme', UNHEX('{}'))",
+            "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'agra', UNHEX('{}'))",
             Uuid::now_v7().simple(),
             Uuid::now_v7().simple()
         ))
@@ -78,7 +78,7 @@ async fn constraint_errors_map_to_conflicts() {
         .unwrap();
     db.pool()
         .execute_script(&format!(
-            "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'acme', UNHEX('{}'))",
+            "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'agra', UNHEX('{}'))",
             Uuid::now_v7().simple(),
             owner.simple()
         ))

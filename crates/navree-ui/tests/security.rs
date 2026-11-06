@@ -767,7 +767,7 @@ fn nothing_is_fetched_ahead_unless_it_asks() {
                 .item(NavItem::new("Undone", "/undone").prefetch().no_prefetch()),
         )
         .user(
-            UserMenu::new("Ada", "a@b")
+            UserMenu::new("Anu", "a@b")
                 .link("Settings", "/settings")
                 .action("Sign out", "/sign-out"),
         );
@@ -830,7 +830,7 @@ fn nothing_is_fetched_ahead_unless_it_asks() {
         &Breadcrumb::new()
             .prefetch()
             .link("Deals", "/deals")
-            .current("Acme")
+            .current("Agra")
             .into(),
     );
     assert_eq!(html.matches("data-ui-prefetch").count(), 1, "{html}");
@@ -846,7 +846,7 @@ fn nothing_is_fetched_ahead_unless_it_asks() {
     }
     let rows = vec![Row {
         id: 1,
-        title: "Acme".into(),
+        title: "Agra".into(),
     }];
     let query = TableQuery::<Row>::parse("/deals", "");
     let html = render(&DataTable::new("deals", &query, &rows).into());

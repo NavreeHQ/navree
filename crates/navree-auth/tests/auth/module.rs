@@ -17,7 +17,7 @@ use crate::support::{self, PASSWORD, login, signed_in};
 #[tokio::test]
 async fn password_hash_never_serialized() {
     let app = support::app().await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     assert!(user.password_hash.starts_with("$argon2id$"));
 
     let value = serde_json::to_value(&user).unwrap();
@@ -29,7 +29,7 @@ async fn password_hash_never_serialized() {
     ] {
         assert!(value.get(hidden).is_none(), "{hidden} in {value}");
     }
-    assert_eq!(value["email"], "ada@example.com");
+    assert_eq!(value["email"], "anu@example.com");
     let debug = format!("{user:?}");
     assert!(!debug.contains(&user.password_hash), "{debug}");
 
@@ -39,15 +39,15 @@ async fn password_hash_never_serialized() {
         json!({
             "__type": "User",
             "id": user.id,
-            "name": "Ada Lovelace",
-            "email": "ada@example.com",
+            "name": "Anu Lakhotia",
+            "email": "anu@example.com",
             "email_verified_at": Value::Null,
             "created_at": user.created_at,
         })
     );
 
     for response in [
-        login(&app.client(), "ada@example.com", PASSWORD).await,
+        login(&app.client(), "anu@example.com", PASSWORD).await,
         app.client()
             .get("/api/auth/me")
             .bearer(&access)
@@ -66,14 +66,14 @@ async fn routes_mount_under_the_configured_prefix() {
         .config("auth.routes_prefix", "/identity")
         .build()
         .await;
-    support::create_user(&app, "ada@example.com").await;
+    support::create_user(&app, "anu@example.com").await;
     app.client()
         .post("/api/identity/login")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200);
-    login(&app.client(), "ada@example.com", PASSWORD)
+    login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_error(404, None);
 }
@@ -98,13 +98,13 @@ async fn for_root_takes_options_and_a_configured_secret() {
         .module(AuthModule::for_root(options.clone()))
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     // Anyone holding the configured secret can verify the tokens.
     let verifier = JwtService::new(secret.as_bytes(), &options.jwt);
     let claims = verifier.verify(&access, TokenType::Access).unwrap();
     assert_eq!(claims.iss, "crm");
     assert_eq!(claims.exp - claims.iat, 60);
-    login(&app.client(), "ada@example.com", PASSWORD)
+    login(&app.client(), "anu@example.com", PASSWORD)
         .await
         .assert_json_path("expires_in", json!(60));
 }
@@ -112,7 +112,7 @@ async fn for_root_takes_options_and_a_configured_secret() {
 #[tokio::test]
 async fn tokens_are_signed_with_a_key_derived_from_the_app_key() {
     let app = support::app().await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let header = access.split('.').next().unwrap();
     assert_eq!(
         header, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
@@ -136,7 +136,7 @@ async fn boots_without_an_app_key() {
         .module(AuthModule::from_config())
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     app.client()
         .get("/api/auth/me")
         .bearer(&access)
@@ -164,16 +164,16 @@ async fn service_creates_finds_and_updates_users() {
     let app = support::app().await;
     let auth = app.get::<AuthService>().await;
     let created: User = auth
-        .create_user("Ada Lovelace", " ADA@Example.com ", PASSWORD)
+        .create_user("Anu Lakhotia", " ANU@Example.com ", PASSWORD)
         .await
         .unwrap();
-    assert_eq!(created.email, "ada@example.com");
+    assert_eq!(created.email, "anu@example.com");
     assert_eq!(
         auth.find_user(created.id).await.unwrap(),
         Some(created.clone())
     );
     assert_eq!(
-        auth.find_by_email("Ada@example.com")
+        auth.find_by_email("Anu@example.com")
             .await
             .unwrap()
             .map(|u| u.id),
@@ -181,7 +181,7 @@ async fn service_creates_finds_and_updates_users() {
     );
     assert_eq!(auth.find_user(uuid::Uuid::now_v7()).await.unwrap(), None);
     assert!(
-        auth.validate_user("ada@example.com", PASSWORD)
+        auth.validate_user("anu@example.com", PASSWORD)
             .await
             .is_ok()
     );
@@ -190,12 +190,12 @@ async fn service_creates_finds_and_updates_users() {
         .await
         .unwrap();
     assert!(
-        auth.validate_user("ada@example.com", PASSWORD)
+        auth.validate_user("anu@example.com", PASSWORD)
             .await
             .is_err()
     );
     let user = auth
-        .validate_user("ada@example.com", "a brand new password")
+        .validate_user("anu@example.com", "a brand new password")
         .await
         .unwrap();
     assert_eq!(user.id, created.id);
@@ -208,7 +208,7 @@ async fn service_creates_finds_and_updates_users() {
 #[tokio::test]
 async fn access_token_lifetime_matches_expires_in() {
     let app = support::app().await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let claims = app
         .get::<JwtService>()
         .await
@@ -297,26 +297,26 @@ async fn register_writes_in_the_given_unit_of_work() {
     let auth = app.get::<AuthService>().await;
     let db = app.get::<Db>().await;
     let new = |email: &str| navree_auth::NewUser {
-        name: "Ada".to_owned(),
+        name: "Anu".to_owned(),
         email: email.to_owned(),
         password: PASSWORD.to_owned(),
     };
 
     let uow = db.uow(None, None).await;
-    auth.register(&uow, new("ada@example.com")).await.unwrap();
+    auth.register(&uow, new("anu@example.com")).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(auth.find_by_email("ada@example.com").await.unwrap(), None);
+    assert_eq!(auth.find_by_email("anu@example.com").await.unwrap(), None);
 
     let uow = db.uow(None, None).await;
-    let user = auth.register(&uow, new("ada@example.com")).await.unwrap();
+    let user = auth.register(&uow, new("anu@example.com")).await.unwrap();
     // A second registration in the same unit of work sees the first.
     assert!(matches!(
-        auth.register(&uow, new("ADA@example.com")).await,
+        auth.register(&uow, new("ANU@example.com")).await,
         Err(navree_auth::AuthError::EmailTaken)
     ));
     uow.commit().await.unwrap();
     assert_eq!(
-        auth.find_by_email("ada@example.com")
+        auth.find_by_email("anu@example.com")
             .await
             .unwrap()
             .map(|u| u.id),

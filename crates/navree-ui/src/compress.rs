@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn brotli_shrinks_markup_and_reads_back() {
-        let html = "<tr data-key=\"1\"><td><a href=\"/deals/1\">Acme</a></td></tr>".repeat(1000);
+        let html = "<tr data-key=\"1\"><td><a href=\"/deals/1\">Agra</a></td></tr>".repeat(1000);
         let packed = brotli(html.as_bytes());
         assert!(packed.len() < html.len() / 10, "{}", packed.len());
         let mut back = Vec::new();

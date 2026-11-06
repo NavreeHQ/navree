@@ -17,7 +17,7 @@ use crate::support::{deals_app, insert_deal};
 async fn server_streams_carry_events_and_check_access_when_they_open() {
     let app = deals_app().build().await;
     let rep = Uuid::now_v7();
-    let deal = insert_deal(&app, "Acme", rep).await;
+    let deal = insert_deal(&app, "Agra", rep).await;
 
     let mut guest = DealsClient::new(TestChannel::new(&app));
     let status = guest.watch_deals(WatchDealsRequest {}).await.unwrap_err();

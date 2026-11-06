@@ -161,7 +161,7 @@ async fn no_secret_reaches_a_change_event() {
     // The device flow.
     let device = world
         .register(
-            NewClient::public("Acme CLI")
+            NewClient::public("Agra CLI")
                 .device()
                 .scopes(["deals:read", "offline_access"]),
         )

@@ -158,7 +158,7 @@ async fn creates_and_reads_back_tables() {
             .unwrap()
     );
 
-    exec(&conn, "INSERT INTO companies (name) VALUES ('Acme')").await;
+    exec(&conn, "INSERT INTO companies (name) VALUES ('Agra')").await;
     exec(
         &conn,
         "INSERT INTO deals (company_id, title) VALUES (1, 'Big one')",
@@ -299,7 +299,7 @@ async fn changing_one_column_and_dropping_another_rebuilds_once() {
         .unwrap();
     exec(
         &conn,
-        "INSERT INTO companies (name, domain) VALUES ('Acme', 'acme.test')",
+        "INSERT INTO companies (name, domain) VALUES ('Agra', 'acme.test')",
     )
     .await;
     let before = schema.statements().len();
@@ -325,7 +325,7 @@ async fn changing_one_column_and_dropping_another_rebuilds_once() {
     );
     assert_eq!(
         texts(rows(&conn, "SELECT name FROM companies").await),
-        [["Acme"]]
+        [["Agra"]]
     );
 }
 
@@ -902,7 +902,7 @@ async fn dumps_load_into_an_empty_database_and_dump_the_same() {
         &conn,
         "CREATE VIEW big_deals AS SELECT title FROM deals WHERE cents > 100;\n\
          CREATE TRIGGER deals_stamp AFTER INSERT ON deals BEGIN UPDATE deals SET title = CASE WHEN new.title = '' THEN 'untitled' ELSE new.title END WHERE id = new.id; END;\n\
-         INSERT INTO companies (name) VALUES ('Acme ''Corp''');\n\
+         INSERT INTO companies (name) VALUES ('Agra ''Corp''');\n\
          INSERT INTO navree_migrations VALUES ('crm', 'm0002_create_deals', 1), ('crm', 'm0001_create_companies', 1);",
     )
     .await;

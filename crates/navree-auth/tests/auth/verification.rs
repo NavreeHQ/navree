@@ -41,13 +41,13 @@ async fn verify_email_signed_link() {
         .override_value::<dyn AuditSink>(sink.clone())
         .build()
         .await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
     request_link(&client, &access).await.assert_status(202);
     let sent = sent_mail(&app).await;
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].to, vec!["ada@example.com".to_owned()]);
+    assert_eq!(sent[0].to, vec!["anu@example.com".to_owned()]);
     let link = mailed_link(&app).await;
     let prefix = format!("{BASE_URL}/api/auth/email/verify/{}/", user.id);
     assert!(link.starts_with(&prefix), "{link}");
@@ -109,7 +109,7 @@ async fn verification_link_expires() {
         .override_value::<dyn Clock>(clock.clone())
         .build()
         .await;
-    let (_, access, _) = signed_in(&app, "ada@example.com").await;
+    let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     request_link(&client, &access).await.assert_status(202);
     let link = mailed_link(&app).await;
@@ -124,7 +124,7 @@ async fn verification_link_for_a_previous_address_is_rejected() {
         .config("auth.verification.base_url", BASE_URL)
         .build()
         .await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
     request_link(&client, &access).await.assert_status(202);
     let link = mailed_link(&app).await;
@@ -132,7 +132,7 @@ async fn verification_link_for_a_previous_address_is_rejected() {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(user.id)
-        .update(&*db, [User::EMAIL.set("ada@new.example.com".to_owned())])
+        .update(&*db, [User::EMAIL.set("anu@new.example.com".to_owned())])
         .await
         .unwrap();
 
@@ -159,7 +159,7 @@ async fn verification_link_defaults_to_the_app_url() {
         .config("app.url", "http://localhost:8080/")
         .build()
         .await;
-    let (user, access, _) = signed_in(&app, "ada@example.com").await;
+    let (user, access, _) = signed_in(&app, "anu@example.com").await;
     request_link(&app.client(), &access)
         .await
         .assert_status(202);

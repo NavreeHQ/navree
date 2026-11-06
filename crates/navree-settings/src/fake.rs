@@ -36,15 +36,15 @@ use crate::{
 ///     const KEY: &'static str = "portal";
 /// }
 ///
-/// let (acme, holding) = (Uuid::now_v7(), Uuid::now_v7());
-/// let fake = SettingsFake::new().attach(acme, holding);
+/// let (agra, holding) = (Uuid::now_v7(), Uuid::now_v7());
+/// let fake = SettingsFake::new().attach(agra, holding);
 /// fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
 ///     .await
 ///     .unwrap();
 ///
 /// // Install with TestApp::builder().override_value(Arc::new(fake.settings())).
 /// let settings = fake.settings();
-/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(acme)).await.unwrap();
+/// let portal = settings.resolve::<PortalSettings>(Scope::workspace(agra)).await.unwrap();
 /// assert!(portal.show_leaderboard);
 /// assert_eq!(portal.source("show_leaderboard"), Some(Source::Organization));
 /// fake.assert_not_changed::<PortalSettings>(); // presets are not changes
