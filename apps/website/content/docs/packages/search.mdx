@@ -533,7 +533,37 @@ pub title: String,
 pub notes: Option<String>,
 ```
 
-On each sync, the embedded fields are joined into one text, one field per line, and turned into a vector by the app's embeddings provider: an `Arc<dyn Embeddings>` the app registers, usually a wrapper around an [embedding model's](/docs/ai/embeddings-and-rag/) API:
+On each sync, the embedded fields are joined into one text, one field per line, and turned into a vector by the app's embeddings provider.
+
+### With the AI SDK
+
+With the `ai` feature next to `search`, nothing more is needed: the [AI SDK's](/docs/ai/embeddings-and-rag/) `Embeddings` (the model of `ai.embeddings.model`, batched and cached) is the provider, and `store = "ai"` keeps the vectors in its `VectorStore`, so vectors are configured once, in `ai.vectors`:
+
+```toml title="config/app.toml"
+[ai.models.embed]
+provider = "openai"
+model = "text-embedding-3-small"
+dimensions = 1536
+
+[ai.embeddings]
+model = "embed"
+
+[ai.vectors]
+store = "pgvector"        # memory | pgvector | qdrant
+dimensions = 1536         # must match the embedding model
+metric = "cosine"         # cosine | dot | euclidean
+
+[search.vectors]
+store = "ai"              # navree-ai's store, size and metric
+```
+
+Each index is then the AI collection `search_<index>` (`search_contacts`), in the same pgvector database or Qdrant server as the app's own collections, created with the same HNSW index. A record's filter fields are the collection record's metadata, so `filter`, workspaces and `accessible` narrow the vector search inside the store; the few filter shapes the AI store can't run as search does (a null test, a range on booleans, equality on a float) are checked on a wider set of the nearest records. `search.vectors.dimensions` and `metric` are not read with `store = "ai"`.
+
+An app that registers its own `Arc<dyn Embeddings>` keeps it: it wins over the AI SDK's, with any store.
+
+### Your own provider
+
+Without the AI SDK, register an `Arc<dyn Embeddings>`, usually a wrapper around an embedding model's API:
 
 ```rust
 use navree::BoxFuture;
@@ -555,9 +585,7 @@ impl Embeddings for ModelEmbeddings {
 m.value_arc(Arc::new(ModelEmbeddings { /* .. */ }) as Arc<dyn Embeddings>);
 ```
 
-With the `ai` feature on, the wrapper can call the `navree::ai::Embeddings` service: `embed_many(texts)` returns `Embedding`s, and `into_vec()` gives each one's `Vec<f32>`. Set `search.vectors.dimensions` to the size `ai.vectors.dimensions` names.
-
-Vectors are stored in the configured vector store:
+Vectors are then stored in search's own vector store:
 
 ```toml title="config/app.toml"
 [search.vectors]
@@ -569,7 +597,9 @@ metric = "cosine"         # cosine | dot | euclidean
 # url = "http://127.0.0.1:6333"   # the REST port; APP_SEARCH__VECTORS__KEY for the API key
 ```
 
-With vectors on, the boot fails without an `Embeddings` provider. With `pgvector`, the store enables the `vector` extension and creates a `search_vectors` table, with an `embedding vector(1536)` column and an HNSW index, the first time it is used. With Qdrant, each index gets a collection of the same name. The `memory` store is for tests.
+With vectors on, the boot fails without an `Embeddings` provider (yours, or the AI SDK's with `AiModule`), and `store = "ai"` fails it without `AiModule`. With `pgvector`, the store enables the `vector` extension and creates a `search_vectors` table, with an `embedding vector(1536)` column and an HNSW index, the first time it is used. With Qdrant, each index gets a collection of the same name. The `memory` store is for tests.
+
+### Querying by meaning
 
 Query by meaning with `similar`, or blend both kinds of relevance with `hybrid`:
 
@@ -632,7 +662,7 @@ async fn finds_contacts_by_a_misspelled_name() {
 - The memory engine supports every query method, typo tolerance included, and ranks with the same field boosts, so tests and production agree on what matches. Exact scores differ between engines; assert on order and membership, not on `_score`.
 - To check that a write queues a sync without running it, install a [`QueueFake`](/docs/testing/fakes/#the-queue) and assert on the sync job, `navree::search::SyncDocuments` (job name `search.sync`): `fake.assert_dispatched::<SyncDocuments>(|job| job.index == "contacts")`.
 - `search.assert_indexed::<Contact>(id)` and `search.assert_not_indexed::<Contact>(id)` check the index directly.
-- For vector search, set `search.vectors.store = "memory"` and register a fake `Embeddings` with `override_value(Arc::new(fake) as Arc<dyn Embeddings>)`.
+- For vector search, set `search.vectors.store = "memory"` and register a fake `Embeddings` with `override_value(Arc::new(fake) as Arc<dyn Embeddings>)`. With the AI SDK, `ai.fake = true`, `ai.vectors.store = "memory"` and `search.vectors.store = "ai"` give deterministic embeddings, in process.
 - To test a hand-written `document()`, build a `SearchContext::new(uow, app.ctx().clone(), None)` around a unit of work (`db.uow(None, None).await`). The unit of work stays yours to commit or roll back; read the records with the model API and call `Deal::document(&record, &ctx)`.
 
 Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`. Override its `filters_exactly(filter)` to return `false` for filter shapes your engine doesn't evaluate as the SQL filter does; access rules of those shapes are then applied to the loaded rows.
@@ -658,10 +688,10 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 | `search.postgres.typo_threshold` | `0.4` | How similar a word must be to match with `trigram`, above 0 and at most 1 |
 | `search.tantivy.path` | `storage/search` | Index directory |
 | `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB; at least 15, or the boot fails |
-| `search.vectors.store` | none | `pgvector`, `qdrant` or `memory`; vector search is off without it |
-| `search.vectors.url`, `search.vectors.key` | none | The Qdrant server |
-| `search.vectors.dimensions` | `1536` | Vector size |
-| `search.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean` |
+| `search.vectors.store` | none | `ai` (the AI SDK's store, configured in `ai.vectors`), `pgvector`, `qdrant` or `memory`; vector search is off without it |
+| `search.vectors.url`, `search.vectors.key` | none | The Qdrant server (not with `ai`) |
+| `search.vectors.dimensions` | `1536` | Vector size (with `ai`: `ai.vectors.dimensions`) |
+| `search.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean` (with `ai`: `ai.vectors.metric`) |
 | `search.indexes.<index>.synonyms` | `{}` | Synonyms per index, both ways: `{ "acme" = ["acme corp"] }` |
 | `search.indexes.<index>.stop_words` | `[]` | Words the index ignores in queries |
 

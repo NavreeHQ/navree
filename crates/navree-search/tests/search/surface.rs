@@ -104,7 +104,10 @@ fn the_documented_names_exist() {
         VectorStoreKind::Pgvector,
         VectorStoreKind::Qdrant,
         VectorStoreKind::Memory,
+        VectorStoreKind::Ai,
     ];
+    let _: fn(navree_ai::VectorStore) -> navree_search::AiVectorStore =
+        navree_search::AiVectorStore::new;
 
     // Settings and documents.
     let settings = IndexSettings::new("Deal", "deals")

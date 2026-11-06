@@ -78,7 +78,7 @@ pub enum SearchError {
     VectorsOff,
     /// Vector search needs a `dyn Embeddings` provider in the app.
     #[error(
-        "vector search needs an embeddings provider: register an `Arc<dyn navree_search::Embeddings>`"
+        "vector search needs an embeddings provider: register an `Arc<dyn navree_search::Embeddings>`, or add AiModule with the `ai` feature"
     )]
     NoEmbeddings,
     /// The embeddings provider failed.

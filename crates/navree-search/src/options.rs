@@ -224,6 +224,9 @@ pub enum VectorStoreKind {
     Qdrant,
     /// In process, for tests.
     Memory,
+    /// navree-ai's `VectorStore` (crate feature `ai`): the store, size and
+    /// metric of `ai.vectors`, shared with the app's AI collections.
+    Ai,
 }
 
 /// How vectors are compared (`search.vectors.metric`).
@@ -561,8 +564,9 @@ impl Default for RawSearchOptions {
 #[derive(Deserialize, ConfigTable)]
 #[serde(default)]
 struct RawVectorOptions {
-    /// Where vectors live (unset: no vector search).
-    #[config(one_of = "pgvector, qdrant, memory")]
+    /// Where vectors live (unset: no vector search). `ai` keeps them in
+    /// navree-ai's store, with its `ai.vectors` size and metric.
+    #[config(one_of = "pgvector, qdrant, memory, ai")]
     store: Option<VectorStoreKind>,
     /// The Qdrant server.
     url: Option<String>,

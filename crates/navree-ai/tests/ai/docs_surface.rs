@@ -289,10 +289,15 @@ async fn embeddings_page(
         });
     notes.upsert_many(records.collect()).await?;
     notes.delete("0199c1d2:0").await?;
+    notes.delete_many(["a:0", "a:1"]).await?;
     notes
         .delete_where(Filter::eq("activity_id", Uuid::now_v7()))
         .await?;
+    let _: Option<VectorRecord> = notes.get("a:2").await?;
     let _: u64 = notes.count().await?;
+    let _: usize = vectors.dimensions();
+    let _: Metric = vectors.metric();
+    notes.clear().await?;
 
     let question = String::from("what did they say about the rollout timeline");
     let matches: Vec<VectorMatch> = notes

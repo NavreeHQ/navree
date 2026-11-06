@@ -23,12 +23,16 @@ mysql = ["navree-db/mysql", "navree-orm/mysql", "navree-workspace/mysql"]
 ## Entry points for the fuzz targets in `fuzz/` (`navree_search::fuzzing`). Not
 ## part of the API.
 fuzzing = []
+## Vector search on navree-ai: its `Embeddings` when the app registers no
+## provider, and its `VectorStore` with `search.vectors.store = "ai"`.
+ai = ["dep:navree-ai"]
 
 [dependencies]
 chrono = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
+navree-ai = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
@@ -54,6 +58,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
+# The tests of vector search on navree-ai always run.
+navree-search = { workspace = true, features = ["ai"] }
 navree-testing = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

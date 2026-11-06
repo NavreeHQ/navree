@@ -20,7 +20,7 @@ The examples build "Ask about this deal" in the CRM: a rep asks "What did they s
 
 <Callout type="tip" title="Search or RAG">
 
-To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries, with an embeddings provider you register that can call the `Embeddings` service of this page. Use what this page describes when a **model answers** from passages of your data.
+To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries. With the `ai` feature, Search embeds with the `Embeddings` service of this page, and with `search.vectors.store = "ai"` it keeps its vectors in this page's `VectorStore`, as the collections `search_<index>`, so `ai.vectors` configures both ([with the AI SDK](/docs/packages/search/#with-the-ai-sdk)). Use what this page describes when a **model answers** from passages of your data.
 
 </Callout>
 
@@ -141,8 +141,10 @@ for m in &matches {
 | Method | |
 |---|---|
 | `upsert(record)`, `upsert_many(records)` | Insert or replace by `id`. A record whose vector isn't `ai.vectors.dimensions` long, or whose metadata isn't a JSON object, fails with `AiError::Config`. |
-| `delete(id)` | Remove one. |
+| `delete(id)`, `delete_many(ids)` | Remove one, or several (ids that aren't there are skipped). |
 | `delete_where(filter)` | Remove every record matching a filter, e.g. all chunks of one activity. |
+| `get(id)` | The record with its vector, text and metadata, or `None`. A cosine store may give the vector back normalized (Qdrant does). |
+| `clear()` | Remove every record; the collection stays. |
 | `search(query)` | A query builder: `.filter(f)`, `.limit(n)` (default 10), `.min_score(s)`, then await. |
 | `count()` | The number of records. |
 
@@ -507,8 +509,8 @@ async fn answers_use_only_the_deals_own_activity() {
 |---|---|
 | `Embeddings` | `embed(text)`, `embed_many(texts)`, `model()`, `dimensions()`. Inject `Arc<Embeddings>`, or build one with `Embeddings::new(ai)`. |
 | `Embedding` | A vector: derefs to `[f32]`; `dimensions()`, `cosine(&other)`, `into_vec()`; `Embedding::new(values)` or `From<Vec<f32>>`. |
-| `VectorStore` | `collection(name)`, `kind()`, `ensure_collection(name)`. Inject `Arc<VectorStore>`; `VectorStore::memory(embeddings)` builds a memory store. |
-| `Collection` | `upsert`, `upsert_many`, `delete`, `delete_where`, `search`, `count`, `name()`. |
+| `VectorStore` | `collection(name)`, `kind()`, `dimensions()`, `metric()`, `ensure_collection(name)`. Inject `Arc<VectorStore>`; `VectorStore::memory(embeddings)` builds a memory store. |
+| `Collection` | `upsert`, `upsert_many`, `get`, `delete`, `delete_many`, `delete_where`, `clear`, `search`, `count`, `name()`. |
 | `SearchRequest`, `SearchQuery` | What `search` returns (`.filter`, `.limit`, `.min_score`, then await), and what it takes: a text or an `Embedding`. |
 | `VectorCollection` | A collection declaration, for `m.vector_collection(..)`. |
 | `VectorRecord` | `VectorRecord::new(id, embedding).text(..).metadata(..)`. |

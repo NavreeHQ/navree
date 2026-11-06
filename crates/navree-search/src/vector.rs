@@ -26,7 +26,9 @@ pub(crate) type EmbedRecord = (String, Option<String>, BTreeMap<String, Value>, 
 
 /// Turns texts into vectors. Register one in the app as
 /// `Arc<dyn Embeddings>` (for example a wrapper around an embedding model's
-/// API); vector search uses it to embed records and query texts.
+/// API); vector search uses it to embed records and query texts. With the
+/// `ai` feature, an app that registers none uses navree-ai's
+/// `Embeddings` (`ai.embeddings.model`), which implements this trait.
 pub trait Embeddings: Send + Sync + 'static {
     /// One vector per text, in order, each of `search.vectors.dimensions`
     /// numbers.
@@ -53,7 +55,8 @@ pub struct VectorMatch {
     pub score: f64,
 }
 
-/// A vector store driver: `pgvector`, `qdrant` or `memory`.
+/// A vector store driver: `pgvector`, `qdrant`, `memory`, or `ai`
+/// (navree-ai's store, with the `ai` feature).
 pub trait VectorStore: Send + Sync + 'static {
     /// The store name.
     fn name(&self) -> &'static str;
@@ -799,6 +802,48 @@ impl VectorStore for PgvectorStore {
     }
 }
 
+/// The app's `Arc<dyn Embeddings>`, else (feature `ai`) navree-ai's
+/// `Embeddings`.
+async fn embeddings(app: &AppContext) -> Option<Arc<dyn Embeddings>> {
+    if let Some(embeddings) = app.try_get::<dyn Embeddings>().await {
+        return Some(embeddings);
+    }
+    #[cfg(feature = "ai")]
+    if let Some(embeddings) = app.try_get::<navree_ai::Embeddings>().await {
+        return Some(embeddings as Arc<dyn Embeddings>);
+    }
+    None
+}
+
+/// navree-ai's store, for `search.vectors.store = "ai"`: `options` take its
+/// size and metric, so `search.vectors.dimensions` and `metric` are not
+/// read.
+#[cfg(feature = "ai")]
+async fn ai_store(
+    app: &AppContext,
+    options: &mut VectorOptions,
+) -> Result<Arc<dyn VectorStore>, BoxError> {
+    let store = app
+        .try_get::<navree_ai::VectorStore>()
+        .await
+        .ok_or("search.vectors.store = \"ai\" needs AiModule in the app")?;
+    options.dimensions = store.dimensions();
+    options.metric = match store.metric() {
+        navree_ai::Metric::Cosine => Metric::Cosine,
+        navree_ai::Metric::Dot => Metric::Dot,
+        navree_ai::Metric::Euclidean => Metric::Euclidean,
+    };
+    Ok(Arc::new(crate::ai::AiVectorStore::new((*store).clone())))
+}
+
+#[cfg(not(feature = "ai"))]
+async fn ai_store(
+    _app: &AppContext,
+    _options: &mut VectorOptions,
+) -> Result<Arc<dyn VectorStore>, BoxError> {
+    Err("search.vectors.store = \"ai\" needs navree-search's `ai` feature (the facade's `ai` and `search` features)".into())
+}
+
 /// The vector side of the search service: the store, the embeddings
 /// provider and a cache of embeddings by text.
 pub(crate) struct Vectors {
@@ -819,7 +864,9 @@ impl Vectors {
         search: &SearchOptions,
         db: Option<&Db>,
     ) -> Result<Vectors, BoxError> {
+        let mut options = options.clone();
         let store: Arc<dyn VectorStore> = match options.store {
+            VectorStoreKind::Ai => ai_store(app, &mut options).await?,
             VectorStoreKind::Memory => Arc::new(MemoryVectorStore::new(options.metric)),
             VectorStoreKind::Qdrant => Arc::new(QdrantStore::new(
                 options.url.as_deref().unwrap_or_default(),
@@ -840,11 +887,10 @@ impl Vectors {
                 ))
             }
         };
-        let embeddings = app
-            .try_get::<dyn Embeddings>()
+        let embeddings = embeddings(app)
             .await
             .ok_or_else(|| SearchError::NoEmbeddings.to_string())?;
-        Ok(Self::with_store(options.clone(), store, Some(embeddings)))
+        Ok(Self::with_store(options, store, Some(embeddings)))
     }
 
     pub(crate) fn with_store(

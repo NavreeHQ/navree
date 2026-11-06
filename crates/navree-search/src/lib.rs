@@ -25,7 +25,10 @@
 //! - **Vectors**: `#[searchable(embed)]` fields are embedded by the app's
 //!   [`Embeddings`] provider and stored in pgvector, Qdrant or memory
 //!   ([`VectorStore`]); [`Search::similar`], [`Search::similar_to`] and
-//!   [`SearchQuery::hybrid`] query them.
+//!   [`SearchQuery::hybrid`] query them. With the `ai` feature, navree-ai's
+//!   `Embeddings` is the provider when the app registers none, and
+//!   `search.vectors.store = "ai"` keeps the vectors in navree-ai's
+//!   `VectorStore` (`AiVectorStore`), configured once in `ai.vectors`.
 //! - **Commands**: `search:import <Name>|--all [--fresh]`,
 //!   `search:flush <Name>`, `search:settings [<Name>]`, `search:status`.
 //!
@@ -47,6 +50,8 @@
 //! ```
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "ai")]
+mod ai;
 mod commands;
 mod document;
 mod engine;
@@ -68,6 +73,8 @@ mod sync;
 mod text;
 mod vector;
 
+#[cfg(feature = "ai")]
+pub use ai::AiVectorStore;
 pub use document::Document;
 #[cfg(feature = "tantivy")]
 pub use engine::TantivyEngine;
