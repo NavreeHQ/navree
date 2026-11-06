@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a53f0c77f45d";
+pub const BUILD: &str = "26a090d16c0c";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-1eda0837195f.js";
@@ -57,7 +57,7 @@ pub const UPLOAD_URL: &str = "/_navree/ui/upload-2a1b85f2036b.js";
 pub const OTP_URL: &str = "/_navree/ui/otp-4d21a9f06aae.js";
 
 /// The URL of `carousel.js`.
-pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-30399fd67df0.js";
+pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-1e6ce13f24d3.js";
 
 /// The URL of `menubar.js`.
 pub const MENUBAR_URL: &str = "/_navree/ui/menubar-028fc9f298d6.js";
@@ -310,7 +310,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel",
         ext: "js",
-        hash: "30399fd67df0",
+        hash: "1e6ce13f24d3",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/carousel.js"),
         gzip: Some(include_bytes!("../dist/carousel.js.gz")),

@@ -165,3 +165,8 @@ function enhance() {
 }
 enhance();
 on(document, "ui:swap", enhance);
+// A stylesheet still on its way when the module runs (the one that lays the track out in a
+// row) is in place when the window loads: the ends are read again then.
+on(window, "load", () => {
+  for (const root of every(ROOT)) sync(root);
+}, { once: true });
