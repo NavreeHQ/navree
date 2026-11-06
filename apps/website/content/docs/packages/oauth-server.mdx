@@ -502,7 +502,7 @@ async fn a_read_only_token_cannot_change_deals() {
 }
 ```
 
-To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pair()`, which returns a verifier and its S256 challenge, and `authorize(&client, client_id, user_token, scopes)`, which walks the authorize, approve and token steps with a `TestClient` for a client with one redirect URI and returns the `TokenResponse`. `AuthorizeFlow::new(client_id)` runs the same flow with options: `.secret(..)` for a confidential client, `.redirect_uri(..)`, `.nonce(..)`, and `.oauth_path(..)` and `.api_prefix(..)` for apps that moved them. Override `dyn Clock` with a `FixedClock` to test expiry.
+To test the whole authorization code flow, `navree::oauth::testing` (it comes with the `testing` feature, which `full` turns on) has `pkce_pair()`, which returns a verifier and its S256 challenge, and `authorize(&client, client_id, user_token, scopes)`, which walks the authorize, approve and token steps with a `TestClient` for a client with one redirect URI and returns the `TokenResponse`. `AuthorizeFlow::new(client_id)` runs the same flow with options: `.secret(..)` for a confidential client, `.redirect_uri(..)`, `.nonce(..)`, and `.oauth_path(..)` and `.api_prefix(..)` for apps that moved them. Override `dyn Clock` with a `FixedClock` to test expiry.
 
 ## Reference
 

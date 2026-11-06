@@ -488,7 +488,7 @@ Each `tools/call`, `resources/read` and `prompts/get` writes one log line, `mcp 
 
 ## Testing
 
-`McpTestClient` speaks the protocol to your test app in process, through its whole HTTP pipeline. Build it from any `TestClient`, so it acts as whoever that client acts as, and give it a bearer token when the client carries one per request:
+`McpTestClient` (it comes with the `testing` feature, which `full` turns on) speaks the protocol to your test app in process, through its whole HTTP pipeline. Build it from any `TestClient`, so it acts as whoever that client acts as, and give it a bearer token when the client carries one per request:
 
 ```rust title="apps/crm-api/tests/mcp.rs"
 use crm_testkit::{Role, TestCrm};

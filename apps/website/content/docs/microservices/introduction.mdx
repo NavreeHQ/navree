@@ -426,7 +426,7 @@ Nothing else changes: the guards, the validation rules, the unit of work and the
 
 ## Testing
 
-`MicroFake` gives the app an in-memory transport. Send messages into the app's own handlers, stub the services it calls, and assert on what it sent and emitted:
+`MicroFake` (it comes with the `testing` feature, which `full` turns on) gives the app an in-memory transport. Send messages into the app's own handlers, stub the services it calls, and assert on what it sent and emitted:
 
 ```rust title="services/deals/tests/get.rs"
 use crm_contracts::deals::{DealView, GetDeal};

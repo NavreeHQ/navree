@@ -225,28 +225,29 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `integrations` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `schedule`, `workspace`, `orm` |
 | `sheets` | `http`, `db`, `storage`, `validation`, `queue`, `workspace`; with `i18n` on too, translated export headers |
 | `social` (opt-in, not in `full`) | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `orm` |
-| `oauth` (opt-in, not in `full`) | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing`, `orm` |
+| `oauth` (opt-in, not in `full`) | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `orm` |
 | `flags` (opt-in, not in `full`) | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth`, `orm` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
-| `grpc` (opt-in, not in `full`) | `http`, `db`, `validation`, `testing` |
-| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`, `pdf`; with `queue` on too, renders queued behind an operation |
+| `grpc` (opt-in, not in `full`) | `http`, `db`, `validation` |
+| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`, `pdf`, and all three parts below; with `queue` on too, renders queued behind an operation |
+| `documents-native`, `documents-chrome`, `documents-docx` (opt-in) | `http`, `view`, `storage`, `pdf`, and one part of navree-documents: the native PDF engine, headless Chrome for PDF, or DOCX files. Use one or more of them in place of `documents` to compile only what the app uses |
 | `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue`, `pdf` |
 | `media-ffmpeg` (opt-in) | `media`, and its FFmpeg sidecar for video and audio |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace`, `orm` |
 | `search` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `queue`, `access`, `workspace` |
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
-| `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `testing`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |
+| `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |
 | `ai` (opt-in, not in `full`) | `http`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
 | `i18n` (opt-in, not in `full`) | `template`, `http`, `view`, `db`, `validation`, `notify`, `workspace`; with `sheets` on too, translated export headers |
-| `lighthouse` | `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth`, `orm`; with `domains` on too, certificates close to expiry become issues |
+| `lighthouse` | `telemetry`, `http`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth`, `orm`, `session`, `ui`; with `domains` on too, certificates close to expiry become issues |
 | `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
 | `mongo` (opt-in, not in `full`) | `telemetry`, `schema`, `db`, `orm` |
 | `mongodb` (opt-in) | `mongo`, the same feature by the database's name |
-| `logbook` | `telemetry`, `http`, `view`, `db`, `auth` |
-| `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `testing`, `validation` |
+| `logbook` | `telemetry`, `http`, `ui`, `db`, `auth` |
+| `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `validation` |
 | `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
-| `fleet` | `telemetry`, `http`, `events`, `view`, `db`, `observe`, `queue`, `access` |
-| `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth`, `orm` |
+| `fleet` | `telemetry`, `http`, `events`, `db`, `observe`, `queue`, `access`, `auth`, `session`, `ui` |
+| `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth`, `orm`, `session`, `ui` |
 | `workflows` | `http`, `db`, `events`, `schedule`, `workspace` |
 | `directory` | `http`, `crypto`, `events`, `db`, `orm`, `queue`, `schedule`, `workspace`, `integrations` |
 | `domains` | `http`, `crypto`, `events`, `db`, `orm`, `schedule`, `workspace` (with `lighthouse` on too, certificates close to expiry are reported to Lighthouse) |
@@ -267,9 +268,11 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 With `workspace` on too, `testing` also adds `navree::workspace::testing`, the [isolation suites](/docs/testing/isolation-tests/); neither feature turns the other on.
 
+The test kits of the opt-in modules come with `testing` and with nothing else: `navree::oauth::testing`, `navree::grpc::testing`, `navree::mcp::testing` and `MicroFake` are in your build only when `testing` is on. `full` turns it on, so tests in an app with the default features find them. An app that turns the defaults off and builds a release binary with `oauth`, `grpc`, `mcp` or `micro` links no test code, and lists `testing` in the `[dev-dependencies]` entry for `navree` that its tests use.
+
 The database drivers are features of their own, and none is in `full`. Each turns on `db` and the matching driver of navree-db: `postgres` adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL, `mysql` the driver for MySQL (MariaDB connects through it but is untested), and `sqlite` the SQLite driver, with the bundled SQLite library compiled from C source (it also turns on the `file` store of `logbook` when that is on). A build with `postgres` or `mysql` and without `sqlite` compiles no SQLite code at all; an app opens a database only with a driver it was built with, and otherwise stops with a message naming the feature to enable. A new app's tests run on SQLite, so `navree new` turns `sqlite` on in `[dev-dependencies]` only. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
-Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`, `mongo`, `dock`, `harbor`, `navigator`, `browser`), which you list yourself: `features = ["billing"]`.
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`, `mongo`, `dock`, `harbor`, `navigator`, `browser`), which you list yourself: `features = ["billing"]`. A scheduled job (`.github/workflows/features.yml`) compiles the facade with each feature on its own, and with the sets the starter kits and the tools use, so a missing feature edge in a smaller build is found. Every test file in `crates/navree/tests` names the features it needs in `Cargo.toml` (`required-features`), so a build that lacks one leaves that test out and names it; `scripts/facade-features.sh skipped --no-default-features --features ui` lists what a feature set leaves out.
 
 <Callout type="note">
 

@@ -473,7 +473,7 @@ impl DealLookup {
 
 ## Testing
 
-`navree::grpc::testing::TestChannel` connects tonic clients to a `TestApp` in-process, with the whole pipeline and no port. `temp_database()` gives the test a SQLite file of its own, so an app that runs on PostgreSQL turns on the `sqlite` Cargo feature in its `[dev-dependencies]` ([database tests](/docs/testing/database-tests/)):
+`navree::grpc::testing::TestChannel` (it comes with the `testing` feature, which `full` turns on) connects tonic clients to a `TestApp` in-process, with the whole pipeline and no port. `temp_database()` gives the test a SQLite file of its own, so an app that runs on PostgreSQL turns on the `sqlite` Cargo feature in its `[dev-dependencies]` ([database tests](/docs/testing/database-tests/)):
 
 ```rust title="services/deals/tests/grpc.rs"
 use deals::grpc::pb::{GetDealRequest, deals_client::DealsClient};

@@ -46,7 +46,7 @@ The `documents` feature of the `navree` facade is opt-in: it is not part of `ful
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] }
 ```
 
-It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `native`, `chrome` and `docx`, all on, and `operations`, which the facade turns on along with its `queue` feature; depend on `navree-documents` directly with `default-features = false` to leave an engine out.
+It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `native`, `chrome` and `docx`, all on, and `operations`, which the facade turns on along with its `queue` feature. To leave a part out, turn on `documents-native`, `documents-chrome` or `documents-docx` in place of `documents`: `features = ["documents-docx"]` compiles the DOCX writer and reader and neither PDF engine.
 
 Add `DocumentsModule` to your app root:
 
