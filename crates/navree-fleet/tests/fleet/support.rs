@@ -218,3 +218,25 @@ pub fn without(mut value: Value, key: &str) -> Value {
     }
     value
 }
+
+/// Fails `count` exports, one attempt each: `count` failed jobs on queue
+/// `exports`, with a password in each payload for the redaction to hide.
+pub async fn fail_exports(h: &Harness, count: usize) {
+    for i in 0..count {
+        h.queue
+            .dispatch(Export {
+                contact: format!("contact-{i}"),
+                password: "hunter2".into(),
+            })
+            .await
+            .unwrap();
+    }
+    h.queue
+        .work(navree_queue::WorkOptions {
+            queues: vec!["exports".into()],
+            stop_when_empty: true,
+            ..navree_queue::WorkOptions::default()
+        })
+        .await
+        .unwrap();
+}

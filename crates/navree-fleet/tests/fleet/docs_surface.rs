@@ -184,6 +184,17 @@ async fn the_documented_routes_are_mounted() {
         .collect();
     for route in [
         "GET /_fleet",
+        "GET /_fleet/supervisors",
+        "GET /_fleet/jobs",
+        "GET /_fleet/jobs/{id}",
+        "GET /_fleet/failed",
+        "GET /_fleet/failed/{id}",
+        "GET /_fleet/metrics",
+        "POST /_fleet/pause",
+        "POST /_fleet/continue",
+        "POST /_fleet/failed/retry",
+        "POST /_fleet/failed/{id}/retry",
+        "POST /_fleet/failed/{id}/forget",
         "GET /_fleet/api/overview",
         "GET /_fleet/api/masters",
         "GET /_fleet/api/jobs",

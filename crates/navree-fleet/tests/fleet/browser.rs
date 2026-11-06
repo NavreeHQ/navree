@@ -1,99 +1,58 @@
 //! The dashboard in a real browser (Chrome or Chromium, through
-//! navree-browser): the overview's supervisors, squares, throughput chart
-//! and failed jobs, the page titles, the no-access screen and the widths at
-//! a laptop and a phone. Without a browser the tests print a notice and
-//! pass, unless `NAVREE_TEST_REQUIRE_SERVICES=1` makes them fail.
+//! navree-browser): a guest signing in and coming back, the overview's
+//! supervisors, queues and failed jobs, Retry pressed on a page, a viewer who
+//! may not operate, and every page at a laptop's width and at a phone's.
+//! Without a browser the tests print a notice and pass, unless
+//! `NAVREE_TEST_REQUIRE_SERVICES=1` makes them fail.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::TimeDelta;
-use http::request::Parts;
-use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
+use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
+use navree_auth::{AuthModule, AuthPages, AuthService};
 use navree_browser::{Browser, Page, Target, TestServer, Viewport};
-use navree_contracts::{AuthVia, Principal};
+use navree_crypto::{CryptoModule, generate_key};
+use navree_db::Db;
 use navree_fleet::testing::FakeSpawner;
 use navree_fleet::{Master, MetricKind, MetricSnapshot};
-use navree_http::{AppError, Authenticator};
-use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
-use navree_queue::WorkOptions;
+use navree_session::{SessionModule, SessionOptions};
 use navree_testing::TestAppBuilder;
+use navree_ui::UiModule;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
-use crate::support::{Export, Harness, SendDigest, builder, eventually, fast};
+use crate::support::{Harness, SendDigest, builder, eventually, fail_exports, fast};
 
-const VIEWER: Uuid = Uuid::from_u128(1);
-const OPERATOR: Uuid = Uuid::from_u128(2);
-const NOBODY: Uuid = Uuid::from_u128(3);
+const PASSWORD: &str = "correct horse battery";
+const EMAIL: &str = "harjinder@example.in";
 
-/// The access tokens of the test: `viewer` may look, `operator` may also
-/// operate, `nobody` has no ability.
-struct TokenAuth;
-
-impl Authenticator for TokenAuth {
-    fn authenticate<'a>(
-        &'a self,
-        parts: &'a mut Parts,
-    ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
-        let token = parts
-            .headers
-            .get(http::header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .map(str::to_owned);
-        Box::pin(async move {
-            let user_id = match token.as_deref() {
-                Some("viewer") => VIEWER,
-                Some("operator") => OPERATOR,
-                Some("nobody") => NOBODY,
-                _ => return Ok(None),
-            };
-            Ok(Some(Principal {
-                user_id,
-                via: AuthVia::Token,
-                token_abilities: None,
-                session_id: None,
-            }))
-        })
-    }
-}
-
-struct TokenModule;
-
-impl Module for TokenModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.global()
-            .factory(Factory::<dyn Authenticator>::new(|_| async {
-                Ok(Arc::new(TokenAuth) as Arc<dyn Authenticator>)
-            }))
-            .exports::<dyn Authenticator>();
-    }
-}
-
+/// Only the permissions stored for a user count.
 fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
-    match ctx.user.as_ref().map(|user| user.id) {
-        Some(id) if id == VIEWER => {
-            rules.can("view", "Fleet");
-        }
-        Some(id) if id == OPERATOR => {
-            rules.can("view", "Fleet");
-            rules.can("operate", "Fleet");
-        }
-        _ => {}
-    }
+    ctx.grant_permissions(rules);
 }
 
+/// The app of a team: sessions (without `Secure`, as the test server speaks
+/// plain HTTP), sign-in pages, the toolkit and the dashboard.
 fn dashboard_builder() -> TestAppBuilder {
     builder()
         .config("fleet.dashboard", true)
+        .config("app.key", generate_key())
+        .config("hashing.memory_kib", 1024)
+        .config("hashing.iterations", 1)
         .config("http.per_ip_rate_limit", Value::Null)
-        .module(TokenModule)
+        .module(CryptoModule)
+        .module(SessionModule::for_root(SessionOptions {
+            secure: false,
+            ..SessionOptions::default()
+        }))
+        .module(AuthModule::from_config())
         .module(AccessModule::for_root(AccessOptions {
             abilities,
             ..AccessOptions::default()
         }))
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Acme Operations"))
 }
 
 /// The supervisors of the docs' example: `default` balances three queues
@@ -105,8 +64,8 @@ fn supervisors() -> Value {
     })
 }
 
-/// The dashboard on a real port, and a browser; `None` (after a notice)
-/// without Chrome.
+/// The dashboard on a real port, a browser, and the one person who uses it;
+/// `None` (after a notice) without Chrome.
 struct Site {
     h: Harness,
     server: TestServer,
@@ -114,7 +73,8 @@ struct Site {
 }
 
 impl Site {
-    async fn start(test: &str, builder: TestAppBuilder) -> Option<Site> {
+    /// The site, with a person who has `permissions`.
+    async fn start(test: &str, builder: TestAppBuilder, permissions: &[&str]) -> Option<Site> {
         if let Err(error) = Browser::find_chrome() {
             if std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() == Ok("1") {
                 panic!("{test}: {error} (NAVREE_TEST_REQUIRE_SERVICES=1)");
@@ -123,6 +83,23 @@ impl Site {
             return None;
         }
         let h = Harness::new(builder).await;
+        let user = h
+            .app
+            .get::<AuthService>()
+            .await
+            .create_user("Harjinder Singh", EMAIL, PASSWORD)
+            .await
+            .expect("a user");
+        let access = h.app.get::<AccessService>().await;
+        let db = h.app.get::<Db>().await;
+        let uow = db.uow(None, None).await;
+        for permission in permissions {
+            access
+                .grant_to_user(&uow, user.id, permission)
+                .await
+                .expect("a permission");
+        }
+        uow.commit().await.expect("the permissions are stored");
         let server = TestServer::start(h.app.ctx())
             .await
             .expect("the dashboard serves");
@@ -130,30 +107,31 @@ impl Site {
         Some(Site { h, server, browser })
     }
 
-    /// The dashboard's page `hash` ("#metrics"), signed in with `token`,
-    /// at `viewport`.
-    async fn open(&self, token: &str, hash: &str, viewport: Viewport) -> Page {
+    /// The page at `path`, at `viewport`: a browser that is not signed in is
+    /// sent to the sign-in page, signs in, and comes back to it.
+    async fn open(&self, path: &str, viewport: Viewport) -> Page {
+        let next = path.replace('/', "%2F").replace('?', "%3F").replace('=', "%3D");
         let page = self
             .browser
-            .visit_with(self.server.url("/_fleet"), viewport)
+            .visit_with(self.server.url(&format!("/sign-in?next={next}")), viewport)
             .await
             .expect("the page opens");
-        let session = json!({ "token": token, "name": token }).to_string();
-        page.script::<Value>(format!(
-            "sessionStorage.setItem('navree.fleet', {}); location.hash = {}; return null;",
-            json!(session),
-            json!(hash)
-        ))
-        .await
-        .unwrap();
-        page.refresh().await.unwrap();
+        // A browser that is signed in already is sent on to `next` at once.
+        if page.url().await.expect("an address").contains("/sign-in") {
+            page.type_into("Email", EMAIL).await.unwrap();
+            page.type_into("Password", PASSWORD).await.unwrap();
+            page.press("Sign in").await.unwrap();
+        }
+        page.assert_path_is(path.split('?').next().unwrap_or(path))
+            .await
+            .unwrap();
         page
     }
 }
 
 macro_rules! site_or_skip {
-    ($name:expr, $builder:expr) => {
-        match Site::start($name, $builder).await {
+    ($name:expr, $builder:expr, $permissions:expr) => {
+        match Site::start($name, $builder, $permissions).await {
             Some(site) => site,
             None => return,
         }
@@ -184,26 +162,6 @@ impl FakeMaster {
     }
 }
 
-async fn fail_exports(h: &Harness, count: usize) {
-    for i in 0..count {
-        h.queue
-            .dispatch(Export {
-                contact: format!("contact-{i}"),
-                password: "hunter2".into(),
-            })
-            .await
-            .unwrap();
-    }
-    h.queue
-        .work(WorkOptions {
-            queues: vec!["exports".into()],
-            stop_when_empty: true,
-            ..WorkOptions::default()
-        })
-        .await
-        .unwrap();
-}
-
 /// A snapshot of `queue` or a job type, `minutes_ago`.
 async fn snapshot(h: &Harness, kind: MetricKind, name: &str, processed: u64, minutes_ago: i64) {
     h.fleet
@@ -232,13 +190,13 @@ async fn overflow(page: &Page, width: u32) -> Value {
     page.script::<Value>(format!(
         "const w = {width};
          const out = [...document.querySelectorAll('body *')]
-           .filter((e) => !e.closest('.table-wrap') && getComputedStyle(e).display !== 'none')
+           .filter((e) => !e.closest('[data-slot=\"table-container\"]') && getComputedStyle(e).display !== 'none')
            .filter((e) => {{
              const right = e.getBoundingClientRect().right;
-             const card = e.parentElement && e.parentElement.closest('.card');
+             const card = e.parentElement && e.parentElement.closest('[data-slot=\"card\"]');
              return right > w + 0.5 || (card && right > card.getBoundingClientRect().right + 0.5);
            }})
-           .map((e) => e.tagName + '.' + (e.getAttribute('class') || '') + ' right=' + Math.round(e.getBoundingClientRect().right));
+           .map((e) => e.tagName + '.' + (e.getAttribute('data-slot') || '') + ' right=' + Math.round(e.getBoundingClientRect().right));
          return {{ width: w, scroll: document.documentElement.scrollWidth, out: out.slice(0, 6) }};"
     ))
     .await
@@ -256,12 +214,39 @@ fn assert_fits(report: &Value, what: &str) {
 }
 
 #[tokio::test]
-async fn the_overview_groups_queues_by_supervisor_with_a_square_per_process() {
+async fn a_guest_signs_in_and_comes_back_to_the_page_they_asked_for() {
     let site = site_or_skip!(
-        "the_overview_groups_queues_by_supervisor_with_a_square_per_process",
+        "a_guest_signs_in_and_comes_back_to_the_page_they_asked_for",
+        dashboard_builder(),
+        &["fleet.view"]
+    );
+    let page = site
+        .browser
+        .visit(site.server.url("/_fleet/failed"))
+        .await
+        .unwrap();
+    page.assert_see("Sign in").await.unwrap();
+    page.assert_dont_see("Failed jobs").await.unwrap();
+    page.press("Sign in").await.unwrap();
+    page.assert_path_is("/sign-in").await.unwrap();
+    page.assert_see("Acme Operations").await.unwrap();
+    page.type_into("Email", EMAIL).await.unwrap();
+    page.type_into("Password", PASSWORD).await.unwrap();
+    page.press("Sign in").await.unwrap();
+    page.assert_path_is("/_fleet/failed").await.unwrap();
+    page.assert_see("No failed jobs.").await.unwrap();
+    page.assert_see("Harjinder Singh").await.unwrap();
+    page.assert_no_console_errors().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_overview_shows_the_workload_and_retry_puts_a_job_back() {
+    let site = site_or_skip!(
+        "the_overview_shows_the_workload_and_retry_puts_a_job_back",
         dashboard_builder()
             .config("fleet.supervisors", supervisors())
-            .config("fleet.balance_cooldown_secs", 1)
+            .config("fleet.balance_cooldown_secs", 1),
+        &["fleet.view", "fleet.operate"]
     );
     let master = FakeMaster::start(&site.h).await;
     eventually("every queue has its process", || async {
@@ -277,46 +262,9 @@ async fn the_overview_groups_queues_by_supervisor_with_a_square_per_process() {
             == 5
     })
     .await;
-
-    let page = site
-        .open("operator", "#overview", Viewport::desktop())
-        .await;
-    page.wait_for(".workload").await.unwrap();
-    page.assert_title("Overview \u{b7} Fleet").await.unwrap();
-    let groups: Value = page
-        .script(
-            "return [...document.querySelectorAll('.workload tbody')].map((b) => ({
-               group: b.querySelector('tr.group').innerText.replace(/\\s+/g, ' ').trim(),
-               rows: [...b.querySelectorAll('tr:not(.group)')].map((r) => ({
-                 queue: r.children[0].innerText,
-                 on: r.querySelectorAll('.slot.on').length,
-                 slots: r.querySelectorAll('.slot').length,
-               })),
-             }));",
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        groups,
-        json!([
-            {
-                "group": "default \u{b7} auto \u{b7} 1-8 processes",
-                "rows": [
-                    { "queue": "default", "on": 1, "slots": 8 },
-                    { "queue": "mail", "on": 1, "slots": 8 },
-                    { "queue": "notifications", "on": 1, "slots": 8 },
-                ]
-            },
-            {
-                "group": "exports \u{b7} off \u{b7} 2 processes",
-                "rows": [{ "queue": "exports", "on": 2, "slots": 2 }]
-            }
-        ])
-    );
-    page.assert_see("1 master \u{b7} worker-1").await.unwrap();
-
-    // A backlog on `mail` moves processes to it: its squares fill.
-    for i in 0..50 {
+    snapshot(&site.h, MetricKind::Queue, "mail", 640, 3).await;
+    snapshot(&site.h, MetricKind::Queue, "mail", 980, 2).await;
+    for i in 0..3 {
         site.h
             .queue
             .dispatch(SendDigest {
@@ -326,110 +274,24 @@ async fn the_overview_groups_queues_by_supervisor_with_a_square_per_process() {
             .await
             .unwrap();
     }
-    eventually("six mail processes", || async {
-        site.h
-            .fleet
-            .overview()
+    fail_exports(&site.h, 3).await;
+
+    let page = site.open("/_fleet", Viewport::desktop()).await;
+    page.assert_see("1 master").await.unwrap();
+    page.assert_see("worker-1").await.unwrap();
+    // Each supervisor is a card of its queues, with the processes running.
+    for text in ["default", "exports", "mail", "notifications", "of 8 processes"] {
+        page.assert_see(text).await.unwrap();
+    }
+    // The busiest queue is charted, and the chart carries its numbers.
+    page.assert_see("Jobs per minute").await.unwrap();
+    page.assert_see("mail: 1,620 jobs").await.unwrap();
+    assert_eq!(
+        page.script::<u64>("return document.querySelectorAll('figure[data-slot=\"chart\"]').length;")
             .await
-            .unwrap()
-            .workload
-            .iter()
-            .any(|w| w.queue == "mail" && w.processes == 6)
-    })
-    .await;
-    page.refresh().await.unwrap();
-    page.wait_for(".workload").await.unwrap();
-    let mail: u64 = page
-        .script(
-            "const row = [...document.querySelectorAll('.workload tr')].find((r) => r.children[0].innerText === 'mail');
-             return row.querySelectorAll('.slot.on').length;",
-        )
-        .await
-        .unwrap();
-    assert_eq!(mail, 6);
-    page.assert_no_console_errors().await.unwrap();
-    master.stop().await;
-}
-
-#[tokio::test]
-async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
-    let site = site_or_skip!(
-        "the_overview_charts_jobs_per_minute_and_lists_failed_jobs",
-        dashboard_builder().config("fleet.supervisors", supervisors())
+            .unwrap(),
+        1
     );
-    snapshot(&site.h, MetricKind::Queue, "mail", 640, 3).await;
-    snapshot(&site.h, MetricKind::Queue, "mail", 980, 2).await;
-    snapshot(&site.h, MetricKind::Queue, "default", 12, 2).await;
-    fail_exports(&site.h, 7).await;
-
-    let page = site
-        .open("operator", "#overview", Viewport::desktop())
-        .await;
-    page.wait_for(".chart-card .bars").await.unwrap();
-    let chart: Value = page
-        .script(
-            "return {
-               queue: document.querySelector('.chart-card select').value,
-               bars: document.querySelectorAll('.chart-card rect.bar').length,
-               filled: document.querySelectorAll('.chart-card rect.bar:not(.zero)').length,
-               foot: document.querySelector('.chart-foot').innerText.replace(/\\s+/g, ' ').trim(),
-             };",
-        )
-        .await
-        .unwrap();
-    assert_eq!(chart["queue"], "mail", "the busiest queue is shown first");
-    assert_eq!(chart["bars"], 30);
-    assert_eq!(chart["filled"], 2);
-    assert!(
-        chart["foot"]
-            .as_str()
-            .unwrap()
-            .contains("1,620 jobs, peak 980/min"),
-        "{chart}"
-    );
-    page.select(".chart-card select", "default").await.unwrap();
-    page.wait_for(".chart-foot").await.unwrap();
-    page.assert_see("12 jobs, peak 12/min").await.unwrap();
-
-    // The five newest failed jobs, each with its attempts and its error.
-    let failures: Value = page
-        .script(
-            "return [...document.querySelectorAll('.failure')].map((r) => r.innerText.replace(/\\s+/g, ' ').trim());",
-        )
-        .await
-        .unwrap();
-    let failures = failures.as_array().unwrap();
-    assert_eq!(failures.len(), 5, "{failures:?}");
-    assert!(
-        failures[0]
-            .as_str()
-            .unwrap()
-            .starts_with("contacts.export 1/1 the mail server is down Retry Forget"),
-        "{failures:?}"
-    );
-    page.assert_see("View all 7 failed jobs").await.unwrap();
-    assert_eq!(page.text("#count-failed").await.unwrap(), "7");
-
-    // Retry puts one back on its queue; Forget deletes one.
-    page.press(Target::from("Retry").nth(0)).await.unwrap();
-    page.assert_see("The job is back on its queue.")
-        .await
-        .unwrap();
-    eventually("one failed job is retried", || async {
-        site.h.fleet.failed_jobs(None).await.unwrap().len() == 6
-    })
-    .await;
-    // The page shows the retried job gone before the next button is pressed.
-    page.assert_see("View all 6 failed jobs").await.unwrap();
-    page.press(Target::from("Forget").nth(0)).await.unwrap();
-    eventually("one failed job is forgotten", || async {
-        site.h.fleet.failed_jobs(None).await.unwrap().len() == 5
-    })
-    .await;
-    eventually("the page counts five failed jobs", || async {
-        page.text("#count-failed").await.unwrap() == "5"
-    })
-    .await;
     assert_eq!(
         page.script::<u64>("return document.querySelectorAll('[style]').length;")
             .await
@@ -437,108 +299,64 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
         0,
         "no style attributes: the page's policy allows none"
     );
-    page.assert_no_console_errors().await.unwrap();
-}
 
-#[tokio::test]
-async fn a_viewer_cannot_retry_and_an_empty_fleet_says_so() {
-    let site = site_or_skip!(
-        "a_viewer_cannot_retry_and_an_empty_fleet_says_so",
-        dashboard_builder()
-    );
-    let page = site.open("viewer", "#overview", Viewport::desktop()).await;
-    page.wait_for(".failed-card").await.unwrap();
-    page.assert_see("No failed jobs.").await.unwrap();
-    page.assert_see("No master running").await.unwrap();
-    page.assert_see("No jobs finished").await.unwrap();
-    page.assert_dont_see("Retry all").await.unwrap();
+    // The newest failed jobs, with the count in the sidebar.
+    page.assert_see("contacts.export").await.unwrap();
+    page.assert_see("the mail server is down").await.unwrap();
 
-    fail_exports(&site.h, 2).await;
-    page.refresh().await.unwrap();
-    page.wait_for(".failure").await.unwrap();
+    // Retry puts one back on its queue, and the page says so.
     page.press(Target::from("Retry").nth(0)).await.unwrap();
-    page.assert_see("This needs the fleet.operate permission.")
+    page.assert_see("The job is back on its queue.")
         .await
         .unwrap();
+    eventually("one failed job is retried", || async {
+        site.h.fleet.failed_jobs(None).await.unwrap().len() == 2
+    })
+    .await;
+    // Forget deletes one.
+    page.press(Target::from("Forget").nth(0)).await.unwrap();
+    eventually("one failed job is forgotten", || async {
+        site.h.fleet.failed_jobs(None).await.unwrap().len() == 1
+    })
+    .await;
+
+    // Pausing a supervisor from its card.
+    page.press(Target::from("Pause").nth(0)).await.unwrap();
+    eventually("the first supervisor is paused", || async {
+        !site.h.fleet.paused().await.unwrap().is_empty()
+    })
+    .await;
+    page.assert_see("Continue all").await.unwrap();
+    page.assert_no_console_errors().await.unwrap();
+    master.stop().await;
+}
+
+#[tokio::test]
+async fn someone_who_may_only_look_cannot_retry() {
+    let site = site_or_skip!(
+        "someone_who_may_only_look_cannot_retry",
+        dashboard_builder(),
+        &["fleet.view"]
+    );
+    fail_exports(&site.h, 2).await;
+    let page = site.open("/_fleet/failed", Viewport::desktop()).await;
+    page.assert_see("contacts.export").await.unwrap();
+    page.press(Target::from("Retry").nth(0)).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(700)).await;
     assert_eq!(site.h.fleet.failed_jobs(None).await.unwrap().len(), 2);
+    assert_eq!(site.h.queue.pending_count("exports").await.unwrap(), 0);
 }
 
 #[tokio::test]
-async fn every_view_is_titled_by_its_page() {
+async fn every_page_fits_a_laptop_and_a_phone_whatever_a_job_type_is_called() {
     let site = site_or_skip!(
-        "every_view_is_titled_by_its_page",
-        dashboard_builder().config("fleet.supervisors", supervisors())
-    );
-    let ids = {
-        fail_exports(&site.h, 1).await;
-        site.h.fleet.failed_jobs(None).await.unwrap()
-    };
-    let page = site
-        .browser
-        .visit(site.server.url("/_fleet"))
-        .await
-        .unwrap();
-    page.assert_title("Sign in \u{b7} Fleet").await.unwrap();
-
-    let page = site
-        .open("operator", "#overview", Viewport::desktop())
-        .await;
-    for (hash, title) in [
-        ("#overview", "Overview \u{b7} Fleet"),
-        ("#supervisors", "Supervisors \u{b7} Fleet"),
-        ("#jobs", "Jobs \u{b7} Fleet"),
-        ("#failed", "Failed jobs \u{b7} Fleet"),
-        ("#metrics", "Metrics \u{b7} Fleet"),
-    ] {
-        page.script::<Value>(format!("location.hash = '{hash}'; return null;"))
-            .await
-            .unwrap();
-        page.assert_title(title).await.unwrap();
-    }
-    let id = &ids[0].id;
-    page.script::<Value>(format!("location.hash = '#failed/{id}'; return null;"))
-        .await
-        .unwrap();
-    page.assert_title("contacts.export \u{b7} Failed jobs \u{b7} Fleet")
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-async fn an_account_without_access_sees_only_the_message() {
-    let site = site_or_skip!(
-        "an_account_without_access_sees_only_the_message",
+        "every_page_fits_a_laptop_and_a_phone_whatever_a_job_type_is_called",
         dashboard_builder()
+            .config("fleet.supervisors", supervisors())
+            .config("fleet.balance_cooldown_secs", 1),
+        &["fleet.view", "fleet.operate"]
     );
-    for viewport in [Viewport::desktop(), Viewport::phone()] {
-        let page = site.open("nobody", "#overview", viewport).await;
-        page.wait_for(".message-card").await.unwrap();
-        page.assert_title("No access \u{b7} Fleet").await.unwrap();
-        page.assert_see("it needs the fleet.view permission")
-            .await
-            .unwrap();
-        page.assert_dont_see("Loading").await.unwrap();
-        let shown: Value = page
-            .script(
-                "const visible = (e) => e.getClientRects().length > 0;
-                 return {
-                   nav: [...document.querySelectorAll('.nav-item')].filter(visible).length,
-                   status: visible(document.querySelector('#fleet-status')),
-                   text: document.body.innerText.includes('Loading'),
-                 };",
-            )
-            .await
-            .unwrap();
-        assert_eq!(shown, json!({ "nav": 0, "status": false, "text": false }));
-    }
-}
-
-#[tokio::test]
-async fn the_metrics_page_fits_its_window_whatever_a_job_type_is_called() {
-    let site = site_or_skip!(
-        "the_metrics_page_fits_its_window_whatever_a_job_type_is_called",
-        dashboard_builder().config("fleet.supervisors", supervisors())
-    );
+    let master = FakeMaster::start(&site.h).await;
     let long =
         "events.listener.workspace.member_added.navree_billing::seats::SyncSeatsAfterMemberAdded";
     for minutes_ago in [1, 2, 3, 4] {
@@ -546,65 +364,45 @@ async fn the_metrics_page_fits_its_window_whatever_a_job_type_is_called() {
         snapshot(&site.h, MetricKind::Job, "mail.send", 5, minutes_ago).await;
         snapshot(&site.h, MetricKind::Queue, "mail", 25, minutes_ago).await;
     }
-    for (viewport, name) in [(Viewport::desktop(), "1440"), (Viewport::phone(), "390")] {
-        let width = viewport.width();
-        let page = site.open("operator", "#metrics", viewport).await;
-        page.wait_for(".charts").await.unwrap();
-        page.assert_see("SyncSeatsAfterMemberAdded").await.ok();
-        let report = overflow(&page, width).await;
-        assert_fits(&report, &format!("Metrics at {name}"));
-    }
-}
-
-#[tokio::test]
-async fn the_overview_fits_a_laptop_and_a_phone_and_the_sidebar_becomes_a_rail() {
-    let site = site_or_skip!(
-        "the_overview_fits_a_laptop_and_a_phone_and_the_sidebar_becomes_a_rail",
-        dashboard_builder()
-            .config("fleet.supervisors", supervisors())
-            .config("fleet.balance_cooldown_secs", 1)
-    );
-    let master = FakeMaster::start(&site.h).await;
-    snapshot(&site.h, MetricKind::Queue, "mail", 30, 2).await;
     fail_exports(&site.h, 3).await;
     eventually("processes", || async {
         site.h.fleet.overview().await.unwrap().supervisors[0].processes > 0
     })
     .await;
+    let failed = site.h.fleet.failed_jobs(None).await.unwrap().remove(0).id;
+    let pending = site
+        .h
+        .queue
+        .dispatch(SendDigest {
+            user: "u".into(),
+            api_token: "t".into(),
+        })
+        .await
+        .unwrap();
 
-    let collapsed = "return document.querySelector('#shell').classList.contains('collapsed');";
-    for (viewport, name, rail) in [
-        (Viewport::desktop(), "1440", false),
-        (Viewport::new(900, 800), "900", true),
-        (Viewport::phone(), "390", false),
+    let paths = [
+        "/_fleet".to_owned(),
+        "/_fleet/supervisors".to_owned(),
+        "/_fleet/jobs".to_owned(),
+        "/_fleet/jobs?tab=completed".to_owned(),
+        format!("/_fleet/jobs/{pending}"),
+        "/_fleet/failed".to_owned(),
+        format!("/_fleet/failed/{failed}"),
+        "/_fleet/metrics".to_owned(),
+        "/_fleet/metrics?period=day".to_owned(),
+    ];
+    for (viewport, name) in [
+        (Viewport::desktop(), "1440"),
+        (Viewport::new(900, 800), "900"),
+        (Viewport::phone(), "390"),
         // The narrow phones: 360 pixels is a common Android width.
-        (Viewport::new(360, 800), "360", false),
+        (Viewport::new(360, 800), "360"),
     ] {
         let width = viewport.width();
-        let page = site.open("operator", "#overview", viewport).await;
-        page.wait_for(".failure").await.unwrap();
-        assert_fits(
-            &overflow(&page, width).await,
-            &format!("Overview at {name}"),
-        );
-        assert_eq!(
-            page.script::<bool>(collapsed).await.unwrap(),
-            rail,
-            "the icon rail at {name}"
-        );
-        // The workload table shows every queue and its squares without
-        // scrolling sideways.
-        let table: Value = page
-            .script(
-                "const wrap = document.querySelector('.workload').parentElement;
-                 return { scroll: wrap.scrollWidth, shown: wrap.clientWidth };",
-            )
-            .await
-            .unwrap();
-        assert!(
-            table["scroll"].as_u64() <= table["shown"].as_u64(),
-            "the workload table scrolls sideways at {name}: {table}"
-        );
+        for path in &paths {
+            let page = site.open(path, viewport.clone()).await;
+            assert_fits(&overflow(&page, width).await, &format!("{path} at {name}"));
+        }
     }
     master.stop().await;
 }

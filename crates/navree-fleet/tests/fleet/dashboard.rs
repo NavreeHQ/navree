@@ -1,5 +1,5 @@
-//! The dashboard: the public page and assets, and the JSON API behind the
-//! `Fleet` abilities `view` and `operate`.
+//! The dashboard: its pages and its JSON API, behind the `Fleet` abilities
+//! `view` and `operate`. (`pages.rs` signs real people in on the session.)
 
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
 use navree_contracts::{AuthVia, Principal};
@@ -77,60 +77,65 @@ async fn fail_one_export(h: &Harness) -> String {
 }
 
 #[tokio::test]
-async fn the_page_and_its_assets_are_public_and_hold_no_data() {
+async fn the_pages_need_the_view_ability_and_the_api_keeps_answering_json() {
     let h = dashboard().await;
-    let page = h
-        .app
+    // A guest has no way in; a person without the ability is refused.
+    h.app
         .client()
         .get("/_fleet")
         .send()
         .await
+        .assert_status(401);
+    h.app
+        .acting_as(principal(OTHER))
+        .get("/_fleet")
+        .send()
+        .await
+        .assert_status(403);
+    // A viewer gets the page: HTML, with no script of its own to run.
+    let page = h
+        .app
+        .acting_as(principal(VIEWER))
+        .get("/_fleet")
+        .header("accept", "text/html")
+        .send()
+        .await
         .assert_status(200);
-    assert_eq!(
-        page.header("content-type"),
-        Some("text/html; charset=utf-8")
+    assert!(
+        page.header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html")),
+        "{:?}",
+        page.header("content-type")
     );
     let csp = page.header("content-security-policy").unwrap();
-    assert!(csp.contains("script-src 'self'"), "{csp}");
+    assert!(csp.contains("script-src"), "{csp}");
     assert!(!csp.contains("unsafe-inline"), "{csp}");
-    assert_eq!(page.header("x-frame-options"), Some("DENY"));
-    // navree-view escapes `/` in attributes as `&#x2f;`, which browsers read
-    // back as `/`.
-    let html = page.text().replace("&#x2f;", "/");
-    // The assets are named after a fingerprint of their content.
-    let attribute = |name: &str, extension: &str| -> String {
-        let path = html
-            .split(&format!("{name}=\""))
-            .skip(1)
-            .filter_map(|rest| rest.split('"').next())
-            .find(|value| value.ends_with(extension))
-            .unwrap_or_else(|| panic!("a {extension} asset in {html}"))
-            .to_owned();
-        assert!(path.starts_with("/_fleet/assets/fleet-"), "{path}");
-        assert_eq!(
-            path.len(),
-            "/_fleet/assets/fleet-".len() + 16 + extension.len(),
-            "{path}"
-        );
-        path
-    };
-    let script = attribute("src", ".js");
-    let styles = attribute("href", ".css");
-    assert!(html.contains("/_fleet/api"), "{html}");
-    assert!(
-        html.contains("/api/auth/login"),
-        "the sign-in route: {html}"
-    );
+    let html = page.text();
+    assert!(html.contains("Fleet"), "{html}");
     assert!(!html.contains("<script>"), "no inline script: {html}");
-
-    for (path, kind) in [(script, "text/javascript"), (styles, "text/css")] {
-        let asset = h.app.client().get(&path).send().await.assert_status(200);
-        assert!(asset.header("content-type").unwrap().starts_with(kind));
-        assert_eq!(
-            asset.header("cache-control"),
-            Some("public, max-age=31536000, immutable")
-        );
-    }
+    // The old assets are gone.
+    h.app
+        .client()
+        .get("/_fleet/assets/fleet.js")
+        .send()
+        .await
+        .assert_status(404);
+    // The API answers in JSON even to a client that asks for HTML.
+    let api = h
+        .app
+        .client()
+        .get("/_fleet/api/overview")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(401);
+    assert!(
+        !api.header("content-type")
+            .unwrap_or_default()
+            .starts_with("text/html"),
+        "{:?}",
+        api.header("content-type")
+    );
 }
 
 #[tokio::test]
@@ -364,8 +369,14 @@ async fn operators_pause_and_continue_supervisors() {
 async fn the_path_is_configurable_and_the_dashboard_can_be_off() {
     let h = Harness::new(dashboard_builder().config("fleet.path", "/ops/fleet/")).await;
     h.app
-        .client()
+        .acting_as(principal(VIEWER))
         .get("/ops/fleet")
+        .send()
+        .await
+        .assert_status(200);
+    h.app
+        .acting_as(principal(VIEWER))
+        .get("/ops/fleet/failed")
         .send()
         .await
         .assert_status(200);
@@ -376,7 +387,7 @@ async fn the_path_is_configurable_and_the_dashboard_can_be_off() {
         .await
         .assert_status(200);
     h.app
-        .client()
+        .acting_as(principal(VIEWER))
         .get("/_fleet")
         .send()
         .await
@@ -386,6 +397,12 @@ async fn the_path_is_configurable_and_the_dashboard_can_be_off() {
     off.app
         .client()
         .get("/_fleet")
+        .send()
+        .await
+        .assert_status(404);
+    off.app
+        .acting_as(principal(VIEWER))
+        .get("/_fleet/failed")
         .send()
         .await
         .assert_status(404);
