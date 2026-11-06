@@ -102,7 +102,7 @@ fn message(subject: &str) -> Message {
         .from("Grewal Traders <billing@grewal.example.in>")
         .to("Harpreet Kaur <harpreet@example.in>")
         .cc("accounts@example.in")
-        .bcc("audit@grewal.example.in")
+        .bcc("records@grewal.example.in")
         .subject(subject)
         .text("Your invoice is attached.")
         .html("<p>Your invoice is attached.</p>")
@@ -149,7 +149,7 @@ async fn ses_delivers_a_message_with_attachments_as_raw_mime() {
     assert_eq!(attachment_bytes(raw, "rates.csv"), CSV);
     // The blind copy went in the envelope only.
     assert!(
-        !raw.contains("audit@grewal.example.in"),
+        !raw.contains("records@grewal.example.in"),
         "Bcc leaked:\n{raw}"
     );
     let recipients = kept.to_string();
