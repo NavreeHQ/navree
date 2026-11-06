@@ -74,7 +74,7 @@ async fn controllers_return_search_pages() {
     settle(&app).await;
     app.client()
         .get("/api/v1/contacts/search")
-        .query(&[("q", "lovlace")])
+        .query(&[("q", "lakotia")])
         .send()
         .await
         .assert_status(200)

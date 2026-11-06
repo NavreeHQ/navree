@@ -146,14 +146,14 @@ async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
             .await
             .unwrap();
 
-        // "lovlace" is 0.55 similar to "Lakhotia": above 0.4, below the
+        // "lakotia" is 0.55 similar to "Lakhotia": above 0.4, below the
         // PostgreSQL default of 0.6.
-        assert_eq!(found(&loose, "lovlace").await, 1);
-        assert_eq!(found(&loose, "anu lovlace").await, 1);
+        assert_eq!(found(&loose, "lakotia").await, 1);
+        assert_eq!(found(&loose, "anu lakotia").await, 1);
         assert_eq!(found(&loose, "zzzzzz").await, 0);
         // A stricter threshold is honoured, so it is set on every query.
-        assert_eq!(found(&engine(0.9), "lovlace").await, 0);
-        assert_eq!(found(&loose, "lovlace").await, 1);
+        assert_eq!(found(&engine(0.9), "lakotia").await, 0);
+        assert_eq!(found(&loose, "lakotia").await, 1);
 
         // The setting stayed local to the queries. A pooled connection that never
         // loaded pg_trgm has no such setting yet: that is the default too.
@@ -167,7 +167,7 @@ async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
         let uow = db.uow(None, None).await;
         uow.scope(async {
             uow.execute(&Statement::text("SELECT 1")).await.unwrap();
-            assert_eq!(found(&loose, "lovlace").await, 1);
+            assert_eq!(found(&loose, "lakotia").await, 1);
             let shown: String = uow.fetch_scalar(&setting).await.unwrap();
             assert_eq!(shown, "0.6");
         })
@@ -215,7 +215,7 @@ async fn an_app_on_postgres_syncs_through_the_database_queue() {
 
         // Typos, filters and sorts on PostgreSQL.
         let page = search
-            .query::<Contact>("lovlace")
+            .query::<Contact>("lakotia")
             .paginate(PageQuery::default())
             .await
             .unwrap();

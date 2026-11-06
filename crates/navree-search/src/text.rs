@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn distance_is_bounded() {
-        assert_eq!(distance_within("lovlace", "lakhotia", 1), Some(1));
+        assert_eq!(distance_within("lakotia", "lakhotia", 1), Some(1));
         assert_eq!(distance_within("kitten", "sitting", 3), Some(3));
         assert_eq!(distance_within("kitten", "sitting", 2), None);
         assert_eq!(distance_within("a", "abcd", 2), None);
@@ -409,7 +409,7 @@ mod tests {
     fn highlight_marks_matches_and_escapes_the_rest() {
         let tags = HighlightTags::default();
         assert_eq!(
-            highlight("Lakhotia", &terms("lovlace"), &tags).as_deref(),
+            highlight("Lakhotia", &terms("lakotia"), &tags).as_deref(),
             Some("<mark>Lakhotia</mark>")
         );
         assert_eq!(

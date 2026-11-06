@@ -801,7 +801,7 @@ mod tests {
 
     #[test]
     fn postgres_trigrams_let_each_word_match_on_its_own() {
-        let (select, count) = postgres_sql("anu lovlace", true);
+        let (select, count) = postgres_sql("anu lakotia", true);
         assert_eq!(
             select,
             "(ts_rank('{0.1, 0.2, 0.4, 1.0}', d.search_vector, to_tsquery($1::regconfig, $2), 32) \
@@ -814,7 +814,7 @@ mod tests {
             count.starts_with("FROM search_documents d WHERE d.index_name = $1 AND ("),
             "{count}"
         );
-        assert_eq!(tsquery_any(&terms("anu lovlace")), "anu | lovlace:*");
+        assert_eq!(tsquery_any(&terms("anu lakotia")), "anu | lakotia:*");
     }
 
     /// What SQLite says it does for `statement`, one line for each step.

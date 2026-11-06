@@ -233,7 +233,7 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
             "crm_contacts",
             EngineQuery {
                 settings: &settings,
-                text: "lovlace",
+                text: "lakotia",
                 filter: &filter,
                 sort: &[SortBy {
                     field: "score".into(),
@@ -261,7 +261,7 @@ async fn meilisearch_searches_with_filters_sorts_and_highlights() {
     assert_eq!(results.hits[0].title.as_deref(), Some("Lakhotia"));
     assert_eq!(results.hits[1].id, "2");
     let sent = body(&requests_to(&server, "POST", "/indexes/crm_contacts/search").await[0]);
-    assert_eq!(sent["q"], "lovlace");
+    assert_eq!(sent["q"], "lakotia");
     assert_eq!(
         sent["filter"],
         "(status = \"customer\" AND _workspace = \"w1\")"

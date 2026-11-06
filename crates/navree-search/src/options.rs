@@ -37,7 +37,7 @@ pub struct PostgresOptions {
     /// The `pg_trgm.word_similarity_threshold` of a query with `trigram`:
     /// how close a query word must be to a word of the text to match, above
     /// 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses
-    /// a one-letter typo in a longer word ("lovlace" scores 0.55 against
+    /// a one-letter typo in a longer word ("lakotia" scores 0.55 against
     /// "Lakhotia"), so the engine sets this value per query.
     pub typo_threshold: f64,
 }

@@ -208,7 +208,7 @@ async fn an_app_on_tantivy_syncs_and_searches() {
     let search = app.get::<Search>().await;
     assert_eq!(search.engine().name(), "tantivy");
     let found = search
-        .query::<crate::support::Contact>("lovlace")
+        .query::<crate::support::Contact>("lakotia")
         .ids(10)
         .await
         .unwrap();

@@ -83,7 +83,7 @@ async fn hits_carry_scores_and_highlights() {
     let (app, _, rows) = seeded("memory").await;
     let search = app.get::<Search>().await;
     let page = search
-        .query::<Contact>("lovlace")
+        .query::<Contact>("lakotia")
         .hits(PageQuery::default())
         .await
         .unwrap();

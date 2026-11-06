@@ -306,7 +306,7 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
 
     // Typo tolerance.
     if caps.typos {
-        let found = search(engine, index, "lovlace", Filter::Const(true), &[], 0, 10).await;
+        let found = search(engine, index, "lakotia", Filter::Const(true), &[], 0, 10).await;
         assert_eq!(sorted(ids(&found)), ["1", "2", "5"]);
     }
 
