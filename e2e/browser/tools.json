@@ -30,7 +30,7 @@
         "/_lighthouse/outgoing?period=7d"
       ],
       "avoid": [
-        "/logout"
+        "/sign-out"
       ],
       "keep_values": [
         "status",
@@ -69,8 +69,6 @@
       "title": "Fleet",
       "package": "navree-fleet",
       "service": "web",
-      "spa": true,
-      "click_rows": true,
       "scope": [
         "/_fleet"
       ],
@@ -78,11 +76,11 @@
         "/_fleet"
       ],
       "variants": [
-        "/_fleet#overview",
-        "/_fleet#supervisors",
-        "/_fleet#jobs",
-        "/_fleet#failed",
-        "/_fleet#metrics"
+        "/_fleet",
+        "/_fleet/supervisors",
+        "/_fleet/jobs",
+        "/_fleet/failed",
+        "/_fleet/metrics"
       ],
       "avoid": [],
       "max_pages": 30,
@@ -94,7 +92,7 @@
         "view-only"
       ],
       "state_pages": [
-        "/_fleet#failed"
+        "/_fleet/failed"
       ],
       "custom": [
         "fleet-retry",
@@ -115,7 +113,7 @@
       ],
       "variants": [],
       "avoid": [
-        "/logout",
+        "/sign-out",
         "/delete$",
         "/actions$"
       ],
@@ -307,7 +305,7 @@
       "avoid": [
         "^/api/",
         "^/broadcasting",
-        "/logout",
+        "/sign-out",
         "^/_next"
       ],
       "per_template": 3,

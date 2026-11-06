@@ -216,7 +216,7 @@ export const custom = {
     const { page } = ctx;
     const login = await page.request.post(`${BASE_URL}/api/auth/login`, { data: { email: OPERATOR, password: PASSWORD } });
     const token = (await login.json()).access_token;
-    await page.goto(BASE_URL + '/_fleet#overview', { waitUntil: 'load' });
+    await page.goto(BASE_URL + '/_fleet', { waitUntil: 'load' });
     await page.waitForTimeout(1500);
     const queued = await page.request.post(`${BASE_URL}/api/demo/jobs`, {
       data: { kind: 'newsletter', count: 2500 },
@@ -224,15 +224,15 @@ export const custom = {
     });
     if (queued.status() !== 202) throw new Error(`the burst was refused: ${queued.status()}`);
     await page.waitForTimeout(5000);
-    out.push(await shot(ctx, 'burst-start', '/_fleet#overview', { navigate: false, label: 'Fleet, 5 s after 2500 mails were queued' }));
+    out.push(await shot(ctx, 'burst-start', '/_fleet', { navigate: false, label: 'Fleet, 5 s after 2500 mails were queued' }));
     await page.waitForTimeout(10000);
-    out.push(await shot(ctx, 'burst-balancing', '/_fleet#overview', { navigate: false, label: 'Fleet, 15 s after: workers moved to the mail queue' }));
-    await page.goto(BASE_URL + '/_fleet#supervisors', { waitUntil: 'load' });
+    out.push(await shot(ctx, 'burst-balancing', '/_fleet', { navigate: false, label: 'Fleet, 15 s after: workers moved to the mail queue' }));
+    await page.goto(BASE_URL + '/_fleet/supervisors', { waitUntil: 'load' });
     await page.waitForTimeout(1200);
-    out.push(await shot(ctx, 'burst-supervisors', '/_fleet#supervisors', { navigate: false, label: 'The supervisors during the burst' }));
-    await page.goto(BASE_URL + '/_fleet#jobs', { waitUntil: 'load' });
+    out.push(await shot(ctx, 'burst-supervisors', '/_fleet/supervisors', { navigate: false, label: 'The supervisors during the burst' }));
+    await page.goto(BASE_URL + '/_fleet/jobs', { waitUntil: 'load' });
     await page.waitForTimeout(1200);
-    out.push(await shot(ctx, 'burst-jobs', '/_fleet#jobs', { navigate: false, label: 'Pending and completed jobs during the burst' }));
+    out.push(await shot(ctx, 'burst-jobs', '/_fleet/jobs', { navigate: false, label: 'Pending and completed jobs during the burst' }));
     // Mails are quick: the backlog clears in seconds. Slow jobs (2 to 4 s of
     // work each) hold a backlog long enough to see Fleet add processes; not
     // while k6 is loading the app (its reports run on the same queue).
@@ -242,11 +242,11 @@ export const custom = {
         headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'acme' },
       });
       if (slow.status() !== 202) throw new Error(`the slow jobs were refused: ${slow.status()}`);
-      await page.goto(BASE_URL + '/_fleet#overview', { waitUntil: 'load' });
+      await page.goto(BASE_URL + '/_fleet', { waitUntil: 'load' });
       await page.waitForTimeout(20000);
-      out.push(await shot(ctx, 'slow-backlog', '/_fleet#overview', { navigate: false, label: 'Fleet 20 s after 240 slow jobs were queued' }));
+      out.push(await shot(ctx, 'slow-backlog', '/_fleet', { navigate: false, label: 'Fleet 20 s after 240 slow jobs were queued' }));
       await page.waitForTimeout(25000);
-      out.push(await shot(ctx, 'slow-backlog-later', '/_fleet#overview', { navigate: false, label: 'Fleet 45 s after: has it added processes?' }));
+      out.push(await shot(ctx, 'slow-backlog-later', '/_fleet', { navigate: false, label: 'Fleet 45 s after: has it added processes?' }));
     }
   }),
 
@@ -263,22 +263,22 @@ export const custom = {
   /** Fleet: pause every supervisor, photograph, continue. */
   'fleet-pause': (args) => session(args, async (ctx, out) => {
     const { page } = ctx;
-    await page.goto(BASE_URL + '/_fleet#overview', { waitUntil: 'load' });
+    await page.goto(BASE_URL + '/_fleet', { waitUntil: 'load' });
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: /pause all/i }).click({ timeout: 4000 });
     await page.waitForTimeout(2500);
-    out.push(await shot(ctx, 'paused', '/_fleet#overview', { navigate: false, label: 'Fleet after Pause all' }));
+    out.push(await shot(ctx, 'paused', '/_fleet', { navigate: false, label: 'Fleet after Pause all' }));
     await page.getByRole('button', { name: /continue all|resume all|continue/i }).first().click({ timeout: 4000 }).catch(() => {});
     await page.waitForTimeout(2000);
-    out.push(await shot(ctx, 'continued', '/_fleet#overview', { navigate: false, label: 'Fleet after Continue' }));
+    out.push(await shot(ctx, 'continued', '/_fleet', { navigate: false, label: 'Fleet after Continue' }));
   }),
 
   /** Fleet: a failed job's page, then Retry. */
   'fleet-retry': (args) => session(args, async (ctx, out) => {
     const { page } = ctx;
-    await page.goto(BASE_URL + '/_fleet#failed', { waitUntil: 'load' });
+    await page.goto(BASE_URL + '/_fleet/failed', { waitUntil: 'load' });
     await page.waitForTimeout(1500);
-    await page.locator('table tbody tr').first().click({ timeout: 4000 });
+    await page.locator('table tbody tr a').first().click({ timeout: 4000 });
     await page.waitForTimeout(1200);
     out.push(await shot(ctx, 'failed-job', page.url().replace(BASE_URL, ''), { navigate: false, label: 'A failed job: attempts and error' }));
     await page.getByRole('button', { name: /retry/i }).first().click({ timeout: 4000 });
