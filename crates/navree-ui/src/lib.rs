@@ -70,6 +70,8 @@ pub mod prelude {
     };
 }
 
+#[cfg(feature = "access")]
+pub mod ability;
 pub mod assets;
 #[rustfmt::skip]
 mod assets_gen;
@@ -101,6 +103,8 @@ pub mod theme;
 pub mod tokens;
 pub mod upload;
 pub mod view;
+#[cfg(feature = "time")]
+mod zone;
 
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;

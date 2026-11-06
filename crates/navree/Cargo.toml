@@ -114,7 +114,7 @@ storage-azure = ["storage", "navree-storage/azure"]
 ## Time zones: zones, the request's zone, local days, send windows,
 ## holidays and local-time SQL (the IANA database compiled in; in `full`).
 ## With `validation` on too, `Valid<Query<DayRange>>` checks report windows.
-time = ["dep:navree-time", "http", "db", "navree-validation?/time"]
+time = ["dep:navree-time", "http", "db", "navree-validation?/time", "navree-ui?/time"]
 ## L4
 ## With `auth` on too, browsers sign in through `AuthModule` on the session
 ## (`navree::auth::SessionStrategy`: two-factor, throttles, sign-in policies
@@ -148,7 +148,7 @@ queue = [
 schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
 ## `accessible` queries, `Authorized<Model, A>`).
-access = ["dep:navree-access", "http", "db", "navree-orm?/access"]
+access = ["dep:navree-access", "http", "db", "navree-orm?/access", "navree-ui?/access"]
 ## Notifications over mail, the database, broadcasts, Slack, Microsoft
 ## Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push (VAPID
 ## through `crypto`, numbers in E.164 through `validation`); stored ones,

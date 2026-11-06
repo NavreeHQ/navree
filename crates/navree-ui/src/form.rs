@@ -802,6 +802,13 @@ impl<T: Form> FormView<T> {
         self
     }
 
+    /// [`dates`](Self::dates) with today counted in the reader's zone (navree-time's
+    /// `CurrentZone`), on the app's clock.
+    #[cfg(feature = "time")]
+    pub fn dates_in(self, locale: DateLocale, zone: &navree_time::CurrentZone) -> Self {
+        self.dates(locale, zone.today().date())
+    }
+
     /// Draws the form in the reader's language: the date pickers' names and words, the
     /// sliders' words and the submit button's text (set [`submit`](Self::submit) after it for
     /// a button of your own). [`ReaderWords::of`] reads them for the request.

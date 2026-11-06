@@ -159,6 +159,51 @@ mod forms_page {
     }
 }
 
+/// What `components/date-range-picker.mdx` shows under "A report's window in the address":
+/// the picker reads the window from the address, the limits hold the server to it, and
+/// today is the person's own.
+#[cfg(feature = "time")]
+mod report_page {
+    use super::*;
+    use navree::http::Query;
+    use navree::ui::dates::{DateLocale, DateRangePicker, DateRangeQuery, DateRules, RangeRules};
+    use navree::ui::*;
+
+    fn window_limits() -> RangeRules {
+        RangeRules::new(DateRules::new()).min_days(2).max_days(90)
+    }
+
+    fn refused(shell: &AppShell, text: String) -> AppPage {
+        shell
+            .page("Report")
+            .status(http::StatusCode::UNPROCESSABLE_ENTITY)
+            .body(el("p").child(text))
+    }
+
+    pub async fn report(
+        shell: AppShell,
+        Query(query): Query<DateRangeQuery>,
+        zone: CurrentZone, // navree-time: the person's or the workspace's zone
+    ) -> Result<AppPage> {
+        let limits = window_limits();
+        let dates = DateLocale::of("en-IN");
+        let range = match query.checked(&limits) {
+            Ok(range) => range, // Option<DateRange>
+            Err(why) => return Ok(refused(&shell, why.message(&dates))),
+        };
+        if let Some(range) = range {
+            let (start, end) = range.utc_bounds(&zone.zone().tz()); // [start, end)
+            assert!(start < end);
+        }
+        let picker = DateRangePicker::new("from", "to")
+            .today_in(&zone)
+            .locale(dates)
+            .limits(limits)
+            .value_opt(range);
+        Ok(shell.page("Report").body(picker))
+    }
+}
+
 struct Pages;
 
 impl Injectable for Pages {
@@ -179,7 +224,8 @@ impl Controller for Pages {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
-        vec![
+        #[allow(unused_mut)]
+        let mut routes = vec![
             RouteDef::on(Method::GET, "!/people/options", combobox_page::people).public(),
             RouteDef::on(
                 Method::GET,
@@ -189,7 +235,10 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::POST, "!/picked", combobox_page::store).public(),
             RouteDef::on(Method::POST, "!/deals", forms_page::store).public(),
-        ]
+        ];
+        #[cfg(feature = "time")]
+        routes.push(RouteDef::on(Method::GET, "!/report", report_page::report).public());
+        routes
     }
 }
 
@@ -207,13 +256,14 @@ impl Module for PickersModule {
 }
 
 async fn app() -> TestApp {
-    let app = TestApp::builder()
+    let builder = TestApp::builder()
         .temp_database()
         .module(DatabaseModule::from_config())
         .module(UiModule)
-        .module(PickersModule)
-        .build()
-        .await;
+        .module(PickersModule);
+    #[cfg(feature = "time")]
+    let builder = builder.module(TimeModule::from_config());
+    let app = builder.build().await;
     let db = app.get::<Db>().await;
     db.execute(&Statement::text(
         "CREATE TABLE pickers_people (id INTEGER PRIMARY KEY, team_id INTEGER NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL)",
@@ -370,4 +420,31 @@ async fn a_refused_form_never_names_someone_outside_the_callers_scope() {
         .assert_status(422)
         .text();
     assert!(page.contains("Alan Turing"), "{page}");
+}
+
+// The report page of `components/date-range-picker.mdx` compiles as written, reads the
+// window from the address, and refuses a window the limits do not allow in the person's
+// own words.
+#[cfg(feature = "time")]
+#[tokio::test]
+async fn the_report_window_example_reads_the_address_and_holds_it_to_the_limits() {
+    let app = app().await;
+    let html = app
+        .client()
+        .get("/report?from=2026-10-01&to=2026-10-31")
+        .send()
+        .await
+        .text();
+    assert!(
+        html.contains("2026-10-01") && html.contains("2026-10-31"),
+        "{html}"
+    );
+    // Ninety days at most: a year is refused with the picker's words.
+    let response = app
+        .client()
+        .get("/report?from=2026-01-01&to=2026-12-31")
+        .send()
+        .await;
+    assert_eq!(response.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.text().contains("Choose at most 90 days."));
 }
