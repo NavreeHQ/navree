@@ -13,7 +13,7 @@ use crate::{DbOptions, MySqlOptions};
 
 /// The text MySQL prepares for `sql` and its values as MySQL binds them:
 /// UUIDs as 16 bytes (the `BINARY(16)` columns the schema builder makes),
-/// instants with an offset converted to UTC.
+/// instants as `DATETIME` values in UTC (see [`bind`]).
 ///
 /// MySQL sends the values' types with every run, but a prepared statement
 /// keeps the result types it derived from earlier runs' values (`SELECT
@@ -30,6 +30,12 @@ pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, MySqlArg
     Ok(keyed.finish())
 }
 
+/// Binds `value`. An instant binds as a `DATETIME` holding its UTC time
+/// (every session runs in UTC), not as a `TIMESTAMP`: MariaDB reads a
+/// `TIMESTAMP` value through its own `TIMESTAMP` range and comparison, so
+/// one after 2038 is stored as `NULL` in a `DATETIME` column, and
+/// `timestamp_column IN (?, ?)` matches the first value only. MySQL stores
+/// and compares both forms alike.
 fn bind(
     args: &mut Keyed<'_, MySqlArguments>,
     value: &Value,
@@ -55,8 +61,8 @@ fn bind(
         Value::Date(v) => args.add(*v),
         Value::Time(v) => args.add(*v),
         Value::DateTime(v) => args.add(*v),
-        Value::Timestamp(v) => args.add(*v),
-        Value::TimestampTz(v) => args.add(v.with_timezone(&chrono::Utc)),
+        Value::Timestamp(v) => args.add(v.naive_utc()),
+        Value::TimestampTz(v) => args.add(v.naive_utc()),
         Value::Enum { value, .. } => args.add(value.as_str()),
         Value::Vector(v) => args.add(super::vector_bytes(v)),
     }
@@ -85,8 +91,9 @@ fn bind_null(
         Kind::Uuid => args.add(None::<uuid::Uuid>),
         Kind::Date => args.add(None::<chrono::NaiveDate>),
         Kind::Time => args.add(None::<chrono::NaiveTime>),
-        Kind::DateTime => args.add(None::<chrono::NaiveDateTime>),
-        Kind::Timestamp | Kind::TimestampTz => args.add(None::<chrono::DateTime<chrono::Utc>>),
+        Kind::DateTime | Kind::Timestamp | Kind::TimestampTz => {
+            args.add(None::<chrono::NaiveDateTime>)
+        }
         Kind::Enum => args.add(None::<String>),
         Kind::Vector => args.add(None::<Vec<u8>>),
     }
