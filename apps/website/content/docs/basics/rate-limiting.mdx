@@ -235,8 +235,8 @@ async fn whoami(&self, ClientIp(ip): ClientIp) -> String {
 
 ## Limits of the built-in limiter
 
-- The per-IP limit and route throttles keep their counters in memory, per process. With several instances, each enforces the limits on its own, so a client can make up to `instances × limit` requests. Keep the limits per instance in mind when you size them, or enforce a global limit at your load balancer.
-- Those counters are lost when the process restarts.
+- The per-IP limit and route throttles count in memory, per process, unless `http.rate_limit_store` names a shared store. With several instances and no store, each enforces the limits on its own, so a client can make up to `instances × limit` requests. With `http.rate_limit_store = "redis"` and [`RedisModule`](/docs/digging-deeper/redis/), every instance counts together, one Redis round trip per allowed request. Each instance also counts every request itself first, so a flood is refused without a round trip, and when Redis fails or takes longer than 100 ms the instance's own count decides: Redis is then left alone for 3 seconds before one request asks it again, and the log says so once a minute.
+- Those counters are lost when the process restarts (in Redis they are not).
 - The login, two-factor and password-reset throttles keep their counters in the [cache](/docs/digging-deeper/cache/) instead. With the memory cache store that is per process too; with `cache.store = "redis"` every instance shares them, so a client gets five failed logins a minute in total, not five per instance.
 
 ## Shared limits with Redis

@@ -1,6 +1,6 @@
 ---
 title: "Roadmap"
-description: "Where Navree goes after 1.0, in the order it is expected: what each item is for and where it stands, from crates.io to shared limits and Windows services."
+description: "Where Navree goes after 1.0, in the order it is expected: what each item is for and where it stands, from crates.io to Windows services."
 ---
 
 This page lists where Navree is heading, in the order it is expected. It has no dates: each item ships when it is ready, and the [release notes](/docs/prologue/release-notes/) record what each release brings. **Planned** means the work is decided and not started. **Ongoing** means it never finishes. **In force** means it already applies. Navree UI keeps its own list in [Coming next](/docs/ui/coming-next/). If one of these matters to you, [Contributing](/docs/prologue/contributing/) explains how to help.
@@ -10,13 +10,12 @@ This page lists where Navree is heading, in the order it is expected. It has no 
 | 1 | Every crate on crates.io and the `@navree` packages on npm | `cargo install navree-cli`, `cargo add navree` and `pnpm add @navree/client` replace the Git installs and the `link:` paths | Planned | [Installation](/docs/getting-started/installation/), [Front end](/docs/frontend/introduction/#once-the-packages-are-on-npm) |
 | 2 | Semantic versioning, upgrade guides and a stated minimum Rust version | Minor and patch releases are safe to take; a breaking change waits for 2.0 | In force from 1.0 | [Versioning](#versioning) |
 | 3 | A support policy | You know how long each release line gets bug fixes and security fixes | Planned | [Long-term support](#long-term-support) |
-| 4 | Shared HTTP limits | The per-IP limit and route throttles count per process today, so several instances each enforce their own | Planned | [Rate limiting](/docs/basics/rate-limiting/) |
-| 5 | More queue backends | Run jobs on a broker you already operate, through the `QueueStore` driver trait | Planned | [Queues](/docs/digging-deeper/queues/) |
-| 6 | Revocable access tokens | Sign-out takes effect before an access token expires | Planned | [Authentication](/docs/security/authentication/) |
-| 7 | More starter kits | More product shapes and front ends, each production-ready from `navree new` | Planned | [Starter kits](/docs/getting-started/starter-kits/) |
-| 8 | Windows services | `serve`, `queue:work` and `schedule:work` run as services on Windows Server | Planned | [Deployment](/docs/getting-started/deployment/) |
-| 9 | More of Navree UI | One module at a time, each only when it is finished | Ongoing | [Coming next](/docs/ui/coming-next/) |
-| 10 | Request pipeline performance | Fewer database round trips per request, less work on requests that don't need it, no process-wide locks on the hot path | Ongoing | [Performance](/performance/) |
+| 4 | More queue backends | Run jobs on a broker you already operate, through the `QueueStore` driver trait | Planned | [Queues](/docs/digging-deeper/queues/) |
+| 5 | Revocable access tokens | Sign-out takes effect before an access token expires | Planned | [Authentication](/docs/security/authentication/) |
+| 6 | More starter kits | More product shapes and front ends, each production-ready from `navree new` | Planned | [Starter kits](/docs/getting-started/starter-kits/) |
+| 7 | Windows services | `serve`, `queue:work` and `schedule:work` run as services on Windows Server | Planned | [Deployment](/docs/getting-started/deployment/) |
+| 8 | More of Navree UI | One module at a time, each only when it is finished | Ongoing | [Coming next](/docs/ui/coming-next/) |
+| 9 | Request pipeline performance | Fewer database round trips per request, less work on requests that don't need it, no process-wide locks on the hot path | Ongoing | [Performance](/performance/) |
 
 ## Versioning
 
@@ -32,7 +31,6 @@ Navree will publish a support policy: how long each release line gets bug fixes 
 
 ## What the other items mean
 
-- **Shared HTTP limits** put the per-IP limit and route throttles in a Redis store, so a limit counts across processes. [Redis](/docs/digging-deeper/redis/) already offers `RateLimiter` for limits your own code counts.
 - **More queue backends** arrive beside the database, memory and Redis drivers, so a new driver needs no change in your code.
 - **Revocable access tokens** are for apps that need a logout or a password change to end an access token before it expires. Today they are stateless, and the answer is a short `auth.jwt.access_ttl_secs`.
 - **Windows services** keep the graceful shutdown the commands have under systemd, and [Harbor](/docs/tools/harbor/) learns to deploy to Windows Server.

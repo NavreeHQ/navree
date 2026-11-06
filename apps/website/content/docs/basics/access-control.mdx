@@ -103,7 +103,7 @@ async fn index(
 
 The `Accessible<Deal, Read>` extractor turns the same rules into a SQL filter, so the list holds exactly the deals this user may read. `List<DealList>` reads the client's filters, sort, search and page from the query string against the deals' `ListSpec` ([list queries](/docs/basics/list-queries/)), and the service applies them on top of the access filter: a client's filter can narrow the list, never widen it.
 
-With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; a record the user may not touch is a 403. The handler receives the loaded record with the `Authorized<M, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
+With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; so is a soft-deleted one (its `deleted_at` is set), before any rule is checked, so a user who may not see it can't tell it was there; a record the user may not touch is a 403. Lists, and records whose parent is soft-deleted, are the app's to filter. The handler receives the loaded record with the `Authorized<M, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
 
 ```rust title="crates/crm-deals/src/controller.rs"
 #[patch("/{id}")]
@@ -250,7 +250,7 @@ The [route pipeline](/docs/architecture/request-lifecycle/#the-route-pipeline) c
 | A route `#[throttle]` exceeded | 429 | `"Too Many Requests"`, with `Retry-After` |
 | A guard refused | The guard's error | The guard's message |
 | The user lacks the roles, the permissions or the ability | 403 | `"Forbidden"` |
-| `#[can(.., from = "id")]` and no record has that id | 404 | `"Not Found"` |
+| `#[can(.., from = "id")]` and no record has that id, or it is soft-deleted | 404 | `"Not Found"` |
 
 A guest calling `GET /api/v1/reports/team` gets a 401, and a signed-in user without the role gets a 403:
 

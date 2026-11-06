@@ -15,6 +15,7 @@ description: "`RedisModule`: shared Redis connections, and Redis drivers so ever
 | `queue.driver = "redis"` | [Queued jobs](/docs/digging-deeper/queues/#the-redis-driver), delayed and failed jobs |
 | `session.store = "redis"` | [Session](/docs/basics/sessions-and-csrf/#the-redis-store) records |
 | `realtime.backplane = "redis"` | Nothing stored: [broadcasts and presence](/docs/digging-deeper/broadcasting/#several-serving-processes) travel between processes over Redis pub/sub |
+| `http.rate_limit_store = "redis"` | The per-IP limit and route throttles, counted together by every process (keys under `http-limit:`) |
 
 It also gives you the connections themselves, for your own commands, and a [`RateLimiter`](#shared-rate-limits) whose counts every process shares.
 

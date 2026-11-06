@@ -130,7 +130,7 @@ The [error response format](#error-responses) section below explains each member
 
 `T` must implement `serde::de::DeserializeOwned` and `Validate`. Each extractor works in two steps:
 
-1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error.
+1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error, and every one of them is reported, together with the rules of the fields that did deserialize (input under 16 KiB; longer input reports its first).
 2. **Validate.** Every rule of `T` runs, and every failure is reported at once.
 
 Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than the route's body limit (`http.body_limit_bytes` unless the route sets its own) is a 413. See [errors](/docs/basics/errors/) for those.
@@ -250,19 +250,9 @@ pub enum Plan {
 
 ### Required fields
 
-serde stops at the first problem, so deserialization errors come **one at a time and before the validation rules**. A `CreateContact` body with only `first_name` and `email` is missing three fields, but gets only:
+Deserialization errors are reported together, and with the validation rules of the other fields: a `CreateContact` body with only `first_name` and `email` gets one error for each missing field. Input of 16 KiB or more reports its first deserialization error only.
 
-```json title="400 Bad Request"
-{
-  "statusCode": 400,
-  "message": ["last_name should not be empty"],
-  "error": "Bad Request",
-  "code": "validation_failed",
-  "errors": { "last_name": ["last_name should not be empty"] }
-}
-```
-
-When you want every missing field reported at once, make the fields `Option`s and use the `required` rule. The CRM's deal DTO does this (`not_blank` is one of its own [custom rules](#custom-rules), which rejects a whitespace-only title):
+When you want a custom message for a missing field, make the field an `Option` and use the `required` rule. The CRM's deal DTO does this (`not_blank` is one of its own [custom rules](#custom-rules), which rejects a whitespace-only title):
 
 ```rust title="crm-deals/src/dto.rs"
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
@@ -545,6 +535,7 @@ A failed rule is a field error like any other: `email has already been taken`, `
 - `AsyncRule::exists(field, table, column, value)` passes when some row has `value` in `column`.
 - A `None` value passes without a query, so optional fields stay optional. Combine with `required` to demand a value.
 - Bind values with the column's type: a `Uuid` for UUID columns, a `String` for text.
+- `.without_deleted("deleted_at")` leaves soft-deleted rows out: `exists` doesn't find them and `unique` doesn't count them.
 
 How they run:
 
@@ -558,7 +549,7 @@ For a check that needs more than one column and one value, `AsyncRule::check(fie
 
 <Callout type="warning" title="No extra conditions">
 
-`AsyncRule::unique` and `AsyncRule::exists` compare one column with one value. They can't add conditions such as `deleted_at IS NULL`, so `exists` accepts a soft-deleted row. Check such cases in your service, as the CRM does for deleted companies, or build the rule on the model, whose rules take `where_(..)` conditions and decide how soft-deleted records count.
+`AsyncRule::unique` and `AsyncRule::exists` compare one column with one value, and with `.without_deleted(column)` leave out soft-deleted rows. For other conditions, build the rule on the model, whose rules take `where_(..)` conditions, or wrap a `UowCheck`.
 
 </Callout>
 
