@@ -94,17 +94,13 @@ async fn live_region(
         })
         .await?;
     Ok(Region::new("lighthouse-live")
-        .src(format!(
-            "{mount}/overview/live?period={}",
-            period.as_str()
-        ))
+        .src(format!("{mount}/overview/live?period={}", period.as_str()))
         .poll(POLL)
         .children((
             figures(overview, period),
-            Grid::cols(2).gap(4).children((
-                top_issues(&mount, &top.data),
-                feed(&mount, &overview.feed),
-            )),
+            Grid::cols(2)
+                .gap(4)
+                .children((top_issues(&mount, &top.data), feed(&mount, &overview.feed))),
         )))
 }
 
@@ -218,7 +214,8 @@ fn requests_chart(overview: &Overview) -> Node {
     // A deploy is a line only inside the chart.
     let first = overview.timeline[0].at;
     let length = TimeDelta::seconds(
-        i64::from(overview.period.resolution()) * i64::try_from(overview.timeline.len()).unwrap_or(0),
+        i64::from(overview.period.resolution())
+            * i64::try_from(overview.timeline.len()).unwrap_or(0),
     );
     for marker in overview
         .releases

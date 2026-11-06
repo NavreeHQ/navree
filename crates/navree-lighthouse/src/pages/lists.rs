@@ -4,9 +4,7 @@ use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
 use navree_ui::{Badge, BadgeVariant, Node, TableRowEl, Text};
 
-use super::{
-    cell, cell_num, code, head, head_num, link, ms, percent, period_switch, table,
-};
+use super::{cell, cell_num, code, head, head_num, link, ms, percent, period_switch, table};
 use crate::dashboard::{LighthouseDashboardController, Viewer, encode};
 use crate::options::Period;
 use crate::store::Origin;
@@ -224,7 +222,10 @@ mod tests {
             make("job SendInvoice", 2),
             make("GET /contacts", 1),
         ]);
-        assert_eq!(shown, "GET /deals (40), POST /deals (3), job SendInvoice (2)");
+        assert_eq!(
+            shown,
+            "GET /deals (40), POST /deals (3), job SendInvoice (2)"
+        );
         assert_eq!(origins(&[]), "");
     }
 }

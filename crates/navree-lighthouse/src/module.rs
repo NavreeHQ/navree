@@ -145,9 +145,7 @@ fn register(m: &mut ModuleBuilder, options: Option<LighthouseOptions>) {
         .contribute(navree_ui::UiNeed::when(|ctx: AppContext| async move {
             ctx.get::<Lighthouse>().await.is_ok_and(|lighthouse| {
                 let options = lighthouse.options();
-                options.dashboard
-                    && options.store != StoreKind::Off
-                    && lighthouse.store().is_some()
+                options.dashboard && options.store != StoreKind::Off && lighthouse.store().is_some()
             })
         }))
         .controller::<LighthouseDashboardController>()

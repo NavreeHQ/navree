@@ -191,10 +191,7 @@ pub async fn flushed(app: &TestApp) -> LighthouseStore {
 /// (none: no role), and returns the id.
 pub async fn user(app: &TestApp, email: &str, role: Option<&str>, permissions: &[&str]) -> Uuid {
     let auth = app.get::<AuthService>().await;
-    let user = auth
-        .create_user("Ada", email, PASSWORD)
-        .await
-        .unwrap();
+    let user = auth.create_user("Ada", email, PASSWORD).await.unwrap();
     if let Some(role) = role {
         let db = app.get::<Db>().await;
         let service = app.get::<AccessService>().await;

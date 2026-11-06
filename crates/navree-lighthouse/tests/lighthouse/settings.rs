@@ -350,7 +350,10 @@ async fn the_settings_page_is_read_only_without_the_ability_and_says_what_is_fix
         "says what is missing"
     );
     assert!(!page.contains("Save changes"));
-    assert!(!page.contains("action=\"/_lighthouse/settings\""), "no form for a reader");
+    assert!(
+        !page.contains("action=\"/_lighthouse/settings\""),
+        "no form for a reader"
+    );
     assert!(page.contains("disabled"));
     // What is set in code or configuration, and where.
     assert!(page.contains("Set in code or configuration"));
@@ -442,9 +445,13 @@ async fn the_form_saves_what_changed_returns_a_setting_to_the_configured_value_a
         ("value.retention_days", "soon"),
         ("value.nope", "1"),
     ] {
-        post_form(&client, "/_lighthouse/settings", &[("action", "save"), field])
-            .await
-            .assert_status(400);
+        post_form(
+            &client,
+            "/_lighthouse/settings",
+            &[("action", "save"), field],
+        )
+        .await
+        .assert_status(400);
     }
     let settings = current(client.clone()).await;
     assert_eq!(row(&settings, "retention_days")["current"], 14);
@@ -456,7 +463,9 @@ async fn the_settings_form_needs_the_token_and_the_ability() {
     let app = builder().build().await;
     people(&app).await;
     let admin = sign_in(&app, "admin@acme.test").await;
-    html(&admin, "/_lighthouse/settings").await.assert_status(200);
+    html(&admin, "/_lighthouse/settings")
+        .await
+        .assert_status(200);
     admin
         .post("/_lighthouse/settings")
         .header("accept", "text/html")
@@ -465,7 +474,9 @@ async fn the_settings_form_needs_the_token_and_the_ability() {
         .await
         .assert_status(403);
     let viewer = sign_in(&app, "viewer@acme.test").await;
-    html(&viewer, "/_lighthouse/settings").await.assert_status(200);
+    html(&viewer, "/_lighthouse/settings")
+        .await
+        .assert_status(200);
     post_form(
         &viewer,
         "/_lighthouse/settings",

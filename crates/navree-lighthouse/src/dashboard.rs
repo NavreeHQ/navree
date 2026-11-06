@@ -12,9 +12,7 @@ use navree_access::{Abilities, Subject as _};
 use navree_auth::{AuthService, SIGN_OUT_PATH};
 use navree_http::extract::FromRequestParts;
 use navree_http::response::{Html, IntoResponse, Response};
-use navree_http::{
-    AppError, ClientIp, Controller, CurrentPrincipal, Form, Path, Query, RouteDef,
-};
+use navree_http::{AppError, ClientIp, Controller, CurrentPrincipal, Form, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_session::Session;
 use navree_ui::{
@@ -272,11 +270,7 @@ impl Controller for LighthouseDashboardController {
                 path("/alerts/channels/{name}"),
                 "lighthouse.alerts.channels.change",
                 CONFIGURE,
-                |c,
-                 viewer,
-                 name: Path<String>,
-                 ip: ClientIp,
-                 form: Form<Vec<(String, String)>>| {
+                |c, viewer, name: Path<String>, ip: ClientIp, form: Form<Vec<(String, String)>>| {
                     c.change_channel(&viewer, ip, &name.0, form.0).await
                 }
             ),
@@ -397,11 +391,7 @@ impl LighthouseDashboardController {
         Ok(fragment(render(&region.into())))
     }
 
-    async fn issues(
-        &self,
-        viewer: Viewer,
-        query: IssueFilterQuery,
-    ) -> Result<Response, AppError> {
+    async fn issues(&self, viewer: Viewer, query: IssueFilterQuery) -> Result<Response, AppError> {
         issues::list(self, viewer, query).await
     }
 
@@ -450,11 +440,7 @@ impl LighthouseDashboardController {
         settings::page(self, viewer).await
     }
 
-    async fn resolve_issue(
-        &self,
-        id: Uuid,
-        form: issues::ResolveForm,
-    ) -> Result<Reply, AppError> {
+    async fn resolve_issue(&self, id: Uuid, form: issues::ResolveForm) -> Result<Reply, AppError> {
         issues::resolve(self, id, form).await
     }
 

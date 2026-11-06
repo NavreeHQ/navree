@@ -165,11 +165,7 @@ pub(crate) fn facts(rows: Vec<(&'static str, Node)>) -> Node {
 /// A form that posts to `action`. It carries the session's CSRF token as a
 /// field, so it works with JavaScript off, and the runtime sends it without
 /// leaving the page when it can.
-pub(crate) fn post_form(
-    action: String,
-    csrf: Option<&str>,
-    children: impl IntoNodes,
-) -> Element {
+pub(crate) fn post_form(action: String, csrf: Option<&str>, children: impl IntoNodes) -> Element {
     el("form")
         .attr("method", "post")
         .attr("action", action)
@@ -217,8 +213,14 @@ mod tests {
     #[test]
     fn a_period_switch_marks_the_current_period() {
         let html = navree_ui::render(&period_switch("/_lighthouse/jobs?", Period::Day));
-        assert!(html.contains(r#"href="/_lighthouse/jobs?period=1h""#), "{html}");
-        assert!(html.contains(r#"href="/_lighthouse/jobs?period=7d""#), "{html}");
+        assert!(
+            html.contains(r#"href="/_lighthouse/jobs?period=1h""#),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"href="/_lighthouse/jobs?period=7d""#),
+            "{html}"
+        );
         assert_eq!(html.matches("aria-current").count(), 1, "{html}");
     }
 
@@ -235,7 +237,10 @@ mod tests {
 
     #[test]
     fn comments_are_trimmed_and_blank_ones_dropped() {
-        assert_eq!(clean("  fixed in 4.2 ".to_owned()).as_deref(), Some("fixed in 4.2"));
+        assert_eq!(
+            clean("  fixed in 4.2 ".to_owned()).as_deref(),
+            Some("fixed in 4.2")
+        );
         assert_eq!(clean("   ".to_owned()), None);
     }
 

@@ -127,7 +127,9 @@ fn changeable(viewer: &Viewer, mount: &str, rows: &[Value]) -> Node {
 fn fixed(options: &[Value]) -> Node {
     let mut parts: Vec<Node> = vec![
         Text::muted(Node::list(vec![
-            Node::from("These are read when the app boots and cannot be changed here. Set them under "),
+            Node::from(
+                "These are read when the app boots and cannot be changed here. Set them under ",
+            ),
             code("[lighthouse]"),
             Node::from(" in the configuration, with the environment variable shown, or in "),
             code("LighthouseOptions"),
@@ -158,7 +160,11 @@ fn fixed(options: &[Value]) -> Node {
                 .key(key)
             })
             .collect();
-        parts.push(table(vec![head("Option"), head("Value")], rows, "Nothing to show."));
+        parts.push(table(
+            vec![head("Option"), head("Value")],
+            rows,
+            "Nothing to show.",
+        ));
     }
     Stack::gap(4).children(parts).into()
 }
@@ -305,8 +311,10 @@ mod tests {
             )
             .is_err()
         );
-        assert!(changes_of(&pairs(&[("action", "save")]), current)
-            .unwrap()
-            .is_empty());
+        assert!(
+            changes_of(&pairs(&[("action", "save")]), current)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

@@ -4,8 +4,7 @@ use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
 use navree_ui::charts::{Chart, Series};
 use navree_ui::{
-    Badge, BadgeVariant, CodeBlock, FactCard, FactGrid, Grid, Node, Row, TableRowEl, Text, Tone,
-    el,
+    Badge, BadgeVariant, CodeBlock, FactCard, FactGrid, Grid, Node, Row, TableRowEl, Text, Tone, el,
 };
 use uuid::Uuid;
 
@@ -270,13 +269,22 @@ pub(crate) async fn trace(
             "Workspace",
             code(sample.workspace_id.clone().unwrap_or_default()),
         ),
-        ("Release", Node::from(sample.release.clone().unwrap_or_default())),
+        (
+            "Release",
+            Node::from(sample.release.clone().unwrap_or_default()),
+        ),
         (
             "Environment",
             Node::from(sample.environment.clone().unwrap_or_default()),
         ),
-        ("Server", Node::from(sample.server.clone().unwrap_or_default())),
-        ("Process", Node::from(sample.process.clone().unwrap_or_default())),
+        (
+            "Server",
+            Node::from(sample.server.clone().unwrap_or_default()),
+        ),
+        (
+            "Process",
+            Node::from(sample.process.clone().unwrap_or_default()),
+        ),
     ]);
     let title = format!("{} · {}", summary.name, ms(summary.duration_ms));
     let page = c

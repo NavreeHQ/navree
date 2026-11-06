@@ -141,7 +141,9 @@ async fn a_guest_signs_in_on_the_apps_page_and_comes_back_to_the_page_they_asked
         .await
         .unwrap();
     page.assert_see("Sign in").await.unwrap();
-    page.assert_dont_see("invoice inv_7 not found").await.unwrap();
+    page.assert_dont_see("invoice inv_7 not found")
+        .await
+        .unwrap();
     page.press("Sign in").await.unwrap();
     page.assert_path_is("/sign-in").await.unwrap();
     page.assert_see("Acme CRM").await.unwrap();
@@ -168,19 +170,34 @@ async fn an_issue_is_resolved_and_reopened_with_its_forms() {
         .issue
         .clone();
     let page = site
-        .open(&format!("/_lighthouse/issues/{}", issue.id), Viewport::desktop())
+        .open(
+            &format!("/_lighthouse/issues/{}", issue.id),
+            Viewport::desktop(),
+        )
         .await;
     page.assert_see("Resolve").await.unwrap();
     page.press("Resolve").await.unwrap();
     page.assert_see("Reopen").await.unwrap();
     assert_eq!(
-        store.issue_detail(issue.id).await.unwrap().issue.status.as_str(),
+        store
+            .issue_detail(issue.id)
+            .await
+            .unwrap()
+            .issue
+            .status
+            .as_str(),
         "resolved"
     );
     page.press("Reopen").await.unwrap();
     page.assert_see("Resolve").await.unwrap();
     assert_eq!(
-        store.issue_detail(issue.id).await.unwrap().issue.status.as_str(),
+        store
+            .issue_detail(issue.id)
+            .await
+            .unwrap()
+            .issue
+            .status
+            .as_str(),
         "open"
     );
     page.assert_no_console_errors().await.unwrap();

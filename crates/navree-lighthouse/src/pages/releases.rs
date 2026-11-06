@@ -7,9 +7,7 @@ use navree_ui::{Badge, BadgeVariant, CodeBlock, Grid, Node, TableRowEl, Text};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use super::{
-    cell, cell_num, code, head, head_num, kind_badge, link, status_badge, table, titled,
-};
+use super::{cell, cell_num, code, head, head_num, kind_badge, link, status_badge, table, titled};
 use crate::dashboard::{LighthouseDashboardController, Viewer, ago, encode};
 use crate::model::{IssueKind, IssueStatus, Level};
 use crate::release::ReleaseSummary;
@@ -152,7 +150,9 @@ pub(crate) async fn page(
         titled(
             "Releases",
             Text::muted(Node::list(vec![
-                Node::from("No release has been reported yet. A process reports the release it runs when it boots, if it has one: set "),
+                Node::from(
+                    "No release has been reported yet. A process reports the release it runs when it boots, if it has one: set ",
+                ),
                 code("lighthouse.release"),
                 Node::from(" (Harbor does this on every deploy) or "),
                 code("app.version"),
@@ -178,11 +178,7 @@ pub(crate) async fn page(
             .children((
                 titled(
                     format!("Introduced in {}", release.name),
-                    issues_table(
-                        &mount,
-                        &introduced,
-                        "No issue began in this release.",
-                    ),
+                    issues_table(&mount, &introduced, "No issue began in this release."),
                 ),
                 titled(
                     format!("Came back in {}", release.name),
@@ -251,11 +247,13 @@ mod tests {
             regressed: 0,
             current: true,
         };
-        let table = navree_ui::Table::new()
-            .rows(vec![release_row("/_lighthouse", &release, true)]);
+        let table = navree_ui::Table::new().rows(vec![release_row("/_lighthouse", &release, true)]);
         let html = navree_ui::render(&Node::from(table));
         assert!(html.contains("Current"), "{html}");
         assert!(html.contains("data-selected"), "{html}");
-        assert!(html.contains("/_lighthouse/releases?release=20261102-101500"), "{html}");
+        assert!(
+            html.contains("/_lighthouse/releases?release=20261102-101500"),
+            "{html}"
+        );
     }
 }

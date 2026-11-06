@@ -91,9 +91,7 @@ async fn guests_are_asked_to_sign_in_and_the_api_answers_401() {
         "the API answers in JSON whatever the browser asks for"
     );
     // The dashboard has no sign-in of its own.
-    html(&client, "/_lighthouse/login")
-        .await
-        .assert_status(404);
+    html(&client, "/_lighthouse/login").await.assert_status(404);
     app.shutdown().await.unwrap();
 }
 
@@ -312,7 +310,13 @@ async fn changes_through_the_session_need_its_csrf_token() {
 #[tokio::test]
 async fn a_user_who_may_view_but_not_resolve_cannot_post_the_forms() {
     let app = builder().build().await;
-    user(&app, "viewer@acme.test", Some("viewer"), &["lighthouse.view"]).await;
+    user(
+        &app,
+        "viewer@acme.test",
+        Some("viewer"),
+        &["lighthouse.view"],
+    )
+    .await;
     boom(&app).await;
     let store = flushed(&app).await;
     let id = store.issues(&IssueFilter::default()).await.unwrap().data[0]
@@ -584,9 +588,7 @@ async fn the_dashboard_can_move_or_be_turned_off() {
         .config("lighthouse.dashboard", false)
         .build()
         .await;
-    html(&app.client(), "/_lighthouse")
-        .await
-        .assert_status(404);
+    html(&app.client(), "/_lighthouse").await.assert_status(404);
     app.client()
         .get("/_lighthouse/api/issues")
         .send()

@@ -49,9 +49,7 @@ fn ignore_for(duration: &str) -> Result<IgnoreFor, AppError> {
         Some(("occurrences", count)) => number(count)
             .map(IgnoreFor::Occurrences)
             .ok_or_else(|| AppError::bad_request("choose how long to ignore the issue")),
-        _ => Err(AppError::bad_request(
-            "choose how long to ignore the issue",
-        )),
+        _ => Err(AppError::bad_request("choose how long to ignore the issue")),
     }
 }
 
@@ -127,14 +125,25 @@ fn filters(mount: &str, filter: &IssueFilter) -> Node {
         ("count".to_owned(), "Most frequent".to_owned()),
     ];
     let controls: Vec<Node> = vec![
-        choice("status", "Status", Some("Any status"), statuses, &filter.status),
+        choice(
+            "status",
+            "Status",
+            Some("Any status"),
+            statuses,
+            &filter.status,
+        ),
         choice("kind", "Kind", Some("Any kind"), kinds, &filter.kind),
         choice("level", "Level", Some("Any level"), levels, &filter.level),
         text_filter("search", "Search", "Words in the title", &filter.search),
         text_filter("route", "Route", "GET /api/deals", &filter.route),
         text_filter("job", "Job", "SendInvoice", &filter.job),
         text_filter("release", "Release", "20261102-101500", &filter.release),
-        text_filter("environment", "Environment", "production", &filter.environment),
+        text_filter(
+            "environment",
+            "Environment",
+            "production",
+            &filter.environment,
+        ),
         text_filter("tag", "Tag", "plan:pro", &filter.tag),
         text_filter("user", "User id", "", &filter.user),
         text_filter("workspace", "Workspace id", "", &filter.workspace),
@@ -255,7 +264,11 @@ fn push_text(
 fn latest_facts(c: &LighthouseDashboardController, mount: &str, o: &Occurrence) -> Node {
     let mut rows: Vec<(&'static str, Node)> = vec![("When", Node::from(when_exact(o.at)))];
     if let Some(method) = &o.method {
-        let target = o.route.clone().or_else(|| o.path.clone()).unwrap_or_default();
+        let target = o
+            .route
+            .clone()
+            .or_else(|| o.path.clone())
+            .unwrap_or_default();
         let status = o.status.map(|s| format!(" → {s}")).unwrap_or_default();
         rows.push(("Request", code(format!("{method} {target}{status}"))));
     }
@@ -299,7 +312,10 @@ fn where_of(o: &Occurrence) -> String {
     match (&o.method, &o.job_id) {
         (Some(method), _) => format!(
             "{method} {}",
-            o.route.clone().or_else(|| o.path.clone()).unwrap_or_default()
+            o.route
+                .clone()
+                .or_else(|| o.path.clone())
+                .unwrap_or_default()
         ),
         (None, Some(job)) => format!("job {job}"),
         (None, None) => o.process.clone().unwrap_or_default(),
@@ -348,7 +364,9 @@ fn status_forms(
                 .option("hours:24", "Ignore for a day")
                 .option("occurrences:100", "Ignore for 100 more events"),
             Input::text("comment").placeholder("Comment (optional)"),
-            Button::new("Ignore").variant(ButtonVariant::Outline).submit(),
+            Button::new("Ignore")
+                .variant(ButtonVariant::Outline)
+                .submit(),
         )),
     );
     titled("Status", Stack::gap(3).children((resolve, ignore)))
@@ -400,9 +418,7 @@ pub(crate) async fn detail(
     let mut message: Vec<Node> = vec![CodeBlock::new("", detail.message.clone()).into()];
     if detail.chain.len() > 1 {
         message.push(Text::new("Caused by").into());
-        message.push(
-            CodeBlock::new("", detail.chain[1..].join("\n")).into(),
-        );
+        message.push(CodeBlock::new("", detail.chain[1..].join("\n")).into());
     }
     if let Some(backtrace) = detail.latest.as_ref().and_then(|l| l.backtrace.clone()) {
         message.push(Text::new("Backtrace").into());
@@ -567,10 +583,7 @@ pub(crate) async fn ignore(
 }
 
 /// Opens the issue again.
-pub(crate) async fn reopen(
-    c: &LighthouseDashboardController,
-    id: Uuid,
-) -> Result<Reply, AppError> {
+pub(crate) async fn reopen(c: &LighthouseDashboardController, id: Uuid) -> Result<Reply, AppError> {
     c.store()?.reopen(id).await?;
     Ok(back(c, id, "Reopened."))
 }

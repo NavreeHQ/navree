@@ -351,7 +351,10 @@ pub(crate) async fn change(
         "test" => {
             let Json(result) = c.configure.test_channel(actor, name).await?;
             if result["ok"].as_bool().unwrap_or(false) {
-                Ok(back.toast(ToastTone::Success, format!("Delivered a test alert to {name}.")))
+                Ok(back.toast(
+                    ToastTone::Success,
+                    format!("Delivered a test alert to {name}."),
+                ))
             } else {
                 let error = result["error"].as_str().unwrap_or("no answer");
                 Ok(back.toast(ToastTone::Danger, format!("The test alert failed: {error}")))
