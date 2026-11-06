@@ -66,8 +66,9 @@ reference `users` use `.after(["auth"])`.
 | `POST /exchange` `{token}` | public | trusted issuers' JWTs (`auth.trusted_issuers.<name>`) |
 
 Details of the account flows: `references/account-flows.md`. Sessions,
-step-up, impersonation, passwordless, platform and token exchange:
-`references/sessions-and-sign-in.md`.
+step-up, impersonation, passwordless, platform and token exchange, and signing
+a browser in on the session cookie (the Navree UI pages, `AuthPages`, and the
+JSON routes of a single-page app): `references/sessions-and-sign-in.md`.
 
 ## Sensitive routes: step-up and impersonation guards
 

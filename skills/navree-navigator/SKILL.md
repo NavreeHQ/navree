@@ -1,6 +1,6 @@
 ---
 name: navree-navigator
-description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the twelve read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`) and, when the app includes Lighthouse, its five (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs`); the options `--path`, `--no-build`, `--allow-remote-database` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error (a build error, a refused query, no log file, a remote database), before adding a route, wiring a provider or writing a migration, or when asked why a request failed or what is slow."
+description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the fourteen read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`, `list_components`, `render_page`) and, when the app includes Lighthouse, its five (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs`); the options `--path`, `--no-build`, `--allow-remote-database` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error, before adding a route, wiring a provider or writing a migration, or when asked why a request failed or what is slow."
 ---
 
 # Navigator
@@ -42,7 +42,7 @@ tool is read-only.
 | Tool | Arguments | Answers |
 |---|---|---|
 | `app_info` | none | `package`, `path`, `navree` (from Cargo.lock), `rust`, `features` (the facade features Cargo.toml turns on), `modules` (boot order), `database` (`driver`, redacted `url`), `config_files` |
-| `list_routes` | `path` (prefix), `method`, `module` | `[{method, path, name, access, module, handler, ...}]` from `<app> routes --json` |
+| `list_routes` | `path` (prefix), `method`, `module`, `pages_only` | `[{method, path, name, access, module, handler, page, ...}]` from `<app> routes --json`; `page` marks a route registered with `.page()` (a Navree UI page), and `pages_only` lists those alone |
 | `module_graph` | `module` | `{modules: [{name, global, root, imports, exports, providers, commands}]}` or one module |
 | `list_providers` | `module` | `[{type, scope, module, exported, multi, dependencies}]` |
 | `list_commands` | none | `[{name, about, module}]`, built-ins first |
@@ -53,6 +53,8 @@ tool is read-only.
 | `read_config` | `key` | the redacted configuration tree, or one key |
 | `search_docs` | `query` (required), `limit` | `{version, source, note?, results: [{slug, title, section, url, excerpt, score}]}` |
 | `read_doc` | `slug` (required), `section` | the page (or section) as Markdown |
+| `list_components` | `query`, `group` | `{version, total, count, groups, components: [{id, name, group, summary, docs, types}]}`: the Navree UI components, from the catalog built into Navigator (no app needed); `docs` is the slug for `read_doc` |
+| `render_page` | `path` (required) | `{path, status, title, headings, links, buttons, forms, components, ...}`: what a page of the app draws for a guest, from `<app> ui:render <path> --json`; a redirect answers `redirect`. An app without that command gets a plain message |
 
 When a file under the app's `src/` adds `LighthouseModule`, five more tools
 read Lighthouse's tables in `lighthouse.database_url` (else `database.url`),
@@ -88,6 +90,11 @@ the environment. Answers are cached while the binary is unchanged.
   backtrace and failing request; `lighthouse_slow_routes` and
   `lighthouse_slow_queries` before performance work. Resolving an issue is
   the dashboard's or Lighthouse's JSON API's job, not Navigator's.
+- Before building a screen: `list_components` for the component that does
+  it, then `read_doc` with its `docs` slug; `list_routes` with `pages_only`
+  for the pages the app has.
+- To see what a page draws without a browser: `render_page` (a guest's view:
+  a page that needs a sign-in answers the redirect or the 401 page).
 - For API questions: `search_docs`, then `read_doc` with the slug.
 
 ## Options

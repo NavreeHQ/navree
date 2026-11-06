@@ -31,9 +31,9 @@ navree --version
 ## 2. Create the app
 
 ```sh
-navree new blog                                  # API only, on TimescaleDB
+navree new crm                                   # screens drawn on the server with Navree UI (the default), on TimescaleDB
+navree new blog --ui none                        # API only
 navree new shop --ui next                        # plus a Next.js front end in web/
-navree new crm --ui navree                       # plus a Navree UI front end in src/ (no Node)
 navree new blog --database sqlite                # a SQLite file, nothing to install
 navree new blog --navree-path ~/code/navree      # depend on that checkout
 ```
@@ -86,9 +86,15 @@ navree dev                     # API on :8080, web app on :3000
 - Demo accounts (saas/api): `owner@<app>.test` (also a super admin for
   `/admin`) and `member@<app>.test`, password `password123`, workspace
   `demo`.
+- Navree UI is the default front end of the minimal app: without `--ui` and
+  without `--kit`, the app gets sign-in (`AuthPages`, with two-factor
+  authentication, and links, codes or passkeys when `auth.magic_link`,
+  `auth.otp` or `auth.passkeys` are on), workspaces, the customers example and
+  `tests/journey.rs`. `--ui none` makes the API alone.
 - `--ui next` only goes with `--kit saas` (where it changes nothing);
   with `api` or `micro` it is an error. `--ui navree` goes with no kit:
-  with `--kit` it is an error.
+  with `--kit` it is an error (a kit without `--ui` keeps its own front end,
+  or none).
 - The kits run on TimescaleDB (the default) or, with `--database postgres`,
   plain PostgreSQL (`timescaledb = false` in `dock.toml`); `mysql` and
   `sqlite` are for the minimal app.
@@ -142,21 +148,27 @@ config/app.toml         http, database (migrate_on_boot = true), schema (timesca
 dock.toml               [services.postgres]: TimescaleDB for `navree dock up`
 src/main.rs             <crate>::app(ConfigSources::defaults()).run()
 src/lib.rs              pub mod abilities; pub mod modules; pub use app::app;
-src/app.rs              every platform module configured once (Lighthouse and Logbook included); `// navree:modules`
+src/app.rs              every platform module configured once (Workspace, Lighthouse and Logbook included); `// navree:modules`
 src/abilities.rs        ability rules; `// navree:policies`
 src/modules/users/      a profile at GET/PUT /api/v1/profile on top of AuthModule
 tests/app.rs            boots the whole app on a temporary SQLite database
 storage/                runtime data (logs, uploads; the database with --database sqlite)
 web/                    with --ui next: Next.js with a backend-for-frontend
-src/ui/                 with --ui navree: the shell, sign-in (auth.rs), the live stream
-src/modules/customers/  with --ui navree: an example table, forms and pages
+src/ui/                 with Navree UI: the shell and the `Desk` extractor (shell.rs), who is signed in (auth.rs), the live topic (live.rs)
+src/modules/customers/  with Navree UI: an example table, forms and pages, per workspace, with demo data in two workspaces
 ```
 
 Routes that exist at once: `POST /api/auth/register|login|refresh|logout`,
-`GET /api/auth/me`, the account routes, `GET /api/me/abilities`,
+`GET /api/auth/me`, the account routes, `GET /api/me/abilities`, the
+workspace routes (`/api/workspaces`: the first workspace of a new user is
+created with `POST /api/workspaces`, and a request names it in the
+`X-Workspace` header),
 `/api/openapi.json`, `/api/docs`, `/health/live`, `/health/ready`,
 `/metrics`, and the profile routes. Registration is on
-(`auth.registration = true` in `config/app.toml`).
+(`auth.registration = true` in `config/app.toml`) in the API app and off in
+the Navree UI app, where the seeder makes the demo account
+(`harpreet.singh@example.com`, password `demo-password-2026`, in development
+only).
 
 ## 4. Add the first feature
 
@@ -174,7 +186,9 @@ migrations run at boot in development (`database.migrate_on_boot = true`);
 run `navree migrate` explicitly elsewhere.
 
 For screens drawn in Rust on the server, load `navree-ui`: it adds the
-shell, a list page and a form page to the app.
+shell, a list page and a form page to the app. In an app made by `navree new`,
+`navree make:page|form|table <name> --module <module>` add them, and the
+pages take `Desk` (see `navree-cli-generators`).
 
 ## Add Navree to an existing package
 

@@ -133,6 +133,14 @@ Go through it in order; each item says how to check.
 - [ ] With `SessionModule` (cookie sessions): CSRF stays on; `session.csrf_except`
   only covers signed webhooks; `session.secure = true`; call
   `session.regenerate()` on sign-in and `invalidate()` on sign-out.
+- [ ] Browser sign-in through `AuthPages` / `AuthService::sign_in_session`:
+  `session.secure` and `session.host_prefix` are on in production (the cookie
+  is `__Host-navree_session`); `auth.session.lifetime_hours` and
+  `auth.session.remember_days` are chosen on purpose; `auth.password_reset.url`
+  (and `auth.magic_link.url`, `https://<site>/sign-in/link/verify`) point at
+  the pages; a `next` only ever leads to a page of the site (the pages check
+  it); impersonation stays off unless `auth.impersonation.enabled` and its
+  permission are granted to few.
 
 ## 7. Secrets and errors
 

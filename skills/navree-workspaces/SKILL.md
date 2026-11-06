@@ -147,6 +147,7 @@ permissions = ["deals.read"]
 | `subdomain` | `acme.app.example.com` (Host header, one label) | `workspace.base_domain` (unset = off) |
 | `claim` | claim of the bearer JWT, authenticated requests only | `workspace.claim` (`workspace`) |
 | `domain` | the workspace's own verified domain (`crm.acme-corp.com`), marked by `DomainsModule` | list it first: `resolvers = ["domain", "header"]`; workspaces only |
+| `session` | the workspace a browser signed in on the session cookie switched to (`POST /workspace/switch`, `workspace.switch_path`; a form with `workspace` and `next`, or JSON); `WorkspaceSwitcher` posts to it | list it first for Navree UI pages: `resolvers = ["session", "header"]`; with `workspace.session_default = true` a browser that has chosen none is in the first workspace its account belongs to |
 
 Order: `workspace.resolvers` (default `["header", "path", "subdomain",
 "claim"]`, env `APP_WORKSPACE__RESOLVERS=subdomain,header`); first hit wins.

@@ -662,14 +662,74 @@ For each page, also check: the keyboard reaches every control in order with
 a visible focus ring; the list works with JavaScript off; the empty, failed,
 read-only and forbidden states show; nothing scrolls sideways at 390 pixels.
 
+## Signing in, workspaces and the person in the shell
+
+A browser signs in on the session cookie, through the same steps as a token
+client (the throttle, two-factor authentication, the sign-in policies, the
+audit trail). Add the pages to the app root:
+
+```rust
+use navree::auth::{AuthModule, AuthPages};
+use navree::session::SessionModule;
+
+Navree::app()
+    // ConfigModule, CryptoModule, HttpModule, DatabaseModule ...
+    .module(UiModule::from_config())
+    .module(SessionModule::from_config())
+    .module(AuthModule::from_config())
+    .module(AuthPages::new().app_name("Sutlej CRM"))
+```
+
+`AuthPages` draws `/sign-in` (with "remember me"), `/sign-in/two-factor`,
+`/forgot-password`, `/reset-password`, `POST /sign-out`, the setup page
+`/account/two-factor` (a secret to scan, the first code, recovery codes shown
+once; a user a two-factor policy requires it of is sent there after signing
+in) and `POST /impersonate/stop`. With `auth.magic_link.enabled`,
+`auth.otp.enabled` or `auth.passkeys.enabled` it adds `/sign-in/link` (a
+mailed link that opens a page with one button), `/sign-in/code` and
+`/sign-in/passkey`, and the sign-in page links to them. Settings that matter:
+`auth.password_reset.url` (the reset page's address), `auth.magic_link.url`
+(`https://app.example.com/sign-in/link/verify`), `session.secure = true` and
+`session.host_prefix` in production, `ui.sign_in_redirect = true` so a guest
+who asks for a page is sent to sign in and back. A page route is
+`.authenticated().page()`; its forms carry the session's token (`FormView::csrf`).
+
+A single-page app that keeps its browser on the cookie posts JSON to
+`POST /api/auth/session/login` (`{email, password, remember?}`; the answer is
+the user, or `{"two_factor_required": true}`) and
+`POST /api/auth/session/2fa/verify`, with the `X-XSRF-TOKEN` header; no token
+is issued. An administrator with the impersonation permission calls
+`POST /api/auth/impersonate/{user}` from a signed-in browser and the session
+becomes the user's (the shell shows "Stop impersonating", a post to
+`/impersonate/stop`).
+
+Workspaces: add `WorkspaceModule::from_config()` and set
+`workspace.resolvers = ["session", "header"]` and
+`workspace.session_default = true` (a browser that has chosen none is in the
+first workspace its account belongs to). `WorkspaceSwitcher` is an
+extractor and a component (`AppPage::actions(switcher)`); `CurrentWorkspace`
+gives the workspace, the role and `has_permission`; read and write a
+workspace's rows through `WorkspaceRepo::<Model>`.
+
+The shell is registered once and static, so draw the person and the
+workspace per request: clone the registered `Shell`, set
+`.context(workspace.name)` and `.user(UserMenu::new(name, email)
+.link("Profile", "/profile").action("Sign out", "/sign-out"))`, and apply it
+with `shell.for_request(path, &headers)`. An app made by `navree new` does this
+in one extractor, `Desk` (`src/ui/shell.rs`): take `Desk` where this skill says
+`AppShell`.
+
 ## What is not shipped
 
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
 - **A workspace switcher in the shell's sidebar header.**
-  `navree_workspace::WorkspaceSwitcher` draws one; put it in the page or in
-  the shell's search slot.
+  `navree_workspace::WorkspaceSwitcher` draws one; put it beside the page
+  heading (`AppPage::actions`) or in the shell's search slot, and show the
+  workspace's name under the app's with `Shell::context`.
+- **A user menu that follows the request.** `Shell::user` is the same for
+  every request: build the shell per request (see above).
 - **Rich text editing and islands** (a part of a page with its own
   JavaScript component).
 - **An app's own stylesheet or static files.** The toolkit serves one
@@ -678,8 +738,10 @@ Tell the owner they are coming.
   font stack.
 
 Navigator (`navree-navigator`) reads the UI docs through `search_docs` and
-`read_doc` (slugs such as `ui/forms` and `components/date-picker`). It has no
-tool that lists the components an app uses or renders a page.
+`read_doc` (slugs such as `ui/forms` and `components/date-picker`),
+`list_components` lists the components of the toolkit, `list_routes` with
+`pages_only` lists the pages, and `render_page` outlines what a page draws
+for a guest.
 
 ## Every component
 

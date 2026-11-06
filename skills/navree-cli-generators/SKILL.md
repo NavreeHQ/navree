@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with the files it writes and what it registers, the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource), running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form` and `make:table` for Navree UI), the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form or data table), running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -18,6 +18,20 @@ Two command lines:
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'
   settings as environment variables.
+
+## Creating an app
+
+```sh
+navree new shop                     # the minimal app with screens drawn by Navree UI (the default)
+navree new shop --ui none           # the API alone
+navree new shop --ui next           # the API and a Next.js front end in web/
+navree new shop --kit saas|api|micro   # a starter kit (the saas kit's front end is Next.js)
+```
+
+The default front end is Navree UI: sign-in with two-factor authentication
+(`AuthPages`), two demo workspaces and a switcher, a customers table, forms,
+a home page with live figures, and `tests/journey.rs`. `--ui navree` goes with
+no kit. See the skill `navree-new-app`.
 
 ## Generators
 
@@ -55,11 +69,24 @@ hint with the line to add. Keep the markers:
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, command `posts:publish-scheduled` | `m.command(..)` in `wire` |
 | `make:agent posts assistant` | `agents/assistant.rs`, agent `Assistant` named `posts-assistant` with one `#[tool(read_only)]` (needs navree's `ai` feature and `AiModule`) | `navree::ai::ModuleBuilderAiExt::agent::<..>(m)` in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | `mod publishing;` in `tests/mod.rs` |
+| `make:page dashboard --module posts` | `pages/dashboard.rs`, a Navree UI page (`DashboardPage`, a controller whose `GET /dashboard` takes `AppShell` and draws a card) and `tests/dashboard_page.rs`; `--public` lets guests open it | `navree::http::ModuleBuilderHttpExt::controller::<..>(m)` in `wire` |
+| `make:form deal --module posts` | `forms/deal.rs`, a form struct (`Validate` + `Form`) with `page` and `store` functions | nothing; call `forms::deal::page` from a `GET` route and `forms::deal::store` from a `POST` route |
+| `make:table deal --module posts` | `tables/deal.rs`, a `TableRow` struct and `index` for the module's model (`models/deal.rs`, `entity.rs` or `entities/deal.rs`, with an `id`, a `name` and `created_at`) | nothing; call `tables::deal::index` from a `GET` route |
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp` with one tool `assistant_echo` (see `navree-mcp`) | `navree::mcp::ModuleBuilderMcpExt::mcp_server::<..>(m)` in `wire`; prints the `mcp` feature and `McpModule` steps |
 
 All `make:<kind>` take `--path <dir>` (default `src/modules`). The module
 must exist (`make:module` first); `make:listener --event` needs the event
-(`make:event` first).
+(`make:event` first). `make:page`, `make:form` and `make:table` name the item
+first and the module with `--module` (without it they use the app's only
+module, and refuse when there are several); they also take `--dry-run` (print
+the files, write nothing) and `--force`.
+
+The Navree UI generators write handlers that take `AppShell`, the app's shell.
+In an app made by `navree new` (which has `src/ui/shell.rs` with a `Desk`
+extractor), take `Desk` instead: it draws the same shell with the signed-in
+person in the user menu, the workspace's name in the sidebar and the workspace
+switcher beside the heading, and gives the workspace id for
+`WorkspaceRepo::<Model>` queries. The generator says so in its next steps.
 
 After generating: replace the placeholder logic, add columns to both the
 model and the migration, then `cargo test` (generated tests pass
@@ -145,6 +172,8 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
   that doesn't exist.
 - `CamelCase` or singular module names (`navree make:module Post`): use `posts`.
 - Running `navree help` to list app commands (use `navree list`).
+- Leaving `AppShell` in a generated page of a Navree UI app that has a `Desk`:
+  the page then shows no workspace and the generic user menu.
 - `navree new` writes `navree = "1.0.0"` (the CLI's own version) when it
   can't find a checkout: pass `--navree-path`.
 

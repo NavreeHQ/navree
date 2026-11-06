@@ -35,7 +35,7 @@ MongoDB.
 | `navree::mail` | navree-mail | `mail` | `MailModule::from_config()` (needs `ViewModule`; the delivery pipeline also `DatabaseModule` and `CryptoModule`) | `mail` | `Mailer`, `TemplateMail`, `Mailable`, `Message`, `TransportResolver`, `Deliveries`, `Suppressions`, `Outbox`, `SendingDomains`, `MailFake` |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule::from_config()` | `realtime` | Pusher-protocol WebSockets, channels, `Realtime` |
 | `navree::storage` | navree-storage | `storage` (+ `storage-s3`, `storage-gcs`, `storage-azure`) | `StorageModule::from_config()` | `storage` | `Disk`, `Storage`, `store_upload`, `presigned_put` / `accept_upload`, temporary URLs, `storage:sync` |
-| `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional; not used with bearer tokens) |
+| `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional with bearer tokens; the browser sign-in of Navree UI pages: `AuthPages`, `AuthService::sign_in_session`) |
 | `navree::validation` | navree-validation | `validation` | `ValidationModule::from_config()` | `validation` | `Validate` (trait and derive), `Valid`, `ValidAsync`, `AsyncRule`, `ValidationErrors`, `Folded`, `Country`, `Locale`; `Phone` (`validation-phone`) and `SafeHtml` (`validation-html`) |
 | `navree::queue` | navree-queue | `queue` | `QueueModule::from_config()` | `queue` | `Queue`, `Batch`, `Operations`, `QueueFake`, `queue:work` |
 | `navree::audit` | navree-audit | `audit` | `AuditModule::from_config()` | `audit` | the audit trail, `GET /api/audit`, `audit:prune` |

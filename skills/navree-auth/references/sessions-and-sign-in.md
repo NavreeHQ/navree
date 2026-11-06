@@ -56,6 +56,49 @@ permission = "users.impersonate"
 - Tests: `navree::auth::testing::VirtualAuthenticator::new(rp_id, origin)`;
   `.create(&options["publicKey"])`, `.get(&options["publicKey"])`.
 
+## Browser sign-in (sessions on the cookie)
+
+Features `session` and `ui` of the facade, with `SessionModule` in the app. A
+browser signs in through the same steps as a token client (the sign-in
+policies, the login and two-factor throttles, two-factor authentication, the
+audit trail), but it gets a server-side session bound to its navree-session
+session, never a token. Signing in gives the session a new id and CSRF token;
+signing out, ending the session from another device (`DELETE
+/auth/sessions/{id}`), changing or resetting the password and offboarding end
+it on the server at once, for a copied cookie too. `SessionStrategy` reads the
+user back on every request (`AuthVia::Session`, the same `AccessClaims` as a
+token, so `.authenticated()`, `#[recent_auth]` and `#[not_while_impersonating]`
+hold for both).
+
+- `AuthService::sign_in_session(&session, email, password, remember, &meta)`
+  answers `SessionSignIn::SignedIn(user)` or `TwoFactorRequired` (the session
+  keeps the challenge); `verify_two_factor_session` finishes it.
+  `login_with_magic_link_session`, `login_with_code_session` and
+  `login_with_passkey_session` are the same for a mailed link, a mailed code
+  and a passkey; `sign_in_to_session` is the hook for flows of your own.
+  `sign_out_session`, `change_password_session`, `confirm_session`,
+  `session_user` and `two_factor_setup_required` complete them.
+- `AuthPages::new().app_name("..")` (feature `ui`) is the pages: `/sign-in`,
+  `/sign-in/two-factor`, `/forgot-password`, `/reset-password`, `POST
+  /sign-out`, the setup page `/account/two-factor` and, when on,
+  `/sign-in/link`, `/sign-in/code` and `/sign-in/passkey`. A user whom a
+  `TwoFactorPolicy` requires to set two-factor up reaches the setup routes and
+  signing out only (403 `two_factor_required` elsewhere); the pages send them
+  to the setup page after signing in.
+- `POST /api/auth/session/login`, `/session/2fa/verify`,
+  `/session/magic-link/verify` and `/session/otp/verify` are the JSON routes of
+  a single-page app on the cookie (no token; the `X-XSRF-TOKEN` header).
+  `POST /api/auth/logout` signs a browser out, `GET /api/auth/me` reads the user.
+- Impersonation in the browser: `POST /api/auth/impersonate/{user}` from a
+  signed-in browser calls `impersonate_session` (the session becomes the
+  user's, with `act` and no `auth_time`, ending after
+  `auth.impersonation.ttl_secs`); `DELETE /api/auth/impersonate` or `POST
+  /impersonate/stop` calls `stop_impersonating_session` and the browser is the
+  administrator again. Signing out while impersonating ends both sign-ins.
+- Settings: `session.secure`, `session.host_prefix` (cookie `__Host-navree_session`),
+  `auth.session.lifetime_hours`, `auth.session.remember_days`,
+  `auth.password_reset.url`.
+
 ## Platform administrators
 
 ```toml

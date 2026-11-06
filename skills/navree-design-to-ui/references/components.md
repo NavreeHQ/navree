@@ -277,8 +277,11 @@ waits.
 Also not there yet:
 
 - A workspace switcher in the shell's sidebar header:
-  `navree_workspace::WorkspaceSwitcher` goes in the page or in the shell's
-  search slot.
+  `navree_workspace::WorkspaceSwitcher` goes beside the page heading
+  (`AppPage::actions`) or in the shell's search slot, and the workspace's name
+  goes under the app's with `Shell::context`. The signed-in person in the user
+  menu is drawn per request: see "Signing in, workspaces and the person in the
+  shell" in `navree-ui`.
 - A date and a time in one control: use a date picker and a time picker.
 - An app's own stylesheet or static files: the toolkit serves one
   stylesheet, and the content security policy loads styles, scripts,
