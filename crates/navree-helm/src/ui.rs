@@ -13,6 +13,7 @@ use navree_http::extract::{FromRequest, Multipart, Request};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Path, RawQuery};
 use navree_kernel::AppContext;
+use navree_ui::{ErrorPage, Href};
 use navree_storage::{Storage, UploadRules, store_upload};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -81,31 +82,22 @@ fn panel_json(core: &Core, csrf: &str) -> Value {
     })
 }
 
-/// A standalone error page.
-pub(crate) fn status_page(core: &Core, status: StatusCode, message: Option<String>) -> Response {
-    let reason = status.canonical_reason().unwrap_or("Error");
-    let message = message.unwrap_or_else(|| default_message(status).to_owned());
-    render(
-        core,
-        status,
-        "helm/error.html",
-        json!({
-            "panel": panel_json(core, ""),
-            "status": status.as_u16(),
-            "reason": reason,
-            "message": message,
-        }),
-    )
-}
+/// The most of an error's own message an error page shows.
+const MESSAGE_CHARS: usize = 300;
 
-fn default_message(status: StatusCode) -> &'static str {
-    match status.as_u16() {
-        403 => "You may not open this page.",
-        404 => "This page does not exist, or you may not see it.",
-        419 | 400 => "The request was not valid.",
-        429 => "Too many requests. Wait a moment and try again.",
-        _ => "Something went wrong. Try again in a moment.",
+/// A standalone error page, drawn by the toolkit like every other error page
+/// of the app: its words for the status, `message` (what the error says, when
+/// it says something the person can act on) under them, and a way back to the
+/// panel.
+pub(crate) fn status_page(core: &Core, status: StatusCode, message: Option<String>) -> Response {
+    let mut page = ErrorPage::new(status).home(Href::from(core.options.base()));
+    if let Some(message) = message {
+        let message = message.trim();
+        if !message.is_empty() {
+            page = page.detail(message.chars().take(MESSAGE_CHARS).collect::<String>());
+        }
     }
+    page.into_response()
 }
 
 /// An error from the panel's own code as a page: database errors mapped

@@ -57,7 +57,7 @@ async fn users_without_the_panel_get_an_error_page() {
             .starts_with("text/html")
     );
     assert!(
-        response.text().replace("&#x2f;", "/").contains("Forbidden"),
+        response.text().contains("No access"),
         "{}",
         response.text().replace("&#x2f;", "/")
     );

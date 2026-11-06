@@ -216,7 +216,7 @@ async fn a_user_without_the_panel_gets_the_error_page() {
             .unwrap()
             .starts_with("text/html")
     );
-    assert!(response.text().contains("Forbidden"));
+    assert!(response.text().contains("No access"));
 }
 
 #[tokio::test]
