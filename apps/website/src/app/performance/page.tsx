@@ -8,10 +8,12 @@ import { LatencyChart } from "@/components/bench/latency-chart";
 import { MachineDiagram } from "@/components/bench/machine-diagram";
 import { MemoryAndStartup } from "@/components/bench/memory-startup";
 import { RepeatChart } from "@/components/bench/repeat-chart";
+import { Screens } from "@/components/bench/screens";
 import { SectionNav } from "@/components/bench/section-nav";
 import { ThroughputBoard } from "@/components/bench/throughput-board";
 import { TickerNumber } from "@/components/bench/ticker";
 import { ArrowRightIcon, DownloadIcon, ExternalIcon } from "@/components/icons";
+import { Faq } from "@/components/faq";
 import { CodeBlock } from "@/components/mdx/code-block";
 import { GridPattern } from "@/components/magicui/grid-pattern";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +48,7 @@ export const metadata: Metadata = pageMetadata({
 
 const sections = [
   { id: "results", label: "Results" },
+  { id: "screens", label: "Screens" },
   { id: "workload", label: "Workload" },
   { id: "method", label: "Method" },
   { id: "efficiency", label: "Efficiency" },
@@ -574,6 +577,19 @@ export default async function PerformancePage() {
         </div>
       </Section>
 
+      {/* --------------------------------------------------------- screens */}
+      <Section id="screens">
+        <SectionHead id="screens" eyebrow="Screens" title="Whole screens, with lakhs of rows behind them.">
+          <p>
+            The results above are what the API can serve. These are what a person waits for: pages that Navree UI draws on the
+            server, with the tables behind them at full size.
+          </p>
+        </SectionHead>
+        <div className="mt-12 lg:mt-16">
+          <Screens />
+        </div>
+      </Section>
+
       {/* -------------------------------------------------------- workload */}
       <Section id="workload">
         <SectionHead id="workload" eyebrow="Workload" title="A small CRM API, and nothing tuned for it.">
@@ -1026,6 +1042,8 @@ export default async function PerformancePage() {
           </div>
         </div>
       </Section>
+
+      <Faq name="performance" />
 
       {/* ----------------------------------------------------------- close */}
       <section aria-labelledby="perf-cta" className="cv-auto relative overflow-hidden border-t border-line">

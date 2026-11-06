@@ -57,7 +57,10 @@ export const pageInfo: Record<string, PageInfo> = {
       "public/images/showcase",
     ],
   },
-  "/performance/": { name: "Performance", sources: ["src/components/bench", "src/lib/bench.ts"] },
+  "/performance/": {
+    name: "Performance",
+    sources: ["src/components/bench", "src/lib/bench.ts", "src/lib/screens.ts", "content/showcase/store.json", "src/components/showcase/inbox-numbers.ts", "src/components/showcase/board-numbers.ts", "src/content/faq.ts"],
+  },
   "/showcase/": {
     name: "Showcase",
     kind: "CollectionPage",

@@ -1,9 +1,11 @@
 import { groups } from "@/components/ui-docs/data";
-import { aboutFaq, aiFaq, architectureFaq, homeFaq, introductionFaq, uiFaq, type FaqSet } from "@/content/faq";
+import { aboutFaq, aiFaq, architectureFaq, homeFaq, introductionFaq, performanceFaq, uiFaq, type FaqSet } from "@/content/faq";
+import { measuredOn, perf } from "@/lib/bench";
+import { screenTables } from "@/lib/screens";
 import { uiRoadmap } from "@/lib/ui-page-data";
 import { appCards } from "@/app/ui/showcases";
 
-export type FaqName = "home" | "ui" | "ai" | "introduction" | "about" | "architecture";
+export type FaqName = "home" | "ui" | "ai" | "introduction" | "about" | "architecture" | "performance";
 
 /**
  * Every set of questions, by name, for the pages that draw them. The Navree
@@ -19,5 +21,26 @@ export function faqSets(): Record<FaqName, FaqSet> {
     introduction: introductionFaq,
     about: aboutFaq,
     architecture: architectureFaq,
+    performance: performanceFaq(performanceInput()),
+  };
+}
+
+/** The performance questions' numbers, read from the result file and the screens the example apps measured. */
+function performanceInput() {
+  const orders = screenTables()[0].screens.find((screen) => screen.name === "Orders");
+  if (!orders) throw new Error("faq-sets: the store has no Orders screen in its measurements");
+  return {
+    listRps: perf.results.deals_list.rps,
+    createRps: perf.results.deals_create.rps,
+    cpus: perf.settings.app.count,
+    peakMemMb: Math.round(perf.peakMemMb),
+    startupMs: perf.startupMs,
+    runs: perf.settings.runs,
+    durationS: perf.settings.durationS,
+    warmupS: perf.settings.warmupS,
+    connections: perf.settings.connections,
+    checks: perf.conformance.passed,
+    measured: measuredOn(),
+    store: { orders: orders.behind.replace(" orders", ""), paintMs: orders.desktopMs },
   };
 }

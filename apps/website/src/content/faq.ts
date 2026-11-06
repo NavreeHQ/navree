@@ -293,6 +293,59 @@ export const aboutFaq: FaqSet = {
   ],
 };
 
+/** What the performance questions are computed from: the result file, and the screens the example apps measured. */
+export type PerformanceFaqInput = {
+  /** Requests a second of the authenticated, paginated list and of the validated insert. */
+  listRps: number;
+  createRps: number;
+  cpus: number;
+  peakMemMb: number;
+  startupMs: number;
+  runs: number;
+  durationS: number;
+  warmupS: number;
+  connections: number;
+  /** Checks the conformance test passed before the run, or null. */
+  checks: number | null;
+  /** The day the run started, written out: "26 October 2026". */
+  measured: string;
+  /** The store's orders page: its orders (written out) and its paint on a laptop in milliseconds. */
+  store: { orders: string; paintMs: number };
+};
+
+/** The performance page (`/performance/`): how fast, how it was measured, and what the numbers mean. */
+export function performanceFaq(input: PerformanceFaqInput): FaqSet {
+  const n = (value: number) => Math.round(value).toLocaleString("en-IN");
+  return {
+    path: "/performance/",
+    heading: "Questions about Navree's speed",
+    items: [
+      {
+        question: "How fast is Navree?",
+        answer: `On a CRM-style API with JWT auth, validation and PostgreSQL, one Navree binary on ${input.cpus} CPUs serves ${n(input.listRps)} authenticated, paginated lists a second and ${n(input.createRps)} validated inserts a second. It peaks at ${input.peakMemMb} MB and answers its first request ${input.startupMs} ms after it starts. Screens paint fast too: the store's orders page in ${input.store.paintMs} ms over ${input.store.orders} orders.`,
+        link: { href: "#results", label: "See the results" },
+      },
+      {
+        question: "How was Navree measured?",
+        answer: `In three containers on one machine with fixed CPUs: Navree, PostgreSQL and the load generator wrk. Each test is the median of ${input.runs} runs of ${input.durationS} seconds at ${input.connections} open connections, after a ${input.warmupS}-second warm-up${input.checks ? `, and the app first passes a ${input.checks}-check conformance test` : ""}. The run started on ${input.measured}.`,
+        link: { href: "#method", label: "Read the method" },
+      },
+      {
+        question: "Do the figures include a real database and real work?",
+        answer:
+          "Yes, except for the plain JSON test, which has no database on purpose. The other tests go through routing, JWT authentication, validation, the ORM and a PostgreSQL query, and the inserts run in a transaction. They measure the overhead of the framework on one small app, so read them as a guide and not as a promise for your product.",
+        link: { href: "#workload", label: "See the workload" },
+      },
+      {
+        question: "Can I repeat the run on my own machine?",
+        answer:
+          "Yes. You need Docker and Node.js. One script starts PostgreSQL, builds the load generator and the app, runs the conformance test, measures every test and writes the result file this page is built from. Every setting is a flag, so you can fit it to your CPUs. The raw result files are on the page.",
+        link: { href: "#reproduce", label: "Run it yourself" },
+      },
+    ],
+  };
+}
+
 /** The set drawn at the end of a docs page (`prologue/introduction`), or null. */
 export function docFaq(slug: string): FaqSet | null {
   return slug === "prologue/introduction" ? introductionFaq : null;
