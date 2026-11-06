@@ -3719,7 +3719,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -3890,7 +3890,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -4061,7 +4061,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -4232,7 +4232,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [
         "Two kinds of image",
@@ -4258,7 +4258,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -4482,7 +4482,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -4653,7 +4653,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -4843,7 +4843,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [
         "Disabled",
@@ -4869,7 +4869,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-7be3fb9ac3f5.js"
+        "upload-2a1b85f2036b.js"
       ],
       "captions": [],
       "slots": [
@@ -46651,6 +46651,24 @@
                                                       "slot": "theme-sr",
                                                       "tag": "span",
                                                       "count": 2,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
                                                       "children": []
                                                     },
                                                     {
