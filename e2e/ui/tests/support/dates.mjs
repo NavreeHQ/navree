@@ -7,15 +7,15 @@ import { createRequire } from "node:module";
 import { after, before, describe } from "node:test";
 import * as playwright from "playwright";
 import { launch } from "./launch.mjs";
+import { LIGHT } from "./light.mjs";
 
 export const BASE = process.env.DATES_URL || "http://127.0.0.1:8290";
 const require = createRequire(import.meta.url);
 const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
 export const cases = JSON.parse(await readFile(new URL("../../../../crates/navree-ui/tests/fixtures/dates-parse.json", import.meta.url), "utf8"));
 
-// The light values of `src/tokens.rs`: the toolkit ships dark only so far, so light
-// is proved by putting these on the page.
-export const LIGHT = ":root{color-scheme:light;--ink-0:#ffffff;--ink-1:#f7f8f7;--ink-2:#eff1f0;--ink-3:#e5e8e6;--line:#dfe3e0;--line-2:#c8cecb;--line-3:#aeb6b2;--fg:#0a0e0c;--fg-1:#1c2420;--fg-2:#3f4a44;--fg-3:#55615b;--accent:#0b7a3e;--accent-ink:#ffffff;--amber:#8a5a00;--danger:#b3261e;--bar:#8a968f}";
+// The page in light, from the tokens.
+export { LIGHT };
 
 /**
  * The light values, set before the page's first paint and winning over the stylesheet. Put on a

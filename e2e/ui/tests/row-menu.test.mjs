@@ -13,14 +13,12 @@ import { createRequire } from "node:module";
 import { after, before, describe, test } from "node:test";
 import * as playwright from "playwright";
 import { launch } from "./support/launch.mjs";
+import { LIGHT } from "./support/light.mjs";
 
 const BASE = process.env.UI_TABLE_URL || "http://127.0.0.1:8097";
 const require = createRequire(import.meta.url);
 const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
 const PHONE = { width: 390, height: 844 };
-
-// The light values of the tokens: the toolkit ships dark only so far, so light is proved by putting these on the page.
-const LIGHT = ":root{color-scheme:light;--ink-0:#ffffff;--ink-1:#f7f8f7;--ink-2:#eff1f0;--ink-3:#e5e8e6;--line:#dfe3e0;--line-2:#c8cecb;--line-3:#aeb6b2;--fg:#0a0e0c;--fg-1:#1c2420;--fg-2:#3f4a44;--fg-3:#55615b;--accent:#0b7a3e;--accent-ink:#ffffff;--amber:#7d5100;--danger:#b3261e;--bar:#8a968f}";
 
 const post = (path) => fetch(BASE + path, { method: "POST" }).then((r) => r.text());
 const get = (path) => fetch(BASE + path).then((r) => r.text());

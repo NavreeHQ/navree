@@ -13,6 +13,7 @@ import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
 import { page as doc, start } from "./support/fixture.mjs";
 import { launch } from "./support/launch.mjs";
+import { LIGHT as TOKENS } from "./support/light.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -21,7 +22,7 @@ const ENGINES = { chromium, firefox, webkit };
 const NAMES = (process.env.UI_BROWSERS || "chromium,firefox").split(",").filter((n) => ENGINES[n]);
 
 /** The light values of the tokens, for a page that otherwise ships only dark. */
-const LIGHT = ":root{color-scheme:light;--ink-0:#ffffff;--ink-1:#f7f8f7;--ink-2:#eff1f0;--ink-3:#e5e8e6;--line:#dfe3e0;--line-2:#c8cecb;--line-3:#aeb6b2;--fg:#0a0e0c;--fg-1:#1c2420;--fg-2:#3f4a44;--fg-3:#55615b;--accent:#0b7a3e;--accent-ink:#ffffff;--amber:#8a5a00;--danger:#b3261e}body{background:var(--ink-0)}";
+const LIGHT = TOKENS + "body{background:var(--ink-0)}";
 
 async function axe(page) {
   await page.evaluate(axeSource);

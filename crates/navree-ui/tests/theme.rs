@@ -635,3 +635,33 @@ fn a_theme_is_offered_by_its_values_not_by_its_key() {
         .appearance();
     assert_eq!(look.theme().short_form(), mine.short_form());
 }
+
+/// A warning badge in the row the pointer is on: its text on its own 12% tint, laid over
+/// the hovered row (`ink-2`), not over the page. The contrast check measures it there, so
+/// a palette whose amber reads on the page but not on a hovered row is caught.
+#[test]
+fn the_contrast_check_measures_a_badge_on_a_hovered_rows_tint() {
+    use navree_ui::theme::{Paint, PairKind, Side, ThemeSpec, Token};
+
+    let on_hovered_row = |spec: &ThemeSpec| {
+        spec.shortfalls().into_iter().find(|short| {
+            short.side == Side::Light
+                && short.pair.text == Paint::Token(Token::Amber)
+                && short.pair.on == Paint::Tint(Token::Amber, 12, Token::Ink2)
+        })
+    };
+    let mut spec = *Theme::NAVREE.spec();
+    assert!(on_hovered_row(&spec).is_none(), "the toolkit's own light amber reads there");
+    // An amber a little lighter than the toolkit's: about 4.44:1 on the hovered row.
+    spec.palette_mut(Side::Light)
+        .set(Token::Amber, Rgb::parse("#8a5a00").unwrap());
+    let short = on_hovered_row(&spec).expect("the badge on a hovered row falls short");
+    assert_eq!(short.pair.kind, PairKind::Text);
+    assert!((4.4..4.5).contains(&short.ratio), "{}", short.ratio);
+    assert!(!spec.text_passes(), "a theme with it can't be saved");
+    // On the page the same amber passes: only the row's tint shows the problem.
+    let light = spec.palette(Side::Light);
+    let amber = Paint::Token(Token::Amber).resolve(light, Side::Light);
+    let page = Paint::Token(Token::Ink0).resolve(light, Side::Light);
+    assert!(amber.contrast(page) >= 4.5, "{}", amber.contrast(page));
+}
