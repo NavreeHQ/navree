@@ -35,6 +35,7 @@ Compose v2 and bash.
 | `sql/` | `lighthouse-reset.sql` clears what the migration and the seeder made Lighthouse record; `lighthouse-history.sql` adds back-dated copies of the recorded hours, so the 24-hour and 7-day charts have a shape (see "UI evidence") |
 | `tools/summarize.mjs` | Builds `summary.json` and `summary.md` from a run's files |
 | `run.sh`, `run.ps1` | The harness |
+| `site/` | Real-browser tests of the built website (`apps/website/out`): the About picture's controls and the homepage film's early press. Run after `pnpm build` in `apps/website`: `npm ci --prefix e2e/site`, `npx playwright install chromium`, `npm test --prefix e2e/site` |
 | `mcp-sdk/` | Not part of the harness: the official MCP TypeScript SDK's client (pinned in `package.json`) against navree-mcp over stdio and Streamable HTTP. Run `npm ci --prefix e2e/mcp-sdk`, then `cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture` |
 
 The app is `apps/evidence-app`: a Navree application that wires the
