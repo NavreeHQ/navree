@@ -14175,7 +14175,7 @@
     "name": "Table",
     "kind": "struct",
     "file": "crates/navree-ui/src/components/display.rs",
-    "summary": "A table of data. The wrapper scrolls on narrow screens.",
+    "summary": "A table of data. The wrapper scrolls on narrow screens, and a keyboard can reach it to scroll it: it is a tab stop, a region named by `Table::label` (\"Table\" until one is given).",
     "constructors": [
       {
         "name": "new",
@@ -14185,6 +14185,12 @@
       }
     ],
     "methods": [
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "The name a screen reader gives the scrolling region around the table."
+      },
       {
         "name": "body_id",
         "generics": "",

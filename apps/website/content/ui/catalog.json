@@ -1762,7 +1762,7 @@
       "id": "table",
       "name": "Table",
       "url": "/docs/components/table/",
-      "summary": "A table of data. The wrapper scrolls on narrow screens.",
+      "summary": "A table of data. The wrapper scrolls on narrow screens, and a keyboard can reach it to scroll it: it is a tab stop, a region named by `Table::label` (\"Table\" until one is given).",
       "group": "data",
       "types": [
         "Table",
