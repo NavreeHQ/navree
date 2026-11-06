@@ -38,6 +38,9 @@ impl Module for CustomersModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
         m.model::<Customer>();
+        // Rows belong to one workspace: `navree check` makes sure they are only read
+        // and written through `WorkspaceRepo`.
+        m.workspace_entity::<Customer>();
         m.provider::<CustomerService>();
         m.provider::<seed::DemoData>().lifecycle::<seed::DemoData>();
         m.seeder::<seed::CustomerSeeder>();

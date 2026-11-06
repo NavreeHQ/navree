@@ -604,6 +604,24 @@ pub(crate) fn generic_call(path: &str, generics: &[String], args: &str, indent: 
     out
 }
 
+/// The comment above a generated model's `global_entity` line: how to give
+/// each workspace its own rows instead.
+const GLOBAL_ENTITY_COMMENT: &str =
+    "// Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.";
+
+/// The lines classifying `model` (a path from the module) as a global
+/// entity, one set of rows for every workspace, as `navree check` requires
+/// of every model in an app with workspaces.
+fn global_entity(model: &str) -> String {
+    let call = generic_call(
+        "navree::workspace::ModuleBuilderWorkspaceExt::global_entity",
+        &[model.to_owned()],
+        "m",
+        WIRE_INDENT,
+    );
+    format!("{GLOBAL_ENTITY_COMMENT}\n{call}")
+}
+
 /// `path(args...);` laid out as rustfmt would at `indent`.
 fn call(path: &str, args: &[String], indent: usize) -> String {
     let line = format!("{path}({});", args.join(", "));
@@ -686,9 +704,12 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
             "m",
             WIRE_INDENT,
         )),
-        // Registered for `model:show`; a model with a policy is also a
-        // subject: its records load for `#[can(.., from = ..)]` routes and
-        // its policy joins every user's rules.
+        // A bare model (`make:entity`): classified as a global entity.
+        MakeKind::Entity => Some(global_entity(&format!("entities::{stem}::{pascal}"))),
+        // Registered for `model:show` and classified as a global entity; a
+        // model with a policy is also a subject: its records load for
+        // `#[can(.., from = ..)]` routes and its policy joins every user's
+        // rules.
         MakeKind::Model => {
             let model = format!("models::{stem}::{pascal}");
             let mut block = generic_call(
@@ -697,6 +718,8 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
                 "m",
                 WIRE_INDENT,
             );
+            block.push('\n');
+            block.push_str(&global_entity(&model));
             if ctx.with_policy {
                 let feature = format!("navree::access::AccessModule::for_feature::<{model}>()");
                 block.push('\n');
@@ -1029,6 +1052,23 @@ mod tests {
             "the last marker wins"
         );
         assert_eq!(altered("backfill_slugs"), None);
+    }
+
+    #[test]
+    fn a_global_entity_is_laid_out_as_rustfmt_would() {
+        assert!(WIRE_INDENT + GLOBAL_ENTITY_COMMENT.len() <= MAX_WIDTH);
+        assert_eq!(
+            global_entity("models::deal::Deal"),
+            format!(
+                "{GLOBAL_ENTITY_COMMENT}\nnavree::workspace::ModuleBuilderWorkspaceExt::global_entity::<models::deal::Deal>(m);"
+            )
+        );
+        assert_eq!(
+            global_entity("models::post_label::PostLabel"),
+            format!(
+                "{GLOBAL_ENTITY_COMMENT}\nnavree::workspace::ModuleBuilderWorkspaceExt::global_entity::<\n    models::post_label::PostLabel,\n>(m);"
+            )
+        );
     }
 
     #[test]

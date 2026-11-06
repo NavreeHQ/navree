@@ -125,7 +125,11 @@ snake_case; module names are plural. Generators never overwrite a file.
   `Executor`. The unit of work commits when the response status is below
   400 and rolls back otherwise. Lists take `PageQuery`, return `Page<T>`
   (`{ "data", "meta" }`) and filter with `Accessible<Post, Read>`
-  (`scope.query().paginate(uow, page)`).
+  (`scope.query().paginate(uow, page)`). `navree check` requires every
+  model to be classified: `m.global_entity::<Post>()` in its module's
+  `wire` for one set of rows shared by every workspace (what the generators
+  write), or `#[model(workspace)]` with a `workspace_id` column for rows
+  that belong to one workspace.
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
 {% if ui_navree %}

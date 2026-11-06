@@ -27,6 +27,7 @@ use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
 use navree::orm::ModuleBuilderOrmExt;
+use navree::workspace::ModuleBuilderWorkspaceExt;
 
 pub use controller::{{ entity_pascal }}Controller;
 pub use entity::{{ entity_pascal }};
@@ -64,6 +65,8 @@ impl {{ module_pascal }}Module {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
         m.model::<{{ entity_pascal }}>();
+        // Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.
+        m.global_entity::<{{ entity_pascal }}>();
         // navree:wire
     }
 }

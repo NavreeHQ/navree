@@ -27,6 +27,7 @@ use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
 use navree::orm::ModuleBuilderOrmExt;
+use navree::workspace::ModuleBuilderWorkspaceExt;
 
 pub use controller::ProfileController;
 pub use entity::Profile;
@@ -48,6 +49,8 @@ impl UsersModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
         m.model::<Profile>();
+        // A user has one profile, the same in every workspace.
+        m.global_entity::<Profile>();
         // navree:wire
     }
 }
