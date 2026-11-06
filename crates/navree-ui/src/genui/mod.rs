@@ -30,16 +30,16 @@ pub mod chat;
 pub mod frame;
 pub mod props;
 
+pub use catalog::{
+    Action, ActionButton, ActionDone, ActionRefusal, Catalog, CatalogTool, Checked, Confirm,
+    Limits, Refusal, RunAction, Surface, SurfaceCx, SurfaceView, TOOL_PREFIX,
+};
 pub use chat::{
     ApprovalCard, ApprovalState, ChatLabels, ChatMessage, ChatRole, ChatState, Citation,
     Conversation, MAX_MESSAGE, PromptInput, Reasoning, Sources, Suggestions, ThreadList,
     ToolCallCard, ToolState, approval_notice, chat_notice, writing_key,
 };
 pub use frame::{FrameLabels, SurfaceFrame, defuse};
-pub use catalog::{
-    Action, ActionButton, ActionDone, ActionRefusal, Catalog, CatalogTool, Checked, Confirm,
-    Limits, Refusal, RunAction, Surface, SurfaceCx, SurfaceView, TOOL_PREFIX,
-};
 #[doc(hidden)]
 pub use props::__private;
 pub use props::{

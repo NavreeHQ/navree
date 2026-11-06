@@ -346,9 +346,16 @@ fn every_tool_is_named_and_described_from_its_props() {
     for tool in &tools {
         assert!(tool.name.starts_with("show_"));
         assert_eq!(tool.parameters["type"], "object", "{}", tool.name);
-        assert_eq!(tool.parameters["additionalProperties"], false, "{}", tool.name);
+        assert_eq!(
+            tool.parameters["additionalProperties"], false,
+            "{}",
+            tool.name
+        );
     }
-    let payments = tools.iter().find(|t| t.name == "show_payments_by_method").unwrap();
+    let payments = tools
+        .iter()
+        .find(|t| t.name == "show_payments_by_method")
+        .unwrap();
     assert!(
         payments
             .description
@@ -432,7 +439,11 @@ fn schema_check_and_example_agree_for_every_component() {
         let mut extra = example.as_object().unwrap().clone();
         extra.insert("html".to_owned(), json!("<b>"));
         assert!(meets(schema, &Value::Object(extra.clone())).is_err());
-        assert!(catalog.check_example(&tool.name, &Value::Object(extra)).is_err());
+        assert!(
+            catalog
+                .check_example(&tool.name, &Value::Object(extra))
+                .is_err()
+        );
     }
 }
 
@@ -501,8 +512,18 @@ fn arbitrary_json() -> impl Strategy<Value = Value> {
         (-1.0e6f64..1.0e6).prop_map(|n| json!(n)),
         "[a-z_]{0,12}".prop_map(Value::String),
         prop::sample::select(vec![
-            "today", "this_week", "upi", "card", "/orders/1042", "/orders/../x", "1042",
-            "2026-11-06", "2026-02-30", "<script>", "a\u{202E}b", "",
+            "today",
+            "this_week",
+            "upi",
+            "card",
+            "/orders/1042",
+            "/orders/../x",
+            "1042",
+            "2026-11-06",
+            "2026-02-30",
+            "<script>",
+            "a\u{202E}b",
+            "",
         ])
         .prop_map(|s| Value::String(s.to_owned())),
     ];
@@ -511,8 +532,18 @@ fn arbitrary_json() -> impl Strategy<Value = Value> {
             prop::collection::vec(inner.clone(), 0..8).prop_map(Value::Array),
             prop::collection::btree_map(
                 prop::sample::select(vec![
-                    "period", "method", "orders", "rows", "caption", "days", "since", "page",
-                    "refunds", "heading", "html", "__proto__",
+                    "period",
+                    "method",
+                    "orders",
+                    "rows",
+                    "caption",
+                    "days",
+                    "since",
+                    "page",
+                    "refunds",
+                    "heading",
+                    "html",
+                    "__proto__",
                 ])
                 .prop_map(str::to_owned),
                 inner,
@@ -620,17 +651,26 @@ fn a_conversation_is_a_live_list_that_starts_at_the_newest() {
     assert!(html.contains(r#"data-genui="conversation""#), "{html}");
     assert!(html.contains(r#"data-ui-order="asc""#), "{html}");
     assert!(html.contains(r#"data-ui-live-at="end""#), "{html}");
-    assert!(html.contains(r#"data-ui-live-event="assistant.7""#), "{html}");
+    assert!(
+        html.contains(r#"data-ui-live-event="assistant.7""#),
+        "{html}"
+    );
     assert!(html.contains(r#"data-ui-since="12""#), "{html}");
     // Finished answers are read out once, politely; the one being written is quiet and
     // listed under its writing key, so it is read out when it comes back finished.
-    assert!(html.contains(r#"data-l-new-one="The assistant answered""#), "{html}");
+    assert!(
+        html.contains(r#"data-l-new-one="The assistant answered""#),
+        "{html}"
+    );
     assert!(html.contains(r#"data-key="a2.w""#), "{html}");
     assert!(
         html.contains(r#"data-ui-say="The assistant answered: UPI took **62%** of payments.""#),
         "{html}"
     );
-    assert!(!html.contains(r#"role="log""#), "a log would read an answer out as it grows");
+    assert!(
+        !html.contains(r#"role="log""#),
+        "a log would read an answer out as it grows"
+    );
     assert_eq!(html.matches(r#"aria-busy="true""#).count(), 1, "{html}");
 }
 
@@ -658,7 +698,10 @@ fn every_part_works_with_no_script() {
         "{suggestions}"
     );
     let html = conversation_html();
-    assert!(html.contains(r#"<form method="post" action="/assistant/7/stop""#), "{html}");
+    assert!(
+        html.contains(r#"<form method="post" action="/assistant/7/stop""#),
+        "{html}"
+    );
 }
 
 #[test]
@@ -672,7 +715,11 @@ fn hostile_words_from_a_model_stay_words() {
         "<form action=https://evil.example><button>Approve</button></form>",
         "\"><svg onload=alert(1)>",
     ] {
-        let html = render(&ChatMessage::assistant("a", "1", hostile).into_item(&labels).into());
+        let html = render(
+            &ChatMessage::assistant("a", "1", hostile)
+                .into_item(&labels)
+                .into(),
+        );
         let lower = html.to_ascii_lowercase();
         assert!(!lower.contains("<script"), "{html}");
         assert!(!lower.contains("<img"), "{html}");
@@ -704,13 +751,24 @@ fn an_approval_card_is_set_apart_and_names_what_it_approves() {
     );
     assert!(html.contains(r#"data-genui="approval""#), "{html}");
     assert!(html.contains(r#"role="region""#), "{html}");
-    assert!(html.contains("The assistant asks to: Refund an order"), "{html}");
+    assert!(
+        html.contains("The assistant asks to: Refund an order"),
+        "{html}"
+    );
     assert!(html.contains("<dt>order</dt><dd>CS-1042</dd>"), "{html}");
     assert!(html.contains("<dt>full</dt><dd>yes</dd>"), "{html}");
     assert!(html.contains("&lt;b&gt;now&lt;/b&gt;"), "{html}");
     assert!(html.contains(r#"action="/assistant/7/approve""#), "{html}");
     assert!(html.contains(r#"action="/assistant/7/reject""#), "{html}");
-    assert_eq!(html.matches(r#"name="call_id" value="call_9""#).count(), 2, "{html}");
-    assert_eq!(html.matches(r#"name="_csrf" value="tok""#).count(), 2, "{html}");
+    assert_eq!(
+        html.matches(r#"name="call_id" value="call_9""#).count(),
+        2,
+        "{html}"
+    );
+    assert_eq!(
+        html.matches(r#"name="_csrf" value="tok""#).count(),
+        2,
+        "{html}"
+    );
     assert!(html.contains(r#"name="reason""#), "{html}");
 }

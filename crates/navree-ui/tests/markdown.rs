@@ -1,7 +1,6 @@
 //! Markdown and code blocks on a page: what a page loads for them, what they write, and
 //! how a real reply from a model reads. The hostile cases are in `security.rs`.
 
-
 use navree_ui::{CodeBlock, Markdown, MarkdownLabels, Uses, View, assets, render};
 
 /// An answer as a model writes it: a heading, figures in a table, a list with links, and code.

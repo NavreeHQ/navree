@@ -1714,7 +1714,8 @@ async fn read_multipart<T: Form>(
     request: Request,
     ctx: Option<&AppContext>,
 ) -> Result<(Pairs, Posted), Result<StatusCode, AppError>> {
-    let Ok(mut form) = <navree_http::extract::Multipart as FromRequest>::from_request(request).await
+    let Ok(mut form) =
+        <navree_http::extract::Multipart as FromRequest>::from_request(request).await
     else {
         return Err(Ok(StatusCode::BAD_REQUEST));
     };
@@ -1756,7 +1757,9 @@ async fn read_multipart<T: Form>(
                             posted.files.push((name.clone(), stored.path.clone()));
                             kept.push((uploads, stored));
                         }
-                        Ok(Err(refused)) => pairs.push((format!("{FILE_REFUSED}{name}"), refused.message)),
+                        Ok(Err(refused)) => {
+                            pairs.push((format!("{FILE_REFUSED}{name}"), refused.message))
+                        }
                         Err(error) => break Err(Err(error)),
                     }
                 }
@@ -1853,13 +1856,18 @@ fn file_values<T: Form>(
         let path = match brought {
             Some(path) => Some(path),
             None => match keys.get(name) {
-                Some(key) => match signer.and_then(|signer| crate::upload::file_path(signer, key)) {
-                    Some(path) => Some(path),
-                    None => {
-                        errors.insert(name.to_owned(), vec![words.render(name, "form.file", &[])]);
-                        None
+                Some(key) => {
+                    match signer.and_then(|signer| crate::upload::file_path(signer, key)) {
+                        Some(path) => Some(path),
+                        None => {
+                            errors.insert(
+                                name.to_owned(),
+                                vec![words.render(name, "form.file", &[])],
+                            );
+                            None
+                        }
                     }
-                },
+                }
                 None => None,
             },
         };

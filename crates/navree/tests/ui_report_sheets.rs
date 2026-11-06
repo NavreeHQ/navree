@@ -24,6 +24,9 @@ fn a_report_table_is_an_xlsx_file_with_its_gaps_left_empty() {
 #[test]
 fn a_report_with_no_series_still_lists_its_periods() {
     let report = Report::new(DateRange::new(day(2), day(3)), Grain::Day, &Utc);
-    let file = report.table("Day", &[]).xlsx("Days").expect("the table is written");
+    let file = report
+        .table("Day", &[])
+        .xlsx("Days")
+        .expect("the table is written");
     assert!(file.starts_with(b"PK"));
 }

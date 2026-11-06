@@ -167,7 +167,10 @@ mod tests {
             "events.listener.\u{200b}workspace.member_\u{200b}added"
         );
         let unbroken = "x".repeat(45);
-        assert_eq!(breakable(&unbroken), format!("{}\u{200b}xxxxx", "x".repeat(40)));
+        assert_eq!(
+            breakable(&unbroken),
+            format!("{}\u{200b}xxxxx", "x".repeat(40))
+        );
     }
 
     #[test]

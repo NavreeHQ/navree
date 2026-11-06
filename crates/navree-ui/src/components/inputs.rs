@@ -214,7 +214,11 @@ impl Input {
             .variant(super::ButtonVariant::Ghost)
             .size(Size::Xs)
             .attr("data-ui-clear", "");
-        let clear = if empty { clear.attr("hidden", "") } else { clear };
+        let clear = if empty {
+            clear.attr("hidden", "")
+        } else {
+            clear
+        };
         el("div")
             .slot("input-group")
             .attr_opt("data-size", self.size.as_str())

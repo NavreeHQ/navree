@@ -614,14 +614,16 @@ impl Breadcrumb {
                 items.push(item(first));
             }
             let folded: Vec<Element> = rest.by_ref().take(count - 1 - tail).map(item).collect();
-            items.push(el("li").slot("breadcrumb-ellipsis").child(
-                el("details").children((
-                    el("summary")
-                        .attr("aria-label", self.hidden_label)
-                        .child(icon(icons::ELLIPSIS)),
-                    el("ol").slot("breadcrumb-hidden").child(folded),
-                )),
-            ));
+            items.push(
+                el("li").slot("breadcrumb-ellipsis").child(
+                    el("details").children((
+                        el("summary")
+                            .attr("aria-label", self.hidden_label)
+                            .child(icon(icons::ELLIPSIS)),
+                        el("ol").slot("breadcrumb-hidden").child(folded),
+                    )),
+                ),
+            );
             items.extend(rest.map(item));
         } else {
             items.extend(self.items.into_iter().map(item));

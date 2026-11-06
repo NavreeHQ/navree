@@ -116,7 +116,10 @@ fn shell(base: &str, overview: &Overview, user: Option<(String, String)>) -> She
         .item(failed)
         .item(NavItem::new("Metrics", format!("{base}/metrics")).icon(icons::CHART_COLUMN));
     let mut shell = Shell::new("Fleet")
-        .context(format!("Queue workers \u{b7} {}", format::status(overview.status)))
+        .context(format!(
+            "Queue workers \u{b7} {}",
+            format::status(overview.status)
+        ))
         .home(base.to_owned())
         .group(monitor);
     if let Some((name, email)) = user {

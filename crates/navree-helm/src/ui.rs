@@ -470,13 +470,8 @@ pub(crate) async fn choose_workspace(
         );
     };
     let mut response = redirect(&base);
-    if let Some(header) = build_cookie(
-        WORKSPACE_COOKIE,
-        value,
-        &base,
-        WORKSPACE_COOKIE_SECS,
-        &host,
-    ) {
+    if let Some(header) = build_cookie(WORKSPACE_COOKIE, value, &base, WORKSPACE_COOKIE_SECS, &host)
+    {
         response.headers_mut().append(SET_COOKIE, header);
     }
     response

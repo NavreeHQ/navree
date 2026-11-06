@@ -446,10 +446,7 @@ impl<const MIN: i64, const MAX: i64> Prop for Int<MIN, MAX> {
 pub struct Key<const MAX: usize = 64>(String);
 
 impl<const MAX: usize> Key<MAX> {
-    const BOUNDED: () = assert!(
-        MAX >= 1 && MAX <= MAX_KEY,
-        "a Key holds 1 to 64 characters"
-    );
+    const BOUNDED: () = assert!(MAX >= 1 && MAX <= MAX_KEY, "a Key holds 1 to 64 characters");
 
     /// `key`, when it is one.
     pub fn new(key: &str) -> Option<Self> {
@@ -813,7 +810,10 @@ pub mod __private {
                 let shown: String = key.chars().take(40).collect();
                 checker.problem(
                     &join(path, &shown),
-                    format!("is not a property here; the properties are: {}", names.join(", ")),
+                    format!(
+                        "is not a property here; the properties are: {}",
+                        names.join(", ")
+                    ),
                 );
             }
         }
@@ -1206,7 +1206,10 @@ mod tests {
             "/admin/1",
         ] {
             let mut checker = Checker::new(&links);
-            assert!(AppLink::check(&json!(bad), "page", &mut checker).is_none(), "{bad}");
+            assert!(
+                AppLink::check(&json!(bad), "page", &mut checker).is_none(),
+                "{bad}"
+            );
         }
         let mut checker = Checker::new(&links);
         assert!(AppLink::check(&json!("/orders/CS-1042"), "page", &mut checker).is_some());
@@ -1217,10 +1220,20 @@ mod tests {
 
     #[test]
     fn text_refuses_controls_and_turned_marks() {
-        for bad in ["", "   ", "a\u{0000}b", "a\u{202E}b", "a\u{2066}b", "\u{200B}"] {
+        for bad in [
+            "",
+            "   ",
+            "a\u{0000}b",
+            "a\u{202E}b",
+            "a\u{2066}b",
+            "\u{200B}",
+        ] {
             assert!(UserText::<40>::new(bad).is_err(), "{bad:?}");
         }
-        assert_eq!(UserText::<40>::new("  two\nlines ").unwrap().as_str(), "two\nlines");
+        assert_eq!(
+            UserText::<40>::new("  two\nlines ").unwrap().as_str(),
+            "two\nlines"
+        );
     }
 
     #[test]

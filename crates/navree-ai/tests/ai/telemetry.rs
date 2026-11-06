@@ -33,7 +33,10 @@ async fn a_text_request_reports_an_ai_call_with_its_tokens_and_no_text() {
     assert_eq!(call.output_tokens, Some(9));
     assert_eq!(call.outcome, Outcome::Success);
     let json = serde_json::to_string(call).unwrap();
-    assert!(!json.contains("Acme"), "the prompt and the answer stay out: {json}");
+    assert!(
+        !json.contains("Acme"),
+        "the prompt and the answer stay out: {json}"
+    );
 }
 
 #[tokio::test]

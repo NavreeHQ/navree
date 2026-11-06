@@ -89,7 +89,10 @@ impl Controller for Pages {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let mut routes = vec![
-            RouteDef::on(Method::GET, "!/", || async { Reply::redirect("/assistant") }).public(),
+            RouteDef::on(Method::GET, "!/", || async {
+                Reply::redirect("/assistant")
+            })
+            .public(),
         ];
 
         let me = self.clone();
@@ -218,7 +221,10 @@ impl Controller for Pages {
             RouteDef::on(
                 Method::GET,
                 "!/orders/{id}",
-                move |shell: AppShell, access: CurrentAccess, session: Session, Path(id): Path<i64>| {
+                move |shell: AppShell,
+                      access: CurrentAccess,
+                      session: Session,
+                      Path(id): Path<i64>| {
                     let me = me.clone();
                     async move {
                         let user = access.user.ok_or_else(AppError::unauthenticated)?;
@@ -237,7 +243,10 @@ impl Controller for Pages {
                             PageOptions {
                                 csrf: Some(token),
                                 context: Some(("order".to_owned(), order.id.to_string())),
-                                draft: Some(format!("What should I know about order {}?", order.number)),
+                                draft: Some(format!(
+                                    "What should I know about order {}?",
+                                    order.number
+                                )),
                                 ..PageOptions::default()
                             },
                         );
@@ -245,23 +254,25 @@ impl Controller for Pages {
                             shell
                                 .page(format!("Order {}", order.number))
                                 .crumb("Orders", "/orders")
-                                .body(Stack::gap(4).children((
-                                    FactGrid::new().cols(2).cards([
-                                        FactCard::new(
-                                            "Customer",
-                                            format!("{} · {}", order.customer, order.city),
-                                        )
-                                        .icon(icons::USER),
-                                        FactCard::new("Total", rupees(order.total))
-                                            .icon(icons::INDIAN_RUPEE),
-                                        FactCard::new("Paid by", order.method_label())
-                                            .icon(icons::WALLET),
-                                        FactCard::new("Status", order.status_label())
-                                            .icon(icons::PACKAGE),
-                                    ]),
-                                    Text::muted("Ask the assistant about this order."),
-                                    composer,
-                                ))),
+                                .body(
+                                    Stack::gap(4).children((
+                                        FactGrid::new().cols(2).cards([
+                                            FactCard::new(
+                                                "Customer",
+                                                format!("{} · {}", order.customer, order.city),
+                                            )
+                                            .icon(icons::USER),
+                                            FactCard::new("Total", rupees(order.total))
+                                                .icon(icons::INDIAN_RUPEE),
+                                            FactCard::new("Paid by", order.method_label())
+                                                .icon(icons::WALLET),
+                                            FactCard::new("Status", order.status_label())
+                                                .icon(icons::PACKAGE),
+                                        ]),
+                                        Text::muted("Ask the assistant about this order."),
+                                        composer,
+                                    )),
+                                ),
                         )
                     }
                 },

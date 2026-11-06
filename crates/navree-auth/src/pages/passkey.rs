@@ -186,14 +186,9 @@ impl PagesController {
                         let (status, next) = match outcome {
                             SessionSignIn::SignedIn(_) => (
                                 "signed_in",
-                                signed_in_target(
-                                    &service,
-                                    &session,
-                                    &paths,
-                                    input.next.as_deref(),
-                                )
-                                .as_str()
-                                .to_owned(),
+                                signed_in_target(&service, &session, &paths, input.next.as_deref())
+                                    .as_str()
+                                    .to_owned(),
                             ),
                             SessionSignIn::TwoFactorRequired => (
                                 "two_factor",

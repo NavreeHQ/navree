@@ -39,11 +39,8 @@ impl CrmCoreModule {
         // The framework's lists, whose handlers read a few plain parameters.
         let paging = |doc: RouteDoc| {
             doc.query(
-                Parameter::query(
-                    "page",
-                    Schema::of_type(Type::Integer).minimum(1.into()),
-                )
-                .described("The page number (default 1)."),
+                Parameter::query("page", Schema::of_type(Type::Integer).minimum(1.into()))
+                    .described("The page number (default 1)."),
             )
             .query(
                 Parameter::query(

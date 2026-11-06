@@ -305,10 +305,13 @@ impl Questionnaire {
                 }),
                 el("div")
                     .slot("questionnaire-answers")
-                    .attr("data-kind", match current.kind {
-                        Kind::Text => "text",
-                        Kind::Single | Kind::Multiple => "choices",
-                    })
+                    .attr(
+                        "data-kind",
+                        match current.kind {
+                            Kind::Text => "text",
+                            Kind::Single | Kind::Multiple => "choices",
+                        },
+                    )
                     .child(field),
                 self.error.clone().map(|error| {
                     el("p")
@@ -333,8 +336,7 @@ impl Questionnaire {
                 .disabled(step == 0)
                 .attr("formnovalidate", ""),
             (!current.required).then(|| {
-                button(labels.skip.clone(), "skip", ButtonVariant::Ghost)
-                    .attr("formnovalidate", "")
+                button(labels.skip.clone(), "skip", ButtonVariant::Ghost).attr("formnovalidate", "")
             }),
             button(
                 if last { labels.finish } else { labels.next },

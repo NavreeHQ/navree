@@ -907,7 +907,10 @@ impl<A: Agent> Running<A> {
             );
         };
         let refused = |message: String| {
-            let mut tries = self.page_tries.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut tries = self
+                .page_tries
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             let count = tries.entry(call.name.clone()).or_insert(0);
             *count += 1;
             let mut message = message;

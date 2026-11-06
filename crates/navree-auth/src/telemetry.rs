@@ -113,7 +113,10 @@ mod tests {
             (json!({ "method": "magic_link" }), SignInMethod::MagicLink),
             (json!({ "method": "otp" }), SignInMethod::Code),
             (json!({ "two_factor": "totp" }), SignInMethod::TwoFactor),
-            (json!({ "via": "session", "remember": true }), SignInMethod::Password),
+            (
+                json!({ "via": "session", "remember": true }),
+                SignInMethod::Password,
+            ),
         ] {
             let event = sign_in_of(&entry("auth.login", metadata.clone()).actor(user)).unwrap();
             assert_eq!(event.method, method, "{metadata}");
@@ -146,7 +149,11 @@ mod tests {
         assert_eq!(refused.provider.as_deref(), Some("okta-1"));
         assert_eq!(refused.reason.as_deref(), Some("sso_required"));
 
-        let wrong_code = sign_in_of(&entry("auth.two_factor_failed", json!({ "method": "totp" }))).unwrap();
+        let wrong_code = sign_in_of(&entry(
+            "auth.two_factor_failed",
+            json!({ "method": "totp" }),
+        ))
+        .unwrap();
         assert_eq!(wrong_code.method, SignInMethod::TwoFactor);
         assert_eq!(wrong_code.reason.as_deref(), Some("invalid_code"));
 
@@ -160,7 +167,13 @@ mod tests {
     fn a_throttled_login_is_a_refusal_and_other_flows_are_not() {
         let throttled = sign_in_of(&entry("auth.throttled", json!({ "flow": "login" }))).unwrap();
         assert_eq!(throttled.reason.as_deref(), Some("throttled"));
-        assert!(sign_in_of(&entry("auth.throttled", json!({ "flow": "password_reset" }))).is_none());
+        assert!(
+            sign_in_of(&entry(
+                "auth.throttled",
+                json!({ "flow": "password_reset" })
+            ))
+            .is_none()
+        );
         assert!(sign_in_of(&entry("auth.logout", json!({}))).is_none());
         assert!(sign_in_of(&entry("auth.register", json!({}))).is_none());
     }

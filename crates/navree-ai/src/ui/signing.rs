@@ -74,14 +74,18 @@ pub(crate) fn action_url(
 }
 
 fn refused() -> AppError {
-    AppError::forbidden().with_detail("This button has expired or was changed. Ask the assistant again.")
+    AppError::forbidden()
+        .with_detail("This button has expired or was changed. Ask the assistant again.")
 }
 
 /// The fields of a signed query, refusing one that names a field twice.
 fn fields(uri: &Uri) -> Result<BTreeMap<String, String>, AppError> {
     let mut fields = BTreeMap::new();
     for (key, value) in form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes()) {
-        if fields.insert(key.into_owned(), value.into_owned()).is_some() {
+        if fields
+            .insert(key.into_owned(), value.into_owned())
+            .is_some()
+        {
             return Err(refused());
         }
     }
@@ -145,7 +149,10 @@ pub(crate) fn read_context(
     user: Uuid,
     now: DateTime<Utc>,
 ) -> Result<ContextClaim, AppError> {
-    let wrong = || AppError::forbidden().with_detail("The page's context was changed or has expired. Open the page again.");
+    let wrong = || {
+        AppError::forbidden()
+            .with_detail("The page's context was changed or has expired. Open the page again.")
+    };
     let uri: Uri = text.parse().map_err(|_| wrong())?;
     if uri.path() != format!("{base}/context") || !signer.verify(&uri, now) {
         return Err(wrong());
@@ -208,7 +215,10 @@ mod tests {
             format!("{url}&a=delete_order"),
         ] {
             let uri: Uri = forged.parse().unwrap();
-            assert!(read_action(&signer, "/assistant", &uri, now).is_err(), "{forged}");
+            assert!(
+                read_action(&signer, "/assistant", &uri, now).is_err(),
+                "{forged}"
+            );
         }
         let later = now + Duration::hours(BUTTON_HOURS) + Duration::seconds(1);
         assert!(read_action(&signer, "/assistant", &url.parse().unwrap(), later).is_err());
@@ -235,8 +245,26 @@ mod tests {
             }
         );
         assert!(read_context(&signer, "/assistant", &signed, Uuid::now_v7(), now).is_err());
-        assert!(read_context(&signer, "/assistant", &signed.replace("1042", "1043"), user, now).is_err());
-        assert!(read_context(&signer, "/assistant", "/assistant/context?k=order&id=1&u=x", user, now).is_err());
+        assert!(
+            read_context(
+                &signer,
+                "/assistant",
+                &signed.replace("1042", "1043"),
+                user,
+                now
+            )
+            .is_err()
+        );
+        assert!(
+            read_context(
+                &signer,
+                "/assistant",
+                "/assistant/context?k=order&id=1&u=x",
+                user,
+                now
+            )
+            .is_err()
+        );
         assert!(read_context(&signer, "/assistant", "not a url at all", user, now).is_err());
     }
 }

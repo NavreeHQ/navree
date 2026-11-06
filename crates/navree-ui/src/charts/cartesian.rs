@@ -1344,20 +1344,18 @@ impl Chart {
                     } else {
                         band * i as f64
                     };
-                    let bar = ready
-                        .color
-                        .on(el("rect")
-                            .slot("chart-bar")
-                            .attr("data-i", i as i64)
-                            .attr("data-s", s as i64)
-                            .attr("x", pct(x))
-                            .attr("width", pct(band))
-                            .attr("y", n(top, 1))
-                            .attr("height", n(h, 1))
-                            .attr(
-                                "clip-path",
-                                bar_clip(k, if plan.stacked { 0 } else { s }, corners),
-                            ));
+                    let bar = ready.color.on(el("rect")
+                        .slot("chart-bar")
+                        .attr("data-i", i as i64)
+                        .attr("data-s", s as i64)
+                        .attr("x", pct(x))
+                        .attr("width", pct(band))
+                        .attr("y", n(top, 1))
+                        .attr("height", n(h, 1))
+                        .attr(
+                            "clip-path",
+                            bar_clip(k, if plan.stacked { 0 } else { s }, corners),
+                        ));
                     marks.push(match links.get(i).and_then(Option::as_ref) {
                         Some(href) => el("a")
                             .slot("chart-drill")

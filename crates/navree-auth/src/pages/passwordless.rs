@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use http::Method;
-use http::request::Parts;
 use http::StatusCode;
+use http::request::Parts;
 use navree_http::extract::Query;
 use navree_http::{AppError, IntoResponse, Response, RouteDef};
 use navree_session::Session;
@@ -115,9 +115,8 @@ fn link_request_page(
     refused: Option<String>,
 ) -> navree_ui::View {
     let sent = sent.then(|| {
-        Alert::new(AlertTone::Success).title(
-            "If an account uses that address, we have sent it a link to sign in with.",
-        )
+        Alert::new(AlertTone::Success)
+            .title("If an account uses that address, we have sent it a link to sign in with.")
     });
     let refused = refused.map(|message| Alert::new(AlertTone::Danger).title(message));
     page(
@@ -205,7 +204,12 @@ fn code_page(paths: &Paths, form: FormView<CodeForm>, sent: bool) -> navree_ui::
 }
 
 /// The empty form that asks for a code, with `email` already typed.
-fn code_form(paths: &Paths, token: String, email: &str, next: Option<String>) -> FormView<CodeForm> {
+fn code_form(
+    paths: &Paths,
+    token: String,
+    email: &str,
+    next: Option<String>,
+) -> FormView<CodeForm> {
     FormView::<CodeForm>::new()
         .post(format!("{}/verify", paths.code))
         .csrf(token)
@@ -540,16 +544,16 @@ impl PagesController {
                                 paths.with_next(&paths.two_factor, input.next.as_deref()),
                             )
                             .into_response()),
-                            Err(AuthError::InvalidLoginToken) => Ok(redraw(
-                                Rejected::after_decode(
+                            Err(AuthError::InvalidLoginToken) => {
+                                Ok(redraw(Rejected::after_decode(
                                     &input,
                                     field_error(
                                         "code",
                                         "That code didn't work. Check it, or ask for a new one.",
                                     ),
                                     &parts,
-                                ),
-                            )),
+                                )))
+                            }
                             Err(AuthError::TooManyAttempts { retry_after }) => Ok(too_many(
                                 redraw(Rejected::after_decode(
                                     &input,

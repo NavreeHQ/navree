@@ -326,12 +326,7 @@ async fn a_watcher_can_be_turned_off() {
         .send()
         .await
         .assert_status(200);
-    let batch = app
-        .get::<Logbook>()
-        .await
-        .last_request()
-        .await
-        .unwrap();
+    let batch = app.get::<Logbook>().await.last_request().await.unwrap();
     assert!(batch.ai_calls().is_empty());
     app.shutdown().await.unwrap();
 }

@@ -235,7 +235,10 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert!(!error, "{text}");
     let components: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(components["components"][0]["id"], "date-picker", "{text}");
-    assert_eq!(components["components"][0]["docs"], "components/date-picker");
+    assert_eq!(
+        components["components"][0]["docs"],
+        "components/date-picker"
+    );
     assert_eq!(components["version"], env!("CARGO_PKG_VERSION"));
 
     // Nothing is built, and --no-build never builds: the app tools say so.

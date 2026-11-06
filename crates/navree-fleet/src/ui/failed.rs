@@ -53,7 +53,8 @@ fn draw_list(frame: &Frame, jobs: &[FailedJob], search: Option<&str>) -> AppPage
             Some(_) => format!("Retry {} matching", number(jobs.len() as u64)),
             None => "Retry all".to_owned(),
         };
-        let fields: Vec<(&'static str, &str)> = search.map(|text| ("search", text)).into_iter().collect();
+        let fields: Vec<(&'static str, &str)> =
+            search.map(|text| ("search", text)).into_iter().collect();
         parts::action_form(
             frame,
             format!("{list}/retry"),
@@ -130,11 +131,7 @@ fn row(frame: &Frame, job: &FailedJob) -> TableRowEl {
 }
 
 /// One failed job.
-pub(crate) async fn show(
-    fleet: &Fleet,
-    id: &str,
-    parts: &mut Parts,
-) -> Result<AppPage, AppError> {
+pub(crate) async fn show(fleet: &Fleet, id: &str, parts: &mut Parts) -> Result<AppPage, AppError> {
     let frame = Frame::load(fleet, parts).await?;
     let mut job = fleet
         .failed_job(id)

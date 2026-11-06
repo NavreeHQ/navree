@@ -148,7 +148,10 @@ fn compact_catalog(file: &Path) -> Option<String> {
             })
         })
         .collect();
-    if components.iter().any(|component| component["group"] == GUIDES) {
+    if components
+        .iter()
+        .any(|component| component["group"] == GUIDES)
+    {
         groups.push(json!({ "id": GUIDES, "title": "Foundations and guides" }));
     }
     Some(json!({ "groups": groups, "components": components }).to_string())

@@ -5,8 +5,8 @@
 
 use navree_ui::assets::{self, Asset, get};
 use navree_ui::{
-    Button, Card, Combobox, Dialog, Grid, NavGroup, NavItem, Node, Select, Shell, Stat, Uses,
-    View, icons, measure,
+    Button, Card, Combobox, Dialog, Grid, NavGroup, NavItem, Node, Select, Shell, Stat, Uses, View,
+    icons, measure,
 };
 
 fn gzip(asset: &Asset) -> usize {
@@ -36,7 +36,8 @@ fn the_core_runtime_is_built_from_its_own_files_only() {
         if !seen.insert(file.clone()) {
             continue;
         }
-        let text = std::fs::read_to_string(src.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let text =
+            std::fs::read_to_string(src.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
         let mut rest = text.as_str();
         while let Some(at) = rest.find("from \"./") {
             rest = &rest[at + 8..];
@@ -46,7 +47,16 @@ fn the_core_runtime_is_built_from_its_own_files_only() {
     }
     assert_eq!(
         seen.into_iter().collect::<Vec<_>>(),
-        ["commands.js", "core.js", "dom.js", "forms.js", "morph.js", "nav.js", "ops.js", "ui.js"]
+        [
+            "commands.js",
+            "core.js",
+            "dom.js",
+            "forms.js",
+            "morph.js",
+            "nav.js",
+            "ops.js",
+            "ui.js"
+        ]
     );
 }
 
@@ -417,7 +427,13 @@ fn linked(html: &str) -> (Vec<&'static str>, Vec<&'static str>) {
     let mut scripts = Vec::new();
     let mut sheets = Vec::new();
     for asset in assets::FILES {
-        let url = format!("{}/{}-{}.{}", assets::MOUNT, asset.name, asset.hash, asset.ext);
+        let url = format!(
+            "{}/{}-{}.{}",
+            assets::MOUNT,
+            asset.name,
+            asset.hash,
+            asset.ext
+        );
         if html.contains(&url) {
             match asset.ext {
                 "js" => scripts.push(asset.name),
@@ -462,17 +478,26 @@ fn a_modules_own_styles_come_with_it_and_only_with_it() {
         ("dates-styles", "[data-slot=calendar-day]"),
     ] {
         assert!(text(sheet).contains(slot), "{slot} in {sheet}");
-        assert!(!shared.contains(slot), "{slot} in the sheet every page loads");
+        assert!(
+            !shared.contains(slot),
+            "{slot} in the sheet every page loads"
+        );
     }
 
     let sheets = |body: Node| linked(&View::new("x").body(body).to_html()).1;
-    assert_eq!(sheets(Button::primary("Go").href("/x").into()), ["navree-ui"]);
+    assert_eq!(
+        sheets(Button::primary("Go").href("/x").into()),
+        ["navree-ui"]
+    );
     let parts: [(Node, &str); 9] = [
         (Select::new("s").option("a", "A").into(), "select-styles"),
         (Combobox::new("c").option("a", "A").into(), "select-styles"),
         (PhoneInput::new("mobile").into(), "phone-styles"),
         (Slider::new("v").label("Value").into(), "slider-styles"),
-        (Tree::new("t", "T").node(TreeNode::leaf("a", "A")).into(), "tree-styles"),
+        (
+            Tree::new("t", "T").node(TreeNode::leaf("a", "A")).into(),
+            "tree-styles",
+        ),
         (
             LazyList::new("l", "Things", "/rows")
                 .items([LazyItem::new("1", "1", "One")])
@@ -496,7 +521,11 @@ fn a_modules_own_styles_come_with_it_and_only_with_it() {
         assert!(!linked.contains(&"table-styles"), "{own}: {linked:?}");
     }
     // A menu's styles come with every menu, the one a toolbar moves its tools into too.
-    let menu = sheets(DropdownMenu::new("m", "M").item(MenuItem::link("L", "/l")).into());
+    let menu = sheets(
+        DropdownMenu::new("m", "M")
+            .item(MenuItem::link("L", "/l"))
+            .into(),
+    );
     assert_eq!(menu, ["navree-ui", "menus-styles"]);
     let bar = sheets(
         Toolbar::new("b", "B")
@@ -646,7 +675,10 @@ fn the_heaviest_page_loads_at_most_52_kb_gzip_of_script() {
     let (scripts, _) = linked(&conversation_page());
     assert_eq!(
         scripts,
-        ["core", "sidebar", "overlay", "live", "select", "dates", "menus", "split", "keys", "lazy"]
+        [
+            "core", "sidebar", "overlay", "live", "select", "dates", "menus", "split", "keys",
+            "lazy"
+        ]
     );
     let total = weight(&scripts);
     assert!(total <= 52 * 1024, "{total}");
@@ -658,7 +690,14 @@ fn the_heaviest_page_loads_at_most_26_kb_gzip_of_styles() {
     let (_, sheets) = linked(&conversation_page());
     assert_eq!(
         sheets,
-        ["navree-ui", "select-styles", "menus-styles", "split-styles", "lazy-styles", "dates-styles"]
+        [
+            "navree-ui",
+            "select-styles",
+            "menus-styles",
+            "split-styles",
+            "lazy-styles",
+            "dates-styles"
+        ]
     );
     let total = weight(&sheets);
     assert!(total <= 26 * 1024, "{total}");

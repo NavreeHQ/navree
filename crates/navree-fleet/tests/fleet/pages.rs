@@ -100,13 +100,7 @@ async fn member(h: &Harness, name: &str, email: &str, permissions: &[&str]) -> T
 
 /// Someone who may look.
 async fn viewer(h: &Harness) -> TestClient {
-    member(
-        h,
-        "Gurpreet Kaur",
-        "gurpreet@example.in",
-        &["fleet.view"],
-    )
-    .await
+    member(h, "Gurpreet Kaur", "gurpreet@example.in", &["fleet.view"]).await
 }
 
 /// Someone who may look and operate.
@@ -287,9 +281,15 @@ async fn every_page_draws_with_the_data_behind_the_api() {
     );
 
     // Pending jobs, the other tab, and a search.
-    let jobs = get(&browser, "/_fleet/jobs").await.assert_status(200).text();
+    let jobs = get(&browser, "/_fleet/jobs")
+        .await
+        .assert_status(200)
+        .text();
     assert!(jobs.contains("mail.digest"), "{jobs}");
-    assert!(jobs.contains(&format!("href=\"/_fleet/jobs/{pending}\"")), "{jobs}");
+    assert!(
+        jobs.contains(&format!("href=\"/_fleet/jobs/{pending}\"")),
+        "{jobs}"
+    );
     assert!(jobs.contains("Pending (1)"), "{jobs}");
     assert!(jobs.contains("Completed (1)"), "{jobs}");
     let completed = get(&browser, "/_fleet/jobs?tab=completed")
@@ -467,9 +467,16 @@ async fn operators_pause_and_continue_from_the_pages() {
         .await
         .assert_status(303);
     assert!(!h.fleet.is_paused("default").await.unwrap());
-    post(&operator, "/_fleet/pause", &[]).await.assert_status(303);
+    post(&operator, "/_fleet/pause", &[])
+        .await
+        .assert_status(303);
     assert_eq!(
-        h.fleet.paused().await.unwrap().into_iter().collect::<Vec<_>>(),
+        h.fleet
+            .paused()
+            .await
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
         ["default"]
     );
     post(&operator, "/_fleet/pause", &[("supervisor", "nope")])

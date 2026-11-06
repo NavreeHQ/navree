@@ -1,6 +1,6 @@
 //! ColorPicker: the browser's own colour field, with a hex field and swatches beside it.
 
-use super::{root_methods, only_with_script};
+use super::{only_with_script, root_methods};
 use crate::node::{Element, Node, Uses, el, into_node};
 
 /// A colour field. The colour is the browser's own `<input type="color">`, which posts

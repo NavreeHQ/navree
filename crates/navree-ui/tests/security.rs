@@ -1503,10 +1503,20 @@ fn an_islands_props_cannot_break_out_of_their_attribute() {
                 .props(&serde_json::json!({ "city": text, "note": [text] }))
                 .into(),
         );
-        assert_eq!(html.matches('<').count(), 4, "two tags opened and closed: {html}");
-        assert!(!html.contains("<script") && !html.contains("<img"), "{html}");
+        assert_eq!(
+            html.matches('<').count(),
+            4,
+            "two tags opened and closed: {html}"
+        );
+        assert!(
+            !html.contains("<script") && !html.contains("<img"),
+            "{html}"
+        );
         assert_eq!(html.matches("data-ui-island=\"").count(), 1, "{html}");
-        assert!(html.contains(&format!("data-ui-island=\"{}\"", MAP.url())), "{html}");
+        assert!(
+            html.contains(&format!("data-ui-island=\"{}\"", MAP.url())),
+            "{html}"
+        );
         let props = html
             .split("data-ui-props=\"")
             .nth(1)
@@ -1548,7 +1558,10 @@ async fn only_the_apps_island_scripts_are_served() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(ok.header("content-type"), Some("text/javascript; charset=utf-8"));
+    assert_eq!(
+        ok.header("content-type"),
+        Some("text/javascript; charset=utf-8")
+    );
     assert_eq!(
         ok.header("cache-control"),
         Some("public, max-age=31536000, immutable")

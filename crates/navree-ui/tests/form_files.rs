@@ -16,7 +16,9 @@ use navree_storage::{Disk, DiskConfig, Storage, StorageOptions};
 use navree_testing::TestApp;
 use navree_ui::form::{Form as _, FormView, Rejected, Widget};
 use navree_ui::upload::{file_key, file_path};
-use navree_ui::{Form, Received, Submit, UiModule, Upload, UploadLimits, Uploads, Validate, render};
+use navree_ui::{
+    Form, Received, Submit, UiModule, Upload, UploadLimits, Uploads, Validate, render,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -103,8 +105,10 @@ fn multipart(fields: &[(&str, &str)], file: Option<(&str, &[u8])>) -> Vec<u8> {
     let mut body = Vec::new();
     for (name, value) in fields {
         body.extend_from_slice(
-            format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n")
-                .as_bytes(),
+            format!(
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+            )
+            .as_bytes(),
         );
     }
     if let Some((file_name, bytes)) = file {
@@ -167,7 +171,10 @@ fn the_derive_draws_a_file_field_as_an_upload_in_a_multipart_form() {
     assert!(html.contains(r#"enctype="multipart/form-data""#), "{html}");
     assert!(html.contains(r#"data-send="/claims/receipt""#), "{html}");
     // The form names the upload after its field, and gives it a field for the key.
-    assert!(html.contains(r#"type="file""#) && html.contains(r#"name="receipt""#), "{html}");
+    assert!(
+        html.contains(r#"type="file""#) && html.contains(r#"name="receipt""#),
+        "{html}"
+    );
     assert!(html.contains(r#"data-slot="upload-key""#), "{html}");
     assert!(!html.contains(r#"name="ignored""#), "{html}");
 }
@@ -183,8 +190,13 @@ async fn a_file_posted_with_the_form_is_stored_and_the_handler_gets_its_path() {
     .await;
     assert_eq!(response.status(), StatusCode::OK, "{}", response.text());
     let text = response.text();
-    let path = text.strip_prefix("Diwali stall ").expect("the title, then the path");
-    assert!(path.starts_with("receipts/") && path.ends_with(".png"), "{path}");
+    let path = text
+        .strip_prefix("Diwali stall ")
+        .expect("the title, then the path");
+    assert!(
+        path.starts_with("receipts/") && path.ends_with(".png"),
+        "{path}"
+    );
     assert!(disk.exists(path).await.unwrap(), "{path} is on the disk");
 }
 
@@ -194,7 +206,10 @@ async fn a_file_the_upload_refuses_is_an_error_under_its_field() {
     let app = app(&disk).await;
     let response = post_multipart(
         &app,
-        multipart(&[("title", "Diwali stall")], Some(("run.exe", b"MZ\x90\0\x03\0\0\0"))),
+        multipart(
+            &[("title", "Diwali stall")],
+            Some(("run.exe", b"MZ\x90\0\x03\0\0\0")),
+        ),
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
@@ -249,7 +264,10 @@ async fn a_refused_form_keeps_the_file_it_stored_as_a_key() {
         .replace("&amp;", "&");
     let path = file_path(&signer, &value).expect("the key the app signed");
     assert!(disk.exists(&path).await.unwrap());
-    assert!(!page.contains(&format!(r#"value="{path}""#)), "the path stays on the server");
+    assert!(
+        !page.contains(&format!(r#"value="{path}""#)),
+        "the path stays on the server"
+    );
 }
 
 #[tokio::test]
@@ -267,7 +285,10 @@ async fn the_upload_route_answers_each_stored_file_with_its_key() {
     };
     let json = received.json_with_keys(&signer);
     let key = json["stored"][0]["key"].as_str().expect("a key");
-    assert_eq!(file_path(&signer, key).as_deref(), Some("receipts/k3v9q.png"));
+    assert_eq!(
+        file_path(&signer, key).as_deref(),
+        Some("receipts/k3v9q.png")
+    );
     assert_eq!(json["stored"][0]["name"], "bill.png");
     assert!(json["stored"][0].get("path").is_none(), "{json}");
 }

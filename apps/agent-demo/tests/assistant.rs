@@ -163,16 +163,27 @@ async fn a_refund_waits_for_the_managers_approval_in_the_page() {
     let app = &shop.app;
     let simran = access(app, MANAGER.1).await;
     let fake = fake(app).await;
-    fake.respond(FakeReply::tool_call("refund_order", json!({ "order": SAMPLE_ORDER })));
+    fake.respond(FakeReply::tool_call(
+        "refund_order",
+        json!({ "order": SAMPLE_ORDER }),
+    ));
     let assistant = assistant(app).await;
     let id = assistant
         .start(simran.clone(), "Refund order KK-1042", None)
         .await
         .unwrap();
     settled(app, &simran, id).await;
-    let region = navree::ui::render(&assistant.approval(simran.clone(), id, Some("tok")).await.unwrap());
+    let region = navree::ui::render(
+        &assistant
+            .approval(simran.clone(), id, Some("tok"))
+            .await
+            .unwrap(),
+    );
 
-    assert!(region.contains("The assistant asks to: Refund an order"), "{region}");
+    assert!(
+        region.contains("The assistant asks to: Refund an order"),
+        "{region}"
+    );
     assert!(region.contains(SAMPLE_ORDER), "{region}");
     assert_eq!(sample(app).await.status, "paid", "nothing ran yet");
 
@@ -187,7 +198,10 @@ async fn a_refund_waits_for_the_managers_approval_in_the_page() {
     let html = settled(app, &simran, id).await;
     assert!(html.contains("Refunded ₹1,250 to Harpreet Kaur."), "{html}");
     let order = sample(app).await;
-    assert_eq!((order.status.as_str(), order.refunded), ("refunded", 125_000));
+    assert_eq!(
+        (order.status.as_str(), order.refunded),
+        ("refunded", 125_000)
+    );
 }
 
 #[tokio::test]
@@ -207,9 +221,17 @@ async fn staff_are_not_offered_refunds_and_see_an_order_without_buttons() {
         .unwrap();
     let html = settled(app, &arjun, id).await;
 
-    assert!(!fake.requests()[0].tools().iter().any(|t| t == "refund_order"));
+    assert!(
+        !fake.requests()[0]
+            .tools()
+            .iter()
+            .any(|t| t == "refund_order")
+    );
     assert!(html.contains("Harpreet Kaur"), "{html}");
-    assert!(html.contains("Only a manager can change an order."), "{html}");
+    assert!(
+        html.contains("Only a manager can change an order."),
+        "{html}"
+    );
     assert!(buttons(&html).is_empty(), "{html}");
 }
 
@@ -235,12 +257,23 @@ async fn the_cards_refund_asks_first_and_runs_once() {
     let refund: Uri = urls[1].parse().unwrap();
 
     let (_, asked) = assistant.act(simran.clone(), &refund, false).await.unwrap();
-    assert_eq!(asked, Acted::Ask { label: "Refund ₹1,250".into() });
+    assert_eq!(
+        asked,
+        Acted::Ask {
+            label: "Refund ₹1,250".into()
+        }
+    );
     assert_eq!(sample(app).await.status, "paid");
     let (_, done) = assistant.act(simran.clone(), &refund, true).await.unwrap();
-    assert_eq!(done, Acted::Done("Refunded ₹1,250 for order KK-1042".into()));
+    assert_eq!(
+        done,
+        Acted::Done("Refunded ₹1,250 for order KK-1042".into())
+    );
     assert_eq!(sample(app).await.status, "refunded");
-    let again = assistant.act(simran.clone(), &refund, true).await.unwrap_err();
+    let again = assistant
+        .act(simran.clone(), &refund, true)
+        .await
+        .unwrap_err();
     assert_eq!(again.status.as_u16(), 409);
     // Arjun can't post Simran's button.
     let arjun = access(app, STAFF.1).await;

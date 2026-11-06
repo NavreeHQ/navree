@@ -18,10 +18,15 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(390)
         .height(520),
-        page!("app-shell", "phone", "The shell on a phone", app_shell_phone)
-            .fill()
-            .width(390)
-            .height(640),
+        page!(
+            "app-shell",
+            "phone",
+            "The shell on a phone",
+            app_shell_phone
+        )
+        .fill()
+        .width(390)
+        .height(640),
     ]
 }
 

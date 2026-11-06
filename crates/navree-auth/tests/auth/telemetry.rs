@@ -46,9 +46,13 @@ async fn a_sign_in_that_a_social_flow_ends_with_names_its_provider_and_user() {
 
     TelemetryContext::new(telemetry)
         .scope(async {
-            auth.sign_in(&user, SignInMethod::social("github"), &ClientMeta::default())
-                .await
-                .unwrap();
+            auth.sign_in(
+                &user,
+                SignInMethod::social("github"),
+                &ClientMeta::default(),
+            )
+            .await
+            .unwrap();
         })
         .await;
 

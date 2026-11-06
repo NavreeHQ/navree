@@ -175,12 +175,14 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         },
     ));
     m.controller::<Assets>();
-    m.command(CommandSpec::new(
-        "ui:render",
-        "Draw one page as a guest and print the answer as JSON (<path> --json)",
-        render_command,
-    )
-    .stdio());
+    m.command(
+        CommandSpec::new(
+            "ui:render",
+            "Draw one page as a guest and print the answer as JSON (<path> --json)",
+            render_command,
+        )
+        .stdio(),
+    );
 }
 
 /// The most of a page `ui:render` reads.
@@ -260,7 +262,9 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     let ops = response
         .extensions()
         .get::<PendingOps>()
-        .map_or(0, |pending| u32::try_from(pending.0.ops.len()).unwrap_or(u32::MAX));
+        .map_or(0, |pending| {
+            u32::try_from(pending.0.ops.len()).unwrap_or(u32::MAX)
+        });
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
         if from_runtime {
             response = to_ops(response, envelope, status);
@@ -491,11 +495,21 @@ mod tests {
     #[tokio::test]
     async fn ui_render_answers_a_page_with_its_html() {
         let app = app().await;
-        assert!(app.ctx().commands().iter().any(|c| c.name == "ui:render" && c.stdio));
+        assert!(
+            app.ctx()
+                .commands()
+                .iter()
+                .any(|c| c.name == "ui:render" && c.stdio)
+        );
         let json = render_json(app.ctx(), "/deals").await.unwrap();
         assert_eq!(json["path"], "/deals");
         assert_eq!(json["status"], 200);
-        assert!(json["content_type"].as_str().unwrap().starts_with("text/html"));
+        assert!(
+            json["content_type"]
+                .as_str()
+                .unwrap()
+                .starts_with("text/html")
+        );
         assert_eq!(json["location"], serde_json::Value::Null);
         assert!(json["html"].as_str().unwrap().contains("Deals"));
     }

@@ -979,10 +979,16 @@ async fn reject_stream_tells_the_model_why_and_streams_its_answer() {
     let events: Vec<StreamEvent> = stream.map(Result::unwrap).collect().await;
 
     assert!(
-        !events.iter().any(|e| matches!(e, StreamEvent::ToolResult { .. })),
+        !events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::ToolResult { .. })),
         "a rejected call never runs: {events:?}"
     );
-    assert!(events.iter().any(|e| matches!(e, StreamEvent::Text(t) if t.contains("old name"))));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::Text(t) if t.contains("old name")))
+    );
     assert!(matches!(events.last(), Some(StreamEvent::Done(_))));
     assert_eq!(notes(&app).await[0].title, "Old");
     let result = &fake.tool_results("rename_note")[0];

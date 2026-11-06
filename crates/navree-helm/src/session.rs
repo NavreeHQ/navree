@@ -271,14 +271,8 @@ mod tests {
 
     #[test]
     fn cookies_are_strict_and_secure_off_loopback() {
-        let header = build_cookie(
-            FLASH_COOKIE,
-            "v".into(),
-            "/admin",
-            60,
-            "admin.example.com",
-        )
-        .unwrap();
+        let header =
+            build_cookie(FLASH_COOKIE, "v".into(), "/admin", 60, "admin.example.com").unwrap();
         let text = header.to_str().unwrap();
         for part in [
             "navree_helm_flash=v",

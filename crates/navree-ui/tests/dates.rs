@@ -513,7 +513,11 @@ fn the_fields_that_post_a_date_are_never_filled_back_in_by_the_browser() {
             "{name}: {range}"
         );
     }
-    let single = html(DatePicker::new("due").today(today()).value(day(2026, 11, 12)));
+    let single = html(
+        DatePicker::new("due")
+            .today(today())
+            .value(day(2026, 11, 12)),
+    );
     assert_eq!(
         attr_of(&single, "name=\"due\"", "autocomplete").as_deref(),
         Some("off"),

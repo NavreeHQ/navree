@@ -70,9 +70,7 @@ fn inputs() -> Stack {
                     .value("kurta"),
             ),
         ),
-        Field::new("parts-small", "A small field").control(
-            Input::text("small").size(Size::Sm),
-        ),
+        Field::new("parts-small", "A small field").control(Input::text("small").size(Size::Sm)),
     ))
 }
 
@@ -163,9 +161,11 @@ fn country() -> Select {
 
 fn flags_by_pointer() -> Stack {
     let row = |name: &'static str, code: flags::CountryCode| {
-        el("span")
-            .attr("data-flag-row", "")
-            .children((Flag::new(code).sprite().decorative(), " ", name))
+        el("span").attr("data-flag-row", "").children((
+            Flag::new(code).sprite().decorative(),
+            " ",
+            name,
+        ))
     };
     let rows: Vec<Element> = (0..20)
         .flat_map(|_| [row("Serbia", flags::RS), row("India", flags::IN)])
@@ -186,9 +186,7 @@ fn sparkline_table() -> Element {
                 .collect();
             TableRowEl::new((
                 TableCell::new(name.clone()),
-                TableCell::new(
-                    Sparkline::new(format!("Orders of {name}"), series).cell(),
-                ),
+                TableCell::new(Sparkline::new(format!("Orders of {name}"), series).cell()),
             ))
         })
         .collect();

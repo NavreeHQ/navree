@@ -36,24 +36,44 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(360),
-        single!("questionnaire", "text", "A question in words", questionnaire_text)
-            .start()
-            .height(300),
-        single!("alert", "actions", "Actions and a close button", alert_actions)
-            .start()
-            .height(150),
+        single!(
+            "questionnaire",
+            "text",
+            "A question in words",
+            questionnaire_text
+        )
+        .start()
+        .height(300),
+        single!(
+            "alert",
+            "actions",
+            "Actions and a close button",
+            alert_actions
+        )
+        .start()
+        .height(150),
         single!("progress", "tone", "A tone and a figure", progress_tone)
             .start()
             .height(130),
         single!("card", "variants", "Variants", card_variants)
             .start()
             .height(420),
-        single!("breadcrumb", "folded", "A long trail folded", breadcrumb_folded)
-            .start()
-            .height(110),
-        single!("checkbox", "described", "With a description", checkbox_described)
-            .start()
-            .height(210),
+        single!(
+            "breadcrumb",
+            "folded",
+            "A long trail folded",
+            breadcrumb_folded
+        )
+        .start()
+        .height(110),
+        single!(
+            "checkbox",
+            "described",
+            "With a description",
+            checkbox_described
+        )
+        .start()
+        .height(210),
         single!("input", "sizes", "Sizes and a clear button", input_sizes)
             .start()
             .height(190),
@@ -116,7 +136,9 @@ fn trace_detail() -> Trace {
         .step(
             TraceStep::new("Checked the columns")
                 .description("All six were found")
-                .detail(Text::code("name, phone, city, gstin, credit_limit, joined_on")),
+                .detail(Text::code(
+                    "name, phone, city, gstin, credit_limit, joined_on",
+                )),
         )
         .step(
             TraceStep::new("Read the rows")
@@ -154,7 +176,9 @@ fn questionnaire_default() -> Questionnaire {
 }
 
 fn questionnaire_text() -> Questionnaire {
-    questionnaire().step(2).answers([("team", "small"), ("tools", "tally")])
+    questionnaire()
+        .step(2)
+        .answers([("team", "small"), ("tools", "tally")])
 }
 
 fn alert_actions() -> Alert {

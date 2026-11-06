@@ -1016,7 +1016,10 @@ fn ui_navree_wires_the_screens_into_the_app() {
         ".module(SessionModule::from_config())",
         ".module(AuthPages::new().app_name(\"Plain\"))",
     ] {
-        assert!(plain_app.contains(line), "src/app.rs lacks `{line}`:\n{plain_app}");
+        assert!(
+            plain_app.contains(line),
+            "src/app.rs lacks `{line}`:\n{plain_app}"
+        );
     }
     assert!(plain_app.contains("use navree::workspace::WorkspaceModule;"));
     assert!(plain_app.contains(".module(WorkspaceModule::from_config())"));
@@ -1167,7 +1170,11 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
         .iter()
         .filter_map(toml::Value::as_str)
         .collect();
-    assert_eq!(resolvers, ["header"], "the API names its workspace in a header");
+    assert_eq!(
+        resolvers,
+        ["header"],
+        "the API names its workspace in a header"
+    );
 }
 
 /// The sign-in pages are the framework's `AuthPages`; the app keeps one small file
@@ -1403,10 +1410,22 @@ fn ui_navree_shell_draws_the_person_and_the_workspace_of_the_request() {
     // Customers belong to a workspace and are read through its repository.
     let entity = read(&root, "src/modules/customers/entity.rs");
     assert!(entity.contains("pub workspace_id: Uuid,"), "{entity}");
-    assert!(entity.contains("impl WorkspaceScoped for Customer {}"), "{entity}");
+    assert!(
+        entity.contains("impl WorkspaceScoped for Customer {}"),
+        "{entity}"
+    );
     let service = read(&root, "src/modules/customers/service.rs");
-    assert!(service.contains("WorkspaceRepo::<Customer>::insert("), "{service}");
+    assert!(
+        service.contains("WorkspaceRepo::<Customer>::insert("),
+        "{service}"
+    );
     let live = read(&root, "src/ui/live.rs");
-    assert!(live.contains("Topic::workspace(workspace, TOPIC)"), "{live}");
-    assert!(!live.contains("broadcast::channel"), "the app's own hub is gone");
+    assert!(
+        live.contains("Topic::workspace(workspace, TOPIC)"),
+        "{live}"
+    );
+    assert!(
+        !live.contains("broadcast::channel"),
+        "the app's own hub is gone"
+    );
 }

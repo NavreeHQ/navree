@@ -86,7 +86,10 @@ fn draw(frame: &Frame, period: MetricsPeriod, series: &[MetricSeries]) -> AppPag
         .iter()
         .filter(|s| s.kind == MetricKind::Queue)
         .collect();
-    let jobs: Vec<&MetricSeries> = series.iter().filter(|s| s.kind == MetricKind::Job).collect();
+    let jobs: Vec<&MetricSeries> = series
+        .iter()
+        .filter(|s| s.kind == MetricKind::Job)
+        .collect();
     if !queues.is_empty() {
         sections.push(parts::section("Queues"));
         for (at, queue) in queues.into_iter().enumerate() {

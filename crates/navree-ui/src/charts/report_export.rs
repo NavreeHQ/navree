@@ -8,9 +8,9 @@ use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use navree_http::body::Body;
 use navree_http::response::Response;
 
+use super::Series;
 use super::report::{Report, ReportZone};
 use super::scale::Grain;
-use super::Series;
 use crate::dates::DateRange;
 use crate::table::write_csv_field;
 
@@ -62,7 +62,11 @@ impl Report {
     /// `series` is a name and its values, one for each period, in the order the report's
     /// [`measure`](Self::measure) gives them. A series shorter than the report is filled
     /// with gaps, and a longer one is cut.
-    pub fn table(&self, period_header: impl Into<String>, series: &[(&str, &[Option<f64>])]) -> ReportTable {
+    pub fn table(
+        &self,
+        period_header: impl Into<String>,
+        series: &[(&str, &[Option<f64>])],
+    ) -> ReportTable {
         let grain = self.grain();
         let count = self.buckets().len();
         let mut head = vec![period_header.into()];
@@ -76,7 +80,11 @@ impl Report {
                 .collect(),
             values: series
                 .iter()
-                .map(|(_, values)| (0..count).map(|at| values.get(at).copied().flatten()).collect())
+                .map(|(_, values)| {
+                    (0..count)
+                        .map(|at| values.get(at).copied().flatten())
+                        .collect()
+                })
                 .collect(),
         }
     }
@@ -90,7 +98,9 @@ impl Report {
     pub fn drill_links(&self, path: &str, column: &str) -> Vec<String> {
         let plain_column = !column.is_empty()
             && column.len() <= 64
-            && column.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            && column
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_');
         if !plain_column {
             return Vec::new();
         }
@@ -114,11 +124,7 @@ impl Report {
     /// the 1st. Pass the zone this report was cut in.
     pub fn previous<Tz: ReportZone>(&self, zone: &Tz) -> Report {
         let days = self.range().day_count();
-        let to = self
-            .range()
-            .from
-            .pred_opt()
-            .unwrap_or(self.range().from);
+        let to = self.range().from.pred_opt().unwrap_or(self.range().from);
         let from = to
             .checked_sub_signed(Duration::days(days - 1))
             .unwrap_or(to);
@@ -135,7 +141,11 @@ impl Report {
     /// [`measure`](Self::measure) gave for [`previous`](Self::previous); they are laid on
     /// this report's periods by position (the first period against the first), a shorter
     /// run leaving gaps and a longer one cut.
-    pub fn previous_series(&self, name: impl Into<String>, previous_values: &[Option<f64>]) -> Series {
+    pub fn previous_series(
+        &self,
+        name: impl Into<String>,
+        previous_values: &[Option<f64>],
+    ) -> Series {
         let count = self.buckets().len();
         Series::new(
             name,
@@ -193,11 +203,7 @@ impl ReportTable {
     /// navree-sheets' `write_xlsx`: that crate sits above this one, so this one cannot
     /// call it.
     pub fn csv_response(&self, file: &str) -> Response {
-        attachment(
-            self.csv().into_bytes(),
-            "text/csv; charset=utf-8",
-            file,
-        )
+        attachment(self.csv().into_bytes(), "text/csv; charset=utf-8", file)
     }
 }
 
@@ -210,7 +216,11 @@ fn attachment(bytes: Vec<u8>, content_type: &'static str, file: &str) -> Respons
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
         .collect();
-    let safe = if safe.is_empty() { "report".to_owned() } else { safe };
+    let safe = if safe.is_empty() {
+        "report".to_owned()
+    } else {
+        safe
+    };
     if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{safe}\"")) {
         headers.insert(CONTENT_DISPOSITION, value);
     }

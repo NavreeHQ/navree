@@ -4,9 +4,7 @@
 use std::sync::Arc;
 
 use navree_storage::StorageError;
-use navree_telemetry::{
-    Outcome, StorageOperation, Telemetry, TelemetryContext, TelemetryRecorder,
-};
+use navree_telemetry::{Outcome, StorageOperation, Telemetry, TelemetryContext, TelemetryRecorder};
 
 use crate::support::storage;
 
@@ -50,7 +48,10 @@ async fn disk_operations_are_reported_with_their_bytes_and_outcome() {
     assert_eq!(ops[1].bytes, Some(10));
     assert_eq!(ops[3].error.as_deref(), Some("not_found"));
     let text = serde_json::to_string(&ops).unwrap();
-    assert!(!text.contains("ABCDE1234F"), "the contents stay out: {text}");
+    assert!(
+        !text.contains("ABCDE1234F"),
+        "the contents stay out: {text}"
+    );
 }
 
 #[tokio::test]

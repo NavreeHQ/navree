@@ -37,15 +37,24 @@ fn document(routes: &[RouteMeta], docs: &[RouteDoc], security: Option<&[String]>
 #[test]
 fn a_list_route_documents_its_query() {
     let routes = [route("GET", "/api/v1/deals", None, false)];
-    let doc = document(&routes, &[RouteDoc::get("/api/v1/deals").list::<Deals>()], None);
+    let doc = document(
+        &routes,
+        &[RouteDoc::get("/api/v1/deals").list::<Deals>()],
+        None,
+    );
 
     let parameters = doc["paths"]["/api/v1/deals"]["get"]["parameters"]
         .as_array()
         .expect("parameters");
-    let names: Vec<&str> = parameters.iter().filter_map(|p| p["name"].as_str()).collect();
+    let names: Vec<&str> = parameters
+        .iter()
+        .filter_map(|p| p["name"].as_str())
+        .collect();
     assert_eq!(
         names,
-        ["filter", "sort", "search", "page", "per_page", "cursor", "limit"]
+        [
+            "filter", "sort", "search", "page", "per_page", "cursor", "limit"
+        ]
     );
     assert!(parameters.iter().all(|p| p["in"] == "query"));
     let filter = &parameters[0];
@@ -109,7 +118,11 @@ fn a_doc_finds_its_route_by_name_or_by_method_and_path() {
     assert!(doc["paths"]["/health/live"]["get"]["responses"]["200"]["content"]["application/json"]["schema"].is_object());
     // Only the GET of the path was described, not the POST.
     assert!(doc["paths"]["/api/v1/deals"]["get"]["parameters"].is_array());
-    assert!(doc["paths"]["/api/v1/deals"]["post"].get("parameters").is_none());
+    assert!(
+        doc["paths"]["/api/v1/deals"]["post"]
+            .get("parameters")
+            .is_none()
+    );
 }
 
 fn json_object() -> navree_openapi::Schema {
@@ -128,7 +141,10 @@ fn a_response_that_is_not_json_is_documented_with_its_content_type() {
 
     let ok = &doc["paths"]["/api/v1/contacts/export"]["get"]["responses"]["200"];
     assert_eq!(ok["description"], "The contacts, one row each.");
-    assert_eq!(ok["content"]["text/csv"]["schema"], json!({"type": "string"}));
+    assert_eq!(
+        ok["content"]["text/csv"]["schema"],
+        json!({"type": "string"})
+    );
     assert!(ok["content"].get("application/json").is_none());
 }
 
@@ -155,12 +171,13 @@ fn a_doc_can_add_a_response_with_a_type() {
         number: String,
     }
     let routes = [route("POST", "/api/v1/deals/{id}/receipt", None, false)];
-    let docs = [RouteDoc::post("/api/v1/deals/{id}/receipt").json_response::<Receipt>(201, "Created")];
+    let docs =
+        [RouteDoc::post("/api/v1/deals/{id}/receipt").json_response::<Receipt>(201, "Created")];
     let doc = document(&routes, &docs, None);
 
     assert_eq!(
-        doc["paths"]["/api/v1/deals/{id}/receipt"]["post"]["responses"]["201"]["content"]
-            ["application/json"]["schema"]["$ref"],
+        doc["paths"]["/api/v1/deals/{id}/receipt"]["post"]["responses"]["201"]["content"]["application/json"]
+            ["schema"]["$ref"],
         "#/components/schemas/Receipt"
     );
     assert_eq!(
@@ -190,7 +207,11 @@ fn a_route_can_name_the_security_it_needs() {
 
     let none = [RouteDoc::get("/api/v1/deals").security(&[])];
     let open = document(&routes[..1], &none, None);
-    assert!(open["paths"]["/api/v1/deals"]["get"].get("security").is_none());
+    assert!(
+        open["paths"]["/api/v1/deals"]["get"]
+            .get("security")
+            .is_none()
+    );
 }
 
 #[test]
@@ -209,7 +230,11 @@ fn an_app_that_uses_only_bearer_tokens_lists_no_cookie_scheme() {
     let schemes = doc["components"]["securitySchemes"].as_object().unwrap();
     assert_eq!(schemes.keys().collect::<Vec<_>>(), ["bearer"]);
     // A public route stays open.
-    assert!(doc["paths"]["/health/live"]["get"].get("security").is_none());
+    assert!(
+        doc["paths"]["/health/live"]["get"]
+            .get("security")
+            .is_none()
+    );
 }
 
 #[test]
@@ -256,10 +281,11 @@ fn a_scheme_the_document_does_not_define_is_refused() {
         &ApiOptions::default(),
     )
     .unwrap_err();
-    assert!(matches!(error, ApiError::UnknownSecurityScheme { .. }), "{error}");
+    assert!(
+        matches!(error, ApiError::UnknownSecurityScheme { .. }),
+        "{error}"
+    );
 
     let app_wide = vec!["oauth".to_owned()];
-    assert!(
-        openapi_document_with(&routes, &[], Some(&app_wide), &ApiOptions::default()).is_err()
-    );
+    assert!(openapi_document_with(&routes, &[], Some(&app_wide), &ApiOptions::default()).is_err());
 }

@@ -184,13 +184,19 @@ impl Core {
         let user = user_of(access)?;
         let claim = read_context(&self.signer, &self.config.path, signed, user, Utc::now())?;
         let Some(resolver) = self.config.contexts.get(&claim.kind) else {
-            return Err(AppError::forbidden().with_detail("The page's context is not one the assistant reads."));
+            return Err(AppError::forbidden()
+                .with_detail("The page's context is not one the assistant reads."));
         };
         let uow = self.store.uow(user).await;
-        let run = self.reader(access.clone(), conversation, uow.clone()).await?;
+        let run = self
+            .reader(access.clone(), conversation, uow.clone())
+            .await?;
         let described = resolver.describe(&claim.key, &run).await;
         let _ = uow.rollback().await;
-        Ok(format!("The user is looking at this {}: {}", claim.kind, described?))
+        Ok(format!(
+            "The user is looking at this {}: {}",
+            claim.kind, described?
+        ))
     }
 
     /// Follows run `begun`'s stream in a task of its own, writing what it says into the
@@ -326,7 +332,11 @@ impl Core {
         drop(stream);
         // A tool that never answered, because the run stopped or failed in it.
         for item in tools.into_values() {
-            self.log(self.store.change(conversation, user, item, status::FAILED, None).await);
+            self.log(
+                self.store
+                    .change(conversation, user, item, status::FAILED, None)
+                    .await,
+            );
         }
         match writing.answer.take() {
             Some(answer) => {
@@ -336,18 +346,38 @@ impl Core {
                     outcome
                 };
                 let content = json!({ "text": writing.text });
-                self.log(self.store.change(conversation, user, answer, state, Some(content)).await);
+                self.log(
+                    self.store
+                        .change(conversation, user, answer, state, Some(content))
+                        .await,
+                );
             }
             None if outcome == status::FAILED => {
                 self.log(
                     self.store
-                        .add(conversation, user, kind::ASSISTANT, status::FAILED, json!({ "text": "" }))
+                        .add(
+                            conversation,
+                            user,
+                            kind::ASSISTANT,
+                            status::FAILED,
+                            json!({ "text": "" }),
+                        )
                         .await,
                 );
             }
             None if outcome == status::STOPPED => {
                 let text = self.config.labels.stopped.clone();
-                self.log(self.store.add(conversation, user, kind::NOTICE, status::DONE, json!({ "text": text })).await);
+                self.log(
+                    self.store
+                        .add(
+                            conversation,
+                            user,
+                            kind::NOTICE,
+                            status::DONE,
+                            json!({ "text": text }),
+                        )
+                        .await,
+                );
             }
             None => {}
         }
@@ -459,11 +489,14 @@ impl Core {
                 kind::SURFACE => {
                     if reader.is_none() {
                         let uow = self.store.uow(user).await;
-                        let run = self.reader(access.clone(), conversation, uow.clone()).await?;
+                        let run = self
+                            .reader(access.clone(), conversation, uow.clone())
+                            .await?;
                         reader = Some((run, uow));
                     }
                     let (run, _) = reader.as_ref().expect("made above");
-                    self.surface(user, conversation, row, &content, run, csrf).await
+                    self.surface(user, conversation, row, &content, run, csrf)
+                        .await
                 }
                 kind::APPROVAL => {
                     let state = match row.status.as_str() {
@@ -740,7 +773,13 @@ impl<A: Agent> Assistant<A> {
         let user = user_of(&access)?;
         let message = checked_message(message)?;
         if let Some(signed) = context.filter(|text| !text.is_empty()) {
-            read_context(&self.core.signer, &self.core.config.path, signed, user, Utc::now())?;
+            read_context(
+                &self.core.signer,
+                &self.core.config.path,
+                signed,
+                user,
+                Utc::now(),
+            )?;
         }
         let row = self
             .core
@@ -771,7 +810,9 @@ impl<A: Agent> Assistant<A> {
         }
         let run = self.core.store.run(id, user).await?;
         if let Some(state) = run.state.as_deref() {
-            notes.push(format!("The conversation's working state, as JSON: {state}"));
+            notes.push(format!(
+                "The conversation's working state, as JSON: {state}"
+            ));
         }
         let begun = self.core.store.begin(id, user, Some(message)).await?;
         for note in self.core.store.take_notes(id).await? {
@@ -921,7 +962,8 @@ impl<A: Agent> Assistant<A> {
             .live(stream.on(topic(id)))
             .labels(self.core.config.labels.clone());
         if earlier && let Some(first) = rows.first() {
-            conversation = conversation.earlier(format!("{path}/{id}/items?dir=start&cursor={}", first.id));
+            conversation =
+                conversation.earlier(format!("{path}/{id}/items?dir=start&cursor={}", first.id));
         }
         let context = options
             .context
@@ -949,7 +991,8 @@ impl<A: Agent> Assistant<A> {
         value: Option<&str>,
         error: Option<&str>,
     ) -> Node {
-        self.core.composer(conversation, csrf, context, value, error)
+        self.core
+            .composer(conversation, csrf, context, value, error)
     }
 
     /// The composer of a page with no conversation yet: its first message starts one.
@@ -977,9 +1020,15 @@ impl<A: Agent> Assistant<A> {
             .await
             .map_err(|error| error.to_app_error())?;
         let mut list = ThreadList::new(self.core.config.labels.threads.clone());
-        for thread in page.data.into_iter().filter(|thread| thread.agent == A::NAME) {
+        for thread in page
+            .data
+            .into_iter()
+            .filter(|thread| thread.agent == A::NAME)
+        {
             list = list.thread(
-                thread.title.unwrap_or_else(|| self.core.config.labels.untitled.clone()),
+                thread
+                    .title
+                    .unwrap_or_else(|| self.core.config.labels.untitled.clone()),
                 self.page_path(thread.id),
                 Some(thread.id) == current,
             );
@@ -1107,7 +1156,10 @@ impl<A: Agent> Assistant<A> {
             }
         };
         if let Some(note) = &done.note {
-            self.core.store.add_note(&uow, claim.conversation, note).await?;
+            self.core
+                .store
+                .add_note(&uow, claim.conversation, note)
+                .await?;
         }
         let revision = self.core.store.bump(&uow, claim.conversation).await?;
         self.core
@@ -1121,9 +1173,9 @@ impl<A: Agent> Assistant<A> {
                 revision,
             )
             .await?;
-        uow.commit()
-            .await
-            .map_err(|error| navree_db::map_db_error(&error).unwrap_or_else(|| AppError::internal(error)))?;
+        uow.commit().await.map_err(|error| {
+            navree_db::map_db_error(&error).unwrap_or_else(|| AppError::internal(error))
+        })?;
         self.core.nudge(user, claim.conversation).await;
         Ok((claim.conversation, Acted::Done(done.message)))
     }
@@ -1131,7 +1183,14 @@ impl<A: Agent> Assistant<A> {
     /// A signed reference to record `key` of `kind`, for `user`'s composer to send: the
     /// assistant hears what that page is about, resolved under their access.
     pub fn context_ref(&self, user: Uuid, kind: &str, key: &str) -> String {
-        context_ref(&self.core.signer, &self.core.config.path, user, kind, key, Utc::now())
+        context_ref(
+            &self.core.signer,
+            &self.core.config.path,
+            user,
+            kind,
+            key,
+            Utc::now(),
+        )
     }
 
     /// The conversation's working state, as `T`; `None` when it has none, or one that
@@ -1149,9 +1208,17 @@ impl<A: Agent> Assistant<A> {
 
     /// Replaces the conversation's working state, as the page edited it: the page's
     /// other tabs see it, and the assistant reads it in its next run.
-    pub async fn set_state<T: Props>(&self, user: Uuid, id: Uuid, state: &T) -> Result<(), AppError> {
+    pub async fn set_state<T: Props>(
+        &self,
+        user: Uuid,
+        id: Uuid,
+        state: &T,
+    ) -> Result<(), AppError> {
         self.owned(user, id).await?;
-        self.core.store.set_state(id, user, &state.to_json()).await?;
+        self.core
+            .store
+            .set_state(id, user, &state.to_json())
+            .await?;
         self.core.nudge(user, id).await;
         Ok(())
     }
@@ -1161,11 +1228,14 @@ impl<A: Agent> Assistant<A> {
 fn refused(refusal: navree_ui::genui::ActionRefusal) -> AppError {
     use navree_ui::genui::ActionRefusal;
     match refusal {
-        ActionRefusal::Unknown => AppError::not_found().with_detail("This component takes no such action."),
-        ActionRefusal::Forbidden => AppError::forbidden(),
-        ActionRefusal::Invalid(refusal) => {
-            AppError::bad_request(format!("The button's input was refused: {}", refusal.message()))
+        ActionRefusal::Unknown => {
+            AppError::not_found().with_detail("This component takes no such action.")
         }
+        ActionRefusal::Forbidden => AppError::forbidden(),
+        ActionRefusal::Invalid(refusal) => AppError::bad_request(format!(
+            "The button's input was refused: {}",
+            refusal.message()
+        )),
         ActionRefusal::Failed(error) => error,
     }
 }

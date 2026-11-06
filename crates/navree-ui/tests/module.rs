@@ -175,11 +175,7 @@ async fn a_runtime_request_is_reported_as_a_ui_operation_and_nothing_else_is() {
         .header("content-type", "application/x-www-form-urlencoded")
         .send()
         .await;
-    client
-        .get("/small")
-        .header("x-navree-ui", "1")
-        .send()
-        .await;
+    client.get("/small").header("x-navree-ui", "1").send().await;
     client
         .get("/small")
         .header("x-navree-ui", "1")

@@ -188,24 +188,28 @@ impl SessionController {
                     ),
                     request: Some(schema_fn::<SessionLoginInput>),
                     response: Some(schema_fn::<UserResource>),
-                    ..api("Sign a browser in with email and password", &[400, 401, 403, 429])
+                    ..api(
+                        "Sign a browser in with email and password",
+                        &[400, 401, 403, 429],
+                    )
                 }),
         );
 
         let service = self.service.clone();
-        let verify = move |session: Session,
-                           meta: ClientMeta,
-                           Valid(Json(input)): Valid<Json<SessionTwoFactorInput>>| {
-            let service = service.clone();
-            async move {
-                let proof = two_factor_proof(input.code, input.recovery_code)?;
-                let user = service
-                    .verify_two_factor_session(&session, proof, &meta)
-                    .await
-                    .map_err(AuthError::into_app_error)?;
-                answer(&service, SessionSignIn::SignedIn(user)).await
-            }
-        };
+        let verify =
+            move |session: Session,
+                  meta: ClientMeta,
+                  Valid(Json(input)): Valid<Json<SessionTwoFactorInput>>| {
+                let service = service.clone();
+                async move {
+                    let proof = two_factor_proof(input.code, input.recovery_code)?;
+                    let user = service
+                        .verify_two_factor_session(&session, proof, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    answer(&service, SessionSignIn::SignedIn(user)).await
+                }
+            };
         routes.push(
             RouteDef::on(Method::POST, path("/session/2fa/verify"), verify)
                 .public()
@@ -222,23 +226,24 @@ impl SessionController {
 
         if self.options.magic_link.enabled {
             let service = self.service.clone();
-            let verify = move |session: Session,
-                               meta: ClientMeta,
-                               Valid(Json(input)): Valid<Json<SessionMagicLinkInput>>| {
-                let service = service.clone();
-                async move {
-                    let outcome = service
-                        .login_with_magic_link_session(
-                            &session,
-                            &input.token,
-                            input.remember,
-                            &meta,
-                        )
-                        .await
-                        .map_err(AuthError::into_app_error)?;
-                    answer(&service, outcome).await
-                }
-            };
+            let verify =
+                move |session: Session,
+                      meta: ClientMeta,
+                      Valid(Json(input)): Valid<Json<SessionMagicLinkInput>>| {
+                    let service = service.clone();
+                    async move {
+                        let outcome = service
+                            .login_with_magic_link_session(
+                                &session,
+                                &input.token,
+                                input.remember,
+                                &meta,
+                            )
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                        answer(&service, outcome).await
+                    }
+                };
             routes.push(
                 RouteDef::on(Method::POST, path("/session/magic-link/verify"), verify)
                     .public()
@@ -256,24 +261,25 @@ impl SessionController {
 
         if self.options.otp.enabled {
             let service = self.service.clone();
-            let verify = move |session: Session,
-                               meta: ClientMeta,
-                               Valid(Json(input)): Valid<Json<SessionOtpInput>>| {
-                let service = service.clone();
-                async move {
-                    let outcome = service
-                        .login_with_code_session(
-                            &session,
-                            &input.email,
-                            &input.code,
-                            input.remember,
-                            &meta,
-                        )
-                        .await
-                        .map_err(AuthError::into_app_error)?;
-                    answer(&service, outcome).await
-                }
-            };
+            let verify =
+                move |session: Session,
+                      meta: ClientMeta,
+                      Valid(Json(input)): Valid<Json<SessionOtpInput>>| {
+                    let service = service.clone();
+                    async move {
+                        let outcome = service
+                            .login_with_code_session(
+                                &session,
+                                &input.email,
+                                &input.code,
+                                input.remember,
+                                &meta,
+                            )
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                        answer(&service, outcome).await
+                    }
+                };
             routes.push(
                 RouteDef::on(Method::POST, path("/session/otp/verify"), verify)
                     .public()
@@ -281,7 +287,10 @@ impl SessionController {
                     .api(ApiMeta {
                         request: Some(schema_fn::<SessionOtpInput>),
                         response: Some(schema_fn::<UserResource>),
-                        ..api("Sign a browser in with an emailed code", &[400, 401, 403, 429])
+                        ..api(
+                            "Sign a browser in with an emailed code",
+                            &[400, 401, 403, 429],
+                        )
                     }),
             );
         }

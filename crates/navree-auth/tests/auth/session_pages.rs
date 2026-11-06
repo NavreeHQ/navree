@@ -60,11 +60,7 @@ async fn post_form(client: &TestClient, path: &str, fields: &[(&str, &str)]) -> 
 
 /// Opens `path` as a browser does.
 async fn open(client: &TestClient, path: &str) -> TestResponse {
-    client
-        .get(path)
-        .header("accept", "text/html")
-        .send()
-        .await
+    client.get(path).header("accept", "text/html").send().await
 }
 
 /// `GET /api/probe/whoami`.
@@ -123,14 +119,10 @@ async fn the_setup_page_sets_two_factor_up_for_a_user_a_policy_requires_it_of() 
     assert!(page.contains(r#"action="/account/two-factor""#), "{page}");
 
     // The secret is made when the person asks for it.
-    let setup = post_form(
-        &browser,
-        "/account/two-factor",
-        &[("next", "/deals/42")],
-    )
-    .await
-    .assert_status(200)
-    .text();
+    let setup = post_form(&browser, "/account/two-factor", &[("next", "/deals/42")])
+        .await
+        .assert_status(200)
+        .text();
     assert!(setup.contains("<svg"), "the QR code: {setup}");
     assert!(
         setup.contains(r#"action="/account/two-factor/confirm""#),
@@ -224,8 +216,12 @@ async fn the_sign_in_page_links_only_the_ways_that_are_on() {
     assert!(!page.contains("/sign-in/link"), "{page}");
     assert!(!page.contains("/sign-in/code"), "{page}");
     assert!(!page.contains("/sign-in/passkey"), "{page}");
-    open(&plain.client(), "/sign-in/link").await.assert_status(404);
-    open(&plain.client(), "/sign-in/code").await.assert_status(404);
+    open(&plain.client(), "/sign-in/link")
+        .await
+        .assert_status(404);
+    open(&plain.client(), "/sign-in/code")
+        .await
+        .assert_status(404);
     open(&plain.client(), "/sign-in/passkey")
         .await
         .assert_status(404);
@@ -250,7 +246,10 @@ async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
     let user = create_user(&app, "ada@example.com").await;
     let browser = app.client();
 
-    let page = open(&browser, "/sign-in/link").await.assert_status(200).text();
+    let page = open(&browser, "/sign-in/link")
+        .await
+        .assert_status(200)
+        .text();
     assert!(page.contains(r#"name="email""#), "{page}");
     let sent = post_form(
         &browser,
@@ -262,10 +261,14 @@ async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
     .text();
     assert!(sent.contains("we have sent it a link"), "{sent}");
     // An address nobody has gets the same answer and no mail.
-    let unknown = post_form(&app.client(), "/sign-in/link", &[("email", "nobody@example.com")])
-        .await
-        .assert_status(200)
-        .text();
+    let unknown = post_form(
+        &app.client(),
+        "/sign-in/link",
+        &[("email", "nobody@example.com")],
+    )
+    .await
+    .assert_status(200)
+    .text();
     assert!(unknown.contains("we have sent it a link"), "{unknown}");
     let mails = sent_mail(&app).await;
     assert_eq!(mails.len(), 1);
@@ -329,7 +332,10 @@ async fn an_emailed_code_signs_a_browser_in() {
     .await
     .assert_status(200)
     .text();
-    assert!(asked.contains(r#"action="/sign-in/code/verify""#), "{asked}");
+    assert!(
+        asked.contains(r#"action="/sign-in/code/verify""#),
+        "{asked}"
+    );
     assert!(asked.contains(r#"name="code""#), "{asked}");
     let mails = sent_mail(&app).await;
     assert_eq!(mails.len(), 1);
@@ -483,7 +489,9 @@ async fn a_passkey_signs_a_browser_in_through_the_page_routes() {
         page.contains(r#"<script src="/sign-in/passkey.js" defer></script>"#),
         "{page}"
     );
-    let script = open(&browser, "/sign-in/passkey.js").await.assert_status(200);
+    let script = open(&browser, "/sign-in/passkey.js")
+        .await
+        .assert_status(200);
     assert_eq!(
         script.header("content-type"),
         Some("text/javascript; charset=utf-8")
@@ -761,7 +769,10 @@ async fn signing_out_while_impersonating_ends_both_sign_ins() {
     whoami(&browser).await.assert_status(401);
     let service = app.get::<navree_auth::AuthService>().await;
     let live = service.sessions(admin.id, None).await.unwrap();
-    assert!(live.is_empty(), "the administrator's sign-in ended too: {live:?}");
+    assert!(
+        live.is_empty(),
+        "the administrator's sign-in ended too: {live:?}"
+    );
 }
 
 // An app without navree-session's layer has no routes that sign a browser in

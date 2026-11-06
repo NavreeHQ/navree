@@ -437,7 +437,8 @@ impl Store {
         content: Option<Json>,
     ) -> Result<(), AppError> {
         let uow = self.uow(user).await;
-        self.change_in(&uow, conversation, id, status, content).await?;
+        self.change_in(&uow, conversation, id, status, content)
+            .await?;
         uow.commit().await.map_err(db_error)
     }
 
@@ -509,11 +510,11 @@ impl Store {
         after: Uuid,
     ) -> Result<(Vec<ItemRow>, bool), AppError> {
         let mut rows = ItemRow::select()
-            .filter(
-                Filter::all()
-                    .eq("conversation_id", conversation)
-                    .compare("id", Compare::Gt, after),
-            )
+            .filter(Filter::all().eq("conversation_id", conversation).compare(
+                "id",
+                Compare::Gt,
+                after,
+            ))
             .order_by("id")
             .limit(PAGE + 1)
             .all(&*self.db)
@@ -532,11 +533,11 @@ impl Store {
         revision: i64,
     ) -> Result<(Vec<ItemRow>, bool), AppError> {
         let mut rows = ItemRow::select()
-            .filter(
-                Filter::all()
-                    .eq("conversation_id", conversation)
-                    .compare("revision", Compare::Gt, revision),
-            )
+            .filter(Filter::all().eq("conversation_id", conversation).compare(
+                "revision",
+                Compare::Gt,
+                revision,
+            ))
             .order_by("revision")
             .order_by("id")
             .limit(PAGE + 1)
@@ -621,7 +622,12 @@ impl Store {
     }
 
     /// Adds a note for the assistant's next run.
-    pub(crate) async fn add_note(&self, uow: &Uow, conversation: Uuid, note: &str) -> Result<(), AppError> {
+    pub(crate) async fn add_note(
+        &self,
+        uow: &Uow,
+        conversation: Uuid,
+        note: &str,
+    ) -> Result<(), AppError> {
         let row = RunRow::select()
             .eq("conversation_id", conversation)
             .one(uow)
@@ -638,7 +644,10 @@ impl Store {
             notes.drain(..notes.len() - 10);
         }
         RunRow::update_where(Filter::all().eq("conversation_id", conversation))
-            .set("notes", Some(serde_json::to_string(&notes).unwrap_or_default()))
+            .set(
+                "notes",
+                Some(serde_json::to_string(&notes).unwrap_or_default()),
+            )
             .execute(uow)
             .await
             .map_err(db_error)?;

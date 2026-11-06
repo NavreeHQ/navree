@@ -1,7 +1,6 @@
 //! The one-time code field: its markup, what a page with it loads, and what the server
 //! makes of a posted code.
 
-
 use navree_ui::{Field, InputOtp, OtpError, OtpKind, OtpRules, Uses, View, assets, render};
 
 fn html(otp: InputOtp) -> String {

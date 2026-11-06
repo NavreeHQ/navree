@@ -149,7 +149,11 @@ pub(crate) fn id_part(text: &str) -> String {
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
         .take(64)
         .collect();
-    if part.is_empty() { "x".to_owned() } else { part }
+    if part.is_empty() {
+        "x".to_owned()
+    } else {
+        part
+    }
 }
 
 /// `text` cut at `most` characters, with an ellipsis.
@@ -189,11 +193,7 @@ fn shown(value: &Value) -> String {
 }
 
 /// A post form to `action` with the session's token, holding `fields`.
-pub(crate) fn post_form(
-    action: &LocalHref,
-    csrf: Option<&str>,
-    fields: impl IntoNodes,
-) -> Element {
+pub(crate) fn post_form(action: &LocalHref, csrf: Option<&str>, fields: impl IntoNodes) -> Element {
     el("form")
         .attr("method", "post")
         .attr("action", action.as_str().to_owned())
@@ -269,7 +269,11 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     /// A message the reader wrote: `key` names it in the list and `cursor` places it.
-    pub fn user(key: impl Into<String>, cursor: impl Into<String>, text: impl Into<String>) -> Self {
+    pub fn user(
+        key: impl Into<String>,
+        cursor: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
         Self::new(ChatRole::User, key.into(), cursor.into(), text.into())
     }
 
@@ -432,7 +436,11 @@ pub struct ToolCallCard {
 
 impl ToolCallCard {
     /// The call `key`, placed at `cursor`, of the tool the reader knows as `label`.
-    pub fn new(key: impl Into<String>, cursor: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(
+        key: impl Into<String>,
+        cursor: impl Into<String>,
+        label: impl Into<String>,
+    ) -> Self {
         Self {
             key: key.into(),
             cursor: cursor.into(),
@@ -629,9 +637,7 @@ impl Sources {
                         el("span")
                             .children((
                                 link,
-                                host.map(|host| {
-                                    Text::muted(format!(" ({host})")).inline()
-                                }),
+                                host.map(|host| Text::muted(format!(" ({host})")).inline()),
                             ))
                             .into()
                     }
@@ -643,10 +649,7 @@ impl Sources {
         el("nav")
             .attr("data-genui", "sources")
             .attr("aria-label", self.label.clone())
-            .children((
-                Text::muted(self.label).inline(),
-                el("ol").child(items),
-            ))
+            .children((Text::muted(self.label).inline(), el("ol").child(items)))
             .into()
     }
 }
@@ -750,11 +753,15 @@ impl Suggestions {
                     .into()
             })
             .collect();
-        post_form(&self.action, self.csrf.as_deref(), Row::gap(2).wrap().children(buttons))
-            .attr("data-genui", "suggestions")
-            .attr("role", "group")
-            .attr("aria-label", self.label)
-            .into()
+        post_form(
+            &self.action,
+            self.csrf.as_deref(),
+            Row::gap(2).wrap().children(buttons),
+        )
+        .attr("data-genui", "suggestions")
+        .attr("role", "group")
+        .attr("aria-label", self.label)
+        .into()
     }
 }
 
@@ -945,7 +952,10 @@ impl ApprovalCard {
             .id(id)
             .attr("data-genui", "approval")
             .attr("role", "region")
-            .attr("aria-label", format!("{}: {}", self.labels.asks, cut(&self.label, 120)))
+            .attr(
+                "aria-label",
+                format!("{}: {}", self.labels.asks, cut(&self.label, 120)),
+            )
             .into()
     }
 }
@@ -1053,16 +1063,20 @@ impl Conversation {
     }
 
     fn into_node(self) -> Node {
-        let mut list = LazyList::new(id_part(&self.id), self.labels.conversation.clone(), self.src)
-            .order(LazyOrder::Ascending)
-            .gap(4)
-            .items(self.items)
-            .announce_new(self.labels.new_many.clone(), self.labels.answered.clone())
-            .max(400)
-            .labels(LazyLabels {
-                start: self.labels.earlier.clone(),
-                ..LazyLabels::default()
-            });
+        let mut list = LazyList::new(
+            id_part(&self.id),
+            self.labels.conversation.clone(),
+            self.src,
+        )
+        .order(LazyOrder::Ascending)
+        .gap(4)
+        .items(self.items)
+        .announce_new(self.labels.new_many.clone(), self.labels.answered.clone())
+        .max(400)
+        .labels(LazyLabels {
+            start: self.labels.earlier.clone(),
+            ..LazyLabels::default()
+        });
         if let Some(since) = self.since {
             list = list.since(since);
         }
@@ -1159,16 +1173,29 @@ mod tests {
                 .into_item(&labels)
                 .into(),
         );
-        assert!(user.contains("&lt;img src=x onerror=alert(1)&gt;<br>second line"), "{user}");
-        assert!(user.contains("data-ui-quiet"), "a reader's own message is not read out");
+        assert!(
+            user.contains("&lt;img src=x onerror=alert(1)&gt;<br>second line"),
+            "{user}"
+        );
+        assert!(
+            user.contains("data-ui-quiet"),
+            "a reader's own message is not read out"
+        );
         let answer = render(
-            &ChatMessage::assistant("a1", "0002", "See ![x](https://evil.example/p.png) [site](javascript:alert(1))")
-                .into_item(&labels)
-                .into(),
+            &ChatMessage::assistant(
+                "a1",
+                "0002",
+                "See ![x](https://evil.example/p.png) [site](javascript:alert(1))",
+            )
+            .into_item(&labels)
+            .into(),
         );
         assert!(!answer.contains("<img"), "{answer}");
         assert!(!answer.contains(r#"href="javascript:"#), "{answer}");
-        assert!(answer.contains("data-ui-say=\"The assistant answered: See"), "{answer}");
+        assert!(
+            answer.contains("data-ui-say=\"The assistant answered: See"),
+            "{answer}"
+        );
     }
 
     #[test]
@@ -1208,7 +1235,10 @@ mod tests {
                 .into_item(&ChatLabels::default())
                 .into(),
         );
-        assert!(!tool.contains("<script>") && !tool.contains("<orders>"), "{tool}");
+        assert!(
+            !tool.contains("<script>") && !tool.contains("<orders>"),
+            "{tool}"
+        );
     }
 
     #[test]
@@ -1221,10 +1251,16 @@ mod tests {
                 .into(),
         );
         assert!(html.contains("(www.rbi.org.in)"), "{html}");
-        assert!(html.contains(r#"rel="noopener noreferrer nofollow""#), "{html}");
+        assert!(
+            html.contains(r#"rel="noopener noreferrer nofollow""#),
+            "{html}"
+        );
         assert!(!html.contains("javascript:"), "{html}");
         assert!(html.contains("<li>Bad</li>"), "{html}");
-        assert_eq!(host_of("https://navree.com@evil.example/x").as_deref(), Some("evil.example"));
+        assert_eq!(
+            host_of("https://navree.com@evil.example/x").as_deref(),
+            Some("evil.example")
+        );
     }
 
     #[test]
@@ -1236,8 +1272,14 @@ mod tests {
                 .error("The assistant is still answering.")
                 .into(),
         );
-        assert!(html.contains(r#"<form method="post" action="/assistant/7/messages""#), "{html}");
-        assert!(html.contains(r#"name="message""#) && html.contains("required"), "{html}");
+        assert!(
+            html.contains(r#"<form method="post" action="/assistant/7/messages""#),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"name="message""#) && html.contains("required"),
+            "{html}"
+        );
         assert!(html.contains(r#"maxlength="4000""#), "{html}");
         assert!(html.contains(r#"name="context""#), "{html}");
         assert!(html.contains("The assistant is still answering."), "{html}");

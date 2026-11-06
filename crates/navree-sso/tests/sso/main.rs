@@ -3,8 +3,8 @@
 mod servers;
 mod support;
 
-mod domains;
 mod doh;
+mod domains;
 mod enforcement;
 mod keycloak;
 mod module;

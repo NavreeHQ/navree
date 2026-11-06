@@ -60,9 +60,9 @@ use navree_realtime::Live;
 use navree_ui::genui::{Catalog, ChatLabels, FrameLabels, Props, SurfaceCx};
 use uuid::Uuid;
 
+use crate::Ai;
 use crate::agent::{Agent, AgentRun};
 use crate::memory::Conversations;
-use crate::Ai;
 
 mod host;
 mod routes;
@@ -257,7 +257,8 @@ mod tests {
 
     #[test]
     fn tools_are_named_in_words() {
-        let config = AssistantConfig::at("/assistant").tool_label("refund_order", "Refund an order");
+        let config =
+            AssistantConfig::at("/assistant").tool_label("refund_order", "Refund an order");
         assert_eq!(config.label_of("refund_order"), "Refund an order");
         assert_eq!(config.label_of("list_payments"), "List payments");
     }

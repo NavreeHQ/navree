@@ -1,7 +1,6 @@
 //! The carousel: its roles and labels, the ids that tie its parts together, the
 //! markup that works with no script, and what a page with one loads.
 
-
 use std::collections::HashSet;
 use std::time::Duration;
 

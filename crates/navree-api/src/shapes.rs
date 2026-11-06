@@ -59,7 +59,8 @@ fn text_or_list() -> Schema {
 
 /// An object of query conditions.
 fn conditions() -> Schema {
-    Schema::object().description("Conditions on the record's fields, in the MongoDB query language.")
+    Schema::object()
+        .description("Conditions on the record's fields, in the MongoDB query language.")
 }
 
 #[cfg(test)]

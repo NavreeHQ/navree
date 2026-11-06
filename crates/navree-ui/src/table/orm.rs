@@ -366,8 +366,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                     }
                 }
                 SearchMode::Words => {
-                    let sources: Vec<&'static str> =
-                        searched.map(|column| column.source).collect();
+                    let sources: Vec<&'static str> = searched.map(|column| column.source).collect();
                     if !sources.is_empty() {
                         builder = builder.where_full_text(sources, q.clone());
                     }

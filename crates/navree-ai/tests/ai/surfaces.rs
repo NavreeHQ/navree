@@ -89,7 +89,9 @@ impl Surface<AgentRun> for Summary {
                 .get(run.uow())
                 .await?
                 .into_models();
-            Ok(SurfaceView::new(el("p").id("count").child(format!("{} notes", notes.len()))))
+            Ok(SurfaceView::new(
+                el("p").id("count").child(format!("{} notes", notes.len())),
+            ))
         })
     }
 }
@@ -150,8 +152,10 @@ impl RunAction<AgentRun> for ArchiveNote {
                 .authorize::<Note, Update>(input.note.as_str())
                 .await?
                 .into_inner();
-            note.update(run.uow(), |note| note.title = format!("Archived: {}", note.title))
-                .await?;
+            note.update(run.uow(), |note| {
+                note.title = format!("Archived: {}", note.title)
+            })
+            .await?;
             Ok(ActionDone::new("Archived the note").note("The user archived a note."))
         })
     }
@@ -412,7 +416,10 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
     let channel = format!("private-navree-live.user.{dana}.assistant.{id}");
     let told = nudges.0.lock().unwrap().clone();
     assert!(told.contains(&channel), "{told:?}");
-    assert!(told.iter().all(|c| c.contains(&dana.to_string())), "{told:?}");
+    assert!(
+        told.iter().all(|c| c.contains(&dana.to_string())),
+        "{told:?}"
+    );
     // What changed since the first revision is the answer, finished, under its own key,
     // and its writing key is gone.
     let changes = assistant
@@ -426,7 +433,11 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
         .map(|v| v.to_str().unwrap().to_owned())
         .unwrap_or_default();
     assert!(gone.ends_with(".w"), "{gone}");
-    let since: i64 = changes.headers()["x-ui-since"].to_str().unwrap().parse().unwrap();
+    let since: i64 = changes.headers()["x-ui-since"]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
     assert!(since > 1, "{since}");
     // Nothing changed since the newest revision.
     let none = assistant
@@ -502,7 +513,10 @@ async fn stop_ends_the_answer_and_a_second_message_waits_for_it() {
     assistant.stop(dana, id).await.unwrap();
     let html = settled(&app, &access, id).await;
     assert!(html.contains("Stopped"), "{html}");
-    assert!(html.contains(r#"data-state="failed""#), "the tool it stopped in: {html}");
+    assert!(
+        html.contains(r#"data-state="failed""#),
+        "the tool it stopped in: {html}"
+    );
     // The run is over: a new message is taken, and the model is asked once more only.
     let fake = app.get::<Ai>().await.fake().unwrap();
     let asked = fake.requests().len();
@@ -521,10 +535,17 @@ async fn a_message_is_checked_before_anything_runs() {
     let assistant = assistant(&app).await;
     let long = "x".repeat(5000);
     for bad in ["", "   ", long.as_str()] {
-        let error = assistant.start(access.clone(), bad, None).await.unwrap_err();
+        let error = assistant
+            .start(access.clone(), bad, None)
+            .await
+            .unwrap_err();
         assert_eq!(error.status.as_u16(), 400, "{bad:?}");
     }
-    app.get::<Ai>().await.fake().unwrap().assert_nothing_prompted();
+    app.get::<Ai>()
+        .await
+        .fake()
+        .unwrap()
+        .assert_nothing_prompted();
 }
 
 // ---------------------------------------------------------------------------
@@ -557,7 +578,12 @@ async fn a_component_is_checked_stored_and_drawn_from_the_readers_data() {
     assert!(!html.contains(r#"id="count""#), "{html}");
     // The model was offered the tools the reader may see, and read back that the
     // component was shown, not its numbers.
-    assert!(fake.requests()[0].tools().iter().any(|t| t == "show_notes_summary"));
+    assert!(
+        fake.requests()[0]
+            .tools()
+            .iter()
+            .any(|t| t == "show_notes_summary")
+    );
     let result = &fake.tool_results("show_notes_summary")[0];
     assert_eq!(result["shown"], "notes_summary");
     assert!(!result.to_string().contains("2 notes"));
@@ -580,7 +606,10 @@ async fn refused_arguments_are_retried_then_the_model_answers_in_words() {
             "show_notes_summary",
             json!({ "heading": "x".repeat(200), "style": "color:red" }),
         ),
-        FakeReply::tool_call("show_notes_summary", json!({ "heading": "<script>" , "html": "<b>" })),
+        FakeReply::tool_call(
+            "show_notes_summary",
+            json!({ "heading": "<script>" , "html": "<b>" }),
+        ),
         FakeReply::text("You have some notes."),
     ]);
     let assistant = assistant(&app).await;
@@ -594,10 +623,16 @@ async fn refused_arguments_are_retried_then_the_model_answers_in_words() {
     assert_eq!(results.len(), 2);
     let first = results[0]["error"]["message"].as_str().unwrap();
     assert!(first.contains("style: is not a property here"), "{first}");
-    assert!(first.contains("heading: must be at most 60 characters"), "{first}");
+    assert!(
+        first.contains("heading: must be at most 60 characters"),
+        "{first}"
+    );
     let second = results[1]["error"]["message"].as_str().unwrap();
     assert!(second.contains("answer in words"), "{second}");
-    assert!(!html.contains(r#"data-genui="surface""#), "nothing refused is drawn: {html}");
+    assert!(
+        !html.contains(r#"data-genui="surface""#),
+        "nothing refused is drawn: {html}"
+    );
     assert!(html.contains("You have some notes."), "{html}");
 }
 
@@ -621,7 +656,10 @@ async fn a_component_the_reader_may_not_see_shows_nothing_of_its_data() {
 
     assert!(html.contains("You can&#39;t see this any more."), "{html}");
     assert!(!html.contains("private plan"), "{html}");
-    assert!(button_urls(&html).is_empty(), "no button for what can't be seen: {html}");
+    assert!(
+        button_urls(&html).is_empty(),
+        "no button for what can't be seen: {html}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -656,12 +694,18 @@ async fn a_button_runs_its_action_once_for_its_own_reader() {
     let archive: Uri = urls[0].parse().unwrap();
     let assistant = assistant(&app).await;
 
-    let (conversation, acted) = assistant.act(access.clone(), &archive, false).await.unwrap();
+    let (conversation, acted) = assistant
+        .act(access.clone(), &archive, false)
+        .await
+        .unwrap();
     assert_eq!(conversation, id);
     assert_eq!(acted, Acted::Done("Archived the note".into()));
     assert_eq!(notes(&app).await[0].title, "Archived: Call Harpreet");
     // The same post again is refused, and changes nothing.
-    let again = assistant.act(access.clone(), &archive, false).await.unwrap_err();
+    let again = assistant
+        .act(access.clone(), &archive, false)
+        .await
+        .unwrap_err();
     assert_eq!(again.status.as_u16(), 409);
     assert_eq!(notes(&app).await[0].title, "Archived: Call Harpreet");
     // The page shows what was done, and the assistant hears of it in its next run.
@@ -716,13 +760,21 @@ async fn forged_cross_user_and_cross_conversation_posts_are_refused() {
 async fn a_destructive_action_asks_first_and_rechecks_access() {
     let (app, dana, access, _id, note, html) = card().await;
     let delete: Uri = button_urls(&html)[1].parse().unwrap();
-    assert!(html.contains(r#"role="alertdialog""#), "the page asks in its own dialog: {html}");
+    assert!(
+        html.contains(r#"role="alertdialog""#),
+        "the page asks in its own dialog: {html}"
+    );
     assert!(html.contains("Delete this note?"), "{html}");
     let assistant = assistant(&app).await;
 
     // Unanswered, it asks.
     let (_, acted) = assistant.act(access.clone(), &delete, false).await.unwrap();
-    assert_eq!(acted, Acted::Ask { label: "Delete".into() });
+    assert_eq!(
+        acted,
+        Acted::Ask {
+            label: "Delete".into()
+        }
+    );
     assert_eq!(notes(&app).await.len(), 1);
     // The note changes hands before the answer: the action checks access again, and
     // its post can be used once that is put right.
@@ -730,7 +782,10 @@ async fn a_destructive_action_asks_first_and_rechecks_access() {
     let ravi = user(&app, "Ravi", &[]).await;
     let mut row = Note::find(&*db, note).await.unwrap().unwrap();
     row.update(&*db, |n| n.owner_id = ravi).await.unwrap();
-    let error = assistant.act(access.clone(), &delete, true).await.unwrap_err();
+    let error = assistant
+        .act(access.clone(), &delete, true)
+        .await
+        .unwrap_err();
     assert_eq!(error.status.as_u16(), 403);
     assert_eq!(notes(&app).await.len(), 1);
     let mut row = Note::find(&*db, note).await.unwrap().unwrap();
@@ -750,17 +805,26 @@ async fn waiting() -> (TestApp, Arc<PrincipalAccess>, Uuid, String) {
     let dana = user(&app, "Dana", &[]).await;
     let access = access_of(&app, dana).await;
     let note = add_note(&app, dana, "Old").await;
-    app.get::<Ai>().await.fake().unwrap().respond(FakeReply::tool_call(
-        "rename_note",
-        json!({ "note_id": note, "title": "New <b>title</b>" }),
-    ));
+    app.get::<Ai>()
+        .await
+        .fake()
+        .unwrap()
+        .respond(FakeReply::tool_call(
+            "rename_note",
+            json!({ "note_id": note, "title": "New <b>title</b>" }),
+        ));
     let assistant = assistant(&app).await;
     let id = assistant
         .start(access.clone(), "Rename my note", None)
         .await
         .unwrap();
     settled(&app, &access, id).await;
-    let region = navree_ui::render(&assistant.approval(access.clone(), id, Some("tok")).await.unwrap());
+    let region = navree_ui::render(
+        &assistant
+            .approval(access.clone(), id, Some("tok"))
+            .await
+            .unwrap(),
+    );
     (app, access, id, region)
 }
 
@@ -768,12 +832,21 @@ async fn waiting() -> (TestApp, Arc<PrincipalAccess>, Uuid, String) {
 async fn an_approval_waits_in_its_own_place_and_approving_streams_the_rest() {
     let (app, access, id, region) = waiting().await;
     assert!(region.contains(r#"data-genui="approval""#), "{region}");
-    assert!(region.contains("The assistant asks to: Rename a note"), "{region}");
+    assert!(
+        region.contains("The assistant asks to: Rename a note"),
+        "{region}"
+    );
     assert!(region.contains("New &lt;b&gt;title&lt;/b&gt;"), "{region}");
     assert!(region.contains(r#"action="/assistant/"#), "{region}");
     let html = items(&app, &access, id).await;
-    assert!(!html.contains(r#"data-genui="approval""#), "the card is never in the conversation");
-    assert!(html.contains("Waiting for your answer: Rename a note"), "{html}");
+    assert!(
+        !html.contains(r#"data-genui="approval""#),
+        "the card is never in the conversation"
+    );
+    assert!(
+        html.contains("Waiting for your answer: Rename a note"),
+        "{html}"
+    );
     assert_eq!(notes(&app).await[0].title, "Old", "nothing ran yet");
 
     let fake = app.get::<Ai>().await.fake().unwrap();
@@ -816,7 +889,10 @@ async fn rejecting_tells_the_model_why() {
         .unwrap();
     let html = settled(&app, &access, id).await;
 
-    assert!(html.contains("Rejected: Rename a note (Keep the old name)"), "{html}");
+    assert!(
+        html.contains("Rejected: Rename a note (Keep the old name)"),
+        "{html}"
+    );
     assert!(html.contains("I left it as it was."), "{html}");
     assert_eq!(notes(&app).await[0].title, "Old");
     assert_eq!(
@@ -850,7 +926,12 @@ async fn state_the_model_writes_is_checked_and_the_page_edits_it() {
     settled(&app, &access, id).await;
 
     let results = fake.tool_results("update_state");
-    assert!(results[0]["error"]["message"].as_str().unwrap().contains("steps[0].state"));
+    assert!(
+        results[0]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("steps[0].state")
+    );
     assert_eq!(results[1]["saved"], true);
     let plan: Plan = assistant.state(dana, id).await.unwrap().unwrap();
     assert_eq!(plan.goal.as_str(), "Diwali sale");
@@ -891,7 +972,10 @@ async fn a_page_context_is_signed_for_its_reader_and_resolved_under_their_access
         .unwrap();
     settled(&app, &access, id).await;
     let system = fake.requests().last().unwrap().system().unwrap().to_owned();
-    assert!(system.contains("The user is looking at this note: note “Order 1042 for Simran”"), "{system}");
+    assert!(
+        system.contains("The user is looking at this note: note “Order 1042 for Simran”"),
+        "{system}"
+    );
 
     // Forged, another reader's, unknown, or a record the reader can't see: refused, and
     // the model is never asked.
@@ -907,7 +991,10 @@ async fn a_page_context_is_signed_for_its_reader_and_resolved_under_their_access
             .send(access.clone(), id, "And this?", Some(&bad))
             .await
             .unwrap_err();
-        assert!(matches!(error.status.as_u16(), 403 | 404), "{bad}: {error:?}");
+        assert!(
+            matches!(error.status.as_u16(), 403 | 404),
+            "{bad}: {error:?}"
+        );
     }
     assert_eq!(fake.requests().len(), asked);
 }

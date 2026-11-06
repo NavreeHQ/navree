@@ -1,7 +1,6 @@
 //! `navree make:page`, `make:form` and `make:table`: Navree UI pages, forms and
 //! data tables in a module.
 
-
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 

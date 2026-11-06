@@ -56,7 +56,13 @@ pub(crate) async fn list(
         .collect();
     let completed = fleet.completed_jobs(search).await.map_err(api_error)?;
     let completed_tab = query.tab.as_deref() == Some("completed");
-    Ok(draw_list(&frame, &pending, &completed, search, completed_tab))
+    Ok(draw_list(
+        &frame,
+        &pending,
+        &completed,
+        search,
+        completed_tab,
+    ))
 }
 
 /// The list page.
@@ -87,7 +93,11 @@ fn draw_list(
             ),
         ],
     );
-    let tab = if completed_tab { "completed" } else { "pending" };
+    let tab = if completed_tab {
+        "completed"
+    } else {
+        "pending"
+    };
     let finder = parts::search_form(
         &base,
         "fleet-jobs",
@@ -190,11 +200,7 @@ fn completed_table(jobs: &[CompletedJob]) -> Table {
 }
 
 /// One pending job.
-pub(crate) async fn show(
-    fleet: &Fleet,
-    id: &str,
-    parts: &mut Parts,
-) -> Result<AppPage, AppError> {
+pub(crate) async fn show(fleet: &Fleet, id: &str, parts: &mut Parts) -> Result<AppPage, AppError> {
     let frame = Frame::load(fleet, parts).await?;
     let mut job = fleet
         .pending_job(id)

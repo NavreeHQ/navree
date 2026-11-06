@@ -45,29 +45,39 @@ fn page(shell: &AppShell, query: &str) -> AppPage {
                 .child(*name)
         })
         .collect();
-    shell.page("Islands").body(Stack::gap(6).children((
-        Heading::h1("Islands"),
-        Region::new("depot")
-            .src(format!("/islands?city={city}"))
-            .children(Stack::gap(3).children((
-                Row::gap(3).children(links),
-                Island::new("tally", &TALLY)
-                    .label("Parcels packed today")
-                    .props(&Tally { city, start })
-                    .fallback(
-                        el("p")
-                            .attr("data-tally-fallback", "")
-                            .child(format!("Parcels packed in {city}: {start}")),
-                    ),
-            ))),
-        // Markup that names another site's script: the islands module imports nothing for it.
-        el("div")
-            .attr("id", "forged")
-            .attr("data-ui-island", "https://attacker.example/island/x-000000000000.js")
-            .attr("data-ui-props", "{}")
-            .child(el("p").child("A forged island")),
-        el("a").href("/").attr("id", "away").child("The overview, which has no island"),
-    )))
+    shell.page("Islands").body(
+        Stack::gap(6).children((
+            Heading::h1("Islands"),
+            Region::new("depot")
+                .src(format!("/islands?city={city}"))
+                .children(
+                    Stack::gap(3).children((
+                        Row::gap(3).children(links),
+                        Island::new("tally", &TALLY)
+                            .label("Parcels packed today")
+                            .props(&Tally { city, start })
+                            .fallback(
+                                el("p")
+                                    .attr("data-tally-fallback", "")
+                                    .child(format!("Parcels packed in {city}: {start}")),
+                            ),
+                    )),
+                ),
+            // Markup that names another site's script: the islands module imports nothing for it.
+            el("div")
+                .attr("id", "forged")
+                .attr(
+                    "data-ui-island",
+                    "https://attacker.example/island/x-000000000000.js",
+                )
+                .attr("data-ui-props", "{}")
+                .child(el("p").child("A forged island")),
+            el("a")
+                .href("/")
+                .attr("id", "away")
+                .child("The overview, which has no island"),
+        )),
+    )
 }
 
 pub struct IslandPages;

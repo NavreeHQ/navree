@@ -277,8 +277,8 @@ pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResou
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
 #[cfg(feature = "session")]
 pub use session_auth::{
-    SESSION_CHALLENGE_KEY, SESSION_USER_KEY, SIGN_OUT_PATH, STOP_IMPERSONATING_PATH,
-    SessionSignIn, SessionStrategy, SessionUser, TWO_FACTOR_SETUP_PATH,
+    SESSION_CHALLENGE_KEY, SESSION_USER_KEY, SIGN_OUT_PATH, STOP_IMPERSONATING_PATH, SessionSignIn,
+    SessionStrategy, SessionUser, TWO_FACTOR_SETUP_PATH,
 };
 pub use session_controller::{
     ConfirmInput, ExchangeInput, ImpersonateInput, MagicLinkVerifyInput, OtpVerifyInput,

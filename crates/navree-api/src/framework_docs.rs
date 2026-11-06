@@ -10,11 +10,13 @@ use crate::shapes::AbilityRule;
 /// The docs for the framework's routes, by route name.
 pub(crate) fn framework_docs() -> Vec<RouteDoc> {
     vec![
-        RouteDoc::named("health.live").optional().json_schema_response(
-            200,
-            "The process answers",
-            Schema::object().property("status", Schema::string_enum(["up"]), true),
-        ),
+        RouteDoc::named("health.live")
+            .optional()
+            .json_schema_response(
+                200,
+                "The process answers",
+                Schema::object().property("status", Schema::string_enum(["up"]), true),
+            ),
         RouteDoc::named("health.ready")
             .optional()
             .json_schema_response(200, "Every check is up", health_report())
@@ -44,7 +46,8 @@ pub(crate) fn framework_docs() -> Vec<RouteDoc> {
                     )
                     .property(
                         "channel_data",
-                        Schema::string().description("For a presence channel: the member, as JSON text."),
+                        Schema::string()
+                            .description("For a presence channel: the member, as JSON text."),
                         false,
                     ),
             ),
@@ -69,9 +72,17 @@ fn health_report() -> Schema {
             Schema::of_type(navree_openapi::Type::Integer).description("How long the check took."),
             true,
         )
-        .property("error", Schema::string().description("Why the check is down."), false);
+        .property(
+            "error",
+            Schema::string().description("Why the check is down."),
+            false,
+        );
     Schema::object()
-        .property("status", state().description("`up` when every check is up."), true)
+        .property(
+            "status",
+            state().description("`up` when every check is up."),
+            true,
+        )
         .property(
             "checks",
             Schema::map(Schema::string(), check).description("Each check's result, by its name."),

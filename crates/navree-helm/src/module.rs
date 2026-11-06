@@ -8,8 +8,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey,
-    Resolver,
+    AppContext, ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
 use crate::controller::HelmController;
@@ -105,7 +104,9 @@ fn register(m: &mut ModuleBuilder, options: Option<HelmOptions>) {
         // The panel's error pages are the toolkit's, and the sign-in page's
         // address (`ui.sign_in`) is its setting.
         .import(navree_ui::UiOnDemand)
-        .contribute(navree_ui::UiNeed::when(|_ctx: AppContext| async move { true }))
+        .contribute(navree_ui::UiNeed::when(
+            |_ctx: AppContext| async move { true },
+        ))
         .factory(
             Factory::<Core>::new(|r: Resolver| async move {
                 let options = r.get::<HelmOptions>().await?;

@@ -119,8 +119,14 @@ fn every_event() -> Vec<TelemetryEvent> {
             ms(1),
         )),
         TelemetryEvent::StorageOp(
-            StorageOp::new("uploads", "local", StorageOperation::Write, "kyc/pan.pdf", ms(4))
-                .bytes(52_314),
+            StorageOp::new(
+                "uploads",
+                "local",
+                StorageOperation::Write,
+                "kyc/pan.pdf",
+                ms(4),
+            )
+            .bytes(52_314),
         ),
         TelemetryEvent::WebhookDelivery(WebhookDelivery::new(
             "ep-1",

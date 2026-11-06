@@ -34,6 +34,7 @@
 
 use std::sync::Arc;
 
+use navree::BoxFuture;
 use navree::access::{AccessModule, AccessOptions, AccessService};
 use navree::ai::ui::ModuleBuilderAssistantExt;
 use navree::ai::{AiModule, ModuleBuilderAiExt};
@@ -43,7 +44,6 @@ use navree::kernel::Lifecycle;
 use navree::prelude::*;
 use navree::session::SessionModule;
 use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
-use navree::BoxFuture;
 
 pub mod assistant;
 pub mod pages;
@@ -62,7 +62,10 @@ impl Settings {
     /// From `AGENT_TEST_HOOKS`, `AGENT_AI_PROVIDER` (`anthropic` by default),
     /// `AGENT_AI_MODEL` and `AGENT_AI_KEY`.
     pub fn from_env() -> Self {
-        let model = match (std::env::var("AGENT_AI_MODEL"), std::env::var("AGENT_AI_KEY")) {
+        let model = match (
+            std::env::var("AGENT_AI_MODEL"),
+            std::env::var("AGENT_AI_KEY"),
+        ) {
             (Ok(model), Ok(key)) if !key.is_empty() => Some((
                 std::env::var("AGENT_AI_PROVIDER").unwrap_or_else(|_| "anthropic".to_owned()),
                 model,
@@ -87,9 +90,9 @@ pub struct Seeder {
 
 impl Lifecycle for Seeder {
     fn on_init(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
-        Box::pin(async move {
-            shop::seed(&self.db, &self.auth, &self.access, chrono::Utc::now()).await
-        })
+        Box::pin(
+            async move { shop::seed(&self.db, &self.auth, &self.access, chrono::Utc::now()).await },
+        )
     }
 }
 
@@ -130,7 +133,10 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
     let mut config = vec![
         ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
         ("APP_DATABASE__URL".to_owned(), database_url),
-        ("APP_DATABASE__MIGRATE_ON_BOOT".to_owned(), "true".to_owned()),
+        (
+            "APP_DATABASE__MIGRATE_ON_BOOT".to_owned(),
+            "true".to_owned(),
+        ),
         (
             "APP_APP__KEY".to_owned(),
             std::env::var("AGENT_APP_KEY").unwrap_or_else(|_| navree::crypto::generate_key()),
@@ -144,9 +150,15 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
             let name = provider.to_ascii_uppercase();
             config.extend([
                 ("APP_AI__DEFAULT".to_owned(), "assistant".to_owned()),
-                (format!("APP_AI__PROVIDERS__{name}__DRIVER"), provider.clone()),
+                (
+                    format!("APP_AI__PROVIDERS__{name}__DRIVER"),
+                    provider.clone(),
+                ),
                 (format!("APP_AI__PROVIDERS__{name}__API_KEY"), key.clone()),
-                ("APP_AI__MODELS__ASSISTANT__PROVIDER".to_owned(), provider.clone()),
+                (
+                    "APP_AI__MODELS__ASSISTANT__PROVIDER".to_owned(),
+                    provider.clone(),
+                ),
                 ("APP_AI__MODELS__ASSISTANT__MODEL".to_owned(), model.clone()),
             ]);
         }

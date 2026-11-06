@@ -267,8 +267,11 @@ mod tests {
     use super::*;
     use http::header::{ACCEPT_ENCODING, CACHE_CONTROL, CONTENT_ENCODING, HeaderValue};
 
-    static CLOCK: IslandScript =
-        IslandScript::new("clock", b"export function mount(body) { body.textContent = 'IST'; }", 1024);
+    static CLOCK: IslandScript = IslandScript::new(
+        "clock",
+        b"export function mount(body) { body.textContent = 'IST'; }",
+        1024,
+    );
 
     #[test]
     fn a_script_is_named_by_its_content_hash() {
@@ -314,7 +317,12 @@ mod tests {
         let old = respond("clock-000000000000.js", &HeaderMap::new(), &scripts);
         assert_eq!(old.status(), http::StatusCode::OK);
         assert_eq!(old.headers()[CACHE_CONTROL], "no-cache");
-        for missing in ["map-000000000000.js", "clock.js", "../clock.js", "clock-x.css"] {
+        for missing in [
+            "map-000000000000.js",
+            "clock.js",
+            "../clock.js",
+            "clock-x.css",
+        ] {
             assert_eq!(
                 respond(missing, &request, &scripts).status(),
                 http::StatusCode::NOT_FOUND,

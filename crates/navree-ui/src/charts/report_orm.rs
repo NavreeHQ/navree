@@ -492,9 +492,7 @@ impl Report {
                 Some((group, names)) => {
                     let column = qualified::<M>(group);
                     for name in names {
-                        let only = window
-                            .clone()
-                            .where_(col(column.clone()).eq(name.clone()));
+                        let only = window.clone().where_(col(column.clone()).eq(name.clone()));
                         out.push(self.measure_documents(only, time, metric, exec).await?);
                     }
                     let values: Vec<Value> = names.to_vec();

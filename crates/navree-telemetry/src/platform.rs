@@ -603,16 +603,12 @@ impl Telemetry {
 
     /// Emits a [`BroadcastSent`].
     pub fn broadcast(&self, build: impl FnOnce() -> BroadcastSent) {
-        self.emit_with(EventKind::Broadcast, || {
-            TelemetryEvent::Broadcast(build())
-        });
+        self.emit_with(EventKind::Broadcast, || TelemetryEvent::Broadcast(build()));
     }
 
     /// Emits a [`StorageOp`].
     pub fn storage_op(&self, build: impl FnOnce() -> StorageOp) {
-        self.emit_with(EventKind::StorageOp, || {
-            TelemetryEvent::StorageOp(build())
-        });
+        self.emit_with(EventKind::StorageOp, || TelemetryEvent::StorageOp(build()));
     }
 
     /// Emits a [`WebhookDelivery`].

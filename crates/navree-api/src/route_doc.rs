@@ -14,7 +14,9 @@
 //! that names no route stops the boot, so a renamed route cannot leave its description behind.
 
 use navree_http::SchemaFn;
-use navree_http::list::{Field, Kind, ListResource, ListSpec, MAX_CURSOR, MAX_PAGE, MAX_TEXT, Op, Search};
+use navree_http::list::{
+    Field, Kind, ListResource, ListSpec, MAX_CURSOR, MAX_PAGE, MAX_TEXT, Op, Search,
+};
 use navree_http::schema_fn;
 use navree_openapi::{Parameter, Schema, ToSchema, Type};
 use serde_json::json;
@@ -161,9 +163,9 @@ impl RouteDoc {
     #[must_use]
     pub fn filters<R: ListResource>(mut self) -> Self {
         self.query.extend(
-            list_parameters(&R::SPEC)
-                .into_iter()
-                .filter(|parameter| matches!(parameter.name.as_str(), "filter" | "sort" | "search")),
+            list_parameters(&R::SPEC).into_iter().filter(|parameter| {
+                matches!(parameter.name.as_str(), "filter" | "sort" | "search")
+            }),
         );
         self
     }
@@ -202,7 +204,10 @@ impl RouteDoc {
         self.responses.push(ResponseDoc {
             status,
             description: Some(description.to_owned()),
-            content: Some(("application/json".to_owned(), Media::Inline(Box::new(schema)))),
+            content: Some((
+                "application/json".to_owned(),
+                Media::Inline(Box::new(schema)),
+            )),
         });
         self
     }
@@ -213,7 +218,10 @@ impl RouteDoc {
         self.responses.push(ResponseDoc {
             status,
             description: Some(description.to_owned()),
-            content: Some((content_type.to_owned(), Media::Inline(Box::new(Schema::string())))),
+            content: Some((
+                content_type.to_owned(),
+                Media::Inline(Box::new(Schema::string())),
+            )),
         });
         self
     }
@@ -312,16 +320,17 @@ pub(crate) fn list_parameters(spec: &ListSpec) -> Vec<Parameter> {
         Parameter::query("page", count(1, MAX_PAGE))
             .described("The page number, for numbered pages (default 1)."),
     );
-    out.push(Parameter::query("per_page", size.clone()).described(format!(
-        "The page size for numbered pages (default {}, at most {}).",
-        spec.default_per_page, spec.max_per_page
-    )));
+    out.push(
+        Parameter::query("per_page", size.clone()).described(format!(
+            "The page size for numbered pages (default {}, at most {}).",
+            spec.default_per_page, spec.max_per_page
+        )),
+    );
     let mut cursor = Schema::string();
     cursor.max_length = Some(length(MAX_CURSOR));
-    out.push(
-        Parameter::query("cursor", cursor.clone())
-            .described("The cursor of the page to read, for cursor pages: the `next` of the page before it."),
-    );
+    out.push(Parameter::query("cursor", cursor.clone()).described(
+        "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+    ));
     out.push(Parameter::query("limit", size).described(format!(
         "The page size for cursor pages (default {}, at most {}).",
         spec.default_per_page, spec.max_per_page
@@ -369,7 +378,9 @@ fn field_schema(field: &Field) -> Schema {
     for op in operators {
         let schema = match op {
             Op::In | Op::NotIn => Schema::string().description("A comma-separated list of values."),
-            Op::Null => Schema::of_type(Type::Boolean).description("`true`: is NULL. `false`: is not NULL."),
+            Op::Null => {
+                Schema::of_type(Type::Boolean).description("`true`: is NULL. `false`: is not NULL.")
+            }
             _ => value.clone(),
         };
         with_operators = with_operators.property(op.name(), schema, false);
@@ -404,7 +415,12 @@ mod tests {
     fn a_list_documents_filter_sort_search_and_paging() {
         let parameters = list_parameters(&Deals::SPEC);
         let names: Vec<&str> = parameters.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["filter", "sort", "search", "page", "per_page", "cursor", "limit"]);
+        assert_eq!(
+            names,
+            [
+                "filter", "sort", "search", "page", "per_page", "cursor", "limit"
+            ]
+        );
 
         let filter = by_name(&parameters, "filter");
         assert_eq!(filter["in"], "query");
@@ -420,12 +436,25 @@ mod tests {
         assert_eq!(amount["oneOf"][0]["type"], "integer");
         assert_eq!(amount["oneOf"][1]["properties"]["gte"]["type"], "integer");
         // A boolean takes eq, ne and null: `ne` is an operator, so it is an object too.
-        assert_eq!(filter["schema"]["properties"]["open"]["oneOf"][0]["type"], "boolean");
+        assert_eq!(
+            filter["schema"]["properties"]["open"]["oneOf"][0]["type"],
+            "boolean"
+        );
         assert_eq!(filter["schema"]["additionalProperties"], false);
 
         let sort = by_name(&parameters, "sort");
-        assert!(sort["description"].as_str().unwrap().contains("`amount_cents`"));
-        assert!(sort["description"].as_str().unwrap().contains("Default: `-created_at`."));
+        assert!(
+            sort["description"]
+                .as_str()
+                .unwrap()
+                .contains("`amount_cents`")
+        );
+        assert!(
+            sort["description"]
+                .as_str()
+                .unwrap()
+                .contains("Default: `-created_at`.")
+        );
 
         let per_page = by_name(&parameters, "per_page");
         assert_eq!(per_page["schema"]["default"], 20);

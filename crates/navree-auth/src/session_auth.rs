@@ -208,8 +208,14 @@ impl AuthService {
         let step = self
             .passwordless_step(user, SignInMethod::Otp, meta, now)
             .await?;
-        self.session_step(session, step, Some(SignInMethod::Otp.name()), remember, meta)
-            .await
+        self.session_step(
+            session,
+            step,
+            Some(SignInMethod::Otp.name()),
+            remember,
+            meta,
+        )
+        .await
     }
 
     /// Signs a browser in with the passkey assertion in `credential` (the

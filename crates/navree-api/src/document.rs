@@ -12,8 +12,8 @@ use navree_openapi::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::route_doc::{Media, RouteDoc, Target};
 use crate::ApiOptions;
+use crate::route_doc::{Media, RouteDoc, Target};
 
 /// The HTTP methods an OpenAPI path item has operations for.
 const METHODS: [&str; 8] = [

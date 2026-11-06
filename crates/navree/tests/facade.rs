@@ -954,7 +954,9 @@ fn documents_has_a_feature_for_each_of_its_parts() {
             "`{part}` must turn on `pdf`"
         );
         assert!(
-            features.table["documents"].iter().any(|item| item == engine),
+            features.table["documents"]
+                .iter()
+                .any(|item| item == engine),
             "`documents` must turn on `{engine}`"
         );
     }

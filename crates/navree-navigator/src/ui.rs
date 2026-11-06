@@ -230,7 +230,8 @@ pub fn check_path(path: &str) -> Result<String, String> {
     }
     if path.len() > 2048 || path.chars().any(|c| c.is_control() || c.is_whitespace()) {
         return Err(
-            "`path` must be at most 2048 characters, with no spaces or control characters".to_owned(),
+            "`path` must be at most 2048 characters, with no spaces or control characters"
+                .to_owned(),
         );
     }
     Ok(path.to_owned())
@@ -272,7 +273,9 @@ pub fn render_answer(path: &str, printed: &Value, catalog: &Catalog) -> Value {
                 ),
                 None => format!(
                     "The route answered {status} with {}, which isn't an HTML page, so there is nothing to outline.",
-                    printed["content_type"].as_str().unwrap_or("no content type")
+                    printed["content_type"]
+                        .as_str()
+                        .unwrap_or("no content type")
                 ),
             };
             answer["note"] = json!(note);
@@ -959,9 +962,19 @@ mod tests {
 
     #[test]
     fn only_a_path_of_the_app_is_drawn() {
-        assert_eq!(check_path(" /deals?page=2#top "), Ok("/deals?page=2".into()));
+        assert_eq!(
+            check_path(" /deals?page=2#top "),
+            Ok("/deals?page=2".into())
+        );
         assert_eq!(check_path("/"), Ok("/".into()));
-        for bad in ["deals", "//evil.example/x", "http://evil.example/", "/a b", "/a\nb", ""] {
+        for bad in [
+            "deals",
+            "//evil.example/x",
+            "http://evil.example/",
+            "/a b",
+            "/a\nb",
+            "",
+        ] {
             assert!(check_path(bad).is_err(), "{bad:?}");
         }
         assert!(check_path(&format!("/{}", "a".repeat(2100))).is_err());
@@ -1071,7 +1084,10 @@ mod tests {
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        assert!(other.contains(&"typography") && other.contains(&"icon"), "{other:?}");
+        assert!(
+            other.contains(&"typography") && other.contains(&"icon"),
+            "{other:?}"
+        );
         assert!(!other.contains(&"card"), "{other:?}");
     }
 
@@ -1126,8 +1142,12 @@ mod tests {
 
     #[test]
     fn what_the_app_prints_is_told_from_a_log_line() {
-        assert!(is_rendered(&json!({"path": "/", "status": 200, "html": null})));
-        assert!(!is_rendered(&json!({"path": "/", "status": 200, "level": "ERROR"})));
+        assert!(is_rendered(
+            &json!({"path": "/", "status": 200, "html": null})
+        ));
+        assert!(!is_rendered(
+            &json!({"path": "/", "status": 200, "level": "ERROR"})
+        ));
         assert!(!is_rendered(&json!({"status": 200, "html": "<p>"})));
         assert!(lacks_render_command(
             "`crm ui:render / --json` failed:\n\nError: unknown command `ui:render`; run `help` to list the available commands"

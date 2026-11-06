@@ -16,8 +16,8 @@ use navree_contracts::Job;
 use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
-    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SaveContext,
-    StaffEntry, StaffOrganizationEntry, VIEW, WORKSPACE_COOKIE, Workspaces,
+    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SaveContext, StaffEntry,
+    StaffOrganizationEntry, VIEW, WORKSPACE_COOKIE, Workspaces,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
@@ -338,10 +338,7 @@ async fn the_documented_routes_answer() {
         .send()
         .await
         .assert_status(303);
-    assert_eq!(
-        response.header("location"),
-        Some("/sign-in?next=%2Fadmin")
-    );
+    assert_eq!(response.header("location"), Some("/sign-in?next=%2Fadmin"));
 }
 
 #[allow(dead_code)]

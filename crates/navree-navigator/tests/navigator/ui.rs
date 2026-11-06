@@ -30,7 +30,13 @@ fn paths(routes: &Value) -> Vec<String> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|r| format!("{} {}", r["method"].as_str().unwrap(), r["path"].as_str().unwrap()))
+        .map(|r| {
+            format!(
+                "{} {}",
+                r["method"].as_str().unwrap(),
+                r["path"].as_str().unwrap()
+            )
+        })
         .collect()
 }
 
@@ -54,7 +60,11 @@ async fn routes_say_which_are_pages() {
         json!({"pages_only": true, "path": "/deals"}),
     )
     .await;
-    assert_eq!(paths(&in_deals), ["GET /deals"], "the filters work together");
+    assert_eq!(
+        paths(&in_deals),
+        ["GET /deals"],
+        "the filters work together"
+    );
 
     let not_filtered = call(&navigator, "list_routes", json!({"pages_only": false})).await;
     assert_eq!(not_filtered.as_array().unwrap().len(), 4);
@@ -71,7 +81,10 @@ async fn routes_that_do_not_say_are_unknown_and_pages_only_says_why() {
     let all = call(&navigator, "list_routes", json!({})).await;
     assert_eq!(all.as_array().unwrap().len(), 2);
     assert!(
-        all.as_array().unwrap().iter().all(|r| r.get("page").is_none()),
+        all.as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r.get("page").is_none()),
         "no page mark is invented: {all}"
     );
     let unfiltered = call(&navigator, "list_routes", json!({"pages_only": false})).await;
@@ -89,7 +102,12 @@ async fn routes_that_do_not_say_are_unknown_and_pages_only_says_why() {
 #[tokio::test]
 async fn an_app_with_no_routes_has_no_pages() {
     let fixture = app(json!([]));
-    let pages = call(&fixture.navigator(), "list_routes", json!({"pages_only": true})).await;
+    let pages = call(
+        &fixture.navigator(),
+        "list_routes",
+        json!({"pages_only": true}),
+    )
+    .await;
     assert_eq!(pages, json!([]));
 }
 
@@ -99,7 +117,10 @@ async fn the_components_are_listed_with_the_version_of_the_catalog() {
     let navigator = fixture.navigator();
     let all = call(&navigator, "list_components", json!({})).await;
     assert_eq!(all["version"], EMBEDDED_VERSION);
-    assert!(all.get("note").is_none(), "the app uses this version: {all}");
+    assert!(
+        all.get("note").is_none(),
+        "the app uses this version: {all}"
+    );
     let total = all["total"].as_u64().unwrap();
     assert!(total >= 90, "the whole catalog is built in: {total}");
     assert_eq!(all["count"].as_u64().unwrap(), total);
@@ -122,7 +143,11 @@ async fn the_components_are_listed_with_the_version_of_the_catalog() {
     assert_eq!(button["group"], "actions");
     assert_eq!(button["docs"], "components/button");
     assert!(
-        button["types"].as_array().unwrap().iter().any(|t| t == "Button"),
+        button["types"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t == "Button"),
         "{button}"
     );
     assert!(!button["summary"].as_str().unwrap().is_empty());
@@ -132,9 +157,17 @@ async fn the_components_are_listed_with_the_version_of_the_catalog() {
 async fn a_docs_slug_of_the_catalog_opens_with_read_doc() {
     let fixture = Fixture::new("");
     let navigator = fixture.navigator();
-    let found = call(&navigator, "list_components", json!({"query": "date picker"})).await;
+    let found = call(
+        &navigator,
+        "list_components",
+        json!({"query": "date picker"}),
+    )
+    .await;
     let picker = &found["components"][0];
-    assert_eq!(picker["id"], "date-picker", "the best match is first: {found}");
+    assert_eq!(
+        picker["id"], "date-picker",
+        "the best match is first: {found}"
+    );
     assert_eq!(picker["docs"], "components/date-picker");
     let page = call(&navigator, "read_doc", json!({"slug": picker["docs"]})).await;
     assert!(
@@ -149,7 +182,12 @@ async fn components_are_filtered_by_query_and_group() {
     let fixture = Fixture::new("");
     let navigator = fixture.navigator();
 
-    let query = call(&navigator, "list_components", json!({"query": "datepicker"})).await;
+    let query = call(
+        &navigator,
+        "list_components",
+        json!({"query": "datepicker"}),
+    )
+    .await;
     let ids: Vec<&str> = query["components"]
         .as_array()
         .unwrap()
@@ -160,7 +198,12 @@ async fn components_are_filtered_by_query_and_group() {
     assert!(query["count"].as_u64().unwrap() < query["total"].as_u64().unwrap());
     assert!(query.get("hint").is_none());
 
-    let by_type = call(&navigator, "list_components", json!({"query": "ButtonVariant"})).await;
+    let by_type = call(
+        &navigator,
+        "list_components",
+        json!({"query": "ButtonVariant"}),
+    )
+    .await;
     assert_eq!(by_type["components"][0]["id"], "button");
 
     let inputs = call(&navigator, "list_components", json!({"group": "inputs"})).await;
@@ -211,7 +254,10 @@ async fn the_guides_without_a_group_are_listed_in_one() {
         .iter()
         .find(|c| c["id"] == "build-anything")
         .expect("an entry with no docs page");
-    assert!(anything.get("docs").is_none(), "no slug to read: {anything}");
+    assert!(
+        anything.get("docs").is_none(),
+        "no slug to read: {anything}"
+    );
 }
 
 #[tokio::test]
@@ -258,7 +304,13 @@ const DEALS_PAGE: &str = r#"<!doctype html><html lang="en"><head><title>Deals</t
 <button data-slot="button" type="submit">Create deal</button></form>
 </body></html>"#;
 
-fn printed(path: &str, status: u64, content_type: Option<&str>, location: Option<&str>, html: Option<&str>) -> Value {
+fn printed(
+    path: &str,
+    status: u64,
+    content_type: Option<&str>,
+    location: Option<&str>,
+    html: Option<&str>,
+) -> Value {
     json!({
         "path": path,
         "status": status,
@@ -274,9 +326,20 @@ async fn a_page_is_drawn_by_the_app_and_answered_as_an_outline() {
     fixture.built();
     fixture.answers(
         &["ui:render", "/deals", "--json"],
-        printed("/deals", 200, Some("text/html; charset=utf-8"), None, Some(DEALS_PAGE)),
+        printed(
+            "/deals",
+            200,
+            Some("text/html; charset=utf-8"),
+            None,
+            Some(DEALS_PAGE),
+        ),
     );
-    let page = call(&fixture.navigator(), "render_page", json!({"path": "/deals"})).await;
+    let page = call(
+        &fixture.navigator(),
+        "render_page",
+        json!({"path": "/deals"}),
+    )
+    .await;
 
     assert_eq!(page["path"], "/deals");
     assert_eq!(page["status"], 200);
@@ -356,7 +419,10 @@ async fn a_page_is_asked_for_every_time() {
         .iter()
         .filter(|c| c.args.first().map(String::as_str) == Some("ui:render"))
         .count();
-    assert_eq!(asked, 2, "the data behind a page changes, so the answer isn't kept");
+    assert_eq!(
+        asked, 2,
+        "the data behind a page changes, so the answer isn't kept"
+    );
 }
 
 #[tokio::test]
@@ -365,7 +431,13 @@ async fn a_query_string_goes_to_the_app_and_a_fragment_does_not() {
     fixture.built();
     fixture.answers(
         &["ui:render", "/deals?page=2", "--json"],
-        printed("/deals?page=2", 200, Some("text/html"), None, Some("<title>Page 2</title>")),
+        printed(
+            "/deals?page=2",
+            200,
+            Some("text/html"),
+            None,
+            Some("<title>Page 2</title>"),
+        ),
     );
     let page = call(
         &fixture.navigator(),
@@ -385,7 +457,12 @@ async fn a_redirect_is_answered_with_where_it_leads() {
         &["ui:render", "/deals", "--json"],
         printed("/deals", 302, None, Some("/sign-in?next=%2Fdeals"), None),
     );
-    let answer = call(&fixture.navigator(), "render_page", json!({"path": "/deals"})).await;
+    let answer = call(
+        &fixture.navigator(),
+        "render_page",
+        json!({"path": "/deals"}),
+    )
+    .await;
     assert_eq!(answer["status"], 302);
     assert_eq!(answer["redirect"], "/sign-in?next=%2Fdeals");
     assert!(answer["note"].as_str().unwrap().contains("/sign-in"));
@@ -408,7 +485,10 @@ async fn an_answer_that_is_not_a_page_says_so() {
     .await;
     assert_eq!(answer["status"], 200);
     assert!(
-        answer["note"].as_str().unwrap().contains("application/json"),
+        answer["note"]
+            .as_str()
+            .unwrap()
+            .contains("application/json"),
         "{answer}"
     );
 }
@@ -427,7 +507,12 @@ async fn an_error_page_is_outlined_with_its_status() {
             Some("<title>Not found</title><h1>Page not found</h1><a href=\"/\">Go to home</a>"),
         ),
     );
-    let answer = call(&fixture.navigator(), "render_page", json!({"path": "/nope"})).await;
+    let answer = call(
+        &fixture.navigator(),
+        "render_page",
+        json!({"path": "/nope"}),
+    )
+    .await;
     assert_eq!(answer["status"], 404);
     assert_eq!(answer["headings"][0]["text"], "Page not found");
     assert_eq!(answer["links"][0]["href"], "/");
@@ -443,8 +528,9 @@ async fn an_app_without_the_render_command_is_told_what_to_do() {
         ProcessOutput {
             success: false,
             stdout: String::new(),
-            stderr: "Error: unknown command `ui:render`; run `help` to list the available commands\n"
-                .to_owned(),
+            stderr:
+                "Error: unknown command `ui:render`; run `help` to list the available commands\n"
+                    .to_owned(),
         },
     );
     let message = refused(&fixture.navigator(), "render_page", json!({"path": "/"})).await;
@@ -470,16 +556,26 @@ async fn another_failure_of_the_command_is_shown_as_it_was() {
         },
     );
     let message = refused(&fixture.navigator(), "render_page", json!({"path": "/"})).await;
-    assert!(message.contains("cannot connect to the database"), "{message}");
+    assert!(
+        message.contains("cannot connect to the database"),
+        "{message}"
+    );
 }
 
 #[tokio::test]
 async fn output_that_is_not_a_rendered_page_is_refused() {
     let fixture = Fixture::new("");
     fixture.built();
-    fixture.runner.on("crm", &["ui:render"], ok("{\"level\":\"ERROR\",\"status\":500}\nnot json\n"));
+    fixture.runner.on(
+        "crm",
+        &["ui:render"],
+        ok("{\"level\":\"ERROR\",\"status\":500}\nnot json\n"),
+    );
     let message = refused(&fixture.navigator(), "render_page", json!({"path": "/"})).await;
-    assert!(message.contains("did not print the expected JSON"), "{message}");
+    assert!(
+        message.contains("did not print the expected JSON"),
+        "{message}"
+    );
 }
 
 #[tokio::test]
@@ -487,7 +583,13 @@ async fn only_a_path_of_the_app_is_asked_for() {
     let fixture = Fixture::new("");
     fixture.built();
     let navigator = fixture.navigator();
-    for bad in ["deals", "//evil.example/deals", "http://127.0.0.1:9/deals", "/a b", ""] {
+    for bad in [
+        "deals",
+        "//evil.example/deals",
+        "http://127.0.0.1:9/deals",
+        "/a b",
+        "",
+    ] {
         let message = refused(&navigator, "render_page", json!({"path": bad})).await;
         assert!(message.contains("`path`"), "{bad:?}: {message}");
     }
@@ -529,7 +631,10 @@ async fn a_build_error_and_no_build_reach_render_page() {
         &["build"],
         ProcessOutput {
             success: false,
-            stdout: format!("{error}\n{}", json!({"reason": "build-finished", "success": false})),
+            stdout: format!(
+                "{error}\n{}",
+                json!({"reason": "build-finished", "success": false})
+            ),
             stderr: String::new(),
         },
     );

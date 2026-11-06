@@ -35,8 +35,8 @@ const MAX_ELEMENTS: usize = 4000;
 
 /// Elements a component's body never keeps, with what is inside them.
 const DROPPED: [&str; 16] = [
-    "form", "button", "textarea", "select", "option", "optgroup", "datalist", "dialog",
-    "template", "slot", "fieldset", "legend", "menu", "frame", "frameset", "portal",
+    "form", "button", "textarea", "select", "option", "optgroup", "datalist", "dialog", "template",
+    "slot", "fieldset", "legend", "menu", "frame", "frameset", "portal",
 ];
 
 /// Attributes that point at an element by its id, and are put under the prefix.
@@ -290,8 +290,12 @@ impl SurfaceFrame {
         let at = self.buttons.len();
         let frame = id_part(&self.id);
         let node: Node = match button.question() {
-            None => post_form(&url, csrf, Button::outline(button.label().to_owned()).submit())
-                .into(),
+            None => post_form(
+                &url,
+                csrf,
+                Button::outline(button.label().to_owned()).submit(),
+            )
+            .into(),
             Some(confirm) => {
                 let dialog = format!("{frame}-ask-{at}");
                 Node::list((
@@ -349,13 +353,11 @@ impl SurfaceFrame {
                 let mut card = Card::new()
                     .heading(3)
                     .title(self.title)
-                    .description(
-                        el("span").children((
-                            crate::components::icon(icons::SPARKLES),
-                            " ",
-                            self.labels.chosen,
-                        )),
-                    )
+                    .description(el("span").children((
+                        crate::components::icon(icons::SPARKLES),
+                        " ",
+                        self.labels.chosen,
+                    )))
                     .body(el("div").attr("data-genui", "surface-body").child(body));
                 if !self.buttons.is_empty() {
                     card = card.footer(
@@ -382,11 +384,19 @@ mod tests {
             .children((
                 el("button").child("Approve"),
                 el("input").attr("type", "text").attr("name", "amount"),
-                el("input").attr("type", "checkbox").slot("chart-toggle").id("t1"),
+                el("input")
+                    .attr("type", "checkbox")
+                    .slot("chart-toggle")
+                    .id("t1"),
                 el("label").attr("for", "t1").child("UPI"),
-                el("a").href("/orders/1").on_click(Cmd::open("approval-call_1")).child("Open"),
+                el("a")
+                    .href("/orders/1")
+                    .on_click(Cmd::open("approval-call_1"))
+                    .child("Open"),
                 el("a").href("#t1").child("Jump"),
-                el("div").attr("data-ui-src", "/admin").attr("popovertarget", "x"),
+                el("div")
+                    .attr("data-ui-src", "/admin")
+                    .attr("popovertarget", "x"),
                 el("p").attr("aria-describedby", "t1 t2").child("₹1,250"),
                 Node::Raw(crate::SafeHtml::trusted("<form action=/x></form>")),
             ))
@@ -411,12 +421,22 @@ mod tests {
             node = el("div").child(node).into();
         }
         let html = render(&defuse(node, "s"));
-        assert!(!html.contains("leaf"), "a tree past the depth loses what is below");
+        assert!(
+            !html.contains("leaf"),
+            "a tree past the depth loses what is below"
+        );
         let wide: Node = el("ul")
-            .children((0..10_000).map(|n| el("li").child(n as i64)).collect::<Vec<_>>())
+            .children(
+                (0..10_000)
+                    .map(|n| el("li").child(n as i64))
+                    .collect::<Vec<_>>(),
+            )
             .into();
         let html = render(&defuse(wide, "s"));
-        assert!(html.matches("<li>").count() < MAX_ELEMENTS, "a wide tree is cut");
+        assert!(
+            html.matches("<li>").count() < MAX_ELEMENTS,
+            "a wide tree is cut"
+        );
     }
 
     #[test]
@@ -440,10 +460,18 @@ mod tests {
                 order: crate::genui::Key::new("1042").unwrap(),
             },
         )
-        .confirm("Refund order CS-1042?", "₹1,250 goes back to Harpreet Kaur.", "Refund ₹1,250");
+        .confirm(
+            "Refund order CS-1042?",
+            "₹1,250 goes back to Harpreet Kaur.",
+            "Refund ₹1,250",
+        );
         let html = render(
             &SurfaceFrame::new("s1", "Order CS-1042", el("p").child("Paid").into())
-                .button(&button, LocalHref::from("/assistant/act?sig=1"), Some("tok"))
+                .button(
+                    &button,
+                    LocalHref::from("/assistant/act?sig=1"),
+                    Some("tok"),
+                )
                 .into_item("0001")
                 .into(),
         );

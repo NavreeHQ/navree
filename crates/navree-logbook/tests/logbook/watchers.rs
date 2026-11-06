@@ -686,16 +686,28 @@ async fn broadcasts_storage_and_webhooks_are_recorded() {
         &logbook,
         &context,
         TelemetryEvent::StorageOp(
-            StorageOp::new("uploads", "local", StorageOperation::Write, "kyc/pan.pdf", ms(6))
-                .bytes(52_314),
+            StorageOp::new(
+                "uploads",
+                "local",
+                StorageOperation::Write,
+                "kyc/pan.pdf",
+                ms(6),
+            )
+            .bytes(52_314),
         ),
     );
     feed(
         &logbook,
         &context,
         TelemetryEvent::StorageOp(
-            StorageOp::new("uploads", "local", StorageOperation::Read, "kyc/gone.pdf", ms(1))
-                .failed("not found"),
+            StorageOp::new(
+                "uploads",
+                "local",
+                StorageOperation::Read,
+                "kyc/gone.pdf",
+                ms(1),
+            )
+            .failed("not found"),
         ),
     );
     feed(
@@ -889,7 +901,12 @@ async fn the_new_kinds_filter_by_type_and_by_text() {
     feed(
         &logbook,
         &outside,
-        TelemetryEvent::AiCall(AiCall::new("anthropic", "claude-sonnet-4-5", "generate", ms(5))),
+        TelemetryEvent::AiCall(AiCall::new(
+            "anthropic",
+            "claude-sonnet-4-5",
+            "generate",
+            ms(5),
+        )),
     );
     feed(
         &logbook,
@@ -926,7 +943,11 @@ async fn the_new_kinds_filter_by_type_and_by_text() {
     assert_eq!(count("type:searches").await, 1);
     assert_eq!(count("type:ai type:sign_in").await, 2);
     assert_eq!(count("type:broadcast").await, 0);
-    assert_eq!(count("anthropic").await, 1, "free text reaches the provider");
+    assert_eq!(
+        count("anthropic").await,
+        1,
+        "free text reaches the provider"
+    );
     assert_eq!(count("policy_refused").await, 1, "and a sign-in's reason");
     assert_eq!(count("failed").await, 1);
     let counts = logbook.counts().await.unwrap();

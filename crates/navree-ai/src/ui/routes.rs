@@ -336,12 +336,9 @@ impl<A: Agent> Controller for AssistantController<A> {
                             Acted::Done(message) => {
                                 Reply::ops_or_redirect(page).toast(ToastTone::Success, message)
                             }
-                            Acted::Ask { label } => Reply::view(confirm_page(
-                                &label,
-                                &uri,
-                                &page,
-                                token.as_deref(),
-                            )),
+                            Acted::Ask { label } => {
+                                Reply::view(confirm_page(&label, &uri, &page, token.as_deref()))
+                            }
                         })
                     }
                 },
@@ -372,13 +369,11 @@ fn confirm_page(label: &str, uri: &Uri, back: &str, token: Option<&str>) -> View
                 .attr("value", "1"),
         )
         .child(navree_ui::Button::destructive(label.to_owned()).submit());
-    View::new("Are you sure?").body(
-        Card::titled("Are you sure?").body(Stack::gap(3).children((
-            Text::new(format!("{label}: this can't be taken back.")),
-            Row::gap(2).children((
-                form,
-                navree_ui::Button::outline("Cancel").href(back.to_owned()),
-            )),
-        ))),
-    )
+    View::new("Are you sure?").body(Card::titled("Are you sure?").body(Stack::gap(3).children((
+        Text::new(format!("{label}: this can't be taken back.")),
+        Row::gap(2).children((
+            form,
+            navree_ui::Button::outline("Cancel").href(back.to_owned()),
+        )),
+    ))))
 }

@@ -110,7 +110,10 @@ impl Site {
     /// The page at `path`, at `viewport`: a browser that is not signed in is
     /// sent to the sign-in page, signs in, and comes back to it.
     async fn open(&self, path: &str, viewport: Viewport) -> Page {
-        let next = path.replace('/', "%2F").replace('?', "%3F").replace('=', "%3D");
+        let next = path
+            .replace('/', "%2F")
+            .replace('?', "%3F")
+            .replace('=', "%3D");
         let page = self
             .browser
             .visit_with(self.server.url(&format!("/sign-in?next={next}")), viewport)
@@ -280,16 +283,24 @@ async fn the_overview_shows_the_workload_and_retry_puts_a_job_back() {
     page.assert_see("1 master").await.unwrap();
     page.assert_see("worker-1").await.unwrap();
     // Each supervisor is a card of its queues, with the processes running.
-    for text in ["default", "exports", "mail", "notifications", "of 8 processes"] {
+    for text in [
+        "default",
+        "exports",
+        "mail",
+        "notifications",
+        "of 8 processes",
+    ] {
         page.assert_see(text).await.unwrap();
     }
     // The busiest queue is charted, and the chart carries its numbers.
     page.assert_see("Jobs per minute").await.unwrap();
     page.assert_see("mail: 1,620 jobs").await.unwrap();
     assert_eq!(
-        page.script::<u64>("return document.querySelectorAll('figure[data-slot=\"chart\"]').length;")
-            .await
-            .unwrap(),
+        page.script::<u64>(
+            "return document.querySelectorAll('figure[data-slot=\"chart\"]').length;"
+        )
+        .await
+        .unwrap(),
         1
     );
     assert_eq!(

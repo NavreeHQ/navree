@@ -76,8 +76,14 @@ fn an_avatar_group_shows_the_most_it_may_and_counts_the_rest() {
         )
     };
     let out = html(AvatarGroup::new("Reviewers").max(2).children(people()));
-    assert!(out.contains(r#"role="group" aria-label="Reviewers""#), "{out}");
-    assert_eq!(count(&out, "Gurpreet Kaur") + count(&out, "Harjot Singh"), 2);
+    assert!(
+        out.contains(r#"role="group" aria-label="Reviewers""#),
+        "{out}"
+    );
+    assert_eq!(
+        count(&out, "Gurpreet Kaur") + count(&out, "Harjot Singh"),
+        2
+    );
     assert!(!out.contains("Simran Arora"), "{out}");
     assert!(out.contains("+2"), "{out}");
     assert!(out.contains(r#"aria-label="2 more""#), "{out}");
@@ -96,7 +102,12 @@ fn an_avatar_group_shows_the_most_it_may_and_counts_the_rest() {
     assert!(first.contains("+37"), "{first}");
 
     // A total smaller than what was given changes nothing; at least one avatar shows.
-    let low = html(AvatarGroup::new("Members").max(0).total(1).children(people()));
+    let low = html(
+        AvatarGroup::new("Members")
+            .max(0)
+            .total(1)
+            .children(people()),
+    );
     assert_eq!(count(&low, r#"data-slot="avatar""#), 2, "{low}");
     assert!(low.contains("+3"), "{low}");
 
@@ -130,9 +141,15 @@ fn a_long_breadcrumb_folds_its_middle_into_a_list_that_opens_without_script() {
     let folded = out.find("breadcrumb-hidden").expect("folded list");
     let ludhiana = out.find("Ludhiana").expect("Ludhiana");
     let invoices = out.find("Invoices").expect("current");
-    assert!(folded < ludhiana, "the ones left out are in the folded list");
+    assert!(
+        folded < ludhiana,
+        "the ones left out are in the folded list"
+    );
     assert!(ludhiana < invoices, "{out}");
-    assert!(out.find("Home").unwrap() < folded, "the first stays in view");
+    assert!(
+        out.find("Home").unwrap() < folded,
+        "the first stays in view"
+    );
     assert_eq!(count(&out, r#"aria-current="page""#), 1);
 
     // Short enough: nothing folds.
@@ -140,7 +157,11 @@ fn a_long_breadcrumb_folds_its_middle_into_a_list_that_opens_without_script() {
     assert!(!whole.contains("<details"), "{whole}");
     // Three is the least: the first, the ellipsis and the last.
     let tiny = html(trail.max_items(1));
-    assert_eq!(count(&tiny, r#"data-slot="breadcrumb-ellipsis""#), 1, "{tiny}");
+    assert_eq!(
+        count(&tiny, r#"data-slot="breadcrumb-ellipsis""#),
+        1,
+        "{tiny}"
+    );
     assert!(tiny.contains("Invoices") && tiny.contains("Home"));
 }
 
@@ -167,7 +188,10 @@ fn a_progress_bar_takes_a_tone_and_can_write_its_figure() {
             .show_value(),
     );
     assert!(out.contains(r#"data-tone="success""#), "{out}");
-    assert!(out.contains("37%"), "3 of 8 is 37 percent, rounded down: {out}");
+    assert!(
+        out.contains("37%"),
+        "3 of 8 is 37 percent, rounded down: {out}"
+    );
     assert!(
         out.contains(r#"<span data-slot="progress-value" aria-hidden="true">37%"#),
         "the figure is hidden from a reader, who has the bar: {out}"
@@ -200,7 +224,10 @@ fn a_description_is_tied_to_its_box_and_a_box_can_be_indeterminate() {
             .label("Product news")
             .description("A message a month at most."),
     );
-    assert!(out.contains(r#"aria-describedby="marketing-description""#), "{out}");
+    assert!(
+        out.contains(r#"aria-describedby="marketing-description""#),
+        "{out}"
+    );
     assert!(out.contains(r#"id="marketing-description""#), "{out}");
     let label = out.find("Product news").unwrap();
     let description = out.find("A message a month").unwrap();
@@ -214,7 +241,10 @@ fn a_description_is_tied_to_its_box_and_a_box_can_be_indeterminate() {
             .label("Admin")
             .description("Everything"),
     );
-    assert!(own.contains(r#"aria-describedby="role-admin-description""#), "{own}");
+    assert!(
+        own.contains(r#"aria-describedby="role-admin-description""#),
+        "{own}"
+    );
 
     // With no label there is nowhere for a description; the box is alone.
     let bare = html(Checkbox::new("x").description("Nothing to hang it on"));
@@ -232,7 +262,10 @@ fn a_description_is_tied_to_its_box_and_a_box_can_be_indeterminate() {
             .label("Email alerts")
             .description("When a payment fails."),
     );
-    assert!(switch.contains(r#"aria-describedby="alerts-description""#), "{switch}");
+    assert!(
+        switch.contains(r#"aria-describedby="alerts-description""#),
+        "{switch}"
+    );
     assert!(switch.contains(r#"role="switch""#), "{switch}");
 }
 
@@ -247,14 +280,30 @@ fn an_input_has_sizes_and_a_clear_button_that_needs_a_script() {
     assert!(uses(Input::text("q").size(Size::Sm)).has(Uses::PARTS_STYLES));
     assert!(!html(Input::text("q").size(Size::Md)).contains("data-size"));
 
-    let clear = html(Input::search("q").clearable("Clear the search").value("saffron"));
-    assert!(clear.starts_with(r#"<div data-slot="input-group""#), "{clear}");
+    let clear = html(
+        Input::search("q")
+            .clearable("Clear the search")
+            .value("saffron"),
+    );
+    assert!(
+        clear.starts_with(r#"<div data-slot="input-group""#),
+        "{clear}"
+    );
     assert!(clear.contains("data-ui-clearable"), "{clear}");
-    assert!(clear.contains(r#"aria-label="Clear the search""#), "{clear}");
+    assert!(
+        clear.contains(r#"aria-label="Clear the search""#),
+        "{clear}"
+    );
     assert!(clear.contains("data-script-only"), "{clear}");
-    assert!(!clear.contains(r#" hidden="""#), "a field with a value shows it: {clear}");
+    assert!(
+        !clear.contains(r#" hidden="""#),
+        "a field with a value shows it: {clear}"
+    );
     let empty = html(Input::search("q").clearable("Clear the search"));
-    assert!(empty.contains(r#" hidden="""#), "an empty field hides it: {empty}");
+    assert!(
+        empty.contains(r#" hidden="""#),
+        "an empty field hides it: {empty}"
+    );
     let needs = uses(Input::search("q").clearable("Clear"));
     assert!(needs.has(Uses::PARTS) && needs.has(Uses::PARTS_STYLES));
 
@@ -313,8 +362,14 @@ fn the_colour_picker_posts_a_native_colour_and_reads_a_colour_the_way_the_field_
             .value(r##"#fff" onfocus="x"##)
             .swatches([r##"#fff"><script>"##]),
     );
-    assert!(!hostile.contains("onfocus") && !hostile.contains("<script"), "{hostile}");
-    assert!(hostile.contains(r##"value="#000000""##), "an unreadable value keeps the default");
+    assert!(
+        !hostile.contains("onfocus") && !hostile.contains("<script"),
+        "{hostile}"
+    );
+    assert!(
+        hostile.contains(r##"value="#000000""##),
+        "an unreadable value keeps the default"
+    );
 
     let off = html(ColorPicker::new("a").disabled(true));
     assert!(count(&off, "disabled") >= 2, "{off}");
@@ -335,13 +390,19 @@ fn a_trace_names_the_state_of_each_step_to_a_reader_and_marks_the_current_one() 
             .step(TraceStep::new("Sent to the owner").state(TraceState::Failed)),
     );
     assert!(out.starts_with("<ol data-slot=\"trace\""), "{out}");
-    assert!(out.contains(r#"aria-label="Reconciling the March ledger""#), "{out}");
+    assert!(
+        out.contains(r#"aria-label="Reconciling the March ledger""#),
+        "{out}"
+    );
     assert_eq!(count(&out, r#"data-slot="trace-step""#), 4, "{out}");
     for word in ["Done", "Running", "Not started", "Failed"] {
         assert_eq!(count(&out, &format!(">{word}<")), 1, "{word}: {out}");
     }
     assert_eq!(count(&out, r#"aria-current="step""#), 1, "{out}");
-    assert!(out.contains("<details data-slot=\"trace-detail\" open>"), "{out}");
+    assert!(
+        out.contains("<details data-slot=\"trace-detail\" open>"),
+        "{out}"
+    );
     assert!(out.contains("<summary>Details</summary>"), "{out}");
     assert!(!out.contains("style="), "{out}");
     // A step with no detail has no details element.
@@ -369,18 +430,30 @@ fn a_questionnaire_shows_one_question_keeps_the_rest_and_offers_the_moves() {
             .question(Question::text("goal", "What do you want to track?"))
     };
     let first = html(form());
-    assert!(first.starts_with("<form data-slot=\"questionnaire\" method=\"post\""), "{first}");
+    assert!(
+        first.starts_with("<form data-slot=\"questionnaire\" method=\"post\""),
+        "{first}"
+    );
     assert!(first.contains(r#"action="/welcome""#), "{first}");
     assert!(first.contains("Question 1 of 3"), "{first}");
     assert!(first.contains("How big is your team?"), "{first}");
-    assert!(!first.contains("What do you use today?"), "one question at a time: {first}");
+    assert!(
+        !first.contains("What do you use today?"),
+        "one question at a time: {first}"
+    );
     assert!(first.contains(r#"name="_step" value="0""#), "{first}");
-    assert!(first.contains(r#"type="radio" name="team" value="small" required"#), "{first}");
+    assert!(
+        first.contains(r#"type="radio" name="team" value="small" required"#),
+        "{first}"
+    );
     assert!(
         first.contains("disabled"),
         "Previous is off on the first question: {first}"
     );
-    assert!(!first.contains(r#"value="skip""#), "a required question is not skipped: {first}");
+    assert!(
+        !first.contains(r#"value="skip""#),
+        "a required question is not skipped: {first}"
+    );
     assert!(first.contains(r#"value="next""#), "{first}");
 
     // The second: its answer shows checked, the first answer travels hidden.
@@ -390,31 +463,47 @@ fn a_questionnaire_shows_one_question_keeps_the_rest_and_offers_the_moves() {
             .answers([("team", "small"), ("tools", "tally")]),
     );
     assert!(second.contains("Question 2 of 3"), "{second}");
-    assert!(second.contains(r#"type="hidden" name="team" value="small""#), "{second}");
-    assert!(!second.contains(r#"type="hidden" name="tools""#), "the shown question is not hidden: {second}");
-    assert!(second.contains(r#"type="checkbox" name="tools" value="tally" checked"#), "{second}");
+    assert!(
+        second.contains(r#"type="hidden" name="team" value="small""#),
+        "{second}"
+    );
+    assert!(
+        !second.contains(r#"type="hidden" name="tools""#),
+        "the shown question is not hidden: {second}"
+    );
+    assert!(
+        second.contains(r#"type="checkbox" name="tools" value="tally" checked"#),
+        "{second}"
+    );
     assert!(second.contains(r#"value="skip""#), "{second}");
     assert!(second.contains(r#"value="back""#), "{second}");
-    assert!(second.contains("formnovalidate"), "Previous and Skip ignore the checks: {second}");
+    assert!(
+        second.contains("formnovalidate"),
+        "Previous and Skip ignore the checks: {second}"
+    );
     assert!(second.contains("Choose any that apply."), "{second}");
 
     // The last question finishes; a number past the end shows the last; an error is tied.
     let last = html(form().step(99).error("Say what you want to track."));
     assert!(last.contains("Question 3 of 3"), "{last}");
     assert!(last.contains("Finish"), "{last}");
-    assert!(last.contains(r#"role="alert""#) && last.contains("Say what you want to track."), "{last}");
+    assert!(
+        last.contains(r#"role="alert""#) && last.contains("Say what you want to track."),
+        "{last}"
+    );
     assert!(last.contains(r#"aria-invalid="true""#), "{last}");
 
     // Nothing to ask draws nothing.
     assert_eq!(html(Questionnaire::new("/x")), "");
 
     // Hostile text stays text.
-    let hostile = html(
-        Questionnaire::new("/x").question(
-            Question::single("q", "<img src=x onerror=alert(1)>").choice("a\"><script>", "<b>A</b>"),
-        ),
+    let hostile = html(Questionnaire::new("/x").question(
+        Question::single("q", "<img src=x onerror=alert(1)>").choice("a\"><script>", "<b>A</b>"),
+    ));
+    assert!(
+        !hostile.contains("<img") && !hostile.contains("<script") && !hostile.contains("<b>"),
+        "{hostile}"
     );
-    assert!(!hostile.contains("<img") && !hostile.contains("<script") && !hostile.contains("<b>"), "{hostile}");
 }
 
 #[test]
@@ -435,13 +524,31 @@ fn the_buttons_of_a_questionnaire_say_where_to_go_next() {
 
 #[test]
 fn a_sparkline_in_a_cell_is_one_named_picture_with_no_table() {
-    let cell = html(Sparkline::new("Opens, last 12 hours", [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24]).cell());
-    assert!(cell.starts_with(r#"<span data-slot="sparkline-cell" role="img" aria-label=""#), "{cell}");
-    assert!(!cell.contains("<table") && !cell.contains("<figure"), "{cell}");
+    let cell = html(
+        Sparkline::new(
+            "Opens, last 12 hours",
+            [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24],
+        )
+        .cell(),
+    );
+    assert!(
+        cell.starts_with(r#"<span data-slot="sparkline-cell" role="img" aria-label=""#),
+        "{cell}"
+    );
+    assert!(
+        !cell.contains("<table") && !cell.contains("<figure"),
+        "{cell}"
+    );
     assert!(cell.contains("<svg"), "{cell}");
-    assert!(cell.contains("Opens, last 12 hours"), "the summary names the series: {cell}");
+    assert!(
+        cell.contains("Opens, last 12 hours"),
+        "the summary names the series: {cell}"
+    );
     assert!(uses(Sparkline::new("x", [1, 2]).cell()).has(Uses::PARTS_STYLES));
-    assert!(!uses(Sparkline::new("x", [1, 2]).cell()).has(Uses::CHARTS), "no script");
+    assert!(
+        !uses(Sparkline::new("x", [1, 2]).cell()).has(Uses::CHARTS),
+        "no script"
+    );
 
     // Nothing to draw: a dash, still named.
     let none = html(Sparkline::new("Opens", Vec::<f64>::new()).cell());
@@ -472,7 +579,10 @@ fn fifty_rows_of_cell_sparklines_have_a_budget() {
         "{bytes} bytes for 50 cells, {} each",
         bytes / 50
     );
-    let figure = html(Sparkline::new("Orders, last 30 days", (0..30).map(f64::from).collect::<Vec<_>>()));
+    let figure = html(Sparkline::new(
+        "Orders, last 30 days",
+        (0..30).map(f64::from).collect::<Vec<_>>(),
+    ));
     assert!(
         rows[0].len() * 2 < figure.len(),
         "a cell is far smaller than the figure: {} against {}",
@@ -513,9 +623,20 @@ fn a_table_column_can_hold_a_cell_sparkline() {
         .collect();
     let query = navree_ui::TableQuery::<TrendRow>::parse("/stores", "");
     let out = html(navree_ui::DataTable::new("stores", &query, &rows));
-    assert_eq!(count(&out, r#"data-slot="sparkline-cell""#), 50, "one picture in each row");
-    assert_eq!(count(&out, "<table"), 1, "the table, and no table in any cell");
-    assert!(out.contains("Orders of Store 7"), "each picture is named for its row");
+    assert_eq!(
+        count(&out, r#"data-slot="sparkline-cell""#),
+        50,
+        "one picture in each row"
+    );
+    assert_eq!(
+        count(&out, "<table"),
+        1,
+        "the table, and no table in any cell"
+    );
+    assert!(
+        out.contains("Orders of Store 7"),
+        "each picture is named for its row"
+    );
 }
 
 #[test]
@@ -673,22 +794,43 @@ fn a_table_can_keep_several_columns_at_its_end_and_numbers_them_from_the_end() {
 
     // No row menu: the last column is `e`, the one before it `e1`.
     let plain = html(DataTable::new("ledger", &query, &rows));
-    let heads = plain.split("<thead>").nth(1).and_then(|part| part.split("</thead>").next()).expect("a head");
+    let heads = plain
+        .split("<thead>")
+        .nth(1)
+        .and_then(|part| part.split("</thead>").next())
+        .expect("a head");
     assert_eq!(count(heads, r#"data-sticky="e1""#), 1, "{heads}");
     assert_eq!(count(heads, r#"data-sticky="e""#), 1, "{heads}");
-    assert!(heads.find(r#"data-sticky="e1""#) < heads.find(r#"data-sticky="e""#), "balance comes before limit: {heads}");
-    assert_eq!(count(&plain, r#"data-sticky="e1""#), 1 + 3, "the head and a cell in each row: {plain}");
+    assert!(
+        heads.find(r#"data-sticky="e1""#) < heads.find(r#"data-sticky="e""#),
+        "balance comes before limit: {heads}"
+    );
+    assert_eq!(
+        count(&plain, r#"data-sticky="e1""#),
+        1 + 3,
+        "the head and a cell in each row: {plain}"
+    );
     assert!(uses(DataTable::new("ledger", &query, &rows)).has(Uses::PARTS_STYLES));
 
     // With a row menu, which is the last of them: the two columns are `e2` and `e1`.
     let menu = html(
         DataTable::new("ledger", &query, &rows)
-            .row_actions(|row: &Ledger| vec![RowAction::link("Open", format!("/ledger/{}", row.id))])
+            .row_actions(|row: &Ledger| {
+                vec![RowAction::link("Open", format!("/ledger/{}", row.id))]
+            })
             .csrf("tok"),
     );
-    let heads = menu.split("<thead>").nth(1).and_then(|part| part.split("</thead>").next()).expect("a head");
+    let heads = menu
+        .split("<thead>")
+        .nth(1)
+        .and_then(|part| part.split("</thead>").next())
+        .expect("a head");
     for name in ["e2", "e1", "e"] {
-        assert_eq!(count(heads, &format!(r#"data-sticky="{name}""#)), 1, "{name}: {heads}");
+        assert_eq!(
+            count(heads, &format!(r#"data-sticky="{name}""#)),
+            1,
+            "{name}: {heads}"
+        );
     }
     assert!(
         heads.find(r#"data-sticky="e2""#) < heads.find(r#"data-sticky="e1""#)
@@ -697,7 +839,11 @@ fn a_table_can_keep_several_columns_at_its_end_and_numbers_them_from_the_end() {
     );
 
     // One column at the end needs nothing more than the sheet every page has.
-    let one: Vec<OneEnd> = vec![OneEnd { id: 1, account: "Sector 17".to_owned(), balance: 5_00_000 }];
+    let one: Vec<OneEnd> = vec![OneEnd {
+        id: 1,
+        account: "Sector 17".to_owned(),
+        balance: 5_00_000,
+    }];
     let one_query = TableQuery::<OneEnd>::parse("/ledger", "");
     assert!(!uses(DataTable::new("one", &one_query, &one)).has(Uses::PARTS_STYLES));
 }

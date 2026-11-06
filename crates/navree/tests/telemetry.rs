@@ -180,10 +180,17 @@ impl SummariesController {
         let started = std::time::Instant::now();
         // ... call the model ...
         Telemetry::current().ai_call(|| {
-            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", started.elapsed())
-                .tokens(1200, 340)
+            AiCall::new(
+                "anthropic",
+                "claude-sonnet-4-5",
+                "generate",
+                started.elapsed(),
+            )
+            .tokens(1200, 340)
         });
-        Ok(Json(json!({ "summary": "Three deals closed in Ludhiana." })))
+        Ok(Json(
+            json!({ "summary": "Three deals closed in Ludhiana." }),
+        ))
     }
 }
 

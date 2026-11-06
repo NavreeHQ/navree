@@ -213,7 +213,11 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
     let members = app.get::<Members>().await;
     let uow = db.uow(None, None).await;
     let acme = workspaces
-        .create(&uow, ada.id, NewWorkspace::named("Ludhiana desk").slug("ludhiana"))
+        .create(
+            &uow,
+            ada.id,
+            NewWorkspace::named("Ludhiana desk").slug("ludhiana"),
+        )
         .await
         .unwrap();
     let globex = workspaces
@@ -261,7 +265,10 @@ async fn sign_in_workspaces_roles_the_live_hub_and_the_audit_trail_work_together
         page.contains("workspace=ludhiana role=owner create=true"),
         "{page}"
     );
-    assert!(page.contains("Jalandhar desk"), "the switcher lists both: {page}");
+    assert!(
+        page.contains("Jalandhar desk"),
+        "the switcher lists both: {page}"
+    );
 
     // Her window hears the workspace she is in.
     let mut stream = Stream::new(

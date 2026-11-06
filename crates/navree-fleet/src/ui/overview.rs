@@ -194,11 +194,7 @@ fn supervisor_card(frame: &Frame, supervisor: &OverviewSupervisor) -> Card {
     let mut title: Vec<Node> = vec![Node::from(supervisor.name.clone())];
     if supervisor.paused {
         title.push(" ".into());
-        title.push(
-            Badge::new("paused")
-                .variant(BadgeVariant::Warning)
-                .into(),
-        );
+        title.push(Badge::new("paused").variant(BadgeVariant::Warning).into());
     }
     Card::new()
         .title(Node::list(title))
@@ -300,7 +296,10 @@ fn throughput(frame: &Frame, queue: Option<&str>) -> Card {
         .id("fleet-throughput")
         .hide_title()
         .categories(labels)
-        .series(Series::new("Jobs finished", chosen.per_minute.iter().copied()))
+        .series(Series::new(
+            "Jobs finished",
+            chosen.per_minute.iter().copied(),
+        ))
         .height(160);
     let mut card = Card::titled("Jobs per minute").description(summary);
     if series.len() > 1 {
@@ -357,7 +356,11 @@ fn failures(frame: &Frame) -> Card {
 fn failure(frame: &Frame, job: &RecentFailure) -> Item {
     let id = segment(&job.id);
     let title: Vec<Node> = vec![
-        parts::link(format!("{}/failed/{id}", frame.base), breakable(&job.job_type)).into(),
+        parts::link(
+            format!("{}/failed/{id}", frame.base),
+            breakable(&job.job_type),
+        )
+        .into(),
         " ".into(),
         Text::muted(format!("{}/{}", job.attempts, job.max_attempts))
             .inline()

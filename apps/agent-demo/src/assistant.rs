@@ -126,7 +126,11 @@ impl Agent for ShopAssistant {
     /// Finds the orders the user can see, newest first: number, customer, city, total in
     /// rupees, how it was paid and where it stands. At most ten.
     #[tool(read_only)]
-    async fn find_orders(&self, run: &AgentRun, args: FindOrders) -> Result<Vec<OrderLine>, AppError> {
+    async fn find_orders(
+        &self,
+        run: &AgentRun,
+        args: FindOrders,
+    ) -> Result<Vec<OrderLine>, AppError> {
         let words = args.search.unwrap_or_default().to_lowercase();
         Ok(readable(run)
             .await?
@@ -344,8 +348,10 @@ impl RunAction<AgentRun> for MarkDelivered {
             order
                 .update(run.uow(), |order| order.status = "delivered".to_owned())
                 .await?;
-            Ok(ActionDone::new(format!("Order {} is delivered", order.number))
-                .note(format!("The user marked order {} delivered.", order.number)))
+            Ok(
+                ActionDone::new(format!("Order {} is delivered", order.number))
+                    .note(format!("The user marked order {} delivered.", order.number)),
+            )
         })
     }
 }
@@ -373,8 +379,11 @@ impl RunAction<AgentRun> for RefundAction {
                 .parse()
                 .map_err(|_| AppError::not_found())?;
             let line = refund(run, id).await?;
-            Ok(ActionDone::new(format!("Refunded {} for order {}", line.total, line.number))
-                .note(format!("The user refunded order {} from its card.", line.number)))
+            Ok(
+                ActionDone::new(format!("Refunded {} for order {}", line.total, line.number)).note(
+                    format!("The user refunded order {} from its card.", line.number),
+                ),
+            )
         })
     }
 }

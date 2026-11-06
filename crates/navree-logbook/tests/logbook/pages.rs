@@ -608,9 +608,14 @@ async fn the_newer_kinds_show_in_the_list_and_in_the_request_that_made_them() {
         &logbook,
         &context,
         TelemetryEvent::AiCall(
-            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", Duration::from_millis(900))
-                .tokens(1200, 340)
-                .cost_micros(5_400),
+            AiCall::new(
+                "anthropic",
+                "claude-sonnet-4-5",
+                "generate",
+                Duration::from_millis(900),
+            )
+            .tokens(1200, 340)
+            .cost_micros(5_400),
         ),
     );
     feed(

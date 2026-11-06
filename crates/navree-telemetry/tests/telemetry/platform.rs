@@ -127,7 +127,12 @@ fn an_ai_call_serializes_its_tokens_cost_and_latency() {
 
 #[test]
 fn a_broadcast_names_its_channels_and_event_but_has_no_data_field() {
-    let sent = BroadcastSent::new(["private-crm.deals", "presence-room.7"], "deal.updated", 5, ms(2));
+    let sent = BroadcastSent::new(
+        ["private-crm.deals", "presence-room.7"],
+        "deal.updated",
+        5,
+        ms(2),
+    );
     let json = json_of(&TelemetryEvent::Broadcast(sent));
     assert_eq!(
         json["channels"],
@@ -181,9 +186,14 @@ fn a_webhook_delivery_is_a_success_only_for_a_2xx_answer() {
 
 #[test]
 fn a_search_records_the_length_of_the_term_never_the_term() {
-    let search =
-        SearchQueried::new("meilisearch", "contacts", SearchMode::Hybrid, "Harpreet Kaur", ms(6))
-            .hits(12);
+    let search = SearchQueried::new(
+        "meilisearch",
+        "contacts",
+        SearchMode::Hybrid,
+        "Harpreet Kaur",
+        ms(6),
+    )
+    .hits(12);
     assert_eq!(search.term_length, 13);
     let text = serde_json::to_string(&TelemetryEvent::Search(search)).unwrap();
     assert!(!text.contains("Harpreet"), "{text}");
@@ -203,9 +213,18 @@ fn a_sign_in_never_holds_an_email_or_a_secret() {
     let throttled = SignInEvent::refused(SignInMethod::TwoFactor, "throttled");
 
     let worked_json = serde_json::to_string(&TelemetryEvent::SignIn(worked.clone())).unwrap();
-    assert!(worked_json.contains("\"user_id\":\"0199c1d2\""), "{worked_json}");
-    assert!(worked_json.contains("\"provider\":\"github\""), "{worked_json}");
-    assert!(worked_json.contains("\"method\":\"social\""), "{worked_json}");
+    assert!(
+        worked_json.contains("\"user_id\":\"0199c1d2\""),
+        "{worked_json}"
+    );
+    assert!(
+        worked_json.contains("\"provider\":\"github\""),
+        "{worked_json}"
+    );
+    assert!(
+        worked_json.contains("\"method\":\"social\""),
+        "{worked_json}"
+    );
 
     // A failed sign-in names no user, so a probe for an address leaves none behind.
     assert_eq!(refused.user_id, None);
@@ -216,12 +235,14 @@ fn a_sign_in_never_holds_an_email_or_a_secret() {
     // The event has no field that could hold an address or a secret.
     for event in [&worked, &refused, &throttled] {
         let json = serde_json::to_value(event).unwrap();
-        let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         keys.sort_unstable();
-        assert_eq!(
-            keys,
-            ["method", "outcome", "provider", "reason", "user_id"]
-        );
+        assert_eq!(keys, ["method", "outcome", "provider", "reason", "user_id"]);
     }
 
     let methods: Vec<&str> = [
@@ -254,7 +275,13 @@ fn a_sign_in_never_holds_an_email_or_a_secret() {
 
 #[test]
 fn a_ui_operation_has_a_name_a_kind_and_counts_but_no_values() {
-    let op = UiOperation::new("/deals/{id}/stage", UiOperationKind::TableQuery, 200, 3, ms(11));
+    let op = UiOperation::new(
+        "/deals/{id}/stage",
+        UiOperationKind::TableQuery,
+        200,
+        3,
+        ms(11),
+    );
     let json = json_of(&TelemetryEvent::UiOperation(op));
     assert_eq!(json["name"], "/deals/{id}/stage");
     assert_eq!(json["kind"], "table_query");
@@ -280,9 +307,8 @@ fn the_one_line_emits_reach_a_recorder() {
 
     telemetry.ai_call(|| AiCall::new("ollama", "llama3", "embed", ms(7)).tokens(10, 0));
     telemetry.broadcast(|| BroadcastSent::new(["room"], "message", 2, ms(1)));
-    telemetry.storage_op(|| {
-        StorageOp::new("local", "local", StorageOperation::Delete, "tmp/x", ms(1))
-    });
+    telemetry
+        .storage_op(|| StorageOp::new("local", "local", StorageOperation::Delete, "tmp/x", ms(1)));
     telemetry.webhook_delivery(|| WebhookDelivery::new("ep", "e", 1, 500, ms(9)));
     telemetry.search(|| SearchQueried::new("memory", "deals", SearchMode::Across, "x", ms(1)));
     telemetry.sign_in(|| SignInEvent::refused(SignInMethod::MagicLink, "expired"));
@@ -291,11 +317,17 @@ fn the_one_line_emits_reach_a_recorder() {
     assert_eq!(recorder.len(), 7);
     assert_eq!(recorder.ai_calls()[0].operation, "embed");
     assert_eq!(recorder.broadcasts()[0].channels, ["room"]);
-    assert_eq!(recorder.storage_ops()[0].operation, StorageOperation::Delete);
+    assert_eq!(
+        recorder.storage_ops()[0].operation,
+        StorageOperation::Delete
+    );
     assert_eq!(recorder.webhook_deliveries()[0].outcome, Outcome::Failure);
     assert_eq!(recorder.searches()[0].mode, SearchMode::Across);
     assert_eq!(recorder.sign_ins()[0].reason.as_deref(), Some("expired"));
-    assert_eq!(recorder.ui_operations()[0].kind, UiOperationKind::LiveRegion);
+    assert_eq!(
+        recorder.ui_operations()[0].kind,
+        UiOperationKind::LiveRegion
+    );
     assert_eq!(recorder.of_kind(EventKind::SignIn).len(), 1);
 }
 

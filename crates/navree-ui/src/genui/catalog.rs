@@ -429,8 +429,10 @@ impl<Cx: SurfaceCx + 'static, S: Surface<Cx>> Entry<Cx> for SurfaceEntry<S> {
         Box::pin(async move {
             let mut checker = Checker::new(links);
             let Some(props) = S::Props::check(props, "", &mut checker) else {
-                return Err(AppError::from_status(http::StatusCode::UNPROCESSABLE_ENTITY)
-                    .with_detail("the component's stored props no longer pass its check"));
+                return Err(
+                    AppError::from_status(http::StatusCode::UNPROCESSABLE_ENTITY)
+                        .with_detail("the component's stored props no longer pass its check"),
+                );
             };
             let title = self.0.title(&props);
             let view = self.0.render(&props, cx).await?;
@@ -663,7 +665,10 @@ impl<Cx: SurfaceCx + 'static> Catalog<Cx> {
     pub fn tools(&self, cx: &Cx) -> Vec<CatalogTool> {
         self.all_tools()
             .into_iter()
-            .filter(|tool| tool.can.is_none_or(|(action, subject)| cx.can(action, subject)))
+            .filter(|tool| {
+                tool.can
+                    .is_none_or(|(action, subject)| cx.can(action, subject))
+            })
             .collect()
     }
 
@@ -696,7 +701,9 @@ impl<Cx: SurfaceCx + 'static> Catalog<Cx> {
         let tools: usize = self
             .all_tools()
             .iter()
-            .map(|tool| tool.name.len() + tool.description.len() + tool.parameters.to_string().len())
+            .map(|tool| {
+                tool.name.len() + tool.description.len() + tool.parameters.to_string().len()
+            })
             .sum();
         (tools + self.prompt().len()).div_ceil(4)
     }
@@ -917,8 +924,14 @@ mod tests {
             Box::pin(async move {
                 let key = Key::new("1042").unwrap();
                 Ok(SurfaceView::new(props.count.get())
-                    .action(ActionButton::new::<Refund>("Refund", &OrderKey { order: key.clone() }))
-                    .action(ActionButton::new::<Delete>("Delete", &OrderKey { order: key })))
+                    .action(ActionButton::new::<Refund>(
+                        "Refund",
+                        &OrderKey { order: key.clone() },
+                    ))
+                    .action(ActionButton::new::<Delete>(
+                        "Delete",
+                        &OrderKey { order: key },
+                    )))
             })
         }
     }
@@ -1024,12 +1037,22 @@ mod tests {
         ));
         assert!(matches!(
             catalog
-                .run_action("recent_orders", "refund", &json!({ "order": "1 OR 1=1" }), &reader)
+                .run_action(
+                    "recent_orders",
+                    "refund",
+                    &json!({ "order": "1 OR 1=1" }),
+                    &reader
+                )
                 .await,
             Err(ActionRefusal::Invalid(_))
         ));
         let done = catalog
-            .run_action("recent_orders", "refund", &json!({ "order": "1042" }), &reader)
+            .run_action(
+                "recent_orders",
+                "refund",
+                &json!({ "order": "1042" }),
+                &reader,
+            )
             .await
             .unwrap();
         assert_eq!(done.message, "Refunded 1042");
@@ -1039,7 +1062,11 @@ mod tests {
     async fn a_reader_who_lost_access_is_refused_before_anything_loads() {
         let catalog = catalog();
         let error = catalog
-            .render("revenue", &json!({ "count": 1 }), &Reader { manager: false })
+            .render(
+                "revenue",
+                &json!({ "count": 1 }),
+                &Reader { manager: false },
+            )
             .await
             .unwrap_err();
         assert_eq!(error.status.as_u16(), 403);

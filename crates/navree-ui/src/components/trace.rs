@@ -206,10 +206,9 @@ impl Trace {
                     .children((
                         el("span").slot("trace-marker").child(icon(glyph)),
                         el("div").slot("trace-content").children((
-                            el("div").slot("trace-title").children((
-                                el("span").slot("trace-state").child(word),
-                                step.title,
-                            )),
+                            el("div")
+                                .slot("trace-title")
+                                .children((el("span").slot("trace-state").child(word), step.title)),
                             step.description
                                 .map(|text| el("div").slot("trace-description").child(text)),
                             detail,

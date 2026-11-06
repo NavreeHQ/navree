@@ -36,7 +36,10 @@ async fn a_broadcast_reports_its_channels_and_the_subscribers_it_reached() {
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].channels, ["news", "sport"]);
     assert_eq!(sent[0].event, "story.published");
-    assert_eq!(sent[0].delivered, 1, "one subscriber on one of the channels");
+    assert_eq!(
+        sent[0].delivered, 1,
+        "one subscriber on one of the channels"
+    );
     assert_eq!(sent[0].outcome, Outcome::Success);
     let text = serde_json::to_string(&sent[0]).unwrap();
     assert!(!text.contains("Ludhiana"), "the data stays out: {text}");

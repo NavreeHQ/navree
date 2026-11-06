@@ -651,7 +651,10 @@ fn the_contrast_check_measures_a_badge_on_a_hovered_rows_tint() {
         })
     };
     let mut spec = *Theme::NAVREE.spec();
-    assert!(on_hovered_row(&spec).is_none(), "the toolkit's own light amber reads there");
+    assert!(
+        on_hovered_row(&spec).is_none(),
+        "the toolkit's own light amber reads there"
+    );
     // An amber a little lighter than the toolkit's: about 4.44:1 on the hovered row.
     spec.palette_mut(Side::Light)
         .set(Token::Amber, Rgb::parse("#8a5a00").unwrap());
