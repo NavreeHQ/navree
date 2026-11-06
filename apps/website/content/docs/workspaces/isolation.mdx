@@ -5,6 +5,8 @@ description: "Keep each workspace's data apart by row, by schema or by database,
 
 Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`, and the [organization](/docs/workspaces/organizations/) and [partition](/docs/workspaces/partitions/) tables) always live in the app's main database; the strategy decides where your workspace-owned data lives.
 
+<Diagram name="workspace-isolation" />
+
 | Strategy | Where data lives | Enforced by | Databases |
 |---|---|---|---|
 | `row` (default) | Shared tables with a `workspace_id` column | `WorkspaceRepo` scoping, route record checks, and row-level security on PostgreSQL | SQLite, PostgreSQL, MySQL (scoping only) |

@@ -13,6 +13,7 @@ import { navreeUi } from "./navree-ui";
 import { requestLifecycle } from "./request-lifecycle";
 import { reverseEngineering } from "./reverse-engineering";
 import { twoWays } from "./two-ways";
+import { workspaceIsolation } from "./workspace-isolation";
 import { workspaceResolution } from "./workspace-resolution";
 
 export { DiagramCanvas, DiagramFigure, DiagramLegend, type DiagramSpec } from "./figure";
@@ -32,6 +33,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "design-to-ui": designToUi,
   "two-ways": twoWays,
   "workspace-resolution": workspaceResolution,
+  "workspace-isolation": workspaceIsolation,
 };
 
 /**

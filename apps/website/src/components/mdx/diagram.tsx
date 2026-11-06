@@ -20,6 +20,7 @@ export const diagramNames = [
   "design-to-ui",
   "two-ways",
   "workspace-resolution",
+  "workspace-isolation",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];
