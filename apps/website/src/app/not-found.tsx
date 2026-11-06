@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { ArrowLink, PrimaryCta, SecondaryCta } from "@/components/home/parts";
 import { GridPattern } from "@/components/magicui/grid-pattern";
+import { ClosestPage, NotFoundSearch } from "@/components/site/not-found-search";
 import { site } from "@site";
 
 /** The rest of the main navigation: the docs and the homepage are the buttons above it. */
@@ -32,9 +33,10 @@ export default function NotFound() {
           This page isn&apos;t here.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-          The link may be old, or the page may have moved. Search the docs with <kbd className="kbd">/</kbd>, or start
-          from one of these.
+          The link may be old, or the page may have moved. Search the docs here, or start from one of the links below.
         </p>
+        <ClosestPage />
+        <NotFoundSearch />
         <div className="mt-10 flex flex-wrap items-center gap-3">
           <PrimaryCta href="/docs/">Read the docs</PrimaryCta>
           <SecondaryCta href="/">Home</SecondaryCta>

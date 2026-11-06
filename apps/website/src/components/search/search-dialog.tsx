@@ -1,15 +1,14 @@
 "use client";
 
-import MiniSearch, { type SearchResult } from "minisearch";
+import type MiniSearch from "minisearch";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { CloseIcon, SearchIcon } from "@/components/icons";
-import { SEARCH_INDEX_URL, searchOptions, type SearchDoc } from "@/lib/search-options";
+import type { SearchDoc } from "@/lib/search-options";
 
 import { OPEN_SEARCH_EVENT } from "./search-button";
-
-type Hit = SearchResult & Omit<SearchDoc, "id">;
+import { findHits, loadIndex, snippet } from "./search-index";
 
 const SUGGESTIONS: { label: string; href: string }[] = [
   { label: "Installation", href: "/docs/getting-started/installation/" },
@@ -20,36 +19,6 @@ const SUGGESTIONS: { label: string; href: string }[] = [
   { label: "Workspaces", href: "/docs/workspaces/introduction/" },
   { label: "Performance", href: "/performance/" },
 ];
-
-let indexPromise: Promise<MiniSearch<SearchDoc>> | null = null;
-
-function loadIndex(): Promise<MiniSearch<SearchDoc>> {
-  indexPromise ??= fetch(SEARCH_INDEX_URL)
-    .then((response) => {
-      if (!response.ok) throw new Error(`search index: HTTP ${response.status}`);
-      return response.text();
-    })
-    .then((json) => MiniSearch.loadJSON<SearchDoc>(json, searchOptions))
-    .catch((error) => {
-      indexPromise = null;
-      throw error;
-    });
-  return indexPromise;
-}
-
-/** The text around the first match, with every matched term marked. */
-function snippet(text: string, terms: string[]): ReactNode {
-  if (!text) return null;
-  const lower = text.toLowerCase();
-  const positions = terms.map((t) => lower.indexOf(t.toLowerCase())).filter((i) => i >= 0);
-  const first = positions.length ? Math.min(...positions) : 0;
-  const start = Math.max(0, first - 50);
-  const window = (start > 0 ? "…" : "") + text.slice(start, start + 170) + (start + 170 < text.length ? "…" : "");
-  if (!terms.length) return window;
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length);
-  const parts = window.split(new RegExp(`(${escaped.join("|")})`, "gi"));
-  return parts.map((part, i) => (i % 2 === 1 ? <mark key={i}>{part}</mark> : part));
-}
 
 /**
  * The docs search (⌘K / Ctrl K, or "/"). The index is built by
@@ -109,13 +78,7 @@ export function SearchDialog({ openOnMount = false }: { openOnMount?: boolean })
     };
   }, [open, close]);
 
-  const hits = useMemo<Hit[]>(() => {
-    const q = query.trim();
-    if (!index || q.length < 2) return [];
-    let results = index.search(q) as Hit[];
-    if (!results.length) results = index.search(q, { combineWith: "OR" }) as Hit[];
-    return results.slice(0, 12);
-  }, [index, query]);
+  const hits = useMemo(() => findHits(index, query), [index, query]);
 
   function go(href: string) {
     close();

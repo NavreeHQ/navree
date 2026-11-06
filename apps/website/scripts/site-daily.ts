@@ -7,7 +7,7 @@
  *   SKIP_BUILD=1 node scripts/site-daily.ts    use the `out/` that is already built
  *
  * Steps, in order: lint, typecheck, build, then the checks on the built
- * site (links, SEO, GEO, AEO, freshness) and Lighthouse on the key pages.
+ * site (links, SEO, GEO, AEO, freshness, the 404 page) and Lighthouse on the key pages.
  * A failing step does not stop the ones after it, except the build, which
  * the checks need. Each step's output is kept in `report/<step>.log`, and
  * `report/summary.md` says what passed, what failed and why: the workflow
@@ -32,6 +32,7 @@ const steps: Step[] = [
   { name: "check:geo", command: ["pnpm", "check:geo"] },
   { name: "check:aeo", command: ["pnpm", "check:aeo"] },
   { name: "check:fresh", command: ["pnpm", "check:fresh"] },
+  { name: "check:404", command: ["pnpm", "check:404"] },
   { name: "lighthouse", command: ["node", "scripts/lighthouse.ts"] },
 ];
 

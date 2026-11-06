@@ -8,6 +8,8 @@
  *   the README of Navree's benchmark app (`bench/frameworks/navree`).
  * - `public/data/bench/`: those two result files, for download.
  * - `public/data/search-index.json`: the docs search index (MiniSearch).
+ * - `public/data/pages.json`: every docs page and main page with its title,
+ *   a few kilobytes, for the 404 page to suggest the nearest one.
  * - `public/ui-preview/`: the UI docs' preview documents, which
  *   `cargo run -p ui-docs` writes to `content/ui/previews/`, and the
  *   toolkit's stylesheet, font and modules they load, copied byte for byte
@@ -34,6 +36,7 @@ import { sections, links } from "../content/docs/manifest.ts";
 import { site } from "../site.config.ts";
 import type { CpuSet, PerfData, StackRow, TestInfo, TestKey, TestResult } from "../src/lib/bench-types.ts";
 import { searchOptions, type SearchDoc } from "../src/lib/search-options.ts";
+import { infoFor, pageRoutes } from "../src/lib/site-pages.ts";
 import { fetchMedia, syncMedia } from "./lib/media.ts";
 
 const WEBSITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -499,6 +502,22 @@ function buildDocs(perf: PerfData): SearchDoc[] {
   return docs;
 }
 
+/**
+ * Every page a visitor can open, once: the docs pages (the first chunk of each,
+ * the one with no heading), the page of each docs section and the site's other
+ * pages (every route under `src/app`). The 404 page reads this list, not the
+ * search index, which is megabytes.
+ */
+function pageList(docs: SearchDoc[]): { href: string; title: string; section: string }[] {
+  const pages = docs.filter((d) => !d.heading).map((d) => ({ href: d.href, title: d.page, section: d.section }));
+  const add = (href: string, title: string, section: string) => {
+    if (!pages.some((p) => p.href === href)) pages.push({ href, title, section });
+  };
+  for (const section of sections) add(`/docs/${section.slug}/`, section.title, "Docs");
+  for (const route of pageRoutes()) add(route, infoFor(route).name, "Navree");
+  return pages;
+}
+
 // ------------------------------------------------------------------- crates
 
 export type CrateInfo = { name: string; layer: number; module: string | null; description: string };
@@ -598,6 +617,7 @@ const docs = buildDocs(perf);
 const index = new MiniSearch<SearchDoc>(searchOptions);
 index.addAll(docs);
 writeFile(path.join(PUBLIC_DATA, "search-index.json"), JSON.stringify(index));
+writeFile(path.join(PUBLIC_DATA, "pages.json"), JSON.stringify(pageList(docs)));
 
 console.log(
   `prebuild: performance data, ${perf.downloads.length} raw files, ${crates.length} crates, ` +
