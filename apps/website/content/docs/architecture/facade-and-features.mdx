@@ -215,7 +215,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `queue` | `http`, `db`, `realtime`, `schedule`, `orm` |
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`; with `webhooks`, `integrations` or `settings` on too, their notification features |
-| `ui` | `http`, `telemetry`, `validation`; with `orm` on too, the data table's backend |
+| `ui` | `http`, `telemetry`, `validation`; with `orm` on too, the data table's backend; with `ai` on too, the assistant's pages (`navree::ai::ui`) |
 | `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
 | `auth` | `http`, `telemetry`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule`, `orm` |
@@ -237,7 +237,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `search` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `db`, `orm`, `queue`, `access`, `workspace` |
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
 | `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |
-| `ai` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
+| `ai` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth`; with `search` on too, search's embeddings and vectors on the AI SDK (`search.vectors.store = "ai"`) |
 | `i18n` (opt-in, not in `full`) | `template`, `http`, `view`, `db`, `validation`, `notify`, `workspace`; with `sheets` on too, translated export headers |
 | `lighthouse` | `telemetry`, `http`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth`, `orm`, `session`, `ui`; with `domains` on too, certificates close to expiry become issues |
 | `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
