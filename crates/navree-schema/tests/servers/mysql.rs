@@ -271,9 +271,11 @@ async fn dumps_load_into_an_empty_database_and_dump_the_same() {
         "CREATE VIEW biggest_deals AS SELECT title FROM big_deals WHERE title <> ''",
     )
     .await;
+    // Quoted names: MariaDB keeps a trigger's text as written, MySQL quotes
+    // its names itself.
     exec(
         &conn,
-        "CREATE TRIGGER deals_title BEFORE INSERT ON deals FOR EACH ROW BEGIN IF NEW.title = '' THEN SET NEW.title = 'untitled'; END IF; END",
+        "CREATE TRIGGER `deals_title` BEFORE INSERT ON `deals` FOR EACH ROW BEGIN IF NEW.title = '' THEN SET NEW.title = 'untitled'; END IF; END",
     )
     .await;
     exec(

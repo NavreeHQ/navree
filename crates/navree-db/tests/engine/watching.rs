@@ -150,10 +150,18 @@ pub async fn sessions_follow_the_options(scratch: Scratch) {
         Backend::MySql => {
             let mode = text("SELECT @@SESSION.sql_mode").await;
             assert!(mode.contains("STRICT_TRANS_TABLES"), "{mode}");
-            assert_eq!(
-                text("SELECT @@SESSION.transaction_isolation").await,
-                "READ-COMMITTED"
-            );
+            // `tx_isolation` on MariaDB before 11.1.
+            let variable = if db
+                .mariadb_version()
+                .await
+                .unwrap()
+                .is_some_and(|version| version < (11, 1))
+            {
+                "SELECT @@SESSION.tx_isolation"
+            } else {
+                "SELECT @@SESSION.transaction_isolation"
+            };
+            assert_eq!(text(variable).await, "READ-COMMITTED");
             assert_eq!(text("SELECT @@SESSION.time_zone").await, "+00:00");
         }
     }

@@ -209,7 +209,8 @@ async fn fresh_drops_every_table_and_reruns() {
     }
     for tx in &held {
         assert_eq!(
-            string(tx, "SELECT CAST(@@SESSION.foreign_key_checks AS CHAR)").await,
+            // `+ 0` reads the setting as a number (MariaDB writes it as `ON`).
+            string(tx, "SELECT CAST(@@SESSION.foreign_key_checks + 0 AS CHAR)").await,
             "1"
         );
     }

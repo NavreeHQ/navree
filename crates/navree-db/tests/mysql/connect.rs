@@ -93,14 +93,20 @@ async fn sessions_are_utc_utf8mb4_and_strict() {
         .to_string();
     assert!(error.contains("Data too long"), "{error}");
 
-    // A column neither grouped by nor aggregated is refused, as on PostgreSQL.
+    // A column neither grouped by nor aggregated is refused, as on PostgreSQL
+    // (MariaDB says so in its own words).
     let error = db
         .pool()
         .execute_script("SELECT code, n FROM codes GROUP BY code")
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains("only_full_group_by"), "{error}");
+    let refusal = if db.is_mariadb().await.unwrap() {
+        "isn't in GROUP BY"
+    } else {
+        "only_full_group_by"
+    };
+    assert!(error.contains(refusal), "{error}");
 }
 
 /// `modes` is the session's whole SQL mode, whatever `strict` says.

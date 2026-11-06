@@ -224,7 +224,18 @@ pub async fn rows_read_dynamically(scratch: Scratch) {
                 Value::Decimal(Decimal::new(12_345_678, 4))
             );
             assert!(matches!(row.value("id_v7").unwrap(), Value::Bytes(ref b) if b.len() == 16));
-            assert!(matches!(row.value("doc").unwrap(), Value::Json(_)));
+            if db.is_mariadb().await.unwrap() {
+                // MariaDB's JSON is `LONGTEXT` (with a binary collation)
+                // checked to be JSON, and its rows say only that much.
+                let doc = match row.value("doc").unwrap() {
+                    Value::String(text) => text.into_bytes(),
+                    Value::Bytes(bytes) => bytes,
+                    other => panic!("a MariaDB JSON column reads as text, not {other:?}"),
+                };
+                serde_json::from_slice::<serde_json::Value>(&doc).expect("the text is JSON");
+            } else {
+                assert!(matches!(row.value("doc").unwrap(), Value::Json(_)));
+            }
         }
         Backend::Sqlite => {
             assert_eq!(row.value("b").unwrap(), Value::I64(1));

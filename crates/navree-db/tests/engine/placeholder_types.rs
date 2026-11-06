@@ -499,6 +499,7 @@ pub async fn logs_show_the_sql_as_written(scratch: Scratch) {
         Backend::Sqlite => "SELECT 'not kept' AS seen WHERE ? > 0;",
     };
     let statement = Statement::portable(written, [1_i64.into()]);
+    let mariadb = db.is_mariadb().await.unwrap();
     let ((), logged) = navree_db::QueryLog::capture(async {
         let row = db.fetch_one(&statement).await.unwrap();
         let seen: String = row.get("seen").unwrap();
@@ -508,7 +509,10 @@ pub async fn logs_show_the_sql_as_written(scratch: Scratch) {
                 written.trim_end_matches(';').replace("? > 0", "$1 > 0")
             ),
             // MySQL shows a prepared statement with its values in place,
-            // without the `;`.
+            // without the `;`; MariaDB shows it as prepared.
+            Backend::MySql if mariadb => {
+                format!("{} /* params: BIGINT */", written.trim_end_matches(';'))
+            }
             Backend::MySql => format!(
                 "{} /* params: BIGINT */",
                 written.trim_end_matches(';').replace("? > 0", "1 > 0")

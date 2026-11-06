@@ -103,11 +103,26 @@ async fn case_is_ignored_under_binary_and_case_sensitive_collations() {
         return;
     };
     let db = scratch.db().await;
-    db.execute_script(
+    // MySQL 8's case-sensitive collation, MariaDB 10.10's, or on an older
+    // MariaDB (which has none for `utf8mb4`) its binary one without padding.
+    let mut cs = "utf8mb4_nopad_bin";
+    for known in ["utf8mb4_0900_as_cs", "utf8mb4_uca1400_as_cs"] {
+        let count: i64 = db
+            .fetch_scalar(&navree_db::Statement::text(format!(
+                "SELECT COUNT(*) FROM information_schema.COLLATIONS WHERE COLLATION_NAME = '{known}'"
+            )))
+            .await
+            .unwrap();
+        if count > 0 {
+            cs = known;
+            break;
+        }
+    }
+    db.execute_script(&format!(
         "CREATE TABLE labels (\
              bin VARCHAR(64) COLLATE utf8mb4_bin NOT NULL, \
-             cs VARCHAR(64) COLLATE utf8mb4_0900_as_cs NOT NULL)",
-    )
+             cs VARCHAR(64) COLLATE {cs} NOT NULL)"
+    ))
     .await
     .unwrap();
     db.execute_script("INSERT INTO labels (bin, cs) VALUES ('Équipe Nord', 'Équipe Nord')")

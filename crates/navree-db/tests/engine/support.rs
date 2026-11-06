@@ -12,7 +12,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
 use futures_util::FutureExt;
-use navree_db::{Backend, Db, DbOptions, Executor, Statement};
+use navree_db::{Backend, Db, DbOptions, Executor, ExecutorExt, Statement};
 use uuid::Uuid;
 
 /// The temporary-directory guard of navree-testing (its reaper retries a
@@ -183,9 +183,23 @@ impl Scratch {
                         format!("DROP SCHEMA {name} CASCADE")
                     }
                     _ => {
+                        // MySQL 8's collation, or on a MariaDB without it
+                        // (10.6) the accent- and case-insensitive
+                        // `utf8mb4_unicode_520_ci`.
+                        let known: i64 = admin
+                            .fetch_scalar(&Statement::text(
+                                "SELECT COUNT(*) FROM information_schema.COLLATIONS WHERE COLLATION_NAME = 'utf8mb4_0900_ai_ci'",
+                            ))
+                            .await
+                            .expect("reads the server's collations");
+                        let collation = if known > 0 {
+                            "utf8mb4_0900_ai_ci"
+                        } else {
+                            "utf8mb4_unicode_520_ci"
+                        };
                         admin
                             .execute_script(&format!(
-                                "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+                                "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE {collation}"
                             ))
                             .await
                             .expect("creates the database");
