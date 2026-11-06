@@ -1169,7 +1169,7 @@ More: [/docs/packages/search/](/docs/packages/search/).
 | `postgres` | table |  | `APP_SEARCH__POSTGRES` | The `postgres` engine. |
 | `postgres.language` | string | `"english"` | `APP_SEARCH__POSTGRES__LANGUAGE` | The text search configuration (default `english`). |
 | `postgres.trigram` | boolean | `false` | `APP_SEARCH__POSTGRES__TRIGRAM` | Typo tolerance with `pg_trgm` (default false). |
-| `postgres.typo_threshold` | number | `0.4` | `APP_SEARCH__POSTGRES__TYPO_THRESHOLD` | The `pg_trgm.word_similarity_threshold` of a query with `trigram`: how close a query word must be to a word of the text to match, above 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses a one-letter typo in a longer word ("lakotia" scores 0.55 against "Lovelace"), so the engine sets this value per query. |
+| `postgres.typo_threshold` | number | `0.4` | `APP_SEARCH__POSTGRES__TYPO_THRESHOLD` | The `pg_trgm.word_similarity_threshold` of a query with `trigram`: how close a query word must be to a word of the text to match, above 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses a one-letter typo in a longer word ("lakotia" scores 0.55 against "Lakhotia"), so the engine sets this value per query. |
 | `tantivy` | table |  | `APP_SEARCH__TANTIVY` | The `tantivy` engine. |
 | `tantivy.path` | string | `"storage/search"` | `APP_SEARCH__TANTIVY__PATH` | The directory holding one directory per index (default `storage/search`). |
 | `tantivy.memory_budget_mb` | integer | `64` | `APP_SEARCH__TANTIVY__MEMORY_BUDGET_MB` | The index writer's buffer in MB (default 64, at least 15). |

@@ -133,7 +133,7 @@ mod tests {
     fn a_refusal_names_a_reason_and_never_the_email() {
         let failed = sign_in_of(&entry(
             "auth.login_failed",
-            json!({ "email": "ada@example.com" }),
+            json!({ "email": "anu@example.com" }),
         ))
         .unwrap();
         assert_eq!(failed.outcome, Outcome::Failure);
@@ -142,7 +142,7 @@ mod tests {
 
         let refused = sign_in_of(&entry(
             "auth.login_refused",
-            json!({ "method": "sso", "connection": "okta-1", "email": "ada@example.com", "code": "sso_required" }),
+            json!({ "method": "sso", "connection": "okta-1", "email": "anu@example.com", "code": "sso_required" }),
         ))
         .unwrap();
         assert_eq!(refused.method, SignInMethod::Sso);
@@ -159,7 +159,7 @@ mod tests {
 
         for event in [&failed, &refused, &wrong_code] {
             let text = serde_json::to_string(event).unwrap();
-            assert!(!text.contains("ada@example.com"), "{text}");
+            assert!(!text.contains("anu@example.com"), "{text}");
         }
     }
 

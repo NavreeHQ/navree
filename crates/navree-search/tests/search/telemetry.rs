@@ -18,8 +18,8 @@ async fn a_query_reports_its_hits_and_the_length_of_its_term() {
     insert_contacts(
         &db,
         vec![
-            new_contact("Harpreet", "Lovelace"),
-            new_contact("Gurpreet", "Hopper"),
+            new_contact("Harpreet", "Lakhotia"),
+            new_contact("Gurpreet", "Hundal"),
         ],
     )
     .await;
@@ -30,7 +30,7 @@ async fn a_query_reports_its_hits_and_the_length_of_its_term() {
     TelemetryContext::new(telemetry)
         .scope(async {
             search
-                .query::<Contact>("lovelace")
+                .query::<Contact>("lakhotia")
                 .paginate(PageQuery::new(1, 15))
                 .await
                 .unwrap();
@@ -46,5 +46,5 @@ async fn a_query_reports_its_hits_and_the_length_of_its_term() {
     assert_eq!(reported.hits, Some(1));
     assert_eq!(reported.outcome, Outcome::Success);
     let text = serde_json::to_string(reported).unwrap();
-    assert!(!text.contains("lovelace"), "the term stays out: {text}");
+    assert!(!text.contains("lakhotia"), "the term stays out: {text}");
 }

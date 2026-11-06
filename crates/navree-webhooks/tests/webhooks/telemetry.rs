@@ -14,11 +14,11 @@ async fn each_attempt_is_reported_with_its_answer_and_outcome() {
     let h = harness(|b| b.module(recorder.module())).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(503),
     );
     let created = h
-        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/navree").events(["deal.won"]))
+        .endpoint(NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]))
         .await;
     let telemetry = Telemetry::from_app(h.app.ctx()).await;
 
@@ -35,7 +35,7 @@ async fn each_attempt_is_reported_with_its_answer_and_outcome() {
     assert_eq!(attempt.outcome, Outcome::Failure);
     let text = serde_json::to_string(attempt).unwrap();
     assert!(
-        !text.contains("Lovelace renewal"),
+        !text.contains("Lakhotia renewal"),
         "the payload stays out: {text}"
     );
 }
@@ -46,10 +46,10 @@ async fn an_answer_of_204_is_a_success() {
     let h = harness(|b| b.module(recorder.module())).await;
     h.server.on(
         Method::POST,
-        "https://hooks.lovelace.io/*",
+        "https://hooks.lakhotia.io/*",
         FakeResponse::new(204),
     );
-    h.endpoint(NewEndpoint::new("https://hooks.lovelace.io/navree").events(["deal.won"]))
+    h.endpoint(NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]))
         .await;
     let telemetry = Telemetry::from_app(h.app.ctx()).await;
 

@@ -12,11 +12,11 @@ async fn a_text_request_reports_an_ai_call_with_its_tokens_and_no_text() {
     let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
     let fake = AiFake::new();
     let ai = fake.ai();
-    fake.respond(FakeReply::text("Acme is in negotiation.").with_usage(120, 9));
+    fake.respond(FakeReply::text("Agra is in negotiation.").with_usage(120, 9));
 
     TelemetryContext::new(telemetry)
         .scope(async {
-            ai.text("Summarize the Acme deal")
+            ai.text("Summarize the Agra deal")
                 .model("fast")
                 .await
                 .unwrap();
@@ -34,7 +34,7 @@ async fn a_text_request_reports_an_ai_call_with_its_tokens_and_no_text() {
     assert_eq!(call.outcome, Outcome::Success);
     let json = serde_json::to_string(call).unwrap();
     assert!(
-        !json.contains("Acme"),
+        !json.contains("Agra"),
         "the prompt and the answer stay out: {json}"
     );
 }

@@ -12,13 +12,13 @@ use crate::support::{self, PASSWORD, login};
 async fn password_sign_ins_are_reported_without_the_email() {
     let recorder = TelemetryRecorder::new();
     let app = support::builder().module(recorder.module()).build().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let client = app.client();
 
-    login(&client, "ada@example.com", "wrong password")
+    login(&client, "anu@example.com", "wrong password")
         .await
         .assert_status(401);
-    login(&client, "ada@example.com", PASSWORD)
+    login(&client, "anu@example.com", PASSWORD)
         .await
         .assert_status(200);
 
@@ -32,7 +32,7 @@ async fn password_sign_ins_are_reported_without_the_email() {
     assert_eq!(events[1].outcome, Outcome::Success);
     assert_eq!(events[1].user_id, Some(user.id.to_string()));
     let text = serde_json::to_string(&events).unwrap();
-    assert!(!text.contains("ada@example.com"), "{text}");
+    assert!(!text.contains("anu@example.com"), "{text}");
     assert!(!text.contains(PASSWORD), "{text}");
 }
 
@@ -40,7 +40,7 @@ async fn password_sign_ins_are_reported_without_the_email() {
 async fn a_sign_in_that_a_social_flow_ends_with_names_its_provider_and_user() {
     let recorder = TelemetryRecorder::new();
     let app = support::builder().module(recorder.module()).build().await;
-    let user = support::create_user(&app, "ada@example.com").await;
+    let user = support::create_user(&app, "anu@example.com").await;
     let auth = app.get::<AuthService>().await;
     let telemetry = Telemetry::from_app(app.ctx()).await;
 
