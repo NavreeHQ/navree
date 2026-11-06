@@ -285,6 +285,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
+      # A provider without a key is skipped, not failed.
+      NAVREE_TEST_REQUIRE_SERVICES: ""
       NAVREE_SANDBOX_RESEND_KEY: ${{ secrets.NAVREE_SANDBOX_RESEND_KEY }}
       NAVREE_SANDBOX_MAILGUN_KEY: ${{ secrets.NAVREE_SANDBOX_MAILGUN_KEY }}
       NAVREE_SANDBOX_MAILGUN_DOMAIN: ${{ secrets.NAVREE_SANDBOX_MAILGUN_DOMAIN }}

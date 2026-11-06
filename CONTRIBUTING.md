@@ -232,6 +232,17 @@ database-switchable crate on SQLite, PostgreSQL and MySQL, and monthly on
 Windows against SQLite. It also builds the projects `navree new` generates once
 a month.
 
+The connectors that need more than one container run against real servers and
+emulators in a second workflow, `.github/workflows/integrations.yml` (weekly,
+and on demand): SMTP over TLS, SES (LocalStack), IMAP and POP3 (GreenMail),
+Gmail's Pub/Sub push, SAML and OpenID Connect (Keycloak), LDAP (OpenLDAP),
+SCIM (scim2-cli), OTLP (an OpenTelemetry Collector), DNS (CoreDNS), Dock, Harbor
+(an Ubuntu host with systemd and sshd) and the paid providers' sandbox modes.
+`scripts/integration-services.sh start [mail|identity|infra|harbor]` starts the
+servers of `scripts/services/integrations.yml` and prints their `NAVREE_TEST_*`
+variables. Their tests are marked `#[ignore]`: run them with
+`cargo test ... -- --ignored`.
+
 ### Web (crm-web)
 
 ```sh
