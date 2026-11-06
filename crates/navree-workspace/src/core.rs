@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navree_contracts::{Clock, SystemClock};
+use navree_contracts::{Broadcaster, Clock, SystemClock};
 use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -184,6 +184,37 @@ impl Core {
             Box::pin(async move {
                 if let Err(error) = bus.emit(event).await {
                     tracing::warn!(target: "navree::workspace", event = E::NAME, %error, "a workspace event listener failed");
+                }
+            })
+        });
+    }
+
+    /// Once `uow` commits, ends the real-time subscriptions and live streams of `users`
+    /// (`dyn Broadcaster::end_user_subscriptions`, when the app has one): a stream was scoped
+    /// to the workspace the reader was a member of when it opened, and must not carry the
+    /// workspace's updates to someone who has left it, or from a workspace that is gone. Every
+    /// open page reconnects and is scoped again. A failure is logged; the change stands.
+    pub(crate) async fn end_live_after_commit(&self, uow: &Uow, users: Vec<Uuid>) {
+        if users.is_empty() {
+            return;
+        }
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let Some(broadcaster) = app.try_get::<dyn Broadcaster>().await else {
+            return;
+        };
+        uow.after_commit(move || {
+            Box::pin(async move {
+                for user in users {
+                    if let Err(error) = broadcaster.end_user_subscriptions(user).await {
+                        tracing::warn!(
+                            target: "navree::workspace",
+                            %error,
+                            user_id = %user,
+                            "could not end the user's live subscriptions after they left a workspace"
+                        );
+                    }
                 }
             })
         });

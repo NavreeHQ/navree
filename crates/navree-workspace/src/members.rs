@@ -204,6 +204,8 @@ impl Members {
                 },
             )
             .await;
+        // Their open pages hold streams scoped to this workspace: end them.
+        self.core.end_live_after_commit(uow, vec![user]).await;
         Ok(())
     }
 }

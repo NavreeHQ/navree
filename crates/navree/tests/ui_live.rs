@@ -237,3 +237,78 @@ async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_reso
     assert_eq!(bob_in_globex.next(WAIT).await.as_deref(), Some("deals"));
     assert_eq!(ada_in_acme.next(QUIET).await, None);
 }
+
+impl Stream {
+    /// Whether the stream ended within `wait`: the server closed it, so the page opens a new one.
+    async fn closed(&mut self, wait: Duration) -> bool {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            match tokio::time::timeout_at(deadline, self.body.frame()).await {
+                Err(_) => return false,
+                Ok(None) | Ok(Some(Err(_))) => return true,
+                Ok(Some(Ok(_))) => {}
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspace_is_deleted() {
+    // The streams of a workspace's members are scoped to it when they open. A member who is
+    // removed must stop hearing it, and so must everyone when it is deleted: their pages
+    // open new streams, scoped again.
+    let app = builder().build().await;
+    let (ada, bob, cy) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let db = app.get::<Db>().await;
+    let workspaces = app.get::<Workspaces>().await;
+    let members = app.get::<navree::workspace::Members>().await;
+    let uow = db.uow(None, None).await;
+    let acme = workspaces
+        .create(&uow, ada, NewWorkspace::named("Acme"))
+        .await
+        .unwrap();
+    for user in [bob, cy] {
+        members
+            .add(
+                &uow,
+                acme.id,
+                user,
+                navree::workspace::WorkspaceRole::Member,
+            )
+            .await
+            .unwrap();
+    }
+    uow.commit().await.unwrap();
+
+    let open = |user: Uuid| {
+        let request = app
+            .acting_as(principal(user))
+            .get("/broadcasting/stream?topics=deals")
+            .header("x-workspace", acme.slug.clone());
+        async move { Stream::new(request.send_stream().await) }
+    };
+    let (mut ada_page, mut bob_page, mut cy_page) =
+        (open(ada).await, open(bob).await, open(cy).await);
+    for page in [&mut ada_page, &mut bob_page, &mut cy_page] {
+        assert_eq!(page.next(WAIT).await.as_deref(), Some("ui:live"));
+    }
+
+    // Bob is removed: his stream ends, the others' go on.
+    let uow = db.uow(None, None).await;
+    members.remove(&uow, acme.id, bob).await.unwrap();
+    uow.commit().await.unwrap();
+    assert!(bob_page.closed(WAIT).await, "bob's stream stayed open");
+    let live = app.get::<Live>().await;
+    live.nudge([Topic::workspace(acme.id, "deals")])
+        .await
+        .unwrap();
+    assert_eq!(ada_page.next(WAIT).await.as_deref(), Some("deals"));
+    assert_eq!(cy_page.next(WAIT).await.as_deref(), Some("deals"));
+
+    // The workspace is deleted: the rest end too.
+    let uow = db.uow(None, None).await;
+    workspaces.delete(&uow, acme.id).await.unwrap();
+    uow.commit().await.unwrap();
+    assert!(ada_page.closed(WAIT).await, "ada's stream stayed open");
+    assert!(cy_page.closed(WAIT).await, "cy's stream stayed open");
+}

@@ -512,6 +512,15 @@ impl Workspaces {
     pub async fn delete(&self, uow: &Uow, id: Uuid) -> Result<(), WorkspaceError> {
         let current = self.core.workspace_in(uow, id).await?;
         let slug = current.slug.clone();
+        // Read before the rows go: every member's open streams end with the workspace.
+        let members: Vec<Uuid> = Member::query()
+            .where_(Member::WORKSPACE_ID.eq(id))
+            .get(uow)
+            .await?
+            .into_models()
+            .into_iter()
+            .map(|member| member.user_id)
+            .collect();
         store::delete(uow, current).await?;
         self.core.isolation.deleted(uow, id).await?;
         self.core
@@ -523,6 +532,7 @@ impl Workspaces {
                 },
             )
             .await;
+        self.core.end_live_after_commit(uow, members).await;
         Ok(())
     }
 
