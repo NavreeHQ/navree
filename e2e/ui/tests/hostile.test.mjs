@@ -1264,6 +1264,50 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await context.close();
     });
 
+    test(`an island imports only a script of the app's own, takes its props as data, and one that throws leaves the fallback (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("isle");
+      const good = `/_navree/ui/island/${name}-0123456789ab.js`;
+      const boom = `/_navree/ui/island/${name}-boom-0123456789ab.js`;
+      const js = (res, text) => {
+        res.writeHead(200, { "content-type": "text/javascript" });
+        res.end(text);
+      };
+      f.routes.set(good, (req, res) => js(res, "export function mount(body, props) { body.textContent = 'drawn ' + typeof props?.city + ' ' + (props?.city ?? ''); }"));
+      f.routes.set(boom, (req, res) => js(res, "export function mount() { throw new Error('no'); }"));
+      const island = (id, src, props = "{}") =>
+        `<div id="${id}" data-ui-island="${src}" data-ui-props="${props.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}" data-ui-keep-attrs="data-ui-mounted data-ui-failed"><div data-slot="island-body" data-ui-keep>fallback</div></div>`;
+      route(
+        `/${name}`,
+        doc(
+          island("ok", good, JSON.stringify({ city: "<img src=x onerror=document.documentElement.setAttribute('data-pwned','island')>" })) +
+            island("evil", `${E()}/_navree/ui/island/x-0123456789ab.js`) +
+            island("up", "/_navree/ui/island/../core.js") +
+            island("query", `${good}?x=1`) +
+            island("named", "/_navree/ui/island/Not_Ours-0123456789ab.js") +
+            island("boom", boom) +
+            island("junk", good, "{not json"),
+          { head: `<script type="module" src="/_navree/ui/islands.js"></script>` },
+        ),
+      );
+      const { context, page, errors } = await fresh(`/${name}`);
+      await page.waitForFunction(() => ["ok", "junk"].every((id) => document.getElementById(id).hasAttribute("data-ui-mounted")));
+      await page.waitForFunction(() => document.getElementById("boom").hasAttribute("data-ui-failed"));
+      assert.match(await page.textContent("#ok [data-slot=island-body]"), /^drawn string <img/, "the props are text to the script, never markup");
+      assert.equal(await attr(page, "data-pwned"), null);
+      assert.equal(await page.textContent("#junk [data-slot=island-body]"), "drawn undefined ", "props that aren't JSON are none");
+      assert.equal(await page.textContent("#boom [data-slot=island-body]"), "fallback", "the server's fallback stays");
+      for (const id of ["evil", "up", "query", "named"]) {
+        const state = await page.evaluate((i) => ["data-ui-mounted", "data-ui-failed"].map((n) => document.getElementById(i).hasAttribute(n)), id);
+        assert.deepEqual(state, [false, false], `${id} was never imported`);
+      }
+      assert.deepEqual(f.evil, [], "nothing asked of another site");
+      assert.equal(hits(`${good}?x=1`).length, 0);
+      assert.equal(hits(good).length, 1, "one script, imported once for two islands");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     test(`commands reach only state attributes (${engine})`, async () => {
       f.evil.length = 0;
       const name = key("cmd");

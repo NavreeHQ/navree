@@ -1481,3 +1481,84 @@ fn a_code_block_escapes_its_code_and_cannot_close_its_own_element() {
     assert_eq!(html.matches("<pre").count(), 1, "{html}");
     assert_eq!(html.matches("</pre>").count(), 1, "{html}");
 }
+
+/// An island's props are data in an attribute: whatever text they hold, it is escaped as
+/// every attribute is, so it can't end the attribute, open a tag or start a script. The
+/// address of the island's script is the app's own, never one taken from the props.
+#[test]
+fn an_islands_props_cannot_break_out_of_their_attribute() {
+    use navree_ui::{Island, IslandScript};
+
+    static MAP: IslandScript = IslandScript::new("map", b"export function mount() {}", 1024);
+    let hostile = [
+        "\"><script>alert(1)</script>",
+        "'><img src=x onerror=alert(1)>",
+        "</div><script src=\"https://attacker.example/x.js\"></script>",
+        "&quot; data-ui-island=\"https://attacker.example/x.js",
+        "\u{2028}\u{2029}<!--",
+    ];
+    for text in hostile {
+        let html = render(
+            &Island::new("map", &MAP)
+                .props(&serde_json::json!({ "city": text, "note": [text] }))
+                .into(),
+        );
+        assert_eq!(html.matches('<').count(), 4, "two tags opened and closed: {html}");
+        assert!(!html.contains("<script") && !html.contains("<img"), "{html}");
+        assert_eq!(html.matches("data-ui-island=\"").count(), 1, "{html}");
+        assert!(html.contains(&format!("data-ui-island=\"{}\"", MAP.url())), "{html}");
+        let props = html
+            .split("data-ui-props=\"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("the props attribute");
+        let read: serde_json::Value = serde_json::from_str(
+            &props
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&amp;", "&"),
+        )
+        .expect("the props read back as JSON");
+        assert_eq!(read["city"], text, "the text comes back as it was");
+    }
+}
+
+/// Only the app's own island scripts are served, by name, under the toolkit's mount.
+#[tokio::test]
+async fn only_the_apps_island_scripts_are_served() {
+    use navree_ui::IslandScript;
+
+    static CLOCK: IslandScript = IslandScript::new(
+        "clock",
+        b"export function mount(body) { body.textContent = '10:30 IST'; }",
+        1024,
+    );
+    struct Islands;
+    impl Module for Islands {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(CLOCK);
+        }
+    }
+    let app = builder().module(UiModule).module(Islands).build().await;
+    let ok = app
+        .client()
+        .get(&CLOCK.url())
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(ok.header("content-type"), Some("text/javascript; charset=utf-8"));
+    assert_eq!(
+        ok.header("cache-control"),
+        Some("public, max-age=31536000, immutable")
+    );
+    assert!(ok.text().contains("10:30 IST"));
+    for path in [
+        "/_navree/ui/island/map-000000000000.js",
+        "/_navree/ui/island/clock.js",
+        "/_navree/ui/island/..%2Fcore.js",
+    ] {
+        app.client().get(path).send().await.assert_status(404);
+    }
+}

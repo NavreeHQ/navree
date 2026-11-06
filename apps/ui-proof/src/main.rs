@@ -30,6 +30,7 @@
 //! | `/otp` | one-time code fields of every length and state, a form that posts them and one that sends itself |
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
+//! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -54,6 +55,7 @@ mod display;
 mod flow;
 mod gallery;
 mod icons_flags;
+mod islands;
 mod markdown;
 mod menubar;
 mod menus;
@@ -141,7 +143,10 @@ impl Module for ProofModule {
             .controller::<otp_carousel::CodePages>()
             .controller::<upload::UploadPages>()
             .controller::<markdown::MarkdownPages>()
-            .controller::<charts::ChartPages>();
+            .controller::<charts::ChartPages>()
+            .controller::<islands::IslandPages>();
+        // The script the islands page draws its island with, served by the toolkit.
+        m.contribute(islands::TALLY);
     }
 }
 

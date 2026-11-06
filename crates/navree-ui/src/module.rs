@@ -226,9 +226,11 @@ fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Respons
     response
 }
 
-/// The route of the files, there only while the toolkit is wanted.
+/// The route of the files, there only while the toolkit is wanted, with the island
+/// scripts the app's modules contributed.
 struct Assets {
     wanted: bool,
+    islands: Arc<Vec<crate::island::Served>>,
 }
 
 impl Injectable for Assets {
@@ -239,8 +241,14 @@ impl Injectable for Assets {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let gate = r.get::<UiGate>().await?;
+            let scripts = r
+                .app()
+                .contributions::<crate::IslandScript>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
+                islands: Arc::new(crate::island::served(scripts)),
             })
         })
     }
@@ -264,6 +272,20 @@ impl Controller for Assets {
                 },
             )
             .name("ui.assets")
+            .public(),
+            // An island's script, of the app's own: by its name and content hash.
+            RouteDef::on(
+                Method::GET,
+                format!("!{}/{{file}}", crate::island::ISLAND_PATH),
+                {
+                    let islands = self.islands.clone();
+                    move |Path(file): Path<String>, headers: HeaderMap| {
+                        let islands = islands.clone();
+                        async move { crate::island::respond(&file, &headers, &islands) }
+                    }
+                },
+            )
+            .name("ui.islands")
             .public(),
             // A theme of your own: the file's name is the theme, read by a strict parser.
             RouteDef::on(

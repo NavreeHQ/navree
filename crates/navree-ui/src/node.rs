@@ -279,6 +279,9 @@ impl Uses {
     /// The menu bar module: context menus, menu bars and the navigation menu, on the
     /// dropdown menu's own popups. Its stylesheet comes with it.
     pub const MENUBAR: Self = Self(1 << 23);
+    /// The islands module: imports the script of each [`Island`](crate::Island) on the
+    /// page, mounts it, gives it new props and lets it go when it leaves.
+    pub const ISLAND: Self = Self(1 << 10);
 
     /// Both sets together.
     #[must_use]

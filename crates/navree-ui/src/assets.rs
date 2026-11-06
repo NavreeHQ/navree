@@ -86,6 +86,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::OTP, OTP_URL),
         (Uses::CAROUSEL, CAROUSEL_URL),
         (Uses::MENUBAR, MENUBAR_URL),
+        (Uses::ISLAND, ISLANDS_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]
@@ -159,12 +160,35 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
     let Some((asset, current)) = lookup(file) else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    answer(
+        asset.hash,
+        asset.content_type,
+        current,
+        request,
+        Bytes::from_static(asset.bytes),
+        asset.gzip.map(Bytes::from_static),
+        asset.brotli.map(Bytes::from_static),
+    )
+}
+
+/// A file named by its content `hash`, in the form the client takes: `immutable` when
+/// the name's hash is `current`, else uncached. The toolkit's own files and the app's
+/// island scripts are answered alike.
+pub(crate) fn answer(
+    hash: &str,
+    content_type: &'static str,
+    current: bool,
+    request: &HeaderMap,
+    bytes: Bytes,
+    gzip: Option<Bytes>,
+    brotli: Option<Bytes>,
+) -> Response {
     let cache = if current {
         "public, max-age=31536000, immutable"
     } else {
         "no-cache"
     };
-    let etag = HeaderValue::from_str(&format!("\"{}\"", asset.hash))
+    let etag = HeaderValue::from_str(&format!("\"{hash}\""))
         .unwrap_or(HeaderValue::from_static("\"navree-ui\""));
     if request
         .get(IF_NONE_MATCH)
@@ -183,21 +207,22 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
         .get(ACCEPT_ENCODING)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    let (bytes, encoding) = match (asset.brotli, asset.gzip) {
+    let compressed = gzip.is_some() || brotli.is_some();
+    let (bytes, encoding) = match (brotli, gzip) {
         (Some(brotli), _) if accepts(accept, "br") => (brotli, Some("br")),
         (_, Some(gzip)) if accepts(accept, "gzip") => (gzip, Some("gzip")),
-        _ => (asset.bytes, None),
+        _ => (bytes, None),
     };
     let mut response = (
         [
-            (CONTENT_TYPE, HeaderValue::from_static(asset.content_type)),
+            (CONTENT_TYPE, HeaderValue::from_static(content_type)),
             (CACHE_CONTROL, HeaderValue::from_static(cache)),
             (ETAG, etag),
         ],
-        Bytes::from_static(bytes),
+        bytes,
     )
         .into_response();
-    if asset.gzip.is_some() {
+    if compressed {
         response
             .headers_mut()
             .insert(VARY, HeaderValue::from_static("accept-encoding"));

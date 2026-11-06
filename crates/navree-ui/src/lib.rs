@@ -85,6 +85,7 @@ pub mod flow;
 pub mod form;
 pub mod html;
 pub mod icons;
+pub mod island;
 pub mod localize;
 pub mod markdown;
 mod module;
@@ -118,6 +119,7 @@ pub use flow::{
 };
 pub use form::{FormView, Money, Submit};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
+pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};
 pub use markdown::{CodeBlock, Markdown, MarkdownLabels, MarkdownTrust};
 pub use module::{UiModule, UiNeed, UiOnDemand};

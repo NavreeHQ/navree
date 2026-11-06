@@ -345,6 +345,30 @@ fn the_menubar_module_is_at_most_3_kb_gzip() {
     assert!(size("menubar") <= 3 * 1024, "{}", size("menubar"));
 }
 
+/// What mounts islands. Each island's own script has the ceiling its app gives it, checked
+/// when the app compiles (`IslandScript::new`).
+#[test]
+fn the_islands_module_is_at_most_1_kb_gzip() {
+    assert!(size("islands") <= 1024, "{}", size("islands"));
+}
+
+/// An island loads the islands module and nothing else of the toolkit's: its own script
+/// comes once the page has loaded, from the address on the island.
+#[test]
+fn a_page_with_an_island_loads_the_islands_module_alone() {
+    use navree_ui::{Island, IslandScript};
+
+    static DEPOTS: IslandScript = IslandScript::new("depots", b"export function mount() {}", 1024);
+    let page = View::new("x").body(Island::new("depots", &DEPOTS).props(&["Ludhiana", "Patiala"]));
+    assert_eq!(page.uses(), Uses::ISLAND);
+    let html = page.to_html();
+    assert_eq!(linked(&html).0, ["islands"], "{html}");
+    assert!(
+        !html.contains(&format!("<script type=\"module\" src=\"{}\"", DEPOTS.url())),
+        "the island's own script is the islands module's to import: {html}"
+    );
+}
+
 /// Each of these components links a stylesheet of its own instead of growing the one every
 /// page loads, so the one stays where it was. The theme builder's sheet is one of them.
 #[test]
@@ -502,6 +526,7 @@ fn no_two_modules_share_a_bit() {
         Uses::OTP,
         Uses::CAROUSEL,
         Uses::MENUBAR,
+        Uses::ISLAND,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {
