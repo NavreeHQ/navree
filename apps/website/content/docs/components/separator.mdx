@@ -19,6 +19,20 @@ Use a line when space alone doesn't set two things apart. Most of the time, the 
 
 <UiChoose name="divider" current="Separator" />
 
+## In a page
+
+A card for a deal sets its summary apart from its facts with a horizontal line, and sets the facts apart from each other with vertical ones:
+
+```rust
+Card::titled("Sutlej Supply renewal").body(Stack::gap(3).children((
+    Text::muted("Proposal · closes 30 November"),
+    Separator::horizontal(),
+    Row::gap(3).children(("Gurpreet Singh", Separator::vertical(), "₹48,000")),
+)))
+```
+
+Leave the line out where the gap of the `Stack` is enough.
+
 ## Anatomy
 
 <UiAnatomy component="separator" />
@@ -36,3 +50,14 @@ Use a line when space alone doesn't set two things apart. Most of the time, the 
 ### Separator
 
 <UiProps type="Separator" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/ui/layout/" title="Stack, Row, Grid and Container">
+    The spacing that usually does the job of a line.
+  </LinkCard>
+  <LinkCard href="/docs/components/card/" title="Card">
+    A titled box for related facts.
+  </LinkCard>
+</LinkCards>

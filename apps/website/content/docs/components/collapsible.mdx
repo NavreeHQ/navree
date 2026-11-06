@@ -18,6 +18,22 @@ Collapsible::new("Advanced settings")
 
 <UiChoose name="disclosure" current="Collapsible" />
 
+## In a page
+
+A settings card keeps the common switch in view and tucks the rarely changed ones away:
+
+```rust
+Card::titled("Workspace settings").body(Stack::gap(4).children((
+    Switch::new("digest").label("Send a daily digest"),
+    Collapsible::new("Advanced settings").body(Stack::gap(3).children((
+        Switch::new("audit").label("Keep an audit log"),
+        Switch::new("sso").label("Require single sign-on"),
+    ))),
+)))
+```
+
+The section starts closed. Add `.open(true)` where most readers need it open.
+
 ## Anatomy
 
 <UiAnatomy component="collapsible" />
@@ -40,3 +56,14 @@ Collapsible::new("Advanced settings")
 ### Collapsible
 
 <UiProps type="Collapsible" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/accordion/" title="Accordion">
+    Several sections, with one open at a time if you ask.
+  </LinkCard>
+  <LinkCard href="/docs/components/card/" title="Card">
+    A titled box to put the section in.
+  </LinkCard>
+</LinkCards>

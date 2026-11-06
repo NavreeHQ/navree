@@ -19,6 +19,19 @@ Use it when you know how much is done: an upload, an import, a step of a batch.
 
 <UiChoose name="loading" current="Progress" />
 
+## In a page
+
+An import shows how many rows are done. The region asks the server again every two seconds, so the bar moves as the import works:
+
+```rust
+Region::new("import")
+    .src("/fragments/import")
+    .poll(Duration::from_secs(2))
+    .children(Progress::new(640, 1000, "Importing contacts"))
+```
+
+The fragment the route answers draws the same `Progress` with the new value, and the region swaps it in.
+
 ## Anatomy
 
 <UiAnatomy component="progress" />
@@ -43,3 +56,14 @@ The value is held to the maximum, and the maximum is at least 1.
 ### Progress
 
 <UiProps type="Progress" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/upload/" title="Upload">
+    A file dropped in, with its own progress.
+  </LinkCard>
+  <LinkCard href="/docs/ui/regions/" title="Regions and live updates">
+    Polling a part of the page.
+  </LinkCard>
+</LinkCards>

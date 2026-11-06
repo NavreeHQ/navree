@@ -19,6 +19,23 @@ Use it to name keys. For a status or a category, use a [Badge](/docs/components/
 
 <UiChoose name="label" current="Kbd" />
 
+## In a page
+
+A list of shortcuts puts each key beside what it does. The inbox example app lists its keys this way in a dialog:
+
+```rust
+Stack::gap(2).children((
+    Row::gap(3).children((Kbd::new("j"), Text::new("Next conversation"))),
+    Row::gap(3).children((Kbd::new("k"), Text::new("Previous conversation"))),
+    Row::gap(3).children((
+        Row::gap(1).children((Kbd::new("Ctrl"), "+", Kbd::new("K"))),
+        Text::new("Open the command palette"),
+    )),
+))
+```
+
+The keys go in the `Row` as separate `Kbd`s, with a plain `+` between a chord. [A tour of the inbox](/docs/example-app/inbox-tour/#keys-and-the-palette) shows the whole dialog.
+
 ## Anatomy
 
 <UiAnatomy component="kbd" />
@@ -36,3 +53,14 @@ Use it to name keys. For a status or a category, use a [Badge](/docs/components/
 ### Kbd
 
 <UiProps type="Kbd" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/command/" title="Command">
+    The palette that `Ctrl` and `K` open.
+  </LinkCard>
+  <LinkCard href="/docs/components/input-group/" title="InputGroup">
+    A field with a hint such as a key at its end.
+  </LinkCard>
+</LinkCards>
