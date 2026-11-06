@@ -1,6 +1,73 @@
 {
   "components": {
     "schemas": {
+      "AbilityRule": {
+        "description": "One rule of the signed-in user's abilities, as CASL's `createMongoAbility` takes it\n(`GET /api/me/abilities` answers with a list of them).",
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "conditions": {
+            "description": "Conditions on the record's fields, in the MongoDB query language.",
+            "type": "object"
+          },
+          "fields": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "inverted": {
+            "description": "Whether the rule takes the ability away (`cannot`).",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "Why the rule exists, for the message of a refusal.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "subject"
+        ],
+        "type": "object"
+      },
       "AcceptInvitationInput": {
         "description": "The body of `POST /invitations/accept`. `Debug` never shows the token.",
         "properties": {
@@ -1827,6 +1894,29 @@
         ],
         "type": "object"
       },
+      "SessionLoginInput": {
+        "description": "`POST /auth/session/login`. `Debug` never shows the password.",
+        "properties": {
+          "email": {
+            "description": "The email address.",
+            "type": "string"
+          },
+          "password": {
+            "description": "The password.",
+            "format": "password",
+            "type": "string"
+          },
+          "remember": {
+            "description": "Keep the browser signed in for `auth.session.remember_days`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
       "SessionResource": {
         "description": "One of the user's sessions (a refresh-token family), as `GET\n/auth/sessions` lists it.",
         "properties": {
@@ -1898,6 +1988,26 @@
           "current",
           "platform"
         ],
+        "type": "object"
+      },
+      "SessionTwoFactorInput": {
+        "description": "`POST /auth/session/2fa/verify`: a code from the authenticator app or a\nrecovery code (exactly one).",
+        "properties": {
+          "code": {
+            "description": "A current code from the authenticator app.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_code": {
+            "description": "One of the recovery codes (single use).",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "SocialCallback": {
@@ -2628,6 +2738,158 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/_navree/ui/appearance": {
+      "post": {
+        "operationId": "ui.appearance",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/_navree/ui/island/{file}": {
+      "get": {
+        "operationId": "ui.islands",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/_navree/ui/theme/{file}": {
+      "get": {
+        "operationId": "ui.theme",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/_navree/ui/{file}": {
+      "get": {
+        "operationId": "ui.assets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/account/two-factor": {
+      "get": {
+        "operationId": "auth.pages.two_factor_setup",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "auth.pages.two_factor_setup.start",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/account/two-factor/confirm": {
+      "post": {
+        "operationId": "auth.pages.two_factor_setup.confirm",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin": {
       "get": {
         "operationId": "helm.dashboard",
@@ -3206,62 +3468,6 @@
               }
             },
             "description": "Forbidden"
-          }
-        },
-        "security": [
-          {
-            "cookie": []
-          },
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/login": {
-      "get": {
-        "operationId": "helm.login",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "post": {
-        "operationId": "helm.login.attempt",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/admin/login/two-factor": {
-      "post": {
-        "operationId": "helm.login.two_factor",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/admin/logout": {
-      "post": {
-        "operationId": "helm.logout",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpError"
-                }
-              }
-            },
-            "description": "Unauthorized"
           }
         },
         "security": [
@@ -5313,6 +5519,149 @@
         ]
       }
     },
+    "/api/auth/session/2fa/verify": {
+      "post": {
+        "operationId": "auth.session.two_factor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionTwoFactorInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Finish a browser's two-factor sign-in with a code or a recovery code",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/session/login": {
+      "post": {
+        "description": "Signs the browser in on the session cookie (no token is issued). When the account uses two-factor authentication the answer is `{\"two_factor_required\": true}`; finish with `POST /auth/session/2fa/verify`. The request carries the CSRF token of the session as `X-XSRF-TOKEN`.",
+        "operationId": "auth.session.login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionLoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Sign a browser in with email and password",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/api/auth/sessions": {
       "get": {
         "operationId": "auth.sessions.index",
@@ -6481,7 +6830,17 @@
         "operationId": "access.abilities",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AbilityRule"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "The rules, with an ETag"
           },
           "304": {
             "description": "Not Modified"
@@ -9163,8 +9522,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "101": {
+            "description": "Switching Protocols: the connection is now a Pusher protocol 7 WebSocket."
           }
         },
         "summary": "Pusher protocol 7 WebSocket",
@@ -9232,7 +9591,27 @@
         "operationId": "realtime.auth",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "auth": {
+                      "description": "`<app key>:<signature>`.",
+                      "type": "string"
+                    },
+                    "channel_data": {
+                      "description": "For a presence channel: the member, as JSON text.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "auth"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The signature that lets the client subscribe"
           },
           "400": {
             "content": {
@@ -9333,12 +9712,63 @@
         ]
       }
     },
+    "/csrf-cookie": {
+      "get": {
+        "description": "Starts a session if needed and sets the `XSRF-TOKEN` cookie; send its URL-decoded value as `X-XSRF-TOKEN` on every state-changing request.",
+        "operationId": "session.csrf-cookie",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Set the XSRF-TOKEN cookie",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
+    "/forgot-password": {
+      "get": {
+        "operationId": "auth.pages.forgot_password",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth.pages.forgot_password.submit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health.live",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "up"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The process answers"
           }
         },
         "summary": "Liveness: the process answers HTTP",
@@ -9352,7 +9782,114 @@
         "operationId": "health.ready",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "checks": {
+                      "additionalProperties": {
+                        "properties": {
+                          "error": {
+                            "description": "Why the check is down.",
+                            "type": "string"
+                          },
+                          "latency_ms": {
+                            "description": "How long the check took.",
+                            "type": "integer"
+                          },
+                          "status": {
+                            "enum": [
+                              "up",
+                              "down"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "latency_ms"
+                        ],
+                        "type": "object"
+                      },
+                      "description": "Each check's result, by its name.",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "status": {
+                      "description": "`up` when every check is up.",
+                      "enum": [
+                        "up",
+                        "down"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Every check is up"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "checks": {
+                      "additionalProperties": {
+                        "properties": {
+                          "error": {
+                            "description": "Why the check is down.",
+                            "type": "string"
+                          },
+                          "latency_ms": {
+                            "description": "How long the check took.",
+                            "type": "integer"
+                          },
+                          "status": {
+                            "enum": [
+                              "up",
+                              "down"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "latency_ms"
+                        ],
+                        "type": "object"
+                      },
+                      "description": "Each check's result, by its name.",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "status": {
+                      "description": "`up` when every check is up.",
+                      "enum": [
+                        "up",
+                        "down"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "At least one check is down"
           }
         },
         "summary": "Readiness: every health check; 503 when one is down",
@@ -9361,18 +9898,249 @@
         ]
       }
     },
+    "/impersonate/stop": {
+      "post": {
+        "operationId": "auth.pages.impersonation.stop",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/metrics": {
       "get": {
         "operationId": "metrics",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "text/plain; version=0.0.4": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The metrics in the Prometheus text format."
           }
         },
         "summary": "Prometheus metrics",
         "tags": [
           "Observability"
         ]
+      }
+    },
+    "/notifications/bell": {
+      "get": {
+        "operationId": "notifications.bell",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "notifications.bell.read_all",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/notifications/{id}/mark-read": {
+      "post": {
+        "operationId": "notifications.bell.read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/operations/{id}/progress": {
+      "get": {
+        "operationId": "operations.progress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/reset-password": {
+      "get": {
+        "operationId": "auth.pages.reset_password",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth.pages.reset_password.submit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sign-in": {
+      "get": {
+        "operationId": "auth.pages.sign_in",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth.pages.sign_in.submit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sign-in/two-factor": {
+      "get": {
+        "operationId": "auth.pages.two_factor",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth.pages.two_factor.submit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sign-out": {
+      "post": {
+        "operationId": "auth.pages.sign_out",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/workspace/switch": {
@@ -9457,6 +10225,9 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "Session"
     },
     {
       "name": "Access"
