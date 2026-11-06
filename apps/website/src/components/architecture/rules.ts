@@ -295,7 +295,7 @@ function noInjection(): Built {
     policyLacking,
     () => lacking("crates/navree-ui/src/view.rs", "fn no_inline_code_is_allowed_by_the_policy()"),
     () => lacking("crates/navree-ui/runtime/src/dom.js", "goes through the prototype"),
-    () => lacking("e2e/ui/tests/hostile.test.mjs", hostile, '["firefox", firefox]'),
+    () => lacking("e2e/ui/tests/hostile.test.mjs", hostile, '"chromium,firefox"'),
     () => docsLacking(docs.href),
   );
   if (missing) return { id, missing };
