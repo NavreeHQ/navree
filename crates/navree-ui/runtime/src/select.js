@@ -381,8 +381,12 @@ function open(root, where = "selected") {
   }
   try { p.popup.showPopover(); } catch {}
   p.popup.dispatchEvent(new Event("ui:place"));
-  if (searched(root)) queue(root, s.q, 0);
-  else view(root);
+  // The server's answers are this list's rows while it is open: a morph of the page, which draws the list as it
+  // first was, leaves them as they are.
+  if (searched(root)) {
+    p.list.setAttribute("data-ui-keep", "");
+    queue(root, s.q, 0);
+  } else view(root);
   const rows = live(root);
   if (where === "first") activate(root, rows[0] || null);
   else if (where === "last") activate(root, rows[rows.length - 1] || null);
@@ -400,6 +404,7 @@ function close(root, refocus) {
   p.control?.setAttribute("aria-expanded", "false");
   p.control?.removeAttribute("aria-activedescendant");
   p.list.removeAttribute("aria-busy");
+  p.list.removeAttribute("data-ui-keep");
   try { p.popup?.hidePopover(); } catch {}
   activate(root, null);
   s.q = "";
@@ -414,10 +419,11 @@ function close(root, refocus) {
 
 /**
  * Shows the rows that match the typed text, at most SHOWN of them. A searched list
- * is the server's answer already: it is not filtered again.
- * @param {Element} root
+ * is the server's answer already: it is not filtered again. `quiet`: the rows are drawn
+ * again as they were (a swap), so how many there are is not said again.
+ * @param {Element} root @param {boolean} [quiet]
  */
-function view(root) {
+function view(root, quiet = false) {
   const p = parts(root), s = stateOf(root);
   const q = norm(s.q).trim(), tokens = q ? q.split(/\s+/) : [];
   const pal = p.palette;
@@ -468,7 +474,7 @@ function view(root) {
     p.note.textContent = text;
     p.note.hidden = !text;
   }
-  if (say_) say(root, say_, 250, true);
+  if (say_ && !quiet) say(root, say_, 250, true);
   highlight(root, tokens);
   // The list got taller or shorter: the popup follows, on the side it opened on.
   if (s.open) p.popup?.dispatchEvent(new Event("ui:place"));
@@ -665,6 +671,8 @@ function land(root, html, q, append) {
   const target = p.palette ? $(root, "[data-slot=command-remote]") || p.list : p.list;
   if (append) { for (const a of target.querySelectorAll("[data-action]")) a.remove(); target.append(...rows); }
   else target.replaceChildren(...rows);
+  // The palette's group of answers is empty as the server draws the page: a morph leaves it as it is.
+  if (target !== p.list) target.toggleAttribute("data-ui-keep", !!target.firstChild);
   s.index = null;
   if (!append) activate(root, null, false);
   sync(root);
@@ -962,13 +970,13 @@ function fill(dlg) {
   stateOf(dlg).index = null;
 }
 
-/** Makes a closed palette ready to open: the Recent group filled, no text, no row on. @param {Element} dlg */
-function prepare(dlg) {
+/** Makes a closed palette ready to open: the Recent group filled, no text, no row on. @param {Element} dlg @param {boolean} [quiet] */
+function prepare(dlg, quiet = false) {
   fill(dlg);
   stateOf(dlg).q = "";
   const input = parts(dlg).control;
   if (input) input.value = "";
-  view(dlg);
+  view(dlg, quiet);
   activate(dlg, null, false);
 }
 
@@ -981,7 +989,7 @@ function refresh(dlg) {
   const s = stateOf(dlg), was = s.active, input = parts(dlg).control;
   if (input) s.q = input.value;
   fill(dlg);
-  view(dlg);
+  view(dlg, true);
   const rows = live(dlg), row = was && (rows.find((o) => o === was) || rows.find((o) => valueOf(o) === valueOf(was)));
   // With no row on, none is: only typing or the arrows put one there.
   if (row || !was) activate(dlg, row || null, false);
@@ -1199,7 +1207,9 @@ on(document, "close", (e) => {
     // and what the server answered for the last text isn't there when it opens again.
     halt(dlg);
     stateOf(dlg).cache.clear();
-    $(dlg, "[data-slot=command-remote]")?.replaceChildren();
+    const remote = $(dlg, "[data-slot=command-remote]");
+    remote?.replaceChildren();
+    remote?.removeAttribute("data-ui-keep");
     prepare(dlg);
   }
 }, true);
@@ -1210,7 +1220,7 @@ function boot() {
   // An open palette keeps what was typed in it and its row: a swap changes the rows, not where the person is.
   for (const dlg of /** @type {NodeListOf<HTMLDialogElement>} */ (every("dialog[data-ui-palette]"))) {
     if (dlg.open) refresh(dlg);
-    else prepare(dlg);
+    else prepare(dlg, true);
   }
 }
 boot();
@@ -1224,7 +1234,7 @@ on(document, "ui:swap", () => {
     const p = parts(root), s = stateOf(root);
     if (!s.open) continue;
     p.control.setAttribute("aria-expanded", "true");
-    view(root);
+    view(root, true);
     if (s.active?.isConnected) activate(root, s.active, false);
   }
 });

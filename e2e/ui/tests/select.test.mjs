@@ -1237,6 +1237,94 @@ for (const browserName of browsers) {
       await close();
     });
 
+    /**
+     * Draws the element `id` again as the server first drew it, as a live region's answer does: it is made a
+     * region of the page it is on, and fetched and morphed in place.
+     */
+    const redraw = (page, id) =>
+      page.evaluate(async (target) => {
+        const el = document.getElementById(target);
+        el.setAttribute("data-ui-region", "");
+        el.setAttribute("data-ui-src", location.pathname);
+        const swapped = new Promise((resolve) => document.addEventListener("ui:swap", resolve, { once: true }));
+        const detail = {};
+        el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
+        await detail.done;
+        await swapped;
+      }, id);
+    /** From now on, what the live region `selector` comes to say (not when it is emptied). */
+    const listen = (page, selector) =>
+      page.evaluate((sel) => {
+        const live = document.querySelector(sel);
+        window.__said = [];
+        new MutationObserver(() => live.textContent && window.__said.push(live.textContent)).observe(live, { childList: true, characterData: true, subtree: true });
+      }, selector);
+    const said = async (page) => {
+      // Past the wait a count of results is said after, and the frame it is written in.
+      await page.waitForTimeout(700);
+      return page.evaluate(() => window.__said);
+    };
+
+    test("A combobox searched on the server and open keeps its answers, the text typed and the row on when it is drawn again, and doesn't say how many again", async () => {
+      const { page, close } = await open("/select");
+      const input = page.locator("#combo-search [data-slot=combobox-input]");
+      await input.click();
+      await input.fill("");
+      const answered = page.waitForResponse((r) => r.url().includes("/select/people") && new URL(r.url()).searchParams.get("q") === "gra");
+      await input.pressSequentially("gra", { delay: 30 });
+      await answered;
+      // The count of results is said a moment after the rows are in.
+      await page.waitForFunction(() => /result/.test(document.querySelector("#combo-search [data-slot=select-status]")?.textContent || ""));
+      await page.waitForTimeout(700);
+      await page.keyboard.press("ArrowDown");
+      const seen = () =>
+        page.evaluate(() => {
+          const root = document.getElementById("combo-search"), box = root.querySelector("[data-slot=combobox-input]"), row = root.querySelector("[role=option][data-active]");
+          return {
+            open: root.hasAttribute("data-open") && root.querySelector("[data-slot=select-popup]").matches(":popover-open"),
+            expanded: box.getAttribute("aria-expanded"),
+            value: box.value,
+            rows: [...root.querySelectorAll("[role=option]:not([hidden])")].map((o) => o.textContent.trim()),
+            active: row ? row.textContent.trim() : null,
+            pointed: !!row && box.getAttribute("aria-activedescendant") === row.id,
+            focused: document.activeElement === box,
+          };
+        });
+      const before = await seen();
+      assert.deepEqual([before.open, before.expanded, before.value, before.focused, before.pointed], [true, "true", "gra", true, true], JSON.stringify(before));
+      assert.ok(before.rows.length > 0, JSON.stringify(before.rows));
+      await listen(page, "#combo-search [data-slot=select-status]");
+      // The server draws the list empty: its answers are the browser's while it is open.
+      await redraw(page, "combo-search");
+      assert.deepEqual(await seen(), before, "the list, the text and the row on are as they were");
+      assert.deepEqual(await said(page), [], "how many results there are is not said again");
+      // Closed, the list is the page's again: the next open asks the server.
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#combo-search [data-slot=select-list][data-ui-keep]").count(), 0);
+      await close();
+    });
+
+    test("An open palette keeps the server's answers when it is drawn again, and doesn't say how many results again", async () => {
+      const { page, close } = await open("/select");
+      await page.keyboard.press("Control+k");
+      const answered = page.waitForResponse((r) => r.url().includes("/select/palette-search") && new URL(r.url()).searchParams.get("q") === "grace");
+      await page.keyboard.type("grace");
+      await answered;
+      await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
+      await page.waitForFunction(() => /result/.test(document.querySelector("#palette [data-slot=select-status]")?.textContent || ""));
+      await page.waitForTimeout(700);
+      const before = await inPalette(page);
+      assert.ok(before.rows.some((r) => /Grace/.test(r)), JSON.stringify(before.rows));
+      await listen(page, "#palette [data-slot=select-status]");
+      await redraw(page, "palette");
+      assert.deepEqual(await inPalette(page), before, "the answers, the text and the row on are as they were");
+      assert.ok((await page.locator("#palette [data-slot=command-remote] [role=option]").count()) > 0);
+      assert.deepEqual(await said(page), [], "how many results there are is not said again");
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#palette [data-slot=command-remote][data-ui-keep]").count(), 0, "a closed palette's answers are gone");
+      await close();
+    });
+
     test("The select module reads the page through the prototype: a named element can't stop it", async () => {
       const { page, problems, close } = await open("/select");
       // Elements named like the properties the module reads would shadow them on the document.
