@@ -1,0 +1,93 @@
+# Connectors against real servers and emulators.
+#
+# rust-suites.yml covers the connectors whose server is one container away
+# (databases, brokers, S3, search, Mailpit over plain text). The connectors here
+# need more: a certificate no public authority signed, an IMAP server, an AWS
+# emulator, an identity provider, an LDAP server, a collector, a DNS server, a
+# Pub/Sub emulator, a host with systemd and sshd. scripts/integration-services.sh
+# starts them from scripts/services/integrations.yml and prints the NAVREE_TEST_*
+# variables the suites read; the suites are marked #[ignore] and run here with
+# `-- --ignored`.
+# NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server into a failure instead
+# of a skip.
+#
+# One job per group of servers, so a run starts only what its tests use:
+#
+# - mail:     SMTP over TLS to Mailpit with a trusted certificate, SES to an
+#             emulator, mail fetched from IMAP and POP3, Gmail's Pub/Sub push.
+#
+# The schedule is weekly, after rust-suites.yml. Run it by hand
+# (workflow_dispatch) after changing one of the connectors, and before a
+# release.
+name: Integrations
+
+on:
+  schedule:
+    # Sundays 05:17 UTC.
+    - cron: "17 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      mail:
+        description: Mail (SMTP over TLS, SES, IMAP and POP3, Pub/Sub)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integrations-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Debug info makes test binaries several times larger and nothing here reads
+  # it; no incremental state is kept between runs.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  RUST_BACKTRACE: "1"
+  # A missing server fails a test instead of skipping it.
+  NAVREE_TEST_REQUIRE_SERVICES: "1"
+
+jobs:
+  mail:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mail)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binaries
+        run: |
+          # The images download while the compiler works.
+          scripts/integration-services.sh pull mail &
+          pulling=$!
+          cargo test --locked -p navree-mail --test mail --no-run
+          wait "$pulling"
+
+      - name: Start the servers
+        id: servers
+        run: scripts/integration-services.sh start mail
+
+      - name: SMTP over TLS to Mailpit
+        run: cargo test --locked -p navree-mail --test mail real_servers -- --ignored --nocapture
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done

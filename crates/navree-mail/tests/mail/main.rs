@@ -18,6 +18,7 @@ mod module;
 mod named;
 mod options;
 mod queue;
+mod real_servers;
 mod render;
 mod routes;
 mod servers;

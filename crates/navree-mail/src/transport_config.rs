@@ -23,7 +23,7 @@ use crate::{
 ///
 /// | Transport | Table | Shorthand |
 /// |---|---|---|
-/// | [`SmtpTransport`] | `{ type = "smtp", url = "smtps://user:pass@host", dkim = {..} }` | `"smtps://user:pass@host"` / `"smtp://..."` |
+/// | [`SmtpTransport`] | `{ type = "smtp", url = "smtps://user:pass@host", dkim = {..}, ca = "-----BEGIN CERTIFICATE-----..." }` | `"smtps://user:pass@host"` / `"smtp://..."` |
 /// | [`SesTransport`] | `{ type = "ses", region, access_key_id, secret_access_key, configuration_set }` | `"ses://KEY_ID:SECRET@eu-west-1?configuration_set=events"` |
 /// | [`MailgunTransport`] | `{ type = "mailgun", domain, api_key, region }` | `"mailgun://API_KEY@mg.acme.test?region=eu"` |
 /// | [`PostmarkTransport`] | `{ type = "postmark", server_token, message_stream }` | `"postmark://TOKEN@api.postmarkapp.com?stream=outbound"` |
@@ -41,12 +41,16 @@ use crate::{
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum TransportConfig {
     /// SMTP at `url` (see [`SmtpTransport::from_url`]), DKIM-signed when
-    /// `dkim` is set.
+    /// `dkim` is set, and trusting the certificate in `ca` besides the
+    /// public authorities (see [`SmtpTransport::with_root_certificate`]).
     Smtp {
         /// The connection URL; it usually holds a password.
         url: Secret<String>,
         /// DKIM signing.
         dkim: Option<DkimConfig>,
+        /// One more certificate or certificate authority to trust, as PEM
+        /// text.
+        ca: Option<String>,
     },
     /// Amazon SES.
     Ses(SesConfig),
@@ -72,7 +76,19 @@ impl TransportConfig {
         TransportConfig::Smtp {
             url: Secret::new(url.into()),
             dkim: None,
+            ca: None,
         }
+    }
+
+    /// This SMTP transport, also trusting the certificate in `pem` (see
+    /// [`SmtpTransport::with_root_certificate`]). Any other transport is
+    /// returned as it is.
+    #[must_use]
+    pub fn with_ca(mut self, pem: impl Into<String>) -> Self {
+        if let TransportConfig::Smtp { ca, .. } = &mut self {
+            *ca = Some(pem.into());
+        }
+        self
     }
 
     /// The transport's type: `smtp`, `ses`, `mailgun`, `postmark`,
@@ -95,8 +111,11 @@ impl TransportConfig {
     /// [`MailError::Config`].
     pub fn build(&self) -> Result<Arc<dyn MailTransport>, MailError> {
         Ok(match self {
-            TransportConfig::Smtp { url, dkim } => {
+            TransportConfig::Smtp { url, dkim, ca } => {
                 let mut transport = SmtpTransport::from_url(url.expose())?;
+                if let Some(ca) = ca {
+                    transport = transport.with_root_certificate(ca)?;
+                }
                 if let Some(dkim) = dkim {
                     transport = transport.with_dkim(DkimSigner::new(dkim)?);
                 }
@@ -138,8 +157,9 @@ impl TransportConfig {
         let mut map = Map::new();
         map.insert("type".to_owned(), json!(self.kind()));
         match self {
-            TransportConfig::Smtp { url, dkim } => {
+            TransportConfig::Smtp { url, dkim, ca } => {
                 map.insert("url".to_owned(), secret(url));
+                optional(&mut map, "ca", ca.as_ref().map(|pem| json!(pem)));
                 optional(
                     &mut map,
                     "dkim",
@@ -365,6 +385,8 @@ enum Tagged {
         url: Secret<String>,
         #[serde(default)]
         dkim: Option<DkimConfig>,
+        #[serde(default)]
+        ca: Option<String>,
     },
     Ses(SesConfig),
     Mailgun(MailgunConfig),
@@ -381,7 +403,7 @@ enum Tagged {
 impl From<Tagged> for TransportConfig {
     fn from(tagged: Tagged) -> Self {
         match tagged {
-            Tagged::Smtp { url, dkim } => TransportConfig::Smtp { url, dkim },
+            Tagged::Smtp { url, dkim, ca } => TransportConfig::Smtp { url, dkim, ca },
             Tagged::Ses(config) => TransportConfig::Ses(config),
             Tagged::Mailgun(config) => TransportConfig::Mailgun(config),
             Tagged::Postmark(config) => TransportConfig::Postmark(config),

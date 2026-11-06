@@ -1,0 +1,58 @@
+# Servers for the connectors that scripts/services/compose.yml does not cover,
+# on 127.0.0.1 only: a real SMTP server over TLS, an IMAP and POP3 server, an
+# AWS emulator, an identity provider, an LDAP server, an OpenTelemetry
+# Collector, a DNS server, a Pub/Sub emulator and an Ubuntu host with systemd
+# and sshd.
+#
+# scripts/integration-services.sh drives this file: it writes the files the
+# containers mount, starts them, waits until each answers, sets up the data the
+# suites expect and prints the NAVREE_TEST_* variables they read. The tests
+# that use these servers are marked #[ignore]; the integrations workflow
+# (.github/workflows/integrations.yml) runs them with `-- --ignored`.
+#
+# The containers are called navree-int-<service> and use ports from 12222 up,
+# so they can run beside the servers of scripts/services/compose.yml. The
+# throwaway credentials below only guard servers that live for one job on the
+# loopback interface.
+name: navree-int
+
+services:
+  # Mailpit, twice more, with its HTTP API published so a test can read back
+  # what arrived (compose.yml's two TLS servers publish SMTP only). Both ask
+  # for a login (navree / navree-secret) and answer with a self-signed
+  # certificate that scripts/integration-services.sh writes into
+  # ${NAVREE_INT_STATE}/mailpit; the transport trusts it with its `ca` setting.
+  #
+  #   mailpit-starttls  SMTP 13027, API 18027: STARTTLS required
+  #   mailpit-tls       SMTP 13465, API 18465: TLS from the first byte
+  mailpit-starttls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-int-mailpit-starttls
+    ports: ["127.0.0.1:13027:1025", "127.0.0.1:18027:8025"]
+    volumes:
+      - ${NAVREE_INT_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-starttls
+
+  mailpit-tls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-int-mailpit-tls
+    ports: ["127.0.0.1:13465:1025", "127.0.0.1:18465:8025"]
+    volumes:
+      - ${NAVREE_INT_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-tls

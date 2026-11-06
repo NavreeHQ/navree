@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 use lettre::message::header::{ContentType, HeaderName, HeaderValue};
 use lettre::message::{Attachment as LettreAttachment, MultiPart, SinglePart};
 use lettre::transport::smtp::AsyncSmtpTransportBuilder;
+use lettre::transport::smtp::client::{Certificate, Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use navree_kernel::BoxFuture;
 use url::Url;
@@ -47,6 +48,14 @@ pub enum SmtpTls {
 ///
 /// The connection (and the pool's background task) is created on the first
 /// send, so building the transport needs no network and no runtime.
+///
+/// A server whose certificate no public authority signed (a private
+/// authority, or a self-signed certificate on a mail relay inside your
+/// network) is trusted with
+/// [`with_root_certificate`](SmtpTransport::with_root_certificate), or `ca`
+/// in the transport's settings. The certificate is trusted besides the
+/// public authorities, for this transport only; the server's name is still
+/// checked.
 ///
 /// With a [`DkimSigner`] ([`with_dkim`](SmtpTransport::with_dkim), or
 /// `dkim` in the transport's settings), mail whose sender is in the
@@ -111,6 +120,44 @@ impl SmtpTransport {
     /// The DKIM signer, if any.
     pub fn dkim(&self) -> Option<&DkimSigner> {
         self.dkim.as_ref()
+    }
+
+    /// This transport, also trusting the certificate (or certificate
+    /// authority) in `pem`, a PEM text with one or more `CERTIFICATE`
+    /// blocks. For a server with a private authority's certificate or a
+    /// self-signed one; the public authorities stay trusted, and the
+    /// server's name must still match its certificate.
+    ///
+    /// The transport must use TLS (`smtps://`, or `?tls=required` or
+    /// `?tls=opportunistic`); plain text has no certificate to trust. An
+    /// opportunistic transport still refuses a server whose certificate it
+    /// does not trust, rather than falling back to plain text.
+    ///
+    /// Errors are [`MailError::Config`] and never repeat the text.
+    pub fn with_root_certificate(mut self, pem: &str) -> Result<Self, MailError> {
+        let invalid =
+            |reason: &str| MailError::Config(format!("invalid SMTP certificate: {reason}"));
+        if !pem.contains("-----BEGIN CERTIFICATE-----") {
+            return Err(invalid("expected a PEM text with a CERTIFICATE block"));
+        }
+        let certificate = Certificate::from_pem(pem.as_bytes())
+            .map_err(|_| invalid("the certificate cannot be read"))?;
+        let parameters = TlsParameters::builder(self.host.clone())
+            .add_root_certificate(certificate)
+            .build_rustls()
+            .map_err(|_| invalid("the certificate cannot be trusted"))?;
+        let tls = match self.tls {
+            SmtpTls::None => {
+                return Err(invalid(
+                    "the transport uses no TLS; use `smtps://` or `?tls=required`",
+                ));
+            }
+            SmtpTls::Opportunistic => Tls::Opportunistic(parameters),
+            SmtpTls::Required => Tls::Required(parameters),
+            SmtpTls::Implicit => Tls::Wrapper(parameters),
+        };
+        self.builder = self.builder.tls(tls);
+        Ok(self)
     }
 
     /// The message as it goes on the wire: lettre's formatting, with a

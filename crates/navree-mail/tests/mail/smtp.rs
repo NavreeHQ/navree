@@ -241,3 +241,82 @@ async fn smtp_transport_reports_connection_failures() {
         "{error}"
     );
 }
+
+/// A certificate no public authority signed, for a transport to trust.
+const TEST_CERTIFICATE: &str = include_str!("../fixtures/smtp-test-ca.pem");
+
+#[test]
+fn smtp_transport_trusts_one_more_certificate_on_every_tls_mode() {
+    for (url, port, tls) in [
+        ("smtps://mailer:s3cret@127.0.0.1", 465, SmtpTls::Implicit),
+        (
+            "smtp://mailer:s3cret@127.0.0.1?tls=required",
+            587,
+            SmtpTls::Required,
+        ),
+        (
+            "smtp://mailer:s3cret@127.0.0.1?tls=opportunistic",
+            587,
+            SmtpTls::Opportunistic,
+        ),
+    ] {
+        let transport = SmtpTransport::from_url(url)
+            .expect(url)
+            .with_root_certificate(TEST_CERTIFICATE)
+            .expect(url);
+        assert_eq!((transport.port(), transport.tls()), (port, tls), "{url}");
+        assert!(!format!("{transport:?}").contains("s3cret"));
+    }
+}
+
+#[test]
+fn a_certificate_needs_a_tls_transport_and_a_pem_certificate() {
+    let plain = SmtpTransport::from_url("smtp://127.0.0.1:1025").expect("url");
+    let error = plain
+        .with_root_certificate(TEST_CERTIFICATE)
+        .expect_err("plain text has no certificate to trust");
+    assert!(matches!(error, MailError::Config(_)), "{error}");
+    assert!(error.to_string().contains("no TLS"), "{error}");
+
+    let tls = || SmtpTransport::from_url("smtps://127.0.0.1:465").expect("url");
+    for text in [
+        "",
+        "not a certificate s3cret",
+        "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n",
+    ] {
+        let error = tls().with_root_certificate(text).expect_err(text);
+        assert!(matches!(error, MailError::Config(_)), "{error}");
+        assert!(!error.to_string().contains("s3cret"), "{error}");
+    }
+}
+
+#[test]
+fn the_ca_setting_reaches_the_transport_and_survives_the_json_form() {
+    use navree_mail::TransportConfig;
+    use serde_json::json;
+
+    let table = json!({
+        "type": "smtp",
+        "url": "smtps://mailer:s3cret@mail.example.com",
+        "ca": TEST_CERTIFICATE,
+    });
+    let config: TransportConfig = serde_json::from_value(table).expect("a transport");
+    let transport = config.build().expect("the certificate is trusted");
+    assert_eq!(transport.name(), "smtp");
+    // The tenant form reads back what was written.
+    assert_eq!(
+        serde_json::from_value::<TransportConfig>(config.to_json()).expect("reads back"),
+        config
+    );
+
+    // Without a `ca` nothing is written, and a bad one is a configuration
+    // error, as is one on a transport without TLS.
+    let plain: TransportConfig =
+        serde_json::from_value(json!({ "type": "smtp", "url": "smtps://mail.example.com" }))
+            .expect("a transport");
+    assert!(plain.to_json().get("ca").is_none());
+    let bad = TransportConfig::smtp("smtps://mail.example.com").with_ca("nonsense");
+    assert!(matches!(bad.build(), Err(MailError::Config(_))));
+    let no_tls = TransportConfig::smtp("smtp://127.0.0.1:1025").with_ca(TEST_CERTIFICATE);
+    assert!(matches!(no_tls.build(), Err(MailError::Config(_))));
+}

@@ -30,7 +30,7 @@ use serde_json::Value;
 
 /// The value of `variable`; `None` after a notice, or a panic when
 /// `NAVREE_TEST_REQUIRE_SERVICES=1`.
-fn service(variable: &str, test: &str) -> Option<String> {
+pub(crate) fn service(variable: &str, test: &str) -> Option<String> {
     match std::env::var(variable) {
         Ok(value) if !value.trim().is_empty() => Some(value),
         _ => {
@@ -45,7 +45,7 @@ fn service(variable: &str, test: &str) -> Option<String> {
 }
 
 /// A client for Mailpit's API on the loopback interface.
-fn client() -> HttpClient {
+pub(crate) fn client() -> HttpClient {
     HttpClient::new(HttpClientOptions {
         retries: 0,
         ssrf: SsrfPolicy {
@@ -58,14 +58,14 @@ fn client() -> HttpClient {
 }
 
 /// A subject no other test (or earlier run) used.
-fn unique(label: &str) -> String {
+pub(crate) fn unique(label: &str) -> String {
     format!("{label} {}", uuid::Uuid::now_v7().simple())
 }
 
 /// The message with `subject` in the Mailpit server at `api`, once it is
 /// there (Mailpit stores a message before it answers the end of `DATA`; the
 /// wait only covers its search index).
-async fn received(api: &str, subject: &str) -> Value {
+pub(crate) async fn received(api: &str, subject: &str) -> Value {
     let http = client();
     let query = format!("subject:\"{subject}\"");
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -100,7 +100,7 @@ async fn received(api: &str, subject: &str) -> Value {
 }
 
 /// The addresses of a recipient list of Mailpit's JSON (`To`, `Cc`, `Bcc`).
-fn addresses(list: &Value) -> Vec<String> {
+pub(crate) fn addresses(list: &Value) -> Vec<String> {
     list.as_array()
         .map(|entries| {
             entries
@@ -112,7 +112,7 @@ fn addresses(list: &Value) -> Vec<String> {
 }
 
 /// An error and everything under it, lower case, to look for a word in.
-fn whole(error: &MailError) -> String {
+pub(crate) fn whole(error: &MailError) -> String {
     let mut text = format!("{error} {error:?}");
     let mut source = error.source();
     while let Some(inner) = source {
@@ -123,7 +123,7 @@ fn whole(error: &MailError) -> String {
     text.to_lowercase()
 }
 
-fn message(subject: &str) -> Message {
+pub(crate) fn message(subject: &str) -> Message {
     Message::new()
         .from("Gurpreet Kaur <gurpreet@example.com>")
         .to("simran@example.com")
@@ -132,7 +132,7 @@ fn message(subject: &str) -> Message {
 }
 
 /// What a client that checks certificates says about a self-signed one.
-fn mentions_the_certificate(text: &str) -> bool {
+pub(crate) fn mentions_the_certificate(text: &str) -> bool {
     text.contains("certificate")
         || text.contains("unknownissuer")
         || text.contains("unknown issuer")
