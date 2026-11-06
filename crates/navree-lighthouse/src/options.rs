@@ -1,8 +1,9 @@
 //! [`LighthouseOptions`]: the `lighthouse` configuration section.
 
 use std::fmt;
+use std::sync::Arc;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, Environment};
 use navree_contracts::Secret;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
@@ -250,8 +251,9 @@ pub struct LighthouseOptions {
     /// The dashboard's public URL, for links in alerts; `app.url` followed
     /// by `path` when unset.
     pub url: Option<String>,
-    /// The environment label; `production` in release builds and
-    /// `development` in debug builds when unset.
+    /// The environment label; the app's environment (`app.env`, `APP_ENV`)
+    /// when unset, and when the app names none, `production` in release
+    /// builds and `development` in debug builds.
     pub environment: Option<String>,
     /// The release label; `app.version`, else `unknown`, when unset
     /// (`APP_LIGHTHOUSE__RELEASE`, which deploys set).
@@ -414,6 +416,26 @@ impl LighthouseOptions {
     pub fn mount_path(&self) -> &str {
         let path = self.path.trim_end_matches('/');
         if path.is_empty() { "/" } else { path }
+    }
+
+    /// The options with the environment label taken from the app's
+    /// environment, unless `environment` is set.
+    pub(crate) fn with_app_environment(
+        options: Arc<LighthouseOptions>,
+        app_environment: Option<Environment>,
+    ) -> Arc<LighthouseOptions> {
+        let set = options
+            .environment
+            .as_deref()
+            .is_some_and(|environment| !environment.trim().is_empty());
+        match app_environment {
+            Some(environment) if !set => {
+                let mut labelled = (*options).clone();
+                labelled.environment = Some(environment.to_string());
+                Arc::new(labelled)
+            }
+            _ => options,
+        }
     }
 
     /// The environment label.
@@ -623,6 +645,23 @@ mod tests {
                 "production"
             }
         );
+    }
+
+    #[test]
+    fn the_label_follows_the_app_environment_unless_it_is_set() {
+        let options = Arc::new(LighthouseOptions::default());
+        let labelled =
+            LighthouseOptions::with_app_environment(options.clone(), Some(Environment::Staging));
+        assert_eq!(labelled.environment_label(), "staging");
+        let own = Arc::new(LighthouseOptions {
+            environment: Some("eu-west".to_owned()),
+            ..LighthouseOptions::default()
+        });
+        let labelled =
+            LighthouseOptions::with_app_environment(own, Some(Environment::Production));
+        assert_eq!(labelled.environment_label(), "eu-west");
+        let unchanged = LighthouseOptions::with_app_environment(options.clone(), None);
+        assert!(Arc::ptr_eq(&unchanged, &options));
     }
 
     #[test]

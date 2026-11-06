@@ -241,14 +241,24 @@ fn without_production_there_is_no_profile() {
     assert!(report.profile.is_empty());
     assert!(!report.render().contains("production profile"));
     let report = CheckReport::run(
-        &good().set("app.env", "staging"),
+        &good().set("app.env", "qa"),
         &registrations(),
         &CheckOptions::default(),
     )
     .expect("load");
     assert!(
         report.profile.is_empty(),
-        "staging does not take the production profile yet"
+        "only production and staging take the production profile"
+    );
+    let report = CheckReport::run(
+        &good().set("app.env", "staging"),
+        &registrations(),
+        &CheckOptions::default(),
+    )
+    .expect("load");
+    assert!(
+        !report.profile.is_empty(),
+        "staging takes the production profile"
     );
 }
 

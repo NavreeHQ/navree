@@ -10,7 +10,7 @@ use crate::{Config, ConfigError, ConfigSection};
 
 /// The environment an app runs in, from `env` (`APP_ENV`) or `app.env`.
 ///
-/// `production` is the only name that changes what modules do (see
+/// `production` and `staging` change what modules do (see
 /// [`behaves_like_production`](Environment::behaves_like_production)).
 /// Names are lower-cased and trimmed. `local`, `testing`, `staging` and
 /// `production` have their own variants; any other name (`development`,
@@ -86,11 +86,21 @@ impl Environment {
     /// document and its page are off, the ORM's strict modes are off, and
     /// error pages hide their details.
     ///
-    /// Only `production` does. Every module asks here, so which environments
-    /// take the production behaviour (`staging`, say) is decided in this one
+    /// `production` and `staging` do: a rehearsal of production has to
+    /// behave as production does. Every module asks here, so which
+    /// environments take the production behaviour is decided in this one
     /// method.
+    ///
+    /// ```
+    /// use navree_config::Environment;
+    ///
+    /// assert!(Environment::Production.behaves_like_production());
+    /// assert!(Environment::Staging.behaves_like_production());
+    /// assert!(!Environment::Local.behaves_like_production());
+    /// assert!(!Environment::parse("qa").behaves_like_production());
+    /// ```
     pub fn behaves_like_production(&self) -> bool {
-        self.is_production()
+        matches!(self, Environment::Production | Environment::Staging)
     }
 
     /// Whether the environment name is usable: letters, digits, `_` and `-`,

@@ -931,12 +931,20 @@ async fn production_is_final_the_details_never_show() {
             "{config:?}: {text}"
         );
     }
-    // Any other environment keeps the rule: on when asked, and by default in a debug build.
+    // Staging behaves as production does: the details stay hidden.
     let app = configured(
         &[("env", json!("staging")), ("ui.debug", json!(true))],
         true,
     )
     .await;
+    assert!(
+        !get(&app, "/boom", BROWSER)
+            .await
+            .text()
+            .contains("Development only")
+    );
+    // Any other environment keeps the rule: on when asked, and by default in a debug build.
+    let app = configured(&[("env", json!("qa")), ("ui.debug", json!(true))], true).await;
     assert!(
         get(&app, "/boom", BROWSER)
             .await

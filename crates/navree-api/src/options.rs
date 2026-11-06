@@ -88,8 +88,8 @@ impl ApiOptions {
     }
 }
 
-/// The default of `docs_ui` and `openapi_json`: off in `production` (in any
-/// case), on in any other environment; with no environment (or a blank
+/// The default of `docs_ui` and `openapi_json`: off in `production` and
+/// `staging` (in any case), on in any other environment; with no environment (or a blank
 /// one), on in a debug build and off in a release build.
 fn on_by_default(env: Option<&str>, debug_build: bool) -> bool {
     match env.map(str::trim).filter(|env| !env.is_empty()) {
@@ -151,13 +151,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn off_in_production_and_on_in_any_other_environment() {
+    fn off_in_production_and_staging_and_on_in_any_other_environment() {
         for debug_build in [true, false] {
             assert!(!on_by_default(Some("production"), debug_build));
             assert!(!on_by_default(Some("PRODUCTION"), debug_build));
             assert!(!on_by_default(Some(" production "), debug_build));
+            assert!(!on_by_default(Some("staging"), debug_build));
+            assert!(!on_by_default(Some("Staging"), debug_build));
             assert!(on_by_default(Some("development"), debug_build));
-            assert!(on_by_default(Some("staging"), debug_build));
             assert!(on_by_default(Some("testing"), debug_build));
         }
     }

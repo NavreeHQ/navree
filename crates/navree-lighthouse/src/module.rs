@@ -216,11 +216,16 @@ async fn prune_if_due(ctx: AppContext) -> Result<(), BoxError> {
 /// `database_url`'s), the labels, the redactor, the engine and the
 /// alerter.
 async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Lighthouse, BoxError> {
+    let config = app.try_get::<Config>().await;
+    // The label defaults to the app's environment, not to the build profile.
+    let options = LighthouseOptions::with_app_environment(
+        options,
+        config.as_deref().and_then(Config::environment),
+    );
     let tuning = Arc::new(Tuning::new(&options));
     if options.store == StoreKind::Off {
         return Ok(Lighthouse::live(options, tuning, None, None, None));
     }
-    let config = app.try_get::<Config>().await;
     let db = match &options.database_url {
         Some(url) => {
             let db = Db::connect(&DbOptions {

@@ -1,6 +1,6 @@
-//! CONFIG-009: the environment name, parsed once. Only `production` changes
-//! what modules do today; `staging` does not (undecided), and the one place
-//! to change that is `Environment::behaves_like_production`.
+//! The environment name, parsed once. `production` and `staging` change what
+//! modules do; the one place that decides it is
+//! `Environment::behaves_like_production`.
 
 use navree_config::{Config, ConfigSources, Environment};
 
@@ -55,12 +55,12 @@ fn names_print_in_their_canonical_form() {
 }
 
 #[test]
-fn staging_does_not_behave_like_production_yet() {
-    // Whether staging behaves like production is undecided: the default
-    // stays as it was. Changing it is one
-    // line in `Environment::behaves_like_production`.
+fn staging_behaves_like_production() {
+    // A rehearsal of production behaves as production does: the OpenAPI
+    // pages are off, `migrate` asks for `--force`, the ORM is lenient and
+    // error pages hide their details.
     assert!(Environment::Production.behaves_like_production());
-    assert!(!Environment::Staging.behaves_like_production());
+    assert!(Environment::Staging.behaves_like_production());
     assert!(!Environment::Local.behaves_like_production());
     assert!(!Environment::Testing.behaves_like_production());
     assert!(!Environment::parse("qa").behaves_like_production());
@@ -98,7 +98,8 @@ fn the_config_names_its_environment() {
 fn the_config_says_whether_it_behaves_like_production() {
     assert!(env(&[("APP_ENV", "production")]).behaves_like_production());
     assert!(env(&[("APP_APP__ENV", "PRODUCTION")]).behaves_like_production());
-    assert!(!env(&[("APP_ENV", "staging")]).behaves_like_production());
+    assert!(env(&[("APP_ENV", "staging")]).behaves_like_production());
+    assert!(env(&[("APP_APP__ENV", "Staging")]).behaves_like_production());
     assert!(!env(&[("APP_ENV", "development")]).behaves_like_production());
     assert!(
         !env(&[]).behaves_like_production(),

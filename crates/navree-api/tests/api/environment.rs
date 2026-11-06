@@ -49,6 +49,12 @@ async fn off_by_default_in_production() {
 }
 
 #[tokio::test]
+async fn off_by_default_in_staging() {
+    let app = boot(&[("APP_ENV", "staging")]).await;
+    assert_eq!(served(&app).await, OFF);
+}
+
+#[tokio::test]
 async fn production_is_matched_in_any_case() {
     let app = boot(&[("APP_ENV", "Production")]).await;
     assert_eq!(served(&app).await, OFF);
@@ -56,7 +62,7 @@ async fn production_is_matched_in_any_case() {
 
 #[tokio::test]
 async fn on_by_default_in_any_other_environment() {
-    for env in ["development", "local", "staging", "testing"] {
+    for env in ["development", "local", "qa", "testing"] {
         let app = boot(&[("APP_ENV", env)]).await;
         assert_eq!(served(&app).await, ON, "env = {env}");
     }
