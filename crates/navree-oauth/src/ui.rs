@@ -3,7 +3,8 @@
 //!
 //! `GET /oauth/authorize` sends the browser to `oauth.consent_url` with `?request=<id>`. With
 //! this feature on, the module serves that page itself at [`CONSENT_PATH`]
-//! (`oauth.consent_url = "/oauth/consent"`): the signed-in person sees who is asking (the
+//! (`oauth.consent_url = "https://app.acme.test/oauth/consent"`, the app's own address and this
+//! path: the setting takes an absolute URL): the signed-in person sees who is asking (the
 //! client's name, and its website when it has one), the scopes it asks for in the words of
 //! `oauth.scopes`, whether they allowed these scopes before, and two buttons. Allow and Deny
 //! post to the same decisions the JSON routes make (`/api/oauth/requests/{id}/approve` and
@@ -34,7 +35,7 @@ use crate::core::Core;
 use crate::requests::{AuthorizationRequestView, Requests};
 use crate::strategy::OAuthToken;
 
-/// Where the consent page is: set `oauth.consent_url` to it.
+/// Where the consent page is: set `oauth.consent_url` to the app's address with this path.
 pub const CONSENT_PATH: &str = "/oauth/consent";
 
 /// The cookie the session layer leaves for the page's posts.
