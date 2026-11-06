@@ -22,8 +22,6 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 http = { workspace = true }
 navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "realtime", "auth", "access", "session", "ai", "crypto"] }
-# The assistant on pages (`navree::ai::ui`).
-navree-ai = { workspace = true, features = ["ui"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

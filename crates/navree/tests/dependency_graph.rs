@@ -578,6 +578,7 @@ const HIERARCHY: &[Rule] = &[
     rule("store-demo", 9, &["navree"]),
     rule("inbox-demo", 9, &["navree"]),
     rule("board-demo", 9, &["navree"]),
+    rule("agent-demo", 9, &["navree"]),
     // The live theme builder the docs frame: the toolkit's themes pages on the facade.
     rule("theme-demo", 9, &["navree"]),
     // The website's UI docs generator: one binary on the `navree` facade, drawing
