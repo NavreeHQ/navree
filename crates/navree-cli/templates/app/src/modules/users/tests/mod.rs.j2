@@ -46,7 +46,7 @@ async fn users_update_their_own_profile() {
     let app = app().await;
     let me = app.acting_as(principal(Uuid::now_v7()));
     me.put("/api/v1/profile")
-        .json(&json!({ "bio": "Rustacean", "timezone": "Europe/Paris" }))
+        .json(&json!({ "bio": "Rustacean", "timezone": "Asia/Kolkata" }))
         .send()
         .await
         .assert_status(200);
@@ -60,7 +60,7 @@ async fn users_update_their_own_profile() {
         .await
         .assert_status(200)
         .assert_json_path("bio", json!("Still a Rustacean"))
-        .assert_json_path("timezone", json!("Europe/Paris"));
+        .assert_json_path("timezone", json!("Asia/Kolkata"));
 
     let someone_else = app.acting_as(principal(Uuid::now_v7()));
     someone_else

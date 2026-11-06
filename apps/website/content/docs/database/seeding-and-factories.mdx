@@ -36,7 +36,7 @@ impl Seeder for DemoCompaniesSeeder {
             if Company::query().exists(db).await? {
                 return Ok(());
             }
-            for name in ["Northwind Logistics", "Halcyon Health", "Brightwater Analytics"] {
+            for name in ["Doaba Logistics", "Shivalik Health", "Beas Analytics"] {
                 Company::create(db, Company { name: name.into(), ..Default::default() }).await?;
             }
             Ok(())

@@ -73,7 +73,7 @@ fn inputs() -> Element {
                 .required()
                 .control(Input::email("email").required()),
             Field::new("g-group", "In a group")
-                .control(InputGroup::new(Input::text("amount")).start("$").end("USD")),
+                .control(InputGroup::new(Input::text("amount")).start("₹").end("INR")),
             Field::new("g-select", "Select").control(
                 NativeSelect::new("select")
                     .prompt("Choose")

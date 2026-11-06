@@ -82,8 +82,8 @@ The UI proof app, `/gallery`: http://127.0.0.1:8090/gallery (see [README.md](REA
 
 **12. Field with fixed text around it**
 - Keys: Tab to the field "In a group". Then in browse mode read the line with NVDA+Up arrow, or VO+Left / VO+Right around the field.
-- The page: the field has "$" before it and "USD" after it.
-- The reader says: on focus, the name "In a group" and the role "edit". The "$" and the "USD" are reached as plain text in reading order, before and after the field. They are not part of the name.
+- The page: the field has "₹" before it and "INR" after it.
+- The reader says: on focus, the name "In a group" and the role "edit". The "₹" and the "INR" are reached as plain text in reading order, before and after the field. They are not part of the name.
 
 **13. Native select**
 - Keys: Tab to the field "Select". NVDA: Down arrow. VoiceOver: VO+Space to open, Down arrow to "One", Return.
@@ -216,7 +216,7 @@ Fill in the sign-off block for this run, then one row for each step.
 | 9 | Name "Invalid", invalid entry, description "This needs a value." | | | |
 | 10 | Disabled skipped; Read only focusable with read-only state and value | | | |
 | 11 | "Required", edit, required; the star is not spoken | | | |
-| 12 | Name "In a group", edit; "$" and "USD" read as separate text | | | |
+| 12 | Name "In a group", edit; "₹" and "INR" read as separate text | | | |
 | 13 | "Select", combo box or pop-up, "Choose"; then "One" after the change | | | |
 | 14 | "Textarea", multi-line edit, "Some text" | | | |
 | 15 | Checkbox states spoken; Disabled skipped; label not repeated | | | |

@@ -9,12 +9,12 @@ use serde::Deserialize;
 #[derive(Clone, Copy, Debug, Deserialize, Options)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Currency {
+    INR,
     USD,
     EUR,
     GBP,
-    CAD,
-    AUD,
-    JPY,
+    AED,
+    SGD,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
@@ -96,7 +96,7 @@ fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> AppPage {
         .cancel("Cancel", "/deals?per_page=1000")
         .options("company_id", choices(&["Agra", "Gulati", "Indrani"]))
         .options("contact_id", choices(&["Anu Lakhotia", "Arun Tiwari"]))
-        .options("owner_id", choices(&["Gauri Hundal", "Edsger Dijkstra"]));
+        .options("owner_id", choices(&["Gauri Hundal", "Esha Dhillon"]));
     shell
         .page("New deal")
         .crumb("Deals", "/deals?per_page=1000")

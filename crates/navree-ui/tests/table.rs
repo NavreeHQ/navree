@@ -956,6 +956,9 @@ fn counts_and_amounts_are_grouped_as_the_labels_group_them() {
     assert!(lakhs.contains("of 12,34,567 results"), "{lakhs}");
     assert!(lakhs.contains("12,34,567.50"), "{lakhs}");
     assert!(!lakhs.contains("1,234,567"), "{lakhs}");
+    // The browser groups the selection's count the same way.
+    assert!(lakhs.contains("&quot;grouping&quot;:&quot;indian&quot;"), "{lakhs}");
+    assert!(!thousands.contains("grouping&quot;"), "{thousands}");
 }
 
 #[test]

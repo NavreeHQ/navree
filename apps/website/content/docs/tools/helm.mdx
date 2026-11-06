@@ -249,7 +249,7 @@ Each field names a column of the model, except `computed`, `has_many` and `view`
 | `Field::textarea(column)` | The first line on the list, everything on the detail page | A text area |
 | `Field::markdown(column)` | Rendered Markdown on the detail page, without raw HTML | A text area with a preview |
 | `Field::number(column)` | The number | A number input |
-| `Field::money(column, currency_column)` | An amount in minor units with its currency, as `$12,500.00` (`USD` when the record has none) | A decimal input; stored in minor units |
+| `Field::money(column, currency_column)` | An amount in minor units with its currency, as `$12,500.00` or `₹12,34,567.00` (`USD` when the record has none) | A decimal input; stored in minor units |
 | `Field::boolean(column)` | A check mark | A switch |
 | `Field::select(column)` | The option's label, or a badge with `.badge()` | A select of `.options(..)` |
 | `Field::date(column)`, `Field::datetime(column)` | The date; a date-time in the viewer's time zone | A date or date-time picker (in the viewer's time zone; stored in UTC) |

@@ -141,7 +141,7 @@ impl Module for DemoModule {
 }
 
 const FIXTURE: &str = r#"[
-    { "title": "Northwind renewal" },
+    { "title": "Doaba renewal" },
     { "title": "Gulati pilot" },
     { "title": "Indrani expansion" }
 ]"#;
@@ -195,7 +195,7 @@ impl World {
 }
 
 fn seeded() -> Vec<String> {
-    let mut titles: Vec<String> = ["Northwind renewal", "Gulati pilot", "Indrani expansion"]
+    let mut titles: Vec<String> = ["Doaba renewal", "Gulati pilot", "Indrani expansion"]
         .map(str::to_owned)
         .to_vec();
     titles.sort();

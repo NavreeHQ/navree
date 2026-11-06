@@ -17,8 +17,8 @@ pub fn page(shell: &AppShell) -> AppPage {
         Stack::gap(4).children((
             Grid::cols(4).gap(4).children((
                 Stat::new("Open deals", "312").trend("+12 this week", true),
-                Stat::new("Pipeline value", "$4.2M").trend("+3.1%", true),
-                Stat::new("Won this month", "$640K").trend("-2.4%", false),
+                Stat::new("Pipeline value", "₹4.2 Cr").trend("+3.1%", true),
+                Stat::new("Won this month", "₹64 L").trend("-2.4%", false),
                 Stat::new("Tasks due today", "18"),
             )),
             Grid::cols(3).gap(4).children((

@@ -2706,7 +2706,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// What the runtime reads: the words it needs, as one attribute.
     fn runtime_labels(&self) -> String {
         let labels = &self.labels;
-        serde_json::json!({
+        let mut words = serde_json::json!({
             "selected": labels.selected,
             "page": labels.page_selected,
             "all": labels.select_all,
@@ -2716,8 +2716,12 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             "ended": labels.selection_ended,
             "failed": labels.failed,
             "lost": labels.lost_access,
-        })
-        .to_string()
+        });
+        // The browser counts the selection as the server counts the rows.
+        if labels.grouping == Grouping::Indian {
+            words["grouping"] = serde_json::json!("indian");
+        }
+        words.to_string()
     }
 
     fn into_node(mut self) -> Node {

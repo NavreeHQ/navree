@@ -36,11 +36,11 @@ const labels = (root) => {
   }
 };
 
-/** @param {number} n */
-const grouped = (n) => n.toLocaleString("en-US");
+/** Counts in lakhs and crores (12,34,567) when the table's labels say `grouping: "indian"`. @param {Element} root @param {number} n */
+const grouped = (root, n) => n.toLocaleString(labels(root).grouping === "indian" ? "en-IN" : "en-US");
 
-/** @param {string} template @param {number} n @param {number} [total] */
-const fill = (template, n, total) => (template || "").replace("{n}", grouped(n)).replace("{total}", grouped(total || 0));
+/** @param {Element} root @param {string} template @param {number} n @param {number} [total] */
+const fill = (root, template, n, total) => (template || "").replace("{n}", grouped(root, n)).replace("{total}", grouped(root, total || 0));
 
 /** @param {Element} root */
 const rowBoxes = (root) => /** @type {HTMLInputElement[]} */ ([...root.querySelectorAll("[data-ui-select-row]")]);
@@ -98,14 +98,14 @@ function drawSelection(root) {
   const offer = root.hasAttribute("data-can-select-all") && selection.mode === "ids" && head?.checked && everything > boxes.length && selection.ids.length === onPage;
   if (all) {
     all.hidden = !offer;
-    all.textContent = fill(words.all, everything);
+    all.textContent = fill(root, words.all, everything);
   }
   let text;
-  if (selection.mode === "all") text = selection.ex.length ? fill(words.some, n, everything) : fill(words.allOn, n);
-  else if (offer) text = fill(words.page, onPage);
+  if (selection.mode === "all") text = selection.ex.length ? fill(root, words.some, n, everything) : fill(root, words.allOn, n);
+  else if (offer) text = fill(root, words.page, onPage);
   else {
-    text = fill(words.selected, n);
-    if (n > onPage) text += " · " + fill(words.off, n - onPage);
+    text = fill(root, words.selected, n);
+    if (n > onPage) text += " · " + fill(root, words.off, n - onPage);
   }
   if (count && count.textContent !== (ended ? words.ended : text)) count.textContent = ended ? words.ended : text;
   root.toggleAttribute("data-has-selection", n > 0 || ended);
@@ -559,7 +559,7 @@ document.addEventListener("submit", (e) => {
   if (!dialog) return;
   e.preventDefault();
   const text = dialog.querySelector("[data-slot=dialog-description]");
-  if (text) text.textContent = fill(question, n);
+  if (text) text.textContent = fill(root, question, n);
   /** @type {any} */ (dialog).uiSubmit = () => {
     confirmed = button;
     dialog.close();

@@ -17,7 +17,7 @@ import { DEAL_STAGES, stageLabel } from "@/lib/api/types";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const longDate = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" });
+const longDate = new Intl.DateTimeFormat("en-IN", { weekday: "long", month: "long", day: "numeric" });
 
 function Tile({
   label,

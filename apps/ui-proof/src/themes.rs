@@ -160,8 +160,8 @@ fn layout_page(headers: &HeaderMap, layout: &str, query: Option<&str>) -> Respon
             )),
             Grid::cols(3).gap(4).children((
                 Stat::new("Open deals", "312").trend("+8%", true),
-                Stat::new("Won this month", "$84,200").trend("+12%", true),
-                Stat::new("Lost", "$9,800").trend("-3%", false),
+                Stat::new("Won this month", "₹84,20,000").trend("+12%", true),
+                Stat::new("Lost", "₹9,80,000").trend("-3%", false),
             )),
             Card::titled("Recent deals").body(
                 Table::new()
@@ -174,9 +174,9 @@ fn layout_page(headers: &HeaderMap, layout: &str, query: Option<&str>) -> Respon
                     ))
                     .rows(
                         [
-                            ("Agra renewal", "Anu", "Won", "$12,000"),
-                            ("Gulati expansion", "Gauri", "Proposal", "$48,500"),
-                            ("Indrani pilot", "Laksh", "Lead", "$3,200"),
+                            ("Agra renewal", "Anu", "Won", "₹12,00,000"),
+                            ("Gulati expansion", "Gauri", "Proposal", "₹48,50,000"),
+                            ("Indrani pilot", "Laksh", "Lead", "₹3,20,000"),
                         ]
                         .into_iter()
                         .map(|(deal, owner, stage, amount)| {

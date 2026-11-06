@@ -30,9 +30,9 @@ const OWNERS: [&str; 4] = [
     "Anu Lakhotia",
     "Arun Tiwari",
     "Gauri Hundal",
-    "Edsger Dijkstra",
+    "Esha Dhillon",
 ];
-const COMPANIES: [&str; 6] = ["Agra", "Gulati", "Indrani", "Umbrella", "Hariyali", "Stark"];
+const COMPANIES: [&str; 6] = ["Agra", "Gulati", "Indrani", "Ujala", "Hariyali", "Sutlej"];
 
 fn tone(stage: &&'static str) -> BadgeVariant {
     match *stage {

@@ -191,9 +191,9 @@ impl PipelineModule {
 // ---------------------------------------------------------------------------
 
 const COMPANIES: &str = r#"[
-  { "name": "Northwind Logistics", "stage": "customer", "last_contacted_at": "{{ now - 2d }}" },
-  { "name": "Halcyon Health", "stage": "proposal", "last_contacted_at": "{{ now - 5h }}" },
-  { "name": "Brightwater Analytics", "stage": "lead", "last_contacted_at": "{{ now }}" }
+  { "name": "Doaba Logistics", "stage": "customer", "last_contacted_at": "{{ now - 2d }}" },
+  { "name": "Shivalik Health", "stage": "proposal", "last_contacted_at": "{{ now - 5h }}" },
+  { "name": "Beas Analytics", "stage": "lead", "last_contacted_at": "{{ now }}" }
 ]"#;
 
 /// `fixtures/demo/crm/companies.json` in a temporary directory.

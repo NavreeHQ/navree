@@ -471,13 +471,13 @@ for (const browserName of browsers) {
       });
       await page.locator("#f-combo-search").click();
       await page.locator("#f-combo-search").fill("");
-      await page.keyboard.type("gr");
+      await page.keyboard.type("ga");
       await page.waitForTimeout(400);
-      await page.keyboard.type("ace love");
-      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Gauri Love"));
+      await page.keyboard.type("uri lak");
+      await page.waitForFunction(() => document.querySelector("#combo-search-list [role=option]")?.textContent.startsWith("Gauri Lak"));
       const fast = await c.texts();
       await page.waitForTimeout(1500);
-      assert.deepEqual(await c.texts(), fast, "the slow reply for 'gr' did not replace the newer list");
+      assert.deepEqual(await c.texts(), fast, "the slow reply for 'ga' did not replace the newer list");
       await close();
     });
 
@@ -716,7 +716,7 @@ for (const browserName of browsers) {
       const m = picker("multi-search");
       assert.deepEqual(await m.value(), ["1"]);
       await page.locator("#f-multi-search").click();
-      await page.keyboard.type("gauri love");
+      await page.keyboard.type("gauri lak");
       await page.waitForFunction(() => document.querySelector("#multi-search-list [role=option]")?.textContent.startsWith("Gauri"));
       await page.keyboard.press("Enter");
       assert.equal(await m.chips.count(), 2);
@@ -1267,8 +1267,8 @@ for (const browserName of browsers) {
       const input = page.locator("#combo-search [data-slot=combobox-input]");
       await input.click();
       await input.fill("");
-      const answered = page.waitForResponse((r) => r.url().includes("/select/people") && new URL(r.url()).searchParams.get("q") === "gra");
-      await input.pressSequentially("gra", { delay: 30 });
+      const answered = page.waitForResponse((r) => r.url().includes("/select/people") && new URL(r.url()).searchParams.get("q") === "gau");
+      await input.pressSequentially("gau", { delay: 30 });
       await answered;
       // The count of results is said a moment after the rows are in.
       await page.waitForFunction(() => /result/.test(document.querySelector("#combo-search [data-slot=select-status]")?.textContent || ""));
@@ -1288,7 +1288,7 @@ for (const browserName of browsers) {
           };
         });
       const before = await seen();
-      assert.deepEqual([before.open, before.expanded, before.value, before.focused, before.pointed], [true, "true", "gra", true, true], JSON.stringify(before));
+      assert.deepEqual([before.open, before.expanded, before.value, before.focused, before.pointed], [true, "true", "gau", true, true], JSON.stringify(before));
       assert.ok(before.rows.length > 0, JSON.stringify(before.rows));
       await listen(page, "#combo-search [data-slot=select-status]");
       // The server draws the list empty: its answers are the browser's while it is open.

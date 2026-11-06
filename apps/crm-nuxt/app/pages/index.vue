@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 useHead({ title: "Dashboard" });
 
-const longDate = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
+const longDate = new Intl.DateTimeFormat("en-IN", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 const dashboard = useDashboard();
 const me = useCurrentUser();
 const userId = computed(() => me.data.value?.id ?? "");
