@@ -1,6 +1,6 @@
 ---
 name: navree-lighthouse
-description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling (0.1 by default; errors and slow work always kept), exact counts under load and the sampled-out figure, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`, muting a channel and changing its kinds from the dashboard), the `/_lighthouse` dashboard and its sign-in (Overview with a live panel, sparklines and a release line; Alerts, Releases and Settings pages), releases (`report_release`, `ReleaseReport`, `POST /_lighthouse/api/releases`), settings changed while the app runs, the JSON API under `/_lighthouse/api` behind the `view`, `resolve` and `configure` abilities (`lighthouse.view`, `lighthouse.resolve`, `lighthouse.configure`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
+description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling (0.1 by default; errors and slow work always kept), exact counts under load and the sampled-out figure, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`, muting a channel and changing its kinds from the dashboard), the `/_lighthouse` dashboard on Navree UI, signed in to on the app's own sign-in page (Overview with a live region, sparklines and a release line; Alerts, Releases and Settings pages), releases (`report_release`, `ReleaseReport`, `POST /_lighthouse/api/releases`), settings changed while the app runs, the JSON API under `/_lighthouse/api` behind the `view`, `resolve` and `configure` abilities (`lighthouse.view`, `lighthouse.resolve`, `lighthouse.configure`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
 ---
 
 # Lighthouse
@@ -23,7 +23,7 @@ facade). The docs page is `apps/website/content/docs/tools/lighthouse.mdx`.
 1. The feature is in `full`, so `navree = { .. }` with default features has
    it. With `default-features = false`, add `"lighthouse"` (it turns on
    `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`,
-   `schedule`, `access`, `auth`, `orm`). `LighthouseModule` and
+   `schedule`, `access`, `auth`, `orm`, `session`, `ui`). `LighthouseModule` and
    `ModuleBuilderLighthouseExt` are in the prelude.
 
 2. Add the module after the ones it builds on. `navree new` apps already
@@ -32,12 +32,15 @@ facade). The docs page is `apps/website/content/docs/tools/lighthouse.mdx`.
 ```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
-    .module(CryptoModule::from_config())     // the dashboard's session cookie
+    .module(CryptoModule::from_config())     // keys the session
     .module(HttpModule::from_config())
     .module(DatabaseModule::from_config())   // the store (unless lighthouse.store = "off")
     .module(MailModule::from_config())       // email alerts only
     .module(QueueModule::from_config())      // optional: alerts as lighthouse.alert jobs
-    .module(AuthModule::from_config())       // the dashboard's sign-in
+    .module(SessionModule::from_config())    // the browser's session
+    .module(AuthModule::from_config())
+    .module(UiModule::from_config())         // the dashboard is Navree UI pages
+    .module(AuthPages::new())                // the sign-in the dashboard sends people to
     .module(AccessModule::for_root(AccessOptions { abilities: abilities::define, super_admin_role: Some("admin".into()) }))
     .module(LighthouseModule::from_config())
 ```
@@ -53,8 +56,10 @@ Navree::app()
    users the role. Super-admins pass every check. Or in the abilities
    function: `rules.can("view", "Lighthouse"); rules.can("resolve", "Lighthouse");`.
 
-5. Open `/_lighthouse` and sign in with an app account (email, password,
-   then a two-factor code if the account has one).
+5. Open `/_lighthouse`. It sends you to the app's sign-in page (`AuthPages`);
+   sign in with an app account (email, password, then a two-factor code if
+   the account has one). The dashboard has no sign-in of its own: the same
+   session opens every page of the app.
 
 ## Reporting errors you handle
 
@@ -223,7 +228,7 @@ button, plus a plain-text part.
 
 ## The JSON API (scripts and agents)
 
-Bearer access tokens work on `/_lighthouse/api/*` (the dashboard's cookie
+Bearer access tokens work on `/_lighthouse/api/*` (a browser's session
 works too, with an `x-csrf-token` header on changes):
 
 | Route | Ability |
