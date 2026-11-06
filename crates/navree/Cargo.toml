@@ -203,6 +203,7 @@ ui = [
     "navree-oauth?/ui",
     "navree-queue?/ui",
     "navree-workspace?/ui",
+    "navree-ai?/ui",
 ]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
@@ -403,6 +404,7 @@ ai = [
     "validation",
     "access",
     "auth",
+    "navree-search?/ai",
 ]
 ## PDF: reading, editing and the text of PDF files within a budget of memory
 ## and work (navree-pdf), under `documents` and `media`.
