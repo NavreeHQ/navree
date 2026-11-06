@@ -6,10 +6,6 @@ use serde_json::Value;
 /// What a redacted value is shown as.
 pub const REDACTED: &str = "[redacted]";
 
-/// navree-log's default `log.redact` fragments.
-pub(crate) const DEFAULT_FRAGMENTS: [&str; 5] =
-    ["password", "token", "authorization", "cookie", "secret"];
-
 /// Redacts payload values by key name (ASCII case-insensitive substring).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Redactor {
@@ -18,7 +14,7 @@ pub(crate) struct Redactor {
 
 impl Default for Redactor {
     fn default() -> Self {
-        Self::new(DEFAULT_FRAGMENTS)
+        Self::new(navree_contracts::Redactor::DEFAULT_FRAGMENTS)
     }
 }
 

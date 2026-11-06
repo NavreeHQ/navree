@@ -1,15 +1,12 @@
 //! [`Redactor`]: masks headers, context values and bodies whose names
-//! contain a fragment of `log.redact` or `lighthouse.redact`.
+//! contain a fragment of `log.redact` or `lighthouse.redact` (by default the
+//! shared list, `navree_contracts::Redactor::DEFAULT_FRAGMENTS`).
 
 use http::HeaderMap;
 use serde_json::{Map, Value};
 
 /// What a masked value is stored as.
 pub const REDACTED: &str = "[redacted]";
-
-/// `log.redact`'s default fragments.
-pub(crate) const DEFAULT_FRAGMENTS: [&str; 5] =
-    ["password", "token", "authorization", "cookie", "secret"];
 
 /// Headers masked whatever the fragments say.
 const ALWAYS_MASKED: [&str; 4] = [
@@ -95,8 +92,10 @@ mod tests {
     use super::*;
 
     fn redactor() -> Redactor {
-        let mut fragments: Vec<String> =
-            DEFAULT_FRAGMENTS.iter().map(|s| (*s).to_owned()).collect();
+        let mut fragments: Vec<String> = navree_contracts::Redactor::DEFAULT_FRAGMENTS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
         fragments.push("iban".to_owned());
         Redactor::new(&fragments)
     }

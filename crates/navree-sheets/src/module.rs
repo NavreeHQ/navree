@@ -6,7 +6,9 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::commands::commands;
 use crate::error::map_sheets_error;
@@ -70,40 +72,18 @@ impl SheetsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: SheetsOptions) -> impl Module {
-        ConfiguredSheetsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<SheetsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `sheets` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredSheetsModule { options: None }
+        ConfiguredModule::<SheetsModule, SheetsOptions>::from_config(register)
     }
 }
 
 impl Module for SheetsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `SheetsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredSheetsModule {
-    /// `None`: read from configuration.
-    options: Option<SheetsOptions>,
-}
-
-impl Module for ConfiguredSheetsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<SheetsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

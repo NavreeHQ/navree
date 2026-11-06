@@ -7,7 +7,7 @@ use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, Dispatcher, ModuleBuilderJobsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 use navree_storage::Storage;
@@ -60,41 +60,19 @@ impl DocumentsModule {
     /// root). They are checked at boot as the `documents` section is: a
     /// value it refuses fails the boot.
     pub fn for_root(options: DocumentsOptions) -> impl Module {
-        ConfiguredDocumentsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<DocumentsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `documents` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredDocumentsModule { options: None }
+        ConfiguredModule::<DocumentsModule, DocumentsOptions>::from_config(register)
     }
 }
 
 impl Module for DocumentsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `DocumentsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredDocumentsModule {
-    /// `None`: read from configuration.
-    options: Option<DocumentsOptions>,
-}
-
-impl Module for ConfiguredDocumentsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<DocumentsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

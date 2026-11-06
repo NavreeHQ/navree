@@ -50,10 +50,12 @@ pub enum StoreKind {
 /// Every key can come from the environment: `APP_MEDIA__DISK`,
 /// `APP_MEDIA__IMAGES__RESPONSIVE_WIDTHS=480,960`,
 /// `APP_MEDIA__FFMPEG__FFMPEG=/usr/bin/ffmpeg`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "media", docs = "/docs/packages/media/", validate = Self::check)]
 #[serde(default)]
 pub struct MediaOptions {
     /// Where media rows are kept: `database` (default) or `memory`.
+    #[config(one_of = "database, memory")]
     pub store: StoreKind,
     /// The storage disk originals are written to (default: the storage
     /// module's default disk). A collection can name its own.
@@ -154,10 +156,49 @@ impl MediaOptions {
     }
 }
 
-impl ConfigSection for MediaOptions {
-    const KEY: &'static str = "media";
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use navree_config::FieldType;
 
-    fn validate(&self) -> Result<(), String> {
-        self.check()
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = MediaOptions::schema().expect("schema");
+        assert_eq!(schema.key, "media");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/media/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "store",
+            "disk",
+            "conversions_disk",
+            "prefix",
+            "max_file_size",
+            "queue_conversions",
+            "queue",
+            "strip_metadata",
+            "delete_with_model",
+            "url_ttl_secs",
+            "download_timeout_secs",
+            "images",
+            "archives",
+        ] {
+            let field = schema.fields.iter().find(|field| field.name == name);
+            assert!(field.is_some_and(|field| !field.doc.is_empty()), "{name}");
+        }
+        let store = schema.fields.iter().find(|field| field.name == "store");
+        assert_eq!(
+            store.map(|field| &field.ty),
+            Some(&FieldType::choice(&["database", "memory"]))
+        );
+        let defaults = MediaOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], serde_json::json!("database"));
+        assert_eq!(defaults["prefix"], serde_json::json!("media"));
+        assert_eq!(defaults["max_file_size"], serde_json::json!(26_214_400));
+        assert_eq!(defaults["queue_conversions"], serde_json::json!(true));
     }
 }

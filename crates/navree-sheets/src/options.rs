@@ -1,6 +1,6 @@
 //! [`SheetsOptions`]: the `sheets` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use serde::{Deserialize, Serialize};
 
 use crate::CsvOptions;
@@ -38,19 +38,22 @@ use crate::CsvOptions;
 ///
 /// Every key also comes from the environment:
 /// `APP_SHEETS__IMPORTS__MAX_ROWS=250000`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "sheets", docs = "/docs/packages/imports-and-exports/", validate = Self::check)]
 #[serde(default)]
 pub struct SheetsOptions {
     /// How CSV files are written.
     pub csv: CsvOptions,
     /// Exports.
+    #[config(table)]
     pub exports: ExportOptions,
     /// Imports.
+    #[config(table)]
     pub imports: ImportOptions,
 }
 
 /// Exports (`sheets.exports`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ExportOptions {
     /// The disk queued exports are written to (default `""`: the storage
@@ -85,7 +88,7 @@ impl Default for ExportOptions {
 }
 
 /// Imports (`sheets.imports`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ImportOptions {
     /// The disk uploads and error files are kept on (default `""`: the
@@ -140,10 +143,9 @@ impl Default for ImportOptions {
     }
 }
 
-impl ConfigSection for SheetsOptions {
-    const KEY: &'static str = "sheets";
-
-    fn validate(&self) -> Result<(), String> {
+impl SheetsOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         self.csv.validate()?;
         if self.exports.page_size == 0 {
             return Err("`exports.page_size` must be at least 1".to_owned());
@@ -185,9 +187,7 @@ impl ConfigSection for SheetsOptions {
         }
         Ok(())
     }
-}
 
-impl SheetsOptions {
     /// `directory` without slashes at either end.
     pub(crate) fn clean(directory: &str) -> &str {
         directory.trim_matches(['/', '\\', ' '])
@@ -197,6 +197,49 @@ impl SheetsOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_config::FieldType;
+    use serde_json::json;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SheetsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "sheets");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/packages/imports-and-exports/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("missing {name}"))
+        };
+        assert_eq!(field("exports").ty, FieldType::Table);
+        assert_eq!(field("imports").ty, FieldType::Table);
+        assert!(
+            field("imports")
+                .fields
+                .iter()
+                .any(|field| field.name == "max_rows" && !field.doc.is_empty())
+        );
+        assert!(
+            field("exports")
+                .fields
+                .iter()
+                .any(|field| field.name == "link_ttl_secs")
+        );
+        let defaults = SheetsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["exports"]["directory"], json!("exports"));
+        assert_eq!(defaults["imports"]["max_rows"], json!(100_000));
+        assert_eq!(defaults["imports"]["routes"], json!(true));
+    }
 
     #[test]
     fn the_defaults_are_valid() {

@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::command::schema_command;
 use crate::endpoint::GraphqlController;
@@ -56,40 +58,18 @@ impl GraphqlModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: GraphqlOptions) -> impl Module {
-        ConfiguredGraphqlModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<GraphqlModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `graphql` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredGraphqlModule { options: None }
+        ConfiguredModule::<GraphqlModule, GraphqlOptions>::from_config(register)
     }
 }
 
 impl Module for GraphqlModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `GraphqlModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredGraphqlModule {
-    /// `None`: read from configuration.
-    options: Option<GraphqlOptions>,
-}
-
-impl Module for ConfiguredGraphqlModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<GraphqlModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

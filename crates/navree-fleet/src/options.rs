@@ -5,9 +5,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_queue::QueueOptions;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::FleetError;
 
@@ -62,7 +62,7 @@ impl fmt::Display for Balance {
 pub struct SupervisorOptions {
     /// The queues, in priority order (required). From the environment, one
     /// comma-separated string.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub queues: Vec<String>,
     /// How the processes are spread over the queues (default `auto`).
     #[serde(default)]
@@ -149,7 +149,7 @@ impl SupervisorOptions {
 }
 
 /// How long Fleet keeps what it records (`fleet.trim`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TrimOptions {
     /// How long completed jobs are listed, in minutes (default 60).
@@ -185,7 +185,8 @@ impl Default for TrimOptions {
 /// From the environment, nested keys use `__` and lists are comma-separated
 /// strings: `APP_FLEET__SUPERVISORS__DEFAULT__QUEUES=default,mail`,
 /// `APP_FLEET__ONLY=exports`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "fleet", docs = "/docs/tools/fleet/", validate = Self::check)]
 #[serde(default)]
 pub struct FleetOptions {
     /// Mount the dashboard and its API (default true).
@@ -200,6 +201,7 @@ pub struct FleetOptions {
     /// How often a master stores metrics, in seconds (default 60).
     pub snapshot_secs: u64,
     /// How long completed jobs and metric snapshots are kept.
+    #[config(table)]
     pub trim: TrimOptions,
     /// Seconds a queue's oldest job may wait before a long-wait alert, per
     /// queue (none by default: such queues never raise one).
@@ -209,7 +211,7 @@ pub struct FleetOptions {
     pub long_wait_cooldown_minutes: u64,
     /// The supervisors this server runs (default: all). From the
     /// environment, one comma-separated string.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub only: Vec<String>,
     /// The supervisors, by name. Without any, one supervisor `default`
     /// works `queue.queues` (or `queue.default_queue`).
@@ -293,12 +295,9 @@ impl FleetOptions {
     pub(crate) fn base_path(&self) -> &str {
         self.path.trim_end_matches('/')
     }
-}
 
-impl ConfigSection for FleetOptions {
-    const KEY: &'static str = "fleet";
-
-    fn validate(&self) -> Result<(), String> {
+    /// Checks the values (the boot calls this): every problem names its key.
+    fn check(&self) -> Result<(), String> {
         let mut problems = Vec::new();
         if !self.path.starts_with('/') || self.base_path().is_empty() {
             problems.push("fleet.path must start with `/` and not be `/` alone".to_owned());
@@ -429,31 +428,9 @@ const fn default_max_time_secs() -> u64 {
     3600
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Names {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let names = match Names::deserialize(deserializer)? {
-        Names::List(names) => names,
-        Names::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(names
-        .into_iter()
-        .map(|name| name.trim().to_owned())
-        .filter(|name| !name.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde_json::json;
 
     use super::*;
@@ -461,6 +438,52 @@ mod tests {
     fn load(sources: ConfigSources) -> Result<FleetOptions, String> {
         let config = Config::load(&sources).expect("configuration loads");
         config.typed::<FleetOptions>().map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = FleetOptions::schema().expect("schema");
+        assert_eq!(schema.key, "fleet");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/tools/fleet/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("missing {name}"))
+        };
+        for name in [
+            "dashboard",
+            "path",
+            "balance_cooldown_secs",
+            "balance_max_shift",
+            "snapshot_secs",
+            "long_wait",
+            "long_wait_cooldown_minutes",
+            "supervisors",
+        ] {
+            assert!(!field(name).doc.is_empty(), "{name} has no description");
+        }
+        assert_eq!(field("only").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("long_wait").ty, FieldType::map(FieldType::Integer));
+        assert_eq!(field("trim").ty, FieldType::Table);
+        assert!(
+            field("trim")
+                .fields
+                .iter()
+                .any(|field| field.name == "recent_minutes")
+        );
+        let defaults = FleetOptions::defaults().expect("defaults");
+        assert_eq!(defaults["dashboard"], json!(true));
+        assert_eq!(defaults["path"], json!("/_fleet"));
+        assert_eq!(defaults["trim"]["recent_minutes"], json!(60));
+        assert_eq!(defaults["only"], json!([]));
     }
 
     #[test]

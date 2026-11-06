@@ -7,7 +7,7 @@ use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::Clock;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_observe::MetricsCollector;
 use navree_queue::Queue;
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
@@ -50,40 +50,18 @@ impl FleetModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: FleetOptions) -> impl Module {
-        ConfiguredFleetModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<FleetModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `fleet` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredFleetModule { options: None }
+        ConfiguredModule::<FleetModule, FleetOptions>::from_config(register)
     }
 }
 
 impl Module for FleetModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `FleetModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredFleetModule {
-    /// `None`: read from configuration.
-    options: Option<FleetOptions>,
-}
-
-impl Module for ConfiguredFleetModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<FleetModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

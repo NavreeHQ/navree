@@ -9,7 +9,7 @@ use navree_db::navree_schema::{Schema, SchemaOptions};
 use navree_db::{Db, DbOptions, ModuleBuilderDbExt};
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
@@ -24,7 +24,7 @@ use crate::dispatch::Alerter;
 use crate::engine::{Engine, Labels};
 use crate::migration::{convert_time_series_at_boot, create_tables, migrations};
 use crate::options::{LighthouseOptions, StoreKind, parse_hh_mm};
-use crate::redact::{DEFAULT_FRAGMENTS, Redactor};
+use crate::redact::Redactor;
 use crate::service::{Lighthouse, LighthouseSink};
 use crate::settings::Tuning;
 use crate::store::{LighthouseError, LighthouseStore};
@@ -80,39 +80,18 @@ pub struct LighthouseModule;
 impl LighthouseModule {
     /// The module with explicit options. Invalid options fail the boot.
     pub fn for_root(options: LighthouseOptions) -> impl Module {
-        ConfiguredLighthouseModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<LighthouseModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `lighthouse` section at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredLighthouseModule { options: None }
+        ConfiguredModule::<LighthouseModule, LighthouseOptions>::from_config(register)
     }
 }
 
 impl Module for LighthouseModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `LighthouseModule::for_root` / `from_config`: same module id.
-struct ConfiguredLighthouseModule {
-    options: Option<LighthouseOptions>,
-}
-
-impl Module for ConfiguredLighthouseModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<LighthouseModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
@@ -327,7 +306,10 @@ fn log_redact(config: Option<&Config>) -> Vec<String> {
             .map(|item| item.trim().to_owned())
             .filter(|item| !item.is_empty())
             .collect(),
-        _ => DEFAULT_FRAGMENTS.iter().map(|s| (*s).to_owned()).collect(),
+        _ => navree_contracts::Redactor::DEFAULT_FRAGMENTS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect(),
     }
 }
 

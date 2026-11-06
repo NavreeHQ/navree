@@ -23,7 +23,8 @@ use serde::{Deserialize, Deserializer};
 ///
 /// As environment variables: `APP_GRPC__ADDR=0.0.0.0:50051`,
 /// `APP_GRPC__REFLECTION=false`.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "grpc", docs = "/docs/microservices/grpc/", validate = Self::check_values)]
 #[serde(default)]
 pub struct GrpcOptions {
     /// A separate listener for gRPC (default none: gRPC shares the HTTP
@@ -74,6 +75,12 @@ impl Default for GrpcOptions {
 }
 
 impl GrpcOptions {
+    /// Checks the values at boot: [`check`](Self::check) with the problems
+    /// joined into one message.
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|problems| problems.join("; "))
+    }
+
     /// The deadline of calls without `grpc-timeout`, and the longest one
     /// that header can ask for: `timeout_secs`, else `http_timeout_secs`.
     pub fn default_timeout(&self, http_timeout_secs: u64) -> Duration {
@@ -100,14 +107,6 @@ impl GrpcOptions {
         } else {
             Err(problems)
         }
-    }
-}
-
-impl ConfigSection for GrpcOptions {
-    const KEY: &'static str = "grpc";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|problems| problems.join("; "))
     }
 }
 
@@ -211,6 +210,44 @@ fn optional_addr<'de, D: Deserializer<'de>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_config::FieldType;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = GrpcOptions::schema().expect("schema");
+        assert_eq!(schema.key, "grpc");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/microservices/grpc/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "addr",
+            "web",
+            "connect",
+            "reflection",
+            "health",
+            "timeout_secs",
+            "max_message_bytes",
+            "concurrency_per_connection",
+            "clients",
+        ] {
+            let field = schema.fields.iter().find(|field| field.name == name);
+            assert!(field.is_some_and(|field| !field.doc.is_empty()), "{name}");
+        }
+        let field = |name: &str| schema.fields.iter().find(|field| field.name == name);
+        assert_eq!(
+            field("max_message_bytes").map(|field| &field.ty),
+            Some(&FieldType::Integer)
+        );
+        assert_eq!(field("web").map(|field| &field.ty), Some(&FieldType::Bool));
+        let defaults = GrpcOptions::defaults().expect("defaults");
+        assert_eq!(defaults["web"], serde_json::json!(true));
+        assert_eq!(defaults["max_message_bytes"], serde_json::json!(4_194_304));
+        assert_eq!(defaults["addr"], serde_json::Value::Null);
+    }
 
     #[test]
     fn defaults_match_the_docs() {

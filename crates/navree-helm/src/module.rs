@@ -7,7 +7,9 @@ use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_http::{AppError, ModuleBuilderHttpExt};
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::controller::HelmController;
 use crate::core::Core;
@@ -63,39 +65,18 @@ pub struct HelmModule;
 impl HelmModule {
     /// The module with explicit options (invalid options fail the boot).
     pub fn for_root(options: HelmOptions) -> impl Module {
-        ConfiguredHelmModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<HelmModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `helm` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredHelmModule { options: None }
+        ConfiguredModule::<HelmModule, HelmOptions>::from_config(register)
     }
 }
 
 impl Module for HelmModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `HelmModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredHelmModule {
-    options: Option<HelmOptions>,
-}
-
-impl Module for ConfiguredHelmModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<HelmModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

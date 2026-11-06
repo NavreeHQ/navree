@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer, Serialize};
+use navree_config::{ConfigSection, ConfigTable};
+use serde::{Deserialize, Serialize};
 
 use crate::EngineKind;
 use crate::print::PrintOptions;
@@ -38,23 +38,27 @@ use crate::print::PrintOptions;
 /// [documents.chrome.print]
 /// paper = "a4"
 /// ```
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "documents", docs = "/docs/packages/documents/", validate = Self::check)]
 #[serde(default)]
 pub struct DocumentsOptions {
     /// Template directories, searched in order (default
     /// `["resources/documents"]`). From the environment, a comma-separated
     /// list.
-    #[serde(deserialize_with = "paths")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub templates: Vec<PathBuf>,
     /// The engine renders use unless they name one (default `native`;
     /// `chrome` in a build without the `native` feature).
+    #[config(one_of = "native, chrome")]
     pub engine: EngineKind,
     /// The storage disk queued renders are written to (default: the
     /// default disk).
     pub disk: Option<String>,
     /// The native engine.
+    #[config(table)]
     pub native: NativeOptions,
     /// The Chrome engine.
+    #[config(table)]
     pub chrome: ChromeOptions,
 }
 
@@ -74,10 +78,9 @@ impl Default for DocumentsOptions {
     }
 }
 
-impl ConfigSection for DocumentsOptions {
-    const KEY: &'static str = "documents";
-
-    fn validate(&self) -> Result<(), String> {
+impl DocumentsOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         if self.native.max_image_pixels == 0 {
             return Err("`native.max_image_pixels` must be at least 1".to_owned());
         }
@@ -86,13 +89,13 @@ impl ConfigSection for DocumentsOptions {
 }
 
 /// The native engine's settings (`documents.native`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct NativeOptions {
     /// Load the bundled Noto fonts (default true).
     pub bundled_fonts: bool,
     /// More font directories, searched recursively (default none).
-    #[serde(deserialize_with = "paths")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub font_dirs: Vec<PathBuf>,
     /// Time limit for one render, in seconds (default 60).
     pub timeout_secs: u64,
@@ -124,12 +127,13 @@ impl Default for NativeOptions {
 }
 
 /// The Chrome engine's settings (`documents.chrome`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ChromeOptions {
     /// The Chrome or Chromium executable. Default: the
     /// `NAVREE_BROWSER_CHROME` environment variable, then the usual
     /// install locations.
+    #[config(env_fallback = "NAVREE_BROWSER_CHROME")]
     pub path: Option<PathBuf>,
     /// A running Chrome to use instead of launching one: its browser
     /// WebSocket URL (`ws://host:9222/devtools/browser/<id>`) or its
@@ -148,7 +152,7 @@ pub struct ChromeOptions {
     /// cannot make the server fetch an address its data names).
     pub allow_network: bool,
     /// More command-line flags for Chrome.
-    #[serde(deserialize_with = "strings")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub args: Vec<String>,
     /// The page settings renders use unless they bring their own.
     pub print: PrintOptions,
@@ -169,38 +173,58 @@ impl Default for ChromeOptions {
     }
 }
 
-/// A list of paths, or one comma-separated string (what an environment
-/// variable holds).
-fn paths<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<PathBuf>, D::Error> {
-    Ok(strings(deserializer)?
-        .into_iter()
-        .map(PathBuf::from)
-        .collect())
-}
-
-/// A list of strings, or one comma-separated string.
-fn strings<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrString {
-        List(Vec<String>),
-        String(String),
-    }
-    Ok(match ListOrString::deserialize(deserializer)? {
-        ListOrString::List(list) => list,
-        ListOrString::String(text) => text
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_config::FieldType;
     use serde_json::json;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = DocumentsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "documents");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/documents/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("missing {name}"))
+        };
+        assert_eq!(field("engine").ty, FieldType::choice(&["native", "chrome"]));
+        assert_eq!(field("templates").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("native").ty, FieldType::Table);
+        assert!(
+            field("native")
+                .fields
+                .iter()
+                .any(|field| field.name == "max_image_pixels")
+        );
+        assert!(
+            field("chrome")
+                .fields
+                .iter()
+                .any(|field| field.name == "pool_size")
+        );
+        let fallbacks = schema.env_fallbacks();
+        assert!(
+            fallbacks.iter().any(|fallback| {
+                fallback.key == "documents.chrome.path"
+                    && fallback.variable == "NAVREE_BROWSER_CHROME"
+            }),
+            "{fallbacks:?}"
+        );
+        let defaults = DocumentsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["templates"], json!(["resources/documents"]));
+        assert_eq!(defaults["native"]["timeout_secs"], json!(60));
+        assert_eq!(defaults["chrome"]["pool_size"], json!(2));
+    }
 
     #[test]
     fn defaults_match_the_documentation() {

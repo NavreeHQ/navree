@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// From the environment: `APP_HELM__TITLE="Acme CRM"`,
 /// `APP_HELM__PER_PAGE=50`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "helm", docs = "/docs/tools/helm/", validate = Self::check_values)]
 #[serde(default)]
 pub struct HelmOptions {
     /// Where the panel is served (`/admin`).
@@ -66,6 +67,12 @@ impl Default for HelmOptions {
 }
 
 impl HelmOptions {
+    /// Checks the values at boot: [`check`](Self::check) with the problems
+    /// joined into one message.
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Every problem with the options, each naming its key.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -126,14 +133,6 @@ impl HelmOptions {
     }
 }
 
-impl ConfigSection for HelmOptions {
-    const KEY: &'static str = "helm";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 /// `#rgb` or `#rrggbb`.
 fn is_hex_color(color: &str) -> bool {
     let Some(hex) = color.strip_prefix('#') else {
@@ -145,8 +144,40 @@ fn is_hex_color(color: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use navree_config::{Config, ConfigSources};
+    use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = HelmOptions::schema().expect("schema");
+        assert_eq!(schema.key, "helm");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/tools/helm/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "path",
+            "title",
+            "logo",
+            "accent",
+            "per_page",
+            "metrics_cache_secs",
+            "dashboard",
+            "session_minutes",
+            "export_max_secs",
+        ] {
+            let field = schema.fields.iter().find(|field| field.name == name);
+            assert!(field.is_some_and(|field| !field.doc.is_empty()), "{name}");
+        }
+        let defaults = HelmOptions::defaults().expect("defaults");
+        assert_eq!(defaults["path"], json!("/admin"));
+        assert_eq!(defaults["per_page"], json!(25));
+        assert_eq!(defaults["logo"], json!(null));
+    }
 
     #[test]
     fn defaults_match_the_docs() {

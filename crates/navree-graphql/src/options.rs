@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(options.ws_path(), "/graphql/ws");
 /// assert!(options.check().is_ok());
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "graphql", docs = "/docs/microservices/graphql/", validate = Self::check_values)]
 #[serde(default)]
 pub struct GraphqlOptions {
     /// The endpoint (default `/graphql`). Absolute: `http.api_prefix` does
@@ -63,6 +64,12 @@ impl Default for GraphqlOptions {
 }
 
 impl GraphqlOptions {
+    /// Checks the values at boot: [`check`](Self::check) with the problems
+    /// joined into one message.
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|problems| problems.join("; "))
+    }
+
     /// The subscriptions endpoint: `<path>/ws`.
     pub fn ws_path(&self) -> String {
         format!("{}/ws", self.path)
@@ -102,17 +109,43 @@ impl GraphqlOptions {
     }
 }
 
-impl ConfigSection for GraphqlOptions {
-    const KEY: &'static str = "graphql";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|problems| problems.join("; "))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_config::FieldType;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = GraphqlOptions::schema().expect("schema");
+        assert_eq!(schema.key, "graphql");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/microservices/graphql/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "path",
+            "graphiql",
+            "introspection",
+            "depth_limit",
+            "complexity_limit",
+            "batching",
+            "subscriptions",
+            "connection_init_timeout_secs",
+            "keep_alive_secs",
+        ] {
+            let field = schema.fields.iter().find(|field| field.name == name);
+            assert!(field.is_some_and(|field| !field.doc.is_empty()), "{name}");
+        }
+        let path = schema.fields.iter().find(|field| field.name == "path");
+        assert_eq!(path.map(|field| &field.ty), Some(&FieldType::String));
+        let defaults = GraphqlOptions::defaults().expect("defaults");
+        assert_eq!(defaults["path"], serde_json::json!("/graphql"));
+        assert_eq!(defaults["depth_limit"], serde_json::json!(16));
+        assert_eq!(defaults["batching"], serde_json::json!(false));
+    }
 
     #[test]
     fn defaults_match_the_documented_table() {

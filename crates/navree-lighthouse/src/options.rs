@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_config::{ConfigSection, Environment};
+use navree_config::{ConfigSection, ConfigTable, Environment};
 use navree_contracts::Secret;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use crate::alert::AlertKind;
 
 /// When a request, query, job attempt or outgoing call is slow
 /// (`lighthouse.thresholds`), in milliseconds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct Thresholds {
     /// A request slower than this opens a slow-request issue (1000).
@@ -41,7 +41,7 @@ impl Default for Thresholds {
 /// always exact, whatever the rates. Errors (5xx responses, requests that
 /// reported something), failed job attempts and slow requests and jobs
 /// always keep their trace; the rates apply to the rest.
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SampleRates {
     /// Fraction of ordinary request traces stored (0.1).
@@ -64,7 +64,7 @@ impl Default for SampleRates {
 }
 
 /// What Lighthouse keeps of a request (`lighthouse.capture`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CaptureOptions {
     /// Store JSON request bodies up to 16 KiB, masked (false).
@@ -86,15 +86,15 @@ impl Default for CaptureOptions {
 }
 
 /// What is never recorded (`lighthouse.ignore`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct IgnoreOptions {
     /// Paths never recorded; `*` at the end matches one or more segments
     /// (`["/health/*", "/metrics"]`).
-    #[serde(deserialize_with = "list_or_comma_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub routes: Vec<String>,
     /// Job types never recorded.
-    #[serde(deserialize_with = "list_or_comma_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub jobs: Vec<String>,
 }
 
@@ -119,7 +119,7 @@ pub enum StoreKind {
 }
 
 /// When occurrences make a spike (`lighthouse.alerts.spike`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SpikeOptions {
     /// Occurrences within the window that make a spike (50).
@@ -138,11 +138,11 @@ impl Default for SpikeOptions {
 }
 
 /// Email alerts (`lighthouse.alerts.email`), sent through the app's `Mailer`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct EmailAlertOptions {
     /// The recipients: one address, a list, or a comma-separated string.
-    #[serde(deserialize_with = "list_or_comma_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub to: Vec<String>,
     /// The kinds sent (default `new_issue`, `regression`, `spike`).
     #[serde(deserialize_with = "kinds")]
@@ -150,7 +150,7 @@ pub struct EmailAlertOptions {
 }
 
 /// Slack alerts (`lighthouse.alerts.slack`) through an incoming webhook.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SlackAlertOptions {
     /// The incoming webhook's URL; a secret
@@ -163,7 +163,7 @@ pub struct SlackAlertOptions {
 
 /// Signed webhook alerts (`lighthouse.alerts.webhook`), in the Standard
 /// Webhooks format.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct WebhookAlertOptions {
     /// Where alerts are posted.
@@ -178,18 +178,22 @@ pub struct WebhookAlertOptions {
 }
 
 /// The alert channels and their throttling (`lighthouse.alerts`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct AlertOptions {
     /// At most one alert per issue and kind in this window (30).
     pub cooldown_minutes: u32,
     /// When occurrences make a spike.
+    #[config(table)]
     pub spike: SpikeOptions,
     /// Email alerts.
+    #[config(table)]
     pub email: EmailAlertOptions,
     /// Slack alerts.
+    #[config(table)]
     pub slack: SlackAlertOptions,
     /// Webhook alerts.
+    #[config(table)]
     pub webhook: WebhookAlertOptions,
 }
 
@@ -230,13 +234,15 @@ pub const DEFAULT_ALERT_KINDS: [AlertKind; 3] =
 /// `APP_LIGHTHOUSE__SAMPLE__REQUESTS=0.05`, lists as comma-separated
 /// strings (`APP_LIGHTHOUSE__IGNORE__ROUTES=/health/*,/metrics`).
 /// [`check`](Self::check) names the key of every problem.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, ConfigSection)]
+#[config(key = "lighthouse", docs = "/docs/tools/lighthouse/", validate = Self::check_values)]
 #[serde(default)]
 pub struct LighthouseOptions {
     /// Record anything at all. When off, the dashboard still shows what was
     /// recorded.
     pub enabled: bool,
     /// Where records are kept: `database` (the default) or `off`.
+    #[config(one_of = "database, off")]
     pub store: StoreKind,
     /// A separate database for Lighthouse's tables (same forms as
     /// `database.url`); the app's database when unset.
@@ -258,11 +264,15 @@ pub struct LighthouseOptions {
     /// The release label; `app.version`, else `unknown`, when unset
     /// (`APP_LIGHTHOUSE__RELEASE`, which deploys set).
     pub release: Option<String>,
-    /// The server label; the host name when unset.
+    /// The server label; the host name when unset (`HOSTNAME`, or
+    /// `COMPUTERNAME` on Windows).
+    #[config(env_fallback = "HOSTNAME")]
     pub server: Option<String>,
     /// When things are slow.
+    #[config(table)]
     pub thresholds: Thresholds,
     /// How many details are stored.
+    #[config(table)]
     pub sample: SampleRates,
     /// What `lighthouse:prune` keeps, in days (14).
     pub retention_days: u32,
@@ -273,13 +283,16 @@ pub struct LighthouseOptions {
     /// ones are sampled out (10000). Counts are never dropped.
     pub buffer: usize,
     /// What is kept of a request.
+    #[config(table)]
     pub capture: CaptureOptions,
     /// Name fragments masked in addition to `log.redact`.
-    #[serde(deserialize_with = "list_or_comma_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub redact: Vec<String>,
     /// What is never recorded.
+    #[config(table)]
     pub ignore: IgnoreOptions,
     /// The alert channels.
+    #[config(table)]
     pub alerts: AlertOptions,
 }
 
@@ -309,15 +322,13 @@ impl Default for LighthouseOptions {
     }
 }
 
-impl ConfigSection for LighthouseOptions {
-    const KEY: &'static str = "lighthouse";
-
-    fn validate(&self) -> Result<(), String> {
+impl LighthouseOptions {
+    /// Checks the values at boot: [`check`](Self::check) with the problems
+    /// joined into one message.
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
-}
 
-impl LighthouseOptions {
     /// Checks the options; every problem names its key and none echoes a
     /// secret.
     pub fn check(&self) -> Result<(), Vec<String>> {
@@ -492,34 +503,10 @@ pub(crate) fn parse_hh_mm(text: &str) -> Option<(u32, u32)> {
     (hour < 24 && minute < 60).then_some((hour, minute))
 }
 
-/// A list, or a comma-separated string (environment variables are strings).
-pub(crate) fn list_or_comma_string<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrString {
-        List(Vec<String>),
-        One(String),
-    }
-    Ok(match ListOrString::deserialize(d)? {
-        ListOrString::List(list) => list
-            .into_iter()
-            .map(|item| item.trim().to_owned())
-            .filter(|item| !item.is_empty())
-            .collect(),
-        ListOrString::One(text) => text
-            .split(',')
-            .map(|item| item.trim().to_owned())
-            .filter(|item| !item.is_empty())
-            .collect(),
-    })
-}
-
 /// Alert kinds: a list or a comma-separated string; an unknown kind is an
 /// error naming the accepted ones.
 fn kinds<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<AlertKind>>, D::Error> {
-    let names = list_or_comma_string(d)?;
+    let names = navree_config::comma_list(d)?;
     names
         .iter()
         .map(|name| {
@@ -601,7 +588,7 @@ impl fmt::Display for Period {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde_json::json;
 
     fn load(sources: ConfigSources) -> Result<LighthouseOptions, String> {
@@ -609,6 +596,107 @@ mod tests {
         config
             .typed::<LighthouseOptions>()
             .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = LighthouseOptions::schema().expect("schema");
+        assert_eq!(schema.key, "lighthouse");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/tools/lighthouse/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "enabled",
+            "store",
+            "database_url",
+            "dashboard",
+            "path",
+            "environment",
+            "release",
+            "server",
+            "thresholds",
+            "sample",
+            "retention_days",
+            "capture",
+            "redact",
+            "ignore",
+            "alerts",
+        ] {
+            assert!(
+                schema.fields.iter().any(|field| field.name == name),
+                "missing {name}"
+            );
+        }
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect("field")
+        };
+        assert_eq!(field("store").ty, FieldType::choice(&["database", "off"]));
+        assert_eq!(field("thresholds").ty, FieldType::Table);
+        assert!(
+            field("thresholds")
+                .fields
+                .iter()
+                .any(|field| field.name == "slow_request_ms")
+        );
+        let secrets = schema.secret_paths();
+        for path in [
+            "lighthouse.database_url",
+            "lighthouse.alerts.slack.webhook_url",
+            "lighthouse.alerts.webhook.secret",
+        ] {
+            assert!(secrets.iter().any(|secret| secret == path), "{secrets:?}");
+        }
+        let fallbacks = schema.env_fallbacks();
+        assert!(
+            fallbacks
+                .iter()
+                .any(|fallback| fallback.key == "lighthouse.server"
+                    && fallback.variable == "HOSTNAME"),
+            "{fallbacks:?}"
+        );
+        let defaults = LighthouseOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], json!("database"));
+        assert_eq!(defaults["retention_days"], json!(14));
+        assert_eq!(defaults["thresholds"]["slow_request_ms"], json!(1000));
+        assert_eq!(defaults["alerts"]["spike"]["occurrences"], json!(50));
+        assert_eq!(defaults["database_url"], json!(null));
+    }
+
+    #[test]
+    fn credentials_never_print() {
+        let options = LighthouseOptions {
+            database_url: Some(Secret::new(
+                "postgres://user:hunter2@db/lighthouse".to_owned(),
+            )),
+            alerts: AlertOptions {
+                slack: SlackAlertOptions {
+                    webhook_url: Some(Secret::new(
+                        "https://hooks.slack.com/services/T0/B0/hunter2".to_owned(),
+                    )),
+                    ..SlackAlertOptions::default()
+                },
+                webhook: WebhookAlertOptions {
+                    url: Some("https://ops.example.com/hooks".to_owned()),
+                    secret: Some(Secret::new("hunter2-hunter2-hunter2-hunter2".to_owned())),
+                    ..WebhookAlertOptions::default()
+                },
+                ..AlertOptions::default()
+            },
+            ..LighthouseOptions::default()
+        };
+        assert!(!format!("{options:?}").contains("hunter2"));
+        assert!(
+            !ConfigTable::to_json(&options)
+                .to_string()
+                .contains("hunter2")
+        );
     }
 
     #[test]
@@ -657,8 +745,7 @@ mod tests {
             environment: Some("eu-west".to_owned()),
             ..LighthouseOptions::default()
         });
-        let labelled =
-            LighthouseOptions::with_app_environment(own, Some(Environment::Production));
+        let labelled = LighthouseOptions::with_app_environment(own, Some(Environment::Production));
         assert_eq!(labelled.environment_label(), "eu-west");
         let unchanged = LighthouseOptions::with_app_environment(options.clone(), None);
         assert!(Arc::ptr_eq(&unchanged, &options));

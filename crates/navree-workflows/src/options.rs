@@ -33,10 +33,12 @@ pub enum WorkflowStoreKind {
 ///
 /// From the environment: `APP_WORKFLOWS__STORE=memory`,
 /// `APP_WORKFLOWS__LEASE_SECS=120`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "workflows", docs = "/docs/packages/workflows/", validate = Self::check)]
 #[serde(default)]
 pub struct WorkflowsOptions {
     /// Where runs are stored (default `database`).
+    #[config(one_of = "database, memory")]
     pub store: WorkflowStoreKind,
     /// How long one execution may hold a run, in seconds (default 300).
     /// Every recorded step renews it. A run whose worker died is taken over
@@ -81,12 +83,9 @@ impl WorkflowsOptions {
     pub fn lease(&self) -> Duration {
         Duration::from_secs(self.lease_secs)
     }
-}
 
-impl ConfigSection for WorkflowsOptions {
-    const KEY: &'static str = "workflows";
-
-    fn validate(&self) -> Result<(), String> {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         if self.lease_secs == 0 {
             return Err("workflows.lease_secs must be at least 1".to_owned());
         }
@@ -100,6 +99,41 @@ impl ConfigSection for WorkflowsOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use navree_config::FieldType;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = WorkflowsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "workflows");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/workflows/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "store",
+            "lease_secs",
+            "queue",
+            "routes",
+            "automations",
+            "automation_routes",
+            "prune_after_days",
+        ] {
+            let field = schema.fields.iter().find(|field| field.name == name);
+            assert!(field.is_some_and(|field| !field.doc.is_empty()), "{name}");
+        }
+        let store = schema.fields.iter().find(|field| field.name == "store");
+        assert_eq!(
+            store.map(|field| &field.ty),
+            Some(&FieldType::choice(&["database", "memory"]))
+        );
+        let defaults = WorkflowsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], serde_json::json!("database"));
+        assert_eq!(defaults["lease_secs"], serde_json::json!(300));
+        assert_eq!(defaults["prune_after_days"], serde_json::json!(30));
+    }
 
     #[test]
     fn defaults_match_the_documentation() {

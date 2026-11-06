@@ -11,8 +11,8 @@ use navree_db::{
 };
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey,
-    Resolver, WeakAppContext,
+    BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module, ModuleBuilder,
+    ProviderKey, Resolver, WeakAppContext,
 };
 use navree_storage::Storage;
 
@@ -79,14 +79,12 @@ impl MediaModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: MediaOptions) -> impl Module {
-        ConfiguredMediaModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<MediaModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `media` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredMediaModule { options: None }
+        ConfiguredModule::<MediaModule, MediaOptions>::from_config(register)
     }
 
     /// Registers model `M`'s collections (import it in the feature module
@@ -102,26 +100,6 @@ impl MediaModule {
 impl Module for MediaModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `MediaModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredMediaModule {
-    /// `None`: read from configuration.
-    options: Option<MediaOptions>,
-}
-
-impl Module for ConfiguredMediaModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<MediaModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

@@ -10,8 +10,8 @@ use navree_db::{Db, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::WorkspaceDeleted;
@@ -95,15 +95,13 @@ impl WorkflowsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: WorkflowsOptions) -> impl Module {
-        ConfiguredWorkflowsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<WorkflowsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `workflows` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredWorkflowsModule { options: None }
+        ConfiguredModule::<WorkflowsModule, WorkflowsOptions>::from_config(register)
     }
 
     /// Registers workflow `W`, for the module that owns it
@@ -116,26 +114,6 @@ impl WorkflowsModule {
 impl Module for WorkflowsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `WorkflowsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredWorkflowsModule {
-    /// `None`: read from configuration.
-    options: Option<WorkflowsOptions>,
-}
-
-impl Module for ConfiguredWorkflowsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<WorkflowsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

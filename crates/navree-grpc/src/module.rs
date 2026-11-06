@@ -3,7 +3,7 @@
 
 use navree_config::ModuleBuilderConfigExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Module, ModuleBuilder, ModuleId};
+use navree_kernel::{ConfiguredModule, Module, ModuleBuilder};
 
 use crate::context::http_context_layer;
 use crate::edge::shared_port_layer;
@@ -43,39 +43,18 @@ pub struct GrpcModule;
 impl GrpcModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: GrpcOptions) -> impl Module {
-        ConfiguredGrpcModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<GrpcModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `grpc` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredGrpcModule { options: None }
+        ConfiguredModule::<GrpcModule, GrpcOptions>::from_config(register)
     }
 }
 
 impl Module for GrpcModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `GrpcModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredGrpcModule {
-    options: Option<GrpcOptions>,
-}
-
-impl Module for ConfiguredGrpcModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<GrpcModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
