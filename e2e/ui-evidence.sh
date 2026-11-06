@@ -81,7 +81,7 @@ ui_crm() {
     docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.crm-api" ${args[@]+"${args[@]}"} -t navree-crm-api:local "$HOST_ROOT" || return 1
   fi
   if ! docker image inspect navree-crm-web:local > /dev/null 2>&1; then
-    docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.crm-web" -t navree-crm-web:local "$HOST_ROOT/apps/crm-web" || return 1
+    docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.crm-web" -t navree-crm-web:local "$HOST_ROOT" || return 1
   fi
   compose up -d crm-web || return 1
   compose run --rm --no-deps crm-api migrate:fresh --seed --force || return 1

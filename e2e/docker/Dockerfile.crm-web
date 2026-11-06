@@ -1,16 +1,23 @@
 # syntax=docker/dockerfile:1
 # The CRM's Next.js front end (apps/crm-web) as a production build, for the
-# UI evidence run (`e2e/run.sh ui --crm`). The build context is apps/crm-web.
+# UI evidence run (`e2e/run.sh ui --crm`). crm-web links the Navree packages
+# in packages/js, so the build context is the repository root (the files it
+# sends are listed in Dockerfile.crm-web.dockerignore) and the packages are
+# built first.
 #
-#   docker build -f e2e/docker/Dockerfile.crm-web -t navree-crm-web:local apps/crm-web
+#   docker build -f e2e/docker/Dockerfile.crm-web -t navree-crm-web:local .
 FROM node:24-bookworm-slim
 ENV NEXT_TELEMETRY_DISABLED=1 CI=1
 RUN corepack enable
-WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+WORKDIR /repo
+COPY packages/js packages/js
+RUN --mount=type=cache,id=navree-e2e-pnpm,target=/root/.local/share/pnpm/store \
+    pnpm --dir packages/js install --frozen-lockfile && pnpm --dir packages/js build
+COPY apps/crm-web/package.json apps/crm-web/pnpm-lock.yaml apps/crm-web/pnpm-workspace.yaml apps/crm-web/
+WORKDIR /repo/apps/crm-web
 RUN --mount=type=cache,id=navree-e2e-pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
-COPY . .
+COPY apps/crm-web ./
 RUN pnpm build
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 EXPOSE 3000

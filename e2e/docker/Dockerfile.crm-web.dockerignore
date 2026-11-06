@@ -1,0 +1,12 @@
+# The build context of Dockerfile.crm-web is the repository root: only the
+# packages and the app go in, without what a local install or build left.
+*
+!packages/js
+!apps/crm-web
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+apps/crm-web/screenshots
+apps/crm-web/test-results
+apps/crm-web/playwright-report
