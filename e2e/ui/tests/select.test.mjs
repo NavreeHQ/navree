@@ -1318,6 +1318,9 @@ for (const browserName of browsers) {
       assert.ok((await page.locator("#palette [data-slot=command-remote] [role=option]").count()) > 0);
       assert.deepEqual(await said(page), [], "how many results there are is not said again");
       await page.keyboard.press("Escape");
+      // A dialog's close event comes in a task of its own after it closes (WebKit's, later than the next step here).
+      await page.waitForFunction(() => !document.querySelector("#palette[open]")).catch(() => {});
+      await page.waitForFunction(() => !document.querySelector("#palette [data-slot=command-remote][data-ui-keep]"), null, { timeout: 2000 }).catch(() => {});
       assert.equal(await page.locator("#palette [data-slot=command-remote][data-ui-keep]").count(), 0, "a closed palette's answers are gone");
       await close();
     });
