@@ -18,7 +18,7 @@ use super::{
 };
 use crate::api::IssueFilterQuery;
 use crate::dashboard::{LighthouseDashboardController, Viewer};
-use crate::model::{IssueKind, IssueStatus, Level};
+use crate::model::{IssueKind, IssueStatus};
 use crate::store::{IgnoreFor, IssueFilter, IssueSummary, Occurrence};
 
 /// The Resolve form: now, or in the next release.
@@ -262,7 +262,7 @@ fn latest_facts(c: &LighthouseDashboardController, mount: &str, o: &Occurrence) 
     push_text(&mut rows, "Job", &o.job_id, true);
     push_text(&mut rows, "Request id", &o.request_id, true);
     if let Some(trace_id) = &o.trace_id {
-        let node = match c.trace_link(Some(trace_id)) {
+        let node = match c.trace_link(Some(trace_id.as_str())) {
             Some(href) => navree_ui::el("a")
                 .href(href)
                 .attr("rel", "noopener noreferrer")
