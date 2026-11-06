@@ -648,10 +648,27 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
         let db = db.clone();
         async move { titles(&q.get(&db).await.unwrap()) }
     };
-    assert_eq!(
-        deals(Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "nope"])).await,
-        ["Pricing upgrade", "Small change"]
-    );
+    // What MariaDB lacks is refused: indexes from the end of a JSON array,
+    // and before 10.9 `json_overlaps`.
+    let mariadb = db.mariadb_version().await.unwrap();
+    let refused_on_mariadb = |q: navree_orm::Builder<Deal>| {
+        let db = db.clone();
+        async move {
+            let error = q.get(&db).await.unwrap_err();
+            assert!(
+                matches!(&error, OrmError::Unsupported { driver, .. } if driver == "MariaDB"),
+                "{error}"
+            );
+        }
+    };
+    if mariadb.is_some_and(|version| version < (10, 9)) {
+        refused_on_mariadb(Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "nope"])).await;
+    } else {
+        assert_eq!(
+            deals(Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "nope"])).await,
+            ["Pricing upgrade", "Small change"]
+        );
+    }
     assert_eq!(
         deals(Deal::query().where_(Deal::TAGS.contained_by(["vip"]))).await,
         ["Platform deal", "Renewal for Agra"],
@@ -661,10 +678,14 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
         deals(Deal::query().where_json_contains_key("tags[1]")).await,
         ["Pricing upgrade"]
     );
-    assert_eq!(
-        deals(Deal::query().where_json_contains_key("tags[-1]")).await,
-        ["Pricing upgrade", "Renewal for Agra", "Small change"]
-    );
+    if mariadb.is_some() {
+        refused_on_mariadb(Deal::query().where_json_contains_key("tags[-1]")).await;
+    } else {
+        assert_eq!(
+            deals(Deal::query().where_json_contains_key("tags[-1]")).await,
+            ["Pricing upgrade", "Renewal for Agra", "Small change"]
+        );
+    }
     assert_eq!(
         deals(Deal::query().where_(Deal::META.has_key("source")))
             .await
@@ -772,30 +793,39 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
 /// and limits, derived tables and (PostgreSQL) a table function.
 pub async fn compound(db: Db, server: Server) {
     let (agra, gulati) = seed(&db).await;
-    // Each company with its biggest deal, through a lateral join.
+    // Each company with its biggest deal, through a lateral join (which
+    // MariaDB lacks, so it is refused there).
     let biggest = Deal::query()
         .select([Deal::TITLE.expr()])
         .where_column(Deal::COMPANY_ID, "=", Company::ID)
         .order_by_desc(Deal::AMOUNT_CENTS)
         .limit(1);
-    let rows = Company::query()
+    let lateral = Company::query()
         .join_lateral(biggest, "biggest")
         .add_select(["biggest.title"])
         .order_by(Company::ID)
         .get(&db)
-        .await
-        .unwrap();
-    let pairs: Vec<(i64, String)> = rows
-        .iter()
-        .map(|c| (c.id, c.extra::<String>("title").unwrap().unwrap()))
-        .collect();
-    assert_eq!(
-        pairs,
-        [
-            (agra.id, "Pricing upgrade".to_owned()),
-            (gulati.id, "Platform deal".to_owned())
-        ]
-    );
+        .await;
+    if db.is_mariadb().await.unwrap() {
+        let error = lateral.unwrap_err();
+        assert!(
+            matches!(&error, navree_orm::OrmError::Unsupported { driver, .. } if driver == "MariaDB"),
+            "{error}"
+        );
+    } else {
+        let pairs: Vec<(i64, String)> = lateral
+            .unwrap()
+            .iter()
+            .map(|c| (c.id, c.extra::<String>("title").unwrap().unwrap()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                (agra.id, "Pricing upgrade".to_owned()),
+                (gulati.id, "Platform deal".to_owned())
+            ]
+        );
+    }
     // The smallest deal of each company.
     let mut smallest: Vec<String> = Deal::query()
         .where_not_null(Deal::COMPANY_ID)

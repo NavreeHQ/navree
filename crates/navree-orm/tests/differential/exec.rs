@@ -13,7 +13,7 @@
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, Utc};
 use navree_db::{Db, DbOptions, Executor, Value};
-use navree_orm::{Decimal, Dialect, Statement};
+use navree_orm::{Decimal, Dialect, Statement, Syntax};
 use serde_json::Value as Json;
 
 /// One row: its columns in order, as `(name, value)`.
@@ -24,6 +24,7 @@ pub type Row = Vec<(String, Json)>;
 pub struct Exec {
     db: Db,
     dialect: Dialect,
+    syntax: Syntax,
 }
 
 impl Exec {
@@ -36,12 +37,44 @@ impl Exec {
         })
         .await
         .unwrap_or_else(|error| panic!("cannot connect to the {dialect} test database: {error}"));
-        Exec { db, dialect }
+        let mariadb = db
+            .mariadb_version()
+            .await
+            .unwrap_or_else(|error| panic!("asks the {dialect} test database its version: {error}"));
+        Exec {
+            db,
+            dialect,
+            syntax: Syntax::of(dialect, mariadb),
+        }
     }
 
     /// The dialect.
     pub fn dialect(&self) -> Dialect {
         self.dialect
+    }
+
+    /// The server's syntax (MariaDB's, or the dialect's).
+    pub fn syntax(&self) -> Syntax {
+        self.syntax
+    }
+
+    /// The `utf8mb4` collation of new databases: MySQL 8's
+    /// `utf8mb4_0900_ai_ci`, or on a MariaDB without it (10.6) the
+    /// accent- and case-insensitive `utf8mb4_unicode_520_ci`.
+    pub async fn utf8mb4_collation(&self) -> &'static str {
+        let known: i64 = navree_db::ExecutorExt::fetch_scalar(
+            &self.db,
+            &navree_db::Statement::text(
+                "SELECT COUNT(*) FROM information_schema.COLLATIONS WHERE COLLATION_NAME = 'utf8mb4_0900_ai_ci'",
+            ),
+        )
+        .await
+        .expect("reads the server's collations");
+        if known > 0 {
+            "utf8mb4_0900_ai_ci"
+        } else {
+            "utf8mb4_unicode_520_ci"
+        }
     }
 
     /// Runs SQL written for this database (schema and fixtures), statement

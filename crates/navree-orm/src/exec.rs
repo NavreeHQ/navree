@@ -58,7 +58,7 @@ use crate::driver::{DocumentDriver, InsertOutcome};
 use crate::error::OrmError;
 use crate::ir::{Aggregate, DeleteIr, InsertIr, QueryIr, UpdateIr};
 use crate::row::Row;
-use crate::sql::{self, Dialect, Statement};
+use crate::sql::{self, Dialect, Statement, Syntax};
 use crate::streams::{StreamingGuard, ensure_free};
 use crate::value::{Field, Kind, Value};
 
@@ -229,6 +229,7 @@ pub enum Target<'a> {
 pub struct SqlTarget<'a> {
     conn: SqlConn<'a>,
     dialect: Dialect,
+    syntax: Syntax,
     uow: Option<Uow>,
     app: Option<AppContext>,
 }
@@ -528,7 +529,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => Target::Sql(SqlTarget::new(
                 tx.conn(),
-                sql.dialect,
+                sql.syntax,
                 sql.uow.clone(),
                 sql.app.clone(),
             )),
@@ -540,7 +541,7 @@ impl Target<'_> {
     pub async fn fetch(&self, query: &QueryIr) -> Result<Vec<Row>, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_select(query, sql.dialect)?;
+                let statement = sql::render_select(query, sql.syntax)?;
                 Ok(sql
                     .query_all_timed(&statement, query.timeout)
                     .await?
@@ -566,7 +567,7 @@ impl Target<'_> {
     pub async fn stream<'s>(&'s self, query: &'s QueryIr) -> Result<RowsStream<'s>, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_select(query, sql.dialect)?;
+                let statement = sql::render_select(query, sql.syntax)?;
                 let Some(timeout) = query.timeout else {
                     return sql.stream(&statement).await;
                 };
@@ -601,7 +602,7 @@ impl Target<'_> {
     ) -> Result<Value, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_aggregate(query, aggregate, sql.dialect)?;
+                let statement = sql::render_aggregate(query, aggregate, sql.syntax)?;
                 match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => Row::from_sql(row).value("aggregate"),
                     None => Ok(Value::Null(Kind::I64)),
@@ -618,7 +619,7 @@ impl Target<'_> {
     pub async fn exists(&self, query: &QueryIr) -> Result<bool, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_exists(query, sql.dialect)?;
+                let statement = sql::render_exists(query, sql.syntax)?;
                 match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => {
                         let value = Row::from_sql(row).value("exists")?;
@@ -640,7 +641,7 @@ impl Target<'_> {
     pub async fn insert(&self, insert: &InsertIr) -> Result<InsertOutcome, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_insert(insert, sql.dialect)?;
+                let statement = sql::render_insert(insert, sql.syntax)?;
                 if !insert.returning.is_empty() && sql.dialect.supports_returning() {
                     let rows: Vec<Row> = sql
                         .query_all(&statement)
@@ -675,7 +676,7 @@ impl Target<'_> {
     pub async fn update(&self, update: &UpdateIr) -> Result<u64, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_update(update, sql.dialect)?;
+                let statement = sql::render_update(update, sql.syntax)?;
                 Ok(sql.execute(&statement).await?.rows_affected)
             }
             Target::Document(document) => {
@@ -689,7 +690,7 @@ impl Target<'_> {
     pub async fn delete(&self, delete: &DeleteIr) -> Result<u64, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::render_delete(delete, sql.dialect)?;
+                let statement = sql::render_delete(delete, sql.syntax)?;
                 Ok(sql.execute(&statement).await?.rows_affected)
             }
             Target::Document(document) => {
@@ -701,10 +702,11 @@ impl Target<'_> {
 }
 
 impl<'a> SqlTarget<'a> {
-    fn new(conn: SqlConn<'a>, dialect: Dialect, uow: Option<Uow>, app: Option<AppContext>) -> Self {
+    fn new(conn: SqlConn<'a>, syntax: Syntax, uow: Option<Uow>, app: Option<AppContext>) -> Self {
         SqlTarget {
             conn,
-            dialect,
+            dialect: syntax.dialect(),
+            syntax,
             uow,
             app,
         }
@@ -713,6 +715,12 @@ impl<'a> SqlTarget<'a> {
     /// The dialect.
     pub fn dialect(&self) -> Dialect {
         self.dialect
+    }
+
+    /// The syntax statements are written in: MariaDB's on a MariaDB
+    /// server, else the dialect's.
+    pub fn syntax(&self) -> Syntax {
+        self.syntax
     }
 
     /// Whether statements run inside a transaction (a unit of work's, or
@@ -885,7 +893,7 @@ impl<'a> SqlTarget<'a> {
     ) -> Result<TimedRows, OrmError> {
         let in_transaction = self.in_transaction();
         let tx = self.begin_atomic().await?;
-        let nested = SqlTarget::new(tx.conn(), self.dialect, self.uow.clone(), self.app.clone());
+        let nested = SqlTarget::new(tx.conn(), self.syntax, self.uow.clone(), self.app.clone());
         let result = async {
             let previous = if in_transaction {
                 let current = Statement {
@@ -1065,7 +1073,7 @@ fn pool_conn(db: &Db, writer: bool) -> SqlConn<'static> {
 /// wrote). A write marks the task's unit of work as having written, so
 /// its later reads stay on the writer.
 async fn db_target(db: &Db, access: Access, writer: bool) -> Result<Target<'static>, OrmError> {
-    let dialect = Dialect::from(DbExecutor::backend(db));
+    let dialect = syntax_of(db).await?;
     let app = db.app();
     let current = Uow::current().filter(|uow| same_pool(db, uow));
     let target = match access {
@@ -1132,6 +1140,19 @@ impl Executor for Db {
     }
 }
 
+/// The syntax of `db`'s server: MariaDB's (its version asked once per
+/// pool), else its dialect's. Boxed, so the futures of every operation do
+/// not grow by the question's.
+fn syntax_of(db: &Db) -> BoxFuture<'_, Result<Syntax, OrmError>> {
+    Box::pin(async move {
+        let dialect = Dialect::from(DbExecutor::backend(db));
+        if dialect != Dialect::MySql {
+            return Ok(Syntax::from(dialect));
+        }
+        Ok(Syntax::of(dialect, db.mariadb_version().await?))
+    })
+}
+
 impl Executor for Uow {
     async fn target(&self, access: Access) -> Result<Target<'_>, OrmError> {
         if access == Access::Write {
@@ -1139,7 +1160,7 @@ impl Executor for Uow {
         }
         Ok(Target::Sql(SqlTarget::new(
             SqlConn::Uow(self.clone()),
-            Dialect::from(DbExecutor::backend(self)),
+            syntax_of(self.db()).await?,
             Some(self.clone()),
             self.db().app(),
         )))
@@ -1181,7 +1202,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => Target::Sql(SqlTarget::new(
                 sql.conn.reborrow(),
-                sql.dialect,
+                sql.syntax,
                 sql.uow.clone(),
                 sql.app.clone(),
             )),

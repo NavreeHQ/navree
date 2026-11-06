@@ -186,6 +186,11 @@ impl Lowerer {
                 let not = matches!(op, Operator::NotRegexp);
                 match self.dialect {
                     Dialect::Postgres => l.binary(custom(if not { "!~" } else { "~" }), r),
+                    // MariaDB has no `REGEXP_LIKE`; PCRE's `(?-i)` matches
+                    // case whatever the collation.
+                    Dialect::MySql if self.syntax.is_mariadb() => {
+                        mariadb_regexp(l, r, "(?-i)", not)
+                    }
                     // `REGEXP` follows the column's collation (usually
                     // case-insensitive); the `c` flag matches case.
                     Dialect::MySql => negate(
@@ -201,6 +206,9 @@ impl Lowerer {
                 let not = matches!(op, Operator::NotRegexpIgnoreCase);
                 match self.dialect {
                     Dialect::Postgres => l.binary(custom(if not { "!~*" } else { "~*" }), r),
+                    Dialect::MySql if self.syntax.is_mariadb() => {
+                        mariadb_regexp(l, r, "(?i)", not)
+                    }
                     Dialect::MySql => negate(
                         ast::Expr::func("REGEXP_LIKE", vec![l, r, ast::Expr::string("i")]),
                         not,
@@ -451,7 +459,7 @@ impl Lowerer {
                     ast::Expr::Value(Value::from(value.to_string())),
                 ];
                 if !column.path.is_empty() {
-                    args.push(self.json_path(&column.path));
+                    args.push(self.json_path(&column.path)?);
                 }
                 ast::Expr::func("json_contains", args)
             }
@@ -470,7 +478,7 @@ impl Lowerer {
                     }
                 };
                 let elements = ast::Select::from_source(ast::Source::Function {
-                    call: Box::new(self.sqlite_json_each(column)),
+                    call: Box::new(self.sqlite_json_each(column)?),
                     alias: None,
                 })
                 .column(ast::Expr::int(1))
@@ -499,7 +507,7 @@ impl Lowerer {
                 "json_contains",
                 vec![
                     ast::Expr::Value(Value::from(value.to_string())).cast(SqlType::Json),
-                    self.mysql_json(column),
+                    self.mysql_json(column)?,
                 ],
             ),
             Dialect::Sqlite => return Err(self.unsupported("a JSON contained-by check")),
@@ -537,10 +545,13 @@ impl Lowerer {
                 ));
                 ast::Expr::exists(candidates)
             }
+            Dialect::MySql if self.syntax.mariadb_before(10, 9) => {
+                return Err(self.unsupported("json_overlaps before MariaDB 10.9"));
+            }
             Dialect::MySql => ast::Expr::func(
                 "json_overlaps",
                 vec![
-                    self.mysql_json(column),
+                    self.mysql_json(column)?,
                     ast::Expr::Value(Value::from(elements.to_string())).cast(SqlType::Json),
                 ],
             ),
@@ -548,7 +559,7 @@ impl Lowerer {
                 let pairs = ast::Select {
                     items: vec![ast::SelectItem::new(ast::Expr::int(1))],
                     from: vec![
-                        ast::Source::function(self.sqlite_json_each(column), "navree_left"),
+                        ast::Source::function(self.sqlite_json_each(column)?, "navree_left"),
                         ast::Source::function(
                             ast::Expr::func(
                                 "json_each",
@@ -620,7 +631,7 @@ impl Lowerer {
                         vec![
                             self.plain_column(column),
                             ast::Expr::string("one"),
-                            self.json_path(&column.path),
+                            self.json_path(&column.path)?,
                         ],
                     ),
                     ast::Expr::int(0),
@@ -628,29 +639,29 @@ impl Lowerer {
             ),
             Dialect::Sqlite => ast::Expr::func(
                 "json_type",
-                vec![self.plain_column(column), self.json_path(&column.path)],
+                vec![self.plain_column(column), self.json_path(&column.path)?],
             )
             .is_not_null(),
         })
     }
 
     /// MySQL: the JSON at `column` (its path extracted, still JSON).
-    fn mysql_json(&self, column: &ColumnRef) -> ast::Expr {
+    fn mysql_json(&self, column: &ColumnRef) -> Result<ast::Expr> {
         let base = self.plain_column(column);
-        if column.path.is_empty() {
+        Ok(if column.path.is_empty() {
             base
         } else {
-            ast::Expr::func("json_extract", vec![base, self.json_path(&column.path)])
-        }
+            ast::Expr::func("json_extract", vec![base, self.json_path(&column.path)?])
+        })
     }
 
     /// SQLite: the elements of the JSON at `column`, as `json_each` rows.
-    fn sqlite_json_each(&self, column: &ColumnRef) -> ast::Expr {
+    fn sqlite_json_each(&self, column: &ColumnRef) -> Result<ast::Expr> {
         let mut args = vec![self.plain_column(column)];
         if !column.path.is_empty() {
-            args.push(self.json_path(&column.path));
+            args.push(self.json_path(&column.path)?);
         }
-        ast::Expr::func("json_each", args)
+        Ok(ast::Expr::func("json_each", args))
     }
 
     fn json_length(&self, column: &ColumnRef, op: &Operator, length: i64) -> Result<ast::Expr> {
@@ -662,7 +673,7 @@ impl Lowerer {
             Dialect::MySql | Dialect::Sqlite => {
                 let mut args = vec![self.plain_column(column)];
                 if !column.path.is_empty() {
-                    args.push(self.json_path(&column.path));
+                    args.push(self.json_path(&column.path)?);
                 }
                 ast::Expr::func(
                     if self.dialect == Dialect::MySql {
@@ -750,6 +761,15 @@ impl Lowerer {
 /// `NOT (condition)` when `not`.
 fn negate(condition: ast::Expr, not: bool) -> ast::Expr {
     if not { condition.not() } else { condition }
+}
+
+/// MariaDB: `l [NOT] REGEXP CONCAT(flag, r)`, the case flag (`(?-i)` or
+/// `(?i)`) leading the pattern.
+fn mariadb_regexp(l: ast::Expr, r: ast::Expr, flag: &'static str, not: bool) -> ast::Expr {
+    l.binary(
+        BinaryOp::Custom(Cow::Borrowed(if not { "NOT REGEXP" } else { "REGEXP" })),
+        ast::Expr::func("CONCAT", vec![ast::Expr::string(flag), r]),
+    )
 }
 
 /// `left op right` for date parts and JSON lengths: comparisons only.

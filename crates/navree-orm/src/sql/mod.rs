@@ -130,6 +130,100 @@ impl fmt::Display for Dialect {
     }
 }
 
+/// The SQL a statement is written in: a [`Dialect`], and on MySQL's
+/// whether the server is MariaDB (and which version), where its SQL
+/// differs from MySQL 8's. A [`Dialect`] converts into its own syntax
+/// (MySQL's is MySQL 8's); the ORM asks a [`navree_db::Db`] once which it
+/// is.
+///
+/// On MariaDB a JSON value is `JSON_EXTRACT(?, '$')` (there is no `CAST(..
+/// AS JSON)`), a shared lock is always `LOCK IN SHARE MODE`, a regular
+/// expression is `REGEXP` with its case flag in the pattern, and a time
+/// limit is `SET STATEMENT max_statement_time = .. FOR`. What MariaDB
+/// lacks is refused: lateral joins, locks of named tables, indexes from
+/// the end of a JSON array (MariaDB 10.9 to 11.4 answer them wrongly), and
+/// before 10.9 `json_overlaps`, before 11.7 vector distances.
+///
+/// ```
+/// use navree_orm::{Dialect, Syntax};
+///
+/// let mariadb = Syntax::mariadb(11, 4);
+/// assert_eq!(mariadb.dialect(), Dialect::MySql);
+/// assert_eq!(mariadb.name(), "MariaDB");
+/// assert_eq!(Syntax::from(Dialect::MySql).mariadb_version(), None);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Syntax {
+    dialect: Dialect,
+    mariadb: Option<(u16, u16)>,
+}
+
+impl Syntax {
+    /// MariaDB `major.minor` (MySQL's dialect).
+    pub fn mariadb(major: u16, minor: u16) -> Syntax {
+        Syntax {
+            dialect: Dialect::MySql,
+            mariadb: Some((major, minor)),
+        }
+    }
+
+    /// The syntax of a server of `dialect`: MariaDB's when `mariadb` holds
+    /// its version (on MySQL's dialect only).
+    pub fn of(dialect: Dialect, mariadb: Option<(u16, u16)>) -> Syntax {
+        match (dialect, mariadb) {
+            (Dialect::MySql, Some((major, minor))) => Syntax::mariadb(major, minor),
+            (dialect, _) => Syntax::from(dialect),
+        }
+    }
+
+    /// The dialect.
+    pub fn dialect(self) -> Dialect {
+        self.dialect
+    }
+
+    /// The MariaDB version, `None` on other servers.
+    pub fn mariadb_version(self) -> Option<(u16, u16)> {
+        self.mariadb
+    }
+
+    /// Whether the server is MariaDB.
+    pub fn is_mariadb(self) -> bool {
+        self.mariadb.is_some()
+    }
+
+    /// Whether the server is a MariaDB older than `major.minor`.
+    pub(crate) fn mariadb_before(self, major: u16, minor: u16) -> bool {
+        self.mariadb.is_some_and(|version| version < (major, minor))
+    }
+
+    /// The database's name in messages: `MariaDB`, else the dialect's.
+    pub fn name(self) -> &'static str {
+        if self.is_mariadb() {
+            "MariaDB"
+        } else {
+            self.dialect.name()
+        }
+    }
+}
+
+impl From<Dialect> for Syntax {
+    fn from(dialect: Dialect) -> Self {
+        Syntax {
+            dialect,
+            mariadb: None,
+        }
+    }
+}
+
+impl fmt::Display for Syntax {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.mariadb {
+            Some((major, minor)) => write!(f, "MariaDB {major}.{minor}"),
+            None => f.write_str(self.dialect.name()),
+        }
+    }
+}
+
 /// A compiled statement: SQL with placeholders and the values bound to
 /// them.
 #[derive(Clone, Debug, PartialEq)]

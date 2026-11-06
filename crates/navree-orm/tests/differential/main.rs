@@ -9,7 +9,9 @@
 //!   (or fail) again. The compiler's outcomes were recorded on the test
 //!   servers (SQLite, PostgreSQL with TimescaleDB, MySQL 8.4) before it was
 //!   deleted, one line per case in `compiler/<database>.jsonl` with its
-//!   SQL.
+//!   SQL. On MariaDB the renderer writes MariaDB's SQL and is compared
+//!   with MySQL 8.4's outcomes; a case it refuses there (what MariaDB
+//!   lacks) is listed as refused on MariaDB.
 //! - **Across databases**: the statements of `across.rs`, built as syntax
 //!   trees, return the rows written there on every database (or are refused
 //!   where the dialect lacks the feature).
@@ -28,7 +30,7 @@ mod support;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use navree_orm::{Dialect, OrmError, Statement, render};
+use navree_orm::{Dialect, OrmError, Statement, Syntax, render};
 use serde_json::Value as Json;
 
 use crate::corpus::{Case, Kind};
@@ -112,8 +114,13 @@ fn recorded(dialect: Dialect) -> HashMap<String, Recorded> {
         .collect()
 }
 
+/// Whether `error` is the renderer refusing what MariaDB lacks.
+fn refused_on_mariadb(error: &OrmError) -> bool {
+    matches!(error, OrmError::Unsupported { driver, .. } if driver == "MariaDB")
+}
+
 /// The statements of `kind` as the renderer writes them.
-fn rendered(kind: &Kind, dialect: Dialect) -> Result<Vec<Statement>, OrmError> {
+fn rendered(kind: &Kind, dialect: Syntax) -> Result<Vec<Statement>, OrmError> {
     Ok(match kind {
         Kind::Select(query) | Kind::Locked(query) => vec![render::render_select(query, dialect)?],
         Kind::Aggregate(query, aggregate) => {
@@ -348,6 +355,8 @@ async fn compare_paths(dialect: Dialect) {
         let mut failures_on_both = String::new();
         let mut differences = String::new();
         let compiled = recorded(dialect);
+        let syntax = exec.syntax();
+        let mut on_mariadb = String::new();
         assert_eq!(
             compiled.len(),
             cases.len(),
@@ -362,7 +371,16 @@ async fn compare_paths(dialect: Dialect) {
             else {
                 panic!("no recorded outcome of the compiler for [{}]", case.name);
             };
-            let renderer_sql = rendered(&case.kind, dialect);
+            let renderer_sql = rendered(&case.kind, syntax);
+            // What MariaDB lacks, where MySQL ran the case.
+            if let Err(error) = &renderer_sql
+                && refused_on_mariadb(error)
+                && !matches!(compiler, Outcome::Refused(_) | Outcome::Failed(_))
+            {
+                differ += 1;
+                writeln!(on_mariadb, "  [{}] {error}", case.name).unwrap();
+                continue;
+            }
             let renderer = run(&exec, case, clone(&renderer_sql)).await;
             let verdict = compare(case, compiler, &renderer);
             let expected = case
@@ -431,7 +449,7 @@ async fn compare_paths(dialect: Dialect) {
             support::reset(&exec).await;
         }
         eprintln!(
-            "differential ({dialect}): {} cases: {rows} same rows ({with_rows} of them not empty), {writes} same writes, {refused} refused by both, {failed} failed on both, {differ} expected differences, {} mismatches",
+            "differential ({syntax}): {} cases: {rows} same rows ({with_rows} of them not empty), {writes} same writes, {refused} refused by both, {failed} failed on both, {differ} expected differences, {} mismatches",
             cases.len(),
             cases.len() - rows - writes - refused - failed - differ,
         );
@@ -441,9 +459,12 @@ async fn compare_paths(dialect: Dialect) {
         if !differences.is_empty() {
             eprintln!("expected differences ({dialect}):\n{differences}");
         }
+        if !on_mariadb.is_empty() {
+            eprintln!("refused on {syntax}:\n{on_mariadb}");
+        }
         assert!(
             mismatches.is_empty(),
-            "the renderer's results differ from the compiler's on {dialect}:{mismatches}"
+            "the renderer's results differ from the compiler's on {syntax}:{mismatches}"
         );
     })
     .await;
@@ -461,11 +482,13 @@ async fn portable(dialect: Dialect) {
         let mut problems = String::new();
         let (mut ran, mut refused) = (0, 0);
         let statements = across::statements();
+        let syntax = exec.syntax();
+        let mut on_mariadb = String::new();
         for portable in &statements {
             let mut rendered = Vec::new();
             let mut refusal = None;
             for step in &portable.steps {
-                match render::render_all(step, dialect) {
+                match render::render_all(step, syntax) {
                     Ok(statements) => rendered.extend(statements),
                     Err(error) => {
                         refusal = Some(error);
@@ -474,6 +497,14 @@ async fn portable(dialect: Dialect) {
                 }
             }
             let expect_refusal = portable.refused_on.contains(&dialect);
+            if let Some(error) = &refusal
+                && !expect_refusal
+                && refused_on_mariadb(error)
+            {
+                refused += 1;
+                writeln!(on_mariadb, "  [{}] {error}", portable.name).unwrap();
+                continue;
+            }
             match (refusal, expect_refusal) {
                 (Some(error), true) => {
                     refused += 1;
@@ -528,7 +559,7 @@ async fn portable(dialect: Dialect) {
                     }
                     match failure {
                         Some(error) => Err(error),
-                        None => match render::render_query(check, dialect) {
+                        None => match render::render_query(check, syntax) {
                             Ok(check) => exec.rows(&check).await,
                             Err(error) => Err(error.to_string()),
                         },
@@ -567,12 +598,15 @@ async fn portable(dialect: Dialect) {
             support::reset(&exec).await;
         }
         eprintln!(
-            "portable ({dialect}): {} statements: {ran} ran, {refused} refused as expected",
+            "portable ({syntax}): {} statements: {ran} ran, {refused} refused as expected",
             statements.len()
         );
+        if !on_mariadb.is_empty() {
+            eprintln!("refused on {syntax}:\n{on_mariadb}");
+        }
         assert!(
             problems.is_empty(),
-            "portable statements on {dialect}:{problems}"
+            "portable statements on {syntax}:{problems}"
         );
     })
     .await;

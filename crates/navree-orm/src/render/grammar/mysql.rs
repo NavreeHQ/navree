@@ -4,10 +4,18 @@
 //! IGNORE` and `ON DUPLICATE KEY UPDATE`, no `RETURNING`, multi-table
 //! `UPDATE`/`DELETE` with commas, `json_extract`, `<=>`, `CONCAT`, `RAND()`
 //! and the `MAX_EXECUTION_TIME` hint.
+//!
+//! When the [`Writer`]'s syntax is MariaDB's: `SET STATEMENT
+//! max_statement_time = .. FOR` for a time limit, `LOCK IN SHARE MODE`
+//! for every shared lock, `JSON_EXTRACT(.., '$')` for a value read as JSON;
+//! lateral joins, locks of named tables and JSON indexes from the end are
+//! refused.
 
 use std::borrow::Cow;
 
 use super::{Grammar, json_path_text, name_text, unsupported};
+use crate::render::lower::{FROM_THE_END, from_the_end};
+use crate::render::unsupported_on_mariadb;
 use crate::error::{OrmError, Result};
 use crate::ir::JsonSegment;
 use crate::render::Writer;
@@ -28,8 +36,27 @@ impl Grammar for MySql {
         Dialect::MySql
     }
 
+    /// MySQL's hint; MariaDB ignores it and takes its limit, in seconds,
+    /// before the statement.
     fn execution_time_hint(&self, w: &mut Writer, millis: u64) {
-        w.push(&format!("/*+ MAX_EXECUTION_TIME({millis}) */ "));
+        if w.syntax().is_mariadb() {
+            w.prepend(&format!(
+                "SET STATEMENT max_statement_time = {}.{:03} FOR ",
+                millis / 1000,
+                millis % 1000
+            ));
+        } else {
+            w.push(&format!("/*+ MAX_EXECUTION_TIME({millis}) */ "));
+        }
+    }
+
+    /// MariaDB has no lateral join.
+    fn lateral(&self, w: &mut Writer) -> Result<()> {
+        if w.syntax().is_mariadb() {
+            return Err(unsupported_on_mariadb("a lateral join"));
+        }
+        w.push("LATERAL ");
+        Ok(())
     }
 
     fn join_keyword(&self, kind: JoinKind) -> Result<&'static str> {
@@ -66,6 +93,19 @@ impl Grammar for MySql {
     /// does not wait or names its tables (MySQL 8 takes those after `FOR
     /// SHARE` only).
     fn lock(&self, w: &mut Writer, lock: &Lock) -> Result<()> {
+        if w.syntax().is_mariadb() {
+            // MariaDB: `LOCK IN SHARE MODE` with or without waiting, and no
+            // `OF`.
+            if !lock.of.is_empty() {
+                return Err(unsupported_on_mariadb("a lock of named tables (OF ..)"));
+            }
+            w.push(match lock.strength {
+                LockStrength::Update | LockStrength::NoKeyUpdate => " FOR UPDATE",
+                LockStrength::Share | LockStrength::KeyShare => " LOCK IN SHARE MODE",
+            });
+            self.lock_tail(w, lock);
+            return Ok(());
+        }
         match lock.strength {
             LockStrength::Update | LockStrength::NoKeyUpdate => w.push(" FOR UPDATE"),
             LockStrength::Share | LockStrength::KeyShare => {
@@ -331,9 +371,27 @@ impl Grammar for MySql {
         })
     }
 
+    /// `CAST(expr AS type)`; on MariaDB, which has no JSON type to cast
+    /// to, JSON is `JSON_EXTRACT(expr, '$')` (the same JSON, read as JSON).
+    fn cast(&self, w: &mut Writer, expr: &Expr, ty: &SqlType) -> Result<()> {
+        if *ty == SqlType::Json && w.syntax().is_mariadb() {
+            w.push("JSON_EXTRACT(");
+            self.expr(w, expr)?;
+            w.push(", '$')");
+            return Ok(());
+        }
+        let name = self.type_name(ty)?;
+        w.push("CAST(");
+        self.expr(w, expr)?;
+        w.push(" AS ");
+        w.push(&name);
+        w.push(")");
+        Ok(())
+    }
+
     /// `json_extract(expr, '$."a"[0]')`, unquoted for text
     /// (`json_unquote(..)`); an index from the end is `[last]`,
-    /// `[last-1]`, ...
+    /// `[last-1]`, ... (refused on MariaDB).
     fn json_path(
         &self,
         w: &mut Writer,
@@ -343,6 +401,9 @@ impl Grammar for MySql {
     ) -> Result<()> {
         if path.is_empty() && mode == JsonMode::Json {
             return self.expr(w, expr);
+        }
+        if w.syntax().is_mariadb() && from_the_end(path) {
+            return Err(unsupported_on_mariadb(FROM_THE_END));
         }
         if mode == JsonMode::Text {
             w.push("json_unquote(");

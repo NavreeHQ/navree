@@ -52,13 +52,15 @@ pub use lower::{
 pub use writer::Writer;
 
 use crate::error::{OrmError, Result};
-use crate::sql::{Dialect, Statement};
+use crate::sql::{Dialect, Statement, Syntax};
 
-/// `statement` written for `dialect`. A statement that takes several on
-/// `dialect` (emptying a table on SQLite) is refused: use [`render_all`].
-pub fn render(statement: &ast::Statement, dialect: Dialect) -> Result<Statement> {
-    let mut w = Writer::new(dialect);
-    grammar::for_dialect(dialect).statement(&mut w, statement)?;
+/// `statement` written for `syntax` (a [`Dialect`], or MariaDB's
+/// [`Syntax`]). A statement that takes several on `syntax` (emptying a
+/// table on SQLite) is refused: use [`render_all`].
+pub fn render(statement: &ast::Statement, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
+    let mut w = Writer::new(syntax);
+    grammar::for_dialect(syntax.dialect()).statement(&mut w, statement)?;
     Ok(w.finish())
 }
 
@@ -83,17 +85,24 @@ pub fn render(statement: &ast::Statement, dialect: Dialect) -> Result<Statement>
 ///     .collect();
 /// assert_eq!(sql, [r#"DELETE FROM "sqlite_sequence" WHERE "name" = ?"#, r#"DELETE FROM "deals""#]);
 /// ```
-pub fn render_all(statement: &ast::Statement, dialect: Dialect) -> Result<Vec<Statement>> {
+pub fn render_all(
+    statement: &ast::Statement,
+    syntax: impl Into<Syntax>,
+) -> Result<Vec<Statement>> {
+    let syntax = syntax.into();
     match statement {
-        ast::Statement::Truncate(truncate) => Ok(grammar::for_dialect(dialect).truncate(truncate)),
-        other => Ok(vec![render(other, dialect)?]),
+        ast::Statement::Truncate(truncate) => {
+            Ok(grammar::for_dialect(syntax.dialect()).truncate(truncate))
+        }
+        other => Ok(vec![render(other, syntax)?]),
     }
 }
 
-/// `query` written for `dialect`.
-pub fn render_query(query: &ast::Query, dialect: Dialect) -> Result<Statement> {
-    let mut w = Writer::new(dialect);
-    grammar::for_dialect(dialect).query(&mut w, query)?;
+/// `query` written for `syntax`.
+pub fn render_query(query: &ast::Query, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
+    let mut w = Writer::new(syntax);
+    grammar::for_dialect(syntax.dialect()).query(&mut w, query)?;
     Ok(w.finish())
 }
 
@@ -110,9 +119,10 @@ pub fn render_query(query: &ast::Query, dialect: Dialect) -> Result<Statement> {
 /// assert_eq!(render_expr(&same, Dialect::MySql).unwrap().sql, "`a` <=> `b`");
 /// assert_eq!(render_expr(&same, Dialect::Sqlite).unwrap().sql, r#""a" IS "b""#);
 /// ```
-pub fn render_expr(expr: &ast::Expr, dialect: Dialect) -> Result<Statement> {
-    let mut w = Writer::new(dialect);
-    grammar::for_dialect(dialect).expr(&mut w, expr)?;
+pub fn render_expr(expr: &ast::Expr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
+    let mut w = Writer::new(syntax);
+    grammar::for_dialect(syntax.dialect()).expr(&mut w, expr)?;
     Ok(w.finish())
 }
 
@@ -122,6 +132,13 @@ pub(crate) fn unsupported(
     feature: impl Into<std::borrow::Cow<'static, str>>,
 ) -> OrmError {
     grammar::unsupported(dialect, feature)
+}
+
+/// `Unsupported` for `feature` on MariaDB.
+pub(crate) fn unsupported_on_mariadb(
+    feature: impl Into<std::borrow::Cow<'static, str>>,
+) -> OrmError {
+    OrmError::unsupported(feature, "MariaDB")
 }
 
 #[cfg(test)]

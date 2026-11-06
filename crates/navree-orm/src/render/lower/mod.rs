@@ -33,7 +33,7 @@ use crate::ir::{
     AggregateFunction, ArithmeticOp, ColumnRef, Direction, Expr, JsonSegment, Nulls, Order,
     VectorMetric,
 };
-use crate::sql::{Dialect, Statement};
+use crate::sql::{Dialect, Statement, Syntax};
 use crate::value::Value;
 
 mod filter;
@@ -47,8 +47,9 @@ pub use select::{aggregate, exists, select};
 pub use write::{delete, insert, truncate, update, update_from};
 
 /// The SQL of a read query.
-pub fn render_select(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Statement> {
-    super::render_query(&select(query, dialect)?, dialect)
+pub fn render_select(query: &crate::ir::QueryIr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
+    super::render_query(&select(query, syntax)?, syntax)
 }
 
 /// The SQL of an aggregate over a query's rows, in a column named
@@ -58,14 +59,16 @@ pub fn render_select(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Sta
 pub fn render_aggregate(
     query: &crate::ir::QueryIr,
     aggregate: &crate::ir::Aggregate,
-    dialect: Dialect,
+    syntax: impl Into<Syntax>,
 ) -> Result<Statement> {
-    super::render_query(&select::aggregate(query, aggregate, dialect)?, dialect)
+    let syntax = syntax.into();
+    super::render_query(&select::aggregate(query, aggregate, syntax)?, syntax)
 }
 
 /// `SELECT EXISTS(query) AS "exists"`.
-pub fn render_exists(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Statement> {
-    super::render_query(&select::exists(query, dialect)?, dialect)
+pub fn render_exists(query: &crate::ir::QueryIr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
+    super::render_query(&select::exists(query, syntax)?, syntax)
 }
 
 /// The SQL of an insert (`RETURNING` on PostgreSQL and SQLite only; MySQL reads
@@ -88,18 +91,20 @@ pub fn render_exists(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Sta
 ///     "INSERT IGNORE INTO `deals` (`title`) VALUES (?)"
 /// );
 /// ```
-pub fn render_insert(insert: &crate::ir::InsertIr, dialect: Dialect) -> Result<Statement> {
+pub fn render_insert(insert: &crate::ir::InsertIr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
     super::render(
-        &ast::Statement::from(write::insert(insert, dialect)?),
-        dialect,
+        &ast::Statement::from(write::insert(insert, syntax)?),
+        syntax,
     )
 }
 
 /// The SQL of an update (JSON path assignments folded per column).
-pub fn render_update(update: &crate::ir::UpdateIr, dialect: Dialect) -> Result<Statement> {
+pub fn render_update(update: &crate::ir::UpdateIr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
     super::render(
-        &ast::Statement::from(write::update(update, dialect)?),
-        dialect,
+        &ast::Statement::from(write::update(update, syntax)?),
+        syntax,
     )
 }
 
@@ -110,17 +115,19 @@ pub fn render_update_from(
     sets: &[(Cow<'static, str>, Expr)],
     joins: &[crate::ir::Join],
     wheres: &[crate::ir::WhereClause],
-    dialect: Dialect,
+    syntax: impl Into<Syntax>,
 ) -> Result<Statement> {
-    let update = write::update_from(table, sets, joins, wheres, dialect)?;
-    super::render(&ast::Statement::from(update), dialect)
+    let syntax = syntax.into();
+    let update = write::update_from(table, sets, joins, wheres, syntax)?;
+    super::render(&ast::Statement::from(update), syntax)
 }
 
 /// The SQL of a delete.
-pub fn render_delete(delete: &crate::ir::DeleteIr, dialect: Dialect) -> Result<Statement> {
+pub fn render_delete(delete: &crate::ir::DeleteIr, syntax: impl Into<Syntax>) -> Result<Statement> {
+    let syntax = syntax.into();
     super::render(
-        &ast::Statement::from(write::delete(delete, dialect)?),
-        dialect,
+        &ast::Statement::from(write::delete(delete, syntax)?),
+        syntax,
     )
 }
 
@@ -128,23 +135,44 @@ pub fn render_delete(delete: &crate::ir::DeleteIr, dialect: Dialect) -> Result<S
 /// RESTART IDENTITY` on PostgreSQL (`CASCADE` also empties the tables whose
 /// foreign keys point at it), `TRUNCATE` on MySQL, and on SQLite a delete
 /// of its rows after resetting its `sqlite_sequence` entry.
-pub fn render_truncate(table: &str, cascade: bool, dialect: Dialect) -> Vec<Statement> {
-    super::grammar::for_dialect(dialect).truncate(&write::truncate(table, cascade))
+pub fn render_truncate(table: &str, cascade: bool, syntax: impl Into<Syntax>) -> Vec<Statement> {
+    super::grammar::for_dialect(syntax.into().dialect()).truncate(&write::truncate(table, cascade))
+}
+
+/// An index from the end of a JSON array, refused on MariaDB: 10.6 has
+/// no `[last]`, and 10.9 to 11.4 answer it from the first row's array for
+/// every row.
+pub(crate) const FROM_THE_END: &str = "an index from the end of a JSON array";
+
+/// Whether `path` counts an index from the end of an array.
+pub(crate) fn from_the_end(path: &[JsonSegment]) -> bool {
+    path.iter()
+        .any(|segment| matches!(segment, JsonSegment::Index(index) if *index < 0))
 }
 
 /// Lowers IR nodes for one dialect.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Lowerer {
     pub(crate) dialect: Dialect,
+    /// MariaDB's syntax, or the dialect's.
+    pub(crate) syntax: Syntax,
 }
 
 impl Lowerer {
-    pub(crate) fn new(dialect: Dialect) -> Self {
-        Lowerer { dialect }
+    pub(crate) fn new(syntax: impl Into<Syntax>) -> Self {
+        let syntax = syntax.into();
+        Lowerer {
+            dialect: syntax.dialect(),
+            syntax,
+        }
     }
 
     pub(crate) fn unsupported(&self, feature: impl Into<Cow<'static, str>>) -> OrmError {
-        super::unsupported(self.dialect, feature)
+        if self.syntax.is_mariadb() {
+            super::unsupported_on_mariadb(feature)
+        } else {
+            super::unsupported(self.dialect, feature)
+        }
     }
 
     /// A column, with its JSON path read as text.
@@ -177,8 +205,11 @@ impl Lowerer {
 
     /// A JSON path as the string literal MySQL and SQLite take:
     /// `'$."a"[0]'`.
-    pub(crate) fn json_path(&self, path: &[JsonSegment]) -> ast::Expr {
-        ast::Expr::string(json_path_text(path, self.dialect))
+    pub(crate) fn json_path(&self, path: &[JsonSegment]) -> Result<ast::Expr> {
+        if self.syntax.is_mariadb() && from_the_end(path) {
+            return Err(self.unsupported(FROM_THE_END));
+        }
+        Ok(ast::Expr::string(json_path_text(path, self.dialect)))
     }
 
     /// An expression.
@@ -361,6 +392,9 @@ impl Lowerer {
                     ast::BinaryOp::Custom(Cow::Borrowed(op)),
                     literal.cast(ast::SqlType::Custom(Cow::Borrowed("vector"))),
                 )
+            }
+            (Dialect::MySql, _) if self.syntax.mariadb_before(11, 7) => {
+                return Err(self.unsupported("a vector distance before MariaDB 11.7"));
             }
             (Dialect::MySql, VectorMetric::Cosine | VectorMetric::Euclidean) => {
                 let function = if metric == VectorMetric::Euclidean {

@@ -7,7 +7,7 @@
 
 use super::ast::{Ident, ObjectName};
 use crate::error::OrmError;
-use crate::sql::{Dialect, Statement};
+use crate::sql::{Dialect, Statement, Syntax};
 use crate::value::Value;
 
 /// A statement being written for one dialect.
@@ -31,16 +31,20 @@ use crate::value::Value;
 #[derive(Debug)]
 pub struct Writer {
     dialect: Dialect,
+    syntax: Syntax,
     sql: String,
     values: Vec<Value>,
     aliases: usize,
 }
 
 impl Writer {
-    /// An empty statement for `dialect`.
-    pub fn new(dialect: Dialect) -> Self {
+    /// An empty statement for `syntax` (a [`Dialect`], or MariaDB's
+    /// [`Syntax`]).
+    pub fn new(syntax: impl Into<Syntax>) -> Self {
+        let syntax = syntax.into();
         Writer {
-            dialect,
+            dialect: syntax.dialect(),
+            syntax,
             sql: String::with_capacity(128),
             values: Vec::new(),
             aliases: 0,
@@ -50,6 +54,17 @@ impl Writer {
     /// The dialect being written.
     pub fn dialect(&self) -> Dialect {
         self.dialect
+    }
+
+    /// The syntax being written (MariaDB's, or the dialect's).
+    pub fn syntax(&self) -> Syntax {
+        self.syntax
+    }
+
+    /// Puts SQL text before everything written so far (a statement's
+    /// prefix, which binds no value).
+    pub(crate) fn prepend(&mut self, sql: &str) {
+        self.sql.insert_str(0, sql);
     }
 
     /// The SQL written so far.

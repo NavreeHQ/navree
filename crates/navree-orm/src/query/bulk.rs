@@ -865,7 +865,7 @@ async fn update_from_on(
         &sets,
         &query.joins,
         &query.wheres,
-        sql.dialect(),
+        sql.syntax(),
     )?;
     Ok(sql.execute(&statement).await?.rows_affected)
 }

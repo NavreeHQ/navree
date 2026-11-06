@@ -84,9 +84,10 @@ where
             with_query(&url, &format!("options=-c%20search_path%3D{name}%2Cpublic"))
         }
         _ => {
+            let collation = admin.utf8mb4_collation().await;
             admin
                 .batch(&format!(
-                    "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+                    "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE {collation}"
                 ))
                 .await
                 .expect("creates the database");

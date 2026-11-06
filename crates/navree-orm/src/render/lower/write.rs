@@ -11,14 +11,15 @@ use crate::ir::{
     UpdateIr, Where, WhereClause,
 };
 use crate::render::ast::{self, SqlType};
-use crate::sql::Dialect;
+use crate::sql::{Dialect, Syntax};
 use crate::value::{Value, to_json};
 
 /// An insert as a tree: `returning` columns come back on PostgreSQL and SQLite only
 /// (MySQL reads `last_insert_id`); conflicting rows fail the statement,
 /// are skipped or update the existing row, as [`OnConflict`] says.
-pub fn insert(insert: &InsertIr, dialect: Dialect) -> Result<ast::Insert> {
-    let lowerer = Lowerer::new(dialect);
+pub fn insert(insert: &InsertIr, syntax: impl Into<Syntax>) -> Result<ast::Insert> {
+    let lowerer = Lowerer::new(syntax);
+    let dialect = lowerer.dialect;
     let columns: Vec<ast::Ident> = insert
         .columns
         .iter()
@@ -129,14 +130,14 @@ pub fn insert(insert: &InsertIr, dialect: Dialect) -> Result<ast::Insert> {
 /// column into one call that sets them all (`jsonb_set` on PostgreSQL,
 /// `json_set` on MySQL and SQLite; a NULL column starts as an empty
 /// object).
-pub fn update(update: &UpdateIr, dialect: Dialect) -> Result<ast::Update> {
+pub fn update(update: &UpdateIr, syntax: impl Into<Syntax>) -> Result<ast::Update> {
     if update.sets.is_empty() {
         return Err(OrmError::invalid(format!(
             "an update of `{}` sets no column",
             update.table.name
         )));
     }
-    let lowerer = Lowerer::new(dialect);
+    let lowerer = Lowerer::new(syntax);
     let mut lowered = ast::Update::new(
         ast::ObjectName::parse(update.table.name.clone()),
         lowerer.update_sets(&update.table.name, &update.sets)?,
@@ -158,8 +159,10 @@ pub fn update_from(
     sets: &[(Cow<'static, str>, Expr)],
     joins: &[Join],
     wheres: &[WhereClause],
-    dialect: Dialect,
+    syntax: impl Into<Syntax>,
 ) -> Result<ast::Update> {
+    let syntax = syntax.into();
+    let dialect = syntax.dialect();
     if sets.is_empty() {
         return Err(OrmError::invalid(format!(
             "an update of `{}` sets no column",
@@ -175,10 +178,10 @@ pub fn update_from(
     if dialect == Dialect::MySql && joins.len() > 1 {
         return Err(OrmError::unsupported(
             "update_from with more than one joined table",
-            dialect.name(),
+            syntax.name(),
         ));
     }
-    let lowerer = Lowerer::new(dialect);
+    let lowerer = Lowerer::new(syntax);
     let mut lowered = ast::Update::new(
         ast::ObjectName::parse(table.name.clone()),
         lowerer.update_sets(&table.name, sets)?,
@@ -219,8 +222,8 @@ pub fn update_from(
 }
 
 /// A delete as a tree (the table is named without its alias).
-pub fn delete(delete: &DeleteIr, dialect: Dialect) -> Result<ast::Delete> {
-    let lowerer = Lowerer::new(dialect);
+pub fn delete(delete: &DeleteIr, syntax: impl Into<Syntax>) -> Result<ast::Delete> {
+    let lowerer = Lowerer::new(syntax);
     let mut lowered = ast::Delete::new(ast::ObjectName::parse(delete.table.name.clone()));
     if !delete.wheres.is_empty() {
         lowered.filter = Some(lowerer.clauses(&delete.wheres)?);
@@ -332,7 +335,7 @@ impl Lowerer {
                     )
                 }];
                 for (path, value) in paths {
-                    args.push(self.json_path(path));
+                    args.push(self.json_path(path)?);
                     args.push(match value {
                         Expr::Value(value) => {
                             let encoded = ast::Expr::Value(Value::from(to_json(value).to_string()));

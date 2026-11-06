@@ -758,7 +758,9 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
                 .timeout(Duration::from_millis(1_500))
                 .order_by("id"),
         ),
-        ordered(
+        // Unordered: the outer order (each row's position in its group) has
+        // ties.
+        read(
             "a limit per group",
             deals()
                 .select(["id", "company_id"])
@@ -766,7 +768,8 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
                 .order_by_desc("amount_cents")
                 .group_limit(1, "company_id"),
         ),
-        ordered(
+        // Unordered, for the same ties (the limit cuts none of them).
+        read(
             "a limit per group with an offset",
             deals()
                 .select(["id", "company_id"])

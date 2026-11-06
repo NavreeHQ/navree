@@ -11,7 +11,7 @@ use crate::ir::{
 };
 use crate::render::ast;
 use crate::render::grammar::is_identifier;
-use crate::sql::Dialect;
+use crate::sql::{Dialect, Syntax};
 use crate::value::Value;
 
 /// The derived table of a group limit, and its row number column.
@@ -19,8 +19,8 @@ const GROUP_TABLE: &str = "navree_table";
 const GROUP_ROW: &str = "navree_row";
 
 /// A read query as a tree (MySQL's timeout hint included).
-pub fn select(query: &QueryIr, dialect: Dialect) -> Result<ast::Query> {
-    let lowerer = Lowerer::new(dialect);
+pub fn select(query: &QueryIr, syntax: impl Into<Syntax>) -> Result<ast::Query> {
+    let lowerer = Lowerer::new(syntax);
     let mut lowered = lowerer.select(query)?;
     lowerer.hint(&mut lowered, query);
     Ok(lowered)
@@ -31,8 +31,12 @@ pub fn select(query: &QueryIr, dialect: Dialect) -> Result<ast::Query> {
 /// or a per-group limit are aggregated as a derived table, so the result
 /// counts what the query returns; others replace the select list (and
 /// drop the order).
-pub fn aggregate(query: &QueryIr, aggregate: &Aggregate, dialect: Dialect) -> Result<ast::Query> {
-    let lowerer = Lowerer::new(dialect);
+pub fn aggregate(
+    query: &QueryIr,
+    aggregate: &Aggregate,
+    syntax: impl Into<Syntax>,
+) -> Result<ast::Query> {
+    let lowerer = Lowerer::new(syntax);
     query.check()?;
     let wrap = !query.groups.is_empty()
         || !query.havings.is_empty()
@@ -89,8 +93,8 @@ pub fn aggregate(query: &QueryIr, aggregate: &Aggregate, dialect: Dialect) -> Re
 }
 
 /// `SELECT EXISTS(query) AS "exists"`.
-pub fn exists(query: &QueryIr, dialect: Dialect) -> Result<ast::Query> {
-    let lowerer = Lowerer::new(dialect);
+pub fn exists(query: &QueryIr, syntax: impl Into<Syntax>) -> Result<ast::Query> {
+    let lowerer = Lowerer::new(syntax);
     let mut inner = query.clone();
     inner.orders.clear();
     inner.lock = None;

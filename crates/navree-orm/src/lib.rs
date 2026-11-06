@@ -194,7 +194,7 @@ pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use soft_deletes::SoftDeleting;
-pub use sql::{Dialect, Statement};
+pub use sql::{Dialect, Statement, Syntax};
 pub use streams::{RowStream, cursor};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
