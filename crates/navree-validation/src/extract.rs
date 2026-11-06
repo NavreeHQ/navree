@@ -36,28 +36,49 @@ fn is_long(bytes: usize) -> bool {
     bytes >= OFF_THE_WORKER_BYTES
 }
 
-/// Whether a JSON value holds [`OFF_THE_WORKER_BYTES`] of text, counted until
-/// it does.
+/// Whether a JSON value is at least [`OFF_THE_WORKER_BYTES`] long as JSON,
+/// counted until it is. Every value counts, not only text: what reading one
+/// costs follows how many values it holds, and a million zeros hold no text.
 fn is_long_value(value: &Value) -> bool {
-    let mut bytes = 0usize;
+    let mut bytes = least_bytes(value);
+    // Counted as they are found, so what waits here stays under the length.
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         match value {
-            Value::String(text) => bytes = bytes.saturating_add(text.len()),
-            Value::Array(items) => pending.extend(items),
+            Value::Array(items) => {
+                for item in items {
+                    bytes = bytes.saturating_add(least_bytes(item));
+                    if is_long(bytes) {
+                        return true;
+                    }
+                    pending.push(item);
+                }
+            }
             Value::Object(fields) => {
-                for (key, value) in fields {
-                    bytes = bytes.saturating_add(key.len());
-                    pending.push(value);
+                for (key, item) in fields {
+                    // A key is text in quotes, with a colon after it.
+                    bytes = bytes
+                        .saturating_add(key.len().saturating_add(3))
+                        .saturating_add(least_bytes(item));
+                    if is_long(bytes) {
+                        return true;
+                    }
+                    pending.push(item);
                 }
             }
             _ => {}
         }
-        if is_long(bytes) {
-            return true;
-        }
     }
-    false
+    is_long(bytes)
+}
+
+/// The fewest bytes `value` takes as JSON, with the comma after it and
+/// without what it holds: its text and quotes, or at least a digit.
+fn least_bytes(value: &Value) -> usize {
+    match value {
+        Value::String(text) => text.len().saturating_add(3),
+        _ => 2,
+    }
 }
 
 /// Runs `work` on Tokio's blocking pool when `long` and there is a runtime to
@@ -930,6 +951,46 @@ where
         vec![stop.into_failure()]
     } else {
         partial::every_failure::<T, I>(input, stop)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// What a value costs to read follows how many values it holds, text or
+    /// not.
+    #[test]
+    fn a_value_is_long_by_its_values_not_only_its_text() {
+        assert!(!is_long_value(
+            &json!({ "name": "Gurpreet Kaur", "size": 3 })
+        ));
+        assert!(is_long_value(
+            &json!({ "text": "x".repeat(OFF_THE_WORKER_BYTES) })
+        ));
+        let zeros = OFF_THE_WORKER_BYTES / 2;
+        assert!(is_long_value(&json!({ "values": vec![0; zeros] })));
+        assert!(!is_long_value(&json!({ "values": vec![0; zeros / 4] })));
+        assert!(is_long_value(&json!(vec![json!({}); zeros])));
+        assert!(is_long_value(&json!(vec![json!(null); zeros])));
+        let keys: serde_json::Map<String, Value> = (0..zeros / 2)
+            .map(|n| (n.to_string(), Value::Null))
+            .collect();
+        assert!(is_long_value(&Value::Object(keys)));
+    }
+
+    /// Nesting counts like anything else.
+    #[test]
+    fn deep_values_are_counted_too() {
+        let mut deep = json!(0);
+        for _ in 0..OFF_THE_WORKER_BYTES / 2 {
+            deep = Value::Array(vec![deep]);
+        }
+        assert!(is_long_value(&deep));
+        // serde_json drops a deep value on the stack: leave it to the heap.
+        std::mem::forget(deep);
     }
 }
 

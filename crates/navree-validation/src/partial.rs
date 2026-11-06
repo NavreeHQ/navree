@@ -13,8 +13,10 @@
 //!
 //! Each read costs a pass over the input, so this runs only on input under
 //! the length the extractors read on the async worker (16 KiB: the caller
-//! decides), for at most [`STOPS_AT_MOST`] values and [`READS_AT_MOST`] reads;
-//! longer input reports the first value only, as serde does.
+//! decides), for at most [`STOPS_AT_MOST`] values and [`READS_AT_MOST`] reads,
+//! and for at most [`WORK_AT_MOST`] values read in all: input of many values
+//! gets fewer reads, and input of more values than that reports its first
+//! value only, as longer input does and as serde does.
 
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
@@ -28,6 +30,10 @@ pub(crate) const STOPS_AT_MOST: usize = 16;
 
 /// The most times the input is read again.
 pub(crate) const READS_AT_MOST: usize = 48;
+
+/// The most values read in all, over every read: each read copies the whole
+/// input and reads all of it.
+pub(crate) const WORK_AT_MOST: usize = 64 * 1024;
 
 /// One step into the input: a key of an object, or an index of an array.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -134,6 +140,17 @@ pub(crate) trait Mendable: Sized {
 
     /// The input read into a `T`.
     fn read<T: DeserializeOwned>(&self) -> Result<T, Stop>;
+
+    /// How many values a read goes through, counted up to `at_most` (more
+    /// is `at_most`).
+    fn values(&self, at_most: usize) -> usize;
+}
+
+/// How many times `input` may be read again within [`WORK_AT_MOST`]: none
+/// for input of more values than that.
+fn reads_for<I: Mendable>(input: &I) -> usize {
+    let values = input.values(WORK_AT_MOST + 1).max(1);
+    (WORK_AT_MOST / values).min(READS_AT_MOST)
 }
 
 /// Every failure of `input`, which serde stopped reading at `first`: one for
@@ -143,6 +160,10 @@ where
     T: DeserializeOwned + Validate,
     I: Mendable,
 {
+    let reads_at_most = reads_for(input);
+    if reads_at_most == 0 {
+        return vec![first.into_failure()];
+    }
     let mut failures = Vec::new();
     // Where stand-ins are: what serde or the rules say there or below is
     // about them, not about the client's input.
@@ -165,7 +186,7 @@ where
             return failures;
         };
         for stand_in in stand_ins(&stop) {
-            if reads >= READS_AT_MOST {
+            if reads >= reads_at_most {
                 return failures;
             }
             let base = current.as_ref().unwrap_or(input);
@@ -287,6 +308,29 @@ impl Mendable for Value {
         failure::encoding(|| serde_path_to_error::deserialize::<_, T>(self))
             .map_err(|error| Stop::of(error.path(), &error.inner().to_string()))
     }
+
+    fn values(&self, at_most: usize) -> usize {
+        let mut values = 1;
+        // Counted before they wait here, so fewer than `at_most` ever do.
+        let mut pending = vec![self];
+        while let Some(value) = pending.pop() {
+            let inside = match value {
+                Value::Array(items) => items.len(),
+                Value::Object(fields) => fields.len(),
+                _ => continue,
+            };
+            values = values.saturating_add(inside);
+            if values >= at_most {
+                return at_most;
+            }
+            match value {
+                Value::Array(items) => pending.extend(items),
+                Value::Object(fields) => pending.extend(fields.values()),
+                _ => {}
+            }
+        }
+        values
+    }
 }
 
 /// URL-encoded pairs (a query string or a form): flat, so a stop is at a
@@ -342,6 +386,15 @@ impl Mendable for Pairs {
             serde_urlencoded::Deserializer::new(form_urlencoded::parse(encoded.as_bytes()));
         failure::encoding(|| serde_path_to_error::deserialize(deserializer))
             .map_err(|error| Stop::of(error.path(), &error.inner().to_string()))
+    }
+
+    /// A key and a value for each pair.
+    fn values(&self, at_most: usize) -> usize {
+        self.0
+            .len()
+            .saturating_mul(2)
+            .saturating_add(1)
+            .min(at_most)
     }
 }
 
@@ -520,6 +573,84 @@ mod tests {
                 .iter()
                 .all(|failure| failure.path.starts_with("values."))
         );
+    }
+
+    /// JSON that counts the reads made of it.
+    #[derive(Clone)]
+    struct Counted {
+        value: Value,
+        reads: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+
+    impl Mendable for Counted {
+        fn mended(&self, at: &[Step], mend: Mend, stand_in: &Value) -> Option<Self> {
+            Some(Self {
+                value: self.value.mended(at, mend, stand_in)?,
+                reads: self.reads.clone(),
+            })
+        }
+
+        fn read<T: DeserializeOwned>(&self) -> Result<T, Stop> {
+            self.reads.set(self.reads.get() + 1);
+            self.value.read()
+        }
+
+        fn values(&self, at_most: usize) -> usize {
+            self.value.values(at_most)
+        }
+    }
+
+    /// The failures of `value` read as a `T`, and how many reads they took.
+    fn counted<T: DeserializeOwned + Validate + std::fmt::Debug>(value: Value) -> (usize, usize) {
+        let input = Counted {
+            value,
+            reads: std::rc::Rc::default(),
+        };
+        let stop = input.value.read::<T>().unwrap_err();
+        let failures = every_failure::<T, _>(&input, stop);
+        (failures.len(), input.reads.get())
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug, Deserialize, Validate)]
+    struct Big {
+        #[validate(skip)]
+        values: Vec<u32>,
+        #[validate(skip)]
+        fields: Vec<Product>,
+    }
+
+    /// Each read copies and reads all of the input: input of many values
+    /// gets fewer reads, so all of them together stay within the work.
+    #[test]
+    fn the_reads_of_big_input_stay_within_the_work() {
+        // Twenty values of the wrong type, each read past with a stand-in.
+        let fields =
+            vec![json!({ "name": [], "size": [], "sku": [], "kind": [], "dimensions": [] }); 4];
+        for count in [10, 1_000, 8_000, 30_000] {
+            let input = json!({ "values": vec![0; count], "fields": fields.clone() });
+            let values = input.values(usize::MAX);
+            let (failures, reads) = counted::<Big>(input);
+            assert!(failures >= 1, "{count}");
+            assert!(reads <= READS_AT_MOST, "{count}: {reads} reads");
+            assert!(
+                reads * values <= WORK_AT_MOST,
+                "{count}: {reads} reads of {values} values"
+            );
+        }
+        let (_, reads) = counted::<Big>(json!({ "values": vec![0; 10], "fields": fields }));
+        assert!(reads > 1, "small input is read again");
+    }
+
+    /// Past the work, the first value that cannot be read is the answer, as
+    /// for long input.
+    #[test]
+    fn input_of_more_values_than_the_work_reports_its_first_failure() {
+        let input = json!({
+            "values": vec![0; WORK_AT_MOST],
+            "fields": [{ "name": 7, "size": "huge" }],
+        });
+        assert_eq!(counted::<Big>(input), (1, 0));
     }
 
     #[test]
