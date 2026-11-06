@@ -313,7 +313,8 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
                 .size(ContainerSize::Sm)
                 .children(Stack::gap(4).children((
                     heading,
-                    Card::titled(title).description(description).body(body),
+                    el("h1").slot("page-title").child(title),
+                    Card::new().description(description).body(body),
                 ))),
         ),
     )
