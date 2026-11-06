@@ -15,6 +15,7 @@ use crate::docs::{DocsLibrary, DocsSettings, HttpFetcher, SITE, navree_home};
 use crate::lighthouse;
 use crate::logs::{self, LogFile, LogFilter, NO_LOG_FILE};
 use crate::project::{NotAnApp, Project};
+use crate::ui::{self, Catalog};
 
 /// How Navigator was started (`navree mcp` and its options).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -81,7 +82,7 @@ fn object(properties: Value) -> Value {
     json!({ "type": "object", "properties": properties, "additionalProperties": false })
 }
 
-/// The twelve tools every app gets, in the order agents see them. An app
+/// The fourteen tools every app gets, in the order agents see them. An app
 /// that includes Lighthouse also gets [`lighthouse::tool_defs`]; see
 /// [`Navigator::tools`].
 pub fn tools() -> Vec<ToolDef> {
@@ -101,12 +102,15 @@ pub fn tools() -> Vec<ToolDef> {
             name: "list_routes",
             title: "List routes",
             description: "Every route of the booted app (what `navree routes --json` prints): method, path, \
-                name, access rule (`public`, `auth`, `can:read Deal from id`), module and handler. Check it \
-                before adding a route. Builds the app first; a build error is returned as is.",
+                name, access rule (`public`, `auth`, `can:read Deal from id`), module and handler. A route \
+                declared with `.page()` has `page: true`: its errors are pages, and `render_page` can draw it. \
+                Check it before adding a route. Builds the app first; a build error is returned as is.",
             input_schema: object(json!({
                 "path": string("Only routes whose path starts with this prefix (`/api/v1/deals`)."),
                 "method": string("Only routes with this HTTP method (`GET`)."),
                 "module": string("Only routes of this module (`DealsModule`)."),
+                "pages_only": { "type": "boolean",
+                                "description": "Only the routes declared with `.page()`." },
             })),
             open_world: false,
         },
@@ -240,6 +244,39 @@ pub fn tools() -> Vec<ToolDef> {
             }),
             open_world: true,
         },
+        ToolDef {
+            name: "list_components",
+            title: "List components",
+            description: "The Navree UI components, from the catalog built into Navigator (of its Navree \
+                version, named in `version`): id, name, group, a one-line summary, the Rust types and `docs`, \
+                the slug `read_doc` takes (`components/button`). Filter by `query` (words in the id, name, \
+                summary or types) or `group`. Call it before building a screen, so the page uses a component \
+                that exists.",
+            input_schema: object(json!({
+                "query": string("Words to look for (`date picker`, `ButtonVariant`)."),
+                "group": string("Only the components of this group (`inputs`); the answer lists the groups."),
+            })),
+            open_world: false,
+        },
+        ToolDef {
+            name: "render_page",
+            title: "Render page",
+            description: "What one page of the app draws, without a browser: the app draws `path` itself \
+                (a GET as a guest, through its own router, changing nothing) and Navigator answers with an \
+                outline: status, title, headings, links, buttons, forms with their fields, and the Navree UI \
+                components the page uses. A route that redirects (to sign-in, say) answers with the redirect. \
+                `list_routes` with `pages_only` lists the pages. Needs the app's `ui:render` command, which \
+                Navree's `UiModule` adds. Builds the app first; a build error is returned as is.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": string("A path of the app, with its query if it has one (`/deals`, `/deals?page=2`)."),
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+            }),
+            open_world: false,
+        },
     ]
 }
 
@@ -270,6 +307,20 @@ struct RouteArgs {
     path: Option<String>,
     method: Option<String>,
     module: Option<String>,
+    pages_only: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ComponentArgs {
+    query: Option<String>,
+    group: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RenderArgs {
+    path: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -409,6 +460,8 @@ impl Navigator {
             "read_config" => self.read_config(parse(args)?),
             "search_docs" => self.search_docs(parse(args)?).await,
             "read_doc" => self.read_doc(parse(args)?).await,
+            "list_components" => self.list_components(parse(args)?),
+            "render_page" => self.render_page(parse(args)?).await,
             name if lighthouse::is_lighthouse_tool(name) => self.lighthouse(name, args).await,
             other => Err(ToolError::new(format!(
                 "unknown tool `{other}`; the tools are {}",
@@ -547,6 +600,16 @@ impl Navigator {
 
     async fn list_routes(&self, args: RouteArgs) -> Result<ToolOutput, ToolError> {
         let routes = self.probe(|probe| probe.routes()).await?;
+        // A route table that says nothing about pages can't be filtered by it.
+        let pages_only = args.pages_only == Some(true);
+        let table = routes.as_array().map_or(&[][..], Vec::as_slice);
+        if pages_only && !table.is_empty() && !table.iter().any(|r| r["page"].is_boolean()) {
+            return Err(ToolError::new(
+                "this app's route table (`routes --json`) doesn't say which routes are pages: it has no \
+                 `page` field, so `pages_only` can't tell. Update Navree to a version that has it, or read \
+                 the routes without `pages_only`.",
+            ));
+        }
         let wanted = |route: &Value| {
             args.path.as_deref().is_none_or(|p| {
                 route["path"]
@@ -557,6 +620,7 @@ impl Navigator {
                     .as_str()
                     .is_some_and(|method| method.eq_ignore_ascii_case(m))
             }) && args.module.as_deref().is_none_or(|m| route["module"] == m)
+                && (!pages_only || route["page"] == true)
         };
         let list: Vec<Value> = routes
             .as_array()
@@ -566,6 +630,38 @@ impl Navigator {
             .cloned()
             .collect();
         Ok(ToolOutput::Json(Value::Array(list)))
+    }
+
+    fn list_components(&self, args: ComponentArgs) -> Result<ToolOutput, ToolError> {
+        let app_version = self.project.as_ref().ok().and_then(Project::navree_version);
+        ui::components_answer(
+            Catalog::embedded(),
+            args.query.as_deref(),
+            args.group.as_deref(),
+            app_version.as_deref(),
+        )
+        .map(ToolOutput::Json)
+        .map_err(ToolError::new)
+    }
+
+    async fn render_page(&self, args: RenderArgs) -> Result<ToolOutput, ToolError> {
+        let path = ui::check_path(&args.path).map_err(ToolError::new)?;
+        let asked = path.clone();
+        let printed = self
+            .probe(move |probe| probe.render(&asked))
+            .await
+            .map_err(|error| {
+                if ui::lacks_render_command(&error.0) {
+                    ToolError::new(ui::NO_RENDER_COMMAND)
+                } else {
+                    error
+                }
+            })?;
+        Ok(ToolOutput::Json(ui::render_answer(
+            &path,
+            &printed,
+            Catalog::embedded(),
+        )))
     }
 
     async fn graph(&self) -> Result<Value, ToolError> {

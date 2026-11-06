@@ -21,8 +21,9 @@ use crate::tools::{Navigator, NavigatorOptions, ToolDef, ToolOutput};
 pub const INSTRUCTIONS: &str = "Navigator answers questions about this Navree app from the app itself. \
 Call app_info first in a new project. Check list_routes before adding a route, module_graph or \
 list_providers before wiring a provider, describe_schema before writing a migration or a query, and \
-last_error or read_logs when a request fails. search_docs and read_doc read the docs of the Navree \
-version in Cargo.lock. Every tool is read-only.";
+last_error or read_logs when a request fails. list_components lists the Navree UI components to build \
+a screen from, and render_page shows what one page of the app draws. search_docs and read_doc read the \
+docs of the Navree version in Cargo.lock. Every tool is read-only.";
 
 /// Added to [`INSTRUCTIONS`] when the app includes Lighthouse.
 pub const LIGHTHOUSE_INSTRUCTIONS: &str = " The app includes Lighthouse: lighthouse_list_issues and \
