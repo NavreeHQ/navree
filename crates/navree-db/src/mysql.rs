@@ -25,9 +25,16 @@ const LENIENT_SESSION: &str = "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
      REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
      ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))";
 
+/// Makes a `TIMESTAMP` column without a default have none, as on MySQL 8:
+/// MariaDB before 10.10 otherwise gives the first one of a table
+/// `DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` and the others a
+/// zero default, which strict mode refuses.
+#[cfg(any(feature = "mysql", test))]
+const EXPLICIT_TIMESTAMP_DEFAULTS: &str = "SET SESSION explicit_defaults_for_timestamp = ON";
+
 /// The statements a new connection runs for `database.mysql`, in order:
-/// the SQL mode (`modes` exactly, else strict or lenient), then the
-/// isolation level when one is set.
+/// the SQL mode (`modes` exactly, else strict or lenient), explicit
+/// `TIMESTAMP` defaults, then the isolation level when one is set.
 ///
 /// `Db::connect` has checked that every entry of `modes` is a mode name
 /// (letters, digits and underscores); the list is still written as an
@@ -45,7 +52,7 @@ pub(crate) fn session_statements(options: &MySqlOptions) -> Vec<String> {
         None if options.strict => STRICT_SESSION.to_owned(),
         None => LENIENT_SESSION.to_owned(),
     };
-    let mut statements = vec![mode];
+    let mut statements = vec![mode, EXPLICIT_TIMESTAMP_DEFAULTS.to_owned()];
     if let Some(level) = options.isolation_level {
         statements.push(format!(
             "SET SESSION TRANSACTION ISOLATION LEVEL {}",
@@ -134,7 +141,8 @@ mod tests {
             [
                 "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), \
                  'ONLY_FULL_GROUP_BY', 'STRICT_TRANS_TABLES', 'NO_ZERO_IN_DATE', \
-                 'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')"
+                 'NO_ZERO_DATE', 'ERROR_FOR_DIVISION_BY_ZERO')",
+                EXPLICIT_TIMESTAMP_DEFAULTS,
             ]
         );
     }
@@ -143,9 +151,12 @@ mod tests {
     fn lenient_sessions_remove_the_strict_modes() {
         assert_eq!(
             session_statements(&options(|o| o.strict = false)),
-            ["SET SESSION sql_mode = TRIM(BOTH ',' FROM \
+            [
+                "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
                  REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), \
-                 ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))"]
+                 ',STRICT_TRANS_TABLES,', ','), ',STRICT_ALL_TABLES,', ','))",
+                EXPLICIT_TIMESTAMP_DEFAULTS,
+            ]
         );
     }
 
@@ -163,17 +174,20 @@ mod tests {
             }));
             assert_eq!(
                 session,
-                ["SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION'"]
+                [
+                    "SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION'",
+                    EXPLICIT_TIMESTAMP_DEFAULTS,
+                ]
             );
         }
         assert_eq!(
-            session_statements(&options(|o| o.modes = Some(Vec::new()))),
-            ["SET SESSION sql_mode = ''"]
+            session_statements(&options(|o| o.modes = Some(Vec::new())))[0],
+            "SET SESSION sql_mode = ''"
         );
         // Checked names hold no quote; one would still stay inside the literal.
         assert_eq!(
-            session_statements(&options(|o| o.modes = Some(vec!["a'b".to_owned()]))),
-            ["SET SESSION sql_mode = 'A''B'"]
+            session_statements(&options(|o| o.modes = Some(vec!["a'b".to_owned()])))[0],
+            "SET SESSION sql_mode = 'A''B'"
         );
     }
 
@@ -187,6 +201,7 @@ mod tests {
             session,
             [
                 "SET SESSION sql_mode = 'ANSI'",
+                EXPLICIT_TIMESTAMP_DEFAULTS,
                 "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
             ]
         );
@@ -197,7 +212,7 @@ mod tests {
         ] {
             let session = session_statements(&options(|o| o.isolation_level = Some(level)));
             assert_eq!(
-                session[1],
+                session[2],
                 format!("SET SESSION TRANSACTION ISOLATION LEVEL {sql}")
             );
         }
