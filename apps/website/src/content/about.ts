@@ -21,12 +21,32 @@ export const founder = {
   knowsAbout: ["Rust", "Laravel", "NestJS", "React", "Next.js", "Cloud computing", "DevOps", "Open-source software"],
 } as const;
 
-/** The numbers of his work, as he states them. */
-export const facts: { value: string; label: string; text: string }[] = [
-  { value: "15", label: "years", text: "Of building software and the companies around it" },
-  { value: "6", label: "startups", text: "Built as a serial entrepreneur" },
-  { value: "100+", label: "packages", text: "Written and shared as open source" },
-  { value: "Millions", label: "of people", text: "Served by the products he built" },
+/**
+ * The numbers of his work, as he states them. Each says where it comes from:
+ * his GitHub profile, where a reader can count it, or his own account, where
+ * only he can. `Millions` is his estimate and is worded as one.
+ */
+export type Fact = { value: string; label: string; text: string; source: { label: string; href?: string } };
+export const facts: Fact[] = [
+  {
+    value: "15",
+    label: "years",
+    text: "Of building software and the companies around it",
+    source: { label: `On GitHub since ${founder.github.since}`, href: founder.github.url },
+  },
+  { value: "6", label: "startups", text: "Built as a serial entrepreneur", source: { label: "His own account" } },
+  {
+    value: "100+",
+    label: "packages",
+    text: "Written and shared as open source",
+    source: { label: "His public repositories", href: `${founder.github.url}?tab=repositories` },
+  },
+  {
+    value: "Millions",
+    label: "of people",
+    text: "Served by the products he built, by his own estimate",
+    source: { label: "His estimate, not an audited count" },
+  },
 ];
 
 /**

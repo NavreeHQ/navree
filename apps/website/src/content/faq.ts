@@ -272,7 +272,7 @@ export const aboutFaq: FaqSet = {
   items: [
     {
       question: "Who built Navree?",
-      answer: `${founder.name}, a serial entrepreneur and full-stack developer in ${founder.place}. He has spent fifteen years building software: six startups, products that serve millions of people and more than a hundred open-source packages, with Laravel, NestJS, React, Next.js, the cloud and DevOps. Navree puts what that work taught him into one framework, written in Rust.`,
+      answer: `${founder.name}, a serial entrepreneur and full-stack developer in ${founder.place}. He has spent fifteen years building software: six startups, products that, by his own estimate, have served millions of people, and more than a hundred open-source packages, with Laravel, NestJS, React, Next.js, the cloud and DevOps. Navree puts what that work taught him into one framework, written in Rust.`,
       link: { href: founder.github.url, label: `${founder.short} on GitHub` },
     },
     {

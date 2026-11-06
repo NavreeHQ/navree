@@ -32,6 +32,16 @@ export function Builder() {
               <dt className="order-2 text-[0.9375rem] leading-snug">
                 <span className="font-medium text-fg-1">{fact.label}</span>
                 <span className="mt-1 block text-sm text-balance text-fg-3">{fact.text}</span>
+                <span className="mt-1.5 block text-xs text-fg-3">
+                  Source:{" "}
+                  {fact.source.href ? (
+                    <a href={fact.source.href} className="link">
+                      {fact.source.label}
+                    </a>
+                  ) : (
+                    fact.source.label
+                  )}
+                </span>
               </dt>
               <dd className="order-1 font-display text-display-md font-semibold text-fg">{fact.value}</dd>
             </div>
