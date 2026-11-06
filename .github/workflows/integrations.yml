@@ -19,7 +19,8 @@
 #             against OpenLDAP, the SCIM server driven by an independent SCIM
 #             client (scim2-cli).
 # - infra:    spans exported to an OpenTelemetry Collector, DNS lookups against
-#             CoreDNS and a DNS-over-HTTPS server.
+#             CoreDNS and a DNS-over-HTTPS server, Dock starting every service
+#             of its catalog.
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -137,6 +138,7 @@ jobs:
           scripts/integration-services.sh pull identity &
           pulling=$!
           cargo test --locked -p navree-sso --test sso --no-run
+          cargo test --locked -p navree-dock --test docker --no-run
           cargo test --locked -p navree-directory --test directory --no-run
           wait "$pulling"
 
@@ -204,6 +206,11 @@ jobs:
           cargo test --locked -p navree-domains --test domains coredns -- --ignored --nocapture
           cargo test --locked -p navree-mail --test mail coredns -- --ignored --nocapture
           cargo test --locked -p navree-sso --test sso doh -- --ignored --nocapture
+
+      - name: Dock starts every service of its catalog
+        env:
+          NAVREE_TEST_DOCKER: "1"
+        run: cargo test --locked -p navree-dock --test docker -- --include-ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}
