@@ -88,6 +88,70 @@ async fn exists_rule(scratch: Scratch) {
     );
 }
 
+/// A company deleted by marking `deleted_at` is not there for `exists`, and
+/// holds no name for `unique`, once the rule says so.
+async fn table_rules_can_leave_soft_deleted_rows_out(scratch: Scratch) {
+    let app = database_app(&scratch).await;
+    let db = app.get::<Db>().await;
+    let (live, gone) = (Uuid::now_v7(), Uuid::now_v7());
+    insert(&app, "companies", live, "Acme").await;
+    insert(&app, "companies", gone, "Bharat Traders").await;
+    db.execute(&Statement::portable(
+        "UPDATE companies SET deleted_at = ? WHERE id = ?",
+        ["2026-11-06T10:00:00Z".into(), gone.into()],
+    ))
+    .await
+    .expect("soft-delete the company");
+
+    let exists = |id: Uuid| AsyncRule::exists("company_id", "companies", "id", id);
+    assert!(
+        exists(gone).passes(&*db).await.unwrap(),
+        "a plain rule still finds the row"
+    );
+    assert!(
+        !exists(gone)
+            .without_deleted("deleted_at")
+            .passes(&*db)
+            .await
+            .unwrap()
+    );
+    assert!(
+        exists(live)
+            .without_deleted("deleted_at")
+            .passes(&*db)
+            .await
+            .unwrap()
+    );
+
+    let free = |name: &str| AsyncRule::unique("name", "companies", "name", name.to_owned(), None);
+    assert!(!free("Bharat Traders").passes(&*db).await.unwrap());
+    assert!(
+        free("Bharat Traders")
+            .without_deleted("deleted_at")
+            .passes(&*db)
+            .await
+            .unwrap(),
+        "a deleted company holds no name"
+    );
+    assert!(
+        !free("Acme")
+            .without_deleted("deleted_at")
+            .passes(&*db)
+            .await
+            .unwrap()
+    );
+
+    let error = exists(live)
+        .without_deleted("deleted_at IS NULL OR 1")
+        .passes(&*db)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, RuleError::InvalidIdentifier { .. }),
+        "{error}"
+    );
+}
+
 async fn validation_rules_run_before_async_rules(scratch: Scratch) {
     let app = database_app(&scratch).await;
 
@@ -353,6 +417,7 @@ on_every_server!(
     "navree_validation";
     unique_rule_rejects_existing_and_ignores_self,
     exists_rule,
+    table_rules_can_leave_soft_deleted_rows_out,
     validation_rules_run_before_async_rules,
     rejects_bad_identifier_in_rule,
     async_rules_on_query_and_form,

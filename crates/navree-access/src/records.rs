@@ -58,6 +58,41 @@ pub trait SubjectRecords: Subject + Send + Sync + 'static {
     fn policy() -> Option<fn(&AbilityCtx, &mut Rules)> {
         None
     }
+
+    /// The member of [`record_json`](Self::record_json) that marks a record
+    /// deleted when it is set: a soft-deleted record is missing to every
+    /// check that loads one by id (a `can(.., from = "id")` route,
+    /// [`Authorized::load`](crate::Authorized::load),
+    /// `AbilityFactory::authorize_record`), so it is a 404 before any rule is
+    /// looked at, and a user the rules deny cannot tell it was there.
+    /// `deleted_at` by default, the column the ORM soft-deletes with (whose
+    /// own query leaves such records out already); `None` for a subject whose
+    /// deleted records checks must still see.
+    const DELETED_AT: Option<&'static str> = Some("deleted_at");
+}
+
+/// The record of `S` whose id is `id`, as [`SubjectRecords::load`] reads it,
+/// with its JSON form; `None` when there is none, or it is soft-deleted
+/// ([`SubjectRecords::DELETED_AT`]).
+pub(crate) async fn load_live<S: SubjectRecords>(
+    uow: &Uow,
+    id: &str,
+) -> Result<Option<(S::Record, Value)>, BoxError> {
+    let Some(record) = S::load(uow, id).await? else {
+        return Ok(None);
+    };
+    let json = S::record_json(&record);
+    if deleted::<S>(&json) {
+        return Ok(None);
+    }
+    Ok(Some((record, json)))
+}
+
+/// Whether the record of `S` that `json` is has been soft-deleted.
+fn deleted<S: SubjectRecords>(json: &Value) -> bool {
+    S::DELETED_AT
+        .and_then(|member| json.get(member))
+        .is_some_and(|value| !value.is_null())
 }
 
 /// Ability rules about one subject, kept next to it: attach it to an ORM
@@ -123,11 +158,11 @@ impl<S: SubjectRecords> SubjectLoader for RecordsLoader<S> {
         id: &'a str,
     ) -> BoxFuture<'a, Result<Option<LoadedRecord>, BoxError>> {
         Box::pin(async move {
-            let record = S::load(uow, id).await.map_err(|error| -> BoxError {
+            let record = load_live::<S>(uow, id).await.map_err(|error| -> BoxError {
                 format!("cannot load {} `{id}`: {error}", S::SUBJECT).into()
             })?;
-            Ok(record.map(|record| LoadedRecord {
-                json: S::record_json(&record),
+            Ok(record.map(|(record, json)| LoadedRecord {
+                json,
                 model: Arc::new(record),
             }))
         })

@@ -198,8 +198,8 @@ impl AbilityFactory {
     /// [`AccessModule::for_feature`](crate::AccessModule::for_feature), and
     /// checks `action` on it: what a `can(action, subject, from = "id")`
     /// route does, outside an HTTP request. A 404 when there is no such
-    /// record, a 403 when `access` does not allow `action` on it, a 500 when
-    /// the subject has no loader.
+    /// record (or it is soft-deleted), a 403 when `access` does not allow
+    /// `action` on it, a 500 when the subject has no loader.
     pub async fn authorize_record(
         &self,
         access: &PrincipalAccess,

@@ -96,6 +96,8 @@ enum Check {
         column: String,
         value: Value,
         ignore_id: Option<Uuid>,
+        /// Rows with this column set are left out (soft-deleted rows).
+        deleted: Option<String>,
     },
     /// A check of its own, in the unit of work.
     Uow {
@@ -113,6 +115,7 @@ impl fmt::Debug for Check {
                 column,
                 value,
                 ignore_id,
+                deleted,
             } => f
                 .debug_struct("Table")
                 .field("kind", kind)
@@ -120,6 +123,7 @@ impl fmt::Debug for Check {
                 .field("column", column)
                 .field("value", value)
                 .field("ignore_id", ignore_id)
+                .field("deleted", deleted)
                 .finish(),
             Check::Uow { rule, .. } => f.debug_struct("Uow").field("rule", rule).finish(),
         }
@@ -128,8 +132,8 @@ impl fmt::Debug for Check {
 
 /// A database rule on one field: `unique` (no row has the value) or
 /// `exists` (some row has it), checked with a parameterised
-/// `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1`; or a
-/// [`UowCheck`] of its own ([`AsyncRule::check`]).
+/// `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] [AND <deleted>
+/// IS NULL] LIMIT 1`; or a [`UowCheck`] of its own ([`AsyncRule::check`]).
 ///
 /// Table and column names must match `[a-z_][a-z0-9_]*`; anything else
 /// fails with [`RuleError::InvalidIdentifier`] before any SQL runs. A null
@@ -183,9 +187,32 @@ impl AsyncRule {
                 column: column.into(),
                 value,
                 ignore_id,
+                deleted: None,
             },
             ignore_path_param: None,
         }
+    }
+
+    /// Leaves out the rows whose `column` is set, the soft-deleted rows of a
+    /// table that marks deletions there (`deleted_at`): `exists` does not
+    /// find a deleted row, and `unique` does not count one. The column name
+    /// is held to the same rules as the table's. Has no effect on a
+    /// [`check`](AsyncRule::check) rule, whose own query decides (an ORM
+    /// model's keeps its soft-delete scope).
+    ///
+    /// ```
+    /// use navree_validation::AsyncRule;
+    ///
+    /// let company_id = uuid::Uuid::now_v7();
+    /// let rule = AsyncRule::exists("company_id", "companies", "id", company_id)
+    ///     .without_deleted("deleted_at");
+    /// assert_eq!(rule.rule(), "exists");
+    /// ```
+    pub fn without_deleted(mut self, column: impl Into<String>) -> Self {
+        if let Check::Table { deleted, .. } = &mut self.check {
+            *deleted = Some(column.into());
+        }
+        self
     }
 
     /// `field` passes when `check` does. `rule` is the rule key, which
@@ -311,9 +338,18 @@ impl AsyncRule {
 
     /// Fails when the table or column name is not a plain identifier.
     pub(crate) fn check_identifiers(&self) -> Result<(), RuleError> {
-        if let Check::Table { table, column, .. } = &self.check {
+        if let Check::Table {
+            table,
+            column,
+            deleted,
+            ..
+        } = &self.check
+        {
             self.identifier(table)?;
             self.identifier(column)?;
+            if let Some(deleted) = deleted {
+                self.identifier(deleted)?;
+            }
         }
         Ok(())
     }
@@ -341,6 +377,7 @@ impl AsyncRule {
             table,
             column,
             value,
+            deleted,
             ..
         } = &self.check
         else {
@@ -351,6 +388,10 @@ impl AsyncRule {
         };
         let table = self.identifier(table)?;
         let column = self.identifier(column)?;
+        let deleted = deleted
+            .as_deref()
+            .map(|deleted| self.identifier(deleted))
+            .transpose()?;
         if self.is_null() {
             return Ok(true);
         }
@@ -367,6 +408,12 @@ impl AsyncRule {
                 backend.quote_identifier(ID_COLUMN)
             ));
             values.push(id.into());
+        }
+        if let Some(deleted) = deleted {
+            sql.push_str(&format!(
+                " AND {} IS NULL",
+                backend.quote_identifier(deleted)
+            ));
         }
         sql.push_str(" LIMIT 1");
         // The identifiers are checked names, quoted for the backend; the

@@ -98,7 +98,8 @@ impl fmt::Debug for AuthorizedRecord {
 /// 3. **can:** the type-level check passes; with `from`, the record whose id
 ///    is that path parameter is loaded in the request's unit of work (`FOR
 ///    UPDATE` where supported) and checked with its conditions. A missing
-///    record is a 404; the record is kept for `Authorized<E, A>`.
+///    record, or a soft-deleted one ([`SubjectRecords::DELETED_AT`]), is a
+///    404; the record is kept for `Authorized<E, A>`.
 ///
 /// Any failure is a 403. Registered as the app's `dyn RouteAuthorizer` by
 /// the access module.

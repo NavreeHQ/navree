@@ -362,12 +362,14 @@ fn id_type(backend: Backend) -> &'static str {
     }
 }
 
-/// Creates `users(id, email)` and `companies(id, name)`.
+/// Creates `users(id, email)` and `companies(id, name, deleted_at)`.
 pub async fn create_tables(db: &Db) {
     let id = id_type(Executor::backend(db));
     for sql in [
         format!("CREATE TABLE users (id {id} PRIMARY KEY NOT NULL, email TEXT NOT NULL)"),
-        format!("CREATE TABLE companies (id {id} PRIMARY KEY NOT NULL, name TEXT NOT NULL)"),
+        format!(
+            "CREATE TABLE companies (id {id} PRIMARY KEY NOT NULL, name TEXT NOT NULL, deleted_at TEXT)"
+        ),
     ] {
         db.execute_script(&sql).await.expect(&sql);
     }

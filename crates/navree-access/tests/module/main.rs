@@ -15,4 +15,5 @@ mod outside;
 mod parity;
 mod permission_check;
 mod service;
+mod soft_deletes;
 mod wiring;

@@ -143,16 +143,17 @@ where
     /// Loads the record of `S` whose id is `id` in `uow` (`FOR UPDATE`
     /// where supported) and checks `A` on it with `ability`, outside an HTTP
     /// request (MCP tools, agent tools, jobs). A 404 when there is no such
-    /// record (or `id` cannot name one), a 403 when `ability` does not allow
+    /// record (or `id` cannot name one, or the record is soft-deleted:
+    /// [`SubjectRecords::DELETED_AT`]), a 403 when `ability` does not allow
     /// `A` on it. `S` needs no
     /// [`AccessModule::for_feature`](crate::AccessModule::for_feature)
     /// registration.
     pub async fn load(uow: &Uow, ability: Arc<Ability>, id: &str) -> Result<Self, AppError> {
-        let model = S::load(uow, id)
+        let (model, record) = crate::records::load_live::<S>(uow, id)
             .await
             .map_err(AppError::internal)?
             .ok_or_else(AppError::not_found)?;
-        Self::check(model, ability)
+        Self::checked(model, record, ability)
     }
 
     /// Checks action `A` on `model` with `ability` outside a route (in an
@@ -161,6 +162,11 @@ where
     /// allow `A` on it.
     pub fn check(model: S::Record, ability: Arc<Ability>) -> Result<Self, AppError> {
         let record = S::record_json(&model);
+        Self::checked(model, record, ability)
+    }
+
+    /// [`check`](Self::check) of `model`, whose JSON form is `record`.
+    fn checked(model: S::Record, record: Value, ability: Arc<Ability>) -> Result<Self, AppError> {
         if !ability.can(A::NAME, S::SUBJECT, Some(&record)) {
             return Err(AppError::forbidden());
         }
