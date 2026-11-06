@@ -869,7 +869,7 @@ async fn under_row_level_security_the_panel_sees_and_changes_the_workspace_of_th
         .send()
         .await
         .assert_status(200);
-    assert_eq!(note_in(&app, agra, a1).await.unwrap().title, "ACME ONE");
+    assert_eq!(note_in(&app, agra, a1).await.unwrap().title, "AGRA ONE");
     editor
         .delete(&format!("/admin/api/resources/notes/{made}"))
         .header("X-Workspace", agra.to_string())
