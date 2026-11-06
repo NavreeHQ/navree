@@ -85,10 +85,7 @@ pub fn render(statement: &ast::Statement, syntax: impl Into<Syntax>) -> Result<S
 ///     .collect();
 /// assert_eq!(sql, [r#"DELETE FROM "sqlite_sequence" WHERE "name" = ?"#, r#"DELETE FROM "deals""#]);
 /// ```
-pub fn render_all(
-    statement: &ast::Statement,
-    syntax: impl Into<Syntax>,
-) -> Result<Vec<Statement>> {
+pub fn render_all(statement: &ast::Statement, syntax: impl Into<Syntax>) -> Result<Vec<Statement>> {
     let syntax = syntax.into();
     match statement {
         ast::Statement::Truncate(truncate) => {

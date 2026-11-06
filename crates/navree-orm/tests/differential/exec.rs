@@ -37,10 +37,9 @@ impl Exec {
         })
         .await
         .unwrap_or_else(|error| panic!("cannot connect to the {dialect} test database: {error}"));
-        let mariadb = db
-            .mariadb_version()
-            .await
-            .unwrap_or_else(|error| panic!("asks the {dialect} test database its version: {error}"));
+        let mariadb = db.mariadb_version().await.unwrap_or_else(|error| {
+            panic!("asks the {dialect} test database its version: {error}")
+        });
         Exec {
             db,
             dialect,

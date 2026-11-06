@@ -206,9 +206,7 @@ impl Lowerer {
                 let not = matches!(op, Operator::NotRegexpIgnoreCase);
                 match self.dialect {
                     Dialect::Postgres => l.binary(custom(if not { "!~*" } else { "~*" }), r),
-                    Dialect::MySql if self.syntax.is_mariadb() => {
-                        mariadb_regexp(l, r, "(?i)", not)
-                    }
+                    Dialect::MySql if self.syntax.is_mariadb() => mariadb_regexp(l, r, "(?i)", not),
                     Dialect::MySql => negate(
                         ast::Expr::func("REGEXP_LIKE", vec![l, r, ast::Expr::string("i")]),
                         not,

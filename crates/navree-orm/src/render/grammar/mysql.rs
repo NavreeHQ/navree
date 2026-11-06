@@ -14,8 +14,6 @@
 use std::borrow::Cow;
 
 use super::{Grammar, json_path_text, name_text, unsupported};
-use crate::render::lower::{FROM_THE_END, from_the_end};
-use crate::render::unsupported_on_mariadb;
 use crate::error::{OrmError, Result};
 use crate::ir::JsonSegment;
 use crate::render::Writer;
@@ -23,6 +21,8 @@ use crate::render::ast::{
     BinaryOp, ConflictAction, Delete, Expr, Ident, Insert, JoinKind, JsonMode, LikeCase, Lock,
     LockStrength, LockWait, ObjectName, OnConflict, OrderBy, SelectItem, SqlType, Truncate, Update,
 };
+use crate::render::lower::{FROM_THE_END, from_the_end};
+use crate::render::unsupported_on_mariadb;
 use crate::sql::{self, Dialect};
 
 use super::precedence::{ATOM, NOT, OTHER};
