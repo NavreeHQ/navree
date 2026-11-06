@@ -29,9 +29,12 @@ pub struct ShowOptions {
     pub origin: bool,
     /// Print JSON instead of a table.
     pub json: bool,
+    /// List the environment variables that fill a key when nothing else sets
+    /// it (`REDIS_URL`), and whether each is set, instead of the keys.
+    pub fallbacks: bool,
 }
 
-const USAGE: &str = "usage: config:show [section] [--defaults] [--origin] [--json]";
+const USAGE: &str = "usage: config:show [section] [--defaults] [--origin] [--fallbacks] [--json]";
 
 impl ShowOptions {
     /// Reads the command line after `config:show`. An unknown option is an
@@ -43,6 +46,7 @@ impl ShowOptions {
                 "--defaults" => options.defaults = true,
                 "--origin" => options.origin = true,
                 "--json" => options.json = true,
+                "--fallbacks" => options.fallbacks = true,
                 option if option.starts_with('-') => {
                     return Err(format!("unknown option `{option}`; {USAGE}"));
                 }
@@ -300,6 +304,57 @@ fn default_leaves(tree: &Json, path: &str, f: &mut dyn FnMut(&str, &Json)) {
         }
         other => f(path, other),
     }
+}
+
+/// The environment variables the sections of `registry` fall back to, as
+/// text (`key  VARIABLE  set|unset`) or, with `json`, as an object by key.
+/// `is_set` says whether a variable has a value; the value is never read
+/// here and never printed.
+pub fn render_fallbacks(
+    registry: &crate::ConfigRegistry,
+    json: bool,
+    is_set: impl Fn(&str) -> bool,
+) -> String {
+    let fallbacks = registry.env_fallbacks();
+    if json {
+        let object: Map<String, Json> = fallbacks
+            .iter()
+            .map(|fallback| {
+                let mut entry = Map::new();
+                entry.insert(
+                    "variable".to_owned(),
+                    Json::String(fallback.variable.clone()),
+                );
+                entry.insert("set".to_owned(), Json::Bool(is_set(&fallback.variable)));
+                (fallback.key.clone(), Json::Object(entry))
+            })
+            .collect();
+        let mut text = serde_json::to_string_pretty(&Json::Object(object)).unwrap_or_default();
+        text.push('\n');
+        return text;
+    }
+    if fallbacks.is_empty() {
+        return "no key falls back to an environment variable\n".to_owned();
+    }
+    let key_width = fallbacks.iter().map(|f| f.key.len()).max().unwrap_or(0);
+    let variable_width = fallbacks
+        .iter()
+        .map(|f| f.variable.len())
+        .max()
+        .unwrap_or(0);
+    let mut out = String::new();
+    for fallback in &fallbacks {
+        let state = if is_set(&fallback.variable) {
+            "set"
+        } else {
+            "unset"
+        };
+        out.push_str(&format!(
+            "{:key_width$}  {:variable_width$}  {state}\n",
+            fallback.key, fallback.variable
+        ));
+    }
+    out
 }
 
 /// The published defaults of `registrations`, as one JSON object: each

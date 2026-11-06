@@ -23,4 +23,5 @@ mod sections;
 mod shadows;
 mod show;
 mod strict;
+mod tools;
 mod unused_keys;

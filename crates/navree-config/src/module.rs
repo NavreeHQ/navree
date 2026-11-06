@@ -40,7 +40,8 @@ use crate::{AppOptions, Config, ConfigSources, commands};
 ///   ([`Config::unused`]);
 /// - lists the problems of every registered section when the boot fails on
 ///   one of them;
-/// - registers the offline commands `config:show` and `config:check`.
+/// - registers the offline commands `config:show`, `config:check`,
+///   `config:schema` and `config:publish`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ConfigModule;
 
@@ -105,7 +106,9 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
         .config::<AppOptions>()
         .exports::<AppOptions>()
         .command(commands::show())
-        .command(commands::check());
+        .command(commands::check())
+        .command(commands::schema())
+        .command(commands::publish());
 }
 
 /// Reports, once the app has booted, what loading the configuration noticed:
