@@ -68,7 +68,7 @@ More: [/docs/getting-started/configuration/](/docs/getting-started/configuration
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
 | `name` | string |  | `APP_APP__NAME` | The app's name. |
-| `url` | string |  | `APP_APP__URL` | The address users reach the app at (`https://acme.example.com`): used to build links in mail and callbacks. An absolute http or https URL. |
+| `url` | string |  | `APP_APP__URL` | The address users reach the app at (`https://agra.example.com`): used to build links in mail and callbacks. An absolute http or https URL. |
 | `version` | string |  | `APP_APP__VERSION` | The app's version. |
 | `env` | Environment |  | `APP_APP__ENV` | The environment the app runs in; none when not set. |
 | `key` | string | secret | `APP_APP__KEY` | The key that encrypts data and signs tokens (`base64:...`). |
@@ -313,7 +313,7 @@ More: [/docs/packages/documents/](/docs/packages/documents/).
 | `native.bundled_fonts` | boolean | `true` | `APP_DOCUMENTS__NATIVE__BUNDLED_FONTS` | Load the bundled Noto fonts (default true). |
 | `native.font_dirs` | list of string | `[]` | `APP_DOCUMENTS__NATIVE__FONT_DIRS` | More font directories, searched recursively (default none). |
 | `native.timeout_secs` | integer | `60` | `APP_DOCUMENTS__NATIVE__TIMEOUT_SECS` | Time limit for one render, in seconds (default 60). |
-| `native.max_image_pixels` | integer | `25000000` | `APP_DOCUMENTS__NATIVE__MAX_IMAGE_PIXELS` | The most pixels (width times height) one PNG, GIF or WebP image in a document may have (default 25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch). A larger image is [`DocumentsError::TooLarge`] before it is decoded. A JPEG is not counted: it goes into the PDF as it is, without being decoded. At least 1; 0 fails the boot. [`DocumentsError::TooLarge`]: crate::DocumentsError::TooLarge |
+| `native.max_image_pixels` | integer | `25000000` | `APP_DOCUMENTS__NATIVE__MAX_IMAGE_PIXELS` | The most pixels (width times height) one PNG, GIF or WebP image in a document may have (default 25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch). A larger image is [`DocumentsError::TooLarge`] before it is decoded. A JPEG is not counted: it goes into the PDF as it is, without being decoded. At least 1; 0 fails the boot. |
 | `native.print` | table |  | `APP_DOCUMENTS__NATIVE__PRINT` | The page settings renders use unless they bring their own (an `@page` rule in the template wins while `prefer_css_page_size` is on). |
 | `native.print.paper` | Paper | `"a4"` | `APP_DOCUMENTS__NATIVE__PRINT__PAPER` | The paper size (default A4). |
 | `native.print.landscape` | boolean | `false` | `APP_DOCUMENTS__NATIVE__PRINT__LANDSCAPE` | Landscape orientation (default false). |
@@ -468,7 +468,7 @@ More: [/docs/microservices/grpc/](/docs/microservices/grpc/).
 
 ## `hashing`
 
-Argon2id parameters and the hashing concurrency limit: section `hashing` for `CryptoModule::from_config()`. The defaults are OWASP's minimum Argon2id recommendation (19 MiB, 2 iterations, 1 lane). Raising any cost parameter makes [`Hasher::needs_rehash`] true for existing hashes, so they are upgraded at the next login.
+Argon2id parameters and the hashing concurrency limit: section `hashing` for `CryptoModule::from_config()`.
 
 More: [/docs/security/encryption-and-hashing/](/docs/security/encryption-and-hashing/).
 
@@ -534,7 +534,7 @@ More: [/docs/basics/routing/](/docs/basics/routing/).
 | `server.http2_keep_alive_timeout_ms` | integer | `20000` | `APP_HTTP__SERVER__HTTP2_KEEP_ALIVE_TIMEOUT_MS` | How long a client has to answer an HTTP/2 ping before the connection closes (default 20 s). |
 | `server.http2_max_concurrent_streams` | integer | `200` | `APP_HTTP__SERVER__HTTP2_MAX_CONCURRENT_STREAMS` | The most requests one HTTP/2 connection may have open at once (default 200). |
 | `server.max_connections` | integer | `10000` | `APP_HTTP__SERVER__MAX_CONNECTIONS` | The most connections open at once, WebSockets and TLS handshakes in progress included (default 10 000). At the cap new connections wait until one closes, nearly all of them in the listen backlog, and nothing is read from or answered on them until then. For a client that has sent something, the connection idle the longest closes, as at its idle timeout, one for each such client, and a connection that has only started its next request head counts as idle. A client that has sent nothing closes nothing, and has `header_read_timeout_ms` to wait. |
-| `server.max_connections_per_ip` | integer | `256` | `APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP` | The most connections open at once from one client address (default 256), counted like `http.per_ip_rate_limit`: per IPv4 address, or per IPv6 network of `http.rate_limit_ipv6_prefix` bits. At the limit a new connection takes the place of the address's own connection idle the longest, closed as at its idle timeout. That one counts until its socket has closed, and at most 8 of an address's connections (no more than the limit) close for newer ones at a time, so one address holds at most the limit and those. When none of its connections is idle, or that many are closing, the new one is closed at once; it cannot wait, because the address is only known after the accept. This limits what one address can hold. It does not stop a client with many addresses, which `max_connections` is then the limit for. Peers in `http.trusted_proxies`, or every peer with `http.trust_proxy`, are not counted: each carries many clients. Behind a reverse proxy list it there (`http.per_ip_rate_limit` needs that too) or raise this, or a busy proxy runs into it. So can many clients sharing one address, such as an office or a carrier. Counted per listener, like `max_connections`, and by the peer of the socket, so a proxy's clients are never limited here: limit those at the proxy. |
+| `server.max_connections_per_ip` | integer | `256` | `APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP` | The most connections open at once from one client address (default 256), counted like `http.per_ip_rate_limit`: per IPv4 address, or per IPv6 network of `http.rate_limit_ipv6_prefix` bits. At the limit a new connection takes the place of the address's own connection idle the longest, closed as at its idle timeout. That one counts until its socket has closed, and at most 8 of an address's connections (no more than the limit) close for newer ones at a time, so one address holds at most the limit and those. When none of its connections is idle, or that many are closing, the new one is closed at once; it cannot wait, because the address is only known after the accept. |
 | `server.max_header_bytes` | integer | `32768` | `APP_HTTP__SERVER__MAX_HEADER_BYTES` | The largest request head, in bytes (default 32 KiB, at least 8 KiB): the request line and headers on HTTP/1, the header list on HTTP/2, where each header also counts 32 bytes. Above it the answer is a 431. |
 | `server.max_headers` | integer | `100` | `APP_HTTP__SERVER__MAX_HEADERS` | The most headers a request may have (default 100, 431 above it). On HTTP/2 a header can cost a client a single byte, so without this a small request could carry a thousand into the app; a browser's cookies can count one each there, as HTTP/2 allows sending them apart. |
 | `server.write_stall_timeout_ms` | integer | `60000` | `APP_HTTP__SERVER__WRITE_STALL_TIMEOUT_MS` | How long a response may go without moving (default 60 s). When the socket takes nothing for this long the connection closes; when an HTTP/2 client's flow control holds one response back for this long, that stream is reset and the connection stays. Each byte the socket takes starts it over, and on HTTP/2 each 16 KiB the client takes from a response, so only a client that has really stopped runs out. It also applies to what a handler writes to an upgraded HTTP/1 socket, but not to an HTTP/2 WebSocket held back by flow control: that is the work of `upgraded_idle_timeout_ms`, or of a timeout on the handler's own writes. A client pausing a large download for longer loses it and has to ask for the rest. |
@@ -547,7 +547,7 @@ More: [/docs/basics/routing/](/docs/basics/routing/).
 
 ## `http_client`
 
-Options for `HttpClient` and `HttpClientModule::for_root`. As configuration (section `http_client`, see `HttpClientModule::from_config`) every key is optional:
+Options for `HttpClient` and `HttpClientModule::for_root`.
 
 More: [/docs/digging-deeper/http-client/](/docs/digging-deeper/http-client/).
 
@@ -673,7 +673,7 @@ More: [/docs/basics/logging/](/docs/basics/logging/).
 | `file.path` | string |  | `APP_LOG__FILE__PATH` | The file path; the date is inserted before the extension. |
 | `file.rotation` | daily \| hourly \| never |  | `APP_LOG__FILE__ROTATION` | When a new file is started. |
 | `file.keep_days` | integer |  | `APP_LOG__FILE__KEEP_DAYS` | How many days of rotated files are kept (at least 1); older files are deleted when a new one starts. |
-| `redact` | list of string | `["password","passwd","pwd","passphrase","secret","token","authorization","cookie","credential","dsn","api_key","apikey","private_key","connection_string"]` | `APP_LOG__REDACT` | Field names containing any of these fragments (ASCII case-insensitively) are written as `[redacted]`. Replaces the defaults, the shared list of secret words ([`Redactor::DEFAULT_FRAGMENTS`]). |
+| `redact` | list of string | `["password","passwd","pwd","passphrase","secret","token","authorization","cookie","credential","dsn","api_key","api-key","apikey","private_key","connection_string"]` | `APP_LOG__REDACT` | Field names containing any of these fragments (ASCII case-insensitively) are written as `[redacted]`. Replaces the defaults, the shared list of secret words ([`Redactor::DEFAULT_FRAGMENTS`]). |
 | `slow_query_ms` | integer | `200` | `APP_LOG__SLOW_QUERY_MS` | Queries slower than this are logged (read by the database module). |
 
 ## `logbook`
@@ -686,7 +686,7 @@ More: [/docs/tools/logbook/](/docs/tools/logbook/).
 |---|---|---|---|---|
 | `enabled` | boolean |  | `APP_LOGBOOK__ENABLED` | Record and serve anything at all. `None` (unset) means on in debug builds and off in release builds; see [`LogbookOptions::activation`]. |
 | `path` | string | `"/_logbook"` | `APP_LOGBOOK__PATH` | Where the UI is served (`/_logbook`). |
-| `store` | file \| memory | `"memory"` | `APP_LOGBOOK__STORE` | Where entries are kept. |
+| `store` | file \| memory | `"file"` | `APP_LOGBOOK__STORE` | Where entries are kept. |
 | `file` | string | `"storage/logbook.db"` | `APP_LOGBOOK__FILE` | The SQLite file of the `file` store. |
 | `max_entries` | integer | `10000` | `APP_LOGBOOK__MAX_ENTRIES` | Entries kept; older batches are pruned whole. |
 | `keep_hours` | integer | `24` | `APP_LOGBOOK__KEEP_HOURS` | Age in hours after which entries are pruned. |
@@ -731,7 +731,7 @@ More: [/docs/digging-deeper/mail/](/docs/digging-deeper/mail/).
 
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
-| `from` | string | `"hello@example.com"` | `APP_MAIL__FROM` | The default sender, `hello@example.com` or `Acme <hello@acme.test>` (default `hello@example.com`). Empty means no default: every message must then set its own sender. |
+| `from` | string | `"hello@example.com"` | `APP_MAIL__FROM` | The default sender, `hello@example.com` or `Agra <hello@acme.test>` (default `hello@example.com`). Empty means no default: every message must then set its own sender. |
 | `transport` | TransportConfig | `"log"` | `APP_MAIL__TRANSPORT` | How messages are delivered (default [`TransportConfig::Log`]). |
 | `queue` | string |  | `APP_MAIL__QUEUE` | The queue `Mailer::queue` dispatches to (default: the job's own queue, `default`). |
 | `transports` | table of TransportConfig | `"{}"` | `APP_MAIL__TRANSPORTS` | Named transports that `Mailer::via` selects (lanes such as `simulation` and `notifications`). |
@@ -824,6 +824,11 @@ More: [/docs/packages/media/](/docs/packages/media/).
 | `archives.max_entry_bytes` | integer | `536870912` | `APP_MEDIA__ARCHIVES__MAX_ENTRY_BYTES` | The largest unpacked entry in bytes (default 512 MiB). |
 | `archives.max_total_bytes` | integer | `2147483648` | `APP_MEDIA__ARCHIVES__MAX_TOTAL_BYTES` | The most bytes all entries unpack to together (default 2 GiB). |
 | `archives.max_ratio` | integer | `200` | `APP_MEDIA__ARCHIVES__MAX_RATIO` | The highest compression ratio of an entry over 1 MiB (default 200). |
+| `ffmpeg` | table |  | `APP_MEDIA__FFMPEG` | The FFmpeg sidecar (the `ffmpeg` feature). |
+| `ffmpeg.ffmpeg` | string | `"ffmpeg"` | `APP_MEDIA__FFMPEG__FFMPEG` | The `ffmpeg` executable: a name on the PATH or a path (default `ffmpeg`). |
+| `ffmpeg.ffprobe` | string | `"ffprobe"` | `APP_MEDIA__FFMPEG__FFPROBE` | The `ffprobe` executable (default `ffprobe`). |
+| `ffmpeg.timeout_secs` | integer | `600` | `APP_MEDIA__FFMPEG__TIMEOUT_SECS` | The longest a single run may take before it is killed (default 600 s). |
+| `ffmpeg.threads` | integer | `0` | `APP_MEDIA__FFMPEG__THREADS` | Encoder threads per transcode; `0` lets FFmpeg choose (default 0). |
 
 ## `micro`
 
@@ -915,7 +920,7 @@ More: [/docs/microservices/introduction/](/docs/microservices/introduction/).
 
 ## `notify`
 
-How `NotifyModule` sends notifications (configuration section `notify`, e.g. `APP_NOTIFY__QUEUE=true`). Build it with `..NotifyOptions::default()` so new fields keep compiling. Secrets (tokens, passwords, private keys) are read from the configuration but never serialized.
+How `NotifyModule` sends notifications (configuration section `notify`, e.g. `APP_NOTIFY__QUEUE=true`).
 
 More: [/docs/digging-deeper/notifications/](/docs/digging-deeper/notifications/).
 
@@ -1317,7 +1322,7 @@ More: [/docs/digging-deeper/time-zones/](/docs/digging-deeper/time-zones/).
 
 ## `ui`
 
-The `ui` section of the configuration: it overrides what the code gives [`PagesOptions`]. Every key is optional; one that is not set leaves the code's value alone. An address that is not usable stops the boot, and the message names the key.
+The `ui` section of the configuration: it overrides what the code gives [`PagesOptions`]. Every key is optional; one that is not set leaves the code's value alone.
 
 More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
 
