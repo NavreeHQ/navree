@@ -269,7 +269,7 @@ mod tests {
 
     use super::*;
 
-    // MOD-003: every workspace is a plain form posting the token, the
+    // Every workspace is a plain form posting the token, the
     // workspace and the page to come back to; the current one is marked.
     #[test]
     fn each_workspace_is_a_form_that_works_without_script() {
@@ -315,7 +315,7 @@ mod tests {
         assert!(!html.contains("data-ui-form"), "{html}");
     }
 
-    // MOD-003: no token, no field (an app on bearer tokens), and an empty
+    // No token, no field (an app on bearer tokens), and an empty
     // list says so.
     #[test]
     fn without_a_token_or_workspaces() {

@@ -88,7 +88,7 @@ fn toml_keys(table: &toml::Table, prefix: &str, out: &mut Vec<String>) {
     }
 }
 
-/// CONFIG-002: `.env` ranks above `config/app.toml`, so a key written in
+/// `.env` ranks above `config/app.toml`, so a key written in
 /// both is set twice and the TOML copy does nothing. The files `navree new`
 /// writes set no key in both.
 #[test]

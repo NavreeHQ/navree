@@ -1,4 +1,4 @@
-//! Workspaces in server-rendered pages (MOD-003): the `session` resolver,
+//! Workspaces in server-rendered pages: the `session` resolver,
 //! `POST /workspace/switch` and the scoping that follows a switch, with the
 //! session layer running as in a browser app.
 
@@ -198,7 +198,7 @@ async fn current_of(client: &TestClient) -> TestResponse {
     client.get("/api/switching/current").send().await
 }
 
-// MOD-003 (a): a member switches; the `session` resolver names that
+// A member switches; the `session` resolver names that
 // workspace from then on, and the switch is audited.
 #[tokio::test]
 async fn a_member_switches_and_the_session_names_the_workspace() {
@@ -243,7 +243,7 @@ async fn a_member_switches_and_the_session_names_the_workspace() {
     assert_eq!(metadata["to"], json!(globex.id));
 }
 
-// MOD-003: JSON clients get the workspace back, and an unsafe `next` never
+// JSON clients get the workspace back, and an unsafe `next` never
 // leaves the site.
 #[tokio::test]
 async fn json_switches_answer_the_workspace_and_next_stays_on_the_site() {
@@ -276,7 +276,7 @@ async fn json_switches_answer_the_workspace_and_next_stays_on_the_site() {
         .assert_status(400);
 }
 
-// MOD-003 (b): a user can't switch into a workspace they don't belong to:
+// A user can't switch into a workspace they don't belong to:
 // 403 `not_a_member`, nothing stored, the old choice kept. An unknown one is
 // a 404.
 #[tokio::test]
@@ -322,7 +322,7 @@ async fn switching_into_a_workspace_of_others_is_refused() {
         .assert_status(403);
 }
 
-// MOD-003 (c): with nothing chosen, the next resolver answers; with no
+// With nothing chosen, the next resolver answers; with no
 // resolver answering, the request names no workspace (400).
 #[tokio::test]
 async fn without_a_choice_the_next_resolver_answers() {
@@ -392,7 +392,7 @@ async fn a_browser_that_chose_nothing_is_in_its_first_workspace_when_asked() {
         .assert_error_code(400, "workspace_required");
 }
 
-// MOD-003 (d): a choice the user may no longer enter (they left it, or it
+// A choice the user may no longer enter (they left it, or it
 // was deleted) is forgotten and the next resolver answers: never a 403 on
 // every page.
 #[tokio::test]
@@ -440,7 +440,7 @@ async fn a_stale_choice_is_forgotten_and_the_next_resolver_answers() {
         .assert_error_code(400, "workspace_required");
 }
 
-// MOD-003 (e): a stolen session cookie carries no workspace across users or
+// A stolen session cookie carries no workspace across users or
 // into a workspace its owner can't enter.
 #[tokio::test]
 async fn a_stolen_session_cookie_reaches_no_other_workspace() {
@@ -518,7 +518,7 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
         .assert_json_path("id", json!(globex.id));
 }
 
-// MOD-003 (f): tables follow the switch: a workspace-scoped query lists the
+// Tables follow the switch: a workspace-scoped query lists the
 // switched-to workspace's rows only, before and after switching.
 #[tokio::test]
 async fn tables_list_the_switched_workspace_rows_only() {
@@ -557,7 +557,7 @@ async fn tables_list_the_switched_workspace_rows_only() {
         .assert_json_path("titles", json!(["Globex pilot"]));
 }
 
-// MOD-003 (g): a stream opens inside the session's workspace at connect;
+// A stream opens inside the session's workspace at connect;
 // after a switch, the next connection opens inside the new one.
 #[tokio::test]
 async fn streams_open_inside_the_switched_workspace() {
@@ -589,7 +589,7 @@ async fn streams_open_inside_the_switched_workspace() {
     assert!(!second.text().contains(&acme.id.to_string()));
 }
 
-// MOD-003: the switcher lists the user's workspaces, marks the current one
+// The switcher lists the user's workspaces, marks the current one
 // and posts to the configured route with the session's token.
 #[tokio::test]
 async fn the_switcher_lists_the_users_workspaces() {
@@ -662,7 +662,7 @@ async fn the_switcher_lists_the_users_workspaces() {
     );
 }
 
-// MOD-003: the route is named, and the choice lives under the documented key.
+// The route is named, and the choice lives under the documented key.
 #[tokio::test]
 async fn the_choice_is_kept_under_the_documented_key() {
     let (world, _sink) = world().await;
@@ -717,7 +717,7 @@ impl Broadcaster for RecordingBroadcaster {
     }
 }
 
-// MOD-003 (live hub): the app's live hub finds a stream's workspace through
+// Live hub: the app's live hub finds a stream's workspace through
 // the workspace module's zone source, the path `CurrentWorkspace` takes, so a
 // page's stream resolves the workspace the browser switched to.
 #[tokio::test]
@@ -748,7 +748,7 @@ async fn the_live_hubs_workspace_lookup_follows_the_switch() {
     assert_eq!(hub(&thief).await, Value::Null);
 }
 
-// MOD-003 (live hub): a switch ends the user's live subscriptions, so every
+// Live hub: a switch ends the user's live subscriptions, so every
 // open page reconnects inside the new workspace instead of keeping the old
 // one's updates until its stream expires; choosing the same workspace again
 // ends nothing.

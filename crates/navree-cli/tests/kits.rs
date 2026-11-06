@@ -272,7 +272,6 @@ fn web_files(root: &Path) -> Vec<String> {
         .collect()
 }
 
-// MOD-012
 #[test]
 fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     let (_dir, root) = generate("acme", Kit::Saas);
@@ -373,7 +372,6 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
     }
 }
 
-// MOD-012
 #[test]
 fn the_saas_kits_web_app_from_a_published_navree_asks_npm_for_the_packages() {
     let dir = tempfile::Builder::new()
@@ -403,7 +401,6 @@ fn the_saas_kits_web_app_from_a_published_navree_asks_npm_for_the_packages() {
     assert!(read(&root, "web/README.md").contains("not on npm yet"));
 }
 
-// MOD-012
 #[test]
 fn no_template_carries_a_backend_for_frontend_of_its_own() {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {

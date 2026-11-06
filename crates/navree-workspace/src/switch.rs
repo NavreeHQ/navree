@@ -320,7 +320,7 @@ pub(crate) fn safe_next(next: Option<&str>) -> String {
 mod tests {
     use super::*;
 
-    // MOD-003: the switch route never sends a browser off the site.
+    // The switch route never sends a browser off the site.
     #[test]
     fn next_is_followed_only_to_a_path_on_this_site() {
         for (next, expected) in [
@@ -351,7 +351,7 @@ mod tests {
         request.body(()).unwrap().into_parts().0
     }
 
-    // MOD-003: a form, its query string, or JSON name the workspace.
+    // A form, its query string, or JSON name the workspace.
     #[test]
     fn the_workspace_comes_from_a_form_its_address_or_json() {
         let form = parts(

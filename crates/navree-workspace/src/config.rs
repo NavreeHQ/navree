@@ -976,7 +976,7 @@ mod tests {
         assert!(unknown.is_err());
     }
 
-    // MOD-003: the `session` resolver and the switch route's path.
+    // The `session` resolver and the switch route's path.
     #[test]
     fn the_session_resolver_names_workspaces_only() {
         let config = load(

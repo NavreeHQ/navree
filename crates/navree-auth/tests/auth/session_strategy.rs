@@ -1,4 +1,4 @@
-//! Browser sign-in on the session cookie (MOD-001): `AuthPages` and the
+//! Browser sign-in on the session cookie: `AuthPages` and the
 //! session strategy, through the full router with navree-session's layer,
 //! as a browser without JavaScript drives them (plain form posts carrying
 //! `_csrf`), and the JSON routes a signed-in browser calls with
@@ -122,7 +122,7 @@ async fn signed_in_browser(app: &TestApp, email: &str) -> (User, TestClient) {
     (user, client)
 }
 
-// MOD-001: signing in gives the session a new id and a new CSRF token
+// Signing in gives the session a new id and a new CSRF token
 // (session fixation), and the id the browser had before signs nobody in.
 #[tokio::test]
 async fn signing_in_regenerates_the_session_against_fixation() {
@@ -156,7 +156,7 @@ async fn signing_in_regenerates_the_session_against_fixation() {
     whoami(&planted).await.assert_status(401);
 }
 
-// MOD-001: the cookie is HttpOnly, Secure, SameSite=Lax, for the whole site,
+// The cookie is HttpOnly, Secure, SameSite=Lax, for the whole site,
 // with the `__Host-` prefix and no Domain; "remember me" makes it last.
 #[tokio::test]
 async fn the_session_cookie_is_httponly_secure_lax_and_host_bound() {
@@ -188,7 +188,7 @@ async fn the_session_cookie_is_httponly_secure_lax_and_host_bound() {
     );
 }
 
-// MOD-001: one guard for both: `.authenticated()`, `CurrentUser`,
+// One guard for both: `.authenticated()`, `CurrentUser`,
 // `#[recent_auth]` (with `POST /auth/confirm` for a browser),
 // `platform_session` and the sessions list hold the same for a cookie as
 // for a token.
@@ -282,7 +282,7 @@ async fn the_same_guards_hold_for_bearer_tokens_and_the_cookie() {
     assert_eq!(current.len(), 1, "{listed}");
 }
 
-// MOD-001: signing out ends the sign-in on the server; the cookie, or a
+// Signing out ends the sign-in on the server; the cookie, or a
 // copy of it, signs nobody in afterwards.
 #[tokio::test]
 async fn signing_out_ends_the_sign_in_on_the_server() {
@@ -306,7 +306,7 @@ async fn signing_out_ends_the_sign_in_on_the_server() {
     );
 }
 
-// MOD-001: a copied cookie dies with the sign-in even while the session
+// A copied cookie dies with the sign-in even while the session
 // record still exists: every request checks the sign-in on the server.
 #[tokio::test]
 async fn a_copied_cookie_dies_when_the_sign_in_is_ended_elsewhere() {
@@ -350,7 +350,7 @@ async fn a_copied_cookie_dies_when_the_sign_in_is_ended_elsewhere() {
         .assert_status(200);
 }
 
-// MOD-001: "sign out everywhere" from a token ends the browser's sign-in too.
+// "sign out everywhere" from a token ends the browser's sign-in too.
 #[tokio::test]
 async fn signing_out_everywhere_ends_the_browser_too() {
     let app = app().await;
@@ -370,7 +370,7 @@ async fn signing_out_everywhere_ends_the_browser_too() {
     whoami(&browser).await.assert_status(401);
 }
 
-// MOD-001: `POST /api/auth/logout` from a browser signs it out of its
+// `POST /api/auth/logout` from a browser signs it out of its
 // session, CSRF token required.
 #[tokio::test]
 async fn the_logout_route_signs_a_browser_out_of_its_session() {
@@ -391,7 +391,7 @@ async fn the_logout_route_signs_a_browser_out_of_its_session() {
     whoami(&browser).await.assert_status(401);
 }
 
-// MOD-001: changing the password from the browser ends every other session
+// Changing the password from the browser ends every other session
 // (other browsers, tokens) and keeps this one, on a new session id.
 #[tokio::test]
 async fn a_password_change_ends_the_other_sessions_and_keeps_this_one() {
@@ -437,7 +437,7 @@ async fn a_password_change_ends_the_other_sessions_and_keeps_this_one() {
     .assert_status(303);
 }
 
-// MOD-001: a password reset through the pages ends every session, the
+// A password reset through the pages ends every session, the
 // browser's included, and the new password signs in.
 #[tokio::test]
 async fn a_password_reset_through_the_pages_ends_every_session() {
@@ -560,7 +560,7 @@ async fn a_password_reset_through_the_pages_ends_every_session() {
     .assert_status(303);
 }
 
-// MOD-001: CSRF on sign-in and sign-out: a form with the session cookie
+// CSRF on sign-in and sign-out: a form with the session cookie
 // needs the session's token; a cross-site form without one is refused
 // (login CSRF).
 #[tokio::test]
@@ -617,7 +617,7 @@ async fn sign_in_and_sign_out_need_the_csrf_token() {
     assert!(sink.with_action("csrf.mismatch").len() >= 4);
 }
 
-// MOD-001: two-factor authentication on cookies: the password alone signs
+// Two-factor authentication on cookies: the password alone signs
 // nothing in; a wrong code is refused and audited; the right one signs in
 // once; a recovery code works once.
 #[tokio::test]
@@ -708,7 +708,7 @@ async fn two_factor_sign_in_on_the_cookie() {
     whoami(&third).await.assert_status(401);
 }
 
-// MOD-001: wrong codes on the cookie are throttled per user like the
+// Wrong codes on the cookie are throttled per user like the
 // token's, and the throttle is audited once.
 #[tokio::test]
 async fn two_factor_codes_on_the_cookie_are_throttled() {
@@ -735,7 +735,7 @@ async fn two_factor_codes_on_the_cookie_are_throttled() {
     assert_eq!(sink.with_action("auth.throttled").len(), 1);
 }
 
-// MOD-001: failed sign-ins are counted per email and address, refused with
+// Failed sign-ins are counted per email and address, refused with
 // 429 past the limit (the right password too), and audited.
 #[tokio::test]
 async fn failed_browser_sign_ins_are_throttled_and_audited() {
@@ -766,7 +766,7 @@ async fn failed_browser_sign_ins_are_throttled_and_audited() {
     assert!(sink.with_action("auth.login").is_empty());
 }
 
-// MOD-001: the audit trail names the browser sign-in and sign-out.
+// The audit trail names the browser sign-in and sign-out.
 #[tokio::test]
 async fn sign_in_and_sign_out_are_audited_as_the_session_s() {
     let sink = Arc::new(RecordingSink::default());
@@ -787,7 +787,7 @@ async fn sign_in_and_sign_out_are_audited_as_the_session_s() {
     assert_eq!(logout[0].metadata["revoked"], 1);
 }
 
-// MOD-001: "remember me" keeps a browser signed in past the idle lifetime,
+// "remember me" keeps a browser signed in past the idle lifetime,
 // up to its days; without it the sign-in ends when the session idles out,
 // and at the latest after `auth.session.lifetime_hours`.
 #[tokio::test]
@@ -858,7 +858,7 @@ impl Module for SsoOnlyModule {
     }
 }
 
-// MOD-001: sign-in policies hold for browsers, and a refusal is audited.
+// Sign-in policies hold for browsers, and a refusal is audited.
 #[tokio::test]
 async fn sign_in_policies_hold_for_browsers() {
     let sink = Arc::new(RecordingSink::default());
@@ -903,7 +903,7 @@ impl Module for EveryoneTwoFactorModule {
     }
 }
 
-// MOD-001: a user who must set up two-factor authentication reaches the
+// A user who must set up two-factor authentication reaches the
 // setup routes and signing out only, on the cookie as with a token; once set
 // up, everything.
 #[tokio::test]
@@ -965,7 +965,7 @@ impl Broadcaster for RecordingBroadcaster {
     }
 }
 
-// MOD-001 (live hub): signing a browser out ends the user's real-time
+// Live hub: signing a browser out ends the user's real-time
 // subscriptions and live streams, so no open page keeps receiving.
 #[tokio::test]
 async fn signing_a_browser_out_ends_its_live_subscriptions() {
@@ -980,7 +980,7 @@ async fn signing_a_browser_out_ends_its_live_subscriptions() {
     assert_eq!(*broadcaster.0.lock().unwrap(), [user.id]);
 }
 
-// MOD-001: the pages: a signed-in browser skips the sign-in form, a `next`
+// The pages: a signed-in browser skips the sign-in form, a `next`
 // off the site is dropped, and the two-factor page without a waiting
 // sign-in sends the browser to sign in.
 #[tokio::test]
@@ -1040,7 +1040,7 @@ async fn the_pages_keep_people_on_the_site() {
     assert_eq!(response.header("location"), Some("/deals"));
 }
 
-// MOD-001: without SessionModule the strategy stays out of the way.
+// Without SessionModule the strategy stays out of the way.
 #[tokio::test]
 async fn without_the_session_module_tokens_work_as_before() {
     let app = support::app().await;
@@ -1060,7 +1060,7 @@ async fn without_the_session_module_tokens_work_as_before() {
         .assert_json_path("via", json!("Token"));
 }
 
-// MOD-001: a browser that signs in again (as someone else, say) ends the
+// A browser that signs in again (as someone else, say) ends the
 // sign-in it held on the server, so a copy of the old cookie is no one.
 #[tokio::test]
 async fn signing_in_again_ends_the_sign_in_the_browser_held() {

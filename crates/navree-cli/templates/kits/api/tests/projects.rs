@@ -226,7 +226,6 @@ async fn roles_decide_who_changes_what() {
     .assert_status(204);
 }
 
-// MOD-013
 #[tokio::test]
 async fn the_project_list_reads_the_list_query() {
     let (app, _guard) = boot().await;

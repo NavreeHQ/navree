@@ -83,7 +83,7 @@ fn first_code(html: &str) -> String {
         .to_owned()
 }
 
-// MOD-001: a user whom a policy makes set up two-factor authentication is
+// A user whom a policy makes set up two-factor authentication is
 // sent to the setup page after signing in, scans a secret, confirms the
 // first code, and is shown recovery codes once; then the app opens.
 #[tokio::test]
@@ -178,7 +178,7 @@ async fn the_setup_page_sets_two_factor_up_for_a_user_a_policy_requires_it_of() 
     assert!(page.contains("Two-factor authentication is on."), "{page}");
 }
 
-// MOD-001: a guest cannot reach the setup page, and posting it needs the token.
+// A guest cannot reach the setup page, and posting it needs the token.
 #[tokio::test]
 async fn the_setup_page_needs_a_sign_in_and_the_csrf_token() {
     let app = with_pages(support::builder()).build().await;
@@ -213,7 +213,7 @@ async fn passwordless_app(clock: &Arc<FixedClock>, sink: Arc<RecordingSink>) -> 
     .await
 }
 
-// MOD-001: the sign-in page offers the other ways in only when they are on.
+// The sign-in page offers the other ways in only when they are on.
 #[tokio::test]
 async fn the_sign_in_page_links_only_the_ways_that_are_on() {
     let plain = with_pages(support::builder()).build().await;
@@ -240,7 +240,7 @@ async fn the_sign_in_page_links_only_the_ways_that_are_on() {
     assert!(page.contains("/sign-in/code?next=%2Fdeals"), "{page}");
 }
 
-// MOD-001: a mailed link opens a page with one button; only the button
+// A mailed link opens a page with one button; only the button
 // signs in, once; a used link is told so.
 #[tokio::test]
 async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
@@ -311,7 +311,7 @@ async fn a_mailed_link_signs_a_browser_in_once_and_only_by_its_button() {
     whoami(&other).await.assert_status(401);
 }
 
-// MOD-001: a mailed code is asked for on the next page, a wrong one is a
+// A mailed code is asked for on the next page, a wrong one is a
 // field error, and the right one signs in.
 #[tokio::test]
 async fn an_emailed_code_signs_a_browser_in() {
@@ -374,7 +374,7 @@ async fn an_emailed_code_signs_a_browser_in() {
     assert_eq!(last.metadata["remember"], true);
 }
 
-// MOD-001: a mailed link or code for an account with two-factor
+// A mailed link or code for an account with two-factor
 // authentication continues at the second factor, not in a session.
 #[tokio::test]
 async fn the_passwordless_pages_ask_for_the_second_factor() {
@@ -436,7 +436,7 @@ async fn post_json(client: &TestClient, path: &str, body: Value) -> TestResponse
     client.post(path).xsrf().json(&body).send().await
 }
 
-// MOD-001: the passkey page ships its button and its script, and the two
+// The passkey page ships its button and its script, and the two
 // JSON routes sign a browser in with a registered passkey.
 #[tokio::test]
 async fn a_passkey_signs_a_browser_in_through_the_page_routes() {
@@ -542,7 +542,7 @@ async fn a_passkey_signs_a_browser_in_through_the_page_routes() {
     assert_eq!(done["next"], "/");
 }
 
-// MOD-001: a single-page app signs a browser in with JSON on the cookie: no
+// A single-page app signs a browser in with JSON on the cookie: no
 // token comes back, two-factor authentication works, and the CSRF token is
 // required.
 #[tokio::test]
@@ -657,7 +657,7 @@ async fn impersonation_app(sink: Arc<RecordingSink>) -> (TestApp, User, User, Te
     (app, admin, target, browser)
 }
 
-// MOD-001: an administrator impersonates in the browser: the session becomes
+// An administrator impersonates in the browser: the session becomes
 // the user's, marked as an impersonation, and a button brings it back.
 #[tokio::test]
 async fn a_browser_impersonates_a_user_and_goes_back() {
@@ -742,7 +742,7 @@ async fn a_browser_impersonates_a_user_and_goes_back() {
     let _ = app;
 }
 
-// MOD-001: signing out while impersonating ends the administrator's own
+// Signing out while impersonating ends the administrator's own
 // sign-in as well.
 #[tokio::test]
 async fn signing_out_while_impersonating_ends_both_sign_ins() {

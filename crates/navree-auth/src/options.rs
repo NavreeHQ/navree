@@ -935,7 +935,7 @@ mod tests {
         assert!(error.contains("auth.platform.roles"), "{error}");
     }
 
-    // MOD-001: how long a browser stays signed in, with and without
+    // How long a browser stays signed in, with and without
     // "remember me".
     #[test]
     fn browser_sign_in_lifetimes_are_read_and_checked() {

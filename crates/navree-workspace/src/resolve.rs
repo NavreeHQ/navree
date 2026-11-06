@@ -486,7 +486,7 @@ mod tests {
         );
     }
 
-    // MOD-003: the session names the workspace a browser switched to, for
+    // The session names the workspace a browser switched to, for
     // the user who switched only, and can be skipped once it turns out stale.
     #[cfg(feature = "session")]
     #[test]

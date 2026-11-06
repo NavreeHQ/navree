@@ -156,8 +156,7 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         "{main}"
     );
     // The URL is set in config/app.toml; `.env` does not repeat it, because
-    // `.env` ranks above the config file and the TOML copy would do nothing
-    // (CONFIG-002).
+    // `.env` ranks above the config file and the TOML copy would do nothing.
     let env = std::fs::read_to_string(root.join(".env.example")).unwrap();
     assert!(!env.contains("APP_DATABASE__URL"), "{env}");
     assert_eq!(
@@ -602,7 +601,6 @@ fn ui_next_adds_the_web_front_end() {
     assert!(gitignore.contains("/web/node_modules/"), "{gitignore}");
 }
 
-// MOD-012
 #[test]
 fn ui_next_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     let dir = tempfile::Builder::new()
@@ -660,7 +658,6 @@ fn ui_next_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     assert!(read(&root, "web/README.md").contains("pnpm --dir /opt/navree/packages/js build"));
 }
 
-// MOD-012
 #[test]
 fn ui_next_from_a_published_navree_asks_npm_for_the_packages() {
     let dir = tempfile::Builder::new()
@@ -872,7 +869,6 @@ fn the_readme_does_not_send_readers_to_navree_help() {
     }
 }
 
-// MOD-002
 /// Navree UI is the default front end of the minimal app; `--ui none` is the API alone.
 #[test]
 fn ui_navree_is_the_default() {

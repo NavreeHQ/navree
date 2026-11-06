@@ -1004,7 +1004,7 @@ mod tests {
         );
     }
 
-    // MOD-001: a `next` never leads off the site or back to the sign-in pages.
+    // A `next` never leads off the site or back to the sign-in pages.
     #[test]
     fn next_stays_on_the_site_and_off_the_sign_in_pages() {
         let paths = Paths::new(&AuthPages::new(), None);
