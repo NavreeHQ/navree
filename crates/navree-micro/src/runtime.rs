@@ -376,13 +376,20 @@ pub(crate) fn connect(
             connect_timeout,
         )?)),
         #[cfg(feature = "kafka")]
-        TransportKind::Kafka => Ok(Arc::new(crate::transport::kafka::KafkaTransport::new(
-            url.unwrap_or_else(|| "127.0.0.1:9092".to_owned()),
-            &options.kafka,
-            service,
-            instance,
-            connect_timeout,
-        )?)),
+        TransportKind::Kafka => {
+            let kafka = &options.kafka;
+            let mut transport = crate::transport::kafka::KafkaTransport::new(
+                url.unwrap_or_else(|| "127.0.0.1:9092".to_owned()),
+                kafka,
+                service,
+                instance,
+                connect_timeout,
+            )?;
+            if kafka.tls_files.ca.is_some() || kafka.tls_files.cert.is_some() {
+                transport = transport.with_tls_files(&kafka.tls_files)?;
+            }
+            Ok(Arc::new(transport))
+        }
         TransportKind::Memory => Ok(Arc::new(crate::MemoryTransport::new())),
         other => Err(format!(
             "the {other} transport needs the `{}` feature of navree",

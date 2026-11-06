@@ -486,8 +486,14 @@ pub struct KafkaOptions {
     pub replication_factor: i16,
     /// How long those topics keep records.
     pub retention_hours: u64,
-    /// Connect with TLS.
+    /// Connect with TLS, trusting the public authorities.
     pub tls: bool,
+    /// TLS with files of your own: `ca`, an authority to trust instead of the
+    /// public ones (a broker whose certificate a private authority signed), and
+    /// `cert` and `key`, for a broker that asks for a client certificate.
+    /// Setting `ca` or `cert` connects with TLS.
+    #[config(table)]
+    pub tls_files: TlsOptions,
     /// SASL credentials.
     #[config(table)]
     pub sasl: Option<SaslOptions>,
@@ -503,6 +509,7 @@ impl Default for KafkaOptions {
             replication_factor: 1,
             retention_hours: 168,
             tls: false,
+            tls_files: TlsOptions::default(),
             sasl: None,
             start_from: "latest".to_owned(),
         }

@@ -234,6 +234,8 @@ sasl = { mechanism = "SCRAM-SHA-512", username = "deals", password = "..." }
 | `micro.kafka.replication_factor` | `1` | Replicas of those topics. Use 3 in production. |
 | `micro.kafka.retention_hours` | `168` | How long those topics keep records. |
 | `micro.kafka.tls` | `false` | Connect with TLS, verified against the public web roots. |
+| `micro.kafka.tls_files.ca` | none | A CA certificate (PEM) to trust instead of the public roots, for a broker whose certificate a private authority signed. Setting it connects with TLS. |
+| `micro.kafka.tls_files.cert`, `.key` | none | This service's certificate chain and private key (PEM), for a broker that asks for a client certificate. |
 | `micro.kafka.sasl.mechanism` | none | `PLAIN`, `SCRAM-SHA-256` or `SCRAM-SHA-512`. |
 | `micro.kafka.sasl.username`, `.password` | none | The SASL credentials. |
 | `micro.kafka.start_from` | `latest` | Where a new consumer group starts: `latest`, or `earliest` to read the topic's whole history. |
