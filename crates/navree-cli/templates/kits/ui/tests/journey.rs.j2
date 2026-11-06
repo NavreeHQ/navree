@@ -782,13 +782,14 @@ async fn two_factor_authentication_is_set_up_on_a_page_and_asked_for_at_sign_in(
         .assert_status(200)
         .text();
     assert!(setup.contains("<svg"), "the picture to scan: {setup}");
-    let secret = first_code(&setup);
+    let first_secret = first_code(&setup);
 
-    // A wrong code starts again; the right one turns it on and shows the
-    // recovery codes once.
+    // A wrong code starts again with a new key; the right one turns it on and
+    // shows the recovery codes once.
     let wrong = post_form(&client, "/account/two-factor/confirm", &[("code", "000000")]).await;
     assert_eq!(wrong.status(), 422);
     let secret = first_code(&wrong.text());
+    assert_ne!(secret, first_secret, "a new key");
     let done = post_form(
         &client,
         "/account/two-factor/confirm",
