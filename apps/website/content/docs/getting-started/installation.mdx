@@ -7,13 +7,39 @@ Navree is a Rust framework, so you need a Rust toolchain and the `navree` comman
 
 ## Requirements
 
+These are the same everywhere:
+
 | What | Version | Why |
 |---|---|---|
 | Rust | 1.95 or newer | Navree uses edition 2024. Install it with [rustup](https://rustup.rs). |
-| A C compiler | the one your Rust toolchain links with | The `navree` tool and any build with the `sqlite` feature compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). On Windows, a C compiler means the MSVC build tools. |
 | `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
-| Docker or Podman | Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
 | Node.js and pnpm | Node.js 22 or newer | Only for a Next.js front end (`navree new --ui next`, or the `saas` [starter kit](/docs/getting-started/starter-kits/)). Its packages are linked from a Navree checkout and built once; the README of the generated `web/` says how. |
+
+The rest depends on your system:
+
+<Tabs>
+<Tab label="Linux and macOS">
+
+| What | Why |
+|---|---|
+| A C compiler (`gcc` or `clang`) | Rust links with it. The `navree` tool and any build with the `sqlite` feature also compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). On Debian and Ubuntu, `sudo apt install build-essential` installs one; on macOS, `xcode-select --install`. |
+| Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
+
+The `navree` binary goes to `~/.cargo/bin`. The commands in these docs are written for your shell as they stand.
+
+</Tab>
+<Tab label="Windows">
+
+| What | Why |
+|---|---|
+| The MSVC build tools | Rust links with them: the Visual Studio Build Tools with the "Desktop development with C++" workload (rustup offers to install them). The `navree` tool and any build with the `sqlite` feature also compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). |
+| Docker Desktop (it includes Compose v2), or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Start Docker Desktop first. Not needed for an app made with `--database sqlite`. |
+| Git Bash or WSL | The commands in these docs use a POSIX shell. In PowerShell, adapt the quoting of `curl` commands and the `~` paths. |
+
+The `navree` binary goes to `%USERPROFILE%\.cargo\bin` as `navree.exe`, and a release build of your app is `target\release\<package>.exe`. `navree new` refuses a name that is a Windows device name, such as `nul` or `con`.
+
+</Tab>
+</Tabs>
 
 You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need to install a database server either: new apps use [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and Dock runs it in a container. `navree new --database sqlite` makes an app that needs nothing at all (see [Database: getting started](/docs/database/getting-started/)).
 
