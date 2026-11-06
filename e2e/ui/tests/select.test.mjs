@@ -564,7 +564,7 @@ for (const browserName of browsers) {
       await page.waitForTimeout(500);
       assert.equal(requests.length, 0);
       assert.match(await c.note.innerText(), /at least 2/);
-      await page.keyboard.type("d");
+      await page.keyboard.type("n");
       await page.waitForFunction(() => document.querySelector("#combo-min-list [role=option]"));
       assert.equal(requests.length, 1);
       await close();
