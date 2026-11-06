@@ -72,6 +72,7 @@
 :where([data-tint=cyan]){--tint:var(--cyan)}
 :where([data-tint=rose]){--tint:var(--rose)}
 :where([data-pct="6"]){--pct:6%}
+:where([data-pct="8"]){--pct:8%}
 :where([data-pct="9"]){--pct:9%}
 :where([data-pct="10"]){--pct:10%}
 :where([data-pct="12"]){--pct:12%}

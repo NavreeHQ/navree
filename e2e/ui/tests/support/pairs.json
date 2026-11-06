@@ -163,6 +163,7 @@
 {"kind":"text","min":4.5,"name":"fg-1 on accent 30% over ink-3","on":"color-mix(in srgb,var(--accent) 30%,var(--ink-3))","text":"var(--fg-1)"},
 {"kind":"text","min":4.5,"name":"fg-1 on accent 6% over ink-3","on":"color-mix(in srgb,var(--accent) 6%,var(--ink-3))","text":"var(--fg-1)"},
 {"kind":"text","min":4.5,"name":"fg on amber 9% into ink-1","on":"color-mix(in oklab,var(--amber) 9%,var(--ink-1))","text":"var(--fg)"},
+{"kind":"text","min":4.5,"name":"fg on accent 8% into ink-1","on":"color-mix(in oklab,var(--accent) 8%,var(--ink-1))","text":"var(--fg)"},
 {"kind":"graphic","min":3.0,"name":"success 78% into fg on success 14% into ink-2","on":"color-mix(in oklab,var(--success) 14%,var(--ink-2))","text":"color-mix(in oklab,var(--success) 78%,var(--fg))"},
 {"kind":"graphic","min":3.0,"name":"success 78% into fg on success 15% into ink-2","on":"color-mix(in oklab,var(--success) 15%,var(--ink-2))","text":"color-mix(in oklab,var(--success) 78%,var(--fg))"},
 {"kind":"graphic","min":3.0,"name":"success 78% into fg on success 16% into ink-2","on":"color-mix(in oklab,var(--success) 16%,var(--ink-2))","text":"color-mix(in oklab,var(--success) 78%,var(--fg))"},
