@@ -10,7 +10,7 @@ import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Changelog: every Navree release",
-  description: `Every ${site.name} release by week, newest first, with a short summary of each week and its changes under the part of ${site.name} they touch. ${site.name} 1.0 is the first release.`,
+  description: `Every ${site.name} release by week, newest first, with a short summary of each week and its changes under the part of ${site.name} they touch.`,
   path: "/changelog/",
 });
 
