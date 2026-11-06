@@ -333,8 +333,8 @@ mod tests {
             "Ela@ACME.test.",
             " Ela@Acme.Test ",
             "ela@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.test",
-            "ela@agra\u{3002}test",
-            "ela@agra\u{ff0e}test\u{3002}",
+            "ela@acme\u{3002}test",
+            "ela@acme\u{ff0e}test\u{3002}",
         ] {
             let attempt = SignInAttempt::new(email, SignInMethod::Otp);
             assert_eq!(attempt.domain(), Some("acme.test"), "{email}");

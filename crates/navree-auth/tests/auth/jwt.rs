@@ -221,7 +221,7 @@ fn tokens_minted_by_the_previous_implementation_still_verify() {
             "challenge_sso" => assert_eq!(
                 claims.sign_in,
                 Some(SignInMethod::Sso {
-                    connection: "agra-okta".to_owned()
+                    connection: "acme-okta".to_owned()
                 })
             ),
             "challenge_exchange" => assert_eq!(
@@ -314,7 +314,7 @@ fn new_tokens_carry_the_algorithm_and_claims_of_the_old_ones() {
                 provider: "github".to_owned(),
             }),
             "challenge_sso" => method(SignInMethod::Sso {
-                connection: "agra-okta".to_owned(),
+                connection: "acme-okta".to_owned(),
             }),
             "challenge_exchange" => method(SignInMethod::TokenExchange {
                 issuer: "partner".to_owned(),
