@@ -3,7 +3,21 @@ import type { DiagramName } from "@/components/mdx/diagram";
 /** The diagrams that draw an architecture; the others belong to docs pages. */
 export type PatternName = Exclude<
   DiagramName,
-  "request-lifecycle" | "module-graph" | "navree-ui" | "reverse-engineering" | "design-to-ui" | "two-ways"
+  | "request-lifecycle"
+  | "module-graph"
+  | "navree-ui"
+  | "reverse-engineering"
+  | "design-to-ui"
+  | "two-ways"
+  | "workspace-resolution"
+  | "workspace-isolation"
+  | "harbor-release"
+  | "orm-parts"
+  | "jobs-and-events"
+  | "transport-choice"
+  | "token-and-session"
+  | "request-to-pixels"
+  | "server-rendered-app"
 >;
 
 /**
