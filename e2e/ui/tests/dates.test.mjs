@@ -490,6 +490,7 @@ for (const browserName of browsers) {
       await page.locator("#tp-arrives input[type=time]").fill("12:30");
       await page.getByRole("button", { name: "Book" }).click();
       await page.locator("[data-slot=field-error]").first().waitFor();
+      await page.waitForLoadState("load"); // the answer can still be arriving when its first error shows
       const messages = await page.locator("[data-slot=field-error]").allInnerTexts();
       assert.equal(messages.length, 2);
       assert.ok(messages.every((text) => /isn't available/.test(text)), messages.join(" | "));
