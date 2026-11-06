@@ -698,6 +698,8 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// milliseconds through a full-text index, where the default reads the whole table.
     ///
     /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
     /// use navree_ui::table::SearchMode;
     /// use navree_ui::{TableQuery, TableRow};
     ///
@@ -709,9 +711,11 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     ///     name: String,
     /// }
     ///
+    /// # fn main() {
     /// let query = TableQuery::<Customer>::parse("/customers", "search=sharma")
     ///     .search_mode(SearchMode::Words);
     /// assert_eq!(query.search_mode_in_use(), SearchMode::Words);
+    /// # }
     /// ```
     pub fn search_mode(mut self, mode: SearchMode) -> Self {
         self.search_mode = mode;

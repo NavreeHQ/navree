@@ -930,6 +930,8 @@ impl<T: Form> FormView<T> {
     /// a chosen file to at once. The form gives it the field's name, label, error and key.
     ///
     /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
     /// use navree_ui::form::FormView;
     /// use navree_ui::{Form, Upload, UploadLimits, Validate, render};
     /// use serde::Deserialize;
@@ -943,6 +945,7 @@ impl<T: Form> FormView<T> {
     ///     receipt: String,
     /// }
     ///
+    /// # fn main() {
     /// let limits = UploadLimits::new(2 * 1024 * 1024).accept(["application/pdf"]);
     /// let form = FormView::<Claim>::new()
     ///     .post("/claims")
@@ -950,6 +953,7 @@ impl<T: Form> FormView<T> {
     /// let html = render(&form.into());
     /// assert!(html.contains(r#"enctype="multipart/form-data""#));
     /// assert!(html.contains(r#"data-send="/claims/receipt""#));
+    /// # }
     /// ```
     pub fn upload(mut self, field: &'static str, upload: crate::Upload) -> Self {
         self.uploads.insert(field, upload);
@@ -2547,13 +2551,18 @@ fn is_form_body(parts: &Parts) -> bool {
 
 /// Why a request isn't a form submission at all, before its body is read.
 pub(crate) async fn refusal(parts: &Parts) -> Option<StatusCode> {
+    refusal_of(parts, false).await
+}
+
+/// [`refusal`], for a form that may also come as a multipart body: one with a file field.
+async fn refusal_of(parts: &Parts, multipart: bool) -> Option<StatusCode> {
     if matches!(parts.method, Method::GET | Method::HEAD) {
         return Some(StatusCode::METHOD_NOT_ALLOWED);
     }
     if !from_this_site(parts) && !from_a_trusted_front_end(parts).await {
         return Some(StatusCode::FORBIDDEN);
     }
-    if !is_form_body(parts) {
+    if !is_form_body(parts) && !(multipart && is_multipart(parts)) {
         return Some(StatusCode::UNSUPPORTED_MEDIA_TYPE);
     }
     None
@@ -2567,9 +2576,9 @@ pub(crate) async fn refusal(parts: &Parts) -> Option<StatusCode> {
 ///
 /// It has its own answer to cross-site request forgery, with or without a session:
 /// a body from another site is refused with 403 unless its `Origin` is in
-/// `http.cors.allowed_origins`, a body that isn't a urlencoded form with 415, and a
-/// `GET` or `HEAD` with 405, so no link or prefetch can fill one. Behind navree-session
-/// the token check also runs.
+/// `http.cors.allowed_origins`, a body that isn't a urlencoded form (or, for a form with a
+/// file field, a multipart one) with 415, and a `GET` or `HEAD` with 405, so no link or
+/// prefetch can fill one. Behind navree-session the token check also runs.
 ///
 /// It checks a post as the API checks a body: the messages are the app's (its
 /// `validation.messages`, and its translator, so a reader gets them in their language),
@@ -2866,11 +2875,11 @@ where
             reader: ReaderWords::english(),
             marker: PhantomData,
         };
-        if let Some(status) = refusal(&parts).await {
+        let files = has_files::<T>();
+        if let Some(status) = refusal_of(&parts, files).await {
             return Err(refuse(status, action));
         }
         let ctx = parts.extensions.get::<AppContext>().cloned();
-        let files = has_files::<T>();
         // A form with a file field is a multipart form when no script sent its files first.
         let (values, stored) = if files && is_multipart(&parts) {
             let request = Request::from_parts(parts.clone(), body);
