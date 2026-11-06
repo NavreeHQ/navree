@@ -374,28 +374,45 @@ on(document, "click", (e) => {
 // back to the item or button that opened a menu it was inside, whichever way it closes
 // (browsers differ on doing that themselves, and not at all for a nested one).
 on(document, "beforetoggle", (e) => {
-  const menu = e.target;
-  const trigger = menu.hasAttribute?.("data-ui-menu") && byId(get(menu, "aria-labelledby"));
+  const menu = /** @type {HTMLElement} */ (e.target);
+  if (!menu.hasAttribute?.("data-ui-menu")) return;
+  // The browser reports a menu open a task after it shows, and Chromium draws a frame in between: focus goes in
+  // before that frame, so the first one drawn has it inside.
+  if (e.newState === "open") {
+    opening.add(menu);
+    requestAnimationFrame(() => arrive(menu));
+  }
+  const trigger = byId(get(menu, "aria-labelledby"));
   if (!trigger) return;
   set(trigger, "aria-expanded", String(e.newState === "open"));
   if (e.newState !== "open" && holds(menu, active())) trigger.focus({ preventScroll: true });
 }, true);
 
-on(document, "toggle", (e) => {
-  const menu = /** @type {HTMLElement} */ (e.target);
-  if (!menu.hasAttribute?.("data-ui-menu")) return;
-  const opening = e.newState === "open";
-  buffer = "";
-  if (!opening) {
-    want = "";
-    hovered = null;
-    return;
-  }
+/** The menus that are opening and have not yet had focus put in them. @type {Set<HTMLElement>} */
+const opening = new Set();
+
+/** Puts focus where the menu that opened wants it, once: in the frame it is first drawn in, or when it is reported open. @param {HTMLElement} menu */
+function arrive(menu) {
+  if (!opening.has(menu) || !isOpen(menu)) return;
+  opening.delete(menu);
   for (const item of itemsOf(menu)) item.tabIndex = -1;
   const items = reachable(menu);
   const to = want === "first" ? items[0] : want === "last" ? items[items.length - 1] : want === "menu" ? menu : null;
   want = "";
   to?.focus({ preventScroll: true });
+}
+
+on(document, "toggle", (e) => {
+  const menu = /** @type {HTMLElement} */ (e.target);
+  if (!menu.hasAttribute?.("data-ui-menu")) return;
+  buffer = "";
+  if (e.newState === "open") {
+    arrive(menu);
+    return;
+  }
+  opening.delete(menu);
+  want = "";
+  hovered = null;
 }, true);
 
 // Typeahead: letters typed together pick the next item that starts with them.

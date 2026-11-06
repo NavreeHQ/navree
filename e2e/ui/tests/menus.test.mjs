@@ -525,6 +525,33 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("M1 a menu opened by a press or a key has focus inside it in the first frame it is drawn in", async () => {
+        const page = await open("/menus");
+        // Listens after the runtime does, so this frame's callback runs after the runtime's own.
+        const firstFrame = () => page.evaluate(() => {
+          const menu = document.getElementById("m-basic");
+          window.__first = new Promise((done) => {
+            const seen = (e) => {
+              if (e.target !== menu || e.newState !== "open") return;
+              document.removeEventListener("beforetoggle", seen, true);
+              requestAnimationFrame(() => done({ open: menu.matches(":popover-open"), inside: menu === document.activeElement || menu.contains(document.activeElement) }));
+            };
+            document.addEventListener("beforetoggle", seen, true);
+          });
+        });
+        await firstFrame();
+        await page.locator("#m-basic-trigger").click();
+        assert.deepEqual(await page.evaluate(() => window.__first), { open: true, inside: true }, "a press");
+        await page.waitForFunction(() => document.activeElement.id === "m-basic");
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(() => document.activeElement.id === "m-basic-trigger");
+        await firstFrame();
+        await page.keyboard.press("Enter");
+        assert.deepEqual(await page.evaluate(() => window.__first), { open: true, inside: true }, "Enter");
+        assert.equal(await focused(page), "EditE", "Enter starts on the first item");
+        await page.done();
+      });
+
       test("M2 typeahead finds items, repeated letters cycle, and a disabled item is reached but does nothing", async () => {
         const page = await open("/menus");
         await page.locator("#m-basic-trigger").focus();
