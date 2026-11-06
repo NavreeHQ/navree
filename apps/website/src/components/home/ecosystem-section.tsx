@@ -5,9 +5,12 @@ import type { ReactNode } from "react";
 import { ProductMark } from "@/components/ecosystem/marks";
 import { FleetMini, HarborMini, HelmMini, LighthouseMini, LogbookMini, NavigatorMini } from "@/components/ecosystem/minis";
 import { Marquee } from "@/components/magicui/marquee";
+import crates from "@/generated/crates.json";
 import { ecosystem, entry, type EcosystemEntry } from "@/content/ecosystem";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
+
+import { ShipBlock } from "./ship";
 
 /** A tool in the bento: its mark, name and line, and a small still of its UI. Links to its block on /ecosystem/. */
 function Tile({
@@ -70,9 +73,10 @@ function LibraryPill({ e }: { e: EcosystemEntry }) {
 /**
  * The homepage's look at the ecosystem: a bento of the six tools with small
  * stills of their UIs (the Lighthouse feed is live), a strip of the
- * libraries, and the way to /ecosystem/.
+ * libraries, Harbor's deploy under them, and the way to /ecosystem/.
  */
 export function EcosystemSection() {
+  const layers = new Set((crates as { layer: number }[]).map((c) => c.layer)).size;
   const libraries = ecosystem.filter((e) => e.kind !== "tool");
   const half = Math.ceil(libraries.length / 2);
   const rows = [libraries.slice(0, half), libraries.slice(half)];
@@ -103,7 +107,7 @@ export function EcosystemSection() {
           <Tile slug="fleet" className="lg:col-span-3">
             <FleetMini />
           </Tile>
-          {/* On phones the deploy is shown once, by the Ship section that follows. */}
+          {/* On phones the deploy is shown once, by the block under the libraries. */}
           <Tile slug="harbor" phone={false} className="lg:col-span-3">
             <HarborMini />
           </Tile>
@@ -131,7 +135,11 @@ export function EcosystemSection() {
           <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-linear-to-l from-ink-0 to-transparent sm:w-40" />
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <div className="mt-24 lg:mt-32">
+          <ShipBlock />
+        </div>
+
+        <div className="mt-20 flex flex-wrap items-center gap-x-6 gap-y-4 lg:mt-28">
           <Link
             href="/ecosystem/"
             className="group inline-flex h-12 items-center gap-2.5 rounded-full border border-line-2 pr-1.5 pl-6 text-base font-medium text-fg transition-colors duration-200 hover:border-fg-3 hover:bg-ink-2"
@@ -142,7 +150,10 @@ export function EcosystemSection() {
             </span>
           </Link>
           <p className="text-sm text-fg-3">
-            {ecosystem.length} first-party packages and tools · {site.license}
+            {ecosystem.length} first-party packages and tools · {site.license} ·{" "}
+            <Link href="/docs/architecture/crate-hierarchy/" className="link">
+              {crates.length} crates in {layers} layers
+            </Link>
           </p>
         </div>
       </div>

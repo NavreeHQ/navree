@@ -3,18 +3,14 @@ import type { ReactNode } from "react";
 
 import { Faq } from "@/components/faq";
 import { AiSection } from "@/components/home/ai-section";
+import { AppsSection } from "@/components/home/apps-section";
 import { ArchitectureSection } from "@/components/home/architecture-section";
-import { CrmSection } from "@/components/home/crm-section";
 import { EcosystemSection } from "@/components/home/ecosystem-section";
-import { ExampleApps } from "@/components/home/example-apps";
 import { FinalCta } from "@/components/home/final-cta";
 import { Hero } from "@/components/home/hero";
-import { InTheBox } from "@/components/home/in-the-box";
 import { PerformanceSection } from "@/components/home/performance-section";
 import { Pillars } from "@/components/home/pillars";
-import { Ship } from "@/components/home/ship";
 import { Showcase } from "@/components/home/showcase";
-import { TwoWays } from "@/components/home/two-ways";
 import { UiSection } from "@/components/home/ui-section";
 import { WhatIs } from "@/components/home/what-is";
 import { Workspaces } from "@/components/home/workspaces";
@@ -31,13 +27,16 @@ export const metadata: Metadata = pageMetadata({
 });
 
 /**
- * The homepage, top to bottom: what Navree is, what every app gets, Navree
- * UI and the other ways to draw screens, the code, the reference CRM built
- * with it, the example apps drawn with Navree UI, the shapes of system it
- * builds, workspaces, AI, the two ways in from an existing product or design,
- * the ecosystem, shipping, performance, the crates, and the way to start. The sections that
- * summarize another page (architecture, AI, ecosystem, performance) render
- * their own content; each sits under a hairline divider drawn here.
+ * The homepage, top to bottom, in ten sections after the hero: what Navree is,
+ * what every app gets, Navree UI and the other ways to draw screens, the code,
+ * the apps built with it (the reference CRM and the example apps drawn with
+ * Navree UI), the shapes of system it builds, workspaces, AI (with the two ways
+ * in from an existing product or design), the ecosystem (with the deploy and the
+ * crates), and performance; then the way to start and the questions. The
+ * sections that summarize another page (architecture, AI, ecosystem,
+ * performance) render their own content; each sits under a hairline divider
+ * drawn here. The crate list is a line in the ecosystem section that links to
+ * the crate hierarchy.
  *
  * No section sits in a Suspense boundary: several are async (their code is
  * highlighted at build time), and a boundary around an async section is
@@ -62,10 +61,7 @@ export default function Home() {
         <Showcase />
       </Part>
       <Part>
-        <CrmSection />
-      </Part>
-      <Part>
-        <ExampleApps />
+        <AppsSection />
       </Part>
       <Part divided>
         <ArchitectureSection />
@@ -76,20 +72,11 @@ export default function Home() {
       <Part divided>
         <AiSection />
       </Part>
-      <Part>
-        <TwoWays />
-      </Part>
       <Part divided>
         <EcosystemSection />
       </Part>
-      <Part>
-        <Ship />
-      </Part>
       <Part divided>
         <PerformanceSection />
-      </Part>
-      <Part>
-        <InTheBox />
       </Part>
       <Part>
         <FinalCta />

@@ -1,4 +1,4 @@
-import { ArrowLink, HomeSection, SectionHeading } from "./parts";
+import { ArrowLink } from "./parts";
 import { ScriptedTerminal, type TermLine } from "./scripted-terminal";
 
 /** A release, step by step (the Harbor docs' deploy output, shortened to fit a phone). */
@@ -34,37 +34,39 @@ const facts = [
   { term: "Your servers", text: "Harbor provisions any Ubuntu server over SSH: Caddy with TLS, PostgreSQL, Redis, a firewall and systemd units." },
 ];
 
-/** "Ship it": one binary, and Harbor for servers and releases. */
-export function Ship() {
+/**
+ * "Ship it": one binary, and Harbor for servers and releases. A block of the
+ * ecosystem section (`ecosystem-section.tsx`), under the tools: Harbor is one
+ * of them, and this is what it does.
+ */
+export function ShipBlock() {
   return (
-    <HomeSection id="ship">
-      <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12 lg:items-center">
-        <div className="lg:col-span-5">
-          <SectionHeading
-            id="ship"
-            eyebrow="Ship it"
-            title="One binary. One command to production."
-            lead="Harbor, built into the CLI, sets up your servers and ships every release with a health check. Secrets stay encrypted in harbor.toml, in your repository."
-          />
-          <dl className="mt-9 grid gap-x-8 gap-y-6 sm:grid-cols-2">
-            {facts.map((f) => (
-              <div key={f.term} className="border-t border-line pt-4">
-                <dt className="text-[0.9375rem] font-semibold text-fg">{f.term}</dt>
-                <dd className="mt-1.5 text-sm leading-relaxed text-pretty text-fg-2">{f.text}</dd>
-              </div>
-            ))}
-          </dl>
-          <ArrowLink href="/docs/tools/harbor/" className="mt-9">
-            Read about Harbor
-          </ArrowLink>
-        </div>
+    <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12 lg:items-center">
+      <div className="lg:col-span-5">
+        <p className="font-mono text-[0.8125rem] text-accent">Harbor</p>
+        <h3 className="mt-3 font-display text-display-md font-semibold text-balance text-fg">One binary. One command to production.</h3>
+        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
+          Harbor, built into the CLI, sets up your servers and ships every release with a health check. Secrets stay encrypted in
+          harbor.toml, in your repository.
+        </p>
+        <dl className="mt-9 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+          {facts.map((f) => (
+            <div key={f.term} className="border-t border-line pt-4">
+              <dt className="text-[0.9375rem] font-semibold text-fg">{f.term}</dt>
+              <dd className="mt-1.5 text-sm leading-relaxed text-pretty text-fg-2">{f.text}</dd>
+            </div>
+          ))}
+        </dl>
+        <ArrowLink href="/docs/tools/harbor/" className="mt-9">
+          Read about Harbor
+        </ArrowLink>
+      </div>
 
-        <div className="min-w-0 lg:col-span-7">
-          <div className="bezel">
-            <ScriptedTerminal title="~/code/cloudworks" lines={session} className="rounded-[calc(1.25rem-0.375rem)] border-line-2" />
-          </div>
+      <div className="min-w-0 lg:col-span-7">
+        <div className="bezel">
+          <ScriptedTerminal title="~/code/cloudworks" lines={session} className="rounded-[calc(1.25rem-0.375rem)] border-line-2" />
         </div>
       </div>
-    </HomeSection>
+    </div>
   );
 }

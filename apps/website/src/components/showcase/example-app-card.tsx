@@ -11,8 +11,11 @@ import { ShowcaseImage } from "./showcase-image";
  * is the link. One column on a phone; lying on its side from a tablet's width
  * to a laptop's; standing up three across on a wide screen. Used by
  * `/showcase/` and the homepage, so an app looks the same in both.
+ * `headingLevel` is the level of its title: 3 under a section's heading, 4
+ * under a block's.
  */
-export function ExampleAppCard({ app, priority = false }: { app: Showcase; priority?: boolean }) {
+export function ExampleAppCard({ app, priority = false, headingLevel = 3 }: { app: Showcase; priority?: boolean; headingLevel?: 3 | 4 }) {
+  const Title = headingLevel === 3 ? "h3" : "h4";
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-ink-1 shadow-bezel transition-colors duration-200 hover:border-line-2 md:flex-row xl:flex-col">
       <div className="aspect-[16/10] shrink-0 overflow-hidden border-b border-line bg-ink-0 md:aspect-auto md:w-[44%] md:border-r md:border-b-0 xl:aspect-[16/10] xl:w-auto xl:border-r-0 xl:border-b">
@@ -25,11 +28,11 @@ export function ExampleAppCard({ app, priority = false }: { app: Showcase; prior
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-6 sm:p-7">
         <p className="font-mono text-xs text-fg-3">{app.name}</p>
-        <h3 className="mt-2 font-display text-display-sm font-semibold text-fg transition-colors group-hover:text-accent">
+        <Title className="mt-2 font-display text-display-sm font-semibold text-fg transition-colors group-hover:text-accent">
           <Link href={`/showcase/${app.slug}/`} prefetch={false} className="after:absolute after:inset-0 after:content-['']">
             {app.kind}
           </Link>
-        </h3>
+        </Title>
         <p className="mt-3 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{app.summary}</p>
         <div className="mt-auto">
           <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line">

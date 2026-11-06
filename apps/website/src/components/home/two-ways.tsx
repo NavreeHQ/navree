@@ -5,8 +5,6 @@ import { DiagramFigure, diagrams } from "@/components/diagrams";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { HomeSection, SectionHeading } from "./parts";
-
 /** The two ways in, each an agent skill (docs: getting-started/bring-your-product, bring-your-design). */
 const ways = [
   {
@@ -40,37 +38,11 @@ const ways = [
 ] as const;
 
 /**
- * "Two ways in": the two agent skills that bring an existing product or
- * design into Navree, each with its phase diagram. As in the architecture
- * section, every panel sits in the same grid cell on large screens, so
- * switching never moves the page.
- */
-export function TwoWays() {
-  return (
-    <HomeSection id="two-ways">
-      <SectionHeading
-        split
-        id="two-ways"
-        eyebrow="Two ways in"
-        title="Start from what you already have."
-        lead={
-          <p>
-            Two agent skills bring an existing product or design into Navree. Your coding agent reads, writes and builds; you
-            decide at fixed stop points. Install them in any folder with{" "}
-            <code className="inline-code whitespace-nowrap">navree skills:install</code>.
-          </p>
-        }
-      />
-
-      <WaysTabs className="mt-12 lg:mt-14" />
-    </HomeSection>
-  );
-}
-
-/**
- * The two ways as tabs: each panel is a skill, what it does and its phase
- * diagram. The homepage and `/ai/` both draw it, so the diagrams are the same
- * on both. `headingLevel` is the level of each panel's title: 3 under a
+ * The two ways in, as tabs: the two agent skills that bring an existing product
+ * or design into Navree, each panel a skill, what it does and its phase
+ * diagram. As in the architecture section, every panel sits in the same grid
+ * cell on large screens, so switching never moves the page. The homepage's AI
+ * section and `/ai/` both draw it, so the diagrams are the same on both. `headingLevel` is the level of each panel's title: 3 under a
  * section's heading, 4 under a block's.
  */
 export function WaysTabs({ className, headingLevel = 3 }: { className?: string; headingLevel?: 3 | 4 }) {

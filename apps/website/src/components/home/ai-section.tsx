@@ -5,10 +5,13 @@ import { AgentSession } from "@/components/ai/agent-session";
 import { Button } from "@/components/ui/button";
 import { navigatorToolCount } from "@/lib/navigator-tools";
 
+import { WaysTabs } from "./two-ways";
+
 /*
  * The homepage's AI section: Navree is built for the developer and for the
  * agent working next to them. What the agent gets, what the product gets,
- * and a coding agent at work through Navigator. Links to /ai/.
+ * a coding agent at work through Navigator, and the two ways in from an
+ * existing product or design. Links to /ai/.
  */
 
 const sides = [
@@ -85,6 +88,21 @@ export function AiSection() {
         <div className="min-w-0 lg:col-span-7">
           <AgentSession className="shadow-glow-lg" tools={navigatorToolCount()} />
         </div>
+      </div>
+
+      <div className="mt-24 lg:mt-32">
+        <div className="grid grid-cols-1 gap-x-12 gap-y-4 lg:grid-cols-12 lg:items-end">
+          <div className="lg:col-span-7">
+            <p className="font-mono text-[0.8125rem] text-accent">Two ways in</p>
+            <h3 className="mt-3 font-display text-display-md font-semibold text-balance text-fg">Start from what you already have.</h3>
+          </div>
+          <p className="max-w-xl text-[0.9375rem] leading-relaxed text-pretty text-fg-2 lg:col-span-5 lg:pb-1">
+            Two agent skills bring an existing product or design into Navree. Your coding agent reads, writes and builds; you
+            decide at fixed stop points. Install them in any folder with{" "}
+            <code className="inline-code whitespace-nowrap">navree skills:install</code>.
+          </p>
+        </div>
+        <WaysTabs headingLevel={4} className="mt-10 lg:mt-12" />
       </div>
     </section>
   );
