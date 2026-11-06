@@ -11,7 +11,7 @@ use navree_kernel::BoxFuture;
 use navree_micro::conformance::{self, Capabilities, Harness, Listening};
 use navree_micro::{
     Envelope, Group, MicroError, MicroOptions, MicroTransport, MqttOptions, MqttTransport,
-    PatternKind, Subscription, Transport, headers,
+    PatternKind, Subscription, TlsOptions, Transport, headers,
 };
 
 use crate::mqtt_server::MiniMqtt;
@@ -277,6 +277,77 @@ async fn setup_has_nothing_to_declare_and_dead_letters_go_to_a_topic() {
     assert!(transport.is_connected());
     assert!(broker.clients().contains(&"stats-1".to_owned()));
     transport.close().await;
+}
+
+/// A broker that asks for a login, in plain text (`NAVREE_TEST_MQTT_AUTH_URL`)
+/// and over TLS with a certificate a private authority signed
+/// (`NAVREE_TEST_MQTT_TLS_URL`, `NAVREE_TEST_BROKER_CA`), both URLs naming
+/// the login: requests and replies go through, a wrong password is refused,
+/// and so is the certificate when the authority is not trusted.
+#[tokio::test]
+async fn a_real_broker_takes_a_login_in_plain_text_and_over_tls() {
+    let Some([plain, secure, ca]) = crate::support::services(
+        "a_real_broker_takes_a_login_in_plain_text_and_over_tls",
+        [
+            "NAVREE_TEST_MQTT_AUTH_URL",
+            "NAVREE_TEST_MQTT_TLS_URL",
+            "NAVREE_TEST_BROKER_CA",
+        ],
+    ) else {
+        return;
+    };
+    let prefix = || format!("auth{}", &uuid::Uuid::now_v7().simple().to_string()[20..]);
+    let trusted = TlsOptions {
+        ca: Some(ca.into()),
+        ..TlsOptions::default()
+    };
+    conformance::request_reply(&MqttHarness::new(
+        plain.clone(),
+        MqttOptions {
+            prefix: prefix(),
+            ..MqttOptions::default()
+        },
+    ))
+    .await;
+    conformance::request_reply(&MqttHarness::new(
+        secure.clone(),
+        MqttOptions {
+            prefix: prefix(),
+            tls: trusted.clone(),
+            ..MqttOptions::default()
+        },
+    ))
+    .await;
+
+    for (refused, url, options) in [
+        (
+            "a wrong password",
+            plain,
+            MqttOptions {
+                password: Some("wrong-password".to_owned().into()),
+                ..MqttOptions::default()
+            },
+        ),
+        ("an untrusted certificate", secure, MqttOptions::default()),
+    ] {
+        let transport = MqttTransport::new(
+            url,
+            &options,
+            "deals",
+            "deals-auth-1",
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        let error = transport
+            .publish(Envelope::new("deal.won", "{}"))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, MicroError::Transport(_)),
+            "{refused}: {error:?}"
+        );
+        transport.close().await;
+    }
 }
 
 /// An MQTT 5 broker: `NAVREE_TEST_MQTT_URL=mqtt://127.0.0.1:1883`.

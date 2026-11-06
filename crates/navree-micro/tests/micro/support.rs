@@ -432,3 +432,24 @@ impl Counter {
         self.0.load(Ordering::SeqCst)
     }
 }
+
+/// The values of `variables`, the settings of a server `test` needs, or
+/// `None` after a notice when one is not set; `NAVREE_TEST_REQUIRE_SERVICES=1`
+/// makes a missing one a failure.
+pub fn services<const N: usize>(test: &str, variables: [&str; N]) -> Option<[String; N]> {
+    let mut values = Vec::with_capacity(N);
+    for variable in variables {
+        match std::env::var(variable) {
+            Ok(value) if !value.trim().is_empty() => values.push(value),
+            _ => {
+                assert!(
+                    std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+                    "{test}: {variable} is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
+                eprintln!("SKIPPED {test}: set {variable}");
+                return None;
+            }
+        }
+    }
+    values.try_into().ok()
+}

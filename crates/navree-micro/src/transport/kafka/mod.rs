@@ -178,6 +178,17 @@ impl KafkaTransport {
         })
     }
 
+    /// Connects over TLS trusting the authority in `tls.ca` instead of the
+    /// public ones (a broker whose certificate a private authority signed),
+    /// and presents `tls.cert` and `tls.key` to a broker that asks for a
+    /// client certificate. Call it before the transport is used.
+    pub fn with_tls_files(mut self, tls: &TlsOptions) -> Result<Self, MicroError> {
+        let connector = TlsConnector::from(client_config(tls, "micro.kafka")?);
+        self.cluster = Arc::new(self.cluster.with_tls(connector));
+        self.options.tls = true;
+        Ok(self)
+    }
+
     fn retry_topic(&self) -> String {
         format!("{}.retry", self.service)
     }
@@ -943,6 +954,11 @@ impl GroupConsumer {
                 return Err(MicroError::transport(describe(response.error_code)));
             }
             code::STALE_MEMBER_EPOCH => return Ok(Some(Duration::from_millis(200))),
+            code::UNSUPPORTED_VERSION => {
+                return Err(MicroError::transport(
+                    "the broker does not take the consumer group heartbeat of KIP-848: the Kafka transport needs Kafka 4.0 or later",
+                ));
+            }
             other => {
                 return Err(MicroError::transport(format!(
                     "the group coordinator refused the heartbeat: {}{}",

@@ -62,6 +62,7 @@ pub(crate) mod code {
     pub(crate) const COORDINATOR_NOT_AVAILABLE: i16 = 15;
     pub(crate) const NOT_COORDINATOR: i16 = 16;
     pub(crate) const UNKNOWN_MEMBER_ID: i16 = 25;
+    pub(crate) const UNSUPPORTED_VERSION: i16 = 35;
     pub(crate) const TOPIC_ALREADY_EXISTS: i16 = 36;
     pub(crate) const OFFSET_NOT_AVAILABLE: i16 = 78;
     pub(crate) const FENCED_MEMBER_EPOCH: i16 = 110;
@@ -327,6 +328,18 @@ impl Cluster {
             round_robin: AtomicUsize::new(0),
             lanes: AtomicU64::new(1),
         }
+    }
+
+    /// The same cluster, connecting with `tls` (before any connection is
+    /// made).
+    pub(crate) fn with_tls(&self, tls: TlsConnector) -> Self {
+        Self::new(
+            self.bootstrap.clone(),
+            ConnSettings {
+                tls: Some(tls),
+                ..self.settings.clone()
+            },
+        )
     }
 
     /// A new fetch lane: the connections one reader fetches on.

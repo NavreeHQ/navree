@@ -25,8 +25,9 @@
 #                                        notices, and the failed tests
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 1025-1027,
-# 1465, 1883, 3306, 3307, 3308, 4222, 4443, 5432, 5433, 5672, 6333, 6379, 7700, 8025,
-# 8026, 8108, 9000, 9092, 10000, 12111, 14000 and 27017 on 127.0.0.1. The
+# 1465, 1883, 1884, 3306, 3307, 3308, 4222, 4223, 4443, 5432, 5433, 5672, 6333,
+# 6379, 7700, 8025, 8026, 8108, 8883, 9000, 9092, 9094, 9095, 10000, 12111,
+# 14000 and 27017 on 127.0.0.1. The
 # containers are called navree-ci-<service>.
 #
 # Settings (environment variables):
@@ -87,13 +88,18 @@ AZURE_KEY='Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFP
 # The login of the Mailpit servers that ask for one.
 SMTP_USER=navree
 SMTP_PASSWORD=navree-secret
+# The login of the brokers that ask for one (Kafka SASL PLAIN, MQTT), and
+# the token of the NATS server that asks for one.
+BROKER_USER=navree
+BROKER_PASSWORD=navree-secret
+NATS_TOKEN=navree-nats-token
 # Pulled by the Dock suite, which starts and removes its own containers (its
 # Mailpit is the image of the mailpit service).
 DOCK_IMAGES=(redis:7)
 
 ALL_SERVICES=(
   postgres pgvector mysql mariadb mariadb-10-6 mongodb redis s3 gcs azurite qdrant typesense
-  meilisearch stripe-mock pebble nats mqtt kafka rabbitmq mailpit mailpit-auth
+  meilisearch stripe-mock pebble nats nats-secure mqtt kafka kafka-secure rabbitmq mailpit mailpit-auth
   mailpit-starttls mailpit-tls
 )
 
@@ -181,8 +187,17 @@ NAVREE_TEST_STRIPE_MOCK_URL=http://127.0.0.1:12111
 NAVREE_TEST_PEBBLE_URL=https://localhost:14000/dir
 NAVREE_TEST_PEBBLE_CA=$(consumer_path "$PEBBLE_CA")
 NAVREE_TEST_NATS_URL=nats://127.0.0.1:4222
+NAVREE_TEST_NATS_TLS_URL=tls://localhost:4223
+NAVREE_TEST_NATS_TOKEN=$NATS_TOKEN
 NAVREE_TEST_MQTT_URL=mqtt://127.0.0.1:1883
+NAVREE_TEST_MQTT_AUTH_URL=mqtt://$BROKER_USER:$BROKER_PASSWORD@localhost:1884
+NAVREE_TEST_MQTT_TLS_URL=mqtts://$BROKER_USER:$BROKER_PASSWORD@localhost:8883
 NAVREE_TEST_KAFKA_URL=127.0.0.1:9092
+NAVREE_TEST_KAFKA_SASL_URL=localhost:9094
+NAVREE_TEST_KAFKA_TLS_URL=localhost:9095
+NAVREE_TEST_BROKER_USER=$BROKER_USER
+NAVREE_TEST_BROKER_PASSWORD=$BROKER_PASSWORD
+NAVREE_TEST_BROKER_CA=$(consumer_path "$STATE/tls/cert.pem")
 NAVREE_TEST_RABBITMQ_URL=amqp://navree:$PASSWORD@127.0.0.1:5672/%2f
 NAVREE_TEST_MAILPIT_URL=http://127.0.0.1:8025
 NAVREE_TEST_SMTP_URL=smtp://127.0.0.1:1025
@@ -251,6 +266,31 @@ prepare_state() {
   fi
   printf '%s:%s\n' "$SMTP_USER" "$SMTP_PASSWORD" >"$dir/auth.txt"
   chmod a+r "$dir/cert.pem" "$dir/key.pem" "$dir/auth.txt"
+
+  # The certificate of the brokers that speak TLS (its own authority, for
+  # localhost), and the PEM key store Kafka reads: the key, then the
+  # certificate.
+  local tls="$STATE/tls"
+  mkdir -p "$tls"
+  if [ ! -s "$tls/cert.pem" ] || [ ! -s "$tls/key.pem" ]; then
+    openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+      -keyout "$tls/key.pem" -out "$tls/cert.pem" -subj "/CN=localhost" \
+      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  fi
+  cat "$tls/key.pem" "$tls/cert.pem" >"$tls/keystore.pem"
+  chmod a+r "$tls/cert.pem" "$tls/key.pem" "$tls/keystore.pem"
+
+  # Mosquitto's password file (hashed by mosquitto_passwd, owned by the
+  # mosquitto user) and a copy of the certificate.
+  local mqtt="$STATE/mqtt"
+  mkdir -p "$mqtt"
+  cp "$tls/cert.pem" "$tls/key.pem" "$mqtt/"
+  chmod a+r "$mqtt/cert.pem" "$mqtt/key.pem"
+  if ! left_out mqtt; then
+    docker run --rm --entrypoint sh --volume "$(native_path "$mqtt"):/state" \
+      "${MQTT_IMAGE:-eclipse-mosquitto:2}" -c \
+      "mosquitto_passwd -c -b /state/passwd '$BROKER_USER' '$BROKER_PASSWORD' && chown 1883:1883 /state/passwd && chmod 0600 /state/passwd"
+  fi
 }
 
 mongodb_is_primary() {
@@ -365,8 +405,12 @@ start() {
   # revocation list and refuses the certificate; other TLS backends ignore it.
   ready pebble navree-ci-pebble curl --fail --silent --ssl-no-revoke --cacert "$PEBBLE_CA" https://localhost:14000/dir
   ready nats navree-ci-nats tcp 4222
+  ready nats-secure navree-ci-nats-secure tcp 4223
   ready mqtt navree-ci-mqtt tcp 1883
+  ready mqtt navree-ci-mqtt tcp 1884
+  ready mqtt navree-ci-mqtt tcp 8883
   ready kafka navree-ci-kafka docker exec navree-ci-kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server 127.0.0.1:9092
+  ready kafka-secure navree-ci-kafka-secure docker exec navree-ci-kafka-secure /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
   ready rabbitmq navree-ci-rabbitmq docker exec navree-ci-rabbitmq rabbitmq-diagnostics -q check_port_connectivity
   local mailpit
   for mailpit in mailpit mailpit-auth mailpit-starttls mailpit-tls; do

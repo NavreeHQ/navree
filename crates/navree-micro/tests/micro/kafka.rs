@@ -11,7 +11,7 @@ use navree_kernel::BoxFuture;
 use navree_micro::conformance::{self, Capabilities, Harness, Listening};
 use navree_micro::{
     DeadLetter, Envelope, Group, KafkaOptions, KafkaTransport, MicroError, MicroOptions,
-    MicroTransport, PatternKind, SaslOptions, Subscription, Transport, headers,
+    MicroTransport, PatternKind, SaslOptions, Subscription, TlsOptions, Transport, headers,
 };
 
 use crate::kafka_server::{MiniKafka, TopicSettings};
@@ -21,6 +21,8 @@ use crate::services::deals_answer_the_api_over;
 struct KafkaHarness {
     url: String,
     options: KafkaOptions,
+    /// The authority to trust over TLS, when not a public one.
+    tls: Option<TlsOptions>,
     next: AtomicUsize,
 }
 
@@ -29,22 +31,31 @@ impl KafkaHarness {
         Self {
             url,
             options,
+            tls: None,
             next: AtomicUsize::new(0),
         }
     }
 
+    /// The same harness, connecting over TLS with `tls`.
+    fn with_tls(mut self, tls: TlsOptions) -> Self {
+        self.tls = Some(tls);
+        self
+    }
+
     fn transport(&self, service: &str) -> Arc<dyn MicroTransport> {
         let n = self.next.fetch_add(1, Ordering::SeqCst);
-        Arc::new(
-            KafkaTransport::new(
-                self.url.clone(),
-                &self.options,
-                service,
-                &format!("{service}-{n}"),
-                Duration::from_secs(5),
-            )
-            .expect("a Kafka transport"),
+        let mut transport = KafkaTransport::new(
+            self.url.clone(),
+            &self.options,
+            service,
+            &format!("{service}-{n}"),
+            Duration::from_secs(5),
         )
+        .expect("a Kafka transport");
+        if let Some(tls) = &self.tls {
+            transport = transport.with_tls_files(tls).expect("the authority loads");
+        }
+        Arc::new(transport)
     }
 }
 
@@ -519,4 +530,69 @@ async fn a_real_broker_conforms() {
         return;
     };
     conformance::run(&KafkaHarness::new(url, options())).await;
+}
+
+/// A Kafka 4.0 broker that asks for a SASL PLAIN login, in plain text
+/// (`NAVREE_TEST_KAFKA_SASL_URL`) and over TLS with a certificate a private
+/// authority signed (`NAVREE_TEST_KAFKA_TLS_URL`, `NAVREE_TEST_BROKER_CA`):
+/// requests and replies go through with the login, a wrong password is
+/// refused, and so is the certificate when the authority is not trusted.
+#[tokio::test]
+async fn a_real_broker_takes_a_sasl_login_in_plain_text_and_over_tls() {
+    let Some([plain, secure, ca, user, password]) = crate::support::services(
+        "a_real_broker_takes_a_sasl_login_in_plain_text_and_over_tls",
+        [
+            "NAVREE_TEST_KAFKA_SASL_URL",
+            "NAVREE_TEST_KAFKA_TLS_URL",
+            "NAVREE_TEST_BROKER_CA",
+            "NAVREE_TEST_BROKER_USER",
+            "NAVREE_TEST_BROKER_PASSWORD",
+        ],
+    ) else {
+        return;
+    };
+    let login = |password: &str| KafkaOptions {
+        sasl: Some(SaslOptions {
+            mechanism: "PLAIN".into(),
+            username: user.clone(),
+            password: password.to_owned().into(),
+        }),
+        ..options()
+    };
+    let authority = TlsOptions {
+        ca: Some(ca.into()),
+        ..TlsOptions::default()
+    };
+
+    conformance::request_reply(&KafkaHarness::new(plain.clone(), login(&password))).await;
+    conformance::request_reply(
+        &KafkaHarness::new(secure.clone(), login(&password)).with_tls(authority),
+    )
+    .await;
+
+    let wrong = transport(plain, &login("wrong-password"), "deals");
+    let error = wrong
+        .publish(published("deal.won", "{}"))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, MicroError::Transport(_)), "{error:?}");
+    assert!(error.to_string().contains("SASL"), "{error}");
+
+    // Over TLS with the public authorities only, the broker's certificate
+    // is refused.
+    let untrusted = transport(
+        secure,
+        &KafkaOptions {
+            tls: true,
+            ..login(&password)
+        },
+        "deals",
+    );
+    assert!(
+        untrusted
+            .publish(published("deal.won", "{}"))
+            .await
+            .is_err(),
+        "a certificate no trusted authority signed"
+    );
 }

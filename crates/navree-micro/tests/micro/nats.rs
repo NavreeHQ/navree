@@ -9,7 +9,10 @@ use std::time::Duration;
 
 use navree_kernel::BoxFuture;
 use navree_micro::conformance::{self, Capabilities, Harness};
-use navree_micro::{MicroOptions, MicroTransport, NatsOptions, NatsTransport, Transport};
+use navree_micro::{
+    Envelope, MicroError, MicroOptions, MicroTransport, NatsOptions, NatsTransport, TlsOptions,
+    Transport,
+};
 
 use crate::nats_server::MiniNats;
 use crate::services::deals_answer_the_api_over;
@@ -135,4 +138,55 @@ async fn jetstream_conforms() {
         },
     ))
     .await;
+}
+
+/// A NATS server that asks for a token and speaks TLS only, with a
+/// certificate a private authority signed (`NAVREE_TEST_NATS_TLS_URL`,
+/// `NAVREE_TEST_NATS_TOKEN`, `NAVREE_TEST_BROKER_CA`): requests and replies
+/// go through with the token, a wrong token is refused, and so is the
+/// certificate when the authority is not trusted.
+#[tokio::test]
+async fn a_real_server_takes_a_token_over_tls() {
+    let Some([url, token, ca]) = crate::support::services(
+        "a_real_server_takes_a_token_over_tls",
+        [
+            "NAVREE_TEST_NATS_TLS_URL",
+            "NAVREE_TEST_NATS_TOKEN",
+            "NAVREE_TEST_BROKER_CA",
+        ],
+    ) else {
+        return;
+    };
+    let options = |token: &str, ca: Option<&str>| NatsOptions {
+        stream: format!("AUTH{}", &uuid::Uuid::now_v7().simple().to_string()[20..]),
+        token: Some(token.to_owned().into()),
+        tls: TlsOptions {
+            ca: ca.map(Into::into),
+            ..TlsOptions::default()
+        },
+        ..NatsOptions::default()
+    };
+    conformance::request_reply(&NatsHarness::new(url.clone(), options(&token, Some(&ca)))).await;
+
+    for (refused, options) in [
+        ("a wrong token", options("wrong-token", Some(&ca))),
+        ("an untrusted certificate", options(&token, None)),
+    ] {
+        let transport = NatsTransport::new(
+            url.clone(),
+            &options,
+            "deals",
+            "deals-1",
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        let error = transport
+            .publish(Envelope::new("deal.won", "{}"))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, MicroError::Transport(_)),
+            "{refused}: {error:?}"
+        );
+    }
 }

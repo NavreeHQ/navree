@@ -3,8 +3,9 @@
 # Linux runs against real servers: SQLite, PostgreSQL 17 with TimescaleDB,
 # MySQL 8.4, MariaDB 11.4 and 10.6, and MongoDB 8.0 (replica set rs0), plus
 # Redis, an S3 server, Google Cloud Storage and Azure Blob emulators, Qdrant,
-# pgvector, Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka,
-# RabbitMQ and four Mailpit servers (plain, with login, STARTTLS, TLS).
+# pgvector, Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka
+# (each also with a login and over TLS), RabbitMQ and four Mailpit servers
+# (plain, with login, STARTTLS, TLS).
 # scripts/ci-services.sh starts them from scripts/services/compose.yml; the
 # suites find them through NAVREE_TEST_* variables.
 # NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server, Chrome, Node.js or
