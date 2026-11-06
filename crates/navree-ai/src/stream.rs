@@ -49,19 +49,34 @@ pub enum StreamEvent {
     },
     /// An agent's run stopped for the user to approve a tool call.
     Approval(PendingApproval),
+    /// An agent chose a component from the page's catalogue, and its props passed the
+    /// catalogue's check. What it shows is loaded by the page, never by the model.
+    Surface {
+        /// The call id.
+        id: String,
+        /// The component's name.
+        surface: String,
+        /// Its props, as checked.
+        props: Value,
+    },
+    /// An agent changed the conversation's working state, and the new state passed its
+    /// check.
+    State(Value),
     /// Last: the model, usage and finish of the whole answer.
     Done(Completion),
 }
 
 impl StreamEvent {
-    /// The SSE event name: `text`, `tool_call`, `tool_result`, `approval`
-    /// or `done`.
+    /// The SSE event name: `text`, `tool_call`, `tool_result`, `approval`,
+    /// `surface`, `state` or `done`.
     pub fn name(&self) -> &'static str {
         match self {
             StreamEvent::Text(_) => "text",
             StreamEvent::ToolCall { .. } => "tool_call",
             StreamEvent::ToolResult { .. } => "tool_result",
             StreamEvent::Approval(_) => "approval",
+            StreamEvent::Surface { .. } => "surface",
+            StreamEvent::State(_) => "state",
             StreamEvent::Done(_) => "done",
         }
     }
@@ -79,6 +94,10 @@ impl StreamEvent {
             }
             StreamEvent::ToolResult { id, tool, ok } => json!({ "id": id, "tool": tool, "ok": ok }),
             StreamEvent::Approval(pending) => serde_json::to_value(pending).unwrap_or_default(),
+            StreamEvent::Surface { id, surface, props } => {
+                json!({ "id": id, "surface": surface, "props": props })
+            }
+            StreamEvent::State(state) => json!({ "state": state }),
             StreamEvent::Done(completion) => serde_json::to_value(completion).unwrap_or_default(),
         }
     }

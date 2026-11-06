@@ -15,10 +15,13 @@ use uuid::Uuid;
 
 use crate::response::Usage;
 
+mod page;
 mod run;
 mod runner;
 
+pub use page::{PageAnswer, PageTool, PageTools};
 pub use run::AgentRun;
+pub(crate) use run::RunShared;
 pub use runner::{AgentRunBuilder, AgentStream};
 
 /// An agent: a model with instructions and tools, which are ordinary async
