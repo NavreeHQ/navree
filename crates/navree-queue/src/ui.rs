@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use http::Method;
 use navree_contracts::BoxFuture;
-use navree_http::{AppError, Authenticator, Controller, CurrentPrincipal, Path, RouteDef};
+use navree_http::{ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Path, RouteDef};
 use navree_kernel::{Injectable, KernelError, ProviderKey, Resolver};
 use navree_ui::html::{Href, LocalHref};
 use navree_ui::{Alert, AlertTone, Button, LiveStream, Node, Progress, Region, View, el};
@@ -315,7 +315,18 @@ impl Controller for OperationProgressController {
         vec![
             RouteDef::on(Method::GET, format!("!{PROGRESS_PATH}"), show)
                 .authenticated()
-                .name("operations.progress"),
+                .name("operations.progress")
+                .api(ApiMeta {
+                    summary: Some("An operation's progress, drawn for a page".to_owned()),
+                    description: Some(
+                        "The `OperationProgress` region as HTML: a page asks for it again while \
+                         the operation runs."
+                            .to_owned(),
+                    ),
+                    tags: vec!["Operations".to_owned()],
+                    responses: vec![401, 404],
+                    ..ApiMeta::default()
+                }),
         ]
     }
 }
