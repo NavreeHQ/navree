@@ -10,6 +10,7 @@ use syn::spanned::Spanned;
 use syn::{Expr, Ident, Item, ItemStruct, Token, Type, token};
 
 use crate::attr::key_name;
+use crate::config_section::config_path;
 use crate::paths::{HTTP, KERNEL};
 
 /// Expands `#[module(args)] item`. On error the item is kept so the error
@@ -29,7 +30,7 @@ fn try_expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let args = ModuleArgs::parse(args)?;
     let item = parse_struct(item)?;
     let kernel = KERNEL.path(Span::call_site())?;
-    generate(&args, &item, &kernel, |span| HTTP.path(span))
+    generate(&args, &item, &kernel, |span| HTTP.path(span), config_path)
 }
 
 /// What `#[module(...)]` declares.
@@ -40,6 +41,9 @@ struct ModuleArgs {
     /// The span of the `controllers` key (for "missing navree-http" errors) and the types.
     controllers: Option<(Span, Vec<Type>)>,
     exports: Vec<Type>,
+    /// The span of the `config` key (for "missing navree-config" errors) and
+    /// the configuration sections (`ConfigSection` types).
+    config: Option<(Span, Vec<Type>)>,
     /// The span of the `global` flag, when present.
     global: Option<Span>,
     /// `register = f`: called last with `(&self, &mut ModuleBuilder)`.
@@ -47,7 +51,8 @@ struct ModuleArgs {
 }
 
 /// The keys `#[module]` accepts, for error messages.
-const KEYS: &str = "`imports`, `providers`, `controllers`, `exports`, `global` or `register`";
+const KEYS: &str =
+    "`imports`, `providers`, `controllers`, `exports`, `config`, `global` or `register`";
 
 impl ModuleArgs {
     fn parse(args: TokenStream) -> syn::Result<Self> {
@@ -72,6 +77,7 @@ impl ModuleArgs {
             "providers" => self.providers = list(meta, key)?,
             "controllers" => self.controllers = Some((meta.path.span(), list(meta, key)?)),
             "exports" => self.exports = list(meta, key)?,
+            "config" => self.config = Some((meta.path.span(), list(meta, key)?)),
             "global" => {
                 if meta.input.peek(Token![=]) || meta.input.peek(token::Paren) {
                     return Err(meta.error("`global` is a flag and takes no value: write `global`"));
@@ -96,11 +102,12 @@ impl ModuleArgs {
 /// The known key `key` is probably a typo of: a singular/plural slip or a
 /// case difference (`import` → `imports`, `Global` → `global`).
 fn suggestion(key: &str) -> Option<&'static str> {
-    const KNOWN: [&str; 6] = [
+    const KNOWN: [&str; 7] = [
         "imports",
         "providers",
         "controllers",
         "exports",
+        "config",
         "global",
         "register",
     ];
@@ -142,12 +149,15 @@ fn parse_struct(item: TokenStream) -> syn::Result<ItemStruct> {
 }
 
 /// Generates the item plus its `impl Module`. `http` resolves the navree-http
-/// path; it is only called when the module declares controllers.
+/// path; it is only called when the module declares controllers. `config`
+/// resolves the navree-config path; it is only called when the module
+/// declares configuration sections.
 fn generate(
     args: &ModuleArgs,
     item: &ItemStruct,
     kernel: &TokenStream,
     http: impl FnOnce(Span) -> syn::Result<TokenStream>,
+    config: impl FnOnce(Span) -> syn::Result<TokenStream>,
 ) -> syn::Result<TokenStream> {
     // Mixed-site hygiene: expressions written by the user cannot see (or
     // shadow) the builder variable.
@@ -157,6 +167,20 @@ fn generate(
         .imports
         .iter()
         .map(|module| quote_spanned!(module.span()=> #builder.import(#module);));
+    let sections = match &args.config {
+        Some((span, types)) if !types.is_empty() => {
+            let config = config(*span)?;
+            types
+                .iter()
+                .map(|ty| {
+                    quote_spanned!(ty.span()=>
+                        #config::ModuleBuilderConfigExt::config::<#ty>(#builder);
+                    )
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    };
     let providers = args
         .providers
         .iter()
@@ -208,6 +232,7 @@ fn generate(
         impl #impl_generics #kernel::Module for #name #ty_generics #where_clause {
             fn register(&self, #builder: &mut #kernel::ModuleBuilder) {
                 #(#imports)*
+                #(#sections)*
                 #(#providers)*
                 #(#controllers)*
                 #(#exports)*
@@ -230,7 +255,40 @@ mod tests {
         let item: ItemStruct = syn::parse_quote!(
             struct UsersModule;
         );
-        generate(&args, &item, &quote!(::navree_kernel), http).map(|tokens| tokens.to_string())
+        generate(&args, &item, &quote!(::navree_kernel), http, |_| {
+            Ok(quote!(::navree_config))
+        })
+        .map(|tokens| tokens.to_string())
+    }
+
+    #[test]
+    fn config_sections_register_through_the_config_extension() {
+        let out = expand_with_http(quote!(config = [MailOptions, admin::AuditOptions]), |_| {
+            panic!("navree-http must not be looked up")
+        })
+        .expect("expands");
+        for section in ["MailOptions", "admin :: AuditOptions"] {
+            let call = format!(
+                ":: navree_config :: ModuleBuilderConfigExt :: config :: < {section} > (builder) ;"
+            );
+            assert!(out.contains(&call), "missing `{call}` in {out}");
+        }
+    }
+
+    #[test]
+    fn modules_without_config_do_not_need_the_config_crate() {
+        let args = ModuleArgs::parse(quote!(providers = [Repo], config = [])).expect("parses");
+        let item: ItemStruct = syn::parse_quote!(
+            struct UsersModule;
+        );
+        generate(
+            &args,
+            &item,
+            &quote!(::navree_kernel),
+            |_| panic!("navree-http must not be looked up"),
+            |_| panic!("navree-config must not be looked up"),
+        )
+        .expect("expands");
     }
 
     #[test]

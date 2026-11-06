@@ -177,6 +177,7 @@ pub fn injectable(args: TokenStream, item: TokenStream) -> TokenStream {
 ///     providers = [UserRepository, UserService],                    // #[injectable] types
 ///     controllers = [UserController],                               // needs navree-http
 ///     exports = [UserService],                                      // types (dyn Trait too)
+///     config = [UserOptions],                                       // ConfigSection types
 ///     global,                                                       // exports visible everywhere
 ///     register = Self::extra,                                       // fn(&Self, &mut ModuleBuilder)
 /// )]
@@ -184,12 +185,14 @@ pub fn injectable(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Every key is optional; order inside the attribute does not matter. The
 /// generated `register` calls, in this order: `m.import(expr)` per import,
+/// `navree_config::ModuleBuilderConfigExt::config::<S>(m)` per configuration
+/// section (`config = [MailOptions]`, which needs `navree-config`),
 /// `m.provider::<P>()` per provider,
 /// `navree_http::ModuleBuilderHttpExt::controller::<C>(m)` per controller,
 /// `m.exports::<E>()` per export, `m.global()`, and finally the `register`
 /// function or closure, for everything the attribute does not declare
-/// (configuration sections, values, factories, named providers, migrations,
-/// jobs, commands, lifecycle hooks). Unknown or duplicate keys are compile
+/// (values, factories, named providers, migrations, jobs, commands,
+/// lifecycle hooks). Unknown or duplicate keys are compile
 /// errors pointing at the key.
 ///
 /// ```

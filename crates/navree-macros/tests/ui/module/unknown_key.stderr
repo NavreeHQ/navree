@@ -1,4 +1,4 @@
-error: unknown #[module] key `guards`: expected `imports`, `providers`, `controllers`, `exports`, `global` or `register`
+error: unknown #[module] key `guards`: expected `imports`, `providers`, `controllers`, `exports`, `config`, `global` or `register`
  --> tests/ui/module/unknown_key.rs:3:10
   |
 3 | #[module(guards = [AdminGuard])]

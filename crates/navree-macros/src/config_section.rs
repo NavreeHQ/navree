@@ -23,7 +23,7 @@ use crate::paths::CONFIG;
 
 /// The path to navree-config: the crate itself when the crate being
 /// compiled depends on it (also from inside), else the `navree` facade.
-fn config_path(span: Span) -> syn::Result<TokenStream> {
+pub(crate) fn config_path(span: Span) -> syn::Result<TokenStream> {
     match proc_macro_crate::crate_name("navree-config") {
         Ok(FoundCrate::Itself) => Ok(quote!(::navree_config)),
         Ok(FoundCrate::Name(name)) => {

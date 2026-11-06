@@ -345,3 +345,42 @@ async fn module_registers_controllers() {
         .await
         .expect("the controller is a provider of DealsModule");
 }
+
+mod settings {
+    use navree_config::ConfigSection;
+    use navree_macros::module;
+    use serde::Deserialize;
+
+    /// The greeting module's settings.
+    #[derive(Debug, Default, Deserialize, ConfigSection)]
+    #[config(key = "greeting")]
+    #[serde(default)]
+    pub struct GreetingOptions {
+        /// What the module says.
+        pub text: String,
+    }
+
+    #[module(config = [GreetingOptions])]
+    pub struct GreetingModule;
+}
+
+#[tokio::test]
+async fn module_registers_its_configuration_sections() {
+    use navree_config::{ConfigModule, ConfigSources};
+    use settings::{GreetingModule, GreetingOptions};
+
+    let app = Navree::app()
+        .module(ConfigModule::for_root(
+            ConfigSources::new().set("greeting.text", "namaste"),
+        ))
+        .module(GreetingModule)
+        .boot()
+        .await
+        .expect("boot");
+    let options = app
+        .ctx()
+        .get::<GreetingOptions>()
+        .await
+        .expect("GreetingOptions is built from the section");
+    assert_eq!(options.text, "namaste");
+}
