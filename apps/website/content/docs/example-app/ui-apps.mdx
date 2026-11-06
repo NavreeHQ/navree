@@ -1,15 +1,15 @@
 ---
 title: "The Navree UI example apps"
-description: "Whole apps in the repository drawn with Navree UI: a store's back office, a team's board and a support inbox, with what each shows, where to read its code and how to run it."
+description: "Whole apps drawn with Navree UI: a store's back office, a team's board and a support inbox, with what each shows and how to run it."
 ---
 
 Beside the [CRM](/docs/example-app/crm-tour/), the repository holds apps whose screens Navree UI draws: a store, a board and an inbox. Each is one Rust crate on SQLite, seeded with demo data (Indian names and cities, times in IST) that it writes afresh at every start, with live updates over server-sent events and a suite that runs it in real browsers. Each has a page on this site with its screens, the code of its hardest part and its measured speed, and all of them are on the [UI page](/ui/#build-anything).
 
-| App | What it is | Run it | Its page |
-| --- | --- | --- | --- |
-| `apps/store-demo` | A store's back office: Charkha Supply Co., an invented shop in Punjab | `cargo run --release -p store-demo` on port 8095 | [The store](/showcase/store/) |
-| `apps/board-demo` | A team's board: Rangla Looms, an invented fabric exporter in Ludhiana | `cargo run -p board-demo` on port 8097 | [The board](/showcase/board/) |
-| `apps/inbox-demo` | A support inbox: Sukhna Labs, an invented software company in Mohali | `cargo run --release -p inbox-demo` on port 8096 | [The inbox](/showcase/inbox/) |
+| App | What it is | Run it | Its page | Its tour |
+| --- | --- | --- | --- | --- |
+| `apps/store-demo` | A store's back office: Charkha Supply Co., an invented shop in Punjab | `cargo run --release -p store-demo` on port 8095 | [The store](/showcase/store/) | [A tour of the store](/docs/example-app/store-tour/) |
+| `apps/board-demo` | A team's board: Rangla Looms, an invented fabric exporter in Ludhiana | `cargo run -p board-demo` on port 8097 | [The board](/showcase/board/) | [A tour of the board](/docs/example-app/board-tour/) |
+| `apps/inbox-demo` | A support inbox: Sukhna Labs, an invented software company in Mohali | `cargo run --release -p inbox-demo` on port 8096 | [The inbox](/showcase/inbox/) | [A tour of the inbox](/docs/example-app/inbox-tour/) |
 
 ## The store
 

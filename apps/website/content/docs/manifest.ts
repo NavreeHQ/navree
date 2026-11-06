@@ -439,7 +439,7 @@ export const sections: DocsSection[] = [
     slug: "example-app",
     title: "Example application",
     description: "A tour of the example CRM, and the example apps drawn with Navree UI: a store, a board and a support inbox.",
-    pages: ["crm-tour", "ui-apps"],
+    pages: ["crm-tour", "ui-apps", "store-tour", "board-tour", "inbox-tour"],
   },
 ];
 

@@ -1,0 +1,133 @@
+---
+title: "A tour of the store"
+description: "The store example app: an orders table paged by cursor, an order in a drawer, refunds checked on the server, a live feed and restocks."
+---
+
+`apps/store-demo` is the back office of Charkha Supply Co., an invented shop in Punjab that sells kitchen, pantry, clothing and festive goods across India from warehouses in Ludhiana, Delhi and Bengaluru. It is one Rust crate on SQLite, drawn with [Navree UI](/docs/ui/overview/). The tour follows one order through the app. [The store's page](/showcase/store/) has its screens and its measured speed, and [the example apps](/docs/example-app/ui-apps/) compares it with the board and the inbox.
+
+## Running it
+
+```sh
+cargo run --release -p store-demo
+```
+
+The app listens on `http://127.0.0.1:8095`. `PORT` picks another port, and `STORE_DATABASE_URL` another database (`sqlite://target/store-demo.db?mode=rwc` by default). The shop is written afresh at every start. While the app runs, a simulator places, packs, ships and delivers orders and restocks shelves every few seconds; `STORE_SIMULATOR=<milliseconds>` changes the pace (3000 by default) and `STORE_SIMULATOR=off` stops it.
+
+## How it is built
+
+| File | What it holds |
+|---|---|
+| `src/lib.rs` | The app: `HttpModule`, `DatabaseModule`, `UiModule`, `RealtimeModule` and `StoreModule`, which seeds the shop when the app boots |
+| `src/data.rs` | The models (orders, lines, products, customers, events) and the seed |
+| `src/shop.rs` | The rules, as plain functions: whether an order can be refunded, cancelled or sent again, and what a restock may be |
+| `src/pages.rs` | The routes |
+| `src/live.rs` | The live hub, the simulator and the nudges that tell open pages something changed |
+| `src/views/` | The screens as functions of the data: `dashboard.rs`, `orders.rs`, `order.rs` and `inventory.rs` |
+
+## The orders table
+
+`/orders` is a [DataTable](/docs/ui/data-table/). One struct says what each column is, and the server runs the search, the filters, the sort and the pages:
+
+```rust title="src/views/orders.rs"
+#[derive(Clone, TableRow)]
+#[table(
+    cursor,
+    capped = 10000,
+    sort = "-placed_on",
+    per = 25,
+    per_pages(10, 25, 50, 100)
+)]
+pub struct OrderRow {
+    #[col(sortable, search, sticky, label = "Order")]
+    pub number: String,
+    #[col(sortable, filter = relation)]
+    pub status: String,
+    #[col(filter = multi, options = FULFILMENTS)]
+    pub fulfilment: String,
+    #[col(sortable, numeric)]
+    pub total: i64,
+    // ...
+}
+```
+
+`cursor` pages by keyset, so a deep page costs what the first one does, and `capped = 10000` counts the matching orders only up to 10,000 and shows "10,000+" past that, so the count stays cheap. The `status` filter is a relation: the page supplies its choices, each status with how many orders hold it. The handler is one query and one call:
+
+```rust title="src/pages.rs"
+let page = query
+    .load_as(Order::query(), &uow, |record| OrderRow::from(record.into_inner()))
+    .await?;
+```
+
+## An order in a drawer
+
+The order number in a row is a form. With JavaScript, it asks `GET /orders/{id}/peek`, and the answer is a list of ops: draw the order into the drawer and open it, over the table.
+
+```rust title="src/pages.rs"
+Ok(Reply::ops_or_redirect(format!("/orders/{id}"))
+    .morph(DRAWER, order_drawer(&view, today(), Parts::Lazy))
+    .op(Op::Open { target: DRAWER.to_owned() }))
+```
+
+With JavaScript off, the same reply is a redirect to `/orders/{id}`, the order on a page of its own with the same detail and the same dialogs. The drawer is a [Sheet](/docs/components/sheet/) at `SheetWidth::Xl`. Its history and the customer's other orders are [regions](/docs/ui/regions/) that load after the drawer opens (`Parts::Lazy`), so opening it costs one query.
+
+## Refunds, cancels and resends
+
+Each action opens a [confirm dialog](/docs/components/alert-dialog/), and the server checks it again when it arrives, because the order may have moved since the page was drawn. The rules are plain functions in `src/shop.rs`:
+
+```rust title="src/shop.rs"
+pub fn check_refund(order: &Order, amount: i64) -> Result<(), Refusal> {
+    let left = refundable(order)?;
+    if amount <= 0 {
+        return Err(Refusal::NotPositive);
+    }
+    if amount > left {
+        return Err(Refusal::TooMuch(left));
+    }
+    Ok(())
+}
+```
+
+A cancel is refused once the order has shipped, and a confirmation can't go out again straight after one. The refund writes with a guard, so two refunds at the same moment can't give back more than was paid:
+
+```rust title="src/shop.rs"
+let changed = Order::query()
+    .where_(Order::ID.eq(id))
+    .where_(Order::REFUNDED.eq(order.refunded))
+    .update(db, [Order::REFUNDED.set(refunded), Order::PAYMENT.set(payment.key())])
+    .await?;
+if changed != 1 {
+    // somebody refunded in between: answer with what is left
+}
+```
+
+A refusal answers `409` with a warning toast. An accepted action closes its dialog, draws the drawer and the page again from the order as it is now, shows a success toast and nudges the live hub.
+
+## Live updates
+
+`src/live.rs` names four topics, `orders`, `activity`, `stats` and `inventory`, and every page listens to them on one stream. The orders table, the dashboard's figures and charts, the activity feed and the inventory each name the topic they follow:
+
+```rust title="src/views/orders.rs"
+.live_on(crate::live::stream().on("orders"))
+```
+
+A nudge says only that something changed. The page never reads it: each live part fetches its own fragment again, so nothing a stream says can put markup in a page. The activity feed asks `GET /fragments/activity?after=<cursor>` and gets only the rows newer than the cursor, with the newest cursor in the `X-UI-Cursor` header. The [regions page](/docs/ui/regions/) explains the pattern, and the [live hub](/docs/ui/live-hub/) the stream.
+
+## The inventory
+
+`/inventory` is a second DataTable, with a stock badge that warns when a shelf runs low and a restock form in each row. `POST /inventory/{id}/restock` checks that the quantity is between 1 and 500, writes the restock as an event, nudges the hub and answers with a toast that says how many units are on the shelf now. A bad quantity is a `422` with a warning toast.
+
+## Tests and numbers
+
+The browser suite is `e2e/ui/tests/store.test.mjs`. It runs the app with the simulator off and `STORE_TEST_HOOKS=1`, drives it in real browsers and makes the orders each test changes through a test hook, so tests never depend on each other. `e2e/ui/measure-store.mjs` measures the app with `STORE_LOG_QUERIES=1`, which logs every statement as JSON lines; the figures on [the store's page](/showcase/store/) come from it.
+
+<LinkCards>
+  <LinkCard href="/docs/example-app/ui-apps/" title="The Navree UI example apps">
+    The store, the board and the inbox side by side.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/board-tour/" title="A tour of the board">
+    Moves that the server places and checks.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/inbox-tour/" title="A tour of the inbox">
+    A lakh of conversations that load as they are read.
+  </LinkCard>
+</LinkCards>
