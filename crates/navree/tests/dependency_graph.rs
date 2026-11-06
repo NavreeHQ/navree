@@ -128,7 +128,8 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-navigator", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-dock"]),
     // L3
     // navree-schema: migrations written with the schema builder, schema dumps.
-    rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-schema"]),
+    // navree-openapi: the schema of `CursorPage`.
+    rule("navree-db", 3, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-schema"]),
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-api", 3, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
@@ -372,12 +373,16 @@ const HIERARCHY: &[Rule] = &[
     // guard); conversation memory and pgvector use navree-db; agents run as a
     // navree-auth user with navree-access abilities and report tool argument
     // errors with navree-validation's messages; budgets and the embeddings
-    // cache use navree-cache; attachments read navree-storage disks; it
-    // re-exports `#[agent]` from navree-macros.
+    // cache use navree-cache; attachments read navree-storage disks; Bedrock
+    // requests are signed with navree-crypto's SigV4 signer; it re-exports
+    // `#[agent]` from navree-macros. Its optional feature `ui` draws an
+    // assistant with navree-ui, nudges the reader's page through
+    // navree-realtime's hub and signs its buttons for navree-session's reader.
     rule("navree-ai", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-http-client", "navree-cache", "navree-db", "navree-storage", "navree-validation",
-        "navree-access", "navree-auth", "navree-telemetry",
+        "navree-access", "navree-auth", "navree-telemetry", "navree-crypto",
+        "navree-ui", "navree-realtime", "navree-session",
     ]),
     // Microservices: message handlers run through navree-http's guards and
     // authorizer, navree-db's unit of work (outbox, inbox, dead letters) and
@@ -437,19 +442,22 @@ const HIERARCHY: &[Rule] = &[
     // L7: packages built on other packages.
     // Search: full-text and vector search over navree-orm models. The server
     // engines talk HTTP through navree-http-client; the `Searchable` derive
-    // lives in navree-macros and is re-exported next to the trait.
+    // lives in navree-macros and is re-exported next to the trait. With its
+    // `ai` feature, vectors are embedded and stored by navree-ai (same family
+    // of layers: L7 on L6).
     rule("navree-search", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-http-client", "navree-db", "navree-orm", "navree-queue", "navree-access",
-        "navree-workspace", "navree-telemetry",
+        "navree-workspace", "navree-telemetry", "navree-ai",
     ]),
-    // Billing: Stripe and Paddle over navree-http-client, billables from
+    // Billing: Stripe and Paddle over navree-http-client, their webhook
+    // signatures checked by navree-webhooks' verifiers, billables from
     // navree-auth (users) and navree-workspace (workspaces). The billing
     // tables are navree-orm models.
     rule("navree-billing", 7, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-schedule",
-        "navree-access", "navree-auth", "navree-workspace", "navree-orm",
+        "navree-access", "navree-auth", "navree-workspace", "navree-orm", "navree-webhooks",
     ]),
     // Lighthouse: a telemetry sink storing issues, occurrences, samples and
     // aggregates in the app's database; alerts by mail (navree-mail) and
