@@ -901,7 +901,8 @@ for (const name of NAMES) {
           { text: "Clicked", key: "block", icon: true },
         ]);
         const lines = await open("/charts?case=line");
-        assert.deepEqual(await lines.locator("#line [data-slot=chart-key]").evaluateAll((els) => els.map((e) => e.getAttribute("data-key"))), ["line", "line"]);
+        // The legend's keys: the tooltip the server writes has a key for each series too.
+        assert.deepEqual(await lines.locator("#line [data-slot=chart-legend-item] [data-slot=chart-key]").evaluateAll((els) => els.map((e) => e.getAttribute("data-key"))), ["line", "line"]);
         await page.done();
         await lines.done();
       });
