@@ -268,7 +268,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
 ```json wrap
-{"summary": "Acme moved to negotiation after Tuesday's pricing call, where Dana asked for a 12-month term. Next step: Sam sends the revised quote by Friday."}
+{"summary": "Agra moved to negotiation after Tuesday's pricing call, where Dana asked for a 12-month term. Next step: Sam sends the revised quote by Friday."}
 ```
 
 <Callout type="tip" title="Keep the model call out of the transaction">
@@ -301,8 +301,8 @@ use navree::ai::Message;
 
 let response = ai
     .text(vec![
-        Message::user("Draft a one-line subject for the Acme renewal email."),
-        Message::assistant("Your Acme renewal: two options for next year"),
+        Message::user("Draft a one-line subject for the Agra renewal email."),
+        Message::assistant("Your Agra renewal: two options for next year"),
         Message::user("Shorter, and without the colon."),
     ])
     .await?;
@@ -458,7 +458,7 @@ async fn summary_stream(
 
 ```text title="Response body (text/event-stream)"
 event: text
-data: {"text":"Acme moved to negotiation"}
+data: {"text":"Agra moved to negotiation"}
 
 event: text
 data: {"text":" after Tuesday's pricing call."}
@@ -669,19 +669,19 @@ async fn the_summary_is_written_from_the_deal_activity() {
         .build()
         .await;
     let ai = crm.get::<Ai>().await.fake().unwrap();
-    ai.respond(FakeReply::text("Acme is in negotiation. Sam sends the revised quote on Friday."));
+    ai.respond(FakeReply::text("Agra is in negotiation. Sam sends the revised quote on Friday."));
 
     let rep = crm.login_as(Role::Rep1).await;
     let company = rep
         .post("/api/v1/companies")
-        .json(&json!({ "name": "Acme" }))
+        .json(&json!({ "name": "Agra" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let deal = rep
         .post("/api/v1/deals")
-        .json(&json!({ "title": "Acme renewal", "company_id": company["id"], "amount_cents": 1_200_000 }))
+        .json(&json!({ "title": "Agra renewal", "company_id": company["id"], "amount_cents": 1_200_000 }))
         .send()
         .await
         .assert_status(201)
@@ -691,11 +691,11 @@ async fn the_summary_is_written_from_the_deal_activity() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("summary", json!("Acme is in negotiation. Sam sends the revised quote on Friday."));
+        .assert_json_path("summary", json!("Agra is in negotiation. Sam sends the revised quote on Friday."));
 
     ai.assert_prompt_count(1);
     ai.assert_prompted(|request| {
-        request.model() == "fast" && request.last_user_message().contains("Acme renewal")
+        request.model() == "fast" && request.last_user_message().contains("Agra renewal")
     });
 }
 ```

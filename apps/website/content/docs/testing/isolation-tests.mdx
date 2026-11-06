@@ -3,7 +3,7 @@ title: "Isolation tests"
 description: "Generate cross-workspace tests from a module's route table: reading, changing or deleting another workspace's record is a 404, lists never show it, and creates never land in it."
 ---
 
-A multi-tenant app is only as safe as its least careful query. One `Deal::find(id)` without the workspace filter, and Globex reads Acme's deals. Isolation tests prove each route keeps workspaces apart, and `TestApp::isolation_suite` writes them for you from the module's route table: every route, sent from one workspace against another workspace's records.
+A multi-tenant app is only as safe as its least careful query. One `Deal::find(id)` without the workspace filter, and Gulati reads Agra's deals. Isolation tests prove each route keeps workspaces apart, and `TestApp::isolation_suite` writes them for you from the module's route table: every route, sent from one workspace against another workspace's records.
 
 ## A first suite
 

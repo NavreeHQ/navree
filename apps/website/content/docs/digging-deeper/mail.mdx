@@ -222,7 +222,7 @@ impl Onboarding {
 - `send(&mail)` renders and delivers now, and returns the transport's error if delivery fails.
 - `queue(&mail)` renders now and leaves delivery to a queue worker: see [queueing mail](#queueing-mail).
 
-A template name with an extension renders only that template: `mail/welcome.txt` as the text body, any other extension as the HTML body. `TemplateMail`'s fields are public (`to`, `subject`, `template`, `context`), so you can also build it as a struct, as the CRM's notifications do. A `locale` string in the context (`json!({ "name": "Ada", "locale": "ar" })`) becomes the message's locale, which sets the HTML body's [`lang` and `dir`](#rendering).
+A template name with an extension renders only that template: `mail/welcome.txt` as the text body, any other extension as the HTML body. `TemplateMail`'s fields are public (`to`, `subject`, `template`, `context`), so you can also build it as a struct, as the CRM's notifications do. A `locale` string in the context (`json!({ "name": "Anu", "locale": "ar" })`) becomes the message's locale, which sets the HTML body's [`lang` and `dir`](#rendering).
 
 ### Mailables
 
@@ -283,16 +283,16 @@ mailer
     .await?;
 ```
 
-Addresses are `ada@example.com` or `Ada Lovelace <ada@example.com>`. Leave `from` unset to use `mail.from`.
+Addresses are `anu@example.com` or `Anu Lakhotia <anu@example.com>`. Leave `from` unset to use `mail.from`.
 
 A message can carry more than its bodies:
 
 ```rust
 let message = Message::new()
-    .to("ada@example.com")
+    .to("anu@example.com")
     .subject("Your March statement")
     .html(html)
-    .header("List-Unsubscribe", "<https://crm.navree.test/unsubscribe/ada>")
+    .header("List-Unsubscribe", "<https://crm.navree.test/unsubscribe/anu>")
     .metadata("statement", "2026-03")
     .locale("en-GB");
 ```
@@ -400,8 +400,8 @@ use navree::view::Views;
 use serde_json::json;
 
 let views = Views::from_templates(TEMPLATES.iter().copied())?;
-let message = TemplateMail::new("ada@example.com", "Welcome", "mail/welcome")
-    .context(json!({ "name": "Ada" }))
+let message = TemplateMail::new("anu@example.com", "Welcome", "mail/welcome")
+    .context(json!({ "name": "Anu" }))
     .build(&views)?;
 println!("{}", message.html.unwrap_or_default());
 ```
@@ -431,16 +431,16 @@ async fn new_users_get_a_welcome_mail() {
     let mailer = app.get::<Mailer>().await;
     mailer
         .queue(
-            &TemplateMail::new("ada@example.com", "Welcome to the CRM", "mail/welcome")
-                .context(json!({ "name": "Ada" })),
+            &TemplateMail::new("anu@example.com", "Welcome to the CRM", "mail/welcome")
+                .context(json!({ "name": "Anu" })),
         )
         .await
         .unwrap();
 
     let sent = mailer.array_transport().expect("the array transport").sent();
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].to, ["ada@example.com"]);
-    assert!(sent[0].text.as_deref().unwrap().contains("Hi Ada"));
+    assert_eq!(sent[0].to, ["anu@example.com"]);
+    assert!(sent[0].text.as_deref().unwrap().contains("Hi Anu"));
     mailer
         .array_transport()
         .unwrap()

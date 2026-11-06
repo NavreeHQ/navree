@@ -119,7 +119,7 @@ The browser never holds a token. It calls its own origin, and the app's server (
 |---|---|---|
 | 1 | Browser | `POST /api/auth/login` with the email and password, same origin. |
 | 2 | BFF | Calls the API's `POST /api/auth/login`, keeps the access token in `navree_at` and the refresh token in `navree_rt` (both httpOnly), returns only `{user}`. |
-| 3 | Browser | `GET /api/v1/deals?filter[stage]=won` through the typed client, with `X-Workspace: acme`. |
+| 3 | Browser | `GET /api/v1/deals?filter[stage]=won` through the typed client, with `X-Workspace: agra`. |
 | 4 | BFF | Forwards it with the bearer token. On a 401 it refreshes once (shared by every request holding the same refresh token), sets the new cookies and retries. |
 | 5 | Server rendering | `auth()` (Next.js) or `getNavreeSession(event)` (Nuxt) calls the API with the token from the cookie; the proxy or session gate has already refreshed an expired one. |
 | 6 | Browser | pusher-js connects to the API's WebSocket server; private channels are signed by `POST /broadcasting/auth` through the BFF. |

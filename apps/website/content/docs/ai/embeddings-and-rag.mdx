@@ -473,10 +473,10 @@ async fn answers_use_only_the_deals_own_activity() {
     let ai = crm.get::<Ai>().await.fake().unwrap();
     let rep = crm.login_as(Role::Rep1).await;
 
-    let acme = create_deal(&rep, "Acme renewal").await;    // POSTs a company and a deal
-    let globex = create_deal(&rep, "Globex expansion").await;
-    log_note(&rep, &acme, "Dana wants to be live before January planning").await;
-    log_note(&rep, &globex, "Globex wants to be live before the summer").await;
+    let agra = create_deal(&rep, "Agra renewal").await;    // POSTs a company and a deal
+    let gulati = create_deal(&rep, "Gulati expansion").await;
+    log_note(&rep, &agra, "Dana wants to be live before January planning").await;
+    log_note(&rep, &gulati, "Gulati wants to be live before the summer").await;
     crm.run_queue().await; // runs the IndexActivity jobs
 
     ai.respond(FakeReply::json(json!({
@@ -485,7 +485,7 @@ async fn answers_use_only_the_deals_own_activity() {
         "answered": true
     })));
 
-    rep.post(&format!("/api/v1/deals/{}/ask", acme["id"].as_str().unwrap()))
+    rep.post(&format!("/api/v1/deals/{}/ask", agra["id"].as_str().unwrap()))
         .json(&json!({ "question": "When do they want to be live?" }))
         .send()
         .await
@@ -494,7 +494,7 @@ async fn answers_use_only_the_deals_own_activity() {
         .assert_json_path("sources.0.excerpt", json!("Dana wants to be live before January planning"));
 
     ai.assert_prompted(|r| r.last_user_message().contains("January planning"));
-    ai.assert_not_prompted(|r| r.last_user_message().contains("Globex"));
+    ai.assert_not_prompted(|r| r.last_user_message().contains("Gulati"));
 }
 ```
 

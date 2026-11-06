@@ -16,8 +16,8 @@ Organizations are off by default and change nothing until you turn them on. Work
 enabled = true
 resolvers = ["header", "path", "subdomain", "claim"]  # tried in order
 header = "X-Organization"
-# base_domain = "partners.example.com"   # acme.partners.example.com names `acme`
-path_prefix = "/o"                       # /api/o/acme/... names `acme`
+# base_domain = "partners.example.com"   # agra.partners.example.com names `agra`
+path_prefix = "/o"                       # /api/o/agra/... names `agra`
 claim = "organization"                   # a claim of the bearer JWT
 
 [workspace.organizations.roles.admin]
@@ -44,21 +44,21 @@ The `Organizations` service creates organizations and attaches workspaces to the
 ```rust
 use navree::workspace::{NewOrganization, Organizations};
 
-let acme = organizations
+let agra = organizations
     .create(
         &uow,
         user_id,
-        NewOrganization::named("Acme Group").country("gb").timezone("Europe/London"),
+        NewOrganization::named("Agra Group").country("gb").timezone("Europe/London"),
     )
     .await?;
-assert_eq!(acme.slug, "acme-group");
-assert_eq!(acme.country.as_deref(), Some("GB"));
+assert_eq!(agra.slug, "agra-group");
+assert_eq!(agra.country.as_deref(), Some("GB"));
 
-organizations.attach(&uow, acme.id, uk_workspace.id).await?;
-organizations.attach(&uow, acme.id, de_workspace.id).await?;
+organizations.attach(&uow, agra.id, uk_workspace.id).await?;
+organizations.attach(&uow, agra.id, de_workspace.id).await?;
 ```
 
-The creator becomes the owner, with the `owner` role and every workspace. Slugs follow the workspace rules (`Acme Group` becomes `acme-group`, then `acme-group-2`; or set one with `.slug("acme")`). `country` is an ISO 3166-1 alpha-2 code, stored in upper case; `timezone` is an IANA name such as `Europe/London`, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`). An unknown zone or country is a 400 on that field. The organization's zone is the zone of its workspaces that have none of their own: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
+The creator becomes the owner, with the `owner` role and every workspace. Slugs follow the workspace rules (`Agra Group` becomes `agra-group`, then `agra-group-2`; or set one with `.slug("agra")`). `country` is an ISO 3166-1 alpha-2 code, stored in upper case; `timezone` is an IANA name such as `Europe/London`, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`). An unknown zone or country is a 400 on that field. The organization's zone is the zone of its workspaces that have none of their own: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
 
 | Method | Does |
 |---|---|
@@ -115,15 +115,15 @@ workspace_role = "auditor"
 ```rust
 use navree::workspace::{OrgMembers, OrgRole, WorkspaceSelector};
 
-// Grace runs every workspace of the organization.
-org_members.add(&uow, acme.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
+// Gauri runs every workspace of the organization.
+org_members.add(&uow, agra.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
 // Linus works in the UK workspace only.
 org_members
-    .add(&uow, acme.id, linus, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
+    .add(&uow, agra.id, linus, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
     .await?;
 // Add, or change a member's role and workspaces.
 org_members
-    .grant(&uow, acme.id, linus, OrgRole::Viewer, WorkspaceSelector::All)
+    .grant(&uow, agra.id, linus, OrgRole::Viewer, WorkspaceSelector::All)
     .await?;
 ```
 
@@ -164,10 +164,10 @@ Organization-level routes (a dashboard over every workspace, the organization's 
 
 | Resolver | Reads | Example |
 |---|---|---|
-| `header` | `workspace.organizations.header` (default `X-Organization`) | `X-Organization: acme-group` |
-| `path` | The segment after `workspace.organizations.path_prefix` (default `/o`) | `/api/o/acme-group/reports` |
-| `subdomain` | The label in front of `workspace.organizations.base_domain` | `acme-group.partners.example.com` |
-| `claim` | The claim `workspace.organizations.claim` (default `organization`) of the bearer JWT | `{"organization": "acme-group"}` |
+| `header` | `workspace.organizations.header` (default `X-Organization`) | `X-Organization: agra-group` |
+| `path` | The segment after `workspace.organizations.path_prefix` (default `/o`) | `/api/o/agra-group/reports` |
+| `subdomain` | The label in front of `workspace.organizations.base_domain` | `agra-group.partners.example.com` |
+| `claim` | The claim `workspace.organizations.claim` (default `organization`) of the bearer JWT | `{"organization": "agra-group"}` |
 
 They work as the [workspace resolvers](/docs/workspaces/resolution/#the-resolvers) do, with their own settings, so a request can name a workspace and an organization at once. Put the `InOrganization` guard on the controller so the route's checks run against the organization role:
 
@@ -239,7 +239,7 @@ use navree::workspace::{AccessRequests, Approval, NewAccessRequest, OrgRole};
 let request = access_requests
     .request(
         &uow,
-        acme.id,
+        agra.id,
         ken,
         NewAccessRequest { workspace_id: Some(uk_workspace.id), message: Some("I run the UK team".into()) },
     )
@@ -247,7 +247,7 @@ let request = access_requests
 
 // Ken joins as a member of the workspace he asked for.
 let approved = access_requests
-    .approve(&uow, acme.id, request.id, Some(grace), Approval::default())
+    .approve(&uow, agra.id, request.id, Some(grace), Approval::default())
     .await?;
 assert_eq!(approved.member.user_id, ken);
 ```
@@ -289,8 +289,8 @@ An admin limited to some workspaces grants only workspaces they reach and change
 {
   "__type": "Organization",
   "id": "0199f3c2-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
-  "name": "Acme Group",
-  "slug": "acme-group",
+  "name": "Agra Group",
+  "slug": "agra-group",
   "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   "country": "GB",
   "timezone": "Europe/London",
@@ -333,16 +333,16 @@ let app = TestApp::builder()
     .build()
     .await;
 
-let admin = app.acting_as(principal(ada));
-admin.post("/api/organizations").json(&json!({ "name": "Acme" })).send().await.assert_status(201);
+let admin = app.acting_as(principal(anu));
+admin.post("/api/organizations").json(&json!({ "name": "Agra" })).send().await.assert_status(201);
 admin
-    .post("/api/organizations/acme/workspaces")
-    .json(&json!({ "workspace": "acme-uk" }))
+    .post("/api/organizations/agra/workspaces")
+    .json(&json!({ "workspace": "agra-uk" }))
     .send()
     .await
     .assert_status(200);
 admin
-    .post("/api/organizations/acme/members")
+    .post("/api/organizations/agra/members")
     .json(&json!({ "user_id": linus, "role": "member", "workspaces": [uk.id] }))
     .send()
     .await
@@ -351,13 +351,13 @@ admin
 let member = app.acting_as(principal(linus));
 member
     .get("/api/v1/deals")
-    .header("X-Workspace", "acme-uk") // reached through the organization
+    .header("X-Workspace", "agra-uk") // reached through the organization
     .send()
     .await
     .assert_status(200);
 member
     .get("/api/v1/deals")
-    .header("X-Workspace", "acme-de") // not in Linus's selector
+    .header("X-Workspace", "agra-de") // not in Linus's selector
     .send()
     .await
     .assert_error(403, "You are not a member of this workspace.");

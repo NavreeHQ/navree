@@ -139,7 +139,7 @@ The state is sealed with your application key. It names the provider, the scope 
 ```http
 GET /api/integrations/microsoft/connect?return_to=/settings/integrations HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-X-Workspace: acme
+X-Workspace: agra
 ```
 
 ```json wrap
@@ -154,7 +154,7 @@ Microsoft sends the tenant back instead of a code:
 ```http
 GET /api/integrations/microsoft/callback?tenant=9188040d-6c67-4c5b-b112-36a304b66dad&admin_consent=True&state=nvi1.Rk9... HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-X-Workspace: acme
+X-Workspace: agra
 ```
 
 ```json title="201 Created"
@@ -189,7 +189,7 @@ Google Workspace connects without a consent screen: a Google Workspace admin cre
 ```http
 POST /api/integrations/google/service-account HTTP/1.1
 Content-Type: application/json
-X-Workspace: acme
+X-Workspace: agra
 
 {
   "key": { "type": "service_account", "client_email": "navree@acme-prod.iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\n...", "private_key_id": "4f2a9c" },
@@ -207,9 +207,9 @@ Security tools and other services hand out keys instead of consent screens. Post
 ```http
 POST /api/integrations/edr/api-key HTTP/1.1
 Content-Type: application/json
-X-Workspace: acme
+X-Workspace: agra
 
-{ "key": "s1-4f2a9c...", "api_url": "https://acme.edr.example/api", "fields": { "site_id": "17" } }
+{ "key": "s1-4f2a9c...", "api_url": "https://agra.edr.example/api", "fields": { "site_id": "17" } }
 ```
 
 With a `health_url`, the key is tried there first and a refused key (401, 403) is a 400. `fields` are stored encrypted with the key, for values such as a region or an account id. Code that signs its own requests reads them with `integrations.api_key(id)`.
@@ -546,11 +546,11 @@ async fn the_directory_is_read_from_the_connected_tenant() {
     fake.api().on(
         Method::GET,
         "https://graph.microsoft.com/v1.0/users*",
-        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "ada@acme.test" }] })),
+        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "anu@acme.test" }] })),
     );
     let graph = integrations.client_for::<MicrosoftGraph>(Owner::App).await.unwrap();
     let users: Vec<serde_json::Value> = graph.paginate("/users").await.unwrap();
-    assert_eq!(users[0]["mail"], "ada@acme.test");
+    assert_eq!(users[0]["mail"], "anu@acme.test");
     assert_eq!(fake.minted()[0].grant_type, "client_credentials");
 }
 ```

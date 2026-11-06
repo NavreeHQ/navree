@@ -276,7 +276,7 @@ gate passed in 3m 14s
 A gate compiles and tests the whole app, and two at once on one machine slow each other down and can exhaust its memory. So the gate takes a lock, `navree-gate.lock` in the system's temporary directory, shared by every app of the same user on the machine. A second gate waits and says whose gate it waits for:
 
 ```text
-Waiting for another navree gate on this machine: process 18244 in /home/ada/acme (lock: /tmp/navree-gate.lock)...
+Waiting for another navree gate on this machine: process 18244 in /home/anu/agra (lock: /tmp/navree-gate.lock)...
 ```
 
 The lock is released when the gate ends, including when it fails or you stop it. In CI, where each job has its own machine, the lock costs nothing.

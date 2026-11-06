@@ -153,9 +153,9 @@ use navree::settings::Scope;
 
 Scope::global();                                   // the whole app
 Scope::organization(holding.id);                   // one organization
-Scope::workspace(acme.id);                         // one workspace (and its organization)
-Scope::user(ada.id).in_workspace(acme.id);         // a user's preferences inside a workspace
-Scope::workspace(acme.id).in_organization(holding.id); // the organization named, no lookup
+Scope::workspace(agra.id);                         // one workspace (and its organization)
+Scope::user(anu.id).in_workspace(agra.id);         // a user's preferences inside a workspace
+Scope::workspace(agra.id).in_organization(holding.id); // the organization named, no lookup
 ```
 
 Methods that take a scope also accept a `&Workspace`, a `&CurrentWorkspace`, an `&Organization`, a `&CurrentOrganization` or a `&Principal` (its user).
@@ -235,7 +235,7 @@ A stored value the type no longer accepts (the field's type changed since) is sk
 
 ```rust
 settings
-    .update::<PortalSettings>(&uow, Scope::workspace(acme.id), json!({"welcome_text": "Welcome to Acme"}))
+    .update::<PortalSettings>(&uow, Scope::workspace(agra.id), json!({"welcome_text": "Welcome to Agra"}))
     .await?;
 ```
 
@@ -252,8 +252,8 @@ A field the type does not have is `SettingsError::UnknownFields` (a 400 naming i
 `inherit` removes one field from the target's level, so it follows the level above again; `reset` removes all of them:
 
 ```rust
-settings.inherit::<PortalSettings>(&uow, Scope::workspace(acme.id), "welcome_text").await?;
-settings.reset::<PortalSettings>(&uow, Scope::workspace(acme.id)).await?;
+settings.inherit::<PortalSettings>(&uow, Scope::workspace(agra.id), "welcome_text").await?;
+settings.reset::<PortalSettings>(&uow, Scope::workspace(agra.id)).await?;
 ```
 
 Inheriting a field that already inherits changes nothing. `stored::<T>(scope)` returns the fields stored at a level, without inheritance.
@@ -301,12 +301,12 @@ With `settings.routes = true` (the default) the module mounts, for signed-in use
 
 ```http
 GET /api/settings/portal?scope=workspace
-X-Workspace: acme
+X-Workspace: agra
 ```
 
 ```json
 {
-  "data": { "show_leaderboard": true, "welcome_text": "Welcome to Acme", "page_size": 50 },
+  "data": { "show_leaderboard": true, "welcome_text": "Welcome to Agra", "page_size": 50 },
   "sources": { "page_size": "global", "show_leaderboard": "organization", "welcome_text": "workspace" },
   "overridden": ["welcome_text"]
 }
@@ -341,7 +341,7 @@ Writes need the type's `permission`, or by default:
 ```sh
 navree settings:set portal page_size=50 "welcome_text=Hello there"
 navree settings:set portal show_leaderboard=true --organization holding
-navree settings:show portal --workspace acme
+navree settings:show portal --workspace agra
 ```
 
 ```text
@@ -350,12 +350,12 @@ portal for workspace 0192e4c1-5b1e-7a40-9f43-2c0d1b8e6a11 < organization 0192e4c
 field             value               source
 page_size         50                  global
 show_leaderboard  true                organization
-welcome_text      "Welcome to Acme"   workspace *
+welcome_text      "Welcome to Agra"   workspace *
 
 * set at this level
 ```
 
-A value is read as JSON when it parses (`true`, `5`, `"5"`, `["a","b"]`) and as text otherwise. The options combine: `--user <id> --workspace acme` is that user's preferences inside Acme. Slugs need `WorkspaceModule`; ids always work. `settings:set` and `settings:inherit` validate like the service and run in a unit of work of their own.
+A value is read as JSON when it parses (`true`, `5`, `"5"`, `["a","b"]`) and as text otherwise. The options combine: `--user <id> --workspace agra` is that user's preferences inside Agra. Slugs need `WorkspaceModule`; ids always work. `settings:set` and `settings:inherit` validate like the service and run in a unit of work of their own.
 
 ### In Helm
 
@@ -429,14 +429,14 @@ mod tests {
 
     #[tokio::test]
     async fn the_leaderboard_follows_the_organization() {
-        let (acme, holding) = (Uuid::now_v7(), Uuid::now_v7());
-        let fake = SettingsFake::new().attach(acme, holding);
+        let (agra, holding) = (Uuid::now_v7(), Uuid::now_v7());
+        let fake = SettingsFake::new().attach(agra, holding);
         fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
             .await
             .unwrap();
 
         let service = PortalService { settings: Arc::new(fake.settings()) };
-        assert!(service.leaderboard(acme).await.unwrap());
+        assert!(service.leaderboard(agra).await.unwrap());
     }
 }
 ```
@@ -454,7 +454,7 @@ let app = TestApp::builder()
     .await;
 
 // ... a request that changes the workspace's portal settings ...
-fake.assert_changed::<PortalSettings>(Scope::workspace(acme));
+fake.assert_changed::<PortalSettings>(Scope::workspace(agra));
 fake.assert_not_changed::<NotificationSettings>();
 ```
 

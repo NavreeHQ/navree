@@ -48,10 +48,10 @@ Content-Type: application/json
   "user": {
     "__type": "User",
     "created_at": "2026-10-27T03:35:56.852768Z",
-    "email": "ada@example.com",
+    "email": "anu@example.com",
     "email_verified_at": "2026-10-27T03:35:56.852768Z",
     "id": "01a17b6d-d0ef-77f7-8097-11dbb4b1f95b",
-    "name": "Ada Lovelace"
+    "name": "Anu Lakhotia"
   }
 }
 ```
@@ -85,7 +85,7 @@ The access token carries an `act` claim (RFC 8693) with the administrator's id, 
 
 Requests made with it are the user's: `CurrentUser` is the user, route authorization uses the user's roles, and data is scoped as theirs. The JWT strategy also puts a `navree::contracts::Impersonator` in the request, which three things pick up:
 
-- **`Actor`**, an extractor naming both people, for handlers and for a "You are impersonating Ada" banner.
+- **`Actor`**, an extractor naming both people, for handlers and for a "You are impersonating Anu" banner.
 - **The unit of work**, which carries the impersonator (`Uow::impersonator()`).
 - **The audit trail**, which records the impersonator on every entry of the request (below).
 
@@ -219,10 +219,10 @@ let app = builder()
     .module(AccessModule::for_root(AccessOptions::default()))
     .build()
     .await;
-// ... sign in `agent`, give it a role with `users.impersonate`, create `ada`.
+// ... sign in `agent`, give it a role with `users.impersonate`, create `anu`.
 let response = app
     .client()
-    .post(&format!("/api/auth/impersonate/{}", ada.id))
+    .post(&format!("/api/auth/impersonate/{}", anu.id))
     .bearer(&agent_access)
     .json(&json!({ "reason": "test" }))
     .send()

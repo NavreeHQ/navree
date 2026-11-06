@@ -122,7 +122,7 @@ Any other OpenID Connect provider (Okta, Auth0, Keycloak, Zitadel, your company'
 [social.providers.okta]
 type = "oidc"
 name = "Okta"                        # shown in errors and in the accounts list
-issuer = "https://acme.okta.com"
+issuer = "https://agra.okta.com"
 client_id = "0oa8f2kq1xYz3AbC4d5e"
 scopes = ["openid", "profile", "email", "groups"]
 ```
@@ -172,7 +172,7 @@ Content-Type: application/json
 
 ```json
 {
-  "user": { "__type": "User", "id": "01a17748-e211-72fc-abb3-836e604457d0", "name": "Ada Lovelace", "email": "ada@example.com", "email_verified_at": "2026-10-26T08:17:07Z", "created_at": "2026-10-26T08:17:07Z" },
+  "user": { "__type": "User", "id": "01a17748-e211-72fc-abb3-836e604457d0", "name": "Anu Lakhotia", "email": "anu@example.com", "email_verified_at": "2026-10-26T08:17:07Z", "created_at": "2026-10-26T08:17:07Z" },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4Fa...",
   "token_type": "Bearer",
@@ -221,7 +221,7 @@ A user with [two-factor authentication](/docs/security/account-flows/#two-factor
 
 ### Single sign-on and sign-in policies
 
-A social sign-in asks navree-auth's [sign-in policies](/docs/security/authentication/#sign-in-policies) twice, with the method `Social { provider }`: about the address the provider reported, before any account is created or linked, and about the account, before the session or the two-factor challenge. When an organization [enforces single sign-on](/docs/security/single-sign-on/#enforcement) for `acme.com`, a Google or GitHub sign-in as `ada@acme.com` answers 403 `sso_required`, creates nothing, and a provider account linked earlier to an `@acme.com` user no longer signs them in. The refusal is audited as `auth.login_refused` with `metadata.provider`.
+A social sign-in asks navree-auth's [sign-in policies](/docs/security/authentication/#sign-in-policies) twice, with the method `Social { provider }`: about the address the provider reported, before any account is created or linked, and about the account, before the session or the two-factor challenge. When an organization [enforces single sign-on](/docs/security/single-sign-on/#enforcement) for `agra.com`, a Google or GitHub sign-in as `anu@agra.com` answers 403 `sso_required`, creates nothing, and a provider account linked earlier to an `@agra.com` user no longer signs them in. The refusal is audited as `auth.login_refused` with `metadata.provider`.
 
 ### Connecting and disconnecting providers
 
@@ -409,10 +409,10 @@ async fn a_new_github_user_gets_an_account_and_tokens() {
     let (social, fake) = Social::fake();
     fake.on_code(
         "github",
-        "code-ada",
+        "code-anu",
         SocialUser::new("github", "583231")
-            .name("Ada Lovelace")
-            .email(Some("ada@example.com"), true),
+            .name("Anu Lakhotia")
+            .email(Some("anu@example.com"), true),
     );
 
     let app = TestApp::builder()
@@ -438,16 +438,16 @@ async fn a_new_github_user_gets_an_account_and_tokens() {
 
     app.client()
         .post("/api/auth/social/github/callback")
-        .json(&json!({ "code": "code-ada", "state": state }))
+        .json(&json!({ "code": "code-anu", "state": state }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("ada@example.com"));
+        .assert_json_path("user.email", json!("anu@example.com"));
 
     // The state works once.
     app.client()
         .post("/api/auth/social/github/callback")
-        .json(&json!({ "code": "code-ada", "state": state }))
+        .json(&json!({ "code": "code-anu", "state": state }))
         .send()
         .await
         .assert_error(400, "Invalid or expired state");

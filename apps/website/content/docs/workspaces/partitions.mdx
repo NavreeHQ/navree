@@ -15,8 +15,8 @@ Partitions are off by default and are independent of [organizations](/docs/works
 [workspace.partitions]
 enabled = true
 resolvers = ["header", "claim"]   # header, path or claim, tried in order
-header = "X-Partition"            # X-Partition: acme-co-uk (a slug or an id)
-path_prefix = "/p"                # /api/p/acme-co-uk/... with the path resolver
+header = "X-Partition"            # X-Partition: agra-co-uk (a slug or an id)
+path_prefix = "/p"                # /api/p/agra-co-uk/... with the path resolver
 claim = "partition"               # a claim of the bearer JWT
 ```
 
@@ -38,17 +38,17 @@ The `Partitions` service manages a workspace's partitions:
 ```rust
 use navree::workspace::{NewPartition, PartitionSelector, Partitions};
 
-let uk = partitions.create(&uow, workspace.id, NewPartition::named("acme.co.uk")).await?;
-assert_eq!(uk.slug, "acme-co-uk");
-let de = partitions.create(&uow, workspace.id, NewPartition::named("acme.de").slug("de")).await?;
+let uk = partitions.create(&uow, workspace.id, NewPartition::named("agra.co.uk")).await?;
+assert_eq!(uk.slug, "agra-co-uk");
+let de = partitions.create(&uow, workspace.id, NewPartition::named("agra.de").slug("de")).await?;
 
-// Grace works with the UK partition only.
+// Gauri works with the UK partition only.
 partitions.grant(&uow, workspace.id, grace, PartitionSelector::only([uk.id])).await?;
 ```
 
 | Method | Does |
 |---|---|
-| `create(&uow, workspace, NewPartition)` | Creates a partition; the slug comes from the name (`acme.co.uk` becomes `acme-co-uk`) unless you set one; a taken slug is a 400 on `slug` |
+| `create(&uow, workspace, NewPartition)` | Creates a partition; the slug comes from the name (`agra.co.uk` becomes `agra-co-uk`) unless you set one; a taken slug is a 400 on `slug` |
 | `rename(&uow, workspace, id, name)` | Renames it; the slug stays |
 | `delete(&uow, workspace, id)` | Deletes it with its grants. Rows of your tables keep their `partition_id`: delete or move them first |
 | `list(workspace)`, `visible(workspace, selector)` | The workspace's partitions by name, and the ones a selector sees |
@@ -204,13 +204,13 @@ let limited = app.acting_as(principal(grace)); // granted Only the UK partition
 
 limited
     .get("/api/v1/contacts")
-    .header("X-Workspace", "acme")
+    .header("X-Workspace", "agra")
     .send()
     .await
     .assert_status(200); // the UK contacts only
 limited
     .post("/api/v1/contacts")
-    .header("X-Workspace", "acme")
+    .header("X-Workspace", "agra")
     .header("X-Partition", "de")
     .json(&json!({ "name": "Nope" }))
     .send()

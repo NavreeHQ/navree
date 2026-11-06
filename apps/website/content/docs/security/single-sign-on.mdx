@@ -10,7 +10,7 @@ description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace,
 It covers the whole flow:
 
 - **Connections per tenant.** A connection belongs to the app, an [organization or a workspace](/docs/workspaces/organizations/), and talks SAML 2.0 (the identity provider's metadata, by URL or pasted) or OpenID Connect (an issuer, a client id and a secret).
-- **Verified domains.** A DNS TXT record proves `acme.com` belongs to Acme's connection. From then on `POST /api/sso/discover {email}` sends `@acme.com` addresses to it, and the connection can enforce single sign-on: no password, magic link, emailed code, passkey, social sign-in, token exchange or other connection signs them in.
+- **Verified domains.** A DNS TXT record proves `agra.com` belongs to Agra's connection. From then on `POST /api/sso/discover {email}` sends `@agra.com` addresses to it, and the connection can enforce single sign-on: no password, magic link, emailed code, passkey, social sign-in, token exchange or other connection signs them in.
 - **Just-in-time provisioning.** The first sign-in creates the user, makes them a member of the connection's organization or workspace and gives them the role their identity provider groups map to.
 - **Signatures checked in Rust.** SAML responses are verified by Navree itself: XML read into a strict tree, exclusive canonicalization, RSA-SHA256 or ECDSA on `ring`. SHA-1 is refused, signature wrapping can't move what a signature covers, and every assertion works once.
 - **A fake identity provider** for your tests, whose responses pass the same checks.
@@ -99,7 +99,7 @@ A connection is one identity provider for one owner:
 | `SsoOwner::Organization(id)` | `{"type": "organization", "id": "..."}` | a member of the organization, reaching all its workspaces |
 | `SsoOwner::Workspace(id)` | `{"type": "workspace", "id": "..."}` | a member of the workspace |
 
-Each connection has a `slug`, the URL segment of its routes (`acme` in `/api/sso/acme/login`). It is derived from the name when you leave it out (`Acme Okta` becomes `acme-okta`, then `acme-okta-2`), and it is lower-case letters, digits and dashes. Changing a slug changes the URLs the identity provider knows, so set it once.
+Each connection has a `slug`, the URL segment of its routes (`agra` in `/api/sso/agra/login`). It is derived from the name when you leave it out (`Agra Okta` becomes `agra-okta`, then `agra-okta-2`), and it is lower-case letters, digits and dashes. Changing a slug changes the URLs the identity provider knows, so set it once.
 
 ### SAML connections
 
@@ -108,11 +108,11 @@ Give the identity provider's metadata as a URL or as the document itself:
 ```json
 {
   "owner": { "type": "workspace", "id": "01a1795b-63c7-7c5e-bf09-5b1d1c38b1a2" },
-  "name": "Acme Okta",
-  "slug": "acme",
+  "name": "Agra Okta",
+  "slug": "agra",
   "settings": {
     "protocol": "saml",
-    "metadata_url": "https://acme.okta.com/app/exk8acme4x7/sso/saml/metadata"
+    "metadata_url": "https://agra.okta.com/app/exk8acme4x7/sso/saml/metadata"
   }
 }
 ```
@@ -144,7 +144,7 @@ Give the identity provider Navree's side, which every connection carries in `ser
 ```json
 {
   "owner": { "type": "organization", "id": "01a1795b-63c7-7c5e-bf09-5b1d1c38b1a2" },
-  "name": "Acme Entra",
+  "name": "Agra Entra",
   "settings": {
     "protocol": "oidc",
     "issuer": "https://login.microsoftonline.com/9e3c5a0f-1b2d-4c6e-8f0a-2b4c6d8e0f1a/v2.0",
@@ -182,11 +182,11 @@ To let workspace administrators manage their own connection, mount your own rout
 A domain routes sign-in only once its owner proves it is theirs. Adding one answers the TXT record to create:
 
 ```http
-POST /api/sso/connections/acme/domains HTTP/1.1
+POST /api/sso/connections/agra/domains HTTP/1.1
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
-{ "domain": "acme.com" }
+{ "domain": "agra.com" }
 ```
 
 ```json wrap
@@ -194,10 +194,10 @@ Content-Type: application/json
   "__type": "SsoDomain",
   "id": "01a17c2e-91c4-7a2b-8d3e-5f6a7b8c9d0e",
   "connection_id": "01a17c2d-17f0-7e55-a9a3-2a3b4c5d6e7f",
-  "domain": "acme.com",
+  "domain": "agra.com",
   "verified": false,
   "verified_at": null,
-  "txt_name": "acme.com",
+  "txt_name": "agra.com",
   "txt_value": "navree-sso-verification=V3kq8ZbT1mN0pL4xR7cY2dF6hJ9sW5aE",
   "created_at": "2026-10-27T12:00:00Z"
 }
@@ -205,7 +205,7 @@ Content-Type: application/json
 
 Once the record is published, `POST /api/sso/domains/{id}/verify` reads the domain's TXT records through DNS over HTTPS and marks it verified. A missing record is a 400 (`domain_not_verified`; DNS changes take a while to appear, so try again later), and a domain already verified for another connection is a 409 (`domain_taken`). Operators and seeders can skip DNS with `Sso::mark_domain_verified`.
 
-Domains are lower-cased and checked (`acme.com`, `mail.acme.co.uk`; no IP addresses, no single labels, ASCII only: write internationalized domains in their `xn--` form). Verification emits `SsoDomainVerified { connection_id, domain }`.
+Domains are lower-cased and checked (`agra.com`, `mail.agra.co.uk`; no IP addresses, no single labels, ASCII only: write internationalized domains in their `xn--` form). Verification emits `SsoDomainVerified { connection_id, domain }`.
 
 ### Discovery
 
@@ -215,16 +215,16 @@ A sign-in page asks for the email first, then shows the password field or sends 
 POST /api/sso/discover HTTP/1.1
 Content-Type: application/json
 
-{ "email": "ada@acme.com" }
+{ "email": "anu@agra.com" }
 ```
 
 ```json
 {
   "sso": true,
-  "connection": "acme",
-  "name": "Acme Okta",
+  "connection": "agra",
+  "name": "Agra Okta",
   "protocol": "saml",
-  "login_url": "https://api.acme.test/api/sso/acme/login",
+  "login_url": "https://api.acme.test/api/sso/agra/login",
   "password_allowed": false
 }
 ```
@@ -247,10 +247,10 @@ With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connecti
 | Another connection | Before provisioning: it can't create, link or sign in anyone of the domain |
 
 ```json
-{ "statusCode": 403, "message": "Sign in with Acme Okta", "error": "Forbidden", "code": "sso_required" }
+{ "statusCode": 403, "message": "Sign in with Agra Okta", "error": "Forbidden", "code": "sso_required" }
 ```
 
-A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected. An address's domain is compared in the form verified domains are kept in, the one mail is routed by: lower-case, an international spelling in its `xn--` form, without a trailing dot. So `eve@ACME.com.` and full-width spellings of `acme.com` are `acme.com`. The same form is what `SignInAttempt::domain()` gives your own [sign-in policies](/docs/security/authentication/#sign-in-policies) (`navree::auth::email_domain` in navree-auth does the normalizing, and this module uses it), and what the profile's `email_domain()` returns.
+A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected. An address's domain is compared in the form verified domains are kept in, the one mail is routed by: lower-case, an international spelling in its `xn--` form, without a trailing dot. So `eve@ACME.com.` and full-width spellings of `agra.com` are `agra.com`. The same form is what `SignInAttempt::domain()` gives your own [sign-in policies](/docs/security/authentication/#sign-in-policies) (`navree::auth::email_domain` in navree-auth does the normalizing, and this module uses it), and what the profile's `email_domain()` returns.
 
 The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign-in-policies) the module registers, and every navree-auth flow, social sign-in and single sign-on ask it, so a sign-in path added later asks it too. Each refusal is audited as `auth.login_refused` with the method (`password`, `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`), the email and the code. A connection with `enforce: false` keeps every method working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default. A disabled connection (`enabled: false`) enforces nothing.
 
@@ -261,7 +261,7 @@ The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign
 Enforcement decides at sign-in: sessions, [personal access tokens](/docs/packages/oauth-server/#personal-access-tokens) and OAuth grants issued before it was turned on go on until they end. Revoking refresh tokens alone (`revoke_all_refresh_tokens`) leaves the last two working. When you turn enforcement on, cut everyone of the domain off with one call:
 
 ```rust
-let ended = auth.revoke_credentials_of_domain("acme.com").await?;
+let ended = auth.revoke_credentials_of_domain("agra.com").await?;
 ```
 
 It ends the sessions, personal access tokens, OAuth access and refresh tokens, unexchanged authorization codes and the remembered consent of every user whose email is on the domain, so they sign in again through the connection. It is a navree-auth call (`AuthService`), because this module doesn't depend on navree-oauth: OAuth takes part by registering a `CredentialRevoker`. [Authentication](/docs/security/authentication/#offboarding-a-user-or-a-domain) has the details, including what happens to access tokens that are already in a client's hands (they expire within `auth.jwt.access_ttl_secs`).
@@ -296,7 +296,7 @@ Content-Type: application/json
 
 ```json
 {
-  "user": { "__type": "User", "id": "01a17d03-5a1e-7f2c-b3d4-e5f6a7b8c9d0", "name": "Ada Lovelace", "email": "ada@acme.com", "email_verified_at": "2026-10-27T12:00:03Z", "created_at": "2026-10-27T12:00:03Z" },
+  "user": { "__type": "User", "id": "01a17d03-5a1e-7f2c-b3d4-e5f6a7b8c9d0", "name": "Anu Lakhotia", "email": "anu@agra.com", "email_verified_at": "2026-10-27T12:00:03Z", "created_at": "2026-10-27T12:00:03Z" },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refresh_token": "01a17d03-5a2b-7d10-8c9e-0f1a2b3c4d5e.k3Lq9...",
   "token_type": "Bearer",
@@ -337,7 +337,7 @@ A sign-in that fails half way writes nothing: the user, the identity and the mem
 Navree finds the user of a sign-in in this order:
 
 1. **A linked identity.** An `sso_identities` row for this connection and subject (name id or `sub`) signs in its user, and is updated with the latest email and attributes.
-2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection and the user with that email has verified it (`email_verified_at`), the user gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An account whose address was never verified doesn't link either, so whoever registered `ceo@acme.com` without owning the mailbox doesn't get the CEO's sign-ins; and an OpenID Connect token that says `email_verified: false` never links.
+2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection and the user with that email has verified it (`email_verified_at`), the user gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An account whose address was never verified doesn't link either, so whoever registered `ceo@agra.com` without owning the mailbox doesn't get the CEO's sign-ins; and an OpenID Connect token that says `email_verified: false` never links.
 3. **A new user**, when `provisioning.jit` is on (the default) and the email is in a verified domain. The user gets the profile's name and email, no password, and a verified email. With `allow_unverified_emails: true`, users outside the verified domains are created too, with an unverified email.
 4. **Otherwise** the answer is 409 `email_taken` (the email belongs to someone) or 403 (`unverified_domain`, `sso_provisioning_disabled`).
 
@@ -349,7 +349,7 @@ Then the person's membership of the connection's owner follows their groups. The
     "jit": true,
     "default_role": "member",
     "roles": [
-      { "group": "Acme Admins", "role": "admin" },
+      { "group": "Agra Admins", "role": "admin" },
       { "group": "Contractors", "role": "viewer" }
     ],
     "sync_roles": true,
@@ -441,10 +441,10 @@ pub async fn connect_workspace(
     let connection = sso
         .create_connection(
             uow,
-            NewConnection::saml(SsoOwner::Workspace(workspace), "Acme Okta", metadata_xml)
+            NewConnection::saml(SsoOwner::Workspace(workspace), "Agra Okta", metadata_xml)
                 .provisioning(Provisioning {
                     roles: vec![RoleRule {
-                        group: "Acme Admins".to_owned(),
+                        group: "Agra Admins".to_owned(),
                         role: "admin".to_owned(),
                     }],
                     ..Provisioning::default()
@@ -521,14 +521,14 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
     let idp = SsoFake::new();
     let sso = app.get::<Sso>().await;
     let uow = app.get::<navree::db::Db>().await.uow(None, None).await;
-    let connection = NewConnection::saml(SsoOwner::App, "Acme", idp.metadata_xml()).slug("acme");
+    let connection = NewConnection::saml(SsoOwner::App, "Agra", idp.metadata_xml()).slug("agra");
     sso.create_connection(&uow, connection).await?;
-    let domain = sso.add_domain(&uow, "acme", "acme.test").await?;
+    let domain = sso.add_domain(&uow, "agra", "acme.test").await?;
     sso.mark_domain_verified(&uow, domain.id).await?;
     uow.commit().await?;
 
     // The login route sends the browser to the identity provider...
-    let login = app.client().get("/api/sso/acme/login").send().await;
+    let login = app.client().get("/api/sso/agra/login").send().await;
     let url = login.json_value()["url"].as_str().unwrap().to_owned();
 
     // ...which posts its signed answer to the assertion consumer service.
@@ -537,7 +537,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
         .name_id("alice@acme.test")
         .attribute("groups", ["Engineering"]);
     app.client()
-        .post("/api/sso/saml/acme/acs")
+        .post("/api/sso/saml/agra/acs")
         .form(&answer.form())
         .send()
         .await

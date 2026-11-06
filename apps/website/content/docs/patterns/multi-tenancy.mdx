@@ -23,7 +23,7 @@ The user is identified from the bearer token or the session, as on any route.
 </Step>
 <Step title="Resolve the workspace">
 
-The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/acme/...`), a subdomain (`acme.app.example.com`) or a claim of the bearer token. These four are the default list. With [custom domains](/docs/packages/custom-domains/) and `domain` in the list, a workspace's own verified domain names it too. A request that names no workspace is a 400, and an unknown workspace a 404.
+The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/agra/...`), a subdomain (`agra.app.example.com`) or a claim of the bearer token. These four are the default list. With [custom domains](/docs/packages/custom-domains/) and `domain` in the list, a workspace's own verified domain names it too. A request that names no workspace is a 400, and an unknown workspace a 404.
 
 </Step>
 <Step title="Check membership">
@@ -72,8 +72,8 @@ It is global, and contributes the tables `workspaces`, `workspace_members` and `
 ```toml title="config/app.toml"
 [workspace]
 resolvers = ["header", "path"]   # tried in this order
-header = "X-Workspace"           # X-Workspace: acme
-path_prefix = "/w"               # /api/w/acme/projects
+header = "X-Workspace"           # X-Workspace: agra
+path_prefix = "/w"               # /api/w/agra/projects
 isolation = "row"                # row | schema | database
 ```
 
@@ -85,11 +85,11 @@ Pick the resolvers that match how clients address a workspace:
 
 | Resolver | Example | Good for |
 |---|---|---|
-| `header` | `X-Workspace: acme` | API clients and a BFF: the web app sends the workspace it shows |
-| `path` | `/api/w/acme/projects` | URLs that name the workspace, shareable links |
-| `subdomain` | `acme.app.example.com` | A branded URL per customer; set `workspace.base_domain` |
+| `header` | `X-Workspace: agra` | API clients and a BFF: the web app sends the workspace it shows |
+| `path` | `/api/w/agra/projects` | URLs that name the workspace, shareable links |
+| `subdomain` | `agra.app.example.com` | A branded URL per customer; set `workspace.base_domain` |
 | `claim` | a `workspace` claim in the bearer JWT | Tokens issued for one workspace |
-| `domain` | `crm.acme-corp.com` | A customer's own domain, verified by [custom domains](/docs/packages/custom-domains/) |
+| `domain` | `crm.agra-corp.com` | A customer's own domain, verified by [custom domains](/docs/packages/custom-domains/) |
 
 A resolver finds a slug or an id, and the first one that finds something wins. The `path` resolver reads the segment after `path_prefix`, so it applies to routes whose path contains it, such as a controller mounted at `/w/{workspace}/projects`; for those, `InWorkspace::from_path("workspace")` reads the route parameter directly. Keep the list short: every resolver you add is another way to name a workspace that your clients and your tests have to agree on. [Resolution](/docs/workspaces/resolution/) covers each resolver and its settings.
 
@@ -291,30 +291,30 @@ Every multi-tenant app needs one test above all others: a member of one workspac
 #[tokio::test]
 async fn a_member_never_sees_another_workspace() {
     let app = test_app().await;
-    let (ada, acme) = workspace_with_owner(&app, "Acme").await;
-    let (_, globex) = workspace_with_owner(&app, "Globex").await;
-    let globex_project = create_project(&app, globex.id, "Launch").await;
+    let (anu, agra) = workspace_with_owner(&app, "Agra").await;
+    let (_, gulati) = workspace_with_owner(&app, "Gulati").await;
+    let gulati_project = create_project(&app, gulati.id, "Launch").await;
 
-    // Ada's own workspace works.
-    app.acting_as(principal(ada))
+    // Anu's own workspace works.
+    app.acting_as(principal(anu))
         .get("/api/v1/projects")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(200);
 
     // Naming the other workspace is refused.
-    app.acting_as(principal(ada))
+    app.acting_as(principal(anu))
         .get("/api/v1/projects")
-        .header("X-Workspace", "globex")
+        .header("X-Workspace", "gulati")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");
 
-    // Its records don't exist from Ada's workspace.
-    app.acting_as(principal(ada))
-        .get(&format!("/api/v1/projects/{}", globex_project.id))
-        .header("X-Workspace", "acme")
+    // Its records don't exist from Anu's workspace.
+    app.acting_as(principal(anu))
+        .get(&format!("/api/v1/projects/{}", gulati_project.id))
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_status(404);

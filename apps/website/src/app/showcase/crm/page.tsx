@@ -490,8 +490,8 @@ function StartYourOwn() {
           <p className="font-mono text-xs tracking-[0.12em] text-fg-3 uppercase">{frontEnds.next.name} front end</p>
           <h3 className="mt-2 font-display text-display-sm font-semibold text-fg">A SaaS app on Next.js</h3>
           <div className="mt-6 space-y-2">
-            <CommandLine command="navree new acme --kit saas" />
-            <CommandLine command="cd acme" />
+            <CommandLine command="navree new agra --kit saas" />
+            <CommandLine command="cd agra" />
             <CommandLine command="navree dev" />
           </div>
           <p className="mt-5 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">

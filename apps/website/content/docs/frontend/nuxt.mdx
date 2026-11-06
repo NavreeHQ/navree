@@ -157,7 +157,7 @@ const api = useNavreeClient<paths>();
 const { data } = await useAsyncData("deals", () => unwrap(api.GET("/api/v1/deals", { params: { query: { per_page: 25 } } })));
 
 const { workspace, setWorkspace } = useWorkspace();
-setWorkspace("globex"); // writes the navree_workspace cookie, then refreshes the page's data
+setWorkspace("gulati"); // writes the navree_workspace cookie, then refreshes the page's data
 ```
 
 `useNavreeClient()` is the [typed client](/docs/frontend/typed-client/) in cookie mode with the workspace from the `navree_workspace` cookie; on a 401 it sends the browser to `loginPath?next=…`. On the server it calls the BFF in-process.

@@ -30,7 +30,7 @@ Builders are plain values: clone one to run two variations of a query, or build 
 ```rust
 let deals = Deal::query().get(&db).await?;
 let newest = Deal::query().latest().first(&db).await?;
-let renewal = Deal::where_(Deal::TITLE.eq("Acme renewal")).first_or_fail(&db).await?;
+let renewal = Deal::where_(Deal::TITLE.eq("Agra renewal")).first_or_fail(&db).await?;
 let open = Deal::query().where_(Deal::STAGE.ne(Stage::Lost)).find(&db, id).await?;
 ```
 
@@ -130,7 +130,7 @@ Deal::query()
     .where_not_null(Deal::CONTACT_ID)
     .where_between(Deal::AMOUNT_CENTS, 10_000, 50_000)
     .where_column(Deal::UPDATED_AT, ">", Deal::CREATED_AT)
-    .where_like(Deal::TITLE, "acme%")
+    .where_like(Deal::TITLE, "agra%")
 ```
 
 Every one of them has an `or_` form (`or_where_in`, `or_where_null`, ...) and most a `not` form (`where_not_between`, `where_not_like`). `where_like_case_sensitive` matches case.
@@ -222,7 +222,7 @@ SQL you write yourself takes `?` placeholders, one per value, on every database 
 
 ```rust
 Deal::query().where_raw("amount_cents > ? * 100", [500]);
-Deal::query().where_(raw("lower(title) = ?", ["acme renewal"]));
+Deal::query().where_(raw("lower(title) = ?", ["agra renewal"]));
 ```
 
 A placeholder count that doesn't match the values fails with `OrmError::InvalidQuery` before anything runs. Never format input into the SQL string: bind it.
@@ -269,7 +269,7 @@ When `select` leaves out a model column, the records can't be fully read. In [st
 ```rust
 Deal::query()
     .join("companies", Deal::COMPANY_ID, "=", Company::ID)
-    .where_(Company::NAME.like("Acme%"))
+    .where_(Company::NAME.like("Agra%"))
     .add_select([("companies.name", "company_name")]);
 
 Deal::query().left_join_on("activities", |join| {

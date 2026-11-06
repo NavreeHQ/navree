@@ -325,8 +325,8 @@ The same suite covers the origin check, login and logout, two-factor sign-in, to
 `navree new` generates the pattern for you:
 
 ```sh
-navree new acme --ui next                # the API plus web/, a Next.js app on @navree/next
-navree new acme --kit saas               # the full SaaS kit on Next.js: sign-in, workspaces, billing, settings, admin
+navree new agra --ui next                # the API plus web/, a Next.js app on @navree/next
+navree new agra --kit saas               # the full SaaS kit on Next.js: sign-in, workspaces, billing, settings, admin
 ```
 
 `--ui next` writes `web/lib/navree.ts` (the app's `createNavree()`), the route handler in `web/app/api/[...path]/route.ts`, `web/proxy.ts` that keeps pages behind sign-in, and a sign-in page and home page that use `auth()`; `navree dev` starts both servers. The packages are installed from the Navree checkout until they are published (see [installing](/docs/frontend/introduction/#installing)). The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the same package. To see both front ends running, see the [CRM showcase](/showcase/crm/).

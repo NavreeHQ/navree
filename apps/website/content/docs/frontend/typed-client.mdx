@@ -50,7 +50,7 @@ import { unwrap } from "@navree/client";
 import { api } from "@/lib/api/client";
 
 const deal = await unwrap(api.GET("/api/v1/deals/{id}", { params: { path: { id } } }));
-const created = await unwrap(api.POST("/api/v1/deals", { body: { title: "Acme renewal", amount_cents: 120_000 } }));
+const created = await unwrap(api.POST("/api/v1/deals", { body: { title: "Agra renewal", amount_cents: 120_000 } }));
 ```
 
 `GET`, `POST`, `PUT`, `PATCH` and `DELETE` take the path as the document writes it; the path parameters, query and body are typed from it, and so is the data. `unwrap` returns the data or throws a [`NavreeError`](#errors).
@@ -199,7 +199,7 @@ try {
 Every Navree list speaks one query-string grammar: filters, sort, search and paging. A Navree server reads it with the `List<Resource>` extractor and a `ListSpec`, the allow-list of the fields a resource lets a client filter, sort and search by. A request outside that list gets a 400 that names the parameter, and `Builder::list` applies a valid query to the database query. [List queries](/docs/basics/list-queries/) covers the server side. Navree UI tables and Helm read and write the same names, so a link to one list is a link a client, a table and an admin screen all understand. This page is the JavaScript side: building a list query, writing it to a URL and reading it back.
 
 ```text
-filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=acme&page=2&per_page=25
+filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=agra&page=2&per_page=25
 ```
 
 ### The grammar
@@ -209,7 +209,7 @@ filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&
 | `filter[field]=value` | The field equals the value. The same as `filter[field][eq]=value`. |
 | `filter[field][operator]=value` | The field compared with an operator (see below). |
 | `sort=-created_at,name` | The fields to sort by, in order; a leading `-` sorts descending. At most four fields. A repeated `sort` adds fields. |
-| `search=acme` | The text to search for. |
+| `search=agra` | The text to search for. |
 | `page=2&per_page=25` | Numbered pages. |
 | `cursor=eyJpZCI6NDJ9&limit=50` | Cursor pages: the page after a position, `limit` rows long. |
 | `before=eyJpZCI6NDJ9` | The page before a position, for lists that page both ways (Navree UI tables). |
@@ -247,7 +247,7 @@ const query = listQuery()
   .where("created_at", "gte", "2026-10-01")
   .whereIn("owner_id", ["u1", "u2"])
   .sort("-amount_cents", "title")
-  .search("acme")
+  .search("agra")
   .page(2)
   .perPage(25);
 
@@ -255,7 +255,7 @@ await unwrap(api.GET("/api/v1/deals", { params: { query: query.toQuery() } }));
 ```
 
 ```text
-filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=acme&page=2&per_page=25
+filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=agra&page=2&per_page=25
 ```
 
 | Builder call | Query string |
@@ -266,7 +266,7 @@ filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&
 | `where("owner_id", "null", true)` | `filter[owner_id][null]=true` |
 | `without("stage")` | removes the filter |
 | `sort("-created_at", "name")` | `sort=-created_at,name` (`-` sorts descending) |
-| `search("acme")` | `search=acme` |
+| `search("agra")` | `search=agra` |
 | `page(2)`, `perPage(25)` | `page=2&per_page=25` (drops `cursor`, `before` and `limit`) |
 | `cursor("eyJpZCI6NDJ9")`, `limit(50)` | `cursor=eyJpZCI6NDJ9&limit=50` (drops `page` and `per_page`) |
 | `before("eyJpZCI6NDJ9")` | `before=eyJpZCI6NDJ9` (drops `page`, `per_page` and `cursor`) |

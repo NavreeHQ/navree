@@ -153,7 +153,7 @@ The columns may have other names, or be left out: `timestamps(created_at = "inse
 ```rust
 let deal = Deal::create(&uow, Deal {
     company_id,
-    title: "Acme renewal".into(),
+    title: "Agra renewal".into(),
     amount_cents: 120_000,
     currency: "USD".into(),
     ..Default::default()
@@ -167,7 +167,7 @@ The record holds the key and timestamps the insert filled in. To insert in two s
 ```rust
 let mut deal = Record::new(Deal {
     company_id,
-    title: "Globex expansion".into(),
+    title: "Gulati expansion".into(),
     ..Default::default()
 });
 deal.save(&uow).await?;
@@ -283,12 +283,12 @@ A record remembers its values as they were read or last saved, so it knows what 
 
 ```rust
 assert!(deal.is_clean());
-deal.title = "Acme renewal 2027".into();
+deal.title = "Agra renewal 2027".into();
 
 assert!(deal.is_dirty());
 assert!(deal.is_dirty_on([Deal::TITLE]));
 assert!(deal.is_clean_on([Deal::STAGE]));
-let dirty = deal.get_dirty()?;                 // [("title", "Acme renewal 2027")]
+let dirty = deal.get_dirty()?;                 // [("title", "Agra renewal 2027")]
 let before = deal.get_original_value(Deal::TITLE)?;
 
 deal.discard_changes();                        // back to the original values

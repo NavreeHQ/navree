@@ -286,7 +286,7 @@ An operation looks like this:
   "id": "0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa",
   "kind": "contacts.import",
   "status": "running",
-  "progress": { "done": 2, "total": 4, "percent": 50, "note": "Imported grace@example.test" },
+  "progress": { "done": 2, "total": 4, "percent": 50, "note": "Imported gauri@example.test" },
   "result": null,
   "error": null,
   "owner_id": "0199c1d3-88a0-7f41-b0d2-5e7a9c3b1f04",
@@ -311,11 +311,11 @@ curl -N -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/operations/0
 ```text wrap
 event: operation
 id: 4
-data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"running","progress":{"done":2,"total":4,"percent":50,"note":"Imported grace@example.test"},...}
+data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"running","progress":{"done":2,"total":4,"percent":50,"note":"Imported gauri@example.test"},...}
 
 event: operation
 id: 7
-data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"succeeded","progress":{"done":4,"total":4,"percent":100,"note":"Imported alan@example.test"},"result":{"imported":4},...}
+data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"succeeded","progress":{"done":4,"total":4,"percent":100,"note":"Imported arun@example.test"},"result":{"imported":4},...}
 ```
 
 Changes made in the same process arrive at once. Changes made by workers in other processes are picked up by re-reading the operation every `queue.operations.stream_poll_ms` (1000 ms). An idle stream sends a keep-alive comment every 15 seconds. The browser's `EventSource` can't send an `Authorization` header, so read the stream with `fetch` when you authenticate with bearer tokens, or let a backend-for-frontend add the header.
@@ -475,7 +475,7 @@ async fn an_import_is_queued_as_one_batch() {
 
     app.acting_as(principal(Uuid::now_v7()))
         .post("/api/v1/contacts/imports")
-        .json(&json!({ "emails": ["ada@example.test", "grace@example.test", "alan@example.test"] }))
+        .json(&json!({ "emails": ["anu@example.test", "gauri@example.test", "arun@example.test"] }))
         .send()
         .await
         .assert_status(200);

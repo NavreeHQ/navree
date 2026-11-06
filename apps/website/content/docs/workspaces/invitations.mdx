@@ -17,11 +17,11 @@ Invitations bring people into a workspace who may not have an account yet. An ad
 Over HTTP, with the `workspace.invitations.create` permission (owners and admins have it):
 
 ```http
-POST /api/workspaces/acme/invitations HTTP/1.1
+POST /api/workspaces/agra/invitations HTTP/1.1
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
-{"email": "grace@example.com", "role": "admin"}
+{"email": "gauri@example.com", "role": "admin"}
 ```
 
 ```json title="201 Created"
@@ -29,7 +29,7 @@ Content-Type: application/json
   "__type": "WorkspaceInvitation",
   "id": "0199f3c3-0a1b-7c2d-8e3f-4a5b6c7d8e9f",
   "workspace_id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
-  "email": "grace@example.com",
+  "email": "gauri@example.com",
   "role": "admin",
   "invited_by": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   "expires_at": "2026-11-02T09:00:00Z",
@@ -45,7 +45,7 @@ In code, `Invitations::invite` returns the invitation and the plain token, for a
 use navree::workspace::{Invitations, WorkspaceRole};
 
 let sent = invitations
-    .invite(&uow, workspace_id, "grace@example.com", WorkspaceRole::Admin, Some(inviter_id))
+    .invite(&uow, workspace_id, "gauri@example.com", WorkspaceRole::Admin, Some(inviter_id))
     .await?;
 // sent.invitation: the row; sent.token: the token to deliver
 ```
@@ -69,11 +69,11 @@ url = "https://app.example.com/invitations/accept"
 ```
 
 ```text title="The built-in mail" wrap
-Subject: You're invited to join Acme
+Subject: You're invited to join Agra
 
 Hello,
 
-Ada Lovelace invited you to join Acme as admin.
+Anu Lakhotia invited you to join Agra as admin.
 
 Accept the invitation: https://app.example.com/invitations/accept?token=Xq3...
 
@@ -116,7 +116,7 @@ Content-Type: application/json
 
 ```json title="200 OK"
 {
-  "workspace": { "__type": "Workspace", "slug": "acme", "role": "admin", "...": "..." },
+  "workspace": { "__type": "Workspace", "slug": "agra", "role": "admin", "...": "..." },
   "member": { "__type": "WorkspaceMember", "role": "admin", "...": "..." }
 }
 ```
@@ -150,7 +150,7 @@ require_matching_email = false
 ## Revoking
 
 ```http
-DELETE /api/workspaces/acme/invitations/0199f3c3-0a1b-7c2d-8e3f-4a5b6c7d8e9f HTTP/1.1
+DELETE /api/workspaces/agra/invitations/0199f3c3-0a1b-7c2d-8e3f-4a5b6c7d8e9f HTTP/1.1
 ```
 
 Revoking (permission `workspace.invitations.delete`) deletes the pending invitation, and its token stops working. `GET /api/workspaces/{workspace}/invitations` (permission `workspace.invitations.read`) lists the pending ones, newest first. In code: `invitations.revoke(&uow, workspace_id, invitation_id)` and `invitations.pending(workspace_id)`.
@@ -182,7 +182,7 @@ impl HousekeepingModule {
 
 ## Showing an invitation before accepting
 
-`invitations.find_by_token(&token)` returns the pending invitation (with its `workspace_id`, `email` and `role`), or `None` for an unknown, used or expired token. Use it in your own route to show "Ada invited you to Acme" before the user accepts.
+`invitations.find_by_token(&token)` returns the pending invitation (with its `workspace_id`, `email` and `role`), or `None` for an unknown, used or expired token. Use it in your own route to show "Anu invited you to Agra" before the user accepts.
 
 ## Events
 
@@ -203,7 +203,7 @@ let text = sent.last().unwrap().text.clone().unwrap();
 let token = text.split("token=").nth(1).unwrap().split_whitespace().next().unwrap();
 
 clock.advance(std::time::Duration::from_secs(8 * 24 * 3600));
-app.acting_as(principal(grace))
+app.acting_as(principal(gauri))
     .post("/api/invitations/accept")
     .json(&json!({ "token": token }))
     .send()

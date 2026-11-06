@@ -301,7 +301,7 @@ The broadcast channel sends the event `notification.created` on the recipient's 
   "type": "deal.won",
   "data": {
     "title": "Deal won",
-    "message": "“Acme renewal” was marked won",
+    "message": "“Agra renewal” was marked won",
     "url": "/deals/0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e",
     "deal_id": "0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e"
   },
@@ -363,7 +363,7 @@ A page looks like this ([pagination](/docs/database/pagination/) explains `page`
       "type": "deal.assigned",
       "data": {
         "title": "Deal assigned to you",
-        "message": "Marcus Reyes assigned you “Acme renewal”",
+        "message": "Marcus Reyes assigned you “Agra renewal”",
         "url": "/deals/0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e",
         "deal_id": "0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e"
       },
@@ -494,8 +494,8 @@ async fn followers_hear_about_moved_contacts() {
     };
     let moved = ContactMoved {
         contact_id: Uuid::now_v7(),
-        name: "Ada".into(),
-        company: "Acme".into(),
+        name: "Anu".into(),
+        company: "Agra".into(),
     };
     let id = notifier.send(&me, moved).await.unwrap();
 

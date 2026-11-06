@@ -60,7 +60,7 @@ SES sends the message to the configuration set when one is configured. That set'
 
 ```toml title="config/app.toml"
 [mail]
-from = "Acme <hello@acme.test>"
+from = "Agra <hello@acme.test>"
 transport = "ses://eu-west-1?configuration_set=account"
 
 [mail.transports.campaigns]
@@ -255,7 +255,7 @@ for delivery in &bounced.data {
 }
 ```
 
-A `Delivery` has the workspace and organization, the `status`, the `transport` and its `tier`, the `provider_id`, the `template`, the `subject`, the `sender`, the number of `recipients`, the transport's `error` when it failed, and `opened_at` and `clicked_at`. Recipients are not stored as addresses. `recipient_hash` is the SHA-256 of the first recipient's address in lower case, so `DeliveryFilter { recipient: Some("ada@example.com".into()), .. }` finds a person's mail without the log holding their address.
+A `Delivery` has the workspace and organization, the `status`, the `transport` and its `tier`, the `provider_id`, the `template`, the `subject`, the `sender`, the number of `recipients`, the transport's `error` when it failed, and `opened_at` and `clicked_at`. Recipients are not stored as addresses. `recipient_hash` is the SHA-256 of the first recipient's address in lower case, so `DeliveryFilter { recipient: Some("anu@example.com".into()), .. }` finds a person's mail without the log holding their address.
 
 | Status | Meaning |
 |---|---|
@@ -365,7 +365,7 @@ Register it with `m.listen::<MailBounced, FlagBouncedContact>()`.
 use navree::mail::{Deliveries, MailEventKind, ProviderEvent};
 
 let event = ProviderEvent::new("relay", message_id, MailEventKind::Bounced)
-    .recipient("ada@example.com")
+    .recipient("anu@example.com")
     .permanent()
     .detail("550 5.1.1 user unknown");
 deliveries.record(event).await?;
@@ -385,7 +385,7 @@ suppressions
     .add(&uow, Some(workspace_id), &email, SuppressionReason::Unsubscribed, None)
     .await?;
 
-if suppressions.is_suppressed(Some(workspace_id), "ada@example.com").await? {
+if suppressions.is_suppressed(Some(workspace_id), "anu@example.com").await? {
     // ...
 }
 ```
@@ -442,7 +442,7 @@ Mail sent through an API provider is signed by the provider. Mail sent over SMTP
 ```toml title="config/app.toml"
 [mail.transport]
 type = "smtp"
-url = "smtps://hello%40acme.test:app-password@smtp.acme.test"
+url = "smtps://hello%40agra.test:app-password@smtp.acme.test"
 
 [mail.transport.dkim]
 domain = "acme.test"
@@ -570,13 +570,13 @@ async fn a_bounced_address_is_not_mailed_again() {
         .build()
         .await;
 
-    app.get::<Newsletter>().await.send_to("ada@example.com").await.unwrap();
-    fake.bounce(app.ctx(), "ada@example.com").await.unwrap();
+    app.get::<Newsletter>().await.send_to("anu@example.com").await.unwrap();
+    fake.bounce(app.ctx(), "anu@example.com").await.unwrap();
 
     let suppressions = app.get::<Suppressions>().await;
-    assert!(suppressions.is_suppressed(None, "ada@example.com").await.unwrap());
-    app.get::<Newsletter>().await.send_to("ada@example.com").await.unwrap();
-    assert_eq!(fake.sent_to("ada@example.com").len(), 1);
+    assert!(suppressions.is_suppressed(None, "anu@example.com").await.unwrap());
+    app.get::<Newsletter>().await.send_to("anu@example.com").await.unwrap();
+    assert_eq!(fake.sent_to("anu@example.com").len(), 1);
 }
 ```
 

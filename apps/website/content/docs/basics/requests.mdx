@@ -59,7 +59,7 @@ pub struct DealFilter {
     pub search: String,
 }
 
-/// `GET /api/v1/deals?stage=won&search=acme`
+/// `GET /api/v1/deals?stage=won&search=agra`
 #[get("/")]
 async fn index(&self, Query(filter): Query<DealFilter>) -> String {
     format!("{:?} {:?} {}", filter.stage, filter.owner_id, filter.search)
@@ -77,7 +77,7 @@ Missing fields must be `Option`s or have a serde default. A value of the wrong t
 }
 ```
 
-`Query<T>` suits parameters of your own. A list with filters, a sort order, a search box and pages reads them with `List<R>` instead, so every list takes the same query string (`filter[stage]=won&search=acme&page=2`): see [list queries](/docs/basics/list-queries/).
+`Query<T>` suits parameters of your own. A list with filters, a sort order, a search box and pages reads them with `List<R>` instead, so every list takes the same query string (`filter[stage]=won&search=agra&page=2`): see [list queries](/docs/basics/list-queries/).
 
 ## JSON bodies
 

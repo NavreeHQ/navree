@@ -269,8 +269,8 @@ let overdue = Deal::query()
     .get(&db)
     .await?;
 
-let acme_deals = Deal::query().where_relation("company", Company::NAME.eq("Acme")).get(&db).await?;
-let same = Deal::query().where_belongs_to(&acme).get(&db).await?;
+let agra_deals = Deal::query().where_relation("company", Company::NAME.eq("Agra")).get(&db).await?;
+let same = Deal::query().where_belongs_to(&agra).get(&db).await?;
 ```
 
 Each becomes a correlated `EXISTS` (or a `COUNT` compared with a number) in one query. A path reaches nested relations: `Company::query().has("deals.activities")`. In `where_has`, a relation method (`Deal::activities`) fixes the closure's type; with a string path, annotate it: `|q: Builder<Company>| ..`. The related model's global scopes apply inside the subquery.
@@ -321,7 +321,7 @@ Each runs the model's events; the `_quietly` forms (`create_quietly`, `save_many
 A `belongs_to` is written from the record that holds the key:
 
 ```rust
-deal.associate(Deal::company, &acme)?;   // company_id = acme.id, and the loaded relation
+deal.associate(Deal::company, &agra)?;   // company_id = agra.id, and the loaded relation
 deal.save(&uow).await?;
 
 deal.dissociate(Deal::contact)?;          // contact_id = NULL

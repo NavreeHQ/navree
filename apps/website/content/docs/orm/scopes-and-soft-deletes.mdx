@@ -38,7 +38,7 @@ The block generates a trait, `DealScopes`, with one method per scope. Import it,
 use crate::modules::deals::models::deal::DealScopes;
 
 let mine = Deal::query().open().owned_by(me).worth(10_000).latest().get(&db).await?;
-let open_at_acme = acme.deals().open().get(&db).await?;
+let open_at_agra = agra.deals().open().get(&db).await?;
 ```
 
 A scope takes any extra parameters after the builder; `Self` in them means the model. The trait is public unless `#[scopes(vis = "pub(crate)")]` says otherwise, and `#[scopes(name = "OpenDeals")]` renames it. For a one-off, `query.scope(|q| ..)` applies any function of the builder.

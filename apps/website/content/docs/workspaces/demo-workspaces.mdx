@@ -25,7 +25,7 @@ JSON files under `fixtures/demo` (`workspace.demo.fixtures`), one per kind of re
 <Step title="Create the demo">
 
 ```sh
-navree workspace:demo-create "Acme demo" --owner admin@acme.test --slug demo
+navree workspace:demo-create "Agra demo" --owner admin@acme.test --slug demo
 ```
 
 </Step>
@@ -173,7 +173,7 @@ Spaces inside the braces are optional. Any other string is kept as it is, `Hello
 From the command line, with the owner's id or email address (looked up in `workspace.users_table`):
 
 ```sh
-navree workspace:demo-create "Acme demo" --owner admin@acme.test --slug demo
+navree workspace:demo-create "Agra demo" --owner admin@acme.test --slug demo
 ```
 
 ```text
@@ -185,7 +185,7 @@ From code, `DemoWorkspaces` (exported by the module) creates and seeds in one ca
 ```rust
 let demos = ctx.get::<DemoWorkspaces>().await?;
 let uow = db.uow(Some(admin_id), None).await;
-let demo = demos.create(&uow, admin_id, NewWorkspace::named("Acme demo")).await?;
+let demo = demos.create(&uow, admin_id, NewWorkspace::named("Agra demo")).await?;
 uow.commit().await?;
 assert!(demo.is_demo());
 ```
@@ -300,7 +300,7 @@ The header is in the CORS `Access-Control-Expose-Headers` list, so a front end o
 {
   "__type": "Workspace",
   "id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
-  "name": "Acme demo",
+  "name": "Agra demo",
   "slug": "demo",
   "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   "organization_id": null,
@@ -374,12 +374,12 @@ async fn the_create_command_makes_a_read_only_demo() {
         .module(CrmModule)
         .build()
         .await;
-    let ada = Uuid::now_v7();
-    app.run_command("workspace:demo-create", &["Acme demo", "--owner", &ada.to_string(), "--slug", "demo"])
+    let anu = Uuid::now_v7();
+    app.run_command("workspace:demo-create", &["Agra demo", "--owner", &anu.to_string(), "--slug", "demo"])
         .await
         .unwrap();
 
-    let client = app.acting_as(principal(ada));
+    let client = app.acting_as(principal(anu));
     let listed = client
         .get("/api/v1/companies")
         .header("X-Workspace", "demo")

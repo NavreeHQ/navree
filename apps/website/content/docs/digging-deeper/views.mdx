@@ -140,11 +140,11 @@ A name can't leave its directory: `..`, absolute paths and backslashes find noth
 
 A template's name picks its mode, in any case and also before a trailing `.j2`, `.jinja` or `.jinja2`:
 
-| Name | Mode | `Ada & <Co>` prints as |
+| Name | Mode | `Anu & <Co>` prints as |
 |---|---|---|
-| `.txt`, `.md` | as it is | `Ada & <Co>` |
-| `.json`, `.json5`, `.js`, `.mjs`, `.cjs`, `.yaml`, `.yml` | JSON | `"Ada & <Co>"` |
-| anything else: `.html`, `.htm`, `.xhtml`, `.xml`, `.svg`, a bare `.j2` or `.jinja`, an unknown extension, no extension | HTML | `Ada &amp; &lt;Co&gt;` |
+| `.txt`, `.md` | as it is | `Anu & <Co>` |
+| `.json`, `.json5`, `.js`, `.mjs`, `.cjs`, `.yaml`, `.yml` | JSON | `"Anu & <Co>"` |
+| anything else: `.html`, `.htm`, `.xhtml`, `.xml`, `.svg`, a bare `.j2` or `.jinja`, an unknown extension, no extension | HTML | `Anu &amp; &lt;Co&gt;` |
 
 Mark text you trust with `|safe`: it prints as it is in every mode.
 
@@ -205,7 +205,7 @@ use navree::view::ModuleBuilderViewExt;
 impl BrandModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.view_environment(|env| {
-            env.add_global("brand", "Acme");
+            env.add_global("brand", "Agra");
             env.add_filter("shout", |text: &str| text.to_uppercase());
             env.add_function("greet", |name: &str| format!("Hello, {name}"));
         });
@@ -283,8 +283,8 @@ use serde_json::json;
 
 mailer
     .send(
-        &TemplateMail::new("ada@example.com", "Your invoice", "mail/invoice").context(json!({
-            "name": "Ada",
+        &TemplateMail::new("anu@example.com", "Your invoice", "mail/invoice").context(json!({
+            "name": "Anu",
             "number": "INV-0042",
             "total_cents": 129900,
             "currency": "EUR",
@@ -334,11 +334,11 @@ fn the_invoice_mail_shows_the_total() {
     let html = views
         .render(
             "mail/invoice",
-            json!({ "name": "Ada & Co", "total_cents": 123456, "currency": "EUR", "due_on": "2026-11-01" }),
+            json!({ "name": "Anu & Co", "total_cents": 123456, "currency": "EUR", "due_on": "2026-11-01" }),
         )
         .unwrap();
 
-    assert_eq!(html, "<p>Ada &amp; Co owes €1,234.56 by 1 November.</p>");
+    assert_eq!(html, "<p>Anu &amp; Co owes €1,234.56 by 1 November.</p>");
 }
 ```
 

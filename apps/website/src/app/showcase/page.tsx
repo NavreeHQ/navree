@@ -123,7 +123,7 @@ export default function ShowcasePage() {
             </div>
             <div>
               <div className="grid gap-2">
-                <CommandLine command="navree new acme --kit saas" />
+                <CommandLine command="navree new agra --kit saas" />
               </div>
               <ArrowLink href="/docs/getting-started/starter-kits/" className="mt-6">
                 Read about the starter kits

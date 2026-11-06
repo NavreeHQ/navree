@@ -336,7 +336,7 @@ sink.publish(
     "deal.won",
     json!({
         "deal_id": deal_id,
-        "title": "Acme renewal",
+        "title": "Agra renewal",
         "owner_id": owner_id,
         "amount_cents": 1_200_000,
         "currency": "USD",
@@ -403,7 +403,7 @@ async fn winning_a_deal_counts_it_and_queues_the_owner_mail() {
     let owner = Uuid::now_v7();
     let won = DealWon {
         deal_id: Uuid::now_v7(),
-        title: "Acme renewal".into(),
+        title: "Agra renewal".into(),
         owner_id: owner,
         amount_cents: 1_200_000,
         currency: "USD".into(),

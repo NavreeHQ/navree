@@ -11,8 +11,8 @@ Pick the kit for the shape you are building:
 
 | Kit | Command | What you get |
 |---|---|---|
-| `saas` | `navree new acme --kit saas` | A Navree API and a Next.js and shadcn/ui front end: sign-in, two-factor, workspaces with members and roles, billing, settings and an admin panel, behind a backend-for-frontend |
-| `api` | `navree new acme --kit api` | The same API without the front end: accounts, workspaces, billing and OpenAPI with a committed contract, for mobile apps, partners or a front end you build yourself |
+| `saas` | `navree new agra --kit saas` | A Navree API and a Next.js and shadcn/ui front end: sign-in, two-factor, workspaces with members and roles, billing, settings and an admin panel, behind a backend-for-frontend |
+| `api` | `navree new agra --kit api` | The same API without the front end: accounts, workspaces, billing and OpenAPI with a committed contract, for mobile apps, partners or a front end you build yourself |
 | `micro` | `navree new billing --kit micro` | A microservice: a message handler and an event handler on NATS, health checks and metrics, and a contracts crate for its clients |
 
 The minimal app has three front-end choices of its own. Without a flag it draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no Node project (`--ui navree`, the default). `--ui next` makes a Next.js app in `web/` instead, and `--ui none` makes the API alone. [The Navree UI app](#the-navree-ui-app) below describes the default.
@@ -28,19 +28,19 @@ Kits are generated code, not a framework layer. There is no kit runtime and noth
 ## Creating an app
 
 ```sh
-navree new acme --kit saas
+navree new agra --kit saas
 ```
 
 ```text
-Created acme in /home/ada/code/acme (kit: saas)
-It depends on navree at /home/ada/code/navree/crates/navree.
+Created agra in /home/anu/code/agra (kit: saas)
+It depends on navree at /home/anu/code/navree/crates/navree.
 
 Next steps:
-  cd acme
+  cd agra
   navree dock up                 # TimescaleDB and Mailpit
   navree migrate:fresh --seed    # tables and a demo workspace
-  pnpm --dir /home/ada/code/navree/packages/js install # the Navree packages (not on npm yet)
-  pnpm --dir /home/ada/code/navree/packages/js build # once; the web app links them
+  pnpm --dir /home/anu/code/navree/packages/js install # the Navree packages (not on npm yet)
+  pnpm --dir /home/anu/code/navree/packages/js build # once; the web app links them
   pnpm --dir web install         # the web app's packages
   navree dev                     # API on :8080, web app on :3000
 
@@ -156,7 +156,7 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
 
 ### The generated layout
 
-<FileTree title="acme/">{`
+<FileTree title="agra/">{`
   AGENTS.md                 # conventions for coding agents
   CLAUDE.md                 # imports AGENTS.md
   Cargo.toml
@@ -447,8 +447,8 @@ kit_version = "1.0.0"
 To adopt a later kit's changes, generate a fresh copy with the current CLI and compare the parts you care about:
 
 ```sh
-navree new acme-latest --kit saas
-git diff --no-index acme-latest/web/lib acme/web/lib
+navree new agra-latest --kit saas
+git diff --no-index agra-latest/web/lib agra/web/lib
 ```
 
 The release notes list what changed in each kit, so you can pick up a fix without reviewing the whole template.

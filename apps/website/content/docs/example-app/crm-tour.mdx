@@ -326,8 +326,8 @@ The CRM is tested at every level. `cargo test --workspace` runs its Rust tests t
 async fn won_sets_closed_at() {
     let crm = crm().await; // TestCrm::builder().module(DealsModule).build()
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let id = id_of(&create_deal(&rep, new_deal("Acme renewal", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let id = id_of(&create_deal(&rep, new_deal("Agra renewal", agra, 100)).await);
 
     crm.clock().advance(Duration::from_secs(10 * 60));
     let won = move_deal(&rep, id, json!({ "stage": "won" })).await;

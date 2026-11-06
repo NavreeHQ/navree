@@ -140,7 +140,7 @@ A request names its workspace with the `X-Workspace` header (or a subdomain, a p
 ```http
 POST /api/v1/deals HTTP/1.1
 Authorization: Bearer eyJhbGciOi...
-X-Workspace: acme
+X-Workspace: agra
 Content-Type: application/json
 
 {"title": "Big one", "amount_cents": 500000}
@@ -166,8 +166,8 @@ Every key of the `workspace` section is optional:
 [workspace]
 resolvers = ["header", "path", "subdomain", "claim"]  # tried in order
 header = "X-Workspace"
-# base_domain = "app.example.com"   # acme.app.example.com names `acme`
-path_prefix = "/w"                  # /api/w/acme/... names `acme`
+# base_domain = "app.example.com"   # agra.app.example.com names `agra`
+path_prefix = "/w"                  # /api/w/agra/... names `agra`
 claim = "workspace"                 # a claim of the bearer JWT
 isolation = "row"                   # row, schema or database
 routes = true                       # /api/workspaces and /api/invitations/accept
@@ -215,12 +215,12 @@ Creating a workspace makes its creator the owner:
 
 ```rust
 let workspace = workspaces
-    .create(&uow, user_id, NewWorkspace::named("Acme Inc."))
+    .create(&uow, user_id, NewWorkspace::named("Agra Inc."))
     .await?;
-assert_eq!(workspace.slug, "acme-inc");
+assert_eq!(workspace.slug, "agra-inc");
 ```
 
-The slug comes from the name (`Acme Inc.` becomes `acme-inc`, then `acme-inc-2` when that is taken), or from `NewWorkspace::named("Acme").slug("acme")`. A slug is lower-case letters, digits and single hyphens, at most 63 characters, and never a UUID. A taken slug is a 400 with `errors.slug = ["slug has already been taken"]`; renaming keeps the slug.
+The slug comes from the name (`Agra Inc.` becomes `agra-inc`, then `agra-inc-2` when that is taken), or from `NewWorkspace::named("Agra").slug("agra")`. A slug is lower-case letters, digits and single hyphens, at most 63 characters, and never a UUID. A taken slug is a 400 with `errors.slug = ["slug has already been taken"]`; renaming keeps the slug.
 
 ## The routes
 
@@ -249,8 +249,8 @@ A workspace comes back as:
 {
   "__type": "Workspace",
   "id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
-  "name": "Acme Inc.",
-  "slug": "acme-inc",
+  "name": "Agra Inc.",
+  "slug": "agra-inc",
   "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   "organization_id": null,
   "kind": "live",
@@ -299,7 +299,7 @@ async fn index(
 }
 ```
 
-`WorkspaceSwitcher::new("Acme").workspace("acme", "Acme", true).csrf(token)` builds one by hand, for a sidebar or a page of its own.
+`WorkspaceSwitcher::new("Agra").workspace("agra", "Agra", true).csrf(token)` builds one by hand, for a sidebar or a page of its own.
 
 **Tables and pickers stay in the workspace.** A [DataTable](/docs/ui/data-table/), its CSV export, its bulk actions and a searched picker all start from the query you give them. Make it the workspace's: a `#[model(workspace)]` model scopes its own queries to the request's workspace (see [Workspaces and access](/docs/orm/workspaces-and-access/)), and `WorkspaceRepo::<M>::query(ws.id())` or `ws.scope(M::query())` does the same for other models. Add `.accessible(&ability, Read)` to keep only the rows the user may read.
 
@@ -392,34 +392,34 @@ async fn members_create_deals_in_their_workspace() {
         .set("workspace.roles.member.permissions", json!(["deals.*"]));
     let app = TestApp::from_builder(TestAuthenticator::install(app(sources))).await;
     let auth = app.get::<AuthService>().await;
-    let ada = auth.create_user("Ada", "ada@example.com", "secret-password").await.unwrap();
-    let grace = auth.create_user("Grace", "grace@example.com", "secret-password").await.unwrap();
+    let anu = auth.create_user("Anu", "anu@example.com", "secret-password").await.unwrap();
+    let gauri = auth.create_user("Gauri", "gauri@example.com", "secret-password").await.unwrap();
 
-    let owner = app.acting_as(principal(ada.id));
+    let owner = app.acting_as(principal(anu.id));
     owner
         .post("/api/workspaces")
-        .json(&json!({ "name": "Acme" }))
+        .json(&json!({ "name": "Agra" }))
         .send()
         .await
         .assert_status(201);
     owner
-        .post("/api/workspaces/acme/members")
-        .json(&json!({ "user_id": grace.id, "role": "member" }))
+        .post("/api/workspaces/agra/members")
+        .json(&json!({ "user_id": gauri.id, "role": "member" }))
         .send()
         .await
         .assert_status(201);
 
-    let member = app.acting_as(principal(grace.id));
+    let member = app.acting_as(principal(gauri.id));
     member
         .post("/api/v1/deals")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({ "title": "Big one", "amount_cents": 500_000 }))
         .send()
         .await
         .assert_status(201);
     app.acting_as(principal(uuid::Uuid::now_v7()))
         .get("/api/v1/deals")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .send()
         .await
         .assert_error(403, "You are not a member of this workspace.");

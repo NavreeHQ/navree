@@ -29,7 +29,7 @@ url = "https://app.example.com/reset-password"
 POST /api/auth/register HTTP/1.1
 Content-Type: application/json
 
-{"name": "Ada Lovelace", "email": "ada@example.com", "password": "correct horse battery"}
+{"name": "Anu Lakhotia", "email": "anu@example.com", "password": "correct horse battery"}
 ```
 
 ```http
@@ -44,10 +44,10 @@ Content-Type: application/json
   "user": {
     "__type": "User",
     "created_at": "2026-10-26T08:17:07.568377800Z",
-    "email": "ada@example.com",
+    "email": "anu@example.com",
     "email_verified_at": null,
     "id": "01a17748-e211-72fc-abb3-836e604457d0",
-    "name": "Ada Lovelace"
+    "name": "Anu Lakhotia"
   }
 }
 ```
@@ -100,7 +100,7 @@ A password reset takes two requests: one asks for a token by mail, the other set
 POST /api/auth/forgot-password HTTP/1.1
 Content-Type: application/json
 
-{"email": "ada@example.com"}
+{"email": "anu@example.com"}
 ```
 
 ```http
@@ -120,11 +120,11 @@ A second request for the same address within `auth.password_reset.throttle_secs`
 With `auth.password_reset.url` set, the built-in mail links to that page:
 
 ```text wrap
-Hello Ada Lovelace,
+Hello Anu Lakhotia,
 
 You are receiving this email because we received a password reset request for your account.
 
-Reset your password: https://app.example.com/reset-password?token=G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F&email=ada%40example.com
+Reset your password: https://app.example.com/reset-password?token=G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F&email=anu%40example.com
 
 This password reset token expires in 60 minutes.
 
@@ -143,7 +143,7 @@ Without a URL, the mail carries the token itself ("Your password reset token: ..
 POST /api/auth/reset-password HTTP/1.1
 Content-Type: application/json
 
-{"email": "ada@example.com", "token": "G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F", "password": "a new password"}
+{"email": "anu@example.com", "token": "G5jKGFTf23sa8eaN2sTcxzpwfJDxQYfaKJFAV4sCHDuQonv7FTcDjLmKuvRbNn6F", "password": "a new password"}
 ```
 
 The answer is `204 No Content`. The token works once and for `auth.password_reset.ttl_secs` (an hour). The new password must meet the password policy. Resetting a password **signs out every session** of the account: all its refresh tokens are revoked. Access tokens already issued keep working until they expire.
@@ -179,7 +179,7 @@ Content-Type: application/json
 An address that is already verified gets `204 No Content` and no mail. Without `MailModule`, an unverified address still gets the 202, although nothing is sent: only a warning is logged. The mail links to the verification route:
 
 ```text wrap
-Hello Ada Lovelace,
+Hello Anu Lakhotia,
 
 Please confirm your email address: https://app.example.com/api/auth/email/verify/01a17749-d2c5-70b9-99c8-0c19e9c995f8/b5fc85e55755f9e0d030a10ab4429b6b2944855f9a0d60077fe832becbc41d72?expires=1793006289&signature=70734ebb467d216d4dc0c3e6cfdab80dcc069d372677c26689d2678b2995f2af
 
@@ -219,17 +219,17 @@ PATCH /api/auth/me HTTP/1.1
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
-{"email": "ada@lovelace.dev", "current_password": "correct horse battery"}
+{"email": "anu@lakhotia.dev", "current_password": "correct horse battery"}
 ```
 
 ```json
 {
   "__type": "User",
   "created_at": "2026-10-26T08:18:09.191850400Z",
-  "email": "ada@lovelace.dev",
+  "email": "anu@lakhotia.dev",
   "email_verified_at": null,
   "id": "01a17749-d2c5-70b9-99c8-0c19e9c995f8",
-  "name": "Ada Lovelace"
+  "name": "Anu Lakhotia"
 }
 ```
 
@@ -293,7 +293,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ```json wrap
 {
-  "otpauth_url": "otpauth://totp/Navree:ada%40lovelace.dev?secret=6D2S4D3BDQICIEEOTKHIHU7IJQG4G7IO&issuer=Navree",
+  "otpauth_url": "otpauth://totp/Navree:anu%40lakhotia.dev?secret=6D2S4D3BDQICIEEOTKHIHU7IJQG4G7IO&issuer=Navree",
   "qr_svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"...",
   "secret": "6D2S4D3BDQICIEEOTKHIHU7IJQG4G7IO"
 }
@@ -414,7 +414,7 @@ A user who holds one of these roles and hasn't turned two-factor authentication 
   "refresh_token": "01a17b6d-d101-70d8-acae-37a74feaa4bf.YWP7DMg3LhmzNDIto4oUF2Z4BhLYGkQ69WvVowxrn8DQMuSq",
   "token_type": "Bearer",
   "two_factor_setup_required": true,
-  "user": {"__type": "User", "email": "ada@example.com", "...": "..."}
+  "user": {"__type": "User", "email": "anu@example.com", "...": "..."}
 }
 ```
 

@@ -178,7 +178,7 @@ Text and labels match exactly after trimming and collapsing whitespace, case inc
 ```rust
 use navree_browser::Target;
 
-let renewal = Target::from("@deal-card").containing("Lovelace renewal");
+let renewal = Target::from("@deal-card").containing("Lakhotia renewal");
 page.click(renewal.clone()).await?;
 
 let card = page.within(renewal).await?;
@@ -192,12 +192,12 @@ Prefer labels and button text: they are what users see, and a test that finds "S
 ### Actions
 
 ```rust
-page.type_into("Title", "Lovelace renewal").await?;   // clears, then types
+page.type_into("Title", "Lakhotia renewal").await?;   // clears, then types
 page.append("Notes", " Call back Monday.").await?;     // types without clearing
 page.select("Stage", "Negotiation").await?;            // by text or value
 page.check("Send me a summary").await?;
 page.uncheck("Send me a summary").await?;
-page.attach("Logo", "tests/fixtures/acme.png").await?; // a file input
+page.attach("Logo", "tests/fixtures/agra.png").await?; // a file input
 page.press("Save").await?;                             // a button or link
 page.click("@deal-card").await?;                       // any element
 page.keys("Escape").await?;                            // "Enter", "Control+K"
@@ -223,11 +223,11 @@ A few actions have more to them:
 ```rust
 page.assert_see("Deal saved").await?;
 page.assert_dont_see("Something went wrong").await?;
-page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+page.assert_see_in("[data-stage=won]", "Lakhotia renewal").await?;
 page.assert_path_is("/deals").await?;
 page.assert_query_has("stage", "won").await?;
 page.assert_title("Deals · Navree CRM").await?;
-page.assert_value("Title", "Lovelace renewal").await?;
+page.assert_value("Title", "Lakhotia renewal").await?;
 page.assert_visible("@toast").await?;
 page.assert_missing("@spinner").await?;
 page.assert_count("@deal-card", 3).await?;
@@ -320,7 +320,7 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let rep = crm.login_as(Role::Rep1).await;
     let company = rep
         .post("/api/v1/companies")
-        .json(&json!({ "name": "Lovelace Analytics" }))
+        .json(&json!({ "name": "Lakhotia Analytics" }))
         .send()
         .await
         .assert_status(201)
@@ -328,7 +328,7 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let deal = rep
         .post("/api/v1/deals")
         .json(&json!({
-            "title": "Lovelace renewal",
+            "title": "Lakhotia renewal",
             "amount_cents": 4_200_000,
             "company_id": company["id"],
         }))
@@ -343,9 +343,9 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let page = sign_in(&browser, &web, Role::Rep1).await?;
 
     page.click("Deals").await?;
-    let card = Target::from("@deal-card").containing("Lovelace renewal");
+    let card = Target::from("@deal-card").containing("Lakhotia renewal");
     page.drag(card, "[data-stage=won]").await?;
-    page.assert_see_in("[data-stage=won]", "Lovelace renewal").await?;
+    page.assert_see_in("[data-stage=won]", "Lakhotia renewal").await?;
     // The board moves the card at once; wait for its API call to finish.
     page.wait_for_request("/api/v1/deals/*/move").await?;
 

@@ -569,7 +569,7 @@ GET /api/imports/{id}/rows?status=invalid&page=1&per_page=50
     {
       "row": 14,
       "status": "invalid",
-      "values": { "email": "ada@example", "name": "Ada Lovelace", "company": null },
+      "values": { "email": "anu@example", "name": "Anu Lakhotia", "company": null },
       "errors": { "email": ["email must be a valid email address"] }
     }
   ],
@@ -630,9 +630,9 @@ returns `contacts-errors.csv`: the row number, the mapped columns under the file
 
 ```text title="contacts-errors.csv"
 Row,Email,Name,Errors
-3,ada@example,Ada,email must be a valid email address
+3,anu@example,Anu,email must be a valid email address
 7,bob@competitor.example,Bob,Contacts at competitors are not imported
-9,grace@example.com,Grace,A record with this key already exists
+9,gauri@example.com,Gauri,A record with this key already exists
 ```
 
 Because the headers are the file's own, the user fixes the rows and uploads the file again; it maps the same way, and the extra `Row` and `Errors` columns are ignored.
@@ -687,7 +687,7 @@ let import = imports
     .upload(
         &uow,
         "contacts",
-        Upload::new("contacts.csv", "Email address,Name\nada@example.com,Ada Lovelace\n"),
+        Upload::new("contacts.csv", "Email address,Name\nada@example.com,Anu Lakhotia\n"),
         UploadOptions::default().owner(ADMIN),
     )
     .await?;

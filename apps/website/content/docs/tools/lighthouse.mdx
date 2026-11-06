@@ -157,8 +157,8 @@ self.lighthouse.capture(
     Report::error(&error)
         .level(Level::Warning)
         .context("invoice_id", invoice.id)
-        .tag("provider", "acme-pay")
-        .fingerprint(["acme-pay", "card-declined"])
+        .tag("provider", "agra-pay")
+        .fingerprint(["agra-pay", "card-declined"])
         .backtrace(),
 );
 

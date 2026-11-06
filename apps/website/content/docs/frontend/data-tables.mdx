@@ -15,7 +15,7 @@ filter[created_at][gte]=2026-10-01     an operator: eq ne gt gte lt lte in not_i
 filter[stage][in]=lead,won             one of several values
 filter[owner_id][null]=true            is NULL (false: is not NULL)
 sort=-created_at,name                  a leading "-" sorts descending
-search=acme
+search=agra
 page=2&per_page=25                     numbered pages, or
 cursor=eyJpZCI6NDJ9&limit=50           cursor pages; before=... is the page before
 ```
@@ -43,7 +43,7 @@ The canonical form is what `useListQuery` writes to the URL: filters grouped by 
 Values equal to `defaults` stay out of the URL, so `useListQuery({ per_page: 25 })` keeps `?per_page=25` from every link. A list that pages by cursor (`cursor`, `before` or `limit` in the URL) takes no default `page` or `per_page`, and a numbered one takes no default `cursor`, `before` or `limit`, so the two ways of paging never mix.
 
 ```text
-/deals?tab=open&filter[stage]=won&filter[created_at][gte]=2026-10-01&sort=-amount_cents&search=acme&page=2
+/deals?tab=open&filter[stage]=won&filter[created_at][gte]=2026-10-01&sort=-amount_cents&search=agra&page=2
 ```
 
 Parameters that are not the list query's, such as `tab` above, stay as they are. The names of the grammar are the only ones read: nothing else (`q`, `per`, `after` or `f.stage`) is part of a list query.
@@ -182,7 +182,7 @@ Filters are list-query filters, so a filter control is a call to `setFilter`:
 |---|---|---|
 | A select | `setFilter("stage", "won")` | `filter[stage]=won` |
 | A multi-select | `setFilter("stage", ["lead", "won"])` | `filter[stage][in]=lead,won` |
-| A text box | `setFilter("title", { contains: "acme" })` | `filter[title][contains]=acme` |
+| A text box | `setFilter("title", { contains: "agra" })` | `filter[title][contains]=agra` |
 | A date or number range | `setFilter("amount", { gte: 100, lte: 900 })` | `filter[amount][gte]=100&filter[amount][lte]=900` |
 | An "empty" toggle | `setFilter("owner_id", { null: true })` | `filter[owner_id][null]=true` |
 

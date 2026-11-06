@@ -50,11 +50,11 @@ let db = app.get::<Db>().await;
 [Model factories](/docs/orm/factories/) create records with fake data, saved through the models like any other record, and you override what the test cares about:
 
 ```rust
-let acme = Company::factory().set(Company::NAME, "Acme").create_one(&db).await.unwrap();
-Deal::factory().count(3).for_record(&acme, Deal::COMPANY_ID).create(&db).await.unwrap();
+let agra = Company::factory().set(Company::NAME, "Agra").create_one(&db).await.unwrap();
+Deal::factory().count(3).for_record(&agra, Deal::COMPANY_ID).create(&db).await.unwrap();
 Deal::factory()
     .count(2)
-    .for_record(&acme, Deal::COMPANY_ID)
+    .for_record(&agra, Deal::COMPANY_ID)
     .state(DealFactory::won)
     .create(&db)
     .await
@@ -99,7 +99,7 @@ The ORM's assertions check rows directly, and report the closest rows when they 
 ```rust
 use navree::orm::testing::*;
 
-assert_database_has(&db, "deals", [("title", "Acme renewal")]).await;
+assert_database_has(&db, "deals", [("title", "Agra renewal")]).await;
 assert_database_count(&db, "deals", 1).await;
 assert_soft_deleted(&db, &company).await;
 ```
@@ -112,7 +112,7 @@ async fn creating_a_deal_stores_it() {
     let app = app().await;
     let db = app.get::<Db>().await;
     let me = Uuid::now_v7();
-    let acme = Company::factory()
+    let agra = Company::factory()
         .set(Company::OWNER_ID, me)
         .create_one(&db)
         .await
@@ -121,7 +121,7 @@ async fn creating_a_deal_stores_it() {
     let body = app
         .acting_as(principal(me))
         .post("/api/v1/deals")
-        .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": acme.id }))
+        .json(&json!({ "title": "Agra renewal", "amount_cents": 120000, "company_id": agra.id }))
         .send()
         .await
         .assert_status(201)
@@ -133,7 +133,7 @@ async fn creating_a_deal_stores_it() {
         .await
         .unwrap()
         .expect("the deal is stored");
-    assert_eq!(stored.title, "Acme renewal");
+    assert_eq!(stored.title, "Agra renewal");
     assert_eq!(stored.owner_id, me);
     assert_eq!(stored.stage, Stage::Lead);
 }

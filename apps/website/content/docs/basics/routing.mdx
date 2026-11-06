@@ -139,7 +139,7 @@ async fn note(&self, Path((deal_id, note_id)): Path<(Uuid, u32)>) -> String {
     format!("note {note_id} of deal {deal_id}")
 }
 
-/// `GET /deal-files/contracts/2026/acme.pdf` gives `contracts/2026/acme.pdf`.
+/// `GET /deal-files/contracts/2026/agra.pdf` gives `contracts/2026/agra.pdf`.
 #[get("!/deal-files/{*path}")]
 async fn file(&self, Path(path): Path<String>) -> String {
     path

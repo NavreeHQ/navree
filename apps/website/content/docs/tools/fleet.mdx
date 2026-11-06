@@ -71,7 +71,7 @@ The pages sign people in on the app's browser session, so the app also has what 
 .module(SessionModule::from_config())
 .module(AuthModule::from_config())
 .module(UiModule)
-.module(AuthPages::new().app_name("Acme Operations"))
+.module(AuthPages::new().app_name("Agra Operations"))
 ``` With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
 
 The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables) the last two are hypertables on their Unix millisecond columns, an hour and a day per chunk, and trimming drops whole chunks; on PostgreSQL, MySQL and SQLite they are regular tables with an index on that column, and trimming deletes the old rows.

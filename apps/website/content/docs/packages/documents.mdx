@@ -194,7 +194,7 @@ They are [navree-view](/docs/digging-deeper/views/) templates with Navree's sett
   <style>@page { size: A4; margin: 18mm; }</style>
 </head>
 <body>
-  <img src="/images/logo.png" width="180" alt="Acme">
+  <img src="/images/logo.png" width="180" alt="Agra">
   <h1>Invoice {{ number }}</h1>
   <p>Billed to <strong>{{ customer }}</strong></p>
   <table>
@@ -300,7 +300,7 @@ async fn summary(&self) -> Result<Download> {
         .title("Quarterly audit report")
         .locale("en")
         .heading(1, "Quarterly audit report")
-        .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+        .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd").text("."))
         .bullets(["Every control was tested", "Two findings are open"])
         .table(controls)
         .paragraph(Paragraph::from("Signed off by the audit team.").align(Align::End))
@@ -424,7 +424,7 @@ let stamped = invoice.overlay(&seal, Pages::All)?;
 
 ## Reading text back
 
-`pdf.text()` returns what the pages show, pages separated by a form feed (`\u{c}`), and `pdf.page_texts()` one string per page. Strings on one baseline form a line, in reading order: right-to-left lines come back right to left, run by run, so Arabic reads naturally next to Latin text and numbers. It is meant for tests and checks (`assert!(pdf.text()?.contains("Ada Lovelace"))`); columns and tables are not reconstructed.
+`pdf.text()` returns what the pages show, pages separated by a form feed (`\u{c}`), and `pdf.page_texts()` one string per page. Strings on one baseline form a line, in reading order: right-to-left lines come back right to left, run by run, so Arabic reads naturally next to Latin text and numbers. It is meant for tests and checks (`assert!(pdf.text()?.contains("Anu Lakhotia"))`); columns and tables are not reconstructed.
 
 A PDF is untrusted input, so reading one has limits. They come from the `navree-pdf` crate (the `pdf` feature, which `documents` and `media` turn on), are fixed in the code like the other limits of `Pdf`, and are not configuration keys.
 
@@ -472,7 +472,7 @@ async fn word(&self) -> Result<Download> {
     let file = Docx::new()
         .title("Quarterly audit report")
         .heading(1, "Quarterly audit report")
-        .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+        .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd").text("."))
         .bullets(["Every control was tested", "Two findings are open"])
         .table(
             Table::new()
@@ -662,12 +662,12 @@ async fn the_certificate_names_the_learner() {
 
     let response = app
         .client()
-        .get("/api/v1/certificates/Ada%20Lovelace")
+        .get("/api/v1/certificates/Anu%20Lakhotia")
         .send()
         .await
         .assert_status(200);
     let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
-    assert!(pdf.text().unwrap().contains("Ada Lovelace"));
+    assert!(pdf.text().unwrap().contains("Anu Lakhotia"));
 }
 ```
 
@@ -686,12 +686,12 @@ let app = TestApp::builder()
     .build()
     .await;
 
-app.client().get("/api/v1/certificates/Ada").send().await.assert_status(200);
+app.client().get("/api/v1/certificates/Anu").send().await.assert_status(200);
 
-fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
+fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Anu");
 ```
 
-The fake's PDF shows the template's name and the data's top-level fields (`name: Ada`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` and `queue_operation` (queued renders are recorded, not rendered; `queue_operation` still starts its operation, which stays `pending`, and the recorded document's `operation_id` names it), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do. `render_document` on the fake's `Documents` lays the document out with the bundled fonts.
+The fake's PDF shows the template's name and the data's top-level fields (`name: Anu`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` and `queue_operation` (queued renders are recorded, not rendered; `queue_operation` still starts its operation, which stays `pending`, and the recorded document's `operation_id` names it), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do. `render_document` on the fake's `Documents` lays the document out with the bundled fonts.
 
 Every engine implements `PdfEngine` and passes the same conformance suite: the native engine, Chrome and the fake. Chrome's tests run against a stand-in DevTools endpoint, and against a real browser when `NAVREE_BROWSER_CHROME` names one.
 

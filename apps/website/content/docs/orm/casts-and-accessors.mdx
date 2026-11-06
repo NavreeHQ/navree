@@ -238,7 +238,7 @@ pub struct Person {
 
 #[accessors]
 impl Person {
-    /// "AL" for Ada Lovelace.
+    /// "AL" for Anu Lakhotia.
     #[accessor]
     pub fn initials(&self) -> String {
         self.first_name.chars().take(1).chain(self.last_name.chars().take(1)).collect()
@@ -278,8 +278,8 @@ fn split_name(person: &mut Person, full_name: String) {
     person.full_name = full_name;
 }
 
-person.set_full_name("Ada   Lovelace".to_owned()); // the generated setter
-person.fill(attrs! { "full_name" => "Grace Hopper" })?;
+person.set_full_name("Anu   Lakhotia".to_owned()); // the generated setter
+person.fill(attrs! { "full_name" => "Gauri Hundal" })?;
 ```
 
 Assigning the field directly (`person.full_name = ..`) bypasses the mutator: it is plain Rust.

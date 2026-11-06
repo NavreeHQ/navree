@@ -175,14 +175,14 @@ Every delivery is a `POST` with a JSON body and three signature headers:
 
 ```http
 POST /hooks/navree HTTP/1.1
-Host: hooks.lovelace.io
+Host: hooks.lakhotia.io
 Content-Type: application/json
 User-Agent: Navree-Webhooks/1
 webhook-id: msg_0199c1d2f7e07a31b5d42f0c8e9a1b23
 webhook-timestamp: 1793002627
 webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=
 
-{"type":"deal.won","timestamp":"2026-10-26T08:17:07Z","data":{"deal":{"id":"0199c1d2-...","title":"Lovelace renewal","amount_cents":4200000,"currency":"USD","stage":"won"},"won_by":"01a17748-..."}}
+{"type":"deal.won","timestamp":"2026-10-26T08:17:07Z","data":{"deal":{"id":"0199c1d2-...","title":"Lakhotia renewal","amount_cents":4200000,"currency":"USD","stage":"won"},"won_by":"01a17748-..."}}
 ```
 
 - `webhook-id` is the message id: the same for every endpoint of one event and across retries, so receivers can drop duplicates.
@@ -235,7 +235,7 @@ use navree::webhooks::{NewEndpoint, Webhooks};
 let created = webhooks
     .create_endpoint(
         &uow,
-        NewEndpoint::new("https://hooks.lovelace.io/navree")
+        NewEndpoint::new("https://hooks.lakhotia.io/navree")
             .events(["deal.won", "deal.lost"])
             .workspace(workspace.id)
             .description("Revenue dashboard")
@@ -401,8 +401,8 @@ topics = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]  # APP_WEBHOOKS__INCO
 auto_confirm = true             # confirm subscriptions without the handler
 
 [webhooks.incoming.google_pubsub]
-service_account = "gmail-push@acme-crm.iam.gserviceaccount.com"
-audience = "https://api.acme.example/api/v1/mail/gmail-push"  # default: the request's public URL
+service_account = "gmail-push@agra-crm.iam.gserviceaccount.com"
+audience = "https://api.agra.example/api/v1/mail/gmail-push"  # default: the request's public URL
 ```
 
 An SES event arrives as an SNS notification whose `Message` is the event's JSON. Read the body as `SnsMessage`:
@@ -503,7 +503,7 @@ Twilio signs the full URL it called, query string included. Behind a proxy or lo
 ```toml title="config/app.toml"
 [webhooks.incoming.twilio]
 secret = ""                     # APP_WEBHOOKS__INCOMING__TWILIO__SECRET: the account's auth token
-url = "https://api.acme.example/api/v1/sms/status"  # the request's query string is appended
+url = "https://api.agra.example/api/v1/sms/status"  # the request's query string is appended
 ```
 
 Without `url`, the URL is rebuilt from `X-Forwarded-Proto`, `X-Forwarded-Host` and `Host`, which is right only when your proxy sets them as the caller saw them. The URL is also tried with its default port added or removed, because Twilio sometimes signs it with `:443`. Read Twilio's form parameters with `form::<T>()`:
@@ -622,7 +622,7 @@ use navree::webhooks::{NewEndpoint, StandardWebhooks, Webhooks};
 #[tokio::test]
 async fn winning_a_deal_notifies_subscribed_endpoints() {
     let (client, server) = HttpClient::fake();
-    server.on(Method::POST, "https://hooks.lovelace.io/*", FakeResponse::new(204));
+    server.on(Method::POST, "https://hooks.lakhotia.io/*", FakeResponse::new(204));
 
     let app = TestApp::builder()
         .temp_database()
@@ -644,7 +644,7 @@ async fn winning_a_deal_notifies_subscribed_endpoints() {
         .await
         .create_endpoint(
             &uow,
-            NewEndpoint::new("https://hooks.lovelace.io/navree").events(["deal.won"]),
+            NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]),
         )
         .await
         .unwrap();
@@ -715,8 +715,8 @@ server.on(Method::GET, GooglePubSub::KEYS_URL, FakeResponse::new(200).json(&keys
 // ...override_value(Arc::new(client)) on the TestApp builder, then:
 let token = key.sign_jwt(&json!({
     "iss": "https://accounts.google.com",
-    "aud": "https://api.acme.example/api/v1/mail/gmail-push",
-    "email": "gmail-push@acme-crm.iam.gserviceaccount.com",
+    "aud": "https://api.agra.example/api/v1/mail/gmail-push",
+    "email": "gmail-push@agra-crm.iam.gserviceaccount.com",
     "email_verified": true,
     "iat": now,
     "exp": now + 3600,

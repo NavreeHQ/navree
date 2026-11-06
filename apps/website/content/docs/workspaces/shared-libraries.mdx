@@ -427,14 +427,14 @@ The rules hold for every route of the model, so a test can check them over HTTP.
 #[tokio::test]
 async fn workspaces_clone_shared_templates_to_change_them() {
     let app = boot_app().await; // your test's own helpers
-    let ada = create_user(&app, "ada@example.com").await;
-    create_workspace(&app, ada, "acme").await;
+    let anu = create_user(&app, "anu@example.com").await;
+    create_workspace(&app, anu, "agra").await;
     let welcome = create_global_template(&app, "welcome", "Welcome").await;
 
-    let client = app.acting_as(principal(ada));
+    let client = app.acting_as(principal(anu));
     client
         .patch(&format!("/api/templates/{welcome}"))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .json(&json!({ "name": "Ours" }))
         .send()
         .await
@@ -442,7 +442,7 @@ async fn workspaces_clone_shared_templates_to_change_them() {
         .assert_json_path("code", json!("library_read_only"));
     client
         .post(&format!("/api/templates/{welcome}/clone"))
-        .header("x-workspace", "acme")
+        .header("x-workspace", "agra")
         .send()
         .await
         .assert_status(200)

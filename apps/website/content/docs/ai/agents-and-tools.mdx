@@ -201,7 +201,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct SearchDeals {
-    /// Words from the deal title, e.g. "Acme renewal". Leave out to list every deal.
+    /// Words from the deal title, e.g. "Agra renewal". Leave out to list every deal.
     #[validate(length(max = 100))]
     pub query: Option<String>,
     /// Only deals in this stage.
@@ -365,7 +365,7 @@ Content-Type: application/json
 ```json
 {
   "conversation_id": "0199c3a4-1b2e-7c40-9d1e-5a6b7c8d9e0f",
-  "text": "Two of your deals in negotiation have been quiet since October 9: Acme renewal ($12,000) and Globex expansion ($48,500). Want me to add a call task for each?",
+  "text": "Two of your deals in negotiation have been quiet since October 9: Agra renewal ($12,000) and Gulati expansion ($48,500). Want me to add a call task for each?",
   "steps": [
     {"tool": "search_deals", "arguments": {"stage": "negotiation", "mine": true}, "ok": true},
     {"tool": "deal_activity", "arguments": {"deal_id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23"}, "ok": true},
@@ -449,8 +449,8 @@ Every method takes the user's id and fails with a 404 (`AiError::NotFound`) for 
 ```json
 {
   "conversation_id": "0199c3a4-1b2e-7c40-9d1e-5a6b7c8d9e0f",
-  "text": "I'll move Acme renewal to Won. Shall I go ahead?",
-  "steps": [{"tool": "search_deals", "arguments": {"query": "Acme renewal"}, "ok": true}],
+  "text": "I'll move Agra renewal to Won. Shall I go ahead?",
+  "steps": [{"tool": "search_deals", "arguments": {"query": "Agra renewal"}, "ok": true}],
   "pending_approval": {
     "call_id": "toolu_01JdX9wXyRk5b2T7",
     "tool": "move_deal",
@@ -614,7 +614,7 @@ async fn a_rep_cannot_move_another_reps_deal_through_the_assistant() {
     let ai = crm.get::<Ai>().await.fake().unwrap();
 
     let owner = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&owner, "Acme renewal").await; // POSTs a company and a deal
+    let deal = create_deal(&owner, "Agra renewal").await; // POSTs a company and a deal
 
     ai.respond_with([
         FakeReply::tool_call("move_deal", json!({ "deal_id": deal["id"], "stage": "proposal" })),
@@ -624,7 +624,7 @@ async fn a_rep_cannot_move_another_reps_deal_through_the_assistant() {
     let other = crm.login_as(Role::Rep2).await;
     let reply = other
         .post("/api/v1/assistant/messages")
-        .json(&json!({ "message": "Move Acme renewal to proposal" }))
+        .json(&json!({ "message": "Move Agra renewal to proposal" }))
         .send()
         .await
         .assert_status(200)

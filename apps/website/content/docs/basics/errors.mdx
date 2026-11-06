@@ -261,8 +261,8 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | social | `provider_not_connected` | 404 | `Google is not connected` |
 | social | `no_provider_token` | 404 | `No Google tokens are stored` |
 | social | `too_many_login_attempts` | 429 | `Too many sign-in attempts. Please try again in N seconds.` |
-| sso | `sso_required` | 403 | `Sign in with Acme Okta` (any sign-in but the connection's own for an enforced domain) |
-| sso | `sso_connection_not_found` | 404 | `` Unknown single sign-on connection `acme` `` |
+| sso | `sso_required` | 403 | `Sign in with Agra Okta` (any sign-in but the connection's own for an enforced domain) |
+| sso | `sso_connection_not_found` | 404 | `` Unknown single sign-on connection `agra` `` |
 | sso | `sso_connection_disabled` | 403 | `Single sign-on is turned off for this connection` |
 | sso | `invalid_state` | 400 | `Invalid or expired sign-in state` |
 | sso | `invalid_saml_response` | 400 | `The identity provider's response is invalid` |
@@ -272,15 +272,15 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | sso | `invalid_id_token` | 400 | `The identity provider sent an invalid ID token` |
 | sso | `sso_provider_unavailable` | 502 | `The identity provider is unavailable. Please try again.` |
 | sso | `missing_email` | 400 | `The identity provider did not share an email address` |
-| sso | `unverified_domain` | 403 | `acme.com is not a verified domain of this single sign-on connection` |
+| sso | `unverified_domain` | 403 | `agra.com is not a verified domain of this single sign-on connection` |
 | sso | `email_taken` | 409 | `An account with this email already exists. ...` |
 | sso | `sso_provisioning_disabled` | 403 | `Your account has not been set up yet. Ask an administrator for access.` |
 | sso | `sso_not_assigned` | 403 | `Your identity provider gives you no role here. Ask an administrator for access.` |
 | sso | `invalid_sso_code` | 400 | `Invalid or expired sign-in code` |
 | sso | `invalid_return_to` | 400 | `return_to must be a relative path` |
 | sso | `sso_domain_not_found` | 404 | `Domain not found` |
-| sso | `domain_not_verified` | 400 | `The TXT record of acme.com was not found. ...` |
-| sso | `domain_taken` | 409 | `acme.com is verified for another connection` |
+| sso | `domain_not_verified` | 400 | `The TXT record of agra.com was not found. ...` |
+| sso | `domain_taken` | 409 | `agra.com is verified for another connection` |
 | billing | `subscription_required` | 402 | `This workspace needs an active subscription` |
 | billing | `already_subscribed` | 409 | `Already subscribed; change the plan with swap instead.` |
 | billing | `no_subscription` | 404 | `No subscription.` |
@@ -343,12 +343,12 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | domains | `invalid_domain` | 400 | `Give the domain without a port` |
 | domains | `domain_not_allowed` | 400 | `` `app.example.com` can't be added `` |
 | domains | `domain_not_found` | 404 | `Domain not found` |
-| domains | `domain_taken` | 409 | `` `crm.acme-corp.com` is already in use `` |
+| domains | `domain_taken` | 409 | `` `crm.agra-corp.com` is already in use `` |
 | domains | `domain_limit_reached` | 409 | `This workspace already has 10 domains` |
-| domains | `domain_not_verified` | 409 | `` `crm.acme-corp.com` is not verified yet `` |
-| domains | `dns_lookup_failed` | 502 | `The DNS lookup of crm.acme-corp.com failed` |
+| domains | `domain_not_verified` | 409 | `` `crm.agra-corp.com` is not verified yet `` |
+| domains | `dns_lookup_failed` | 502 | `The DNS lookup of crm.agra-corp.com failed` |
 | domains | `dns_provider_failed` | 502 | `The DNS provider failed: Cloudflare error 10000: Authentication error` |
-| domains | `certificate_not_issued` | 502 | `The certificate for crm.acme-corp.com could not be issued: ...` |
+| domains | `certificate_not_issued` | 502 | `The certificate for crm.agra-corp.com could not be issued: ...` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 

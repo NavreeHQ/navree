@@ -39,8 +39,8 @@ assert_eq!(page.click("Create"), Clicked::Submit);
 let errors = page.clone().fill("title", "").fill("amount", "1").submit_as::<NewDeal>().unwrap_err();
 assert!(errors.contains_key("title"));
 
-let deal = page.fill("title", "Acme").fill("amount", "1").submit_as::<NewDeal>().unwrap();
-assert_eq!(deal.title, "Acme");
+let deal = page.fill("title", "Agra").fill("amount", "1").submit_as::<NewDeal>().unwrap();
+assert_eq!(deal.title, "Agra");
 ```
 
 `shows_error(Some("title"))` asks whether a control shows an error, and `form_values()` lists what the form would post. A control that is not filled posts its own value, and a select starts on its first choice.

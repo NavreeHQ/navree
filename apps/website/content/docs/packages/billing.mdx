@@ -685,14 +685,14 @@ async fn upgrading_starts_a_pro_trial() {
     let owner = app
         .get::<AuthService>()
         .await
-        .create_user("Ada Lovelace", "ada@example.com", "password123")
+        .create_user("Anu Lakhotia", "anu@example.com", "password123")
         .await
         .unwrap();
     let uow = app.get::<Db>().await.uow(None, None).await;
     let workspace = app
         .get::<Workspaces>()
         .await
-        .create(&uow, owner.id, NewWorkspace::named("Acme"))
+        .create(&uow, owner.id, NewWorkspace::named("Agra"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -700,7 +700,7 @@ async fn upgrading_starts_a_pro_trial() {
     let response = app
         .acting_as(principal(owner.id))
         .post("/api/v1/billing/upgrade")
-        .header("X-Workspace", "acme")
+        .header("X-Workspace", "agra")
         .json(&json!({ "plan": "pro", "yearly": false }))
         .send()
         .await

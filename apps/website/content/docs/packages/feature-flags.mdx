@@ -214,8 +214,8 @@ A check that names only a user, or only a workspace, uses that one's override an
 use navree::flags::{FlagScope, Flags, Rollout};
 
 // On for one workspace, and for one user wherever they work:
-flags.activate::<NewPipeline>(FlagScope::workspace(acme.id)).await?;
-flags.activate::<NewPipeline>(FlagScope::user(ada.id)).await?;
+flags.activate::<NewPipeline>(FlagScope::workspace(agra.id)).await?;
+flags.activate::<NewPipeline>(FlagScope::user(anu.id)).await?;
 
 // Off for one user, then back to what their workspace gets:
 flags.deactivate::<NewPipeline>(FlagScope::user(grace.id)).await?;
@@ -316,7 +316,7 @@ Flags marked `expose` are served to the signed-in user at `GET /api/flags`, reso
 ```http
 GET /api/flags HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-X-Workspace: acme
+X-Workspace: agra
 ```
 
 ```json
@@ -340,7 +340,7 @@ Flags without `expose` never leave the server, so you can name an unreleased fea
 | `flags:purge [--dry-run]` | Deletes the state of flags no module registers any more |
 
 ```sh
-navree flags:on new-pipeline --workspace acme
+navree flags:on new-pipeline --workspace agra
 navree flags:rollout new-pipeline 25 --of workspaces
 navree flags:list
 ```

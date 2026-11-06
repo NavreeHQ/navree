@@ -113,7 +113,7 @@ With the token, call the API from the server:
 
 ```ts
 const user = await bff.me(session.accessToken, bff.workspaceOf(request)); // null when signed out
-const response = await bff.api("/api/v1/deals?page=2", { accessToken: session.accessToken, workspace: "acme" });
+const response = await bff.api("/api/v1/deals?page=2", { accessToken: session.accessToken, workspace: "agra" });
 ```
 
 `me()` answers `null` for a missing or refused token and throws when the API is down, so a page can tell "signed out" from "unreachable".

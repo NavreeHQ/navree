@@ -77,7 +77,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
     );
     storage.disks.insert(
         "documents".into(),
-        S3Config::new("acme-documents").region("eu-west-1").into(),
+        S3Config::new("agra-documents").region("eu-west-1").into(),
     );
 
     Navree::app()
@@ -105,7 +105,7 @@ The AWS, Google and Azure variables these drivers fall back to are read from the
 ```toml title="config/app.toml"
 [storage.disks.documents]
 driver = "s3"
-bucket = "acme-documents"
+bucket = "agra-documents"
 region = "eu-west-1"
 ```
 
@@ -128,7 +128,7 @@ bucket = "crm-uploads"
 ```toml title="config/app.toml"
 [storage.disks.documents]
 driver = "s3"
-bucket = "acme-documents"
+bucket = "agra-documents"
 endpoint = "https://<account-id>.r2.cloudflarestorage.com"
 region = "auto"
 access_key = "..."   # an R2 API token's access key id
@@ -142,10 +142,10 @@ Put the secret in the environment rather than in the file: `APP_STORAGE__DISKS__
 ```toml title="config/app.toml"
 [storage.disks.documents]
 driver = "s3"
-bucket = "acme-documents"
+bucket = "agra-documents"
 endpoint = "https://nyc3.digitaloceanspaces.com"
 region = "us-east-1"
-path_style = false   # https://acme-documents.nyc3.digitaloceanspaces.com
+path_style = false   # https://agra-documents.nyc3.digitaloceanspaces.com
 access_key = "..."
 ```
 
@@ -178,7 +178,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["storage-gcs"
 ```toml title="config/app.toml"
 [storage.disks.media]
 driver = "gcs"
-bucket = "acme-media"
+bucket = "agra-media"
 service_account_path = "/run/secrets/gcs.json"   # optional
 ```
 
@@ -191,7 +191,7 @@ Credentials come from `service_account_path` (a key file) or `service_account_ke
 ```toml title="config/app.toml"
 [storage.disks.archive]
 driver = "azure"
-account = "acmestorage"
+account = "agrastorage"
 container = "archive"
 ```
 
@@ -204,7 +204,7 @@ A `prefix` keeps every file of a cloud disk under one key prefix, so several dis
 ```toml title="config/app.toml"
 [storage.disks.public]
 driver = "s3"
-bucket = "acme-assets"
+bucket = "agra-assets"
 prefix = "production/public"
 public_url = "https://assets.example.com"   # a CDN in front of the prefix
 ```
@@ -477,7 +477,7 @@ impl DocumentUploadController {
   "disk": "documents",
   "path": "incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png",
   "method": "PUT",
-  "url": "https://acme-documents.s3.eu-west-1.amazonaws.com/incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "url": "https://agra-documents.s3.eu-west-1.amazonaws.com/incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
   "headers": { "content-type": "image/png" },
   "expires_at": "2026-10-27T10:15:00Z"
 }

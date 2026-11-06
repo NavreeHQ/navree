@@ -230,7 +230,7 @@ Granting the `owner` role, or changing or removing a member who has it, also tak
   "workspace_id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
   "user_id": "0199f3c2-2b3c-7d4e-8f50-6a7b8c9d0e1f",
   "role": "admin",
-  "user": { "id": "0199f3c2-2b3c-7d4e-8f50-6a7b8c9d0e1f", "name": "Grace", "email": "grace@example.com" },
+  "user": { "id": "0199f3c2-2b3c-7d4e-8f50-6a7b8c9d0e1f", "name": "Gauri", "email": "gauri@example.com" },
   "created_at": "2026-10-26T09:00:00Z",
   "updated_at": "2026-10-26T09:00:00Z"
 }
@@ -286,11 +286,11 @@ Each is emitted once the unit of work commits. See [events](/docs/digging-deeper
 Give each user a role, then check what each role may do:
 
 ```rust
-let client = app.acting_as(principal(grace));
+let client = app.acting_as(principal(gauri));
 
 client
     .post("/api/v1/deals")
-    .header("X-Workspace", "acme") // grace is a member here
+    .header("X-Workspace", "agra") // gauri is a member here
     .json(&json!({ "title": "Big one", "amount_cents": 500_000 }))
     .send()
     .await
@@ -298,7 +298,7 @@ client
 
 client
     .post("/api/v1/deals")
-    .header("X-Workspace", "globex") // and a viewer here
+    .header("X-Workspace", "gulati") // and a viewer here
     .json(&json!({ "title": "Nope", "amount_cents": 1 }))
     .send()
     .await

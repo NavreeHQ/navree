@@ -264,8 +264,8 @@ The request id is the client's `X-Request-Id` when it is 1 to 64 characters of l
 Before a line is written, any event or span field whose **name** contains one of the `log.redact` fragments, ignoring ASCII case, is written as `[redacted]`. With the defaults, `password`, `api_token`, `Authorization`, `session_cookie` and `client_secret` are all redacted, whatever their type. Redaction applies to every format and to the log file.
 
 ```rust
-tracing::info!(user = "ada", password = "hunter2", "signed in");
-// INFO my_app: signed in user="ada" password=[redacted]
+tracing::info!(user = "anu", password = "hunter2", "signed in");
+// INFO my_app: signed in user="anu" password=[redacted]
 ```
 
 Setting `log.redact` replaces the default list, so include the defaults you still want:

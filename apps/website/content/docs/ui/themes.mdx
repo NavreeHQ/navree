@@ -38,7 +38,7 @@ use navree::ui::theme::{Appearance, Mode, Theme};
 use navree::ui::*;
 
 pub fn shell() -> Shell {
-    Shell::new("Acme CRM")
+    Shell::new("Agra CRM")
         .appearance(Appearance::new(Theme::OCEAN, Mode::System))
         .theme_menu()
         .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)))
@@ -84,7 +84,7 @@ By default it posts to the toolkit's route, which keeps the choice in a cookie f
 Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust export into your app, or write it yourself:
 
 ```rust title="src/theme.rs"
-let theme = Theme::custom(ThemeId::parse("acme")?, "Acme", spec)?;
+let theme = Theme::custom(ThemeId::parse("agra")?, "Agra", spec)?;
 ```
 
 `Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.

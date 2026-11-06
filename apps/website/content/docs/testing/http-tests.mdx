@@ -14,7 +14,7 @@ use serde_json::json;
 
 let response = client
     .post("/api/v1/deals")
-    .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": company.id }))
+    .json(&json!({ "title": "Agra renewal", "amount_cents": 120000, "company_id": company.id }))
     .send()
     .await;
 ```
@@ -70,8 +70,8 @@ This works through the `TestAuthenticator`, which `TestApp` installs when your a
 
 ```rust
 let auth = app.get::<AuthService>().await;
-let ada = auth.create_user("Ada", "ada@example.com", "correct horse battery").await?;
-let client = app.acting_as(principal(ada.id));
+let anu = auth.create_user("Anu", "anu@example.com", "correct horse battery").await?;
+let client = app.acting_as(principal(anu.id));
 ```
 
 **Or sign in for real**, through `POST /api/auth/login`, and send the access token. This tests the whole authentication path:
@@ -121,7 +121,7 @@ rep.get("/api/v1/deals")
         "meta",
         json!({ "current_page": 1, "per_page": 10, "total": 1, "last_page": 1 }),
     )
-    .assert_json_path("data.0.title", json!("Acme renewal"));
+    .assert_json_path("data.0.title", json!("Agra renewal"));
 ```
 
 | Assertion | Checks |
@@ -149,7 +149,7 @@ app.acting_as(principal(Uuid::now_v7()))
 `assert_error_code` checks the same and the body's machine-readable `code`, which is what a front end branches on and translates. Assert it for every refusal your users can see, so a renamed code fails a test:
 
 ```rust
-login(&client, "ada@example.com", "wrong password")
+login(&client, "anu@example.com", "wrong password")
     .await
     .assert_error(401, "Invalid credentials")
     .assert_error_code(401, "invalid_credentials");
@@ -182,7 +182,7 @@ To look at a response yourself:
 ```rust
 let response = rep
     .post("/api/v1/deals")
-    .json(&json!({ "title": "Acme renewal", "amount_cents": 120000, "company_id": company.id }))
+    .json(&json!({ "title": "Agra renewal", "amount_cents": 120000, "company_id": company.id }))
     .send()
     .await
     .assert_status(201);
@@ -205,7 +205,7 @@ client.csrf_cookie().await;
 client
     .post("/api/v1/login")
     .xsrf()
-    .json(&json!({ "email": "ada@example.com", "password": "secret" }))
+    .json(&json!({ "email": "anu@example.com", "password": "secret" }))
     .send()
     .await
     .assert_status(200);

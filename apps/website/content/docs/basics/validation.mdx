@@ -85,8 +85,8 @@ Send a body that breaks several rules:
 ```json title="POST /api/v1/contacts"
 {
   "first_name": "",
-  "last_name": "Lovelace",
-  "email": "ada@",
+  "last_name": "Lakhotia",
+  "email": "anu@",
   "age": 12,
   "tags": ["vip", ""],
   "status": "prospect"
@@ -641,8 +641,8 @@ Calling `input.validate()` yourself works anywhere. It returns `Result<(), Viola
 client
     .post("/api/v1/contacts")
     .json(&json!({
-        "first_name": "Ada",
-        "last_name": "Lovelace",
+        "first_name": "Anu",
+        "last_name": "Lakhotia",
         "email": "nope",
         "tags": [],
         "status": "lead"

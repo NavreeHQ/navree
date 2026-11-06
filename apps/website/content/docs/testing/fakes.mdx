@@ -54,12 +54,12 @@ async fn signing_up_queues_the_welcome_mail() {
 
     app.client()
         .post("/api/v1/signups")
-        .json(&json!({ "email": "ada@example.com" }))
+        .json(&json!({ "email": "anu@example.com" }))
         .send()
         .await
         .assert_status(204);
 
-    fake.assert_dispatched::<SendWelcome>(|job| job.email == "ada@example.com");
+    fake.assert_dispatched::<SendWelcome>(|job| job.email == "anu@example.com");
     fake.assert_dispatched_times::<SendWelcome>(1);
 }
 ```
@@ -99,7 +99,7 @@ let app = TestApp::builder()
 
 app.client()
     .post("/api/v1/signups")
-    .json(&json!({ "email": "ada@example.com" }))
+    .json(&json!({ "email": "anu@example.com" }))
     .send()
     .await
     .assert_status(204);
@@ -128,11 +128,11 @@ async fn the_welcome_mail_is_sent() {
         .build()
         .await;
 
-    app.get::<Welcomer>().await.welcome("ada@example.com").await.unwrap();
+    app.get::<Welcomer>().await.welcome("anu@example.com").await.unwrap();
 
     let mailer = app.get::<Mailer>().await;
     let sent = mailer.array_transport().expect("the array transport");
-    sent.assert_sent(|m| m.to == ["ada@example.com"] && m.subject == "Welcome aboard");
+    sent.assert_sent(|m| m.to == ["anu@example.com"] && m.subject == "Welcome aboard");
     assert_eq!(sent.sent().len(), 1);
 }
 ```
@@ -289,8 +289,8 @@ let app = TestApp::builder()
     .await;
 
 let disk = app.get::<Disk>().await;
-disk.put("avatars/ada.png", "png").await.unwrap();
-assert!(disk.exists("avatars/ada.png").await.unwrap());
+disk.put("avatars/anu.png", "png").await.unwrap();
+assert!(disk.exists("avatars/anu.png").await.unwrap());
 ```
 
 Setting `storage.disks` replaces the default disk list, so name every disk your code uses. See [file storage](/docs/digging-deeper/storage/).

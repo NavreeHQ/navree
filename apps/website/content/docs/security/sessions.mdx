@@ -238,7 +238,7 @@ use serde_json::json;
 
 let clock = Arc::new(FixedClock::new(chrono::Utc::now()));
 let app = builder().override_value::<dyn Clock>(clock.clone()).build().await;
-let access = sign_in(&app, "ada@example.com").await;
+let access = sign_in(&app, "anu@example.com").await;
 
 clock.advance(Duration::from_secs(11 * 60));
 app.client()

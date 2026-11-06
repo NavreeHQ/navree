@@ -3,7 +3,7 @@ title: "Data isolation"
 description: "Keep each workspace's data apart by row, by schema or by database, and pick the strategy that fits your customers and your database."
 ---
 
-Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`, and the [organization](/docs/workspaces/organizations/) and [partition](/docs/workspaces/partitions/) tables) always live in the app's main database; the strategy decides where your workspace-owned data lives.
+Every workspace's data must stay its own: a query in Agra never returns Gulati's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`, and the [organization](/docs/workspaces/organizations/) and [partition](/docs/workspaces/partitions/) tables) always live in the app's main database; the strategy decides where your workspace-owned data lives.
 
 <Diagram name="workspace-isolation" />
 
@@ -198,7 +198,7 @@ Workspace migrations must be navree-schema migrations: the per-workspace runner 
 
 - Creating a workspace creates its schema and runs every workspace migration in it, in the same transaction.
 - Each schema records its own migrations in its own `navree_migrations` table.
-- New workspace migrations reach existing workspaces with `navree workspace:migrate` (every workspace) or `navree workspace:migrate acme globex` (some). Run it after `navree migrate` when you deploy.
+- New workspace migrations reach existing workspaces with `navree workspace:migrate` (every workspace) or `navree workspace:migrate agra gulati` (some). Run it after `navree migrate` when you deploy.
 - Deleting a workspace drops its schema (`DROP SCHEMA ... CASCADE`) in the same transaction.
 
 Handlers write their queries without any workspace filter; `WorkspaceUow` (or the request's `Uow`, which is the same unit of work here) already points at the workspace's schema:
@@ -269,8 +269,8 @@ Row isolation runs on SQLite, so tests need nothing special: create two workspac
 
 ```rust
 client
-    .get(&format!("/api/v1/deals/{}", globex_deal.id))
-    .header("X-Workspace", "acme")
+    .get(&format!("/api/v1/deals/{}", gulati_deal.id))
+    .header("X-Workspace", "agra")
     .send()
     .await
     .assert_error(404, None);

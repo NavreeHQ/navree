@@ -212,7 +212,7 @@ impl OwnersController {
     #[get("/{id}")]
     #[authenticated]
     async fn show(&self, Path(id): Path<Uuid>, cache: Scoped<UserCache>) -> NoContent {
-        cache.remember(id, "Ada");
+        cache.remember(id, "Anu");
         NoContent
     }
 }

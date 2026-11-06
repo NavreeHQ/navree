@@ -29,7 +29,7 @@ The module goes after the database and the queue. [Configuration](#configuration
 
 ## Introduction
 
-<Badge feature="search" /> A CRM lives or dies by its search box. Typing "ada lov" should find Ada Lovelace the contact, Lovelace Analytics the company and the "Lovelace renewal" deal, ranked by relevance, in a few milliseconds, and only the records the person is allowed to see.
+<Badge feature="search" /> A CRM lives or dies by its search box. Typing "anu lov" should find Anu Lakhotia the contact, Lakhotia Analytics the company and the "Lakhotia renewal" deal, ranked by relevance, in a few milliseconds, and only the records the person is allowed to see.
 
 `navree-search` adds full-text and vector search to the [models](/docs/orm/models/) you already have. You derive `Searchable` on a navree-orm model, register it with `SearchModule`, and from then on:
 
@@ -139,7 +139,7 @@ trigram = true         # typo tolerance with pg_trgm
 typo_threshold = 0.4   # how close a word must be to match, above 0 to 1
 ```
 
-The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("ada lovlace") still finds its record while the other words keep narrowing the results. How close a word must be is `typo_threshold` (default 0.4): the engine sets `pg_trgm.word_similarity_threshold` to it for each query, inside a transaction, because PostgreSQL's own default of 0.6 rejects a one-letter typo in a longer word ("lovlace" scores 0.55 against "Lovelace"). Raise it for fewer, closer matches; lower it for more forgiving ones. The trigram index is created before the first typo-tolerant query even when no import ran. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
+The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("anu lovlace") still finds its record while the other words keep narrowing the results. How close a word must be is `typo_threshold` (default 0.4): the engine sets `pg_trgm.word_similarity_threshold` to it for each query, inside a transaction, because PostgreSQL's own default of 0.6 rejects a one-letter typo in a longer word ("lovlace" scores 0.55 against "Lakhotia"). Raise it for fewer, closer matches; lower it for more forgiving ones. The trigram index is created before the first typo-tolerant query even when no import ran. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
 
 On SQLite, in development and tests, the same engine uses an FTS5 table, `search_documents_fts`, that the migration creates next to `search_documents`: one column per boost, ranked with BM25. Each FTS row carries the rowid of its document, so replacing or deleting a document finds its row through the primary key and an import stays linear. Prefixes match there; misspellings don't.
 
@@ -408,7 +408,7 @@ pub struct ContactSearchController {
 
 #[controller("/contacts/search", version = "1")]
 impl ContactSearchController {
-    /// `GET /api/v1/contacts/search?q=ada&status=customer`
+    /// `GET /api/v1/contacts/search?q=anu&status=customer`
     #[get("/")]
     #[can(Read, Contact)]
     async fn index(
@@ -430,7 +430,7 @@ impl ContactSearchController {
 ```json
 {
   "data": [
-    { "__type": "Contact", "id": "0199c1d2-...", "full_name": "Ada Lovelace", "email": "ada@lovelace.io" }
+    { "__type": "Contact", "id": "0199c1d2-...", "full_name": "Anu Lakhotia", "email": "anu@lakhotia.io" }
   ],
   "meta": { "current_page": 1, "per_page": 15, "total": 1, "last_page": 1 }
 }
@@ -446,7 +446,7 @@ Filters apply to `#[searchable(filter)]` fields; sorts to `#[searchable(sort)]` 
 let deals = search
     .query::<Deal>("renewal")
     .filter("stage", "negotiation")
-    .filter_in("owner_id", [ada_id, grace_id])
+    .filter_in("owner_id", [anu_id, grace_id])
     .range("amount_cents", 1_000_000..)
     .sort_desc("amount_cents")
     .paginate(page)
@@ -481,7 +481,7 @@ A rule the engine can't evaluate exactly takes the same path to the rows: on Mei
 let page = search.query::<Contact>("lovlace").hits(page).await?;
 for hit in &page.data {
     println!("{} {:?}", hit.score, hit.highlights.get("last_name"));
-    // 0.94 Some("<mark>Lovelace</mark>")
+    // 0.94 Some("<mark>Lakhotia</mark>")
 }
 ```
 
@@ -493,7 +493,7 @@ The command palette searches contacts, companies and deals in one call. `across`
 
 ```rust
 let results = search
-    .across("ada")
+    .across("anu")
     .include::<Contact>(contacts_scope)
     .include::<Company>(companies_scope)
     .include::<Deal>(deals_scope)
@@ -515,7 +515,7 @@ In an app with [workspaces](/docs/workspaces/introduction/) and row isolation, a
 Every query on such an index names the workspace, as `WorkspaceRepo` does for rows. In a request, pass the `CurrentWorkspace` id; in jobs and commands, the workspace you work in:
 
 ```rust
-search.query::<Contact>("ada").workspace(ws.id()).paginate(page).await?;
+search.query::<Contact>("anu").workspace(ws.id()).paginate(page).await?;
 ```
 
 A query without a workspace fails with `SearchError::WorkspaceRequired`, so one workspace's search never returns another's records. `across` and `similar` take `.workspace(id)` the same way. Sync jobs carry their records' workspace, and on PostgreSQL they read the rows inside it, so row-level security policies hold; `search:import` imports workspace by workspace there.
@@ -641,7 +641,7 @@ async fn finds_contacts_by_a_misspelled_name() {
     let rep = crm.login_as(Role::Rep1).await;
 
     rep.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace" }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia" }))
         .send()
         .await
         .assert_status(201);
@@ -654,7 +654,7 @@ async fn finds_contacts_by_a_misspelled_name() {
         .await
         .assert_status(200)
         .assert_json_path("meta.total", json!(1))
-        .assert_json_path("data.0.full_name", json!("Ada Lovelace"));
+        .assert_json_path("data.0.full_name", json!("Anu Lakhotia"));
 }
 ```
 
@@ -692,7 +692,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 | `search.vectors.url`, `search.vectors.key` | none | The Qdrant server (not with `ai`) |
 | `search.vectors.dimensions` | `1536` | Vector size (with `ai`: `ai.vectors.dimensions`) |
 | `search.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean` (with `ai`: `ai.vectors.metric`) |
-| `search.indexes.<index>.synonyms` | `{}` | Synonyms per index, both ways: `{ "acme" = ["acme corp"] }` |
+| `search.indexes.<index>.synonyms` | `{}` | Synonyms per index, both ways: `{ "agra" = ["agra corp"] }` |
 | `search.indexes.<index>.stop_words` | `[]` | Words the index ignores in queries |
 
 ### The Search service

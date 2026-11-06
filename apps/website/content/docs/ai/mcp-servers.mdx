@@ -5,7 +5,7 @@ description: "Expose your app's tools, resources and prompts to Claude, ChatGPT,
 
 ## Introduction
 
-<Badge feature="mcp" /> The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is how AI clients reach outside themselves. With an MCP server in your app, a sales rep can ask Claude "Log a call with Dana on the Acme deal: she approved the budget" and the call lands in your CRM, written by your own service, checked by your own access rules and recorded in your audit log.
+<Badge feature="mcp" /> The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is how AI clients reach outside themselves. With an MCP server in your app, a sales rep can ask Claude "Log a call with Dana on the Agra deal: she approved the budget" and the call lands in your CRM, written by your own service, checked by your own access rules and recorded in your audit log.
 
 `navree-mcp` turns methods on your services into an MCP server. The protocol layer is Navree's own: JSON-RPC, the protocol versions, both transports and their security checks live in `navree-mcp`, so a fix lands in your app's next Navree release. You write the server with Navree's macros:
 
@@ -416,7 +416,7 @@ Clients on the stateless protocol skip the handshake: they ask `server/discover`
 The `mcp:serve` command serves the same tools over standard input and output, for clients that start a local process:
 
 ```sh
-./target/release/crm-api mcp:serve --user ada@example.com
+./target/release/crm-api mcp:serve --user anu@example.com
 ```
 
 It reads JSON-RPC messages on stdin, one per line, writes them on stdout and logs to stderr (`LoggerModule` writes there while a command owns stdout). A line longer than `mcp.max_request_bytes` is refused without being kept in memory; the stateless protocol works here too. There is no token: the process acts as the user named by `--user`, an email address (which needs `AuthModule`) or a user id, with that user's roles and permissions. Give it to people who already have shell access to a machine that can reach the database. A client configures it as a command:
@@ -426,7 +426,7 @@ It reads JSON-RPC messages on stdin, one per line, writes them on stdout and log
   "mcpServers": {
     "crm": {
       "command": "/srv/crm/crm-api",
-      "args": ["mcp:serve", "--user", "ada@example.com"]
+      "args": ["mcp:serve", "--user", "anu@example.com"]
     }
   }
 }
@@ -499,7 +499,7 @@ use serde_json::json;
 async fn reps_log_activity_but_cannot_move_others_deals() {
     let crm = TestCrm::builder().app(crm_api::app).build().await;
     let owner = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&owner, "Acme renewal").await; // POSTs a company and a deal
+    let deal = create_deal(&owner, "Agra renewal").await; // POSTs a company and a deal
 
     let rep = crm.login_as(Role::Rep2).await;
     let mcp = McpTestClient::new(rep.inner().clone())

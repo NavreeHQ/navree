@@ -249,7 +249,7 @@ A message is written by its sender, so treat everything in it as a stranger's in
 
 **`from` is a claim.** The sender writes it. What vouches for it is the provider's verdict, so read `verdicts` before an address decides anything: `mail.verdicts.dmarc == Some(Verdict::Pass)` says the provider checked the domain of the `From` it read. A source that reports no verdict (Mailgun, Postmark, raw MIME) leaves you with a [reply token](#reply-tokens), which only your app can make, or a check of your own on the raw message.
 
-**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees. A `From` is an address (`ceo@acme.test`) or an optional display name and an address in angle brackets (`Ada <ceo@acme.test>`), with comments between them, and nothing else. Two `From` fields, a group (`team: a@x.test;`), a list, a separator or bracket without its pair (`a@x.test:b@y.test`, `b@y.test>`), an unclosed quote or comment, a quoted string beside an address (`"x"ceo@acme.test`), a second pair of brackets or a route, a blank or comment inside the brackets, an address with an empty label (`ceo@acme.test.`), one spelled in an encoded word, a display name with an unquoted `@`, `[`, `]` or `\` in it (`ceo@acme.test <a@evil.test>`), a comment with a quote, separator, bracket, escape or line break in it, and a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR) all give `None`. The fields stay in `mail.headers`. A display name is never checked by anyone: `"ceo@acme.test" <a@evil.test>` is the address `a@evil.test` with that name.
+**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees. A `From` is an address (`ceo@acme.test`) or an optional display name and an address in angle brackets (`Anu <ceo@acme.test>`), with comments between them, and nothing else. Two `From` fields, a group (`team: a@x.test;`), a list, a separator or bracket without its pair (`a@x.test:b@y.test`, `b@y.test>`), an unclosed quote or comment, a quoted string beside an address (`"x"ceo@acme.test`), a second pair of brackets or a route, a blank or comment inside the brackets, an address with an empty label (`ceo@acme.test.`), one spelled in an encoded word, a display name with an unquoted `@`, `[`, `]` or `\` in it (`ceo@acme.test <a@evil.test>`), a comment with a quote, separator, bracket, escape or line break in it, and a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR) all give `None`. The fields stay in `mail.headers`. A display name is never checked by anyone: `"ceo@acme.test" <a@evil.test>` is the address `a@evil.test` with that name.
 
 **Decoded values hold no control characters.** In `subject` and display names each one becomes a space; in addresses, attachment file names and content ids, and message ids, each one is removed. So `=?utf-8?Q?Hi=0D=0ABcc:_x?=` can't start a new line in a log. `mail.headers`, `mail.header(..)`, `text` and `html` keep what the message holds: a header's line breaks are unfolded, and anything else in it stays. Don't copy those into a header or a log line without cleaning them.
 
@@ -598,10 +598,10 @@ async fn a_reply_lands_on_its_ticket() {
         .receive(
             app.ctx(),
             Incoming::compose()
-                .from("Ada Lovelace <ada@example.com>")
+                .from("Anu Lakhotia <anu@example.com>")
                 .to(reply_to)
                 .subject("Re: your support request")
-                .text("Thanks, that fixed it.\n\nOn Monday, Acme Support wrote:\n> Try turning it off and on.")
+                .text("Thanks, that fixed it.\n\nOn Monday, Agra Support wrote:\n> Try turning it off and on.")
                 .build(),
         )
         .await

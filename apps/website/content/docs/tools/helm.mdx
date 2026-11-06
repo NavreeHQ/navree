@@ -58,7 +58,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(SessionModule::from_config())
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Acme CRM"))
+        .module(AuthPages::new().app_name("Agra CRM"))
         .module(AccessModule::for_root(access()))
         // ... your feature modules
         .module(HelmModule::from_config())
@@ -309,7 +309,7 @@ Each filter is a **chip** in the list's toolbar: a dashed button with the filter
 The search, filters, sort and page are in the URL, so a filtered list is a link you can share:
 
 ```text
-/admin/resources/deals?search=globex&filter[stage][in]=lead,won&sort=-amount_cents&page=2
+/admin/resources/deals?search=gulati&filter[stage][in]=lead,won&sort=-amount_cents&page=2
 ```
 
 The names are the same as on every Navree list (see [list queries](/docs/basics/list-queries/)):
@@ -318,7 +318,7 @@ The names are the same as on every Navree list (see [list queries](/docs/basics/
 |---|---|
 | `filter[stage]=won` | The filter holds this one value |
 | `filter[stage][in]=lead,won` | The filter holds any of these values. Separate them with commas, or repeat the parameter. |
-| `search=globex` | The text to search for |
+| `search=gulati` | The text to search for |
 | `sort=-amount_cents` | The column to sort by; a leading `-` sorts descending |
 | `page=2`, `per_page=50` | The page and its size (at most 100) |
 
@@ -539,7 +539,7 @@ The `helm` section sets the panel's name and look:
 
 ```toml title="config/app.toml"
 [helm]
-title = "Acme CRM"
+title = "Agra CRM"
 logo = "/brand/logo.svg"   # a URL; served by your app or a CDN
 accent = "#3dff8f"
 per_page = 25
@@ -599,11 +599,11 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
     let app = boot_app().await;
     let priya = create_user(&app, "priya@example.com", "rep").await;
     let tom = create_user(&app, "tom@example.com", "rep").await;
-    let toms_deal = create_deal(&app, tom.id, "Globex renewal").await;
+    let toms_deal = create_deal(&app, tom.id, "Gulati renewal").await;
 
     let rep = app.acting_as(principal(priya.id));
     rep.get("/admin/api/resources/deals")
-        .query(&[("search", "Globex")])
+        .query(&[("search", "Gulati")])
         .send()
         .await
         .assert_status(200)
@@ -639,7 +639,7 @@ Errors use Navree's JSON error shape (`{ "statusCode", "message", "error", "code
 
 ## Configuration
 
-Every key of the `helm` section is optional. From the environment: `APP_HELM__TITLE="Acme CRM"`, `APP_HELM__PER_PAGE=50`.
+Every key of the `helm` section is optional. From the environment: `APP_HELM__TITLE="Agra CRM"`, `APP_HELM__PER_PAGE=50`.
 
 | Key | Default | What it does |
 |---|---|---|

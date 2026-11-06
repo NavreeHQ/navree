@@ -341,7 +341,7 @@ Sign up. Registration is on in new apps (`auth.registration = true`), and it ret
 ```sh
 curl -s -X POST http://127.0.0.1:8080/api/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Ada","email":"ada@example.com","password":"correct horse"}'
+  -d '{"name":"Anu","email":"anu@example.com","password":"correct horse"}'
 ```
 
 ```json
@@ -353,10 +353,10 @@ curl -s -X POST http://127.0.0.1:8080/api/auth/register \
   "user": {
     "__type": "User",
     "created_at": "2026-10-26T08:14:46.406702500Z",
-    "email": "ada@example.com",
+    "email": "anu@example.com",
     "email_verified_at": null,
     "id": "01a17746-ba87-7343-b9dd-cbe3dcd0add6",
-    "name": "Ada"
+    "name": "Anu"
   }
 }
 ```
@@ -430,7 +430,7 @@ Invalid input never reaches the handler. An empty title is a 400 in Navree's err
 }
 ```
 
-Without a token, the API answers 401. With a token for another user, Grace, `GET /api/v1/tasks` shows none of Ada's tasks, and `GET /api/v1/tasks/{id}` of Ada's task is a 403:
+Without a token, the API answers 401. With a token for another user, Gauri, `GET /api/v1/tasks` shows none of Anu's tasks, and `GET /api/v1/tasks/{id}` of Anu's task is a 403:
 
 ```json
 {"statusCode":403,"message":"Forbidden","error":"Forbidden","code":"forbidden"}
@@ -504,7 +504,7 @@ async fn sign_up(app: &TestApp, email: &str) -> String {
     let body = app
         .client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Ada", "email": email, "password": "correct horse" }))
+        .json(&json!({ "name": "Anu", "email": email, "password": "correct horse" }))
         .send()
         .await
         .assert_status(201)
@@ -525,7 +525,7 @@ async fn guests_cannot_list_tasks() {
 #[tokio::test]
 async fn users_manage_their_own_tasks() {
     let (app, _guard) = app().await;
-    let token = sign_up(&app, "ada@example.com").await;
+    let token = sign_up(&app, "anu@example.com").await;
     let client = app.client();
 
     let task = client
@@ -560,13 +560,13 @@ async fn users_manage_their_own_tasks() {
 #[tokio::test]
 async fn other_users_cannot_see_or_change_them() {
     let (app, _guard) = app().await;
-    let ada = sign_up(&app, "ada@example.com").await;
-    let grace = sign_up(&app, "grace@example.com").await;
+    let anu = sign_up(&app, "anu@example.com").await;
+    let gauri = sign_up(&app, "gauri@example.com").await;
     let client = app.client();
 
     let task = client
         .post("/api/v1/tasks")
-        .bearer(&ada)
+        .bearer(&anu)
         .json(&json!({ "title": "Private" }))
         .send()
         .await
@@ -576,19 +576,19 @@ async fn other_users_cannot_see_or_change_them() {
 
     client
         .get("/api/v1/tasks")
-        .bearer(&grace)
+        .bearer(&gauri)
         .send()
         .await
         .assert_json_path("meta.total", json!(0));
     client
         .get(&path)
-        .bearer(&grace)
+        .bearer(&gauri)
         .send()
         .await
         .assert_status(403);
     client
         .delete(&path)
-        .bearer(&grace)
+        .bearer(&gauri)
         .send()
         .await
         .assert_status(403);
@@ -597,7 +597,7 @@ async fn other_users_cannot_see_or_change_them() {
 #[tokio::test]
 async fn titles_are_validated() {
     let (app, _guard) = app().await;
-    let token = sign_up(&app, "ada@example.com").await;
+    let token = sign_up(&app, "anu@example.com").await;
     app.client()
         .post("/api/v1/tasks")
         .bearer(&token)
@@ -714,7 +714,7 @@ pub use pages::TaskPages; // [!code ++]
 )]
 ```
 
-Start the app with `navree dev` and open `http://127.0.0.1:8080/tasks`. You are not signed in, so the page answers 401 with a button to the sign-in page. Sign in with the account you registered above (`ada@example.com` and `correct horse`), and the browser comes back to `/tasks` with its task list:
+Start the app with `navree dev` and open `http://127.0.0.1:8080/tasks`. You are not signed in, so the page answers 401 with a button to the sign-in page. Sign in with the account you registered above (`anu@example.com` and `correct horse`), and the browser comes back to `/tasks` with its task list:
 
 ```text
 To do   Write the docs

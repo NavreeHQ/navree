@@ -465,7 +465,7 @@ async fn deal_by_id_respects_access() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.deal.title", json!("Acme renewal"))
+        .assert_json_path("data.deal.title", json!("Agra renewal"))
         .assert_json_path("data.deal.stage", json!("NEGOTIATION"));
 
     app.shutdown().await.unwrap();

@@ -96,7 +96,7 @@ let directory = ctx.get::<Directory>().await?;
 
 // A SCIM connection: give the identity provider the URL and the token.
 let scim = directory
-    .create_connection(workspace, NewConnection::new("Acme Entra ID", "scim"))
+    .create_connection(workspace, NewConnection::new("Agra Entra ID", "scim"))
     .await?;
 let token = scim.scim_token.unwrap(); // shown once; only its hash is kept
 
@@ -104,7 +104,7 @@ let token = scim.scim_token.unwrap(); // shown once; only its hash is kept
 let ldap = directory
     .create_connection(
         workspace,
-        NewConnection::new("Acme Active Directory", "ldap")
+        NewConnection::new("Agra Active Directory", "ldap")
             .settings(json!({
                 "url": "ldaps://dc1.acme.test",
                 "base_dn": "DC=acme,DC=test",
@@ -226,9 +226,9 @@ impl DirectorySource for HrSource {
             // Read request.setting("export_url") with your HTTP client.
             let _export = request.setting("export_url");
             let people = vec![
-                DirectoryUser::new("E-1001", "ada@acme.test")
-                    .name("Ada", "Lovelace")
-                    .email("ada@acme.test")
+                DirectoryUser::new("E-1001", "anu@acme.test")
+                    .name("Anu", "Lakhotia")
+                    .email("anu@acme.test")
                     .department("Engineering"),
             ];
             Ok(Pulled::snapshot(people, Vec::new()))
@@ -385,7 +385,7 @@ The server follows RFC 7643 and RFC 7644. Answers are `application/scim+json`; e
   "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
   "status": "409",
   "scimType": "uniqueness",
-  "detail": "userName ada@acme.test is already taken"
+  "detail": "userName anu@acme.test is already taken"
 }
 ```
 
@@ -408,7 +408,7 @@ Every request carries the connection's token (`Authorization: Bearer nvscim_...`
 **PATCH.** `add`, `remove` and `replace` with plain paths, sub-attributes, value filters and schema URNs, and path-less operations whose value is an object. It also accepts what identity providers send in practice:
 
 - operation names in any case (`"op": "Replace"`) and booleans as strings (`"value": "False"`);
-- path-less values whose keys are paths (`{"name.givenName": "Ada"}`, `{"urn:...:enterprise:2.0:User:department": "Sales"}`);
+- path-less values whose keys are paths (`{"name.givenName": "Anu"}`, `{"urn:...:enterprise:2.0:User:department": "Sales"}`);
 - `remove` on `members` with a value list naming the members to remove;
 - `add` or `replace` with a value filter that matches nothing (`emails[type eq "work"].value`), which adds the element the filter describes.
 
@@ -464,10 +464,10 @@ The routes of a directory settings page are mounted under `{http.api_prefix}/dir
 ```http
 POST /api/directory/connections HTTP/1.1
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-X-Workspace: acme
+X-Workspace: agra
 Content-Type: application/json
 
-{ "name": "Acme Entra ID", "source": "scim" }
+{ "name": "Agra Entra ID", "source": "scim" }
 ```
 
 ```json
@@ -476,7 +476,7 @@ Content-Type: application/json
     "id": "019a2c4e-1f3a-7b2c-9d4e-5f6a7b8c9d0e",
     "owner_type": "workspace",
     "owner_id": "019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29",
-    "name": "Acme Entra ID",
+    "name": "Agra Entra ID",
     "source": "scim",
     "settings": {},
     "has_secret": false,
@@ -578,15 +578,15 @@ async fn directory_people_become_recipients() {
         .build()
         .await;
     fake.user(
-        DirectoryUser::new("00u1", "ada@acme.test")
-            .name("Ada", "Lovelace")
-            .email("ada@acme.test"),
+        DirectoryUser::new("00u1", "anu@acme.test")
+            .name("Anu", "Lakhotia")
+            .email("anu@acme.test"),
     )
-    .user(DirectoryUser::new("00u2", "grace@acme.test").inactive());
+    .user(DirectoryUser::new("00u2", "gauri@acme.test").inactive());
 
     let directory = app.get::<Directory>().await;
     let connection = directory
-        .create_connection(Owner::App, NewConnection::new("Acme Okta", "okta"))
+        .create_connection(Owner::App, NewConnection::new("Agra Okta", "okta"))
         .await
         .unwrap()
         .connection;
@@ -597,27 +597,27 @@ async fn directory_people_become_recipients() {
     assert_eq!(run.summary.users_created, 2);
 
     let db = app.get::<Db>().await;
-    let ada = Recipient::query()
-        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+    let anu = Recipient::query()
+        .where_(Recipient::EMAIL.eq("anu@acme.test"))
         .first(&*db)
         .await
         .unwrap()
         .unwrap();
-    assert!(ada.active);
+    assert!(anu.active);
 
-    // Ada leaves the company.
+    // Anu leaves the company.
     fake.remove_user("00u1");
     directory
         .sync_now(connection.id, SyncOptions::default())
         .await
         .unwrap();
-    let ada = Recipient::query()
-        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+    let anu = Recipient::query()
+        .where_(Recipient::EMAIL.eq("anu@acme.test"))
         .first(&*db)
         .await
         .unwrap()
         .unwrap();
-    assert!(!ada.active);
+    assert!(!anu.active);
 }
 ```
 
