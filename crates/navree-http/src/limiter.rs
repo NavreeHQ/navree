@@ -338,12 +338,9 @@ impl Breaker {
     fn answered(&self, turn: Turn) {
         if let Turn::Probe(probing) = turn {
             // Unless another request saw it fail meanwhile.
-            let _ = self.rest_until.compare_exchange(
-                probing,
-                0,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            );
+            let _ =
+                self.rest_until
+                    .compare_exchange(probing, 0, Ordering::AcqRel, Ordering::Acquire);
         }
     }
 
@@ -495,11 +492,7 @@ mod tests {
             let started = Instant::now();
             assert!(limiter.check(&"192.0.2.1").await.is_ok());
             assert!(limiter.check(&"192.0.2.1").await.is_err());
-            assert!(
-                started.elapsed() <= STORE_WAIT,
-                "{:?}",
-                started.elapsed()
-            );
+            assert!(started.elapsed() <= STORE_WAIT, "{:?}", started.elapsed());
         }
     }
 
@@ -528,7 +521,12 @@ mod tests {
     }
 
     impl RateLimitStore for Scripted {
-        fn hit<'a>(&'a self, key: &'a str, limit: u32, per: Duration) -> BoxFuture<'a, StoreVerdict> {
+        fn hit<'a>(
+            &'a self,
+            key: &'a str,
+            limit: u32,
+            per: Duration,
+        ) -> BoxFuture<'a, StoreVerdict> {
             self.asked.fetch_add(1, Ordering::Relaxed);
             match self.mode.load(Ordering::Relaxed) {
                 COUNTS => self.counts.hit(key, limit, per),

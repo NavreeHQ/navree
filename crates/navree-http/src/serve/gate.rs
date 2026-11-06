@@ -793,7 +793,10 @@ mod tests {
             "not looked at again so soon"
         );
         tokio::time::advance(NO_IDLE_FOR).await;
-        assert!(limit.admit(Some(ip("192.0.2.1"))).is_ok(), "then it makes way");
+        assert!(
+            limit.admit(Some(ip("192.0.2.1"))).is_ok(),
+            "then it makes way"
+        );
         assert!(busy.reclaimable_since().is_none());
     }
 
