@@ -3,6 +3,7 @@
 //!
 //! [`Reply`]: crate::Reply
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, OnceLock};
 
 use bytes::Bytes;
@@ -15,8 +16,8 @@ use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
-    AppContext, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
 
 use crate::op::{Envelope, PendingOps, UI_HEADER};
@@ -174,6 +175,74 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         },
     ));
     m.controller::<Assets>();
+    m.command(CommandSpec::new(
+        "ui:render",
+        "Draw one page as a guest and print the answer as JSON (<path> --json)",
+        render_command,
+    )
+    .stdio());
+}
+
+/// The most of a page `ui:render` reads.
+const RENDER_AT_MOST: usize = 4 * 1024 * 1024;
+
+/// `ui:render <path> --json`: one `GET` through the app's own router, as a guest
+/// from 127.0.0.1, printed as one JSON object (`path`, `status`, `content_type`,
+/// `location`, `html`) whatever the status. Redirects are not followed, and
+/// `html` is the body only when it is HTML. Navigator reads it to outline a page.
+async fn render_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let path = args
+        .iter()
+        .find(|arg| !arg.starts_with("--"))
+        .filter(|path| path.starts_with('/') && !path.starts_with("//"))
+        .ok_or("ui:render needs a path of the app, such as /deals")?;
+    let json = render_json(&ctx, path).await?;
+    println!("{json}");
+    Ok(())
+}
+
+/// What [`render_command`] prints for `path`.
+pub(crate) async fn render_json(
+    ctx: &AppContext,
+    path: &str,
+) -> Result<serde_json::Value, BoxError> {
+    use tower::ServiceExt;
+
+    let router = navree_http::build_router(ctx).await?;
+    let mut request = http::Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .header(header::ACCEPT, "text/html,application/xhtml+xml")
+        .body(navree_http::body::Body::empty())?;
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 49152);
+    request
+        .extensions_mut()
+        .insert(navree_http::serve::ConnectInfo(peer));
+    let response = router
+        .oneshot(request)
+        .await
+        .unwrap_or_else(|never| match never {});
+    let (parts, body) = response.into_parts();
+    let bytes = navree_http::body::to_bytes(body, RENDER_AT_MOST).await?;
+    let text = |name: HeaderName| {
+        parts
+            .headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let content_type = text(header::CONTENT_TYPE);
+    let html = content_type
+        .as_deref()
+        .is_some_and(|kind| kind.starts_with("text/html"))
+        .then(|| String::from_utf8_lossy(&bytes).into_owned());
+    Ok(serde_json::json!({
+        "path": path,
+        "status": parts.status.as_u16(),
+        "content_type": content_type,
+        "location": text(header::LOCATION),
+        "html": html,
+    }))
 }
 
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
@@ -311,5 +380,82 @@ impl Controller for Assets {
             .name("ui.appearance")
             .public(),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::{HttpModule, RouteDef};
+    use navree_testing::TestApp;
+
+    use super::*;
+    use crate::View;
+
+    struct Pages;
+
+    impl Injectable for Pages {
+        fn dependencies() -> Vec<ProviderKey> {
+            Vec::new()
+        }
+
+        fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+            Box::pin(async { Ok(Self) })
+        }
+    }
+
+    impl Controller for Pages {
+        fn prefix(&self) -> &'static str {
+            ""
+        }
+
+        fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+            vec![
+                RouteDef::on(Method::GET, "!/deals", || async { View::new("Deals") })
+                    .page()
+                    .public(),
+                RouteDef::on(Method::GET, "!/old", || async {
+                    crate::Reply::redirect("/deals")
+                })
+                .public(),
+            ]
+        }
+    }
+
+    struct App;
+
+    impl Module for App {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.controller::<Pages>();
+        }
+    }
+
+    async fn app() -> TestApp {
+        TestApp::builder()
+            .module(HttpModule::for_root(Default::default()))
+            .module(UiModule)
+            .module(App)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn ui_render_answers_a_page_with_its_html() {
+        let app = app().await;
+        assert!(app.ctx().commands().iter().any(|c| c.name == "ui:render" && c.stdio));
+        let json = render_json(app.ctx(), "/deals").await.unwrap();
+        assert_eq!(json["path"], "/deals");
+        assert_eq!(json["status"], 200);
+        assert!(json["content_type"].as_str().unwrap().starts_with("text/html"));
+        assert_eq!(json["location"], serde_json::Value::Null);
+        assert!(json["html"].as_str().unwrap().contains("Deals"));
+    }
+
+    #[tokio::test]
+    async fn ui_render_reports_a_redirect_without_following_it() {
+        let app = app().await;
+        let json = render_json(app.ctx(), "/old").await.unwrap();
+        assert_eq!(json["status"], 303);
+        assert_eq!(json["location"], "/deals");
+        assert_eq!(json["html"], serde_json::Value::Null);
     }
 }

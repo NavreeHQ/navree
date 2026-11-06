@@ -64,6 +64,8 @@ serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true }
+# `ui:render` sends one request through the app's router.
+tower = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
