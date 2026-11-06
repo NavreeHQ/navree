@@ -81,6 +81,21 @@ main() {
   mv -Tf "$site/current.next" "$site/current"
   echo "navree.com now serves $sha from $release"
 
+  # Opt-in: purge Cloudflare's cache of the pages. nginx.conf lets Cloudflare
+  # keep a page for five minutes once a cache rule for HTML is on, and the new
+  # release has new script files, so the pages in the cache must go. The file
+  # holds CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN (a token that may purge
+  # this zone's cache and nothing else). A failed purge never fails the deploy.
+  local cloudflare="$site/shared/cloudflare.env"
+  if [ -f "$cloudflare" ]; then
+    (
+      . "$cloudflare"
+      curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
+        -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+        --data '{"purge_everything":true}' > /dev/null
+    ) && echo "Cloudflare's cache purged" || echo "Cloudflare's cache was not purged (see $cloudflare)" >&2
+  fi
+
   # Opt-in: tell IndexNow which pages changed (see indexnow.sh). A failed ping
   # never fails the deploy.
   if [ "${INDEXNOW:-}" = 1 ]; then

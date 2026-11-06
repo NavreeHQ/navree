@@ -7,7 +7,8 @@
 # It does exactly two things, the same way the server's other sites are set up:
 #   1. a Let's Encrypt certificate for navree.com and www.navree.com through
 #      certbot's Cloudflare DNS plugin (the method every other site here uses);
-#   2. the nginx site from nginx.conf, enabled, tested and reloaded.
+#   2. the nginx site from nginx.conf (and the security headers file it
+#      includes), enabled, tested and reloaded.
 # It touches no other site. Re-running it is safe.
 set -euo pipefail
 
@@ -36,6 +37,8 @@ certbot certonly \
   --non-interactive --keep-until-expiring
 
 echo "2/2 nginx site"
+install -d -m 755 /etc/nginx/snippets
+install -m 644 "$here/security-headers.conf" /etc/nginx/snippets/navree.com-security.conf
 install -m 644 "$here/nginx.conf" /etc/nginx/sites-available/navree.com
 ln -sfn /etc/nginx/sites-available/navree.com /etc/nginx/sites-enabled/navree.com
 nginx -t

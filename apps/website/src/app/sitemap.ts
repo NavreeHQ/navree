@@ -11,7 +11,7 @@ export const dynamic = "force-static";
  * `/sitemap.xml`: every public page, with the date its content last changed
  * (from git). The pages that are not docs pages are found by walking
  * `src/app` (`pageRoutes`), so a new one needs no edit here; a page marked
- * noindex (the styleguide, the `/benchmarks/` redirect) is left out. Docs
+ * noindex is left out. Docs
  * pages and the page of each docs section come from the manifest.
  */
 export default function sitemap(): MetadataRoute.Sitemap {

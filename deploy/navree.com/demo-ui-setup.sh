@@ -10,7 +10,8 @@
 #   2. installs the locations /demo/ui/ and /_navree/ui/
 #      (/etc/nginx/snippets/navree.com-demo-ui.conf);
 #   3. installs this repository's nginx.conf for navree.com, whose server block
-#      includes that snippet;
+#      includes that snippet, and the security headers file it also includes
+#      (/etc/nginx/snippets/navree.com-security.conf);
 #   4. tests nginx and reloads it, or puts every file back if the test fails.
 #
 # Building the app and running it under pm2 needs no sudo (theme-demo.sh). The
@@ -37,6 +38,7 @@ fi
 
 limits=/etc/nginx/conf.d/navree.com-demo-ui-limits.conf
 snippet=/etc/nginx/snippets/navree.com-demo-ui.conf
+security=/etc/nginx/snippets/navree.com-security.conf
 site=/etc/nginx/sites-available/navree.com
 backup=$(mktemp -d)
 cp -a "$site" "$backup/site"
@@ -44,6 +46,7 @@ cp -a "$site" "$backup/site"
 install -d -m 755 /etc/nginx/snippets
 install -m 644 "$here/demo-ui-limits.conf" "$limits"
 install -m 644 "$here/demo-ui.conf" "$snippet"
+install -m 644 "$here/security-headers.conf" "$security"
 install -m 644 "$here/nginx.conf" "$site"
 
 if nginx -t; then
