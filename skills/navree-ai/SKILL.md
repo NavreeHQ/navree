@@ -229,8 +229,8 @@ let app = TestApp::builder()
     .await;
 let fake = app.get::<Ai>().await.fake().unwrap();
 fake.respond_with([
-    FakeReply::tool_call("search_deals", json!({ "query": "Acme" })),
-    FakeReply::text("Acme is in negotiation."),
+    FakeReply::tool_call("search_deals", json!({ "query": "Agra" })),
+    FakeReply::text("Agra is in negotiation."),
 ]);
 // ... run the route or the agent ...
 fake.assert_prompt_count(2);

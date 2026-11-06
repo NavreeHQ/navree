@@ -102,11 +102,11 @@ async fn home(&self, portal: Setting<PortalSettings>) -> Json<PortalHome> {
 }
 
 // Anywhere: inject Arc<Settings> and pass a scope.
-let portal = settings.resolve::<PortalSettings>(Scope::workspace(acme.id)).await?;
+let portal = settings.resolve::<PortalSettings>(Scope::workspace(agra.id)).await?;
 portal.page_size;                       // derefs to the value
 portal.source("welcome_text");          // Some(Source::Organization)
 portal.overridden;                      // fields stored at the workspace's own level
-let size = settings.get::<PortalSettings>(Scope::user(ada.id)).await?.page_size;
+let size = settings.get::<PortalSettings>(Scope::user(anu.id)).await?.page_size;
 ```
 
 Scopes: `Scope::global()`, `Scope::organization(id)`, `Scope::workspace(id)`
@@ -122,9 +122,9 @@ none, gives guests the global values, and checks no permission.
 ## Writing
 
 ```rust,ignore
-settings.update::<PortalSettings>(&uow, Scope::workspace(acme.id), json!({"welcome_text": "Hi"})).await?;
-settings.inherit::<PortalSettings>(&uow, Scope::workspace(acme.id), "welcome_text").await?;
-settings.reset::<PortalSettings>(&uow, Scope::workspace(acme.id)).await?;
+settings.update::<PortalSettings>(&uow, Scope::workspace(agra.id), json!({"welcome_text": "Hi"})).await?;
+settings.inherit::<PortalSettings>(&uow, Scope::workspace(agra.id), "welcome_text").await?;
+settings.reset::<PortalSettings>(&uow, Scope::workspace(agra.id)).await?;
 ```
 
 - The patch is anything that serializes to a JSON object. Writes go to the
@@ -162,10 +162,10 @@ turns the routes off.
 
 ```sh
 navree settings:list
-navree settings:show portal --workspace acme
+navree settings:show portal --workspace agra
 navree settings:set portal page_size=50 "welcome_text=Hello there"   # global
 navree settings:set portal show_leaderboard=true --organization holding
-navree settings:inherit portal welcome_text --workspace acme
+navree settings:inherit portal welcome_text --workspace agra
 navree settings:inherit portal --all --user 0192e4c1-5b1e-7a40-9f43-2c0d1b8e6a11
 ```
 
@@ -196,7 +196,7 @@ Unit test with the fake (real resolution and validation, in memory, no
 registration):
 
 ```rust,ignore
-let fake = SettingsFake::new().attach(acme, holding);      // workspace → organization
+let fake = SettingsFake::new().attach(agra, holding);      // workspace → organization
 fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
     .await
     .unwrap();                                              // setup, not recorded

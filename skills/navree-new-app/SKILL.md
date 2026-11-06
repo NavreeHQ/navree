@@ -65,13 +65,13 @@ shape:
 
 | Want | Command | Writes |
 |---|---|---|
-| Multi-tenant SaaS with a web app | `navree new acme --kit saas` | The API (accounts, two-factor, workspaces, members and invitations, billing, social sign-in, Helm at `/admin`, an example `projects` feature, a demo seeder) plus `web/`: Next.js, shadcn/ui and a backend-for-frontend holding the tokens in httpOnly cookies |
-| The same API for mobile or other clients | `navree new acme --kit api` | The SaaS kit's API without `web/`, and a committed `openapi.json` |
+| Multi-tenant SaaS with a web app | `navree new agra --kit saas` | The API (accounts, two-factor, workspaces, members and invitations, billing, social sign-in, Helm at `/admin`, an example `projects` feature, a demo seeder) plus `web/`: Next.js, shadcn/ui and a backend-for-frontend holding the tokens in httpOnly cookies |
+| The same API for mobile or other clients | `navree new agra --kit api` | The SaaS kit's API without `web/`, and a committed `openapi.json` |
 | A service on a broker | `navree new billing --kit micro` | A Cargo workspace: `crates/billing` (an `invoices.get` message handler, a `deal.won` event handler, health and metrics over HTTP) and `crates/billing-contracts` (the payloads and events clients share), NATS configured |
 
 ```sh
-navree new acme --kit saas
-cd acme
+navree new agra --kit saas
+cd agra
 navree dock up                 # TimescaleDB and Mailpit (micro: TimescaleDB and NATS)
 navree migrate:fresh --seed    # saas/api: tables and the `demo` workspace (micro: navree migrate)
 pnpm --dir web install         # saas only: the web app's packages
@@ -104,7 +104,7 @@ navree dev                     # API on :8080, web app on :3000
   folders that hold class names need their own `@source` line.
 - The kit is recorded in `Cargo.toml`: `[package.metadata.navree] kit`
   and `kit_version` (`[workspace.metadata.navree]` for `micro`). Compare
-  with a fresh `navree new acme-latest --kit saas` to adopt template fixes.
+  with a fresh `navree new agra-latest --kit saas` to adopt template fixes.
 - Read the generated `AGENTS.md` before changing a kit app: it lists the
   layout, the commands and the conventions (workspace-scoped features copy
   `src/modules/projects/`, whose `entity.rs` is a navree-orm model declared

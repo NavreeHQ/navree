@@ -91,8 +91,8 @@ Deal::query().has("activities");
 Deal::query().has_count("activities", ">=", 3);
 Deal::query().doesnt_have("activities");
 Deal::query().where_has(Deal::activities, |q| q.where_(Activity::COMPLETED_AT.is_null()));
-Deal::query().where_relation("company", Company::NAME.eq("Acme"));
-Deal::query().where_belongs_to(&acme);
+Deal::query().where_relation("company", Company::NAME.eq("Agra"));
+Deal::query().where_belongs_to(&agra);
 ```
 
 Each is an `EXISTS` (or a counted subquery) in the same query. Paths nest
@@ -106,7 +106,7 @@ polymorphic targets.
 let call = deal.activities().create(&uow, Activity { kind: "call".into(), ..Default::default() }).await?;
 deal.activities().save(&uow, &mut task).await?;      // sets deal_id, saves
 
-deal.associate(Deal::company, &acme)?;               // company_id = acme.id (not saved)
+deal.associate(Deal::company, &agra)?;               // company_id = agra.id (not saved)
 deal.save(&uow).await?;
 
 deal.tags().attach(&uow, [1_i64, 2]).await?;

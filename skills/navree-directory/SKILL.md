@@ -73,7 +73,7 @@ impl DirectorySink for RecipientSink {
    write through `ctx.uow()`; mail and remote calls go in listeners of the
    events (after commit).
 3. Create connections (routes, or in code):
-   `directory.create_connection(Owner::Workspace(id), NewConnection::new("Acme Entra ID", "scim"))`
+   `directory.create_connection(Owner::Workspace(id), NewConnection::new("Agra Entra ID", "scim"))`
    returns `CreatedConnection { connection, scim_token, scim_url }` (token
    shown once, SHA-256 at rest). Pull connections:
    `NewConnection::new(name, "ldap").settings(json!({..})).secret(pw).interval(30)`.
@@ -190,7 +190,7 @@ let (directory, fake) = Directory::fake();
 // TestApp::builder().temp_database().config("directory.routes", false)
 //   .module(DatabaseModule::from_config()).module(DirectoryModule::from_config())
 //   .module(RecipientsModule).override_value(Arc::new(directory)).build().await
-fake.user(DirectoryUser::new("00u1", "ada@acme.test").email("ada@acme.test"))
+fake.user(DirectoryUser::new("00u1", "anu@acme.test").email("anu@acme.test"))
     .group(DirectoryGroup::new("g1", "Engineering").members(["00u1"]));
 fake.next_pull(Pulled::delta(vec![], vec![]).removed_user("00u1")); // or fail_next_pull("..")
 let run = app.get::<Directory>().await.sync_now(id, SyncOptions::default()).await?;

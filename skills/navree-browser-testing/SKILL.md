@@ -88,8 +88,8 @@ page.click("#deal-title").await?;          // CSS: starts with #, . or [, or "cs
 page.click("@deal-card").await?;           // data-testid="deal-card"
 page.type_into("Email", "a@b.test").await?; // a field by label, aria-label, aria-labelledby, placeholder or name
 page.press("Sign in").await?;              // a button or link by text or accessible name
-page.click(Target::from("@deal-card").containing("Lovelace").nth(0)).await?;
-let card = page.within(Target::from("@deal-card").containing("Lovelace")).await?;
+page.click(Target::from("@deal-card").containing("Lakhotia").nth(0)).await?;
+let card = page.within(Target::from("@deal-card").containing("Lakhotia")).await?;
 card.press("Edit").await?;                 // Element: the same methods, inside the card
 let cards = page.all("@deal-card").await?; // Vec<Element>, visible matches now
 let text = cards[0].inner_text().await?;
@@ -101,11 +101,11 @@ Actions, assertions, waits and reads:
 page.append("Notes", " Call back Monday.").await?;
 page.select("Stage", "Negotiation").await?;           // <select> by text or value; or a combobox + option
 page.check("Send me a summary").await?;               // clicks the label when the input is hidden
-page.attach("Logo", "tests/fixtures/acme.png").await?; // a file input, even display:none
+page.attach("Logo", "tests/fixtures/agra.png").await?; // a file input, even display:none
 page.keys("Control+K").await?;
-page.drag(Target::from("@deal-card").containing("Lovelace"), "[data-stage=won]").await?;
+page.drag(Target::from("@deal-card").containing("Lakhotia"), "[data-stage=won]").await?;
 page.wait_for_request("/api/v1/deals/*/move").await?; // after the action; returns PageRequest
-page.assert_see_in("[data-stage=won]", "Lovelace").await?;
+page.assert_see_in("[data-stage=won]", "Lakhotia").await?;
 page.assert_count("@deal-card", 3).await?;            // visible matches
 page.with_timeout(Duration::from_secs(20)).assert_see("Export ready").await?;
 let total: f64 = page.script("return window.__DEAL_TOTAL__").await?; // a function body

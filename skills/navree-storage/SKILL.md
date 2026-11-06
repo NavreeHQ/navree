@@ -40,7 +40,7 @@ public_url = "https://cdn.example.com/avatars"   # for Disk::url
 
 [storage.disks.documents]
 driver = "s3"
-bucket = "acme-documents"
+bucket = "agra-documents"
 region = "eu-west-1"            # else AWS_REGION; `auto` for R2
 # endpoint = "https://<account>.r2.cloudflarestorage.com"   # MinIO, R2, Spaces
 # access_key = "..."            # else AWS_ACCESS_KEY_ID, IAM role, IMDS

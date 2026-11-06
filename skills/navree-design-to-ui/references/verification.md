@@ -28,7 +28,7 @@ pub struct NewContact {
 
 #[test]
 fn the_empty_list_offers_the_first_action() {
-    let view = Shell::new("Acme CRM")
+    let view = Shell::new("Agra CRM")
         .page("Contacts", "/contacts")
         .body(Empty::new("No contacts yet").actions(Button::primary("New contact").href("/contacts/new")))
         .to_view();
@@ -40,7 +40,7 @@ fn the_empty_list_offers_the_first_action() {
 #[test]
 fn the_form_refuses_a_bad_email_under_its_field() {
     let form = TestView::of_node(FormView::<NewContact>::new().post("/contacts"))
-        .fill("name", "Ada Lovelace")
+        .fill("name", "Anu Lakhotia")
         .fill("email", "not an email");
     let errors = form.submit_as::<NewContact>().unwrap_err();
     assert!(errors.contains_key("email"));

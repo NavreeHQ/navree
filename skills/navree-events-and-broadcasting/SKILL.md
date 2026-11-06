@@ -205,7 +205,7 @@ let app = TestApp::builder()
     .build()
     .await;
 let owner = Uuid::now_v7();
-app.get::<EventBus>().await.emit(DealWon { deal_id: Uuid::now_v7(), title: "Acme".into(), owner_id: owner }).await.unwrap();
+app.get::<EventBus>().await.emit(DealWon { deal_id: Uuid::now_v7(), title: "Agra".into(), owner_id: owner }).await.unwrap();
 let job = navree::events::listener_job_name::<DealWon, NotifyOwner>();
 assert!(fake.envelopes().iter().any(|e| e.job_type == job));   // the queued listener was dispatched
 let wins: Option<i64> = app.get::<Cache>().await.get(&format!("wins:{owner}")).await.unwrap();

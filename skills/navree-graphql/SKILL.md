@@ -262,7 +262,7 @@ app.acting_as(principal(rep))
     .send()
     .await
     .assert_status(200)
-    .assert_json_path("data.deals.0.title", json!("Acme renewal"));
+    .assert_json_path("data.deals.0.title", json!("Agra renewal"));
 
 // Without HTTP:
 let schema = app.get::<GraphqlSchema>().await;

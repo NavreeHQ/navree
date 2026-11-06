@@ -112,7 +112,7 @@ check) and `/api/mail/inbound/gmail?token=` (Pub/Sub push).
 ```rust,ignore
 let fake = MailFake::new();
 let received = fake
-    .receive(app.ctx(), Incoming::compose().from("ada@example.com").to(address).text("Thanks").build())
+    .receive(app.ctx(), Incoming::compose().from("anu@example.com").to(address).text("Thanks").build())
     .await?;
 assert_eq!(received.status, InboundStatus::Handled);
 ```

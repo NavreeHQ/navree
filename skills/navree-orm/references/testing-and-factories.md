@@ -41,7 +41,7 @@ trait is `navree::orm::factory::ModelFactory`.
 | Builder | Does |
 |---|---|
 | `.count(n)` | `n` records |
-| `.state(DealFactory::won)`, `.set(Deal::TITLE, "Acme")` | change the definition |
+| `.state(DealFactory::won)`, `.set(Deal::TITLE, "Agra")` | change the definition |
 | `.sequence(Sequence::new([DealFactory::won, DealFactory::lost]))`, `Sequence::column(Deal::TITLE, [..])` | states or values in turn across the batch |
 | `.trashed()` | soft-deleted records |
 | `.for_(Company::factory(), Deal::COMPANY_ID)`, `.for_record(..)` | one parent for all |

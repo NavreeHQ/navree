@@ -212,10 +212,10 @@ let app = TestApp::builder()
     .module(OnboardingModule)
     .build()
     .await;
-app.get::<Onboarding>().await.welcome("Ada", "ada@example.com").await.unwrap();
+app.get::<Onboarding>().await.welcome("Anu", "anu@example.com").await.unwrap();
 let mailer = app.get::<Mailer>().await;
 let sent = mailer.array_transport().expect("the array transport");
-sent.assert_sent(|m| m.to == ["ada@example.com"] && m.subject == "Welcome aboard");
+sent.assert_sent(|m| m.to == ["anu@example.com"] && m.subject == "Welcome aboard");
 ```
 
 With `QueueModule` in the test app, queued mail reaches the array transport

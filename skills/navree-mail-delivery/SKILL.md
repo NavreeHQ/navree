@@ -120,8 +120,8 @@ let app = TestApp::builder()
     .build()
     .await;
 // ... send ...
-fake.bounce(app.ctx(), "ada@example.com").await?;   // also deliver, soft_bounce, complain, open, click
-assert!(app.get::<Suppressions>().await.is_suppressed(None, "ada@example.com").await?);
+fake.bounce(app.ctx(), "anu@example.com").await?;   // also deliver, soft_bounce, complain, open, click
+assert!(app.get::<Suppressions>().await.is_suppressed(None, "anu@example.com").await?);
 ```
 
 `temp_database()` is SQLite: the app's `[dev-dependencies]` turn on the

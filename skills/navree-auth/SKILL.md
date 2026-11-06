@@ -141,12 +141,12 @@ the user JSON of `/api/auth/*` with a `UserResourceExtension` registered by
 Inject `Arc<AuthService>` (global):
 
 ```rust,ignore
-let user = auth.create_user("Ada Lovelace", "ada@example.com", &password).await?; // no password policy
+let user = auth.create_user("Anu Lakhotia", "anu@example.com", &password).await?; // no password policy
 let user = auth.register(&uow, NewUser { name, email, password }).await?;          // with the policy, in your uow
 let token = auth.jwt().sign_access(user.id)?;
-let found = auth.find_by_email("ada@example.com").await?;
+let found = auth.find_by_email("anu@example.com").await?;
 auth.revoke_all_refresh_tokens(user.id).await?;                  // sessions only
-let ended = auth.revoke_credentials_of_domain("acme.com").await?; // offboarding: see below
+let ended = auth.revoke_credentials_of_domain("agra.com").await?; // offboarding: see below
 ```
 
 Also: `attempt_login`, `sign_in`, `check_sign_in`, `two_factor_challenge`,
@@ -183,7 +183,7 @@ refresh don't ask (support sessions; existing sessions).
 
 Policies decide at sign-in only. When a rule starts to apply (SSO
 enforcement turns on for a domain), call
-`auth.revoke_credentials_of_domain("acme.com")` (or
+`auth.revoke_credentials_of_domain("agra.com")` (or
 `auth.revoke_all_credentials(user_id)`), not just
 `revoke_all_refresh_tokens`: it revokes the sessions and real-time
 subscriptions of navree-auth, then asks every `dyn CredentialRevoker`
@@ -325,7 +325,7 @@ async fn shows_the_signed_in_users_profile() {
         .build()
         .await;
     let auth = app.get::<AuthService>().await;
-    let user = auth.create_user("Ada Lovelace", "ada@example.com", "correct horse battery").await.unwrap();
+    let user = auth.create_user("Anu Lakhotia", "anu@example.com", "correct horse battery").await.unwrap();
     let token = auth.jwt().sign_access(user.id).unwrap();
     app.client()
         .get("/api/v1/profile")
@@ -333,7 +333,7 @@ async fn shows_the_signed_in_users_profile() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("email", json!("ada@example.com"));
+        .assert_json_path("email", json!("anu@example.com"));
     app.client().get("/api/v1/profile").send().await.assert_error(401, "Unauthorized");
     app.shutdown().await.unwrap();
 }

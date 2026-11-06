@@ -78,7 +78,7 @@ use navree::i18n::{I18n, Locale, Money, args, t};
 let text = t!("deal-created", count = 3);                     // current locale
 let amount = t!("deal-amount", amount = Money::new(4_200_000, "EUR"));
 let title = t!("login.title");                                // an attribute
-let german = Locale::scope("de", async { t!("deal-won", owner = "Ada", title = "X") }).await;
+let german = Locale::scope("de", async { t!("deal-won", owner = "Anu", title = "X") }).await;
 let explicit = i18n.t("pt-BR", "deal-created", args!(count = 2))?; // Arc<I18n>
 ```
 
@@ -167,7 +167,7 @@ let app = TestApp::builder()
 app.client()
     .post("/api/v1/contacts")
     .header("Accept-Language", "fr")
-    .json(&json!({ "last_name": "Lovelace" }))
+    .json(&json!({ "last_name": "Lakhotia" }))
     .send()
     .await
     .assert_json_path("errors.first_name.0", json!("prénom ne doit pas être vide"));

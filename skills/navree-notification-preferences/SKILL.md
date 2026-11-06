@@ -121,7 +121,7 @@ With `settings` on, `PATCH /api/settings/notification-templates?scope=workspace`
 
 ```json
 { "logo_url": "https://cdn.acme.test/logo.png", "brand_color": "#0F766E",
-  "footer": "Acme Corp, Pune", "style": { "accent": "#F59E0B" },
+  "footer": "Agra Corp, Pune", "style": { "accent": "#F59E0B" },
   "templates": { "deal.won": { "subject": "We won {{ title }}!", "html": "{% extends \"layouts/mail.html\" %}..." } } }
 ```
 

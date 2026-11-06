@@ -45,7 +45,7 @@ client_id = "Iv1.8a61f9b3a7aba766"
 [social.providers.okta]          # any OpenID Connect issuer
 type = "oidc"
 name = "Okta"
-issuer = "https://acme.okta.com"
+issuer = "https://agra.okta.com"
 client_id = "0oa8f2kq1xYz3AbC4d5e"
 ```
 
@@ -196,8 +196,8 @@ impl SocialProvider for Zoho {
 
 ```rust,ignore
 let (social, fake) = Social::fake();
-fake.on_code("github", "code-ada",
-    SocialUser::new("github", "583231").name("Ada").email(Some("ada@example.com"), true));
+fake.on_code("github", "code-anu",
+    SocialUser::new("github", "583231").name("Anu").email(Some("anu@example.com"), true));
 let app = TestApp::builder()
     .temp_database()
     .config("app.key", navree::crypto::generate_key())

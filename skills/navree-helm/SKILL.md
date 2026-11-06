@@ -36,7 +36,7 @@ Navree::app()
     .module(SessionModule::from_config())
     .module(AuthModule::from_config())
     .module(UiModule)
-    .module(AuthPages::new().app_name("Acme CRM"))
+    .module(AuthPages::new().app_name("Agra CRM"))
     .module(AccessModule::for_root(access()))
     // ... feature modules
     .module(HelmModule::from_config()) // section `helm`; or HelmModule::for_root(HelmOptions { .. })
@@ -284,7 +284,7 @@ async fn reps_edit_only_their_own_deals() {
     let app = boot_app().await;
     // create users with a role that has `helm.view`, and deals (your helpers)
     let rep = app.acting_as(principal(priya_id));
-    rep.get("/admin/api/resources/deals").query(&[("search", "Globex")]).send().await
+    rep.get("/admin/api/resources/deals").query(&[("search", "Gulati")]).send().await
         .assert_status(200).assert_json_path("meta.total", 1.into());
     rep.patch(&format!("/admin/api/resources/deals/{toms_deal}"))
         .json(&json!({ "title": "Mine now" })).send().await

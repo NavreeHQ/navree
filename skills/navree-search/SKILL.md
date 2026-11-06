@@ -168,7 +168,7 @@ filters: `.filter`, `.filter_not`, `.filter_in`, `.range(field, 10..)`,
 
 ```rust,ignore
 let hits = search
-    .across("ada")
+    .across("anu")
     .include::<Contact>(contacts_scope)
     .include::<Deal>(deals_scope)
     .limit(10)
@@ -248,7 +248,7 @@ it fails with
 `SearchError::WorkspaceRequired`:
 
 ```rust,ignore
-search.query::<Company>("acme").workspace(ws.id()).paginate(page).await?;
+search.query::<Company>("agra").workspace(ws.id()).paginate(page).await?;
 ```
 
 Only row isolation is supported. Sync jobs carry the workspace and, on
@@ -293,7 +293,7 @@ let app = TestApp::builder()
 // write through the model API, then:
 let search = app.get::<Search>().await;
 search.flush_pending().await?;                 // waits for inline syncs
-search.assert_indexed::<Contact>(ada.id).await;
+search.assert_indexed::<Contact>(anu.id).await;
 ```
 
 - `sync = "queued"` in tests: `app.get::<Queue>().await.run_pending().await`.

@@ -33,7 +33,7 @@ use navree::crypto::jose::{Algorithm, Header, JoseError, Jwk, JwkSet, Jws, Signi
 pub fn partner_assertion(pem: &str, key_id: &str, now: i64) -> Result<String, JoseError> {
     let key = SigningKey::from_pem(pem)?.with_kid(key_id);
     key.sign_jwt(&serde_json::json!({
-        "iss": "acme",
+        "iss": "agra",
         "aud": "https://api.partner.example",
         "iat": now,
         "exp": now + 300,

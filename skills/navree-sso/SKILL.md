@@ -140,13 +140,13 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 let idp = SsoFake::new();                       // SAML IdP whose responses pass every check
 let sso = app.get::<Sso>().await;
 let uow = app.get::<navree::db::Db>().await.uow(None, None).await;
-sso.create_connection(&uow, NewConnection::saml(SsoOwner::App, "Acme", idp.metadata_xml()).slug("acme")).await?;
-let domain = sso.add_domain(&uow, "acme", "acme.test").await?;
+sso.create_connection(&uow, NewConnection::saml(SsoOwner::App, "Agra", idp.metadata_xml()).slug("agra")).await?;
+let domain = sso.add_domain(&uow, "agra", "acme.test").await?;
 sso.mark_domain_verified(&uow, domain.id).await?;   // skips DNS
 uow.commit().await?;
-let url = app.client().get("/api/sso/acme/login").send().await.json_value()["url"].as_str().unwrap().to_owned();
+let url = app.client().get("/api/sso/agra/login").send().await.json_value()["url"].as_str().unwrap().to_owned();
 let answer = idp.respond_to(&url)?.name_id("alice@acme.test").attribute("groups", ["Admins"]);
-app.client().post("/api/sso/saml/acme/acs").form(&answer.form()).send().await.assert_status(200);
+app.client().post("/api/sso/saml/agra/acs").form(&answer.form()).send().await.assert_status(200);
 ```
 
 - `FakeResponse`: `sign_response(true)`, `sign_assertion(false)`,

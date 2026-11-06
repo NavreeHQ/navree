@@ -73,7 +73,7 @@ if cache.increment(&key, 1).await? > 10 {
 ```rust,ignore
 use navree::cache::Locks;
 
-let lock = self.locks.lock("imports:acme", Duration::from_secs(120)); // TTL longer than the work
+let lock = self.locks.lock("imports:agra", Duration::from_secs(120)); // TTL longer than the work
 let Some(_guard) = lock.acquire().await? else {
     return Ok(false); // someone else holds it
 };

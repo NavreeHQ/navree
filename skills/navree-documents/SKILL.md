@@ -161,7 +161,7 @@ let document = PdfDocument::new()
     .header(Paragraph::new().run(Run::title()).align(Align::End))
     .footer_page_numbers()                // "Page N of M"
     .heading(1, "Quarterly audit report")
-    .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").link("site", "https://acme.example"))
+    .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd").link("site", "https://agra.example"))
     .list(List::numbered().item("Rotate keys").item_with("Restore", List::bullets().item("Database")))
     .table(Table::new().header(["Control", "Status"])
         .row([Cell::new("MFA"), Cell::new("Passed").align(Align::End)])
@@ -297,7 +297,7 @@ let file = Docx::new()
     .title("Quarterly audit report")
     .locale("ar")                       // RTL paragraphs and tables
     .heading(1, "تقرير التدقيق")
-    .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd"))
+    .paragraph(Paragraph::new().text("Prepared for ").bold("Agra Ltd"))
     .bullets(["one", "two"])
     .numbered(["first", "second"])
     .table(Table::new().header(["Control", "Status"]).row(["MFA", "Passed"]))
@@ -395,9 +395,9 @@ Assert on the text; the native engine renders fast enough for unit and HTTP
 tests:
 
 ```rust,ignore
-let response = app.client().get("/api/v1/certificates/Ada").send().await.assert_status(200);
+let response = app.client().get("/api/v1/certificates/Anu").send().await.assert_status(200);
 let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
-assert!(pdf.text().unwrap().contains("Ada"));
+assert!(pdf.text().unwrap().contains("Anu"));
 ```
 
 For RTL output compare `pdf.text()` with a golden file. When the document is
@@ -414,7 +414,7 @@ let app = TestApp::builder()
     .build()
     .await;
 // ... exercise the app ...
-fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
+fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Anu");
 fake.assert_queued("reports/audit");     // queue() records, does not render
 // queue_operation() starts the operation (stays pending) and records the render;
 // fake.queued()[0].document.operation_id == Some(op.id)

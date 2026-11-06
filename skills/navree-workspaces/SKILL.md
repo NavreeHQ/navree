@@ -142,11 +142,11 @@ permissions = ["deals.read"]
 
 | Resolver | Reads | Config |
 |---|---|---|
-| `header` | `X-Workspace: acme` (slug or id) | `workspace.header` |
-| `path` | segment after the prefix: `/api/v1/w/acme/deals` | `workspace.path_prefix` (`/w`) |
-| `subdomain` | `acme.app.example.com` (Host header, one label) | `workspace.base_domain` (unset = off) |
+| `header` | `X-Workspace: agra` (slug or id) | `workspace.header` |
+| `path` | segment after the prefix: `/api/v1/w/agra/deals` | `workspace.path_prefix` (`/w`) |
+| `subdomain` | `agra.app.example.com` (Host header, one label) | `workspace.base_domain` (unset = off) |
 | `claim` | claim of the bearer JWT, authenticated requests only | `workspace.claim` (`workspace`) |
-| `domain` | the workspace's own verified domain (`crm.acme-corp.com`), marked by `DomainsModule` | list it first: `resolvers = ["domain", "header"]`; workspaces only |
+| `domain` | the workspace's own verified domain (`crm.agra-corp.com`), marked by `DomainsModule` | list it first: `resolvers = ["domain", "header"]`; workspaces only |
 | `session` | the workspace a browser signed in on the session cookie switched to (`POST /workspace/switch`, `workspace.switch_path`; a form with `workspace` and `next`, or JSON); `WorkspaceSwitcher` posts to it | list it first for Navree UI pages: `resolvers = ["session", "header"]`; with `workspace.session_default = true` a browser that has chosen none is in the first workspace its account belongs to |
 
 Order: `workspace.resolvers` (default `["header", "path", "subdomain",
@@ -190,11 +190,11 @@ of this workspace.`
 ## Services (writes take `&Uow` first, emit events after commit)
 
 ```rust,ignore
-let ws = workspaces.create(&uow, owner_id, NewWorkspace::named("Acme Inc.")).await?; // slug "acme-inc"
-workspaces.rename(&uow, ws.id, "Acme Corp").await?;          // slug unchanged
+let ws = workspaces.create(&uow, owner_id, NewWorkspace::named("Agra Inc.")).await?; // slug "agra-inc"
+workspaces.rename(&uow, ws.id, "Agra Corp").await?;          // slug unchanged
 workspaces.set_time_zone(&uow, ws.id, Some("Asia/Calcutta"), Some("in")).await?; // stored Asia/Kolkata, IN
 workspaces.for_user(user_id).await?;                          // Vec<Membership { workspace, role, granted_by }>
-workspaces.resolve("acme").await?;                            // slug or id, 404 otherwise
+workspaces.resolve("agra").await?;                            // slug or id, 404 otherwise
 workspaces.transfer_ownership(&uow, ws.id, new_owner).await?; // new owner: owner, old: admin
 workspaces.delete(&uow, ws.id).await?;                        // members + invitations cascade
 workspaces.enter(&uow, ws.id).await?;                         // jobs: navree.workspace / search_path
@@ -204,7 +204,7 @@ members.change_role(&uow, ws.id, user_id, WorkspaceRole::Admin).await?;
 members.remove(&uow, ws.id, user_id).await?;                  // 409 for the owner
 members.list(ws.id).await?;                                    // Vec<MemberInfo { member, user }>
 
-let sent = invitations.invite(&uow, ws.id, "grace@example.com", WorkspaceRole::Member, Some(me)).await?;
+let sent = invitations.invite(&uow, ws.id, "gauri@example.com", WorkspaceRole::Member, Some(me)).await?;
 let joined = invitations.accept(&uow, &token, user_id).await?; // AcceptedInvitation { workspace, member }
 invitations.revoke(&uow, ws.id, invitation_id).await?;
 invitations.prune_expired(&uow).await?;                        // or `navree workspace:prune-invitations`
@@ -255,11 +255,11 @@ workspace_role = "viewer"            # the workspace role it gives (default: sam
 ```
 
 ```rust,ignore
-let acme = organizations.create(&uow, owner, NewOrganization::named("Acme Group").country("gb")).await?;
-organizations.attach(&uow, acme.id, ws.id).await?;   // 409 if attached elsewhere
-org_members.add(&uow, acme.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
-org_members.grant(&uow, acme.id, linus, OrgRole::Member, WorkspaceSelector::only([ws.id])).await?;
-access_requests.approve(&uow, acme.id, request_id, Some(admin), Approval::default()).await?;
+let agra = organizations.create(&uow, owner, NewOrganization::named("Agra Group").country("gb")).await?;
+organizations.attach(&uow, agra.id, ws.id).await?;   // 409 if attached elsewhere
+org_members.add(&uow, agra.id, gauri, OrgRole::Admin, WorkspaceSelector::All).await?;
+org_members.grant(&uow, agra.id, linus, OrgRole::Member, WorkspaceSelector::only([ws.id])).await?;
+access_requests.approve(&uow, agra.id, request_id, Some(admin), Approval::default()).await?;
 ```
 
 - Org roles: `owner` (`all.*`), `admin` (`organization.read|update|attach|detach`,
@@ -297,8 +297,8 @@ enabled = true          # resolvers header (X-Partition), path (/p), claim; no s
 impl WorkspaceScoped for Contact {}
 impl PartitionScoped for Contact {}   // Contact: a #[derive(Model)]; column `partition_id` (PARTITION_COLUMN)
 
-let uk = partitions.create(&uow, ws.id, NewPartition::named("acme.co.uk")).await?; // slug acme-co-uk
-partitions.grant(&uow, ws.id, grace, PartitionSelector::only([uk.id])).await?;
+let uk = partitions.create(&uow, ws.id, NewPartition::named("agra.co.uk")).await?; // slug agra-co-uk
+partitions.grant(&uow, ws.id, gauri, PartitionSelector::only([uk.id])).await?;
 
 // lists: the named partition, else every partition the member sees
 async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<Record<Contact>>> {
@@ -426,8 +426,8 @@ m.migrations(..).workspace_scoped::<Company>().demo_seeder::<CrmDemo>(); // Comp
    `{{ today }}` or `{{ today + 1w }}` (d/w) becomes a time/date relative to
    `demo.now()` (the app's `dyn Clock`). `demo.parse_fixture(include_str!(..))`
    for embedded JSON.
-3. Create: `navree workspace:demo-create "Acme demo" --owner <id|email> [--slug demo]`
-   or `demos.create(&uow, owner, NewWorkspace::named("Acme demo"))`
+3. Create: `navree workspace:demo-create "Agra demo" --owner <id|email> [--slug demo]`
+   or `demos.create(&uow, owner, NewWorkspace::named("Agra demo"))`
    (`DemoWorkspaces`; seeds in `uow`, which stays entered in the demo; under
    database isolation seeds the tenant DB and commits it).
 4. Pick the mode:
@@ -455,19 +455,19 @@ plus `app.get::<Scheduler>().await.tick(at)`.
 ```rust,ignore
 let app = TestApp::from_builder(TestAuthenticator::install(app(sources))).await;
 let auth = app.get::<AuthService>().await;
-let ada = auth.create_user("Ada", "ada@example.com", "secret-password").await.unwrap();
-let owner = app.acting_as(principal(ada.id));
-owner.post("/api/workspaces").json(&json!({ "name": "Acme" })).send().await.assert_status(201);
+let anu = auth.create_user("Anu", "anu@example.com", "secret-password").await.unwrap();
+let owner = app.acting_as(principal(anu.id));
+owner.post("/api/workspaces").json(&json!({ "name": "Agra" })).send().await.assert_status(201);
 owner
     .post("/api/v1/deals")
-    .header("X-Workspace", "acme")
+    .header("X-Workspace", "agra")
     .json(&json!({ "title": "Big one" }))
     .send()
     .await
     .assert_status(201);
 app.acting_as(principal(Uuid::now_v7()))
     .get("/api/v1/deals")
-    .header("X-Workspace", "acme")
+    .header("X-Workspace", "agra")
     .send()
     .await
     .assert_error(403, "You are not a member of this workspace.");

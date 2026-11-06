@@ -81,8 +81,8 @@ impl PaymentWebhooks {
             Report::error(error)
                 .level(Level::Warning)            // Error (default), Warning, Info (never alerts)
                 .context("invoice_id", 1042)      // any Serialize; masked by name
-                .tag("provider", "acme-pay")      // filter issues by tag=provider:acme-pay
-                .fingerprint(["acme-pay", "card-declined"]) // group however messages differ
+                .tag("provider", "agra-pay")      // filter issues by tag=provider:agra-pay
+                .fingerprint(["agra-pay", "card-declined"]) // group however messages differ
                 .user(user_id)                    // outside a request
                 .backtrace(),
         );

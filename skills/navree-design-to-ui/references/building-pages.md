@@ -21,7 +21,7 @@ use navree::ui::{NavGroup, NavItem, Shell, UserMenu, icons};
 
 /// The app's one shell, from the design's sidebar (DC-01 in COMPONENTS.md).
 pub fn shell() -> Shell {
-    Shell::new("Acme CRM")
+    Shell::new("Agra CRM")
         .context("Production")
         .group(
             NavGroup::new("Sales")
@@ -30,7 +30,7 @@ pub fn shell() -> Shell {
         )
         .group(NavGroup::new("Settings").item(NavItem::new("Team", "/team").icon(icons::USERS)))
         .user(
-            UserMenu::new("Ada Lovelace", "ada@acme.test")
+            UserMenu::new("Anu Lakhotia", "anu@acme.test")
                 .link("Profile", "/profile")
                 .action("Sign out", "/sign-out"), // a POST: nothing a hover fetches signs anyone out
         )

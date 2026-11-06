@@ -310,7 +310,7 @@ message table per app, in English.
 ```rust,ignore
 app.acting_as(principal(Uuid::now_v7()))
     .post("/api/v1/contacts")
-    .json(&json!({ "first_name": "", "email": "ada@", "tags": [], "status": "lead", "stage": "lead" }))
+    .json(&json!({ "first_name": "", "email": "anu@", "tags": [], "status": "lead", "stage": "lead" }))
     .send()
     .await
     .assert_validation_error("first_name")

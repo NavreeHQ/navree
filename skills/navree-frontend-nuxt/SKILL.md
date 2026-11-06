@@ -263,7 +263,7 @@ export function useDeals(params: MaybeRefOrGetter<DealListParams>) {
 ```
 
 List filters live in the URL (`app/composables/useUrlState.ts`:
-`url.set({ search: "acme" })` replaces the entry and resets the page), so
+`url.set({ search: "agra" })` replaces the entry and resets the page), so
 views survive reloads and can be shared.
 
 #### Session and abilities

@@ -224,7 +224,7 @@ async fn reps_see_and_call_their_tools() {
     mcp.call_tool("list_deals", json!({}))
         .await
         .assert_ok()
-        .assert_json_path("0.title", json!("Acme renewal"));
+        .assert_json_path("0.title", json!("Agra renewal"));
     mcp.read_resource(&format!("crm://deals/{mine}")).await.assert_ok();
     mcp.get_prompt("follow-up-email", json!({ "deal_id": mine.to_string() })).await.assert_ok();
 }
@@ -247,7 +247,7 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
   shows them under the tag `MCP`.
 - Inspect by hand: `npx @modelcontextprotocol/inspector`, URL
   `http://127.0.0.1:8080/mcp`, header `Authorization: Bearer <token>`.
-- stdio: `cargo run -- mcp:serve --user ada@example.com` (logs on stderr).
+- stdio: `cargo run -- mcp:serve --user anu@example.com` (logs on stderr).
 - Navree's own conformance run with the official TypeScript SDK client:
   `npm ci --prefix e2e/mcp-sdk`, then
   `cargo test -p navree-mcp --test sdk_conformance -- --ignored`.

@@ -165,7 +165,7 @@ neither (jobs, commands) is decided by 1, 4 and 6 only; with
 ```rust,ignore
 use navree::flags::{FlagScope, Flags, Rollout};
 
-flags.activate::<NewPipeline>(FlagScope::workspace(acme.id)).await?;   // override
+flags.activate::<NewPipeline>(FlagScope::workspace(agra.id)).await?;   // override
 flags.deactivate::<NewPipeline>(FlagScope::user(grace.id)).await?;     // override
 flags.forget::<NewPipeline>(FlagScope::user(grace.id)).await?;         // remove it
 flags.activate::<NewPipeline>(FlagScope::everyone()).await?;           // global state

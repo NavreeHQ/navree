@@ -209,7 +209,7 @@ entries with `override_value::<dyn AuditSink>(..)`.
 - `dynamic_registration` lets any app register and ask users for consent;
   leave it off unless you need it (MCP OAuth mode).
 - Offboarding: the module registers a `CredentialRevoker`, so
-  `AuthService::revoke_credentials_of_domain("acme.com")` /
+  `AuthService::revoke_credentials_of_domain("agra.com")` /
   `revoke_all_credentials(user_id)` also revokes personal access tokens, OAuth
   access and refresh tokens, unexchanged codes and device codes, and the
   remembered consent (`oauth_authorizations`) of those users. Revoked tokens

@@ -120,7 +120,7 @@ async fn users(&self, graph: Connection<MicrosoftGraph, DirectoryRead>) -> Resul
 }
 // jobs/commands:
 let google = integrations.client_for::<GoogleWorkspace>(Owner::Workspace(id)).await?;
-let mail = google.as_user("ada@acme.test");   // domain-wide delegation
+let mail = google.as_user("anu@acme.test");   // domain-wide delegation
 let slack = integrations.client_for::<Slack>(owner).await?;
 slack.call("chat.postMessage", &json!({ "channel": "C1", "text": "hi" })).await?;
 ```
