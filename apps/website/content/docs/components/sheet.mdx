@@ -3,11 +3,32 @@ title: "Sheet"
 description: "A dialog that slides in from an edge of the screen, for longer panels beside the page."
 ---
 
-<UiPreview example="sheet/default" />
+<UiPreview example="build-anything/store-drawer" />
 
 `Sheet` is a [Dialog](/docs/components/dialog/) pinned to an edge: the right by default, or the left, top or bottom. It has everything a dialog has: the focus trap, `Esc`, focus return and no script.
 
-The preview shows the sheet in place. Press **Filters** to open it for real.
+The preview is the main job of a sheet, taken from the [store example app](/docs/example-app/store-tour/#an-order-in-a-drawer): an order opened over its table of orders, with the table still in view behind it. The sheet is `SheetWidth::Xl`, 60% of the screen, so an order and its lines fit beside the list the reader came from:
+
+```rust title="apps/store-demo/src/views/order.rs"
+let order = &view.order;
+Sheet::new(DRAWER, format!("Order {}", order.number))
+    .width(SheetWidth::Xl)
+    .description(format!(
+        "{} for {} in {}",
+        units(order.items),
+        order.customer,
+        place_of(&order.city, &order.state, &order.country)
+    ))
+    .body((order_detail(view, 3, today, true, parts), dialogs(view)))
+```
+
+A click on the order number asks the server for the drawer, and the answer draws it and opens it with `Op::Open`; with JavaScript off the same detail is a page of its own. Its history and the customer's other orders are [regions](/docs/ui/regions/) that load after it opens.
+
+## A small sheet
+
+A sheet is also the right size for filters or settings. The preview shows the sheet in place. Press **Filters** to open it for real.
+
+<UiPreview example="sheet/default" />
 
 ```rust
 use navree::ui::*;
