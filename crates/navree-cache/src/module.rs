@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
-use navree_kernel::{CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_telemetry::Telemetry;
 use serde::{Deserialize, Serialize};
 
@@ -47,11 +49,13 @@ impl CacheStoreKind {
 /// ```
 ///
 /// Every field has a default, so a missing section is valid.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "cache", docs = "/docs/digging-deeper/cache/", validate = Self::check)]
 #[serde(default)]
 pub struct CacheOptions {
     /// The backend (default `memory`; `redis` needs navree-redis's
     /// `RedisModule`).
+    #[config(one_of = "memory, redis")]
     pub store: CacheStoreKind,
     /// Prepended to every cache key and lock name (default empty).
     pub prefix: String,
@@ -65,6 +69,14 @@ impl CacheOptions {
     pub fn default_ttl(&self) -> Duration {
         Duration::from_secs(self.default_ttl_secs)
     }
+
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
+        if self.default_ttl_secs == 0 {
+            return Err("default_ttl_secs must be greater than 0".to_owned());
+        }
+        Ok(())
+    }
 }
 
 impl Default for CacheOptions {
@@ -74,17 +86,6 @@ impl Default for CacheOptions {
             prefix: String::new(),
             default_ttl_secs: DEFAULT_TTL.as_secs(),
         }
-    }
-}
-
-impl ConfigSection for CacheOptions {
-    const KEY: &'static str = "cache";
-
-    fn validate(&self) -> Result<(), String> {
-        if self.default_ttl_secs == 0 {
-            return Err("default_ttl_secs must be greater than 0".to_owned());
-        }
-        Ok(())
     }
 }
 
@@ -119,40 +120,18 @@ pub struct CacheModule;
 impl CacheModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: CacheOptions) -> impl Module {
-        ConfiguredCacheModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<CacheModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `cache` of the app configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredCacheModule { options: None }
+        ConfiguredModule::<CacheModule, CacheOptions>::from_config(register)
     }
 }
 
 impl Module for CacheModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `CacheModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredCacheModule {
-    /// `None`: read from configuration.
-    options: Option<CacheOptions>,
-}
-
-impl Module for ConfiguredCacheModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<CacheModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
@@ -295,5 +274,47 @@ impl HealthCheck for CacheHealth {
                 Err(error) => HealthStatus::Down(error.to_string()),
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_config::FieldType;
+
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = CacheOptions::schema().expect("schema");
+        assert_eq!(schema.key, "cache");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/digging-deeper/cache/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect(name)
+        };
+        assert_eq!(field("store").ty, FieldType::choice(&["memory", "redis"]));
+        assert_eq!(field("prefix").ty, FieldType::String);
+        assert_eq!(field("default_ttl_secs").ty, FieldType::Integer);
+        let defaults = CacheOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], "memory");
+        assert_eq!(defaults["default_ttl_secs"], 3600);
+    }
+
+    #[test]
+    fn a_zero_ttl_is_invalid() {
+        let options = CacheOptions {
+            default_ttl_secs: 0,
+            ..CacheOptions::default()
+        };
+        assert!(options.validate().unwrap_err().contains("default_ttl_secs"));
+        assert!(CacheOptions::default().validate().is_ok());
     }
 }

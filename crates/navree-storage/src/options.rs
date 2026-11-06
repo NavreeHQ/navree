@@ -38,12 +38,14 @@ use crate::path::normalize;
 /// Without a `storage` section there is one disk, `local`, rooted at
 /// `storage/app` (relative to the working directory). Defining `disks`
 /// replaces that default disk.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "storage", docs = "/docs/digging-deeper/storage/", validate = Self::check)]
 #[serde(default)]
 pub struct StorageOptions {
     /// The name of the default disk (default `local`).
     pub default: String,
-    /// The disks, by name. Names use `[A-Za-z0-9_-]`.
+    /// The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`,
+    /// `memory`, `s3`, `gcs` or `azure`.
     pub disks: BTreeMap<String, DiskConfig>,
     /// An absolute base URL (`https://api.example.com`) prepended to the
     /// links the app serves itself ([temporary URLs](crate::Disk::temporary_url)
@@ -346,14 +348,12 @@ impl AzureConfig {
     }
 }
 
-impl ConfigSection for StorageOptions {
-    const KEY: &'static str = "storage";
-
+impl StorageOptions {
     /// The default disk must exist; disk names use `[A-Za-z0-9_-]`; local
     /// roots and public URLs are not empty; buckets and containers are set;
     /// endpoints and `base_url` are absolute `http(s)` URLs; prefixes are
-    /// valid paths; a cloud driver is compiled in.
-    fn validate(&self) -> Result<(), String> {
+    /// valid paths; a cloud driver is compiled in. The boot calls this.
+    fn check(&self) -> Result<(), String> {
         if !self.disks.contains_key(&self.default) {
             return Err(format!(
                 "the default disk `{}` is not configured under `storage.disks`",
@@ -468,4 +468,73 @@ fn is_http_url(url: &str) -> bool {
     url.strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))
         .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_config::FieldType;
+
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = StorageOptions::schema().expect("schema");
+        assert_eq!(schema.key, "storage");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/storage/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect(name)
+        };
+        assert_eq!(field("default").ty, FieldType::String);
+        assert_eq!(
+            field("disks").ty,
+            FieldType::map(FieldType::other("DiskConfig"))
+        );
+        assert_eq!(field("base_url").ty, FieldType::String);
+        let defaults = StorageOptions::defaults().expect("defaults");
+        assert_eq!(defaults["default"], "local");
+        assert!(defaults["base_url"].is_null());
+    }
+
+    #[test]
+    fn the_options_never_print_a_configured_credential() {
+        let mut options = StorageOptions::default();
+        options.disks.insert(
+            "uploads".to_owned(),
+            S3Config::new("acme-uploads")
+                .credentials("AKIAEXAMPLE", "s3cr3t-value")
+                .into(),
+        );
+        options.disks.insert(
+            "media".to_owned(),
+            GcsConfig {
+                service_account_key: Some(Secret::new("gcs-key-value".to_owned())),
+                ..GcsConfig::new("acme-media")
+            }
+            .into(),
+        );
+        options.disks.insert(
+            "archive".to_owned(),
+            AzureConfig {
+                access_key: Some(Secret::new("azure-key-value".to_owned())),
+                ..AzureConfig::new("acmestorage", "archive")
+            }
+            .into(),
+        );
+        let text = format!("{options:?}");
+        for value in ["s3cr3t-value", "gcs-key-value", "azure-key-value"] {
+            assert!(!text.contains(value), "{text}");
+        }
+    }
 }

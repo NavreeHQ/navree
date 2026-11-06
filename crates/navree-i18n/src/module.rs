@@ -7,7 +7,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 use navree_notify::RecipientScope;
@@ -77,40 +77,18 @@ impl I18nModule {
     /// root), for example with Fluent files embedded by
     /// [`embed_locales!`](crate::embed_locales).
     pub fn for_root(options: I18nOptions) -> impl Module {
-        ConfiguredI18nModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<I18nModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `i18n` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredI18nModule { options: None }
+        ConfiguredModule::<I18nModule, I18nOptions>::from_config(register)
     }
 }
 
 impl Module for I18nModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `I18nModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredI18nModule {
-    /// `None`: read from configuration.
-    options: Option<I18nOptions>,
-}
-
-impl Module for ConfiguredI18nModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<I18nModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

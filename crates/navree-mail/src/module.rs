@@ -2,11 +2,13 @@
 
 use std::sync::Arc;
 
-use navree_config::{Config, ConfigSection};
+use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, ModuleBuilderJobsExt, SystemClock};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{ModuleBuilderHttpExt, UrlSigner};
-use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_telemetry::Telemetry;
 use navree_view::Views;
 
@@ -69,42 +71,19 @@ pub struct MailModule;
 impl MailModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: MailOptions) -> impl Module {
-        ConfiguredMailModule {
-            source: Source::Options(Arc::new(options)),
-        }
+        ConfiguredModule::<MailModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `mail` of the app's `Config` at
     /// boot (see [`MailOptions`]).
     pub fn from_config() -> impl Module {
-        ConfiguredMailModule {
-            source: Source::Config,
-        }
+        ConfiguredModule::<MailModule, MailOptions>::from_config(register)
     }
 }
 
 impl Module for MailModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, Source::Config);
-    }
-}
-
-/// `MailModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredMailModule {
-    source: Source,
-}
-
-impl Module for ConfiguredMailModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<MailModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.source.clone());
+        register(m, None);
     }
 }
 
@@ -141,8 +120,18 @@ impl Source {
 /// Global; provides the options (private), the transport, the mailer, the
 /// delivery services and the domain checks (exported), and registers the
 /// send job, the `mail` migrations, the routes, the commands and the error
-/// mapping.
-fn register(m: &mut ModuleBuilder, source: Source) {
+/// mapping. `Some` options come from code; `None` reads section `mail` of
+/// the configuration at boot.
+fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
+    let source = match options {
+        Some(options) => Source::Options(Arc::new(options)),
+        None => Source::Config,
+    };
+    // The section is read in `Source::options`, not by `m.config`, so it is
+    // registered here for `config:check` and the reference.
+    if matches!(source, Source::Config) {
+        m.config_section::<MailOptions>();
+    }
     let deps = source.deps();
     m.global()
         .factory(

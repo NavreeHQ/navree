@@ -10,7 +10,7 @@ use navree_contracts::{Broadcaster, Principal};
 use navree_crypto::Encrypter;
 use navree_http::{HttpOptions, HttpServer, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey,
     Resolver,
 };
 use serde_json::Value;
@@ -70,39 +70,18 @@ pub struct RealtimeModule;
 impl RealtimeModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: RealtimeOptions) -> impl Module {
-        ConfiguredRealtimeModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<RealtimeModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `realtime` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredRealtimeModule { options: None }
+        ConfiguredModule::<RealtimeModule, RealtimeOptions>::from_config(register)
     }
 }
 
 impl Module for RealtimeModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `RealtimeModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredRealtimeModule {
-    options: Option<RealtimeOptions>,
-}
-
-impl Module for ConfiguredRealtimeModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<RealtimeModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

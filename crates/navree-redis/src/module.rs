@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use futures_util::future::join_all;
 use navree_cache::{CacheStore, LockStore};
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, Clock, HealthCheck, HealthStatus, SessionStore};
 use navree_http::RateLimitStore;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_queue::QueueStore;
 use navree_realtime::Backplane;
 
@@ -62,39 +62,18 @@ pub struct RedisModule;
 impl RedisModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: RedisOptions) -> impl Module {
-        ConfiguredRedisModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<RedisModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `redis` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredRedisModule { options: None }
+        ConfiguredModule::<RedisModule, RedisOptions>::from_config(register)
     }
 }
 
 impl Module for RedisModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `RedisModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredRedisModule {
-    options: Option<RedisOptions>,
-}
-
-impl Module for ConfiguredRedisModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<RedisModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
@@ -110,7 +89,9 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
                 Ok(Arc::new(options))
             }
         })),
-        None => m.factory(
+        // The section is read here (with the `REDIS_URL` fallback), not by
+        // `m.config`, so it is registered for `config:check` and the reference.
+        None => m.config_section::<RedisOptions>().factory(
             Factory::<RedisOptions>::new(|r: Resolver| async move {
                 let config = r.get::<Config>().await?;
                 Ok(Arc::new(RedisOptions::from_config(&config)?))

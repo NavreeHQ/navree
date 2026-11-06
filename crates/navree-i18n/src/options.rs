@@ -2,9 +2,10 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use navree_config::ConfigSection;
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
+use serde::de::{self, Deserializer, Visitor};
 use serde::{Deserialize, Serialize};
 
 use crate::tag;
@@ -46,6 +47,22 @@ impl Source {
 impl fmt::Display for Source {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Source {
+    type Err = String;
+
+    /// The name [`as_str`](Source::as_str) gives.
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "query" => Ok(Source::Query),
+            "user" => Ok(Source::User),
+            "workspace" => Ok(Source::Workspace),
+            "cookie" => Ok(Source::Cookie),
+            "header" => Ok(Source::Header),
+            _ => Err("expected query, user, workspace, cookie or header".to_owned()),
+        }
     }
 }
 
@@ -159,32 +176,39 @@ impl fmt::Debug for LocaleFiles {
 ///
 /// Environment variables map as usual (`APP_I18N__DEFAULT_LOCALE=fr`);
 /// lists also accept a comma-separated string (`APP_I18N__LOCALES=en,fr`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "i18n", docs = "/docs/packages/localization/", validate = Self::check_values)]
 #[serde(default)]
 pub struct I18nOptions {
     /// The locale when negotiation finds nothing, and the last fallback of
     /// every lookup. Must be one of [`locales`](Self::locales).
     pub default_locale: String,
     /// The supported locales, as BCP 47 tags (`en`, `fr`, `pt-BR`).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub locales: Vec<String>,
     /// The directory of the Fluent files (`<dir>/<locale>/*.ftl`), relative
     /// to the working directory; not read when [`files`](Self::files) are
     /// embedded.
     pub dir: PathBuf,
-    /// The sources of a request's locale, in order.
-    #[serde(deserialize_with = "list_or_csv")]
+    /// The sources of a request's locale, in order: `query`, `user`,
+    /// `workspace`, `cookie` and `header` (default `user, workspace,
+    /// header`).
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
+    #[config(default = "user, workspace, header")]
     pub negotiation: Vec<Source>,
     /// The `query` source's parameter.
     pub query_param: String,
     /// The `cookie` source's cookie.
     pub cookie: String,
     /// What a missing message gives.
+    #[config(one_of = "warn, error, id")]
     pub missing: Missing,
     /// Whether changed files are reloaded while the app runs (checked
     /// twice a second; for development). Not with embedded files.
     pub reload: bool,
-    /// Isolation marks around variables.
+    /// Isolation marks around variables (`auto`, `always` or `never`; also
+    /// `true` and `false`).
+    #[config(one_of = "auto, always, never")]
     pub bidi_isolation: BidiIsolation,
     /// Whether the module mounts `GET /api/i18n/locales` and, with
     /// `DatabaseModule` and an authenticator in the app,
@@ -271,57 +295,20 @@ impl I18nOptions {
             Err(errors)
         }
     }
-}
 
-impl ConfigSection for I18nOptions {
-    const KEY: &'static str = "i18n";
-
-    fn validate(&self) -> Result<(), String> {
+    /// [`check`](I18nOptions::check) with the problems joined (the boot
+    /// calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    struct ListVisitor<T>(std::marker::PhantomData<T>);
-
-    impl<'de, T: Deserialize<'de>> Visitor<'de> for ListVisitor<T> {
-        type Value = Vec<T>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(|item| T::deserialize(de::value::StrDeserializer::<E>::new(item)))
-                .collect()
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-    }
-
-    deserializer.deserialize_any(ListVisitor(std::marker::PhantomData))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use navree_config::FieldType;
     use serde_json::json;
+
+    use super::*;
 
     fn parse(value: serde_json::Value) -> I18nOptions {
         serde_json::from_value(value).unwrap()
@@ -407,5 +394,59 @@ mod tests {
             ..I18nOptions::default()
         };
         assert!(options.check().unwrap_err()[0].contains("i18n.reload"));
+    }
+
+    #[test]
+    fn a_source_has_the_name_it_prints() {
+        for source in [
+            Source::Query,
+            Source::User,
+            Source::Workspace,
+            Source::Cookie,
+            Source::Header,
+        ] {
+            assert_eq!(source.to_string().parse::<Source>(), Ok(source));
+        }
+        assert!("carrier".parse::<Source>().is_err());
+        assert!(
+            serde_json::from_value::<I18nOptions>(json!({ "negotiation": "query,carrier" }))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = I18nOptions::schema().expect("schema");
+        assert_eq!(schema.key, "i18n");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/localization/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect(name)
+        };
+        assert_eq!(field("locales").ty, FieldType::list(FieldType::String));
+        assert_eq!(
+            field("missing").ty,
+            FieldType::choice(&["warn", "error", "id"])
+        );
+        assert_eq!(
+            field("bidi_isolation").ty,
+            FieldType::choice(&["auto", "always", "never"])
+        );
+        // The embedded files are not a setting.
+        assert!(schema.fields.iter().all(|field| field.name != "files"));
+        let defaults = I18nOptions::defaults().expect("defaults");
+        assert_eq!(defaults["default_locale"], "en");
+        assert_eq!(defaults["locales"][0], "en");
+        assert_eq!(defaults["negotiation"], "user, workspace, header");
+        assert_eq!(defaults["missing"], "warn");
+        assert_eq!(defaults["bidi_isolation"], "auto");
     }
 }

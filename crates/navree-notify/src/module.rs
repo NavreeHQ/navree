@@ -3,12 +3,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use navree_config::{Config, ConfigSection};
+use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
+    Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::Telemetry;
@@ -54,17 +55,13 @@ pub struct NotifyModule;
 impl NotifyModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: NotifyOptions) -> impl Module {
-        ConfiguredNotifyModule {
-            source: Source::Options(Arc::new(options)),
-        }
+        ConfiguredModule::<NotifyModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `notify` of the app's `Config`
     /// at boot (see [`NotifyOptions`]).
     pub fn from_config() -> impl Module {
-        ConfiguredNotifyModule {
-            source: Source::Config,
-        }
+        ConfiguredModule::<NotifyModule, NotifyOptions>::from_config(register)
     }
 
     /// Registers notification type `N` (import it in the module that owns
@@ -92,26 +89,7 @@ impl<N: Notification> Module for NotificationFeature<N> {
 
 impl Module for NotifyModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, Source::Config);
-    }
-}
-
-/// `NotifyModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredNotifyModule {
-    source: Source,
-}
-
-impl Module for ConfiguredNotifyModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<NotifyModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.source.clone());
+        register(m, None);
     }
 }
 
@@ -147,8 +125,18 @@ impl Source {
 
 /// Global; provides the options (private), the notifier, the delivery log,
 /// the opt-outs and the push subscriptions (exported), and registers the
-/// job, the migrations, the routes and `notify:vapid`.
-fn register(m: &mut ModuleBuilder, source: Source) {
+/// job, the migrations, the routes and `notify:vapid`. `Some` options come
+/// from code; `None` reads section `notify` of the configuration at boot.
+fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
+    let source = match options {
+        Some(options) => Source::Options(Arc::new(options)),
+        None => Source::Config,
+    };
+    // The section is read in `Source::options`, not by `m.config`, so it is
+    // registered here for `config:check` and the reference.
+    if matches!(source, Source::Config) {
+        m.config_section::<NotifyOptions>();
+    }
     let deps = source.deps();
     let options_key = || vec![ProviderKey::of::<NotifyOptions>()];
     m.global()

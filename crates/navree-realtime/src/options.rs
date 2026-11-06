@@ -1,8 +1,8 @@
 //! [`RealtimeOptions`]: the `realtime` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 /// Settings of the realtime server (configuration section `realtime`; every
 /// key optional).
@@ -25,13 +25,15 @@ use serde::{Deserialize, Deserializer};
 /// ```
 ///
 /// `Debug` redacts the secret.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "realtime", docs = "/docs/digging-deeper/broadcasting/", validate = Self::check_values)]
 #[serde(default)]
 pub struct RealtimeOptions {
     /// The application id (default `navree`).
     pub app_id: String,
     /// The public application key clients connect with (default `navree`):
     /// letters, digits, `-`, `_` and `.`.
+    #[config(public)]
     pub key: String,
     /// The secret that signs private and presence channel subscriptions.
     /// Empty (the default) means a random secret per process, which is
@@ -42,7 +44,7 @@ pub struct RealtimeOptions {
     /// allowed origins. A request without an `Origin` header (not a
     /// browser) or from the server's own origin is always accepted. From the
     /// environment, a comma-separated list.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allowed_origins: Vec<String>,
     /// Seconds of silence after which the server pings a client (default
     /// 120, sent to clients as `activity_timeout`). A client that then stays
@@ -65,14 +67,16 @@ pub struct RealtimeOptions {
     /// disconnections over Redis; it needs `RedisModule` and a
     /// [`secret`](RealtimeOptions::secret), because a subscription signed
     /// by one process is checked by another.
+    #[config(one_of = "none, redis")]
     pub backplane: BackplaneKind,
     /// The live streams pages listen to (`realtime.streams`).
+    #[config(table)]
     pub streams: StreamOptions,
 }
 
 /// The caps of the live streams pages listen to (`realtime.streams`; every
 /// key optional).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct StreamOptions {
     /// The topics and channels one stream may name together (default 32).
@@ -145,15 +149,13 @@ impl Default for RealtimeOptions {
     }
 }
 
-impl ConfigSection for RealtimeOptions {
-    const KEY: &'static str = "realtime";
-
-    fn validate(&self) -> Result<(), String> {
+impl RealtimeOptions {
+    /// [`check`](RealtimeOptions::check) with the problems joined (the boot
+    /// calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
-}
 
-impl RealtimeOptions {
     /// Every problem with these options (empty when valid). Messages name
     /// the key and never echo the secret.
     pub(crate) fn check(&self) -> Result<(), Vec<String>> {
@@ -214,31 +216,9 @@ impl RealtimeOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Origins {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let origins = match Origins::deserialize(deserializer)? {
-        Origins::List(origins) => origins,
-        Origins::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(origins
-        .into_iter()
-        .map(|origin| origin.trim().to_owned())
-        .filter(|origin| !origin.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
 
     use super::*;
 
@@ -309,7 +289,6 @@ mod tests {
                 serde_json::json!({"relay_url": "127.0.0.1:8080"}),
                 "realtime.relay_url",
             ),
-            // MOD-004
             (
                 serde_json::json!({"streams": {"names": 0}}),
                 "realtime.streams.names",
@@ -337,7 +316,6 @@ mod tests {
 
     #[test]
     fn stream_caps_have_defaults_and_read_from_the_environment() {
-        // MOD-004
         let defaults = load(ConfigSources::new()).unwrap();
         assert_eq!(defaults.streams, StreamOptions::default());
         assert_eq!(
@@ -392,5 +370,59 @@ mod tests {
             load(ConfigSources::new().set("realtime", serde_json::json!({"backplane": "pigeon"})))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = RealtimeOptions::schema().expect("schema");
+        assert_eq!(schema.key, "realtime");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/broadcasting/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        // The secret is a credential; the key clients connect with is not.
+        assert_eq!(schema.secret_paths(), ["realtime.secret"]);
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect(name)
+        };
+        assert!(field("key").public);
+        assert!(!field("key").secret);
+        assert_eq!(
+            field("allowed_origins").ty,
+            FieldType::list(FieldType::String)
+        );
+        assert_eq!(field("backplane").ty, FieldType::choice(&["none", "redis"]));
+        let streams = field("streams");
+        assert_eq!(streams.ty, FieldType::Table);
+        assert!(
+            streams
+                .fields
+                .iter()
+                .any(|field| field.name == "lifetime_secs")
+        );
+        let defaults = RealtimeOptions::defaults().expect("defaults");
+        assert_eq!(defaults["app_id"], "navree");
+        assert!(defaults["secret"].is_null());
+        assert_eq!(defaults["backplane"], "none");
+        assert_eq!(defaults["streams"]["replay"], 1024);
+    }
+
+    #[test]
+    fn the_secret_is_never_printed() {
+        let options = load(
+            ConfigSources::new().set("realtime", serde_json::json!({"secret": "hush-hush-value"})),
+        )
+        .unwrap();
+        assert_eq!(options.secret.expose(), "hush-hush-value");
+        assert!(!format!("{options:?}").contains("hush-hush-value"));
     }
 }

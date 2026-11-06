@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
 use serde::Deserialize;
 
@@ -35,7 +35,8 @@ use crate::{RenderOptions, TransportConfig};
 /// See [`TransportConfig`] for every transport and its shorthand,
 /// [`DeliveryOptions`], [`TrackingOptions`], [`WebhookOptions`] and
 /// [`RenderOptions`] for the rest.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, ConfigSection)]
+#[config(key = "mail", docs = "/docs/digging-deeper/mail/", validate = Self::check)]
 #[serde(default)]
 pub struct MailOptions {
     /// The default sender, `hello@example.com` or `Acme <hello@acme.test>`
@@ -53,11 +54,14 @@ pub struct MailOptions {
     /// CSS inlining and the generated text body.
     pub render: RenderOptions,
     /// The delivery log, suppressions, the outbox and tenant transports.
+    #[config(table)]
     pub delivery: DeliveryOptions,
     /// Open and click tracking.
+    #[config(table)]
     pub tracking: TrackingOptions,
     /// The provider webhooks that report deliveries, bounces and
     /// complaints.
+    #[config(table)]
     pub webhooks: WebhookOptions,
     /// Inbound mail: size limit, the disk for raw messages, reply tokens
     /// and the provider sources (crate feature `inbound`).
@@ -82,12 +86,10 @@ impl Default for MailOptions {
     }
 }
 
-impl ConfigSection for MailOptions {
-    const KEY: &'static str = "mail";
-
+impl MailOptions {
     /// The sender parses, every transport builds (no connection is made),
-    /// and tracking has the delivery log it needs.
-    fn validate(&self) -> Result<(), String> {
+    /// and tracking has the delivery log it needs. The boot calls this.
+    fn check(&self) -> Result<(), String> {
         if !self.from.is_empty() {
             mailbox("from", &self.from).map_err(|error| format!("`from`: {error}"))?;
         }
@@ -146,7 +148,7 @@ impl ConfigSection for MailOptions {
 /// Everything here needs `DatabaseModule` (migration set `mail`); stored
 /// transports and held messages are encrypted with the app key
 /// (`CryptoModule`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DeliveryOptions {
     /// Turn the delivery pipeline on (default `false`): every message is
@@ -190,7 +192,7 @@ impl Default for DeliveryOptions {
 ///
 /// Tracking needs `mail.delivery.enabled`: links and the image name the
 /// delivery, and each open or click is logged as an event on it.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TrackingOptions {
     /// Add an open-tracking image to HTML mail (default `false`).
@@ -244,16 +246,20 @@ impl TrackingOptions {
 /// [mail.webhooks.resend]
 /// secret = "whsec_..."    # POST /api/mail/webhooks/resend
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct WebhookOptions {
     /// Amazon SES events through an SNS topic.
+    #[config(table)]
     pub ses: SesWebhookOptions,
     /// Mailgun event webhooks.
+    #[config(table)]
     pub mailgun: MailgunWebhookOptions,
     /// Postmark webhooks.
+    #[config(table)]
     pub postmark: PostmarkWebhookOptions,
     /// Resend webhooks.
+    #[config(table)]
     pub resend: ResendWebhookOptions,
 }
 
@@ -262,7 +268,7 @@ pub struct WebhookOptions {
 /// 2, with the signing certificate fetched from
 /// `https://sns.<region>.amazonaws.com`), its topic, its age, and the URL
 /// token.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SesWebhookOptions {
     /// The secret in the subscription URL's `token` query parameter,
@@ -293,7 +299,7 @@ impl Default for SesWebhookOptions {
 }
 
 /// `mail.webhooks.mailgun`.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MailgunWebhookOptions {
     /// The webhook signing key (Mailgun's "HTTP webhook signing key").
@@ -301,7 +307,7 @@ pub struct MailgunWebhookOptions {
 }
 
 /// `mail.webhooks.postmark`.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PostmarkWebhookOptions {
     /// The secret: the basic-auth password of the webhook URL, or its
@@ -310,9 +316,88 @@ pub struct PostmarkWebhookOptions {
 }
 
 /// `mail.webhooks.resend`.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ResendWebhookOptions {
     /// The webhook's signing secret (`whsec_...`).
     pub secret: Option<Secret<String>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_config::{FieldSchema, FieldType};
+
+    use super::*;
+
+    fn field<'a>(fields: &'a [FieldSchema], name: &str) -> &'a FieldSchema {
+        fields
+            .iter()
+            .find(|field| field.name == name)
+            .unwrap_or_else(|| panic!("no field {name}"))
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = MailOptions::schema().expect("schema");
+        assert_eq!(schema.key, "mail");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/digging-deeper/mail/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        // Every webhook credential is a secret, and nothing else is.
+        let mut secrets = schema.secret_paths();
+        secrets.sort();
+        assert_eq!(
+            secrets,
+            [
+                "mail.webhooks.mailgun.signing_key",
+                "mail.webhooks.postmark.token",
+                "mail.webhooks.resend.secret",
+                "mail.webhooks.ses.token",
+            ]
+        );
+        assert_eq!(field(&schema.fields, "from").ty, FieldType::String);
+        let delivery = field(&schema.fields, "delivery");
+        assert_eq!(delivery.ty, FieldType::Table);
+        assert!(delivery.fields.iter().any(|field| field.name == "enabled"));
+        let webhooks = field(&schema.fields, "webhooks");
+        let ses = field(&webhooks.fields, "ses");
+        assert_eq!(ses.ty, FieldType::Table);
+        assert!(field(&ses.fields, "token").secret);
+        assert!(!field(&ses.fields, "tolerance_secs").secret);
+        let defaults = MailOptions::defaults().expect("defaults");
+        assert_eq!(defaults["from"], "hello@example.com");
+        assert_eq!(defaults["transport"], "log");
+        assert_eq!(defaults["delivery"]["enabled"], false);
+        assert!(defaults["webhooks"]["ses"]["token"].is_null());
+    }
+
+    #[test]
+    fn the_options_never_print_a_configured_credential() {
+        let options: MailOptions = serde_json::from_value(serde_json::json!({
+            "transport": "smtps://asha:smtp-pa55word@smtp.acme.test",
+            "webhooks": {
+                "ses": { "token": "ses-token-value", "topic_arns": ["arn:aws:sns:ap-south-1:1:events"] },
+                "mailgun": { "signing_key": "mailgun-key-value" },
+                "postmark": { "token": "postmark-token-value" },
+                "resend": { "secret": "whsec_resend-value" },
+            },
+        }))
+        .expect("the section parses");
+        let text = format!("{options:?}");
+        for value in [
+            "smtp-pa55word",
+            "ses-token-value",
+            "mailgun-key-value",
+            "postmark-token-value",
+            "whsec_resend-value",
+        ] {
+            assert!(!text.contains(value), "{text}");
+        }
+        // They are still there for the code that needs them.
+        let resend = options.webhooks.resend.secret.as_ref().expect("a secret");
+        assert_eq!(resend.expose(), "whsec_resend-value");
+    }
 }

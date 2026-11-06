@@ -34,12 +34,15 @@ pub const URL_ENV: &str = "REDIS_URL";
 /// `APP_REDIS__CONNECTIONS__QUEUE__URL`. When the configuration leaves
 /// `redis.url` out, [`from_config`](RedisOptions::from_config) takes it from
 /// `REDIS_URL` ([`URL_ENV`]). `Debug` masks URL passwords.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "redis", docs = "/docs/digging-deeper/redis/", validate = Self::check_values)]
 #[serde(default)]
 pub struct RedisOptions {
     /// The default connection's URL (default `redis://127.0.0.1:6379`):
     /// `redis://[user][:password@]host[:port][/db]`, `rediss://…` for TLS
     /// (rustls, the system's root certificates) or `unix:///path/to/redis.sock`.
+    /// When nothing sets it, the `REDIS_URL` environment variable does.
+    #[config(env_fallback = "REDIS_URL")]
     pub url: String,
     /// Starts every key the Redis drivers write (default `navree:`). Give
     /// each app sharing a Redis server its own prefix.
@@ -162,12 +165,10 @@ impl RedisOptions {
             Err(errors)
         }
     }
-}
 
-impl ConfigSection for RedisOptions {
-    const KEY: &'static str = "redis";
-
-    fn validate(&self) -> Result<(), String> {
+    /// [`check`](RedisOptions::check) with the problems joined (the boot
+    /// calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
 }
@@ -405,5 +406,37 @@ mod tests {
             "unix:///tmp/redis.sock"
         );
         assert_eq!(redact_url("not a url"), "not a url");
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = RedisOptions::schema().expect("schema");
+        assert_eq!(schema.key, "redis");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/digging-deeper/redis/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "url",
+            "prefix",
+            "connect_timeout_ms",
+            "response_timeout_ms",
+            "connections",
+        ] {
+            assert!(
+                schema.fields.iter().any(|field| field.name == name),
+                "{name}"
+            );
+        }
+        // `REDIS_URL` is listed as the fallback of `redis.url`, and only that.
+        let fallbacks = schema.env_fallbacks();
+        assert_eq!(fallbacks.len(), 1, "{fallbacks:?}");
+        assert_eq!(fallbacks[0].key, "redis.url");
+        assert_eq!(fallbacks[0].variable, URL_ENV);
+        let defaults = RedisOptions::defaults().expect("defaults");
+        assert_eq!(defaults["url"], "redis://127.0.0.1:6379");
+        assert_eq!(defaults["connect_timeout_ms"], 5000);
     }
 }

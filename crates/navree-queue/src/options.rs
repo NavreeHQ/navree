@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer, Serialize};
+use navree_config::{ConfigSection, ConfigTable};
+use serde::{Deserialize, Serialize};
 
 /// Where queued jobs are stored.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,10 +50,12 @@ impl QueueDriver {
 /// `queues` may also be one comma-separated string
 /// (`APP_QUEUE__QUEUES=high,default`); when empty, workers process
 /// `default_queue`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "queue", docs = "/docs/digging-deeper/queues/", validate = Self::check)]
 #[serde(default)]
 pub struct QueueOptions {
     /// Where jobs are stored (default [`QueueDriver::Database`]).
+    #[config(one_of = "database, memory, redis")]
     pub driver: QueueDriver,
     /// The queue of jobs dispatched with an empty queue name, and the queue
     /// workers process when [`queues`](QueueOptions::queues) is empty
@@ -68,10 +70,11 @@ pub struct QueueOptions {
     pub poll_interval_ms: u64,
     /// The queues workers process, highest priority first (default: just
     /// `default_queue`).
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub queues: Vec<String>,
     /// Operations: their routes, heartbeat and watchdog (section
     /// `queue.operations`).
+    #[config(table)]
     pub operations: OperationsOptions,
 }
 
@@ -102,7 +105,7 @@ impl Default for QueueOptions {
 /// view_permission = "operations.view"  # see other users' operations
 /// cancel_permission = "operations.cancel"
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct OperationsOptions {
     /// Mounts the `/api/operations` routes (default true; they also need
@@ -208,12 +211,9 @@ impl QueueOptions {
     pub fn poll_interval(&self) -> Duration {
         Duration::from_millis(self.poll_interval_ms)
     }
-}
 
-impl ConfigSection for QueueOptions {
-    const KEY: &'static str = "queue";
-
-    fn validate(&self) -> Result<(), String> {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         let mut problems = Vec::new();
         if self.default_queue.trim().is_empty() {
             problems.push("default_queue must not be empty");
@@ -233,31 +233,9 @@ impl ConfigSection for QueueOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Names {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let names = match Names::deserialize(deserializer)? {
-        Names::List(names) => names,
-        Names::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(names
-        .into_iter()
-        .map(|name| name.trim().to_owned())
-        .filter(|name| !name.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
 
     use super::*;
 
@@ -378,5 +356,41 @@ mod tests {
             ..QueueOptions::default()
         };
         assert!(options.validate().unwrap_err().contains("poll_interval_ms"));
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = QueueOptions::schema().expect("schema");
+        assert_eq!(schema.key, "queue");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/digging-deeper/queues/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .expect(name)
+        };
+        assert_eq!(
+            field("driver").ty,
+            FieldType::choice(&["database", "memory", "redis"])
+        );
+        assert_eq!(field("queues").ty, FieldType::list(FieldType::String));
+        let operations = field("operations");
+        assert_eq!(operations.ty, FieldType::Table);
+        assert!(
+            operations
+                .fields
+                .iter()
+                .any(|field| field.name == "stale_after_secs")
+        );
+        let defaults = QueueOptions::defaults().expect("defaults");
+        assert_eq!(defaults["driver"], "database");
+        assert_eq!(defaults["workers"], 4);
+        assert_eq!(defaults["operations"]["heartbeat_secs"], 30);
     }
 }

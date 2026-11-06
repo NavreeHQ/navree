@@ -7,7 +7,7 @@ use navree_contracts::{Clock, Dispatcher, JobMonitor, JobRegistration};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_realtime::ModuleBuilderRealtimeExt;
 use navree_schedule::ModuleBuilderScheduleExt;
@@ -61,40 +61,18 @@ pub struct QueueModule;
 impl QueueModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: QueueOptions) -> impl Module {
-        ConfiguredQueueModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<QueueModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `queue` of the app configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredQueueModule { options: None }
+        ConfiguredModule::<QueueModule, QueueOptions>::from_config(register)
     }
 }
 
 impl Module for QueueModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `QueueModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredQueueModule {
-    /// `None`: read from configuration.
-    options: Option<QueueOptions>,
-}
-
-impl Module for ConfiguredQueueModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<QueueModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

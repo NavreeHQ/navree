@@ -1,12 +1,9 @@
 //! [`NotifyOptions`]: configuration section `notify`.
 
-use std::fmt;
-use std::str::FromStr;
-
 use chrono::{NaiveTime, Weekday};
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
-use serde::{Deserialize, Deserializer, Serialize, de};
+use serde::{Deserialize, Serialize};
 
 use crate::Channel;
 use crate::timing::{parse_hh_mm, parse_weekday};
@@ -17,7 +14,8 @@ use crate::timing::{parse_hh_mm, parse_weekday};
 /// Build it with `..NotifyOptions::default()` so new fields keep compiling.
 /// Secrets (tokens, passwords, private keys) are read from the
 /// configuration but never serialized.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "notify", docs = "/docs/digging-deeper/notifications/", validate = Self::check)]
 #[serde(default)]
 pub struct NotifyOptions {
     /// Queue notifications: [`Notifier::send`](crate::Notifier::send)
@@ -36,28 +34,40 @@ pub struct NotifyOptions {
     /// Default: `true`.
     pub deliveries: bool,
     /// The Slack channel.
+    #[config(table)]
     pub slack: SlackOptions,
     /// The Microsoft Teams channel.
+    #[config(table)]
     pub teams: TeamsOptions,
     /// The SMS channel.
+    #[config(table)]
     pub sms: SmsOptions,
     /// The WhatsApp channel.
+    #[config(table)]
     pub whatsapp: WhatsAppOptions,
     /// The web push channel.
+    #[config(table)]
     pub web_push: WebPushOptions,
     /// Twilio credentials, for `sms.driver` and `whatsapp.driver` `twilio`.
+    #[config(table)]
     pub twilio: TwilioOptions,
     /// Vonage credentials, for `sms.driver = "vonage"`.
+    #[config(table)]
     pub vonage: VonageOptions,
     /// Amazon SNS credentials, for `sms.driver = "sns"`.
+    #[config(table)]
     pub sns: SnsOptions,
     /// WhatsApp Cloud API credentials, for `whatsapp.driver = "meta"`.
+    #[config(table)]
     pub meta: MetaOptions,
     /// What people and workspaces choose to receive.
+    #[config(table)]
     pub preferences: PreferenceOptions,
     /// The digest mail of batched notifications.
+    #[config(table)]
     pub digest: DigestOptions,
     /// Deliveries held for quiet hours, send windows and digests.
+    #[config(table)]
     pub deferred: DeferredOptions,
 }
 
@@ -84,7 +94,7 @@ impl Default for NotifyOptions {
 }
 
 /// `notify.preferences`: the channels people switch per category.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PreferenceOptions {
     /// Apply the stored preferences when sending (with `DatabaseModule`).
@@ -94,12 +104,13 @@ pub struct PreferenceOptions {
     /// list them: a list, or a comma-separated string from an environment
     /// variable. Default: every channel but `broadcast`, which follows the
     /// `database` choice (the real-time event of an in-app notification).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
+    #[config(default = "mail, database, slack, teams, sms, whatsapp, web_push")]
     pub channels: Vec<Channel>,
     /// Categories that cannot be turned off (`security`): their
     /// notifications go out over every channel they name, and a change
     /// that turns one of their channels off is refused. Default: none.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub required: Vec<String>,
     /// The permission that changes a workspace's defaults
     /// (`PATCH /api/notifications/preferences/workspace`), checked in the
@@ -129,7 +140,7 @@ impl PreferenceOptions {
 }
 
 /// `notify.digest`: when digests go out and how they look.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DigestOptions {
     /// The local time daily and weekly digests go out, `HH:MM` on the
@@ -175,13 +186,14 @@ impl DigestOptions {
 
 /// `notify.deferred`: deliveries held for quiet hours, send windows and
 /// digests, released by `notify:release`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DeferredOptions {
     /// The channels quiet hours and send windows hold. Default: `mail`,
     /// `slack`, `teams`, `sms`, `whatsapp` and `web_push` (the database
     /// and broadcast channels show in the app at once).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
+    #[config(default = "mail, slack, teams, sms, whatsapp, web_push")]
     pub channels: Vec<Channel>,
     /// How many held deliveries one `notify:release` run releases at most.
     /// Default: 500.
@@ -222,34 +234,9 @@ impl DeferredOptions {
     }
 }
 
-/// A list, or one comma-separated string (an environment variable).
-fn list_or_csv<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de> + FromStr,
-    T::Err: fmt::Display,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrCsv<T> {
-        List(Vec<T>),
-        Csv(String),
-    }
-    match ListOrCsv::<T>::deserialize(deserializer)? {
-        ListOrCsv::List(items) => Ok(items),
-        ListOrCsv::Csv(text) => text
-            .split(',')
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .map(|item| item.parse::<T>().map_err(de::Error::custom))
-            .collect(),
-    }
-}
-
-impl ConfigSection for NotifyOptions {
-    const KEY: &'static str = "notify";
-
-    fn validate(&self) -> Result<(), String> {
+impl NotifyOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         parse_hh_mm(&self.digest.at).map_err(|error| format!("notify.digest.at: {error}"))?;
         parse_weekday(&self.digest.weekly_on)
             .map_err(|error| format!("notify.digest.weekly_on: {error}"))?;
@@ -323,7 +310,7 @@ fn check_url(key: &str, url: &str) -> Result<(), String> {
 }
 
 /// `notify.slack`: the bot token of bot routes without a connection.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SlackOptions {
     /// The bot token (`xoxb-...`) for [`SlackRoute::channel`](crate::SlackRoute::channel).
@@ -335,7 +322,7 @@ pub struct SlackOptions {
 
 /// `notify.teams`: the bot that sends proactive messages to conversations
 /// without a connection (an Azure Bot's app registration).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TeamsOptions {
     /// The bot's Microsoft app id.
@@ -348,6 +335,7 @@ pub struct TeamsOptions {
     pub tenant: String,
     /// The token endpoint (default
     /// `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`).
+    #[config(public)]
     pub token_url: Option<String>,
 }
 
@@ -378,10 +366,11 @@ pub enum SmsDriverKind {
 }
 
 /// `notify.sms`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SmsOptions {
     /// The driver; without one the SMS channel is unavailable.
+    #[config(one_of = "twilio, vonage, sns, log")]
     pub driver: Option<SmsDriverKind>,
     /// The default sender: a number in E.164, an alphanumeric sender id, or
     /// a Twilio messaging service (`MG...`).
@@ -408,10 +397,11 @@ pub enum WhatsAppDriverKind {
 }
 
 /// `notify.whatsapp`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct WhatsAppOptions {
     /// The driver; without one the WhatsApp channel is unavailable.
+    #[config(one_of = "twilio, meta, log")]
     pub driver: Option<WhatsAppDriverKind>,
     /// The sender's number in E.164 (Twilio).
     pub from: Option<String>,
@@ -420,7 +410,7 @@ pub struct WhatsAppOptions {
 }
 
 /// `notify.web_push`: the VAPID key pair (see `notify:vapid`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct WebPushOptions {
     /// The application server key: the public key, base64url (65 bytes).
@@ -469,7 +459,7 @@ impl WebPushOptions {
 }
 
 /// `notify.twilio`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TwilioOptions {
     /// The account SID (`AC...`).
@@ -479,6 +469,7 @@ pub struct TwilioOptions {
     pub auth_token: Secret<String>,
     /// An API key SID (`SK...`) to authenticate with instead of the
     /// account SID (its secret goes in `auth_token`).
+    #[config(public)]
     pub api_key: Option<String>,
     /// The API's base URL (default `https://api.twilio.com`).
     pub endpoint: Option<String>,
@@ -496,10 +487,11 @@ impl TwilioOptions {
 }
 
 /// `notify.vonage`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct VonageOptions {
-    /// The API key.
+    /// The API key, which names the account (the secret is `api_secret`).
+    #[config(public)]
     pub api_key: String,
     /// The API secret.
     #[serde(skip_serializing)]
@@ -520,7 +512,7 @@ impl VonageOptions {
 }
 
 /// `notify.sns`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SnsOptions {
     /// The AWS region (`us-east-1`).
@@ -568,7 +560,7 @@ impl SnsOptions {
 }
 
 /// `notify.meta`: the WhatsApp Cloud API.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MetaOptions {
     /// The sending phone number's id.
@@ -604,7 +596,7 @@ impl MetaOptions {
 
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
 
     use super::*;
 
@@ -783,5 +775,145 @@ mod tests {
         let json = serde_json::to_string(&options).unwrap();
         assert!(!json.contains("tw-secret"));
         assert!(!json.contains("xoxb-secret"));
+    }
+
+    #[test]
+    fn secrets_are_never_printed() {
+        let sources = ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_NOTIFY__SLACK__BOT_TOKEN", "xoxb-bot-value"),
+                ("APP_NOTIFY__TEAMS__APP_PASSWORD", "teams-password-value"),
+                ("APP_NOTIFY__WEB_PUSH__PRIVATE_KEY", "vapid-private-value"),
+                ("APP_NOTIFY__TWILIO__AUTH_TOKEN", "twilio-token-value"),
+                ("APP_NOTIFY__VONAGE__API_SECRET", "vonage-secret-value"),
+                ("APP_NOTIFY__SNS__SECRET_ACCESS_KEY", "sns-secret-value"),
+                ("APP_NOTIFY__SNS__SESSION_TOKEN", "sns-session-value"),
+                ("APP_NOTIFY__META__ACCESS_TOKEN", "meta-token-value"),
+            ],
+        );
+        let options = Config::load(&sources)
+            .unwrap()
+            .typed::<NotifyOptions>()
+            .unwrap();
+        let text = format!("{options:?}");
+        for value in [
+            "xoxb-bot-value",
+            "teams-password-value",
+            "vapid-private-value",
+            "twilio-token-value",
+            "vonage-secret-value",
+            "sns-secret-value",
+            "sns-session-value",
+            "meta-token-value",
+        ] {
+            assert!(!text.contains(value), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_channel_list_names_only_known_channels() {
+        let sources = ConfigSources::new()
+            .env_vars("APP_", [("APP_NOTIFY__DEFERRED__CHANNELS", "sms, carrier")]);
+        assert!(
+            Config::load(&sources)
+                .unwrap()
+                .typed::<NotifyOptions>()
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = NotifyOptions::schema().expect("schema");
+        assert_eq!(schema.key, "notify");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/notifications/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        // Every credential is a secret, and nothing else is.
+        let mut secrets = schema.secret_paths();
+        secrets.sort();
+        assert_eq!(
+            secrets,
+            [
+                "notify.meta.access_token",
+                "notify.slack.bot_token",
+                "notify.sns.secret_access_key",
+                "notify.sns.session_token",
+                "notify.teams.app_password",
+                "notify.twilio.auth_token",
+                "notify.vonage.api_secret",
+                "notify.web_push.private_key",
+            ]
+        );
+        let table = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no table {name}"))
+        };
+        assert_eq!(table("queue").ty, FieldType::Bool);
+        for name in [
+            "slack",
+            "teams",
+            "sms",
+            "whatsapp",
+            "web_push",
+            "twilio",
+            "vonage",
+            "sns",
+            "meta",
+            "preferences",
+            "digest",
+            "deferred",
+        ] {
+            assert_eq!(table(name).ty, FieldType::Table, "{name}");
+        }
+        let field = |table_name: &str, name: &str| {
+            table(table_name)
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {table_name}.{name}"))
+        };
+        assert_eq!(
+            field("sms", "driver").ty,
+            FieldType::choice(&["twilio", "vonage", "sns", "log"])
+        );
+        assert_eq!(
+            field("whatsapp", "driver").ty,
+            FieldType::choice(&["twilio", "meta", "log"])
+        );
+        assert_eq!(
+            field("preferences", "channels").ty,
+            FieldType::list(FieldType::other("Channel"))
+        );
+        // Identifiers that are named like credentials are not secrets.
+        for (table_name, name) in [
+            ("twilio", "api_key"),
+            ("vonage", "api_key"),
+            ("teams", "token_url"),
+        ] {
+            let field = field(table_name, name);
+            assert!(field.public && !field.secret, "{table_name}.{name}");
+        }
+        let defaults = NotifyOptions::defaults().expect("defaults");
+        assert_eq!(defaults["queue"], false);
+        assert_eq!(defaults["routes"], true);
+        assert_eq!(defaults["teams"]["tenant"], "botframework.com");
+        assert_eq!(defaults["web_push"]["ttl_secs"], 86_400);
+        assert!(defaults["twilio"]["auth_token"].is_null());
+        assert!(defaults["sms"]["driver"].is_null());
+        assert_eq!(
+            defaults["deferred"]["channels"],
+            "mail, slack, teams, sms, whatsapp, web_push"
+        );
     }
 }

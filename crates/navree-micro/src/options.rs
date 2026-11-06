@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::{Backoff, Secret};
 use serde::Deserialize;
 
@@ -43,18 +43,23 @@ use crate::{Codec, Transport, TransportKind};
 /// `Debug` never shows a credential: URL passwords are masked, and the
 /// NATS token, the Kafka SASL password and the MQTT password are
 /// [`Secret`]s.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, ConfigSection)]
+#[config(key = "micro", docs = "/docs/microservices/introduction/", validate = Self::check_values)]
 #[serde(default)]
 pub struct MicroOptions {
     /// The service's name: its consumer group, its client id and the
     /// `navree-service` header of what it sends. Empty: `app.name`, else
     /// the binary's name.
     pub service: String,
-    /// The transport (required).
+    /// The transport (required): `tcp`, `nats`, `kafka`, `rabbitmq`, `redis`,
+    /// `mqtt` or `memory`.
+    #[config(one_of = "tcp, nats, kafka, rabbitmq, redis, mqtt, memory")]
+    #[config(default = "")]
     pub transport: Transport,
     /// Where the broker is; the transport's local default when unset.
     pub url: Option<String>,
     /// How payloads are encoded.
+    #[config(one_of = "json, msgpack")]
     pub codec: Codec,
     /// The deadline of a `send` that sets none.
     pub request_timeout_ms: u64,
@@ -83,18 +88,25 @@ pub struct MicroOptions {
     /// listener starts. Default: on in debug builds.
     pub auto_setup: bool,
     /// Retries and dead letters of events.
+    #[config(table)]
     pub events: EventsOptions,
     /// TCP settings.
+    #[config(table)]
     pub tcp: TcpOptions,
     /// NATS settings.
+    #[config(table)]
     pub nats: NatsOptions,
     /// Kafka settings.
+    #[config(table)]
     pub kafka: KafkaOptions,
     /// RabbitMQ settings.
+    #[config(table)]
     pub rabbitmq: RabbitmqOptions,
     /// Redis Streams settings.
+    #[config(table)]
     pub redis: RedisOptions,
     /// MQTT settings.
+    #[config(table)]
     pub mqtt: MqttOptions,
     /// Named clients for other transports (`micro.clients.<name>`), which
     /// only send.
@@ -172,15 +184,13 @@ impl From<Transport> for MicroOptions {
     }
 }
 
-impl ConfigSection for MicroOptions {
-    const KEY: &'static str = "micro";
-
-    fn validate(&self) -> Result<(), String> {
+impl MicroOptions {
+    /// [`check`](MicroOptions::check) with the problems joined (the boot
+    /// calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
-}
 
-impl MicroOptions {
     /// Every problem with these options, each naming its key.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -341,7 +351,7 @@ pub enum DeadLetterMode {
 }
 
 /// Retries and dead letters of events (`micro.events`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct EventsOptions {
     /// Attempts before an event is dead-lettered.
@@ -352,6 +362,7 @@ pub struct EventsOptions {
     pub timeout_secs: u64,
     /// Where exhausted events go; default: `database` with
     /// `DatabaseModule`, else `transport`.
+    #[config(one_of = "database, transport, log")]
     pub dead_letter: Option<DeadLetterMode>,
 }
 
@@ -367,7 +378,7 @@ impl Default for EventsOptions {
 }
 
 /// TLS files (`.tls.ca`, `.tls.cert`, `.tls.key`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TlsOptions {
     /// A CA certificate (PEM).
@@ -379,7 +390,7 @@ pub struct TlsOptions {
 }
 
 /// TCP settings (`micro.tcp`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TcpOptions {
     /// Where this service listens.
@@ -390,6 +401,7 @@ pub struct TcpOptions {
     /// Connections kept open to each peer.
     pub pool_size: usize,
     /// `cert` and `key` turn on TLS; `ca` turns on mutual TLS.
+    #[config(table)]
     pub tls: TlsOptions,
 }
 
@@ -405,7 +417,7 @@ impl Default for TcpOptions {
 }
 
 /// NATS settings (`micro.nats`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct NatsOptions {
     /// Events through JetStream (at least once); `false` uses core
@@ -424,11 +436,13 @@ pub struct NatsOptions {
     /// ed25519-dalek, which the crypto policy keeps out, so a value here
     /// fails at connect. Use `token`, a user and password in the URL, or
     /// TLS client certificates.
+    #[config(public)]
     pub credentials: Option<PathBuf>,
     /// A token, for servers with token authentication
     /// (`APP_MICRO__NATS__TOKEN`). Never shown in `Debug`.
     pub token: Option<Secret<String>>,
     /// TLS files.
+    #[config(table)]
     pub tls: TlsOptions,
 }
 
@@ -448,9 +462,10 @@ impl Default for NatsOptions {
 }
 
 /// SASL credentials (`micro.kafka.sasl`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 pub struct SaslOptions {
     /// `PLAIN`, `SCRAM-SHA-256` or `SCRAM-SHA-512`.
+    #[config(one_of = "PLAIN, SCRAM-SHA-256, SCRAM-SHA-512")]
     pub mechanism: String,
     /// The user name.
     #[serde(default)]
@@ -462,7 +477,7 @@ pub struct SaslOptions {
 }
 
 /// Kafka settings (`micro.kafka`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct KafkaOptions {
     /// Partitions of the topics `micro:setup` creates.
@@ -474,8 +489,10 @@ pub struct KafkaOptions {
     /// Connect with TLS.
     pub tls: bool,
     /// SASL credentials.
+    #[config(table)]
     pub sasl: Option<SaslOptions>,
     /// Where a new consumer group starts: `latest` or `earliest`.
+    #[config(one_of = "latest, earliest")]
     pub start_from: String,
 }
 
@@ -493,16 +510,18 @@ impl Default for KafkaOptions {
 }
 
 /// RabbitMQ settings (`micro.rabbitmq`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct RabbitmqOptions {
     /// The topic exchange.
     pub exchange: String,
     /// `quorum` (replicated) or `classic`.
+    #[config(one_of = "quorum, classic")]
     pub queue_type: String,
     /// Unacknowledged messages one instance holds per queue.
     pub prefetch: u16,
     /// TLS files (`ca` for `amqps://` URLs signed by a private CA).
+    #[config(table)]
     pub tls: TlsOptions,
 }
 
@@ -518,7 +537,7 @@ impl Default for RabbitmqOptions {
 }
 
 /// Redis Streams settings (`micro.redis`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct RedisOptions {
     /// The prefix of every stream key.
@@ -544,7 +563,7 @@ impl Default for RedisOptions {
 }
 
 /// MQTT settings (`micro.mqtt`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MqttOptions {
     /// The topic prefix.
@@ -560,6 +579,7 @@ pub struct MqttOptions {
     /// The password (`APP_MICRO__MQTT__PASSWORD`). Never shown in `Debug`.
     pub password: Option<Secret<String>>,
     /// TLS files.
+    #[config(table)]
     pub tls: TlsOptions,
 }
 
@@ -638,6 +658,7 @@ pub(crate) fn redact_url(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
     use serde_json::json;
 
     use super::*;
@@ -821,5 +842,88 @@ mod tests {
         );
         assert_eq!(redact_url("nats://127.0.0.1:4222"), "nats://127.0.0.1:4222");
         assert_eq!(redact_url("redis://token@host"), "redis://token@host");
+    }
+
+    #[test]
+    fn the_boot_check_joins_the_problems() {
+        let error = MicroOptions::default().validate().unwrap_err();
+        assert!(error.starts_with("micro.transport is required"), "{error}");
+        assert!(MicroOptions::from(Transport::memory()).validate().is_ok());
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = MicroOptions::schema().expect("schema");
+        assert_eq!(schema.key, "micro");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/microservices/introduction/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        // The NATS token, the Kafka SASL password and the MQTT password are
+        // the credentials, wherever they are nested.
+        let mut secrets = schema.secret_paths();
+        secrets.sort();
+        assert_eq!(
+            secrets,
+            [
+                "micro.kafka.sasl.password",
+                "micro.mqtt.password",
+                "micro.nats.token",
+            ]
+        );
+        let table = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(
+            table("transport").ty,
+            FieldType::choice(&[
+                "tcp", "nats", "kafka", "rabbitmq", "redis", "mqtt", "memory"
+            ])
+        );
+        assert_eq!(table("codec").ty, FieldType::choice(&["json", "msgpack"]));
+        for name in [
+            "events", "tcp", "nats", "kafka", "rabbitmq", "redis", "mqtt",
+        ] {
+            assert_eq!(table(name).ty, FieldType::Table, "{name}");
+        }
+        assert_eq!(
+            table("clients").ty,
+            FieldType::map(FieldType::other("ClientOptions"))
+        );
+        let sasl = table("kafka")
+            .fields
+            .iter()
+            .find(|field| field.name == "sasl")
+            .expect("kafka.sasl");
+        assert_eq!(sasl.ty, FieldType::Table);
+        assert!(
+            sasl.fields
+                .iter()
+                .any(|field| field.name == "password" && field.secret)
+        );
+        // A path to a credentials file is not a credential.
+        let credentials = table("nats")
+            .fields
+            .iter()
+            .find(|field| field.name == "credentials")
+            .expect("nats.credentials");
+        assert!(credentials.public && !credentials.secret);
+        let defaults = MicroOptions::defaults().expect("defaults");
+        assert_eq!(defaults["codec"], "json");
+        assert_eq!(defaults["concurrency"], 64);
+        assert_eq!(defaults["tcp"]["addr"], "127.0.0.1:4000");
+        assert_eq!(defaults["nats"]["jetstream"], true);
+        assert!(defaults["nats"]["token"].is_null());
+        assert!(defaults["kafka"]["sasl"].is_null());
+        assert!(defaults["events"]["dead_letter"].is_null());
     }
 }

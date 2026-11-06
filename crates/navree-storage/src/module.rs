@@ -9,7 +9,9 @@ use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_crypto::{AppKey, Encrypter};
 use navree_http::{AppError, ModuleBuilderHttpExt};
-use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::serve::StorageController;
 use crate::{Disk, Storage, StorageError, StorageOptions, UploadRejection};
@@ -58,40 +60,18 @@ pub struct StorageModule;
 impl StorageModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: StorageOptions) -> impl Module {
-        ConfiguredStorageModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<StorageModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `storage` of the app configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredStorageModule { options: None }
+        ConfiguredModule::<StorageModule, StorageOptions>::from_config(register)
     }
 }
 
 impl Module for StorageModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `StorageModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredStorageModule {
-    /// `None`: read from configuration.
-    options: Option<StorageOptions>,
-}
-
-impl Module for ConfiguredStorageModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<StorageModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
