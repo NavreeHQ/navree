@@ -331,6 +331,7 @@ fn every_kind_generates_into_its_directory() {
     for line in [
         "navree::http::ModuleBuilderHttpExt::controller::<controllers::admin::AdminController>(m);",
         "m.provider::<services::pricing::PricingService>();",
+        "// Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.\n        navree::workspace::ModuleBuilderWorkspaceExt::global_entity::<entities::avatar::Avatar>(m);",
         "navree::view::ModuleBuilderViewExt::templates(m, mail::welcome::TEMPLATES);",
         "m.command(commands::prune_profiles::command());",
         "navree::mcp::ModuleBuilderMcpExt::mcp_server::<mcp::assistant::AssistantMcp>(m);",

@@ -1026,6 +1026,40 @@ fn ui_navree_wires_the_screens_into_the_app() {
     assert!(read(&plain, "tests/app.rs").contains("a_new_app_has_workspaces_and_resolves_one"));
 }
 
+/// With workspaces, `navree check` requires every model to be classified: a
+/// profile is per user, the same in every workspace; a customer belongs to
+/// one workspace.
+#[test]
+fn every_model_of_a_new_app_is_classified() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let plain = create_app(dir.path(), &app("plain", Ui::None), now()).unwrap();
+    let users = read(&plain, "src/modules/users/mod.rs");
+    assert!(
+        users.contains("use navree::workspace::ModuleBuilderWorkspaceExt;\n"),
+        "{users}"
+    );
+    assert!(
+        users.contains(
+            "        m.model::<Profile>();\n        // A user has one profile, the same in every workspace.\n        m.global_entity::<Profile>();\n"
+        ),
+        "{users}"
+    );
+    let screens = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
+    assert!(read(&screens, "src/modules/users/mod.rs").contains("m.global_entity::<Profile>();"));
+    let customers = read(&screens, "src/modules/customers/mod.rs");
+    assert!(
+        customers.contains("        m.model::<Customer>();\n"),
+        "{customers}"
+    );
+    assert!(
+        customers.contains("        m.workspace_entity::<Customer>();\n"),
+        "{customers}"
+    );
+}
+
 /// The pages build on the facade's default features, and on a few crates of their own.
 #[test]
 fn ui_navree_has_the_features_and_crates_its_pages_need() {

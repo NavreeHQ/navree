@@ -99,14 +99,44 @@ fn a_model_alone_is_declared_and_hints_at_its_migration() {
     assert!(module.contains("pub mod models;"), "{module}");
     assert!(
         module.contains(
-            "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        // navree:wire\n"
+            "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        // Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.\n        navree::workspace::ModuleBuilderWorkspaceExt::global_entity::<models::deal::Deal>(m);\n        // navree:wire\n"
         ),
-        "registered for model:show: {module}"
+        "registered for model:show and classified as a global entity: {module}"
     );
     assert!(!module.contains("AccessModule::for_feature::<"), "{module}");
     assert_eq!(
         report.hints,
         ["create its table: navree make:migration users create_deals_table"]
+    );
+}
+
+#[test]
+fn a_module_without_the_wire_marker_gets_the_registration_as_a_hint() {
+    let (_dir, root) = project();
+    let module = read(&root, "src/modules/users/mod.rs");
+    std::fs::write(
+        path(&root, "src/modules/users/mod.rs"),
+        module.replace("        // navree:wire\n", ""),
+    )
+    .unwrap();
+    let report = make_model(
+        &root,
+        "src/modules",
+        &name("users"),
+        &name("deal"),
+        Companions::default(),
+        now(),
+    )
+    .unwrap();
+    assert!(
+        report.hints.iter().any(|hint| {
+            hint.starts_with("register it in the module's `register` (or `wire`) method: ")
+                && hint.contains(
+                    "navree::workspace::ModuleBuilderWorkspaceExt::global_entity::<models::deal::Deal>(m);"
+                )
+        }),
+        "{:?}",
+        report.hints
     );
 }
 
@@ -219,7 +249,7 @@ fn every_companion_refers_to_the_others() {
         "pub mod seeders;",
         "pub mod policies;",
         "pub mod controllers;",
-        "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        m.import(navree::access::AccessModule::for_feature::<\n            models::deal::Deal,\n        >());\n",
+        "        navree::orm::ModuleBuilderOrmExt::model::<models::deal::Deal>(m);\n        // Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.\n        navree::workspace::ModuleBuilderWorkspaceExt::global_entity::<models::deal::Deal>(m);\n        m.import(navree::access::AccessModule::for_feature::<\n            models::deal::Deal,\n        >());\n",
         "        navree::db::ModuleBuilderDbExt::seeder::<seeders::deal::DealSeeder>(m);\n",
         "        navree::http::ModuleBuilderHttpExt::controller::<controllers::deal::DealController>(m);\n",
     ] {
@@ -476,6 +506,13 @@ fn a_pivot_model_holds_the_two_keys() {
             "                t.uuid_primary();\n                t.foreign_uuid(\"deal_id\");\n                t.foreign_uuid(\"tag_id\");\n                t.unique([\"deal_id\", \"tag_id\"]);\n                t.timestamps_tz();\n"
         ),
         "{migration}"
+    );
+    let module = read(&root, "src/modules/users/mod.rs");
+    assert!(
+        module.contains(
+            "        navree::workspace::ModuleBuilderWorkspaceExt::global_entity::<models::deal_tag::DealTag>(m);\n"
+        ),
+        "a pivot is a global entity too: {module}"
     );
     let factory = read(&root, "src/modules/users/factories/deal_tag.rs");
     assert!(!factory.contains("name:"), "{factory}");

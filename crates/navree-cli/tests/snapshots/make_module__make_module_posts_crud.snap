@@ -30,6 +30,7 @@ use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
 use navree::orm::ModuleBuilderOrmExt;
+use navree::workspace::ModuleBuilderWorkspaceExt;
 
 pub use controller::PostController;
 pub use entity::Post;
@@ -56,6 +57,8 @@ impl PostsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
         m.model::<Post>();
+        // Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.
+        m.global_entity::<Post>();
         // navree:wire
     }
 }
