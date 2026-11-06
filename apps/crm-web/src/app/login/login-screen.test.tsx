@@ -16,7 +16,7 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
   return { ...actual, api: actual.createApiClient({ baseUrl: "http://crm.test" }) };
 });
 
-const user = { __type: "User", id: "u9", name: "Dana Boss", email: "boss@navree.test", roles: ["admin"] };
+const user = { __type: "User", id: "u9", name: "Daljit Kaur", email: "boss@navree.test", roles: ["admin"] };
 
 type Call = { route: string; body: unknown };
 

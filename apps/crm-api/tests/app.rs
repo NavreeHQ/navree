@@ -158,7 +158,7 @@ async fn serves_the_contract_routes() {
     // Public sign-up is off: accounts are created by admins.
     app.client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Eve", "email": "eve@navree.test", "password": "a long password" }))
+        .json(&json!({ "name": "Esha", "email": "esha@navree.test", "password": "a long password" }))
         .send()
         .await
         .assert_status(404);

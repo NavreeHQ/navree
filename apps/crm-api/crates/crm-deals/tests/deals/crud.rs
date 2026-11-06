@@ -41,7 +41,7 @@ async fn create_returns_the_deal_with_its_embeds() {
         "id": id,
         "title": "Agra renewal",
         "amount_cents": 125_000,
-        "currency": "USD",
+        "currency": "INR",
         "stage": "lead",
         "probability": 10,
         "position": 0,

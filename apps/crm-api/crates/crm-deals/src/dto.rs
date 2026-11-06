@@ -37,7 +37,7 @@ pub struct CreateDeal {
     #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
     #[schema(value_type = i64, required = true, minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
-    /// The ISO 4217 code (default `USD`; stored upper-case).
+    /// The ISO 4217 code (default `INR`; stored upper-case).
     #[validate(custom(currency_code))]
     pub currency: Option<String>,
     /// The stage (default `lead`).

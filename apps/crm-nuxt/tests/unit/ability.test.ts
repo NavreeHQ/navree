@@ -11,7 +11,7 @@ const OTHER_REP = "rep-2";
 
 /** API records carry `__type`, which is how CASL tells subjects apart. */
 const deal = (owner: string, stage: DealStage = "proposal") =>
-  ({ __type: "Deal", id: `d-${owner}-${stage}`, stage, owner_id: owner, owner: { id: owner, name: "Tom Becker" } }) as unknown as Deal;
+  ({ __type: "Deal", id: `d-${owner}-${stage}`, stage, owner_id: owner, owner: { id: owner, name: "Tarun Bhatia" } }) as unknown as Deal;
 const company = (owner: string) => ({ __type: "Company", id: `c-${owner}`, owner_id: owner }) as unknown as Company;
 const task = (owner: string, assignee: string) =>
   ({ __type: "Activity", id: `a-${owner}`, owner_id: owner, assignee_id: assignee }) as unknown as Activity;
@@ -54,7 +54,7 @@ describe("the app ability, built the way the module builds it from the rules GET
     const ability = createAbility<AppAbility>(rulesFor(REP));
     expect(moveBlockedReason(ability, deal(REP.id, "won"))).toBe("Only a manager can reopen a won or lost deal.");
     expect(moveBlockedReason(ability, deal(OTHER_REP))).toBeNull();
-    expect(lockReason(ability, deal(OTHER_REP))).toBe("Owned by Tom Becker; you can't move it");
+    expect(lockReason(ability, deal(OTHER_REP))).toBe("Owned by Tarun Bhatia; you can't move it");
   });
 
   it("lets a manager move any deal, including closed ones, and export contacts", () => {

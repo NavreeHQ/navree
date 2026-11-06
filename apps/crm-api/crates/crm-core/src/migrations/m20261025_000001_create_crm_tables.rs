@@ -51,7 +51,7 @@ impl navree::schema::Migration for Migration {
                 t.uuid_primary();
                 t.string("title");
                 t.big_integer("amount_cents");
-                t.string("currency").length(3).default("USD");
+                t.string("currency").length(3).default("INR");
                 t.string("stage").length(16).default("lead");
                 t.integer("position").default(0);
                 t.date("expected_close_date").nullable();

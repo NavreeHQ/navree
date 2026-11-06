@@ -27,7 +27,7 @@ import { useCreateDeal, useUpdateDeal } from "./queries";
 const props = defineProps<{ deal?: Deal; company?: CompanyRef; defaultStage?: DealStage }>();
 const open = defineModel<boolean>("open", { default: false });
 
-const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"] as const;
+const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD"] as const;
 const picked = z.object({ id: z.string(), label: z.string() });
 
 const schema = z
@@ -42,7 +42,7 @@ const schema = z
       .refine((v) => {
         const cents = parseMoneyToCents(v);
         return cents !== null && cents >= 0;
-      }, "Enter an amount of 0 or more, like 12,500."),
+      }, "Enter an amount of 0 or more, like 12,50,000."),
     currency: z.string().length(3),
     stage: z.string(),
     expected_close_date: z.string(),
@@ -80,7 +80,7 @@ function initialValues() {
     company: c ? { id: c.id, label: c.name } : null,
     contact: props.deal?.contact ? { id: props.deal.contact.id, label: props.deal.contact.full_name } : null,
     amount: props.deal ? centsToInput(props.deal.amount_cents, props.deal.currency) : "",
-    currency: props.deal?.currency ?? "USD",
+    currency: props.deal?.currency ?? "INR",
     stage: props.deal?.stage ?? props.defaultStage ?? "lead",
     expected_close_date: props.deal?.expected_close_date ?? "",
     owner_id: props.deal?.owner_id,
@@ -194,7 +194,7 @@ const onSubmit = form.handleSubmit((values) => {
             id="deal-amount"
             v-model="amount"
             inputmode="decimal"
-            placeholder="12,500"
+            placeholder="12,50,000"
             :aria-invalid="amountError ? true : undefined"
             class="figures"
           />

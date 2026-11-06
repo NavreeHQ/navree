@@ -4,7 +4,7 @@ import { ACCOUNTS, callApi, signIn, unique } from "./support";
 
 test("a rep creates a company and a contact at it", async ({ page }) => {
   await signIn(page, "rep1");
-  const company = unique("Zephyr Robotics");
+  const company = unique("Zirakpur Robotics");
   const domain = `${company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.example`;
 
   // New company from the list.
@@ -34,7 +34,7 @@ test("a rep creates a company and a contact at it", async ({ page }) => {
   await page.getByRole("tab", { name: /Contacts/ }).click();
   await page.getByRole("button", { name: "New contact" }).click();
   const contactDialog = page.getByRole("dialog", { name: "New contact" });
-  const lastName = unique("Okafor").replace(" ", "-");
+  const lastName = unique("Oberoi").replace(" ", "-");
   await contactDialog.getByLabel("First name").fill("Anu");
   await contactDialog.getByLabel("Last name").fill(lastName);
   await contactDialog.getByLabel("Email").fill(`anu.${lastName.toLowerCase()}@${domain}`);

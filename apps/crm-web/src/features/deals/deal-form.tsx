@@ -20,7 +20,7 @@ import { DEAL_STAGES, MAX_AMOUNT_CENTS } from "@/lib/api/types";
 import { centsToInput, parseMoneyToCents } from "@/lib/format";
 import { useCreateDeal, useUpdateDeal } from "./queries";
 
-export const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"] as const;
+export const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD"] as const;
 
 const picked = z.object({ id: z.string(), label: z.string() });
 
@@ -40,7 +40,7 @@ const schema = z
       ctx.addIssue({ code: "custom", path: ["company"], message: "Choose the company this deal is with." });
     const cents = parseMoneyToCents(v.amount, v.currency);
     if (v.amount && (cents === null || cents < 0)) {
-      ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount of 0 or more, like 12,500." });
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount of 0 or more, like 12,50,000." });
     } else if (cents !== null && cents > MAX_AMOUNT_CENTS) {
       ctx.addIssue({ code: "custom", path: ["amount"], message: "That amount is larger than the API accepts." });
     }
@@ -54,7 +54,7 @@ function toValues(deal?: Deal, company?: CompanyRef): Values {
     company: c ? { id: c.id, label: c.name } : null,
     contact: deal?.contact ? { id: deal.contact.id, label: deal.contact.full_name } : null,
     amount: deal ? centsToInput(deal.amount_cents, deal.currency) : "",
-    currency: deal?.currency ?? "USD",
+    currency: deal?.currency ?? "INR",
     stage: deal?.stage ?? "lead",
     expected_close_date: deal?.expected_close_date ?? "",
     owner_id: deal?.owner_id,
@@ -224,7 +224,7 @@ export function DealFormDialog({
                     {...field}
                     id="deal-amount"
                     inputMode="decimal"
-                    placeholder="12,500"
+                    placeholder="12,50,000"
                     aria-invalid={fieldState.invalid || undefined}
                     className="figures"
                   />

@@ -25,8 +25,8 @@ test("a rep creates a deal, drags it to proposal, and dropping it on lost asks f
   const dialog = page.getByRole("dialog", { name: "New deal" });
   await dialog.getByLabel("Deal name").fill(title);
   await dialog.getByRole("combobox", { name: /Company/ }).click();
-  await page.getByPlaceholder("Search companies").fill("Northwind");
-  await page.getByRole("option", { name: "Northwind Logistics" }).click();
+  await page.getByPlaceholder("Search companies").fill("Doaba");
+  await page.getByRole("option", { name: "Doaba Logistics" }).click();
   await dialog.getByLabel("Value").fill("12500");
   const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/deals") && r.request().method() === "POST");
   await dialog.getByRole("button", { name: "Create deal" }).click();
@@ -35,7 +35,7 @@ test("a rep creates a deal, drags it to proposal, and dropping it on lost asks f
     title,
     stage: "lead",
     amount_cents: 1_250_000,
-    company: { name: "Northwind Logistics" },
+    company: { name: "Doaba Logistics" },
   });
   await expect(dialog).toBeHidden();
 

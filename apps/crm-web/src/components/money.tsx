@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export function Money({
   cents,
-  currency = "USD",
+  currency = "INR",
   className,
   ...options
 }: { cents: number; currency?: string; className?: string } & MoneyOptions) {

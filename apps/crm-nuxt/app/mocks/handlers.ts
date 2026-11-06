@@ -598,7 +598,7 @@ function validateDeal(body: Record<string, unknown>, partial: boolean): Partial<
     else out.amount_cents = amount;
   }
   if ("currency" in body || !partial) {
-    const currency = (str(body.currency) ?? "USD").toUpperCase();
+    const currency = (str(body.currency) ?? "INR").toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) add(errors, "currency", "The currency must be a 3-letter ISO code.");
     else out.currency = currency;
   }
@@ -1178,7 +1178,7 @@ export const handlers = [
         id: newId(),
         title: input.title!,
         amount_cents: input.amount_cents!,
-        currency: input.currency ?? "USD",
+        currency: input.currency ?? "INR",
         stage,
         position: stageDeals(stage).length,
         expected_close_date: input.expected_close_date ?? null,

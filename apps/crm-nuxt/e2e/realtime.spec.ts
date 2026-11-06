@@ -40,7 +40,7 @@ test("a deal moved in one browser moves on another person's board without a relo
 
   // The mover: a rep who creates a deal (through the API) and opens their board.
   await signIn(page, "rep1");
-  const companies = await callApi<{ data: { id: string }[] }>(page, "GET", "/api/v1/companies?search=Northwind");
+  const companies = await callApi<{ data: { id: string }[] }>(page, "GET", "/api/v1/companies?search=Doaba");
   const title = unique("Realtime rollout");
   const created = await callApi<{ id: string }>(page, "POST", "/api/v1/deals", {
     title,

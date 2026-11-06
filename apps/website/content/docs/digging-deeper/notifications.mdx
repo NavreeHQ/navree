@@ -363,7 +363,7 @@ A page looks like this ([pagination](/docs/database/pagination/) explains `page`
       "type": "deal.assigned",
       "data": {
         "title": "Deal assigned to you",
-        "message": "Marcus Reyes assigned you “Agra renewal”",
+        "message": "Manpreet Gill assigned you “Agra renewal”",
         "url": "/deals/0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e",
         "deal_id": "0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e"
       },
@@ -489,7 +489,7 @@ async fn followers_hear_about_moved_contacts() {
     let notifier = app.get::<Notifier>().await;
     let me = NotifiableUser {
         id: Uuid::now_v7(),
-        name: "Priya Shah".into(),
+        name: "Priya Verma".into(),
         email: "rep1@navree.test".into(),
     };
     let moved = ContactMoved {

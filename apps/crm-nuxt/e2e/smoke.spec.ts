@@ -45,11 +45,11 @@ test("every screen renders for a manager, with the sidebar and the palette", asy
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Search Navree CRM" });
   await expect(palette).toBeVisible();
-  await page.keyboard.type("Northwind");
-  await expect(palette.getByRole("option", { name: /Northwind Logistics/ }).first()).toBeVisible();
+  await page.keyboard.type("Doaba");
+  await expect(palette.getByRole("option", { name: /Doaba Logistics/ }).first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(palette).toBeHidden();
-  await expect(page.getByRole("heading", { level: 1, name: "Northwind Logistics" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Doaba Logistics" })).toBeVisible();
 
   // `g d` goes to the board.
   await page.keyboard.press("g");

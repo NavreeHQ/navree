@@ -68,9 +68,9 @@ async fn sqlite_gets_through_a_day_of_crm_work() {
     assert_eq!(
         answer("industry SOFTWARE"),
         json!([
-            "Brightwater Analytics",
-            "Cobalt Cloudworks",
-            "Pinecrest Software"
+            "Beas Analytics",
+            "Chandni Cloudworks",
+            "Pipal Software"
         ])
     );
     let found = |query: Value| -> Value {
@@ -81,16 +81,16 @@ async fn sqlite_gets_through_a_day_of_crm_work() {
             .unwrap_or_else(|| panic!("no contacts found for {query}"))
     };
     assert_eq!(
-        found(json!({ "search": "LINDQVIST" })),
-        json!(["Elena Lindqvist", "Kenji Lindqvist"])
+        found(json!({ "search": "DHILLON" })),
+        json!(["Harleen Dhillon", "Manish Dhillon"])
     );
     assert_eq!(
-        found(json!({ "search": "grace garcia" })),
-        json!(["Grace Garcia"])
+        found(json!({ "search": "simran verma" })),
+        json!(["Simran Verma"])
     );
     assert_eq!(
-        answer("Northwind Logistics"),
-        json!({ "contacts_count": 3, "open_deals_count": 2, "open_deals_amount_cents": 15_200_000 })
+        answer("Doaba Logistics"),
+        json!({ "contacts_count": 3, "open_deals_count": 2, "open_deals_amount_cents": 760_000_000 })
     );
     assert_eq!(
         answer("moved to the top of qualified")[0],
@@ -230,7 +230,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
     }
     for query in [
         json!({ "search": "LINDQVIST" }),
-        json!({ "search": "grace garcia" }),
+        json!({ "search": "simran verma" }),
         json!({ "filter[status]": "customer", "per_page": 100 }),
     ] {
         let page = list(&rep, "/api/v1/contacts", query.clone()).await;
@@ -243,15 +243,15 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
     answers.push(("deals found", sorted(names(&page, "title"))));
 
     // A company's live contacts and open deals, counted and summed.
-    let northwind = list(&rep, "/api/v1/companies", json!({ "search": "northwind" })).await;
+    let doaba = list(&rep, "/api/v1/companies", json!({ "search": "doaba" })).await;
     let detail = rep
-        .get(&format!("/api/v1/companies/{}", id(&northwind["data"][0])))
+        .get(&format!("/api/v1/companies/{}", id(&doaba["data"][0])))
         .send()
         .await
         .assert_status(200)
         .json_value();
     answers.push((
-        "Northwind Logistics",
+        "Doaba Logistics",
         json!({
             "contacts_count": detail["contacts_count"],
             "open_deals_count": detail["open_deals_count"],

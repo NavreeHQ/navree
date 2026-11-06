@@ -24,7 +24,7 @@ use crate::resource::{DealBoard, DealResource};
 use crate::stages::{self, Closing};
 
 /// The currency of deals created without one.
-pub const DEFAULT_CURRENCY: &str = "USD";
+pub const DEFAULT_CURRENCY: &str = "INR";
 
 /// Lists, creates, changes and deletes deals, keeping every stage's
 /// positions dense. Writes run in the caller's unit of work, so a deal,
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn currencies_are_stored_upper_case_with_a_default() {
-        assert_eq!(currency(None), "USD");
+        assert_eq!(currency(None), "INR");
         assert_eq!(currency(Some("eur")), "EUR");
     }
 }

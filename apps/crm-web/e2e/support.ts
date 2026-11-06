@@ -2,10 +2,10 @@ import { expect, test, type Browser, type Locator, type Page } from "@playwright
 
 /** The crm-demo seeder's accounts; every one uses `password123`. */
 export const ACCOUNTS = {
-  admin: { email: "admin@navree.test", name: "Dana Whitfield" },
-  manager: { email: "manager@navree.test", name: "Marcus Reyes" },
-  rep1: { email: "rep1@navree.test", name: "Priya Shah" },
-  rep2: { email: "rep2@navree.test", name: "Tom Becker" },
+  admin: { email: "admin@navree.test", name: "Daljit Kaur" },
+  manager: { email: "manager@navree.test", name: "Manpreet Gill" },
+  rep1: { email: "rep1@navree.test", name: "Priya Verma" },
+  rep2: { email: "rep2@navree.test", name: "Tarun Bhatia" },
 } as const;
 export type Account = keyof typeof ACCOUNTS;
 export const PASSWORD = "password123";

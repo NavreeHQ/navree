@@ -4,7 +4,7 @@
  * zero-decimal currencies (JPY, KRW) are handled correctly.
  */
 
-const DEFAULT_LOCALE = "en-US";
+const DEFAULT_LOCALE = "en-IN";
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
@@ -18,7 +18,7 @@ function numberFormat(locale: string, options: Intl.NumberFormatOptions): Intl.N
   return formatter;
 }
 
-/** Number of minor-unit digits for a currency (USD 2, JPY 0, BHD 3). */
+/** Number of minor-unit digits for a currency (INR 2, JPY 0, BHD 3). */
 export function currencyDigits(currency: string): number {
   try {
     return numberFormat(DEFAULT_LOCALE, { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
@@ -32,7 +32,7 @@ export function centsToAmount(amountCents: number, currency: string): number {
 }
 
 export interface MoneyOptions {
-  /** `$1.2M` style for column totals and charts. */
+  /** `₹1.2L` style for column totals and charts. */
   compact?: boolean;
   /** Always show minor units, even for whole amounts. Default: only when non-zero. */
   showCents?: boolean;
@@ -41,10 +41,10 @@ export interface MoneyOptions {
 
 export function formatMoney(
   amountCents: number,
-  currency: string = "USD",
+  currency: string = "INR",
   { compact = false, showCents = false, locale = DEFAULT_LOCALE }: MoneyOptions = {},
 ): string {
-  const code = (currency || "USD").toUpperCase();
+  const code = (currency || "INR").toUpperCase();
   const digits = currencyDigits(code);
   const amount = amountCents / 10 ** digits;
   if (compact) {
@@ -65,10 +65,10 @@ export function formatMoney(
 }
 
 /**
- * Parses what a person types into a money field ("12,500", "$1,200.50") into
+ * Parses what a person types into a money field ("12,500", "₹1,200.50") into
  * integer minor units. Returns null when the input isn't a number.
  */
-export function parseMoneyToCents(input: string, currency: string = "USD"): number | null {
+export function parseMoneyToCents(input: string, currency: string = "INR"): number | null {
   const cleaned = input.replace(/[^\d.,-]/g, "").replace(/,/g, "");
   if (cleaned === "" || cleaned === "-" || cleaned === ".") return null;
   if (!/^-?\d*(\.\d*)?$/.test(cleaned)) return null;
@@ -78,7 +78,7 @@ export function parseMoneyToCents(input: string, currency: string = "USD"): numb
 }
 
 /** Formats minor units as a plain editable number ("12500.5" → "12500.50"). */
-export function centsToInput(amountCents: number, currency: string = "USD"): string {
+export function centsToInput(amountCents: number, currency: string = "INR"): string {
   const digits = currencyDigits(currency);
   return (amountCents / 10 ** digits).toFixed(digits).replace(/\.0+$/, "");
 }

@@ -34,22 +34,22 @@ pub struct DemoAccount {
 /// match crm-web's mock data).
 pub const DEMO_ACCOUNTS: [DemoAccount; 4] = [
     DemoAccount {
-        name: "Dana Whitfield",
+        name: "Daljit Kaur",
         email: "admin@navree.test",
         role: UserRole::Admin,
     },
     DemoAccount {
-        name: "Marcus Reyes",
+        name: "Manpreet Gill",
         email: "manager@navree.test",
         role: UserRole::Manager,
     },
     DemoAccount {
-        name: "Priya Shah",
+        name: "Priya Verma",
         email: "rep1@navree.test",
         role: UserRole::Rep,
     },
     DemoAccount {
-        name: "Tom Becker",
+        name: "Tarun Bhatia",
         email: "rep2@navree.test",
         role: UserRole::Rep,
     },

@@ -289,7 +289,7 @@ mod tests {
 
     fn reminder(subjects: &[&str]) -> TasksDueToday {
         TasksDueToday {
-            name: "Priya Shah".to_owned(),
+            name: "Priya Verma".to_owned(),
             tasks: subjects
                 .iter()
                 .map(|subject| DueTask {
@@ -336,7 +336,7 @@ mod tests {
         let mail = reminder(&["Call <Agra>", "Send deck"])
             .to_mail(&NotifiableUser {
                 id: Uuid::nil(),
-                name: "Priya Shah".to_owned(),
+                name: "Priya Verma".to_owned(),
                 email: "rep1@navree.test".to_owned(),
             })
             .expect("a mail");
@@ -346,7 +346,7 @@ mod tests {
             .expect("text renders");
         assert_eq!(
             text,
-            "Hello Priya Shah,\n\nYou have 2 tasks due today:\n\
+            "Hello Priya Verma,\n\nYou have 2 tasks due today:\n\
              - Call <Agra>, due 09:00 UTC\n\
              - Send deck, due 09:00 UTC\n\n\
              Open your tasks: http://localhost:3000/tasks?tab=today"

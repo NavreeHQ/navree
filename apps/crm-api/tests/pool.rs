@@ -49,7 +49,7 @@ async fn record_checks_with_current_user_need_one_connection() {
     let contact = create(
         &rep,
         "/api/v1/contacts",
-        json!({ "first_name": "Anu", "last_name": "Byte", "company_id": company }),
+        json!({ "first_name": "Anu", "last_name": "Bains", "company_id": company }),
     )
     .await;
     let deal = create(
@@ -65,7 +65,7 @@ async fn record_checks_with_current_user_need_one_connection() {
         .await
         .assert_status(200);
     rep.patch(&format!("/api/v1/contacts/{contact}"))
-        .json(&json!({ "phone": "+1 555 0100" }))
+        .json(&json!({ "phone": "+91 98765 43210" }))
         .send()
         .await
         .assert_status(200);
@@ -88,7 +88,7 @@ async fn record_checks_with_current_user_need_one_connection() {
         .assert_status(200);
     admin
         .patch(&format!("/api/v1/users/{}", crm.user_id(Role::Rep2)))
-        .json(&json!({ "name": "Tom B." }))
+        .json(&json!({ "name": "Tarun B." }))
         .send()
         .await
         .assert_status(200);

@@ -185,7 +185,7 @@ function PipelineChart({ data }: { data: Dashboard }) {
               <TooltipContent side="top" align="start" className="flex flex-col gap-0.5">
                 <span className="font-medium">{stageLabel(r.stage)}</span>
                 <span className="figures">
-                  {formatMoney(r.amount, "USD")} across {r.count} {r.count === 1 ? "deal" : "deals"}
+                  {formatMoney(r.amount, "INR")} across {r.count} {r.count === 1 ? "deal" : "deals"}
                 </span>
                 {share !== null ? <span className="figures">{formatPercent(share)} of open pipeline</span> : null}
               </TooltipContent>

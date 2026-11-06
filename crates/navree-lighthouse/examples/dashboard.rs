@@ -299,7 +299,7 @@ async fn user(
     permissions: &[&str],
 ) -> Result<(), BoxError> {
     let auth = ctx.get::<AuthService>().await?;
-    let user = auth.create_user("Priya Shah", email, PASSWORD).await?;
+    let user = auth.create_user("Priya Verma", email, PASSWORD).await?;
     if permissions.is_empty() {
         return Ok(());
     }

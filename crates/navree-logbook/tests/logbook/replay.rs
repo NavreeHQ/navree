@@ -199,7 +199,7 @@ async fn replays_run_as_the_same_user_with_a_fresh_token() {
     let user = app
         .get::<AuthService>()
         .await
-        .create_user("Priya Shah", "priya@example.com", "password123")
+        .create_user("Priya Verma", "priya@example.com", "password123")
         .await
         .unwrap();
     let token = app.get::<JwtService>().await.sign_access(user.id).unwrap();

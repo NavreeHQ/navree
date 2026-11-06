@@ -153,7 +153,7 @@ async fn reminder_tick_notifies_assignees_of_tasks_due_today() {
     assert_eq!(to_rep1.subject, "2 tasks due today");
     let text = to_rep1.text.clone().unwrap_or_default();
     for expected in [
-        "Priya Shah",
+        "Priya Verma",
         "Call Agra back",
         "Send the contract",
         "http://localhost:3000/tasks?tab=today",

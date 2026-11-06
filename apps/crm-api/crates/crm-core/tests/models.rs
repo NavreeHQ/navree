@@ -80,12 +80,12 @@ async fn every_model_round_trips_its_columns() {
         &*core.db,
         Company {
             name: "Agra".into(),
-            domain: Some("acme.test".into()),
+            domain: Some("agra.test".into()),
             industry: Some("Software".into()),
             size: Some(CompanySize::Medium),
-            website: Some("https://acme.test".into()),
-            city: Some("Berlin".into()),
-            country: Some("Germany".into()),
+            website: Some("https://agra.test".into()),
+            city: Some("Ludhiana".into()),
+            country: Some("India".into()),
             owner_id: owner,
             ..Company::default()
         },
@@ -214,7 +214,7 @@ async fn relations_load_with_the_records_that_name_them() {
         OwnerRef::loaded(loaded.loaded(Deal::owner), loaded.owner_id),
         OwnerRef {
             id: rep1,
-            name: "Priya Shah".into()
+            name: "Priya Verma".into()
         }
     );
     // Without its relation loaded, an embed keeps the id and has no name.

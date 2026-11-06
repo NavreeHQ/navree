@@ -512,11 +512,11 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
 
     mcp.call_tool(
         "log_activity",
-        json!({ "deal_id": deal["id"], "kind": "call", "subject": "Dana approved the budget" }),
+        json!({ "deal_id": deal["id"], "kind": "call", "subject": "Daljit approved the budget" }),
     )
     .await
     .assert_ok()
-    .assert_json_path("subject", json!("Dana approved the budget"));
+    .assert_json_path("subject", json!("Daljit approved the budget"));
 
     mcp.call_tool("move_deal", json!({ "deal_id": deal["id"], "stage": "won" }))
         .await

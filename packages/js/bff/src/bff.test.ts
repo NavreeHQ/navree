@@ -10,7 +10,7 @@ const request = (path: string, options: BrowserRequestOptions = {}) => browserRe
 const setCookies = readSetCookies;
 const tokens = (n: number) => tokenPair(n);
 
-const user = { __type: "User", id: "u1", name: "Priya Shah", email: "rep1@navree.test", roles: ["rep"] };
+const user = { __type: "User", id: "u1", name: "Priya Verma", email: "rep1@navree.test", roles: ["rep"] };
 
 describe("BFF proxy", () => {
   it("forwards to Navree with the access token as a bearer header, never the cookies", async () => {

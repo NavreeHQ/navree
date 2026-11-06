@@ -23,7 +23,7 @@ async fn contacts_crud_happy_path() {
             "first_name": "Anu",
             "last_name": "Lakhotia",
             "email": "anu@agra.com",
-            "phone": "+44 20 7946 0000",
+            "phone": "+91 98765 43211",
             "title": "CTO",
             "company_id": company_id,
         }))
@@ -45,7 +45,7 @@ async fn contacts_crud_happy_path() {
             "last_name": "Lakhotia",
             "full_name": "Anu Lakhotia",
             "email": "anu@agra.com",
-            "phone": "+44 20 7946 0000",
+            "phone": "+91 98765 43211",
             "title": "CTO",
             "status": "lead",
             "company_id": company_id,
@@ -184,7 +184,7 @@ async fn contact_of_a_deleted_company_stays_editable() {
     let company_id = id_of(&company);
     let contact = create_contact(
         &rep,
-        json!({ "first_name": "Anu", "last_name": "Byte", "company_id": company_id }),
+        json!({ "first_name": "Anu", "last_name": "Bains", "company_id": company_id }),
     )
     .await;
     let other = create_company(&rep, json!({ "name": "Also Gone" })).await;
@@ -200,9 +200,9 @@ async fn contact_of_a_deleted_company_stays_editable() {
     rep.patch(&path)
         .json(&json!({
             "first_name": "Anu",
-            "last_name": "Byte",
+            "last_name": "Bains",
             "email": null,
-            "phone": "+1 555 0100",
+            "phone": "+91 98765 43210",
             "title": null,
             "status": "lead",
             "company_id": company_id,
@@ -210,7 +210,7 @@ async fn contact_of_a_deleted_company_stays_editable() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("phone", json!("+1 555 0100"))
+        .assert_json_path("phone", json!("+91 98765 43210"))
         .assert_json_path("company_id", json!(company_id));
     rep.patch(&path)
         .json(&json!({ "company_id": id_of(&other) }))
@@ -269,7 +269,7 @@ async fn rep_cannot_update_other_reps_contact_or_assign_contacts() {
 
     // A rep may not hand a new contact to someone else.
     rep1.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Al", "last_name": "Tiwari", "owner_id": crm.user_id(Role::Rep2) }))
+        .json(&json!({ "first_name": "Amar", "last_name": "Tiwari", "owner_id": crm.user_id(Role::Rep2) }))
         .send()
         .await
         .assert_error(403, None);
@@ -417,7 +417,7 @@ async fn export_csv_header_and_rows() {
             "first_name": "Anu",
             "last_name": "Lakhotia",
             "email": "anu@agra.com",
-            "phone": "+44 20 7946 0000",
+            "phone": "+91 98765 43211",
             "title": "Chief \"Analytical\" Engineer",
             "status": "customer",
             "company_id": id_of(&company),
@@ -447,7 +447,7 @@ async fn export_csv_header_and_rows() {
     let expected = format!(
         "id,first_name,last_name,email,phone,title,status,company,owner,created_at\r\n\
          {grace},Gauri,Hundal,,,\"'=HYPERLINK(\"\"http://evil\"\")\",lead,,{rep_name},{START}\r\n\
-         {ada},Anu,Lakhotia,anu@agra.com,+44 20 7946 0000,\"Chief \"\"Analytical\"\" Engineer\",customer,\"Agra, Inc.\",{rep_name},{START}\r\n",
+         {ada},Anu,Lakhotia,anu@agra.com,+91 98765 43211,\"Chief \"\"Analytical\"\" Engineer\",customer,\"Agra, Inc.\",{rep_name},{START}\r\n",
         grace = id_of(&grace),
         ada = id_of(&ada),
     );

@@ -11,7 +11,7 @@ const props = withDefaults(
     showCents?: boolean;
     class?: HTMLAttributes["class"];
   }>(),
-  { currency: "USD", compact: false, showCents: false },
+  { currency: "INR", compact: false, showCents: false },
 );
 
 const text = computed(() =>

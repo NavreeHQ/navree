@@ -12,7 +12,7 @@ async fn crm() -> TestCrm {
 
 fn new_user(email: &str, role: &str) -> Value {
     json!({
-        "name": "Nina Novak",
+        "name": "Nisha Narang",
         "email": email,
         "password": "a long password",
         "role": role,
@@ -58,13 +58,13 @@ async fn admin_can_create_user_with_role() {
     let admin = crm.login_as(Role::Admin).await;
     let response = admin
         .post("/api/v1/users")
-        .json(&new_user(" Nina@Navree.test ", "manager"))
+        .json(&new_user(" Nisha@Navree.test ", "manager"))
         .send()
         .await
         .assert_status(201)
         .assert_json_path("__type", json!("User"))
-        .assert_json_path("name", json!("Nina Novak"))
-        .assert_json_path("email", json!("nina@navree.test"))
+        .assert_json_path("name", json!("Nisha Narang"))
+        .assert_json_path("email", json!("nisha@navree.test"))
         .assert_json_path("roles", json!(["manager"]))
         .assert_json_path("email_verified_at", Value::Null);
     let body = response.json_value();
@@ -79,7 +79,7 @@ async fn admin_can_create_user_with_role() {
     let login = crm
         .client()
         .post("/api/auth/login")
-        .json(&json!({ "email": "nina@navree.test", "password": "a long password" }))
+        .json(&json!({ "email": "nisha@navree.test", "password": "a long password" }))
         .send()
         .await
         .assert_status(200)
@@ -103,14 +103,14 @@ async fn rep_cannot_create_user() {
         crm.login_as(role)
             .await
             .post("/api/v1/users")
-            .json(&new_user("eve@navree.test", "admin"))
+            .json(&new_user("esha@navree.test", "admin"))
             .send()
             .await
             .assert_error(403, "Forbidden");
     }
     crm.client()
         .post("/api/v1/users")
-        .json(&new_user("eve@navree.test", "admin"))
+        .json(&new_user("esha@navree.test", "admin"))
         .send()
         .await
         .assert_status(401);
@@ -162,7 +162,7 @@ async fn creating_a_user_validates_the_input() {
         .assert_validation_error("email");
     admin
         .post("/api/v1/users")
-        .json(&new_user("nina@navree.test", "owner"))
+        .json(&new_user("nisha@navree.test", "owner"))
         .send()
         .await
         .assert_validation_error("role");
@@ -174,7 +174,7 @@ async fn creating_a_user_validates_the_input() {
         .assert_validation_error("email");
     admin
         .post("/api/v1/users")
-        .json(&json!({ "name": "Nina", "email": "nina@navree.test", "password": "short", "role": "rep" }))
+        .json(&json!({ "name": "Nisha", "email": "nisha@navree.test", "password": "short", "role": "rep" }))
         .send()
         .await
         .assert_validation_error("password");
@@ -202,7 +202,7 @@ async fn any_signed_in_user_lists_and_searches_users() {
         .collect();
     assert_eq!(
         names,
-        ["Dana Whitfield", "Marcus Reyes", "Priya Shah", "Tom Becker"]
+        ["Daljit Kaur", "Manpreet Gill", "Priya Verma", "Tarun Bhatia"]
     );
     assert_eq!(page["data"][2]["roles"], json!(["rep"]));
     assert_eq!(page["data"][0]["__type"], json!("User"));
@@ -242,12 +242,12 @@ async fn admin_updates_name_and_role() {
     let tom = crm.user_id(Role::Rep2);
     admin
         .patch(&format!("/api/v1/users/{tom}"))
-        .json(&json!({ "name": "Thomas Becker", "role": "manager" }))
+        .json(&json!({ "name": "Tarunveer Bhatia", "role": "manager" }))
         .send()
         .await
         .assert_status(200)
         .assert_json_path("id", json!(tom))
-        .assert_json_path("name", json!("Thomas Becker"))
+        .assert_json_path("name", json!("Tarunveer Bhatia"))
         .assert_json_path("roles", json!(["manager"]));
     // The new role takes effect at once.
     let promoted = crm.login_as(Role::Rep2).await;
@@ -256,7 +256,7 @@ async fn admin_updates_name_and_role() {
         .send()
         .await
         .assert_json_path("roles", json!(["manager"]))
-        .assert_json_path("name", json!("Thomas Becker"));
+        .assert_json_path("name", json!("Tarunveer Bhatia"));
     let rules = promoted.get("/api/me/abilities").send().await.json_value();
     assert!(
         rules
@@ -267,7 +267,7 @@ async fn admin_updates_name_and_role() {
     // Only the name: the role stays.
     admin
         .patch(&format!("/api/v1/users/{tom}"))
-        .json(&json!({ "name": "Tom Becker" }))
+        .json(&json!({ "name": "Tarun Bhatia" }))
         .send()
         .await
         .assert_status(200)
@@ -470,19 +470,19 @@ async fn users_sort_by_the_fields_of_the_allow_list() {
         user_names(&users(&admin, &[]).await),
         [
             "Aarav Kapoor",
-            "Dana Whitfield",
-            "Marcus Reyes",
-            "Priya Shah",
-            "Tom Becker"
+            "Daljit Kaur",
+            "Manpreet Gill",
+            "Priya Verma",
+            "Tarun Bhatia"
         ]
     );
     assert_eq!(
         user_names(&users(&admin, &[("sort", "email")]).await),
         [
-            "Dana Whitfield",
-            "Marcus Reyes",
-            "Priya Shah",
-            "Tom Becker",
+            "Daljit Kaur",
+            "Manpreet Gill",
+            "Priya Verma",
+            "Tarun Bhatia",
             "Aarav Kapoor"
         ]
     );
@@ -490,19 +490,19 @@ async fn users_sort_by_the_fields_of_the_allow_list() {
         user_names(&users(&admin, &[("sort", "-email")]).await),
         [
             "Aarav Kapoor",
-            "Tom Becker",
-            "Priya Shah",
-            "Marcus Reyes",
-            "Dana Whitfield"
+            "Tarun Bhatia",
+            "Priya Verma",
+            "Manpreet Gill",
+            "Daljit Kaur"
         ]
     );
     assert_eq!(
         user_names(&users(&admin, &[("sort", "-name")]).await),
         [
-            "Tom Becker",
-            "Priya Shah",
-            "Marcus Reyes",
-            "Dana Whitfield",
+            "Tarun Bhatia",
+            "Priya Verma",
+            "Manpreet Gill",
+            "Daljit Kaur",
             "Aarav Kapoor"
         ]
     );
@@ -510,7 +510,7 @@ async fn users_sort_by_the_fields_of_the_allow_list() {
     users(&admin, &[("sort", "-created_at")]).await;
     assert_eq!(
         user_names(&users(&admin, &[("search", "navree.test"), ("sort", "-name")]).await)[0],
-        "Tom Becker"
+        "Tarun Bhatia"
     );
     crm.shutdown().await;
 }
@@ -523,7 +523,7 @@ async fn what_the_user_list_does_not_allow_is_a_400_naming_the_parameter() {
     // (the parameter sent, its value, the parameter the 400 names)
     for (sent, value, param) in [
         // The user list has no filters.
-        ("filter[name]", "Priya Shah", "filter[name]"),
+        ("filter[name]", "Priya Verma", "filter[name]"),
         ("filter[email][contains]", "rep", "filter[email][contains]"),
         ("filter[password]", "x", "filter[password]"),
         ("sort", "password", "sort"),
@@ -542,7 +542,7 @@ async fn what_the_user_list_does_not_allow_is_a_400_naming_the_parameter() {
     let page = users(&rep, &[("per_page", "100")]).await;
     assert_eq!(page["meta"]["per_page"], json!(100));
     // Names that are not the list query's are left alone.
-    let page = users(&rep, &[("name", "Priya Shah"), ("email", "x")]).await;
+    let page = users(&rep, &[("name", "Priya Verma"), ("email", "x")]).await;
     assert_eq!(page["meta"]["total"], json!(4));
     crm.shutdown().await;
 }

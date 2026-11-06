@@ -11,7 +11,7 @@ import LoginPage from "@/pages/login.vue";
 const { navigateTo } = vi.hoisted(() => ({ navigateTo: vi.fn() }));
 mockNuxtImport("navigateTo", () => navigateTo);
 
-const user = { __type: "User", id: "u9", name: "Dana Whitfield", email: "admin@navree.test", roles: ["admin"] };
+const user = { __type: "User", id: "u9", name: "Daljit Kaur", email: "admin@navree.test", roles: ["admin"] };
 type Call = { route: string; body: Record<string, unknown> };
 
 /**

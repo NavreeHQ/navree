@@ -92,13 +92,13 @@ pub struct NewDeal {
 }
 
 impl NewDeal {
-    /// An open USD deal.
+    /// An open deal in rupees.
     pub fn open(title: &'static str, stage: Stage, amount_cents: i64) -> Self {
         NewDeal {
             title,
             stage,
             amount_cents,
-            currency: "USD",
+            currency: "INR",
             closed_at: None,
         }
     }

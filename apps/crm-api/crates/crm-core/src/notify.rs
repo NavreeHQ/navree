@@ -107,7 +107,7 @@ mod tests {
     fn user() -> navree::auth::User {
         navree::auth::User {
             id: Uuid::from_u128(7),
-            name: "Priya Shah".into(),
+            name: "Priya Verma".into(),
             email: "rep1@navree.test".into(),
             password_hash: String::new(),
             email_verified_at: None,
@@ -129,7 +129,7 @@ mod tests {
             user.broadcast_channel(),
             Some(format!("private-users.{}", Uuid::from_u128(7)))
         );
-        assert_eq!(user.name, "Priya Shah");
+        assert_eq!(user.name, "Priya Verma");
     }
 
     #[test]

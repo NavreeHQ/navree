@@ -59,9 +59,9 @@ async fn create_task_on_deal() {
             "subject_id": renewal.id,
             "subject_label": "Agra renewal",
             "owner_id": rep1,
-            "owner": { "id": rep1, "name": "Priya Shah" },
+            "owner": { "id": rep1, "name": "Priya Verma" },
             "assignee_id": rep2,
-            "assignee": { "id": rep2, "name": "Tom Becker" },
+            "assignee": { "id": rep2, "name": "Tarun Bhatia" },
             "created_at": "2026-10-26T10:00:00Z",
         })
     );
@@ -110,7 +110,7 @@ async fn notes_without_assignee_or_due_date_belong_to_their_creator() {
     assert_eq!(body["assignee"], Value::Null);
     assert_eq!(
         body["owner"],
-        json!({ "id": manager, "name": "Marcus Reyes" })
+        json!({ "id": manager, "name": "Manpreet Gill" })
     );
     crm.shutdown().await;
 }
@@ -695,7 +695,7 @@ async fn update_changes_only_the_fields_sent() {
     assert_eq!(body["due_at"], json!("2026-10-29T13:00:00Z"));
     assert_eq!(
         body["assignee"],
-        json!({ "id": rep1, "name": "Priya Shah" })
+        json!({ "id": rep1, "name": "Priya Verma" })
     );
 
     // The new values are validated like on create, and nothing changes.

@@ -5,7 +5,7 @@ test.use({ viewport: BOARD_VIEWPORT });
 
 test("a deal moves between stages with the keyboard alone", async ({ page }) => {
   await signIn(page, "rep1");
-  const companies = await callApi<{ data: { id: string }[] }>(page, "GET", "/api/v1/companies?search=Northwind");
+  const companies = await callApi<{ data: { id: string }[] }>(page, "GET", "/api/v1/companies?search=Doaba");
   const title = unique("Keyboard renewal");
   const created = await callApi<{ id: string }>(page, "POST", "/api/v1/deals", {
     title,

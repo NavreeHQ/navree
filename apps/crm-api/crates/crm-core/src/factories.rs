@@ -110,7 +110,7 @@ impl ContactFactory {
     }
 }
 
-/// Open deals in USD with a fake title and amount, at the top of the
+/// Open deals in rupees with a fake title and amount, at the top of the
 /// `lead` column.
 #[derive(Default)]
 pub struct DealFactory;
@@ -123,7 +123,7 @@ impl ModelFactory for DealFactory {
         Deal {
             title: fake.catch_phrase(),
             amount_cents: fake.number(10..=5_000) * 10_000,
-            currency: "USD".to_owned(),
+            currency: "INR".to_owned(),
             stage: Stage::Lead,
             ..Deal::default()
         }

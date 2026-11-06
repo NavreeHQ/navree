@@ -44,7 +44,7 @@ describe("the app on the Navree packages", () => {
 });
 
 describe("the app's routes", () => {
-  const user = { __type: "User", id: "u1", name: "Priya Shah", email: "priya@navree.test" };
+  const user = { __type: "User", id: "u1", name: "Priya Verma", email: "priya@navree.test" };
   const upstream = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 
   beforeAll(() => {

@@ -16,10 +16,10 @@ fn agra() -> Value {
         "domain": "agra.com",
         "industry": "Software",
         "size": "51-200",
-        "phone": "+1 555-0100",
+        "phone": "+91 98765 43210",
         "website": "https://agra.com",
-        "city": "Berlin",
-        "country": "Germany",
+        "city": "Ludhiana",
+        "country": "India",
     })
 }
 
@@ -52,10 +52,10 @@ async fn companies_crud_happy_path() {
             "domain": "agra.com",
             "industry": "Software",
             "size": "51-200",
-            "phone": "+1 555-0100",
+            "phone": "+91 98765 43210",
             "website": "https://agra.com",
-            "city": "Berlin",
-            "country": "Germany",
+            "city": "Ludhiana",
+            "country": "India",
             "owner_id": rep_id,
             "owner": { "id": rep_id, "name": Role::Rep1.name() },
             "created_at": START,
@@ -80,16 +80,16 @@ async fn companies_crud_happy_path() {
     tick(&crm);
     let updated = rep
         .patch(&format!("/api/v1/companies/{id}"))
-        .json(&json!({ "city": "Lisbon", "domain": null, "size": null }))
+        .json(&json!({ "city": "Amritsar", "domain": null, "size": null }))
         .send()
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(updated["city"], "Lisbon");
+    assert_eq!(updated["city"], "Amritsar");
     assert_eq!(updated["domain"], Value::Null);
     assert_eq!(updated["size"], Value::Null);
     assert_eq!(updated["name"], "Agra Corp");
-    assert_eq!(updated["country"], "Germany");
+    assert_eq!(updated["country"], "India");
     assert_eq!(updated["created_at"], START);
     assert_eq!(updated["updated_at"], "2026-10-26T10:01:00Z");
     assert_eq!(updated["__type"], "Company");
@@ -134,12 +134,12 @@ async fn company_detail_counts_live_contacts_and_open_deals() {
     .await;
     let gone = create_contact(
         &rep,
-        json!({ "first_name": "Bob", "last_name": "Byte", "company_id": id }),
+        json!({ "first_name": "Baljit", "last_name": "Bains", "company_id": id }),
     )
     .await;
     create_contact(
         &rep,
-        json!({ "first_name": "Cy", "last_name": "Other", "company_id": id_of(&other) }),
+        json!({ "first_name": "Chetan", "last_name": "Other", "company_id": id_of(&other) }),
     )
     .await;
     rep.delete(&format!("/api/v1/contacts/{}", id_of(&gone)))
@@ -250,7 +250,7 @@ async fn only_managers_assign_companies_to_someone_else() {
     // Managers assign on create and reassign on update.
     let assigned = create_company(
         &manager,
-        json!({ "name": "Pied Piper", "owner_id": rep2_id }),
+        json!({ "name": "Pind Pantry", "owner_id": rep2_id }),
     )
     .await;
     assert_eq!(assigned["owner_id"], json!(rep2_id));

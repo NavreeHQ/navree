@@ -26,7 +26,7 @@ pub struct Deal {
     pub title: String,
     /// The value in the currency's minor unit (cents), never negative.
     pub amount_cents: i64,
-    /// The ISO 4217 code, e.g. `USD` (the default).
+    /// The ISO 4217 code, e.g. `INR` (the default).
     pub currency: String,
     /// The pipeline stage.
     #[model(cast = "string_enum")]

@@ -167,7 +167,7 @@ const taskTotal = computed(() => {
               </TooltipTrigger>
               <TooltipContent side="top" align="start" class="flex flex-col gap-0.5">
                 <span class="font-medium">{{ stageLabel(r.stage) }}</span>
-                <span class="figures">{{ formatMoney(r.amount, "USD") }} across {{ r.count }} {{ r.count === 1 ? "deal" : "deals" }}</span>
+                <span class="figures">{{ formatMoney(r.amount, "INR") }} across {{ r.count }} {{ r.count === 1 ? "deal" : "deals" }}</span>
                 <span v-if="r.share !== null" class="figures">{{ formatPercent(r.share) }} of open pipeline</span>
               </TooltipContent>
             </Tooltip>

@@ -27,7 +27,7 @@ function deal(overrides: Partial<Deal> = {}): Deal {
     id: "d1",
     title: "Fleet telematics rollout",
     amount_cents: 4_800_000,
-    currency: "USD",
+    currency: "INR",
     stage: "proposal",
     probability: 50,
     position: 0,
@@ -35,11 +35,11 @@ function deal(overrides: Partial<Deal> = {}): Deal {
     closed_at: null,
     lost_reason: null,
     company_id: "c1",
-    company: { id: "c1", name: "Northwind" },
+    company: { id: "c1", name: "Doaba" },
     contact_id: null,
     contact: null,
     owner_id: REP1,
-    owner: { id: REP1, name: "Priya Shah" },
+    owner: { id: REP1, name: "Priya Verma" },
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
     ...overrides,
@@ -66,7 +66,7 @@ describe("CASL ability", () => {
 
   it("does not let a rep update or move another rep's deal", () => {
     const ability = createAbility(repRules);
-    const theirs = deal({ owner_id: REP2, owner: { id: REP2, name: "Tom Becker" } });
+    const theirs = deal({ owner_id: REP2, owner: { id: REP2, name: "Tarun Bhatia" } });
 
     expect(ability.can("update", theirs)).toBe(false);
     expect(ability.can("move", theirs)).toBe(false);
@@ -128,7 +128,7 @@ describe("CASL ability", () => {
 
   it("<Can I='update' this={deal}> hides actions the API would refuse", () => {
     const mine = deal({ id: "mine", title: "Mine" });
-    const theirs = deal({ id: "theirs", title: "Theirs", owner_id: REP2, owner: { id: REP2, name: "Tom Becker" } });
+    const theirs = deal({ id: "theirs", title: "Theirs", owner_id: REP2, owner: { id: REP2, name: "Tarun Bhatia" } });
 
     render(
       <AbilityProvider rules={repRules}>

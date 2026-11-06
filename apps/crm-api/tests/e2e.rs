@@ -109,8 +109,8 @@ async fn a_deal_from_first_contact_to_reassignment() {
         &rep1,
         "/api/v1/contacts",
         json!({
-            "first_name": "Hank",
-            "last_name": "Scorpio",
+            "first_name": "Harsh",
+            "last_name": "Sehgal",
             "email": "hank@gulati.example",
             "company_id": id(&company),
         }),
@@ -140,14 +140,14 @@ async fn a_deal_from_first_contact_to_reassignment() {
     assert_eq!(deal["__type"], "Deal");
     assert_eq!(deal["owner_id"], json!(rep1.id()));
     assert_eq!(deal["probability"], 50);
-    assert_eq!(deal["currency"], "USD");
+    assert_eq!(deal["currency"], "INR");
     assert_eq!(
         deal["company"],
         json!({ "id": id(&company), "name": "Gulati" })
     );
     assert_eq!(
         deal["contact"],
-        json!({ "id": id(&contact), "full_name": "Hank Scorpio" })
+        json!({ "id": id(&contact), "full_name": "Harsh Sehgal" })
     );
 
     let due_at = crm.clock().now() + Duration::hours(3);
@@ -348,8 +348,8 @@ async fn deleted_companies_drop_out_of_every_module() {
     // Nothing new can be attached to it.
     rep.post("/api/v1/contacts")
         .json(&json!({
-            "first_name": "Peter",
-            "last_name": "Gibbons",
+            "first_name": "Parveen",
+            "last_name": "Grewal",
             "company_id": id(&company),
         }))
         .send()
@@ -383,7 +383,7 @@ async fn deleting_a_deal_deletes_its_activities() {
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
     let admin = crm.login_as(Role::Admin).await;
-    let company = create(&rep1, "/api/v1/companies", json!({ "name": "Umbrella" })).await;
+    let company = create(&rep1, "/api/v1/companies", json!({ "name": "Ujala" })).await;
     let deal =
         |title: &str| json!({ "title": title, "company_id": id(&company), "amount_cents": 500 });
     let doomed = id(&create(&rep1, "/api/v1/deals", deal("Doomed")).await);
@@ -406,7 +406,7 @@ async fn deleting_a_deal_deletes_its_activities() {
         "/api/v1/activities",
         json!({
             "kind": "note",
-            "subject": "About Umbrella",
+            "subject": "About Ujala",
             "subject_type": "company",
             "subject_id": id(&company),
         }),
@@ -510,8 +510,8 @@ async fn errors_share_one_json_shape_across_modules() {
         .assert_error(403, None);
     rep.post("/api/v1/users")
         .json(&json!({
-            "name": "Eve",
-            "email": "eve@navree.test",
+            "name": "Esha",
+            "email": "esha@navree.test",
             "password": "a long password",
             "role": "admin",
         }))

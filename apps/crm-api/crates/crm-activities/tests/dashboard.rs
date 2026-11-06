@@ -211,7 +211,7 @@ async fn dashboard_numbers_match_seeded_fixture() {
     assert_eq!(recent[0]["subject_label"], json!("Agra"));
     assert_eq!(
         recent[0]["owner"],
-        json!({ "id": crm.user_id(Role::Manager), "name": "Marcus Reyes" })
+        json!({ "id": crm.user_id(Role::Manager), "name": "Manpreet Gill" })
     );
     crm.shutdown().await;
 }

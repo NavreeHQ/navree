@@ -117,7 +117,7 @@ impl From<PageMeta> for PageInfo {
 /// A CSV cell that spreadsheets show as text: a value starting with `=`,
 /// `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (CSV
 /// formula injection), unless it only has phone-number characters
-/// (`+1 555-0100`), which cannot form a formula.
+/// (`+91 98765 43210`), which cannot form a formula.
 pub(crate) fn csv_safe(value: &str) -> std::borrow::Cow<'_, str> {
     let risky = value
         .chars()
@@ -164,7 +164,7 @@ mod tests {
         );
         assert_eq!(csv_safe("\tx"), "'\tx");
         // Phone numbers and plain text are left alone.
-        assert_eq!(csv_safe("+1 555-0100"), "+1 555-0100");
+        assert_eq!(csv_safe("+91 98765 43210"), "+91 98765 43210");
         assert_eq!(csv_safe("+44 (20) 7946.0000"), "+44 (20) 7946.0000");
         assert_eq!(csv_safe("Anu"), "Anu");
         assert_eq!(csv_safe("a=b"), "a=b");
