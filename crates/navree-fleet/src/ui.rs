@@ -72,7 +72,7 @@ impl Frame {
             .path_and_query()
             .map_or_else(|| path.clone(), |target| target.as_str().to_owned());
         let csrf = parts.extensions.get::<Session>().map(Session::csrf_token);
-        let app = shell(&base, &overview, user).for_request(path, &parts.headers);
+        let app = shell(&base, &overview, user).for_request(here.clone(), &parts.headers);
         Ok(Frame {
             base,
             here,
