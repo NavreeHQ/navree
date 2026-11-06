@@ -69,7 +69,7 @@ async fn contacts_crud_happy_path() {
     tick(&crm);
     let updated = rep
         .patch(&path)
-        .json(&json!({ "status": "customer", "company_id": null, "last_name": "King" }))
+        .json(&json!({ "status": "customer", "company_id": null, "last_name": "Kaur" }))
         .send()
         .await
         .assert_status(200)
@@ -609,7 +609,7 @@ async fn contact_filters_take_their_operators() {
     );
     assert_eq!(
         names(&[
-            ("search", "katherine johnson"),
+            ("search", "kavita joshi"),
             ("filter[company_id]", &agra)
         ])
         .await,

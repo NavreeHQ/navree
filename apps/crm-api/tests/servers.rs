@@ -225,7 +225,7 @@ async fn day_of_work(crm: &TestCrm) -> Answers {
         answers.push((question, sorted(names(&page, "name"))));
     }
     for query in [
-        json!({ "search": "LINDQVIST" }),
+        json!({ "search": "DHILLON" }),
         json!({ "search": "simran verma" }),
         json!({ "filter[status]": "customer", "per_page": 100 }),
     ] {

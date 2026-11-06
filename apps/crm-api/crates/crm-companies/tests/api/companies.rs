@@ -423,7 +423,7 @@ async fn search_and_filters() {
     // Search: name or domain, case-insensitive, `%` and `_` are literal.
     assert_eq!(names(&[("search", "AGR")]).await, ["agra"]);
     assert_eq!(names(&[("search", ".io")]).await, ["Gulati"]);
-    assert_eq!(names(&[("search", "te")]).await, ["Ilaichi"]);
+    assert_eq!(names(&[("search", "chi")]).await, ["Ilaichi"]);
     assert_eq!(names(&[("search", "%")]).await, ["100% Juice"]);
     assert_eq!(names(&[("search", "_")]).await, Vec::<String>::new());
     assert_eq!(names(&[("search", "  ")]).await.len(), 4);
@@ -438,7 +438,7 @@ async fn search_and_filters() {
         ["agra", "Ilaichi"]
     );
     assert_eq!(
-        names(&[("filter[industry]", "software"), ("search", "indr")]).await,
+        names(&[("filter[industry]", "software"), ("search", "ilai")]).await,
         ["Ilaichi"]
     );
     // Sort.
