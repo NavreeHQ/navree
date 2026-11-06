@@ -86,8 +86,8 @@ function RuleCard({ rule, index, wide }: { rule: Rule; index: number; wide: bool
 
 /**
  * "Built in": the rules every Navree app follows, with the picture of a page
- * from the request to the pixels. Only the rules whose proof is in the
- * repository are drawn (`./rules.ts`); the section is left out when none is.
+ * from the request to the pixels. Every rule's proof is in the repository
+ * (`./rules.ts` fails the build when one is not), so every rule is drawn.
  */
 export function BuiltIn() {
   const shown = rules();

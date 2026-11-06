@@ -6,12 +6,13 @@
  *
  * A card is shown only when its proof is in the repository at build time:
  * every file and symbol it names is read here, from the code itself. When
- * one is missing, the card is left out and the build says which and why, so
- * a rule reaches the site with the code that keeps it, never before. A
- * measurement file that is there but has changed shape fails the build
- * instead of showing a stale number. Numbers are read from the files that
- * own them, never typed in, and written in Indian digit grouping (`indian`
- * in `src/lib/format.ts`), as the rest of the site writes counts.
+ * one is missing, the build fails and says which and why, so a rule reaches
+ * the site with the code that keeps it and is never dropped without anyone
+ * knowing (a test that moved, a symbol that was renamed). A measurement file
+ * that is there but has changed shape fails the build too, instead of showing
+ * a stale number. Numbers are read from the files that own them, never typed
+ * in, and written in Indian digit grouping (`indian` in `src/lib/format.ts`),
+ * as the rest of the site writes counts.
  *
  * Server components only: this reads the repository with `node:fs`.
  */
@@ -424,17 +425,23 @@ function storyOf(id: string): Rule["story"] {
 
 let cache: Rule[] | null = null;
 
-/** The rules whose proof is in the repository, in order. The build logs each one it leaves out. */
+/**
+ * The rules, in order. Every rule's proof must be in the repository: one that
+ * is not fails the build, naming each rule and what it lacks.
+ */
 export function rules(): Rule[] {
   if (cache) return cache;
   const shown: Rule[] = [];
+  const lost: string[] = [];
   for (const build of builders) {
     const built = build();
-    if ("missing" in built) {
-      console.warn(`architecture: the rule "${built.id}" is left out until its proof is in the repository: no ${built.missing}`);
-      continue;
-    }
-    shown.push({ ...built, story: storyOf(built.id) });
+    if ("missing" in built) lost.push(`  - "${built.id}": no ${built.missing}`);
+    else shown.push({ ...built, story: storyOf(built.id) });
+  }
+  if (lost.length) {
+    throw new Error(
+      `architecture: ${lost.length} rule${lost.length === 1 ? " has" : "s have"} lost ${lost.length === 1 ? "its" : "their"} proof, so /architecture/ cannot be built. Restore the proof, or change the rule in src/components/architecture/rules.ts:\n${lost.join("\n")}`,
+    );
   }
   cache = shown;
   return shown;
