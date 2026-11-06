@@ -22,7 +22,7 @@ The screens are rendered on the server from templates, with a small stylesheet a
 <Steps>
 <Step title="Add the module">
 
-Put `HelmModule::from_config()` after `AuthModule`, `AccessModule` and your feature modules in `src/app.rs`. See [Installation](#installation).
+Put `HelmModule::from_config()` after `AuthModule`, `AccessModule` and your feature modules in `src/app.rs`. The panel signs people in on your app's browser session, so the app also has `SessionModule`, `UiModule` and `AuthPages`. See [Installation](#installation).
 
 </Step>
 <Step title="Let a role in">
@@ -48,21 +48,24 @@ Open `http://127.0.0.1:8080/admin` and sign in with your app's account. See [You
 
 The `helm` feature of the `navree` facade brings the crate `navree-helm`. It is part of `full`, the default. Add the module to your app root:
 
-```rust title="src/app.rs" {10}
+```rust title="src/app.rs" {13}
 pub fn app(sources: ConfigSources) -> AppBuilder {
     Navree::app()
         .module(ConfigModule::for_root(sources))
         .module(CryptoModule::from_config())
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
+        .module(SessionModule::from_config())
         .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Acme CRM"))
         .module(AccessModule::for_root(access()))
         // ... your feature modules
         .module(HelmModule::from_config())
 }
 ```
 
-`HelmModule` is global and needs `DatabaseModule`, `AuthModule` (sign-in), `AccessModule` (every check) and `CryptoModule` (the session cookie). It has no tables of its own. `HelmModule::for_root(HelmOptions { .. })` takes the [options](#configuration) in code instead.
+`HelmModule` is global and needs `DatabaseModule`, `AccessModule` (every check) and `CryptoModule`. People sign in to the panel the way they sign in to the rest of your app, so it also needs the app's browser sign-in: `SessionModule` (the session cookie), `AuthModule` (the users) and `AuthPages` on `UiModule` (the sign-in, two-factor and sign-out pages). A guest who opens the panel is sent to the sign-in page (`ui.sign_in`, `/sign-in` by default) and comes back to the page they asked for. It has no tables of its own. `HelmModule::for_root(HelmOptions { .. })` takes the [options](#configuration) in code instead.
 
 Helm registers the subject `Helm` with the permission prefix `helm`. The `view` ability on it lets a user into the panel; what they can do inside depends on their abilities on each resource. Grant it to the roles that should have a panel:
 
@@ -327,7 +330,7 @@ A page is forgiving: a parameter Helm does not read, such as `filter[stage][gte]
 
 **Export** on a list downloads its rows as a CSV file (`GET /admin/resources/deals/export.csv`, with the list's search, filters and sort in the query). It has the list's rows for the user: the same rows, narrowed by the same access filter, and in a workspace only that workspace's. Its columns are the fields of a record's page, less any marked `.hide_on_export()`: use that for a field someone reads one record at a time but shouldn't take by the table. A header line names them by their labels; a value the user's rules hide is empty, and a `#[model(hidden)]` column isn't there at all. Dates are ISO 8601 and Markdown is the text typed.
 
-- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk reads the user's access again and checks again that they may work in the workspace, so a role or a permission taken away, or a member removed, ends the file. The panel's sign-in is a cookie with no state on the server, so signing out does not end a file already being sent; its time limit does.
+- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk reads the user's access again and checks again that they may work in the workspace, so a role or a permission taken away, or a member removed, ends the file. Signing out does not end a file already being sent; its time limit does.
 - **A time limit.** `helm.export_max_secs` (1800) ends a file however slowly the client reads, and no more rows are read for it. A client that has stopped reading altogether holds only its socket until the server's own connection limits close it: nothing is read for it.
 - **In a workspace your app entered.** The file enters the workspace itself past its first chunk, so the panel asks up front who may work there, as it does for a queued action: `WorkspaceModule`, or `helm_staff_workspaces`. An app with neither can't export from a workspace it entered, the list doesn't offer it, and the route answers with a 403 that says why.
 - **Spreadsheets.** A text that starts with `=`, `+`, `-` or `@` and is not a number gets a quote in front, so a spreadsheet opens it as text and runs nothing; a number stays a number, currency symbol and thousands separators included (`-$1,234.60`). The file starts with a UTF-8 byte order mark so that Excel reads it as UTF-8: a program that reads it should skip one.
@@ -443,7 +446,7 @@ Every create, update and delete runs in the request's [unit of work](/docs/datab
 A model declared `#[model(workspace)]` belongs to workspaces, and the panel works in **one workspace at a time**. Which one is decided before a screen runs:
 
 1. the workspace the request's unit of work has entered, which is the case when the app enters it for the request (an `InWorkspace` guard, or `Workspaces::enter` in your own layer);
-2. else the one the request names: the workspace header holding the workspace id (`workspace.header`, `X-Workspace` by default, for API clients; none if `workspace.resolvers` leaves out `header`), or the `navree_helm_workspace` cookie that the form in the sidebar sets. The form shows when the panel has a resource of a workspace model; type the workspace id and press **Work in this workspace**, and an empty field leaves the workspace. Anything that isn't a UUID names no workspace. The cookie lasts as long as a sign-in (`helm.session_minutes`), and signing in or out clears it. In a signed-in browser its value is sealed to the sign-in, so a cookie set at another path, by a sibling subdomain or from another sign-in, names nothing.
+2. else the one the request names: the workspace header holding the workspace id (`workspace.header`, `X-Workspace` by default, for API clients; none if `workspace.resolvers` leaves out `header`), or the `navree_helm_workspace` cookie that the form in the sidebar sets. The form shows when the panel has a resource of a workspace model; type the workspace id and press **Work in this workspace**, and an empty field leaves the workspace. Anything that isn't a UUID names no workspace. The browser keeps the cookie for up to 30 days. In a signed-in browser its value is sealed to the sign-in, so a cookie set at another path, by a sibling subdomain or kept from another sign-in, names nothing; after signing out or in again it is dead.
 
 A workspace the request names is entered only for a user who may work in it:
 
@@ -573,8 +576,8 @@ The page is served at `/admin/pages/pipeline` and appears in the menu for users 
 
 ## Security
 
-- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). The code check is the API's: a six-digit TOTP from `navree::crypto::totp` (30-second steps, one step of clock drift either way), compared in constant time, and each code works once, whether it was used at the panel or at `POST /api/auth/2fa/verify`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. The workspace the panel works in is a cookie of its own, `navree_helm_workspace`, with the same flags, set only by the sidebar's form (a `POST` that carries the session's CSRF token). It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
-- **CSRF.** Every change the panel makes sends a CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403. The sign-in form has its own token. If your app also uses `SessionModule`, add the panel to its exceptions (`session.csrf_except = ["/admin/*"]`): Helm checks its own token there.
+- **Sign-in.** The panel has no sign-in screen of its own. People sign in on your app's pages (`AuthPages`), on the app's [session](/docs/basics/sessions-and-csrf/): password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). One sign-in opens every page and tool of the app. The session is kept on the server: signing out, ending the session from another device, changing or resetting the password and offboarding end it at once, for a copied cookie too. The cookie is the session's own (`__Host-navree_session` where browsers allow the prefix, `Secure` and `HttpOnly`); its settings and lifetime (`session.*`, `auth.session.lifetime_hours`, `auth.session.remember_days`) are the app's. The workspace the panel works in is a cookie of its own, `navree_helm_workspace`, scoped to the panel's path, set only by the sidebar's form (a `POST` that carries the session's CSRF token) and sealed to the sign-in it was chosen in. **Sign out** in the sidebar posts to the app's `/sign-out`.
+- **CSRF.** Every change a browser makes sends the session's CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403 by the session layer. Do not put the panel in `session.csrf_except`: nothing else checks it.
 - **Deny by default.** Nobody enters without `view` on `Helm`, and every screen and API call checks the user's ability on the subject and the record, as [above](#authorization). The super-admin role passes every check.
 - **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.
 - **Rate limits.** The panel and its API are subject to your app's per-IP [rate limit](/docs/basics/rate-limiting/).
@@ -642,12 +645,11 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 |---|---|---|
 | `helm.path` | `/admin` | Where the panel is served. |
 | `helm.title` | `Admin` | The name in the header and the browser tab. |
-| `helm.logo` | none | A logo URL for the sidebar's header and the sign-in screen: a path on your app or an `http(s)` URL. |
+| `helm.logo` | none | A logo URL for the sidebar's header: a path on your app or an `http(s)` URL. |
 | `helm.accent` | `#3dff8f` | The accent color of the primary buttons, focus rings and positive figures (`#rgb` or `#rrggbb`). |
 | `helm.per_page` | `25` | Rows per page on lists (at most 100). |
 | `helm.metrics_cache_secs` | `60` | How long metric results and the sidebar's counts are cached per user and range (counts: per user and workspace); `0` turns the cache off. |
 | `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
-| `helm.session_minutes` | `480` | How long a sign-in to the panel lasts. |
 | `helm.export_max_secs` | `1800` | How long a list's CSV file may take to send, however slowly the client reads. |
 
 | Command | What it does |
