@@ -3,9 +3,9 @@ title: "Your first app"
 description: "Build a small task-list API with a model, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests."
 ---
 
-This tutorial builds **Planner**, a small JSON API for to-do lists. People sign up, sign in, create tasks and tick them off, and nobody can see or change anyone else's tasks. Along the way you use the generators, write a migration and a model, validate input, protect routes with access attributes, and finish with feature tests that sign up real users.
+This tutorial builds **Planner**, a small JSON API for to-do lists. People sign up, sign in, create tasks and tick them off, and nobody can see or change anyone else's tasks. Along the way you use the generators, write a migration and a model, validate input, protect routes with access attributes, test the API with real users, and draw the task list in a browser with Navree UI.
 
-Every command and file below comes from a real run of the CLI, and the finished app passes its tests and `cargo clippy -- -D warnings`.
+Every command and file that builds the API comes from a real run of the CLI, and the finished API passes its tests and `cargo clippy -- -D warnings`. The last step adds a screen on top of it.
 
 ## Before you start
 
@@ -630,11 +630,103 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 The first line is the module tests in `src/` (users and tasks), the second the app tests the template wrote in `tests/app.rs`, and the third your new feature tests. Cargo also prints empty results for the binary and the doc tests, left out here.
 
+## Draw the tasks with Navree UI
+
+The API answers clients that send a bearer token. A browser can show the same tasks too: [Navree UI](/docs/ui/overview/) draws a page on the server, from the same service and under the same rules. This step adds the page and the sign-in a browser needs.
+
+Three modules go beside `AuthModule` in `src/app.rs`. `SessionModule` keeps a browser signed in on a cookie, `UiModule` serves the toolkit, and `AuthPages` draws the sign-in pages on top of `AuthModule`:
+
+```rust title="src/app.rs"
+use navree::auth::AuthPages; // [!code ++]
+use navree::session::SessionModule; // [!code ++]
+use navree::ui::UiModule; // [!code ++]
+```
+
+```rust title="src/app.rs" {2-4}
+        .module(AuthModule::from_config())
+        .module(SessionModule::from_config())
+        .module(UiModule::from_config())
+        .module(AuthPages::new().app_name("Planner"))
+```
+
+Then write the page. It is a controller like the one the generator wrote, with three differences: its path starts with `!`, which leaves out the `/api/v1` prefix; `#[page]` makes its errors pages, so a guest gets a page with a button to sign in instead of JSON; and it returns a `View`. Create `src/modules/tasks/pages.rs`:
+
+```rust title="src/modules/tasks/pages.rs"
+//! The tasks as a page: the same service and the same rules as the JSON API.
+
+use std::sync::Arc;
+
+use navree::access::{Accessible, Read};
+use navree::db::{PageQuery, Uow};
+use navree::http::Result;
+use navree::ui::{Badge, Card, Node, Row, Stack, Text, View};
+use navree::{controller, injectable};
+
+use super::entity::Task;
+use super::service::TaskService;
+
+#[injectable]
+pub struct TaskPages {
+    tasks: Arc<TaskService>,
+}
+
+#[controller("!/tasks")]
+#[page]
+impl TaskPages {
+    /// `GET /tasks`: the tasks the signed-in user may read, newest first.
+    #[get("/")]
+    #[can(Read, Task)]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Task, Read>,
+        page: PageQuery,
+    ) -> Result<View> {
+        let tasks = self.tasks.list(&uow, scope, page).await?;
+        let rows: Vec<Node> = tasks
+            .data
+            .iter()
+            .map(|task| {
+                Row::gap(3)
+                    .children((
+                        Badge::new(if task.done { "Done" } else { "To do" }),
+                        Text::new(task.title.clone()),
+                    ))
+                    .into()
+            })
+            .collect();
+        Ok(View::new("Tasks")
+            .body(Card::titled("Your tasks").body(Stack::gap(3).children(rows))))
+    }
+}
+```
+
+`TaskService::list` is the method the JSON route calls, and `Accessible<Task, Read>` is the same SQL filter, so the page lists the signed-in user's own tasks and no one else's. Add the controller to the module:
+
+```rust title="src/modules/tasks/mod.rs"
+mod pages; // [!code ++]
+pub use pages::TaskPages; // [!code ++]
+
+#[module(
+    // ...
+    controllers = [TaskController, TaskPages], // [!code ++]
+)]
+```
+
+Start the app with `navree dev` and open `http://127.0.0.1:8080/tasks`. You are not signed in, so the page answers 401 with a button to the sign-in page. Sign in with the account you registered above (`ada@example.com` and `correct horse`), and the browser comes back to `/tasks` with its task list:
+
+```text
+To do   Write the docs
+```
+
+Tick the task off with the `PATCH` call from [Try it](#try-it) and reload: the badge says Done. The page is plain on purpose. The [app shell](/docs/ui/app-shell/) adds a sidebar and a top bar, [DataTable](/docs/ui/data-table/) adds search, filters and pages, and [forms](/docs/ui/forms/) add a page that creates a task.
+
 ## What you built
 
 <FileTree title="planner/src/modules/tasks">{`
 mod.rs              # TasksModule
 controller.rs       # five routes, each with #[can]
+pages.rs            # the tasks page, drawn with Navree UI
 service.rs          # TaskService
 entity.rs           # the Task model and access subject
 dto.rs              # CreateTask, UpdateTask and their rules
@@ -648,7 +740,7 @@ tests/
   mod.rs            # module tests
 `}</FileTree>
 
-Planner has sign-up and sign-in with rotating refresh tokens, a validated CRUD API whose every route checks abilities, per-user data enforced in SQL, OpenAPI docs at `/api/docs`, health checks at `/health/live` and `/health/ready`, and tests at two levels.
+Planner has sign-up and sign-in with rotating refresh tokens, a validated CRUD API whose every route checks abilities, per-user data enforced in SQL, OpenAPI docs at `/api/docs`, health checks at `/health/live` and `/health/ready`, tests at two levels, and a page that draws each user's tasks with Navree UI.
 
 ## Where to go next
 
@@ -667,6 +759,9 @@ Planner has sign-up and sign-in with rotating refresh tokens, a validated CRUD A
   </LinkCard>
   <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
     Build a release binary and run it behind a proxy.
+  </LinkCard>
+  <LinkCard href="/docs/ui/overview/" title="Navree UI">
+    Draw whole screens in Rust: components, forms, tables and live updates.
   </LinkCard>
   <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
     A larger app built the same way.
