@@ -3,7 +3,6 @@
 //! `TestApp`: JWT login and refresh, abilities on records and lists,
 //! validation, a queued mail on publish, the audit trail, the OpenAPI
 //! document, CASL rules for the front end, `check`, and a wiring mistake.
-#![cfg(feature = "sqlite")]
 
 mod blog;
 

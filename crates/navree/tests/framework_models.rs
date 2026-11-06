@@ -14,7 +14,6 @@
 //! NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:53306/test \
 //! cargo test -p navree --features postgres,mysql --test framework_models
 //! ```
-#![cfg(feature = "sqlite")]
 
 use navree::audit::{AuditFilter, AuditLog, AuditRecord};
 use navree::auth::{AuthService, ClientMeta, User, refresh_token};

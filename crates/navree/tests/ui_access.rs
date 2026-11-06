@@ -4,7 +4,6 @@
 //! page showed, and navree-access's own suites prove that.)
 //!
 //! `cargo test -p navree --features ui,access --test ui_access`
-#![cfg(all(feature = "ui", feature = "access"))]
 
 use navree::access::{Ability, Rules};
 use navree::ui::ability::{ByAbility, Requires};

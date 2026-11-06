@@ -1,6 +1,5 @@
 //! The examples of `content/docs/packages/webhooks.mdx`, written as an app
 //! writes them (the facade, the prelude and the macros), compiled and run.
-#![cfg(feature = "sqlite")]
 
 use http::Method;
 use navree::BoxFuture;

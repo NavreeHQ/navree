@@ -6,13 +6,6 @@
 //! a second factor and switches workspace (MOD-003).
 //!
 //! `cargo test -p navree --features sqlite,ui,auth,session,testing --test ui_auth_session`
-#![cfg(all(
-    feature = "sqlite",
-    feature = "ui",
-    feature = "auth",
-    feature = "session",
-    feature = "testing"
-))]
 
 use std::sync::Arc;
 use std::time::Duration;

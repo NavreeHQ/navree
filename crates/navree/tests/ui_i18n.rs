@@ -3,7 +3,6 @@
 //! its page in the language the reader asked for.
 //!
 //! `cargo test -p navree --features ui,i18n,testing --test ui_i18n`
-#![cfg(all(feature = "ui", feature = "i18n", feature = "testing"))]
 
 use std::sync::Arc;
 

@@ -123,7 +123,12 @@ pub use navree_i18n::{I18nModule, Locale};
 #[cfg(feature = "grpc")]
 pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};
 
-#[cfg(feature = "documents")]
+#[cfg(any(
+    feature = "documents",
+    feature = "documents-native",
+    feature = "documents-chrome",
+    feature = "documents-docx"
+))]
 pub use navree_documents::{DocumentsModule, ModuleBuilderDocumentsExt as _};
 
 #[cfg(feature = "media")]

@@ -4,13 +4,6 @@
 //! workspace, as the workspace module resolves it.
 //!
 //! `cargo test -p navree --features sqlite --test ui_live`
-#![cfg(all(
-    feature = "sqlite",
-    feature = "ui",
-    feature = "queue",
-    feature = "workspace",
-    feature = "testing"
-))]
 
 use std::sync::Arc;
 use std::time::Duration;

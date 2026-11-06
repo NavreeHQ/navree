@@ -84,11 +84,19 @@ schema = ["dep:navree-schema"]
 db = ["dep:navree-db", "http", "schema"]
 ## With `workspace` on too, also `navree::workspace::testing` (isolation suites).
 ## With `orm` on too, also `navree::orm::testing::TestAppExt` (`app.seed::<S>()`).
+## With `oauth`, `grpc`, `mcp` or `micro` on too, also their test kits
+## (`navree::oauth::testing`, `navree::grpc::testing`, `navree::mcp::testing`,
+## `MicroFake`). Those modules link no test code without this feature; it is in
+## `full`, so an app that wants none turns off the default features.
 testing = [
     "dep:navree-testing",
     "http",
     "navree-workspace?/testing",
     "navree-orm?/testing",
+    "navree-oauth?/testing",
+    "navree-grpc?/testing",
+    "navree-mcp?/testing",
+    "navree-micro?/testing",
 ]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
@@ -350,7 +358,6 @@ oauth = [
     "crypto",
     "db",
     "http",
-    "testing",
     "workspace",
     "orm",
 ]
@@ -381,7 +388,7 @@ graphql = [
 ]
 ## L6 (opt-in: not in `full`)
 ## gRPC, gRPC-Web and Connect services in modules, on tonic.
-grpc = ["dep:navree-grpc", "http", "db", "validation", "testing"]
+grpc = ["dep:navree-grpc", "http", "db", "validation"]
 ## L6 (ecosystem libraries; opt-in, not in `full`)
 ## AI SDK: text, structured output and streaming from Anthropic, OpenAI,
 ## Gemini, Mistral, Ollama and Bedrock; agents with tools; embeddings,
@@ -407,7 +414,22 @@ phone = ["dep:navree-phone", "navree-phone/serde"]
 ## add to the build)
 ## Documents: PDF from HTML templates or `PdfDocument` (the native engine in
 ## process, or headless Chrome), DOCX, merge and stamps, queued renders.
-documents = ["dep:navree-documents", "http", "view", "storage", "pdf"]
+documents = [
+    "dep:navree-documents",
+    "http",
+    "view",
+    "storage",
+    "pdf",
+    "navree-documents/native",
+    "navree-documents/chrome",
+    "navree-documents/docx",
+]
+## One part of `documents` without the others (opt-in, not in `full`): the
+## native PDF engine, headless Chrome for PDF, or DOCX files. Turn on one or
+## more of these instead of `documents` to compile only what the app uses.
+documents-native = ["navree-documents/native", "http", "view", "storage", "pdf"]
+documents-chrome = ["navree-documents/chrome", "http", "view", "storage", "pdf"]
+documents-docx = ["navree-documents/docx", "http", "view", "storage", "pdf"]
 ## L7 (opt-in, not in `full`)
 ## Search: full-text and vector search over navree-orm models (postgres,
 ## meilisearch, typesense and memory engines).
@@ -444,7 +466,6 @@ mcp = [
     "http",
     "cache",
     "db",
-    "testing",
     "validation",
     "access",
     "auth",
@@ -458,7 +479,6 @@ micro = [
     "http",
     "events",
     "db",
-    "testing",
     "validation",
 ]
 ## NATS for `micro` (async-nats; core request-reply, JetStream for events).
@@ -493,8 +513,6 @@ lighthouse = [
     "dep:navree-lighthouse",
     "telemetry",
     "http",
-    "crypto",
-    "view",
     "http-client",
     "db",
     "mail",
@@ -502,6 +520,8 @@ lighthouse = [
     "access",
     "auth",
     "orm",
+    "session",
+    "ui",
     # With `domains` on too, certificates close to expiry become issues.
     "navree-domains?/lighthouse",
 ]
@@ -520,17 +540,20 @@ logbook = [
 ## L7 (in `full`)
 ## Fleet: supervised queue workers with auto-balancing, recycling and
 ## graceful restarts, metrics, failed jobs, pause and continue, long-wait
-## alerts and a dashboard at `/_fleet` (pure Rust; no system dependency).
+## alerts and a Navree UI dashboard at `/_fleet` on the app's browser session
+## (`session`, `auth` and `ui`; pure Rust; no system dependency).
 fleet = [
     "dep:navree-fleet",
     "access",
+    "auth",
     "db",
     "events",
     "http",
     "observe",
     "queue",
+    "session",
     "telemetry",
-    "view",
+    "ui",
 ]
 ## L7 (in `full`)
 ## Helm: the admin panel generated from your navree-orm models.
@@ -546,6 +569,7 @@ helm = [
     "access",
     "auth",
     "orm",
+    "session",
     "ui",
 ]
 ## L7 (opt-in, not in `full`: the image codecs, resvg and the document
@@ -745,31 +769,263 @@ tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tonic-prost = { workspace = true }
 
-[[test]]
-name = "graphql"
-required-features = ["graphql"]
+# Every test target names the features it needs, so a feature set that lacks one
+# leaves the test out of the build and says so: `cargo test -p navree --test x`
+# stops with the features to turn on, instead of compiling an empty file and
+# reporting no tests. `tests/feature_gates.rs` fails when a test file is gated
+# with `#![cfg(feature = ..)]` inside, or when a name here is not a feature.
+# `scripts/facade-tests.sh` lists, for a feature set, the targets it leaves out.
 
-# The gRPC docs example through the facade (`cargo test -p navree --features grpc,sqlite --test grpc`).
 [[test]]
-name = "grpc"
-required-features = ["grpc"]
+name = "ai"
+required-features = ["access", "ai", "http", "validation"]
 
-# Redis through the facade (`cargo test -p navree --features redis --test redis`).
 [[test]]
-name = "redis"
-required-features = ["redis"]
+name = "auth_security_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "sqlite", "testing"]
+
+[[test]]
+name = "batches_docs"
+required-features = ["db", "http", "queue", "sqlite", "testing"]
+
+[[test]]
+name = "billing"
+required-features = ["access", "auth", "billing", "crypto", "db", "events", "http", "http-client", "queue", "schedule", "settings", "sqlite", "testing", "validation", "workspace"]
+
+[[test]]
+name = "directory_docs"
+required-features = ["crypto", "db", "directory", "events", "http", "orm", "schema", "sqlite", "testing"]
 
 # The documents docs examples through the facade
 # (`cargo test -p navree --features documents --test documents`).
 [[test]]
 name = "documents"
-required-features = ["documents"]
+required-features = ["db", "documents", "http", "queue", "sqlite", "storage", "testing"]
+
+[[test]]
+name = "domains_docs"
+required-features = ["access", "auth", "crypto", "db", "domains", "events", "http", "schedule", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "errors_docs"
+required-features = ["access", "http", "testing"]
+
+[[test]]
+name = "facade"
+required-features = ["full"]
+
+[[test]]
+name = "flags"
+required-features = ["access", "auth", "cache", "crypto", "db", "events", "flags", "http", "queue", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "fleet_docs"
+required-features = ["access", "auth", "db", "events", "fleet", "http", "queue", "session", "sqlite", "testing", "ui"]
+
+[[test]]
+name = "framework_models"
+required-features = ["access", "audit", "auth", "crypto", "db", "notify", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "fullstack_blog"
+required-features = ["api", "audit", "auth", "db", "mail", "queue", "sqlite", "testing"]
+
+# GraphQL through the facade (`cargo test -p navree --features graphql --test graphql`).
+[[test]]
+name = "graphql"
+required-features = ["graphql", "http", "testing", "validation"]
+
+# The gRPC docs example through the facade (`cargo test -p navree --features grpc,sqlite --test grpc`).
+[[test]]
+name = "grpc"
+required-features = ["access", "db", "grpc", "http", "orm", "schema", "sqlite", "testing", "validation"]
+
+[[test]]
+name = "helm"
+required-features = ["access", "auth", "crypto", "db", "helm", "http", "orm", "schema", "sqlite", "testing", "validation", "view"]
+
+[[test]]
+name = "integrations_docs"
+required-features = ["access", "crypto", "db", "directory", "events", "http", "http-client", "integrations", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "jose_docs"
+required-features = ["cache", "crypto", "http", "http-client", "sso", "testing"]
+
+[[test]]
+name = "lighthouse_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "lighthouse", "log", "queue", "sqlite", "testing"]
+
+[[test]]
+name = "lighthouse_mcp"
+required-features = ["access", "db", "lighthouse", "mcp", "sqlite", "testing"]
+
+[[test]]
+name = "logbook_docs"
+required-features = ["db", "http", "logbook", "orm", "sqlite", "telemetry", "testing"]
+
+[[test]]
+name = "macros_end_to_end"
+required-features = ["access", "api", "db", "http", "sqlite", "testing"]
+
+[[test]]
+name = "mail_delivery_docs"
+required-features = ["crypto", "db", "events", "http", "mail", "orm", "settings", "sqlite", "testing", "view", "workspace"]
+
+[[test]]
+name = "mail_inbound_docs"
+required-features = ["crypto", "db", "events", "http", "integrations", "mail", "mail-inbound", "storage", "testing", "view", "webhooks"]
+
+[[test]]
+name = "mcp"
+required-features = ["access", "http", "mcp", "testing", "validation"]
+
+[[test]]
+name = "mcp_oauth"
+required-features = ["access", "auth", "crypto", "db", "http", "mcp", "oauth", "sqlite", "testing"]
 
 # The media docs examples through the facade
 # (`cargo test -p navree --features media --test media`).
 [[test]]
 name = "media"
-required-features = ["media"]
+required-features = ["db", "http", "media", "orm", "schema", "sqlite", "storage", "testing"]
+
+[[test]]
+name = "middleware_docs"
+required-features = ["http", "testing"]
+
+[[test]]
+name = "notification_channels_docs"
+required-features = ["db", "http", "notify", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "notification_preferences_docs"
+required-features = ["db", "mail", "notify", "orm", "settings", "sqlite", "testing", "time", "view"]
+
+[[test]]
+name = "orm"
+required-features = ["access", "db", "http", "orm", "sqlite"]
+
+[[test]]
+name = "orm_attributes"
+required-features = ["orm"]
+
+[[test]]
+name = "production_migrations"
+required-features = ["access", "audit", "auth", "crypto", "db", "directory", "domains", "fleet", "integrations", "lighthouse", "mail", "notify", "queue", "schedule", "session", "settings", "sheets", "sqlite", "sso", "storage", "view", "webhooks", "workflows", "workspace"]
+
+# Redis through the facade (`cargo test -p navree --features redis --test redis`).
+[[test]]
+name = "redis"
+required-features = ["auth", "cache", "db", "http", "queue", "realtime", "redis", "session", "sqlite", "testing"]
+
+[[test]]
+name = "search"
+required-features = ["db", "orm", "schema", "search", "sqlite", "testing"]
+
+[[test]]
+name = "settings_docs"
+required-features = ["access", "audit", "auth", "cache", "db", "events", "http", "settings", "sqlite", "testing", "validation", "workspace"]
+
+[[test]]
+name = "sheets_docs"
+required-features = ["access", "db", "http", "orm", "queue", "schema", "sheets", "sqlite", "storage", "testing", "validation"]
+
+[[test]]
+name = "social_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "http-client", "social", "sqlite", "sso", "testing"]
+
+[[test]]
+name = "sortable_locks"
+required-features = ["access", "db", "http", "orm", "sqlite", "ui"]
+
+[[test]]
+name = "sso_docs"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "settings", "sqlite", "sso", "testing", "workspace"]
+
+[[test]]
+name = "storage_docs"
+required-features = ["crypto", "http", "storage", "testing"]
+
+[[test]]
+name = "telemetry"
+required-features = ["access", "http", "http-client", "observe", "telemetry", "testing"]
+
+[[test]]
+name = "time_docs"
+required-features = ["db", "http", "orm", "schedule", "schema", "sqlite", "testing", "time", "validation"]
+
+[[test]]
+name = "time_series"
+required-features = ["access", "audit", "db", "events", "fleet", "http-client", "lighthouse", "orm", "queue", "schedule", "sqlite", "testing", "webhooks"]
+
+[[test]]
+name = "timescaledb_docs"
+required-features = ["db", "orm", "schema", "sqlite"]
+
+[[test]]
+name = "ui_access"
+required-features = ["access", "ui"]
+
+[[test]]
+name = "ui_auth_browser"
+required-features = ["access", "auth", "browser", "crypto", "db", "http", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_auth_session"
+required-features = ["access", "auth", "crypto", "db", "http", "session", "sqlite", "testing", "ui"]
+
+[[test]]
+name = "ui_forms_validation"
+required-features = ["access", "db", "http", "i18n", "orm", "sqlite", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_i18n"
+required-features = ["http", "i18n", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_live"
+required-features = ["access", "db", "events", "http", "queue", "realtime", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_live_session"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "realtime", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_pickers_docs"
+required-features = ["access", "db", "http", "orm", "sqlite", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_platform"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "realtime", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_workspace"
+required-features = ["access", "crypto", "db", "http", "orm", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_zone"
+required-features = ["http", "testing", "time", "ui"]
+
+[[test]]
+name = "validation_docs"
+required-features = ["http", "testing", "validation", "validation-html", "validation-phone"]
+
+[[test]]
+name = "webhooks_docs"
+required-features = ["db", "events", "http", "http-client", "integrations", "queue", "sqlite", "testing", "webhooks"]
+
+[[test]]
+name = "workflows_docs"
+required-features = ["access", "db", "events", "http", "sqlite", "testing", "workflows"]
+
+[[test]]
+name = "workspace_demo_docs"
+required-features = ["access", "db", "http", "orm", "schedule", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "workspace_library_docs"
+required-features = ["access", "auth", "crypto", "db", "events", "helm", "http", "orm", "schema", "sqlite", "testing", "validation", "view", "workspace"]
 
 # The request-pipeline micro-benchmarks: `/json` through the whole router,
 # a pool read, a validated insert and a unit of work on SQLite

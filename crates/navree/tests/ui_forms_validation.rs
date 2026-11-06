@@ -4,13 +4,6 @@
 //! as a field error under its field, with what was posted kept.
 //!
 //! `cargo test -p navree --features sqlite,ui,orm,i18n,testing --test ui_forms_validation`
-#![cfg(all(
-    feature = "ui",
-    feature = "orm",
-    feature = "sqlite",
-    feature = "i18n",
-    feature = "testing"
-))]
 
 use std::sync::Arc;
 

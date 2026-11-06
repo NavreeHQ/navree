@@ -3,14 +3,6 @@
 //! them through `POST /workspace/switch`, a page drawing the
 //! `WorkspaceSwitcher` with the current one marked, and a DataTable over a
 //! `#[model(workspace)]` model that lists only the current workspace's rows.
-#![cfg(all(
-    feature = "ui",
-    feature = "orm",
-    feature = "workspace",
-    feature = "session",
-    feature = "sqlite",
-    feature = "testing"
-))]
 
 use std::sync::Arc;
 

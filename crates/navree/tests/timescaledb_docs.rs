@@ -2,7 +2,6 @@
 //! app writes them: the migrations compiled for TimescaleDB (offline) and
 //! run on SQLite, pruning and the time-bucket queries run on SQLite. The
 //! facade's `time_series` suite runs Navree's own tables on real servers.
-#![cfg(feature = "sqlite")]
 
 /// The temporary-directory guard of navree-testing, included so these tests
 /// need no feature for it: its reaper retries a folder Windows will not

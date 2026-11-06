@@ -2,8 +2,6 @@
 //! the `social` feature (`cargo test -p navree --features social`): the
 //! testing example as written, the custom controller (macros) and the
 //! custom provider.
-#![cfg(feature = "sqlite")]
-#![cfg(feature = "social")]
 
 use navree::auth::{ClientMeta, LoginOutcome};
 use navree::prelude::*;

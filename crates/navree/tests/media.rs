@@ -4,8 +4,6 @@
 //! multipart upload, the module that registers the model, deleting with
 //! the model, regeneration, archives, text, images on their own, and the
 //! fake.
-#![cfg(feature = "sqlite")]
-#![cfg(feature = "media")]
 
 use std::io::Write;
 

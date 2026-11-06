@@ -57,6 +57,7 @@
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
 //! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from HTML templates or `PdfDocument` (native engine or Chrome), DOCX, merge and stamps |
+//! | | | `documents-native`, `documents-chrome`, `documents-docx` (opt-in) | One part of `documents` without the others |
 //! | `media` | navree-media | `media` (opt-in) | `MediaModule`: files attached to models in collections, image conversions and responsive variants, safe remote downloads, zip archives, text from PDF, DOCX and HTML |
 //! | | | `media-ffmpeg` (opt-in) | Video and audio through an FFmpeg sidecar: probe, poster frames, transcodes |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
@@ -258,7 +259,12 @@ pub use navree_sso as sso;
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
-#[cfg(feature = "documents")]
+#[cfg(any(
+    feature = "documents",
+    feature = "documents-native",
+    feature = "documents-chrome",
+    feature = "documents-docx"
+))]
 pub use navree_documents as documents;
 #[cfg(feature = "grpc")]
 pub use navree_grpc as grpc;

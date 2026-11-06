@@ -5,15 +5,6 @@
 //! reconnects in the right place or not at all.
 //!
 //! `cargo test -p navree --features sqlite --test ui_live_session`
-#![cfg(all(
-    feature = "sqlite",
-    feature = "ui",
-    feature = "auth",
-    feature = "session",
-    feature = "workspace",
-    feature = "realtime",
-    feature = "testing"
-))]
 
 use std::time::Duration;
 

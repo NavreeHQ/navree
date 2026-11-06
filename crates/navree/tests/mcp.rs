@@ -1,7 +1,6 @@
 //! The `mcp` feature: `navree::mcp` re-exports navree-mcp and the
 //! `#[mcp_server]` macros, whose expansion names `::navree::mcp`. Runs with
 //! `cargo test -p navree --features mcp`.
-#![cfg(feature = "mcp")]
 
 // Inside this crate's own tests the macros name `crate::<module>`.
 use navree::{access, kernel, mcp};

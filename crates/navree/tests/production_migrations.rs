@@ -13,7 +13,6 @@
 //! Navree can migrate a database with this same file;
 //! `NAVREE_UPGRADE_DATABASES` checks databases migrated that way: nothing
 //! is pending, every row reads back, and they roll back cleanly.
-#![cfg(feature = "sqlite")]
 
 /// The temporary-directory guard of navree-testing, included so these tests
 /// need no feature for it: its reaper retries a folder Windows will not

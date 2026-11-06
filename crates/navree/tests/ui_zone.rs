@@ -3,7 +3,6 @@
 //! `CurrentZone`, on the app's clock.
 //!
 //! `cargo test -p navree --features ui,time,testing --test ui_zone`
-#![cfg(all(feature = "ui", feature = "time", feature = "testing"))]
 
 use std::sync::Arc;
 

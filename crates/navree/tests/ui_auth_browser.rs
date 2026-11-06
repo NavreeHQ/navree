@@ -7,15 +7,6 @@
 //!
 //! It needs Chrome or Chromium (`NAVREE_BROWSER_CHROME`); without one it
 //! prints a notice and passes, unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
-#![cfg(all(
-    feature = "sqlite",
-    feature = "ui",
-    feature = "auth",
-    feature = "session",
-    feature = "workspace",
-    feature = "testing",
-    feature = "browser"
-))]
 
 use std::sync::Arc;
 use std::time::Duration;

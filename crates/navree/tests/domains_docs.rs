@@ -2,8 +2,6 @@
 //! the `domains` feature (in `full`): the app, adding a domain, the
 //! public page, links to the workspace, the listener and the page's test
 //! as written.
-#![cfg(feature = "sqlite")]
-#![cfg(feature = "domains")]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]
 

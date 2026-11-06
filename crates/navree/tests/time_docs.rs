@@ -1,13 +1,6 @@
 //! The examples of `content/docs/digging-deeper/time-zones.mdx`, written as
 //! an app writes them (the facade, the prelude and the macros), compiled
 //! and run.
-#![cfg(feature = "sqlite")]
-#![cfg(all(
-    feature = "time",
-    feature = "schedule",
-    feature = "testing",
-    feature = "validation"
-))]
 
 use std::sync::Mutex;
 use std::time::Duration;

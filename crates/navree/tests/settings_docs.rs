@@ -1,7 +1,6 @@
 //! The examples of `content/docs/packages/settings.mdx`, written as an app
 //! writes them (the facade, the prelude and `#[derive(Settings)]`), compiled
 //! and run.
-#![cfg(feature = "sqlite")]
 
 use std::sync::Mutex;
 

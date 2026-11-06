@@ -2,8 +2,6 @@
 //! `mcp` feature: Lighthouse's tools, resource and prompt are served by
 //! `McpModule`, as `content/docs/tools/lighthouse.mdx` shows. Runs with
 //! `cargo test -p navree --features mcp --test lighthouse_mcp`.
-#![cfg(feature = "sqlite")]
-#![cfg(all(feature = "mcp", feature = "lighthouse"))]
 
 use navree::access::{AccessOptions, AccessService};
 use navree::db::Db;

@@ -583,6 +583,9 @@ const OPT_IN: &[&str] = &[
     "graphql",
     "grpc",
     "documents",
+    "documents-native",
+    "documents-chrome",
+    "documents-docx",
     "pdf",
     "media",
     "billing",
@@ -921,6 +924,38 @@ fn full_brings_the_international_validation_types() {
         assert!(
             features.closure(feature).contains("validation"),
             "`{feature}` must turn on `validation`"
+        );
+    }
+}
+
+/// The parts of `documents` are features of their own, outside `full`: each
+/// turns on the module's support crates and one engine of navree-documents, and
+/// `documents` is all three.
+#[test]
+fn documents_has_a_feature_for_each_of_its_parts() {
+    let features = Features::read();
+    let full = features.closure("full");
+    for (part, engine) in [
+        ("documents-native", "navree-documents/native"),
+        ("documents-chrome", "navree-documents/chrome"),
+        ("documents-docx", "navree-documents/docx"),
+    ] {
+        let list = features
+            .table
+            .get(part)
+            .unwrap_or_else(|| panic!("the facade has no `{part}` feature"));
+        assert!(
+            list.iter().any(|item| item == engine),
+            "`{part}` must turn on `{engine}`: {list:?}"
+        );
+        assert!(!full.contains(part), "`full` turns on `{part}`");
+        assert!(
+            features.closure(part).contains("pdf"),
+            "`{part}` must turn on `pdf`"
+        );
+        assert!(
+            features.table["documents"].iter().any(|item| item == engine),
+            "`documents` must turn on `{engine}`"
         );
     }
 }

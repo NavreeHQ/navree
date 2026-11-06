@@ -1,7 +1,6 @@
 //! The examples of `content/docs/digging-deeper/storage.mdx`, written as an
 //! app writes them (the facade, the prelude and the macros), compiled and
 //! run.
-#![cfg(all(feature = "storage", feature = "testing"))]
 
 use std::collections::BTreeMap;
 

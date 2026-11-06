@@ -147,8 +147,8 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // Realtime: a live nudge inside a unit of work waits for its commit
     // (navree-db, same layer; the database never depends on realtime).
-    rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
-    rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
+    rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db", "navree-telemetry"]),
+    rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-telemetry"]),
     // Time zones: zones, local days, send windows, holidays; the
     // `CurrentZone` extractor reads the request (navree-http) and collects
     // zone sources (navree-contracts) from workspaces and apps. Its local-time
@@ -212,7 +212,7 @@ const HIERARCHY: &[Rule] = &[
     // navree-storage's disks and upload rules. Its optional feature `time` reads the
     // reader's zone from navree-time (today's day, the times of a timeline), and its
     // optional feature `access` shows and hides actions by navree-access's abilities.
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access"]),
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access", "navree-telemetry"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
@@ -243,7 +243,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-auth", 5, &["navree-openapi",
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
-        "navree-access", "navree-http-client", "navree-orm", "navree-ui",
+        "navree-access", "navree-http-client", "navree-orm", "navree-ui", "navree-telemetry",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5). The nightly demo
@@ -298,7 +298,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-webhooks", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
-        "navree-workspace", "navree-orm", "navree-notify",
+        "navree-workspace", "navree-orm", "navree-notify", "navree-telemetry",
     ]),
     // Integrations: workspace and organization connections to third-party
     // APIs. Credentials encrypted with navree-crypto (service-account JWTs
@@ -377,7 +377,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-ai", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-http-client", "navree-cache", "navree-db", "navree-storage", "navree-validation",
-        "navree-access", "navree-auth",
+        "navree-access", "navree-auth", "navree-telemetry",
     ]),
     // Microservices: message handlers run through navree-http's guards and
     // authorizer, navree-db's unit of work (outbox, inbox, dead letters) and
@@ -441,7 +441,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-search", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-http-client", "navree-db", "navree-orm", "navree-queue", "navree-access",
-        "navree-workspace",
+        "navree-workspace", "navree-telemetry",
     ]),
     // Billing: Stripe and Paddle over navree-http-client, billables from
     // navree-auth (users) and navree-workspace (workspaces). The billing
@@ -454,17 +454,17 @@ const HIERARCHY: &[Rule] = &[
     // Lighthouse: a telemetry sink storing issues, occurrences, samples and
     // aggregates in the app's database; alerts by mail (navree-mail) and
     // over HTTP (navree-http-client), queued as jobs (navree-contracts) and
-    // pruned on the schedule; a server-rendered dashboard (navree-view)
-    // signed in through navree-auth, with an encrypted cookie
-    // (navree-crypto), behind navree-access abilities; with its `mcp`
+    // pruned on the schedule; a dashboard drawn with navree-ui on
+    // navree-session's session (navree-auth's `SessionStrategy`), behind
+    // navree-access abilities; with its `mcp`
     // feature, tools, a resource and a prompt on navree-mcp's server, whose
     // arguments derive navree-validation's `Validate`. Its tables are
     // navree-orm models.
     rule("navree-lighthouse", 7, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
-        "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
+        "navree-http-client", "navree-db", "navree-mail",
         "navree-schedule", "navree-access", "navree-auth", "navree-mcp", "navree-orm",
-        "navree-validation",
+        "navree-validation", "navree-session", "navree-ui",
     ]),
     // Logbook: a telemetry sink and a data-change observer (navree-db), an
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in
@@ -473,14 +473,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-ui",
         "navree-view", "navree-db", "navree-auth", "navree-glob",
     ]),
-    // Fleet:supervised queue workers (navree-queue's supervision hooks and
-    // introspection), telemetry job records for metrics, a dashboard page
-    // rendered with navree-view behind navree-access abilities, gauges on
+    // Fleet: supervised queue workers (navree-queue's supervision hooks and
+    // introspection), telemetry job records for metrics, dashboard pages
+    // drawn with navree-ui on navree-session's session (the user's name from
+    // navree-auth) behind navree-access abilities, gauges on
     // navree-observe's `/metrics`, long-wait events.
     rule("navree-fleet", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
-        "navree-events", "navree-view", "navree-db", "navree-observe", "navree-queue",
-        "navree-access",
+        "navree-events", "navree-ui", "navree-db", "navree-observe", "navree-queue",
+        "navree-access", "navree-auth", "navree-session",
     ]),
     // Media: files attached to models (a navree-orm model in navree-db,
     // bytes on navree-storage disks), remote files fetched through
@@ -1038,6 +1039,46 @@ fn the_sqlite_feature_builds_sqlite_and_no_other_driver() {
         assert!(
             !packages.contains(name),
             "`navree` with `sqlite` builds `{name}`: each driver is a feature of its own"
+        );
+    }
+}
+
+/// The test kits belong to the `testing` feature: `oauth`, `grpc`, `mcp` and
+/// `micro` link no navree-testing without it, and link it with it.
+#[test]
+fn the_test_kits_come_only_with_the_testing_feature() {
+    for feature in ["oauth", "grpc", "mcp", "micro"] {
+        let without = packages_in_tree(false, &[feature]);
+        assert!(
+            !without.contains("navree-testing"),
+            "`navree` with `{feature}` links navree-testing: the test kits are the `testing`              feature's; find what pulls it in with `cargo tree -p navree -i navree-testing              --no-default-features --features {feature}`"
+        );
+        let with = packages_in_tree(false, &[feature, "testing"]);
+        assert!(
+            with.contains("navree-testing"),
+            "`navree` with `{feature}` and `testing` does not link navree-testing"
+        );
+    }
+}
+
+/// The parts of `documents` compile only what they name: the native engine
+/// brings the PDF layout crates, and the DOCX and Chrome parts do not.
+#[test]
+fn the_parts_of_documents_build_only_their_own_engine() {
+    let native = packages_in_tree(false, &["documents-native"]);
+    assert!(
+        native.contains("krilla"),
+        "`documents-native` does not build the native PDF engine"
+    );
+    for part in ["documents-chrome", "documents-docx"] {
+        let packages = packages_in_tree(false, &[part]);
+        assert!(
+            packages.contains("navree-documents"),
+            "`{part}` does not build navree-documents"
+        );
+        assert!(
+            !packages.contains("krilla"),
+            "`{part}` builds the native PDF engine (krilla): each part is a feature of its own"
         );
     }
 }

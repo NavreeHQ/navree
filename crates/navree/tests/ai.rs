@@ -3,7 +3,6 @@
 //! prelude, and `AiModule` with the fake.
 //!
 //! Run with `cargo test -p navree --features ai --test ai`.
-#![cfg(feature = "ai")]
 
 use navree::ai::{Agent, AgentOptions, AgentRun, Ai, FakeReply, agent};
 use navree::openapi::ToSchema;

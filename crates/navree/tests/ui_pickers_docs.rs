@@ -3,12 +3,6 @@
 //! an app writes them (the facade and its prelude), compiled and run: a searched list
 //! answers from the database, a post that names someone the caller may not pick is
 //! refused, and the form that comes back shows the chosen person's name.
-#![cfg(all(
-    feature = "ui",
-    feature = "orm",
-    feature = "sqlite",
-    feature = "testing"
-))]
 
 use std::sync::Arc;
 

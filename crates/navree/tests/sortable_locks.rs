@@ -15,7 +15,6 @@
 //! ```text
 //! cargo test -p navree --features sqlite,postgres,mysql --test sortable_locks -- --nocapture
 //! ```
-#![cfg(feature = "sqlite")]
 
 use std::future::Future;
 use std::sync::Arc;

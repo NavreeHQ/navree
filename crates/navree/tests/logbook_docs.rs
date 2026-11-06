@@ -1,6 +1,5 @@
 //! The examples of `content/docs/tools/logbook.mdx`, written as an app
 //! writes them (the facade, the prelude and the macros), compiled and run.
-#![cfg(feature = "sqlite")]
 
 use navree::db::Db;
 use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};

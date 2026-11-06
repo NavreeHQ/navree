@@ -3,13 +3,6 @@
 //! an app writes them (the facade, the prelude and the macros), compiled and
 //! run.
 
-#![cfg(all(
-    feature = "crypto",
-    feature = "cache",
-    feature = "http-client",
-    feature = "testing"
-))]
-
 use http::Method;
 use navree::crypto::jose::{
     Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey,

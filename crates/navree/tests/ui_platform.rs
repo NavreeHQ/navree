@@ -4,15 +4,6 @@
 //! only the workspace that changed, and the audit trail of it all.
 //!
 //! `cargo test -p navree --features sqlite --test ui_platform`
-#![cfg(all(
-    feature = "sqlite",
-    feature = "ui",
-    feature = "auth",
-    feature = "session",
-    feature = "workspace",
-    feature = "realtime",
-    feature = "testing"
-))]
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;

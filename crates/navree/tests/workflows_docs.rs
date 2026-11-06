@@ -1,7 +1,6 @@
 //! The examples of `content/docs/packages/workflows.mdx` and
 //! `content/docs/packages/automations.mdx`, written as an app writes them
 //! (the facade, the prelude and the macros), compiled and run.
-#![cfg(feature = "sqlite")]
 #![allow(missing_docs)]
 
 use std::sync::{Arc, Mutex, PoisonError};

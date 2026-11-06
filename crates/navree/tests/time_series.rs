@@ -13,7 +13,6 @@
 //! NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:53306/test \
 //! cargo test -p navree --features postgres,mysql --test time_series
 //! ```
-#![cfg(feature = "sqlite")]
 
 use navree::db::navree_schema::Schema;
 use navree::db::{Db, MIGRATIONS_TABLE};

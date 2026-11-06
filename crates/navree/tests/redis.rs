@@ -4,7 +4,6 @@
 //! macros. They boot without a Redis server (connections open on first
 //! use); the ones that need a server read `REDIS_URL`, as the docs do, and
 //! return early without one.
-#![cfg(feature = "sqlite")]
 
 use std::time::Duration;
 

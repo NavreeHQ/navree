@@ -1,6 +1,5 @@
 //! The ORM through the facade: a model declared and queried with
 //! `navree::prelude` and `navree::orm`, inside a unit of work.
-#![cfg(feature = "sqlite")]
 
 /// The temporary-directory guard of navree-testing, included so these tests
 /// need no feature for it: its reaper retries a folder Windows will not

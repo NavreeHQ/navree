@@ -88,7 +88,7 @@ navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "1.0.0" }
 navree-browser = { path = "crates/navree-browser", version = "1.0.0" }
 navree-time = { path = "crates/navree-time", version = "1.0.0" }
 navree-sso = { path = "crates/navree-sso", version = "1.0.0" }
-navree-documents = { path = "crates/navree-documents", version = "1.0.0" }
+navree-documents = { path = "crates/navree-documents", version = "1.0.0", default-features = false }
 navree-sheets = { path = "crates/navree-sheets", version = "1.0.0" }
 navree-workflows = { path = "crates/navree-workflows", version = "1.0.0" }
 navree-media = { path = "crates/navree-media", version = "1.0.0" }

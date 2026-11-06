@@ -4,8 +4,6 @@
 //! authorization server and its scopes, and a personal access token from
 //! `OAuthServerModule` reaches `/mcp` narrowed to its scopes. Runs with
 //! `cargo test -p navree --features mcp,oauth --test mcp_oauth`.
-#![cfg(feature = "sqlite")]
-#![cfg(all(feature = "mcp", feature = "oauth"))]
 
 // Inside this crate's own tests the macros name `crate::<module>`.
 use navree::{access, kernel, mcp};

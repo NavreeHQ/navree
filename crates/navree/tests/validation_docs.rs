@@ -1,7 +1,6 @@
 //! The "International input" examples of `content/docs/basics/validation.mdx`,
 //! written as an app writes them (the facade, the prelude and the macros),
 //! compiled and run.
-#![cfg(all(feature = "validation-phone", feature = "validation-html"))]
 
 use http::request::Parts;
 use navree::BoxFuture;

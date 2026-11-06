@@ -2,8 +2,6 @@
 //! navree-orm model expands to `::navree::search` paths, and
 //! `SearchModule` comes with the prelude.
 //! Run with `cargo test -p navree --features search --test search`.
-#![cfg(feature = "sqlite")]
-#![cfg(feature = "search")]
 
 use navree::db::{DatabaseModule, Db, MigrationSet, PageQuery};
 use navree::prelude::*;

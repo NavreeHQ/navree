@@ -2,7 +2,6 @@
 //! depends on `navree` alone: the generated code names `::navree::kernel`,
 //! `::navree::http` and `::navree::access`, and the result boots, routes and
 //! authorizes through the real modules.
-#![cfg(feature = "sqlite")]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
