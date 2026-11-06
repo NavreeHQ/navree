@@ -50,8 +50,8 @@
 //!   body before it reads the answer. On HTTP/1 the answer goes out first and
 //!   the server then reads the rest of the body and throws it away, so the
 //!   connection can take the next request: at most the route's body limit
-//!   (`http.body_limit_bytes` outside a route), for at most 5 s, at the pace
-//!   above. A body that declares more, one not read to its end in time and one
+//!   (`http.body_limit_bytes` outside a route, and on a route until the
+//!   client has been let in), for at most 5 s, at the pace above. A body that declares more, one not read to its end in time and one
 //!   from a client waiting on `100 Continue` close the connection after the
 //!   answer (`Connection: close`, when the answer has not gone out yet). That
 //!   close lingers, so the client reads the answer and not a reset: the server

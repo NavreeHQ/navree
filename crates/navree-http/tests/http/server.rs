@@ -106,7 +106,16 @@ where
     F: FnOnce(SocketAddr) -> Fut,
     Fut: Future<Output = T>,
 {
-    let app = Setup::new(routes)
+    served_by(Setup::new(routes), options, client).await
+}
+
+/// [`against`], for the app `setup` makes.
+async fn served_by<F, Fut, T>(setup: Setup, options: HttpOptions, client: F) -> T
+where
+    F: FnOnce(SocketAddr) -> Fut,
+    Fut: Future<Output = T>,
+{
+    let app = setup
         .options(HttpOptions {
             addr: "127.0.0.1:0".to_owned(),
             ..options
@@ -293,6 +302,68 @@ async fn the_rest_of_a_body_is_read_up_to_its_routes_limit() {
     assert!(outside.starts_with("HTTP/1.1 404"), "{outside}");
     assert!(!outside.contains("connection: close"), "{outside}");
     assert!(beyond.ends_with("fast"), "{beyond}");
+}
+
+/// Until a client has been let in, no more of a body its answer did not wait for is read than
+/// outside a route (`http.body_limit_bytes`), however much the route takes: a client refused at
+/// the door does not get its upload read. Once it has been let in, the route's own limit is what
+/// is read.
+#[tokio::test]
+async fn before_a_client_is_let_in_little_of_its_body_is_read() {
+    let routes = vec![
+        RouteDef::on(Method::POST, "/import", || async { "kept" })
+            .authenticated()
+            .body_limit(1024 * 1024),
+        RouteDef::on(Method::GET, "/fast", || async { "fast" }).public(),
+    ];
+    let options = HttpOptions {
+        body_limit_bytes: 16 * 1024,
+        ..options()
+    };
+    let setup = Setup::new(routes).authenticated();
+    let answers = served_by(setup, options, |addr| async move {
+        let mut answers = Vec::new();
+        for user in ["", "x-user-id: 0b9f1e1a-6a62-4c43-9a59-3f2b1c1d5e01\r\n"] {
+            let mut stream = TcpStream::connect(addr).await.expect("connects");
+            let length = 64 * 1024;
+            let head = format!(
+                "POST /api/import HTTP/1.1\r\nHost: localhost\r\n{user}Content-Length: {length}\r\n\r\n"
+            );
+            stream.write_all(head.as_bytes()).await.unwrap();
+            // The answer comes before the body.
+            let answer = read_answer(&mut stream).await;
+            stream.write_all(&vec![b'x'; length]).await.ok();
+            stream
+                .write_all(
+                    b"GET /api/fast HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .ok();
+            let mut rest = Vec::new();
+            let _ = tokio::time::timeout(Duration::from_secs(20), stream.read_to_end(&mut rest))
+                .await
+                .expect("the server closes the connection");
+            answers.push((answer, String::from_utf8_lossy(&rest).into_owned()));
+        }
+        answers
+    })
+    .await;
+    let [(refused, after), (kept, next)] = &answers[..] else {
+        panic!("{answers:?}");
+    };
+    assert!(refused.starts_with("HTTP/1.1 401"), "{refused}");
+    assert!(refused.contains("connection: close"), "{refused}");
+    assert!(
+        !after.contains("HTTP/1.1"),
+        "the connection closed: {after}"
+    );
+
+    assert!(
+        kept.starts_with("HTTP/1.1 200") && kept.ends_with("kept"),
+        "{kept}"
+    );
+    assert!(!kept.contains("connection: close"), "{kept}");
+    assert!(next.ends_with("fast"), "{next}");
 }
 
 /// Reads one answer, up to the end of its `content-length` body.

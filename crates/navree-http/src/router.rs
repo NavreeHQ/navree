@@ -703,9 +703,10 @@ impl Service<Request> for RouteService {
 /// audit action.
 ///
 /// An answer before the body has been read goes out at once: the server
-/// reads what is left of the body afterwards, up to the route's limit, so
-/// the client reads the answer and not a reset (see
-/// [`serve`](mod@crate::serve#what-a-client-can-hold)).
+/// reads what is left of the body afterwards, up to the route's limit once
+/// the client has been let in (before that, no more than
+/// `http.body_limit_bytes`), so the client reads the answer and not a reset
+/// (see [`serve`](mod@crate::serve#what-a-client-can-hold)).
 async fn route_pipeline(
     runtime: Arc<RouteRuntime>,
     request: Request,
@@ -718,8 +719,11 @@ async fn route_pipeline(
     }
     parts.extensions.insert(meta.clone());
     parts.extensions.insert(BodyLimit(runtime.body_limit));
-    if let Some(unread) = parts.extensions.get::<UnreadLimit>() {
-        unread.set(runtime.body_limit);
+    // Until the client is let in, no more of a body its answer does not wait
+    // for is read than outside a route; once it is, up to the route's limit.
+    let unread = parts.extensions.get::<UnreadLimit>().cloned();
+    if let Some(unread) = &unread {
+        unread.at_most(runtime.body_limit);
     }
     if let (Some(route_timeout), Some(cell)) =
         (meta.timeout, parts.extensions.get::<TimeoutOverride>())
@@ -730,6 +734,9 @@ async fn route_pipeline(
     let mut response = match runtime.admit(&mut parts).await {
         Err(error) => error.into_response(),
         Ok(user) => {
+            if let Some(unread) = &unread {
+                unread.set(runtime.body_limit);
+            }
             let audit = runtime.audit_entry(&parts, user);
             // A 403 the handler returns itself (an ownership rule, a
             // channel it will not authorize) is a denial no authorizer saw.

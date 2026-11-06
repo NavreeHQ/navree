@@ -8,8 +8,9 @@
 //!
 //! - What is left of the body is read and thrown away, so the connection can
 //!   take the next request: at most the route's body limit (the
-//!   [`UnreadLimit`] the route pipeline sets, else `http.body_limit_bytes`),
-//!   for at most [`DRAIN_FOR`], at the body's pace. A body that declares more
+//!   [`UnreadLimit`] the route pipeline sets once the client has been let
+//!   in, else `http.body_limit_bytes`), for at most [`DRAIN_FOR`], at the
+//!   body's pace. A body that declares more
 //!   than that is not read at all.
 //! - Any other body closes the connection after the answer, with
 //!   `Connection: close` when the answer has not gone yet: one that declares
@@ -73,6 +74,12 @@ impl UnreadLimit {
     pub(crate) fn set(&self, bytes: usize) {
         self.0
             .store(u64::try_from(bytes).unwrap_or(u64::MAX), Ordering::Relaxed);
+    }
+
+    /// At most `bytes` of what is left are read, if that is fewer.
+    pub(crate) fn at_most(&self, bytes: usize) {
+        self.0
+            .fetch_min(u64::try_from(bytes).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
     fn get(&self) -> u64 {
