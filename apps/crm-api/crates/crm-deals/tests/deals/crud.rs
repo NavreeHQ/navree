@@ -15,14 +15,14 @@ use crate::support::{
 async fn create_returns_the_deal_with_its_embeds() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let ada = contact(&crm, "Ada", "Lovelace", Some(acme), rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let ada = contact(&crm, "Anu", "Lakhotia", Some(agra), rep.id()).await;
 
     let response = rep
         .post("/api/v1/deals")
         .json(&json!({
-            "title": "Acme renewal",
-            "company_id": acme,
+            "title": "Agra renewal",
+            "company_id": agra,
             "contact_id": ada,
             "amount_cents": 125_000,
             "expected_close_date": "2026-12-01",
@@ -39,7 +39,7 @@ async fn create_returns_the_deal_with_its_embeds() {
     let expected = json!({
         "__type": "Deal",
         "id": id,
-        "title": "Acme renewal",
+        "title": "Agra renewal",
         "amount_cents": 125_000,
         "currency": "USD",
         "stage": "lead",
@@ -48,10 +48,10 @@ async fn create_returns_the_deal_with_its_embeds() {
         "expected_close_date": "2026-12-01",
         "closed_at": null,
         "lost_reason": null,
-        "company_id": acme,
-        "company": { "id": acme, "name": "Acme" },
+        "company_id": agra,
+        "company": { "id": agra, "name": "Agra" },
         "contact_id": ada,
-        "contact": { "id": ada, "full_name": "Ada Lovelace" },
+        "contact": { "id": ada, "full_name": "Anu Lakhotia" },
         "owner_id": rep.id(),
         "owner": { "id": rep.id(), "name": Role::Rep1.name() },
         "created_at": "2026-10-26T10:00:00Z",
@@ -76,7 +76,7 @@ async fn create_validates_the_input() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
     let gone = company(&crm, "Gone Ltd", rep.id()).await;
     delete_company(&crm, gone).await;
 
@@ -94,7 +94,7 @@ async fn create_validates_the_input() {
         .post("/api/v1/deals")
         .json(&json!({
             "title": "  ",
-            "company_id": acme,
+            "company_id": agra,
             "amount_cents": -1,
             "currency": "dollars",
             "expected_close_date": "12/01/2026",
@@ -116,7 +116,7 @@ async fn create_validates_the_input() {
         errors["expected_close_date"],
         json!(["expected_close_date must be a valid date in the format YYYY-MM-DD"])
     );
-    let mut input = new_deal("Renewal", acme, 100);
+    let mut input = new_deal("Renewal", agra, 100);
     input["stage"] = json!("closed");
     rep.post("/api/v1/deals")
         .json(&input)
@@ -130,7 +130,7 @@ async fn create_validates_the_input() {
         ("company_id", json!({ "company_id": gone })),
         ("contact_id", json!({ "contact_id": Uuid::now_v7() })),
     ] {
-        let mut input = new_deal("Renewal", acme, 100);
+        let mut input = new_deal("Renewal", agra, 100);
         for (key, value) in changes.as_object().expect("an object") {
             input[key] = value.clone();
         }
@@ -145,7 +145,7 @@ async fn create_validates_the_input() {
             json!([format!("{field} does not exist")])
         );
     }
-    let mut input = new_deal("Renewal", acme, 100);
+    let mut input = new_deal("Renewal", agra, 100);
     input["owner_id"] = json!(Uuid::now_v7());
     manager
         .post("/api/v1/deals")
@@ -166,10 +166,10 @@ async fn create_validates_the_input() {
 async fn amounts_are_capped() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
 
     for amount in [json!(i64::MAX), json!(1_000_000_000_000_001_i64)] {
-        let mut input = new_deal("Huge", acme, 0);
+        let mut input = new_deal("Huge", agra, 0);
         input["amount_cents"] = amount;
         let response = rep
             .post("/api/v1/deals")
@@ -182,7 +182,7 @@ async fn amounts_are_capped() {
             json!(["amount_cents must not be greater than 1000000000000000"])
         );
     }
-    let deal = create_deal(&rep, new_deal("Biggest", acme, 1_000_000_000_000_000)).await;
+    let deal = create_deal(&rep, new_deal("Biggest", agra, 1_000_000_000_000_000)).await;
     rep.patch(&format!("/api/v1/deals/{}", id_of(&deal)))
         .json(&json!({ "amount_cents": i64::MAX }))
         .send()
@@ -196,9 +196,9 @@ async fn amounts_are_capped() {
 async fn deal_search_ignores_case_beyond_ascii() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("Ölwechsel Rahmenvertrag", acme, 100)).await;
-    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("Ölwechsel Rahmenvertrag", agra, 100)).await;
+    create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
     for term in ["Ölwechsel", "ölwechsel", "ÖLWECHSEL", "rahmenvertrag"] {
         let page = rep
             .get("/api/v1/deals")
@@ -216,15 +216,15 @@ async fn deal_search_ignores_case_beyond_ascii() {
 async fn new_deals_join_the_end_of_their_stage() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
 
-    let first = create_deal(&rep, new_deal("First", acme, 100)).await;
-    let second = create_deal(&rep, new_deal("Second", acme, 200)).await;
+    let first = create_deal(&rep, new_deal("First", agra, 100)).await;
+    let second = create_deal(&rep, new_deal("Second", agra, 200)).await;
     assert_eq!(first["position"], 0);
     assert_eq!(second["position"], 1);
 
     // A deal created as won is closed now, with the stage's probability.
-    let mut input = new_deal("Signed", acme, 300);
+    let mut input = new_deal("Signed", agra, 300);
     input["stage"] = json!("won");
     input["currency"] = json!("eur");
     let won = create_deal(&rep, input).await;
@@ -235,7 +235,7 @@ async fn new_deals_join_the_end_of_their_stage() {
     assert_eq!(won["closed_at"], "2026-10-26T10:00:00Z");
 
     // A deal created as lost needs a reason.
-    let mut input = new_deal("Gone cold", acme, 400);
+    let mut input = new_deal("Gone cold", agra, 400);
     input["stage"] = json!("lost");
     rep.post("/api/v1/deals")
         .json(&input)
@@ -255,10 +255,10 @@ async fn only_managers_create_deals_for_someone_else() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
     let rep2 = crm.user_id(Role::Rep2);
 
-    let mut input = new_deal("Handover", acme, 100);
+    let mut input = new_deal("Handover", agra, 100);
     input["owner_id"] = json!(rep2);
     rep.post("/api/v1/deals")
         .json(&input)
@@ -267,7 +267,7 @@ async fn only_managers_create_deals_for_someone_else() {
         .assert_error(403, None);
 
     // Naming themselves is fine.
-    let mut own = new_deal("Mine", acme, 100);
+    let mut own = new_deal("Mine", agra, 100);
     own["owner_id"] = json!(rep.id());
     let mine = create_deal(&rep, own).await;
     assert_eq!(mine["owner_id"], json!(rep.id()));
@@ -311,15 +311,15 @@ async fn list_filters_searches_and_paginates() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let globex = company(&crm, "Globex", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let gulati = company(&crm, "Gulati", rep.id()).await;
     let rep2 = crm.user_id(Role::Rep2);
 
-    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
-    let mut input = new_deal("Globex expansion", globex, 200);
+    create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
+    let mut input = new_deal("Gulati expansion", gulati, 200);
     input["stage"] = json!("proposal");
     create_deal(&rep, input).await;
-    let mut input = new_deal("Acme upsell", acme, 300);
+    let mut input = new_deal("Agra upsell", agra, 300);
     input["owner_id"] = json!(rep2);
     create_deal(&manager, input).await;
 
@@ -336,7 +336,7 @@ async fn list_filters_searches_and_paginates() {
     let all = list(json!({})).await;
     assert_eq!(
         titles(&all),
-        ["Acme upsell", "Globex expansion", "Acme renewal"]
+        ["Agra upsell", "Gulati expansion", "Agra renewal"]
     );
     assert_eq!(all["data"][0]["__type"], "Deal");
     assert_eq!(all["data"][0]["owner"]["name"], Role::Rep2.name());
@@ -346,18 +346,18 @@ async fn list_filters_searches_and_paginates() {
     );
 
     let proposals = list(json!({ "filter[stage]": "proposal" })).await;
-    assert_eq!(titles(&proposals), ["Globex expansion"]);
+    assert_eq!(titles(&proposals), ["Gulati expansion"]);
     let owned = list(json!({ "filter[owner_id]": rep2 })).await;
-    assert_eq!(titles(&owned), ["Acme upsell"]);
-    let at_acme = list(json!({ "filter[company_id]": acme })).await;
-    assert_eq!(titles(&at_acme), ["Acme upsell", "Acme renewal"]);
-    let found = list(json!({ "search": "ACME" })).await;
-    assert_eq!(titles(&found), ["Acme upsell", "Acme renewal"]);
-    let narrowed = list(json!({ "search": "expan", "filter[company_id]": globex })).await;
-    assert_eq!(titles(&narrowed), ["Globex expansion"]);
+    assert_eq!(titles(&owned), ["Agra upsell"]);
+    let at_agra = list(json!({ "filter[company_id]": agra })).await;
+    assert_eq!(titles(&at_agra), ["Agra upsell", "Agra renewal"]);
+    let found = list(json!({ "search": "AGRA" })).await;
+    assert_eq!(titles(&found), ["Agra upsell", "Agra renewal"]);
+    let narrowed = list(json!({ "search": "expan", "filter[company_id]": gulati })).await;
+    assert_eq!(titles(&narrowed), ["Gulati expansion"]);
 
     let page = list(json!({ "per_page": 2, "page": 2 })).await;
-    assert_eq!(titles(&page), ["Acme renewal"]);
+    assert_eq!(titles(&page), ["Agra renewal"]);
     assert_eq!(
         page["meta"],
         json!({ "current_page": 2, "per_page": 2, "total": 3, "last_page": 2 })
@@ -375,10 +375,10 @@ async fn list_filters_searches_and_paginates() {
 async fn update_changes_only_the_fields_sent() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let globex = company(&crm, "Globex", rep.id()).await;
-    let ada = contact(&crm, "Ada", "Lovelace", Some(acme), rep.id()).await;
-    let mut input = new_deal("Acme renewal", acme, 100);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let gulati = company(&crm, "Gulati", rep.id()).await;
+    let ada = contact(&crm, "Anu", "Lakhotia", Some(agra), rep.id()).await;
+    let mut input = new_deal("Agra renewal", agra, 100);
     input["contact_id"] = json!(ada);
     input["expected_close_date"] = json!("2026-12-01");
     let id = id_of(&create_deal(&rep, input).await);
@@ -388,7 +388,7 @@ async fn update_changes_only_the_fields_sent() {
         .patch(&format!("/api/v1/deals/{id}"))
         .json(&json!({
             "amount_cents": 250_000,
-            "company_id": globex,
+            "company_id": gulati,
             "contact_id": null,
             "expected_close_date": null,
         }))
@@ -396,11 +396,11 @@ async fn update_changes_only_the_fields_sent() {
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(updated["title"], "Acme renewal");
+    assert_eq!(updated["title"], "Agra renewal");
     assert_eq!(updated["amount_cents"], 250_000);
     assert_eq!(
         updated["company"],
-        json!({ "id": globex, "name": "Globex" })
+        json!({ "id": gulati, "name": "Gulati" })
     );
     assert_eq!(updated["contact_id"], json!(null));
     assert_eq!(updated["contact"], json!(null));
@@ -436,8 +436,8 @@ async fn reps_change_only_their_own_deals() {
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep1.id()).await;
-    let id = id_of(&create_deal(&rep1, new_deal("Acme renewal", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep1.id()).await;
+    let id = id_of(&create_deal(&rep1, new_deal("Agra renewal", agra, 100)).await);
     let path = format!("/api/v1/deals/{id}");
 
     rep2.patch(&path)
@@ -455,11 +455,11 @@ async fn reps_change_only_their_own_deals() {
 
     manager
         .patch(&path)
-        .json(&json!({ "title": "Acme renewal 2027" }))
+        .json(&json!({ "title": "Agra renewal 2027" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("title", json!("Acme renewal 2027"));
+        .assert_json_path("title", json!("Agra renewal 2027"));
     crm.shutdown().await;
 }
 
@@ -467,10 +467,10 @@ async fn reps_change_only_their_own_deals() {
 async fn delete_removes_the_deal_and_closes_the_gap() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let first = id_of(&create_deal(&rep, new_deal("First", acme, 100)).await);
-    create_deal(&rep, new_deal("Second", acme, 100)).await;
-    create_deal(&rep, new_deal("Third", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let first = id_of(&create_deal(&rep, new_deal("First", agra, 100)).await);
+    create_deal(&rep, new_deal("Second", agra, 100)).await;
+    create_deal(&rep, new_deal("Third", agra, 100)).await;
 
     rep.delete(&format!("/api/v1/deals/{first}"))
         .send()
@@ -490,20 +490,20 @@ async fn delete_removes_the_deal_and_closes_the_gap() {
 async fn resending_unchanged_references_is_fine() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let ada = contact(&crm, "Ada", "Lovelace", Some(acme), rep.id()).await;
-    let mut input = new_deal("Acme renewal", acme, 100);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let ada = contact(&crm, "Anu", "Lakhotia", Some(agra), rep.id()).await;
+    let mut input = new_deal("Agra renewal", agra, 100);
     input["contact_id"] = json!(ada);
     let id = id_of(&create_deal(&rep, input).await);
     // The company goes away after the deal was made; an edit form sends
     // every field back.
-    delete_company(&crm, acme).await;
+    delete_company(&crm, agra).await;
 
     let updated = rep
         .patch(&format!("/api/v1/deals/{id}"))
         .json(&json!({
-            "title": "Acme renewal (final)",
-            "company_id": acme,
+            "title": "Agra renewal (final)",
+            "company_id": agra,
             "contact_id": ada,
             "owner_id": rep.id(),
         }))
@@ -511,7 +511,7 @@ async fn resending_unchanged_references_is_fine() {
         .await
         .assert_status(200)
         .json_value();
-    assert_eq!(updated["title"], "Acme renewal (final)");
-    assert_eq!(updated["company"], json!({ "id": acme, "name": "Acme" }));
+    assert_eq!(updated["title"], "Agra renewal (final)");
+    assert_eq!(updated["company"], json!({ "id": agra, "name": "Agra" }));
     crm.shutdown().await;
 }

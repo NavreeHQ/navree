@@ -2998,7 +2998,7 @@ export interface components {
              * @description When it was created (UTC).
              */
             created_at: string;
-            /** @description The web domain, e.g. `acme.com`. */
+            /** @description The web domain, e.g. `agra.com`. */
             domain?: string | null;
             /**
              * Format: uuid
@@ -3057,7 +3057,7 @@ export interface components {
             city?: string | null;
             /** @description The country. */
             country?: string | null;
-            /** @description The web domain, e.g. `acme.com`. */
+            /** @description The web domain, e.g. `agra.com`. */
             domain?: string | null;
             /** @description The industry, free text. */
             industry?: string | null;

@@ -26,7 +26,7 @@ pub struct Company {
     pub id: Uuid,
     /// The name (required).
     pub name: String,
-    /// The web domain, e.g. `acme.com`.
+    /// The web domain, e.g. `agra.com`.
     pub domain: Option<String>,
     /// The industry, free text.
     pub industry: Option<String>,

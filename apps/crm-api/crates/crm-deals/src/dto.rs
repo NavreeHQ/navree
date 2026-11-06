@@ -222,11 +222,11 @@ mod tests {
         let id = Uuid::now_v7();
         let query = format!(
             "filter[stage][in]=lead,won&filter[owner_id]={id}&filter[company_id]={id}\
-             &search=acme&sort=-amount_cents,title&page=2&per_page=100"
+             &search=agra&sort=-amount_cents,title&page=2&per_page=100"
         );
         let list = DealList::SPEC.parse(&query).expect("a valid query");
         assert_eq!(list.filter.len(), 3);
-        assert_eq!(list.search.as_deref(), Some("acme"));
+        assert_eq!(list.search.as_deref(), Some("agra"));
         assert_eq!(list.sort.len(), 2);
 
         for (query, param) in [

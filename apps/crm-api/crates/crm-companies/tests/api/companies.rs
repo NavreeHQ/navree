@@ -10,14 +10,14 @@ use crate::support::{
     START, column, create_company, create_contact, crm, id_of, insert_deal, list, tick,
 };
 
-fn acme() -> Value {
+fn agra() -> Value {
     json!({
-        "name": "Acme Corp",
-        "domain": "acme.com",
+        "name": "Agra Corp",
+        "domain": "agra.com",
         "industry": "Software",
         "size": "51-200",
         "phone": "+1 555-0100",
-        "website": "https://acme.com",
+        "website": "https://agra.com",
         "city": "Berlin",
         "country": "Germany",
     })
@@ -33,7 +33,7 @@ async fn companies_crud_happy_path() {
     // and the owner embed.
     let response = rep
         .post("/api/v1/companies")
-        .json(&acme())
+        .json(&agra())
         .send()
         .await
         .assert_status(201);
@@ -48,12 +48,12 @@ async fn companies_crud_happy_path() {
         json!({
             "__type": "Company",
             "id": id,
-            "name": "Acme Corp",
-            "domain": "acme.com",
+            "name": "Agra Corp",
+            "domain": "agra.com",
             "industry": "Software",
             "size": "51-200",
             "phone": "+1 555-0100",
-            "website": "https://acme.com",
+            "website": "https://agra.com",
             "city": "Berlin",
             "country": "Germany",
             "owner_id": rep_id,
@@ -88,7 +88,7 @@ async fn companies_crud_happy_path() {
     assert_eq!(updated["city"], "Lisbon");
     assert_eq!(updated["domain"], Value::Null);
     assert_eq!(updated["size"], Value::Null);
-    assert_eq!(updated["name"], "Acme Corp");
+    assert_eq!(updated["name"], "Agra Corp");
     assert_eq!(updated["country"], "Germany");
     assert_eq!(updated["created_at"], START);
     assert_eq!(updated["updated_at"], "2026-10-26T10:01:00Z");
@@ -123,13 +123,13 @@ async fn companies_crud_happy_path() {
 async fn company_detail_counts_live_contacts_and_open_deals() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let company = create_company(&rep, json!({ "name": "Globex" })).await;
+    let company = create_company(&rep, json!({ "name": "Gulati" })).await;
     let id = id_of(&company);
-    let other = create_company(&rep, json!({ "name": "Initech" })).await;
+    let other = create_company(&rep, json!({ "name": "Indrani" })).await;
 
     create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace", "company_id": id }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia", "company_id": id }),
     )
     .await;
     let gone = create_contact(
@@ -169,7 +169,7 @@ async fn rep_cannot_update_other_reps_company() {
     let crm = crm().await;
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
-    let company = create_company(&rep2, acme()).await;
+    let company = create_company(&rep2, agra()).await;
     let path = format!("/api/v1/companies/{}", id_of(&company));
 
     rep1.patch(&path)
@@ -187,7 +187,7 @@ async fn rep_cannot_update_other_reps_company() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme Corp"));
+        .assert_json_path("name", json!("Agra Corp"));
     crm.client().get(&path).send().await.assert_error(401, None);
     crm.shutdown().await;
 }
@@ -196,15 +196,15 @@ async fn rep_cannot_update_other_reps_company() {
 async fn rep_can_update_own() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let company = create_company(&rep, acme()).await;
+    let company = create_company(&rep, agra()).await;
     let path = format!("/api/v1/companies/{}", id_of(&company));
 
     rep.patch(&path)
-        .json(&json!({ "name": "Acme Inc", "owner_id": crm.user_id(Role::Rep1) }))
+        .json(&json!({ "name": "Agra Inc", "owner_id": crm.user_id(Role::Rep1) }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("name", json!("Acme Inc"));
+        .assert_json_path("name", json!("Agra Inc"));
 
     // Managers manage every company, a rep's included.
     let manager = crm.login_as(Role::Manager).await;
@@ -231,7 +231,7 @@ async fn only_managers_assign_companies_to_someone_else() {
     // Reps sending another owner_id get a 403, and nothing is
     // created.
     rep1.post("/api/v1/companies")
-        .json(&json!({ "name": "Hooli", "owner_id": rep2_id }))
+        .json(&json!({ "name": "Hariyali", "owner_id": rep2_id }))
         .send()
         .await
         .assert_error(403, None);
@@ -243,7 +243,7 @@ async fn only_managers_assign_companies_to_someone_else() {
     // Naming themselves is fine.
     create_company(
         &rep1,
-        json!({ "name": "Hooli", "owner_id": crm.user_id(Role::Rep1) }),
+        json!({ "name": "Hariyali", "owner_id": crm.user_id(Role::Rep1) }),
     )
     .await;
 
@@ -294,7 +294,7 @@ async fn company_validation_errors_are_400() {
     let rep = crm.login_as(Role::Rep1).await;
 
     rep.post("/api/v1/companies")
-        .json(&json!({ "domain": "acme.com" }))
+        .json(&json!({ "domain": "agra.com" }))
         .send()
         .await
         .assert_validation_error("name")
@@ -311,7 +311,7 @@ async fn company_validation_errors_are_400() {
         .await
         .assert_validation_error("name");
     rep.post("/api/v1/companies")
-        .json(&json!({ "name": "Acme", "size": "huge" }))
+        .json(&json!({ "name": "Agra", "size": "huge" }))
         .send()
         .await
         .assert_validation_error("size")
@@ -320,12 +320,12 @@ async fn company_validation_errors_are_400() {
             "size must be one of the following values: 1-10, 11-50, 51-200, 201-1000, 1000+",
         );
     rep.post("/api/v1/companies")
-        .json(&json!({ "name": "Acme", "owner_id": "not-a-uuid" }))
+        .json(&json!({ "name": "Agra", "owner_id": "not-a-uuid" }))
         .send()
         .await
         .assert_validation_error("owner_id");
 
-    let company = create_company(&rep, acme()).await;
+    let company = create_company(&rep, agra()).await;
     let path = format!("/api/v1/companies/{}", id_of(&company));
     rep.patch(&path)
         .json(&json!({ "name": "" }))
@@ -340,7 +340,7 @@ async fn company_validation_errors_are_400() {
     rep.get(&path)
         .send()
         .await
-        .assert_json_path("name", json!("Acme Corp"));
+        .assert_json_path("name", json!("Agra Corp"));
     crm.shutdown().await;
 }
 
@@ -394,19 +394,19 @@ async fn search_and_filters() {
     let rep2 = crm.login_as(Role::Rep2).await;
     create_company(
         &rep1,
-        json!({ "name": "Initech", "domain": "initech.com", "industry": "Software" }),
+        json!({ "name": "Indrani", "domain": "indrani.com", "industry": "Software" }),
     )
     .await;
     tick(&crm);
     create_company(
         &rep2,
-        json!({ "name": "Globex", "domain": "globex.io", "industry": "Manufacturing" }),
+        json!({ "name": "Gulati", "domain": "gulati.io", "industry": "Manufacturing" }),
     )
     .await;
     tick(&crm);
     create_company(
         &rep1,
-        json!({ "name": "acme", "domain": "acme.com", "industry": "Software" }),
+        json!({ "name": "agra", "domain": "agra.com", "industry": "Software" }),
     )
     .await;
     tick(&crm);
@@ -418,12 +418,12 @@ async fn search_and_filters() {
     // Default order: by name, case-insensitively.
     assert_eq!(
         names(&[]).await,
-        ["100% Juice", "acme", "Globex", "Initech"]
+        ["100% Juice", "agra", "Gulati", "Indrani"]
     );
     // Search: name or domain, case-insensitive, `%` and `_` are literal.
-    assert_eq!(names(&[("search", "ACM")]).await, ["acme"]);
-    assert_eq!(names(&[("search", ".io")]).await, ["Globex"]);
-    assert_eq!(names(&[("search", "te")]).await, ["Initech"]);
+    assert_eq!(names(&[("search", "AGR")]).await, ["agra"]);
+    assert_eq!(names(&[("search", ".io")]).await, ["Gulati"]);
+    assert_eq!(names(&[("search", "te")]).await, ["Indrani"]);
     assert_eq!(names(&[("search", "%")]).await, ["100% Juice"]);
     assert_eq!(names(&[("search", "_")]).await, Vec::<String>::new());
     assert_eq!(names(&[("search", "  ")]).await.len(), 4);
@@ -431,28 +431,28 @@ async fn search_and_filters() {
     let rep2_id = crm.user_id(Role::Rep2).to_string();
     assert_eq!(
         names(&[("filter[owner_id]", rep2_id.as_str())]).await,
-        ["100% Juice", "Globex"]
+        ["100% Juice", "Gulati"]
     );
     assert_eq!(
         names(&[("filter[industry]", "Software")]).await,
-        ["acme", "Initech"]
+        ["agra", "Indrani"]
     );
     assert_eq!(
-        names(&[("filter[industry]", "software"), ("search", "init")]).await,
-        ["Initech"]
+        names(&[("filter[industry]", "software"), ("search", "indr")]).await,
+        ["Indrani"]
     );
     // Sort.
     assert_eq!(
         names(&[("sort", "-name")]).await,
-        ["Initech", "Globex", "acme", "100% Juice"]
+        ["Indrani", "Gulati", "agra", "100% Juice"]
     );
     assert_eq!(
         names(&[("sort", "created_at")]).await,
-        ["Initech", "Globex", "acme", "100% Juice"]
+        ["Indrani", "Gulati", "agra", "100% Juice"]
     );
     assert_eq!(
         names(&[("sort", "-created_at")]).await,
-        ["100% Juice", "acme", "Globex", "Initech"]
+        ["100% Juice", "agra", "Gulati", "Indrani"]
     );
     let refused = rep1
         .get("/api/v1/companies")
@@ -481,7 +481,7 @@ async fn search_and_filters() {
             "meta",
             json!({ "current_page": 2, "per_page": 3, "total": 4, "last_page": 2 }),
         )
-        .assert_json_path("data.0.name", json!("Initech"));
+        .assert_json_path("data.0.name", json!("Indrani"));
     crm.shutdown().await;
 }
 
@@ -686,11 +686,11 @@ async fn sort_takes_the_names_of_the_allow_list_and_several_fields() {
 async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    create_company(&rep, acme()).await;
+    create_company(&rep, agra()).await;
 
     // (the parameter sent, its value, the parameter the 400 names)
     for (sent, value, param) in [
-        ("filter[name]", "Acme", "filter[name]"),
+        ("filter[name]", "Agra", "filter[name]"),
         ("filter[x]", "1", "filter[x]"),
         (
             "filter[password][contains]",
@@ -729,7 +729,7 @@ async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
 async fn the_page_size_is_at_most_100_and_refused_beyond() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    create_company(&rep, acme()).await;
+    create_company(&rep, agra()).await;
 
     rep.get("/api/v1/companies")
         .query(&[("per_page", "100")])
@@ -791,7 +791,7 @@ async fn hostile_values_are_just_values() {
         json!({ "name": "Robert'); DROP TABLE companies;--", "industry": "' OR 1=1" }),
     )
     .await;
-    create_company(&rep, acme()).await;
+    create_company(&rep, agra()).await;
     let names = async |query: &[(&str, &str)]| list(&rep, "/api/v1/companies", query, "name").await;
 
     // The industry and the search are plain values, found or not.

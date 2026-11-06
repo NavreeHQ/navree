@@ -170,7 +170,7 @@ describe("mock API lists read the one list grammar", () => {
     expect(filter.status).toBe(400);
     expect(Object.keys(filter.body.errors ?? {})).toEqual(["filter[bogus]"]);
 
-    const search = await getPage("/api/v1/activities?search=acme");
+    const search = await getPage("/api/v1/activities?search=agra");
     expect(search.status).toBe(400);
     expect(Object.keys(search.body.errors ?? {})).toEqual(["search"]);
 

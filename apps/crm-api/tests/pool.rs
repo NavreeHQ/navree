@@ -45,11 +45,11 @@ async fn record_checks_with_current_user_need_one_connection() {
     let rep = crm.login_as(Role::Rep1).await;
     let admin = crm.login_as(Role::Admin).await;
 
-    let company = create(&rep, "/api/v1/companies", json!({ "name": "Acme" })).await;
+    let company = create(&rep, "/api/v1/companies", json!({ "name": "Agra" })).await;
     let contact = create(
         &rep,
         "/api/v1/contacts",
-        json!({ "first_name": "Ada", "last_name": "Byte", "company_id": company }),
+        json!({ "first_name": "Anu", "last_name": "Byte", "company_id": company }),
     )
     .await;
     let deal = create(
@@ -111,7 +111,7 @@ async fn record_checks_with_current_user_need_one_connection() {
 async fn board_reads_and_a_move_under_load() {
     let crm = TestCrm::builder().app(crm_api::app).build().await;
     let manager = crm.login_as(Role::Manager).await;
-    let company = create(&manager, "/api/v1/companies", json!({ "name": "Acme" })).await;
+    let company = create(&manager, "/api/v1/companies", json!({ "name": "Agra" })).await;
     let mut deals = Vec::new();
     for title in ["A", "B", "C"] {
         deals.push(

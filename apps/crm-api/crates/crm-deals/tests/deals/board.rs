@@ -29,20 +29,20 @@ async fn board_groups_by_stage_with_totals() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
     let rep2 = crm.user_id(Role::Rep2);
 
-    create_deal(&rep, new_deal("A", acme, 100)).await;
-    create_deal(&rep, new_deal("B", acme, 250)).await;
-    let mut input = new_deal("C", acme, 1_000);
+    create_deal(&rep, new_deal("A", agra, 100)).await;
+    create_deal(&rep, new_deal("B", agra, 250)).await;
+    let mut input = new_deal("C", agra, 1_000);
     input["stage"] = json!("proposal");
     input["currency"] = json!("EUR");
     create_deal(&rep, input).await;
-    let mut input = new_deal("D", acme, 500);
+    let mut input = new_deal("D", agra, 500);
     input["stage"] = json!("negotiation");
     input["owner_id"] = json!(rep2);
     create_deal(&manager, input).await;
-    let mut input = new_deal("E", acme, 700);
+    let mut input = new_deal("E", agra, 700);
     input["stage"] = json!("won");
     create_deal(&rep, input).await;
 
@@ -66,7 +66,7 @@ async fn board_groups_by_stage_with_totals() {
     );
     let lead = &everything["stages"][0]["deals"][0];
     assert_eq!(lead["__type"], "Deal");
-    assert_eq!(lead["company"], json!({ "id": acme, "name": "Acme" }));
+    assert_eq!(lead["company"], json!({ "id": agra, "name": "Agra" }));
 
     // One owner's board.
     let theirs = rep

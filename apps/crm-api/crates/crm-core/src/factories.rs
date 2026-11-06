@@ -9,15 +9,15 @@
 //! # use navree::db::Db;
 //! # use navree::orm::Model;
 //! # async fn demo(db: &Db, rep: uuid::Uuid) -> navree::orm::Result<()> {
-//! let acme = Company::factory()
+//! let agra = Company::factory()
 //!     .set(Company::OWNER_ID, rep)
-//!     .set(Company::NAME, "Acme")
+//!     .set(Company::NAME, "Agra")
 //!     .create_one(db)
 //!     .await?;
 //! let won = Deal::factory()
 //!     .count(3)
 //!     .set(Deal::OWNER_ID, rep)
-//!     .set(Deal::COMPANY_ID, acme.id)
+//!     .set(Deal::COMPANY_ID, agra.id)
 //!     .state(DealFactory::won_at(Utc::now()))
 //!     .create(db)
 //!     .await?;

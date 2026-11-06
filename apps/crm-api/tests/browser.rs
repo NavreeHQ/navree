@@ -69,7 +69,7 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let rep = crm.login_as(Role::Rep1).await;
     let company = rep
         .post("/api/v1/companies")
-        .json(&json!({ "name": "Lovelace Analytics" }))
+        .json(&json!({ "name": "Lakhotia Analytics" }))
         .send()
         .await
         .assert_status(201)
@@ -77,7 +77,7 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let deal = rep
         .post("/api/v1/deals")
         .json(&json!({
-            "title": "Lovelace renewal",
+            "title": "Lakhotia renewal",
             "amount_cents": 4_200_000,
             "company_id": company["id"],
         }))
@@ -92,9 +92,9 @@ async fn a_rep_moves_a_deal_to_won() -> Result<(), BrowserError> {
     let page = sign_in(&browser, &web, Role::Rep1).await?;
 
     page.click("Deals").await?;
-    let card = Target::from("@deal-card").containing("Lovelace renewal");
+    let card = Target::from("@deal-card").containing("Lakhotia renewal");
     page.drag(card, "[data-stage=won]").await?;
-    page.assert_see_in("[data-stage=won]", "Lovelace renewal")
+    page.assert_see_in("[data-stage=won]", "Lakhotia renewal")
         .await?;
     // The board moves the card at once; wait for its API call to finish.
     let moved = page.wait_for_request("/api/v1/deals/*/move").await?;

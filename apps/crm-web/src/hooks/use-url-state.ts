@@ -7,7 +7,7 @@ type Value = string | number | boolean | null | undefined;
 
 /**
  * List filters live in the URL so views can be shared and survive reloads.
- * `set({ search: "acme" })` replaces the history entry and, by default, resets
+ * `set({ search: "agra" })` replaces the history entry and, by default, resets
  * pagination. It uses `history.replaceState`, which Next.js syncs into
  * `useSearchParams` without a server round trip, and does nothing once the
  * user has navigated to another page (a late debounced search must not drag

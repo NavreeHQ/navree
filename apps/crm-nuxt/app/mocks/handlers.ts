@@ -507,7 +507,7 @@ function validateCompany(body: Record<string, unknown>, partial: boolean): Parti
     if (field in body) out[field] = str(body[field]);
   }
   if ("domain" in body && out.domain && !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(out.domain)) {
-    add(errors, "domain", "The domain must be a valid domain name, like acme.com.");
+    add(errors, "domain", "The domain must be a valid domain name, like agra.com.");
   }
   if ("website" in body) {
     const website = str(body.website);

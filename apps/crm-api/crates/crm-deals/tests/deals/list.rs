@@ -352,8 +352,8 @@ async fn what_the_list_does_not_allow_is_a_400_naming_the_parameter() {
 async fn the_page_size_is_at_most_100_and_refused_beyond() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
 
     let page = list(&rep, &[("per_page", "100")]).await;
     assert_eq!(page["meta"]["per_page"], 100);
@@ -410,9 +410,9 @@ async fn the_old_flat_parameters_are_ignored() {
 async fn hostile_values_are_just_values() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
-    create_deal(&rep, new_deal("Robert'); DROP TABLE deals;--", acme, 200)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
+    create_deal(&rep, new_deal("Robert'); DROP TABLE deals;--", agra, 200)).await;
 
     let none = list(&rep, &[("search", "' OR 1=1")]).await;
     assert_eq!(none["meta"]["total"], 0);
@@ -443,8 +443,8 @@ async fn hostile_values_are_just_values() {
 async fn a_filtered_list_still_needs_a_signed_in_reader() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
 
     // Everyone with a CRM role reads deals; a guest reads none, whatever the
     // filters say.

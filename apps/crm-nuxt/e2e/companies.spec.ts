@@ -35,9 +35,9 @@ test("a rep creates a company and a contact at it", async ({ page }) => {
   await page.getByRole("button", { name: "New contact" }).click();
   const contactDialog = page.getByRole("dialog", { name: "New contact" });
   const lastName = unique("Okafor").replace(" ", "-");
-  await contactDialog.getByLabel("First name").fill("Ada");
+  await contactDialog.getByLabel("First name").fill("Anu");
   await contactDialog.getByLabel("Last name").fill(lastName);
-  await contactDialog.getByLabel("Email").fill(`ada.${lastName.toLowerCase()}@${domain}`);
+  await contactDialog.getByLabel("Email").fill(`anu.${lastName.toLowerCase()}@${domain}`);
   await contactDialog.getByLabel("Job title").fill("Head of Operations");
   const contactCreated = page.waitForResponse(
     (r) => r.url().endsWith("/api/v1/contacts") && r.request().method() === "POST",
@@ -47,20 +47,20 @@ test("a rep creates a company and a contact at it", async ({ page }) => {
   await expect(contactDialog).toBeHidden();
   expect(contact).toMatchObject({
     __type: "Contact",
-    full_name: `Ada ${lastName}`,
+    full_name: `Anu ${lastName}`,
     status: "lead",
     company: { name: company },
     owner: { name: ACCOUNTS.rep1.name },
   });
 
   const contactsTab = page.getByRole("tabpanel");
-  await expect(contactsTab.getByRole("link", { name: `Ada ${lastName}` })).toBeVisible();
+  await expect(contactsTab.getByRole("link", { name: `Anu ${lastName}` })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Contacts/ })).toContainText("1");
 
   // The contact list shows it with its company.
   await page.goto("/contacts");
   await page.getByPlaceholder("Search by name, email or title").fill(lastName);
-  const contactRow = page.getByRole("row").filter({ hasText: `Ada ${lastName}` });
+  const contactRow = page.getByRole("row").filter({ hasText: `Anu ${lastName}` });
   await expect(contactRow).toHaveCount(1);
   await expect(contactRow).toContainText(company);
 

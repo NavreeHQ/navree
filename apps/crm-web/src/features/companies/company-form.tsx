@@ -42,7 +42,7 @@ const schema = z.object({
   domain: z
     .string()
     .trim()
-    .refine((v) => v === "" || /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v), "Use a bare domain, like acme.com."),
+    .refine((v) => v === "" || /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v), "Use a bare domain, like agra.com."),
   website: z
     .string()
     .trim()
@@ -148,8 +148,8 @@ export function CompanyFormDialog({
       <FieldGroup className="gap-4">
         <TextField control={form.control} name="name" label="Name" required autoFocus />
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextField control={form.control} name="domain" label="Domain" placeholder="acme.com" />
-          <TextField control={form.control} name="website" label="Website" placeholder="https://acme.com" type="url" />
+          <TextField control={form.control} name="domain" label="Domain" placeholder="agra.com" />
+          <TextField control={form.control} name="website" label="Website" placeholder="https://agra.com" type="url" />
           <TextField control={form.control} name="industry" label="Industry" list="industry-options" />
           <SelectField
             control={form.control}

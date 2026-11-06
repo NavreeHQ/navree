@@ -40,15 +40,15 @@ async fn seed_tasks(crm: &TestCrm) {
     let rep2 = crm.user_id(Role::Rep2);
     let manager = crm.user_id(Role::Manager);
     let admin = crm.user_id(Role::Admin);
-    let acme = company(crm, rep2, "Acme").await;
+    let agra = company(crm, rep2, "Agra").await;
     let task = |subject: &str, owner| {
-        NewActivity::task(subject, acme.id, owner).on(SubjectType::Company, acme.id)
+        NewActivity::task(subject, agra.id, owner).on(SubjectType::Company, agra.id)
     };
     for new in [
         task("Send the contract", rep2)
             .assigned(rep1)
             .due(at("2026-10-26T23:59:59Z")),
-        task("Call Acme back", rep2)
+        task("Call Agra back", rep2)
             .assigned(rep1)
             .due(at("2026-10-26T09:00:00Z")),
         task("Prepare tomorrow's demo", rep1)
@@ -121,7 +121,7 @@ async fn reminder_tick_notifies_assignees_of_tasks_due_today() {
         rep1[0]["data"],
         json!({
             "title": "Tasks due today",
-            "message": "You have 2 tasks due today: Call Acme back and Send the contract.",
+            "message": "You have 2 tasks due today: Call Agra back and Send the contract.",
             "url": "/tasks?tab=today",
         })
     );
@@ -154,7 +154,7 @@ async fn reminder_tick_notifies_assignees_of_tasks_due_today() {
     let text = to_rep1.text.clone().unwrap_or_default();
     for expected in [
         "Priya Shah",
-        "Call Acme back",
+        "Call Agra back",
         "Send the contract",
         "http://localhost:3000/tasks?tab=today",
     ] {
@@ -162,7 +162,7 @@ async fn reminder_tick_notifies_assignees_of_tasks_due_today() {
     }
     assert!(!text.contains("tomorrow's demo"), "{text}");
     let html = to_rep1.html.clone().unwrap_or_default();
-    assert!(html.contains("Call Acme back"), "{html}");
+    assert!(html.contains("Call Agra back"), "{html}");
 
     // The tick runs once, however often it is claimed; the next minute is
     // not due.
@@ -245,7 +245,7 @@ async fn the_reminder_command_runs_on_demand_and_with_a_queue() {
 async fn reminder_messages_list_at_most_three_tasks() {
     let crm = crm_with(&[]).await;
     let rep1 = crm.user_id(Role::Rep1);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     for (hour, subject) in [
         (9, "One"),
         (10, "Two"),
@@ -255,8 +255,8 @@ async fn reminder_messages_list_at_most_three_tasks() {
     ] {
         activity(
             &crm,
-            NewActivity::task(subject, acme.id, rep1)
-                .on(SubjectType::Company, acme.id)
+            NewActivity::task(subject, agra.id, rep1)
+                .on(SubjectType::Company, agra.id)
                 .due(at(&format!("2026-10-26T{hour:02}:00:00Z"))),
         )
         .await;

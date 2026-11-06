@@ -15,12 +15,12 @@ async fn create_task_on_deal() {
     let crm = crm().await;
     let rep1 = crm.user_id(Role::Rep1);
     let rep2 = crm.user_id(Role::Rep2);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     let renewal = deal(
         &crm,
         rep1,
-        acme.id,
-        NewDeal::open("Acme renewal", Stage::Proposal, 1_200_000),
+        agra.id,
+        NewDeal::open("Agra renewal", Stage::Proposal, 1_200_000),
     )
     .await;
     let client = crm.login_as(Role::Rep1).await;
@@ -57,7 +57,7 @@ async fn create_task_on_deal() {
             "completed_at": null,
             "subject_type": "deal",
             "subject_id": renewal.id,
-            "subject_label": "Acme renewal",
+            "subject_label": "Agra renewal",
             "owner_id": rep1,
             "owner": { "id": rep1, "name": "Priya Shah" },
             "assignee_id": rep2,
@@ -88,7 +88,7 @@ async fn create_task_on_deal() {
 async fn notes_without_assignee_or_due_date_belong_to_their_creator() {
     let crm = crm().await;
     let manager = crm.user_id(Role::Manager);
-    let acme = company(&crm, manager, "Acme").await;
+    let agra = company(&crm, manager, "Agra").await;
     let client = crm.login_as(Role::Manager).await;
     let body = client
         .post("/api/v1/activities")
@@ -96,14 +96,14 @@ async fn notes_without_assignee_or_due_date_belong_to_their_creator() {
             "kind": "note",
             "subject": "  Met at the trade fair  ",
             "subject_type": "company",
-            "subject_id": acme.id,
+            "subject_id": agra.id,
         }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     assert_eq!(body["subject"], json!("Met at the trade fair"));
-    assert_eq!(body["subject_label"], json!("Acme"));
+    assert_eq!(body["subject_label"], json!("Agra"));
     assert_eq!(body["body"], Value::Null);
     assert_eq!(body["due_at"], Value::Null);
     assert_eq!(body["assignee_id"], Value::Null);
@@ -119,7 +119,7 @@ async fn notes_without_assignee_or_due_date_belong_to_their_creator() {
 async fn subject_must_exist() {
     let crm = crm().await;
     let rep1 = crm.user_id(Role::Rep1);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     let gone = deleted_company(&crm, rep1, "Gone Ltd").await;
     let client = crm.login_as(Role::Rep1).await;
     let create = |subject_type: &str, subject_id: Uuid| {
@@ -135,8 +135,8 @@ async fn subject_must_exist() {
         // Nothing has this id.
         ("deal", Uuid::now_v7()),
         // A company's id under another type.
-        ("contact", acme.id),
-        ("deal", acme.id),
+        ("contact", agra.id),
+        ("deal", agra.id),
         // Soft-deleted.
         ("company", gone.id),
     ] {
@@ -151,7 +151,7 @@ async fn subject_must_exist() {
             "{subject_type} {subject_id}"
         );
     }
-    create("company", acme.id).send().await.assert_status(201);
+    create("company", agra.id).send().await.assert_status(201);
 
     // The assignee must be a user, too.
     client
@@ -160,7 +160,7 @@ async fn subject_must_exist() {
             "kind": "task",
             "subject": "Follow up",
             "subject_type": "company",
-            "subject_id": acme.id,
+            "subject_id": agra.id,
             "assignee_id": Uuid::now_v7(),
         }))
         .send()
@@ -212,14 +212,14 @@ async fn invalid_input_is_a_400_listing_every_field() {
         .assert_error(400, "kind should not be empty");
 
     // A blank subject (after trimming).
-    let acme = company(&crm, crm.user_id(Role::Rep1), "Acme").await;
+    let agra = company(&crm, crm.user_id(Role::Rep1), "Agra").await;
     client
         .post("/api/v1/activities")
         .json(&json!({
             "kind": "note",
             "subject": "   ",
             "subject_type": "company",
-            "subject_id": acme.id,
+            "subject_id": agra.id,
         }))
         .send()
         .await
@@ -259,11 +259,11 @@ async fn due_filters_overdue_today_upcoming() {
     // Monday 2026-10-26, 10:00 UTC: "today" is [10-26 00:00, 10-27 00:00).
     let crm = crm().await;
     let rep1 = crm.user_id(Role::Rep1);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     let renewal = deal(
         &crm,
         rep1,
-        acme.id,
+        agra.id,
         NewDeal::open("Renewal", Stage::Lead, 100),
     )
     .await;
@@ -341,19 +341,19 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
     let crm = crm().await;
     let rep1 = crm.user_id(Role::Rep1);
     let rep2 = crm.user_id(Role::Rep2);
-    let acme = company(&crm, rep1, "Acme").await;
-    let ada = contact(&crm, rep1, "Ada", "Lovelace").await;
+    let agra = company(&crm, rep1, "Agra").await;
+    let ada = contact(&crm, rep1, "Anu", "Lakhotia").await;
     let renewal = deal(
         &crm,
         rep1,
-        acme.id,
+        agra.id,
         NewDeal::open("Renewal", Stage::Lead, 100),
     )
     .await;
     let start = crm_testkit::TestCrm::start();
     let minutes = |n: i64| start + chrono::Duration::minutes(n);
     for new in [
-        NewActivity::task("Call Ada", renewal.id, rep1)
+        NewActivity::task("Call Anu", renewal.id, rep1)
             .kind(ActivityKind::Call)
             .on(SubjectType::Contact, ada.id)
             .created(minutes(1)),
@@ -367,9 +367,9 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
         NewActivity::task("Old win", renewal.id, rep1)
             .completed(minutes(4))
             .created(minutes(-60)),
-        NewActivity::task("Note on Acme", renewal.id, rep2)
+        NewActivity::task("Note on Agra", renewal.id, rep2)
             .kind(ActivityKind::Note)
-            .on(SubjectType::Company, acme.id)
+            .on(SubjectType::Company, agra.id)
             .created(minutes(5)),
     ] {
         activity(&crm, new).await;
@@ -380,16 +380,16 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
     assert_eq!(
         subjects(&list(&client, "").await),
         [
-            "Note on Acme",
+            "Note on Agra",
             "Book demo",
             "Send deck",
-            "Call Ada",
+            "Call Anu",
             "Old win"
         ]
     );
     assert_eq!(
         subjects(&list(&client, "filter[kind]=call").await),
-        ["Call Ada"]
+        ["Call Anu"]
     );
     assert_eq!(
         subjects(&list(&client, &format!("filter[assignee_id]={rep2}")).await),
@@ -402,11 +402,11 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
     );
     assert_eq!(
         subjects(&list(&client, "filter[completed]=false").await),
-        ["Note on Acme", "Send deck", "Call Ada"]
+        ["Note on Agra", "Send deck", "Call Anu"]
     );
     assert_eq!(
         subjects(&list(&client, "filter[subject_type]=company").await),
-        ["Note on Acme"]
+        ["Note on Agra"]
     );
     assert_eq!(
         subjects(
@@ -416,11 +416,11 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
             )
             .await
         ),
-        ["Call Ada"]
+        ["Call Anu"]
     );
     // Pagination keeps the filters.
     let page = list(&client, "filter[completed]=false&per_page=2&page=2").await;
-    assert_eq!(subjects(&page), ["Call Ada"]);
+    assert_eq!(subjects(&page), ["Call Anu"]);
     assert_eq!(
         page["meta"],
         json!({ "current_page": 2, "per_page": 2, "total": 3, "last_page": 2 })
@@ -439,15 +439,15 @@ async fn list_filters_by_kind_assignee_completion_and_subject() {
     crm.shutdown().await;
 }
 
-/// A deal of Acme (owned by rep1) to hang activities on.
+/// A deal of Agra (owned by rep1) to hang activities on.
 async fn renewal(crm: &crm_testkit::TestCrm) -> navree::orm::Record<crm_core::Deal> {
     let rep1 = crm.user_id(Role::Rep1);
-    let acme = company(crm, rep1, "Acme").await;
+    let agra = company(crm, rep1, "Agra").await;
     deal(
         crm,
         rep1,
-        acme.id,
-        NewDeal::open("Acme renewal", Stage::Negotiation, 500_000),
+        agra.id,
+        NewDeal::open("Agra renewal", Stage::Negotiation, 500_000),
     )
     .await
 }
@@ -479,7 +479,7 @@ async fn complete_sets_completed_at() {
         .assert_json_path("completed_at", json!("2026-10-26T11:30:00Z"))
         .json_value();
     assert_eq!(body["id"], json!(task.id));
-    assert_eq!(body["subject_label"], json!("Acme renewal"));
+    assert_eq!(body["subject_label"], json!("Agra renewal"));
 
     // Completing again keeps the first completion time (within the access
     // token's 15 minutes).
@@ -629,7 +629,7 @@ async fn update_changes_only_the_fields_sent() {
     let rep1 = crm.user_id(Role::Rep1);
     let rep2 = crm.user_id(Role::Rep2);
     let deal = renewal(&crm).await;
-    let acme_id = deal.company_id;
+    let agra_id = deal.company_id;
     let client = crm.login_as(Role::Rep1).await;
     let created = client
         .post("/api/v1/activities")
@@ -680,7 +680,7 @@ async fn update_changes_only_the_fields_sent() {
         .json(&json!({
             "kind": "meeting",
             "subject_type": "company",
-            "subject_id": acme_id,
+            "subject_id": agra_id,
             "due_at": "2026-10-29T09:00:00-04:00",
             "assignee_id": rep1,
         }))
@@ -690,8 +690,8 @@ async fn update_changes_only_the_fields_sent() {
         .json_value();
     assert_eq!(body["kind"], json!("meeting"));
     assert_eq!(body["subject_type"], json!("company"));
-    assert_eq!(body["subject_id"], json!(acme_id));
-    assert_eq!(body["subject_label"], json!("Acme"));
+    assert_eq!(body["subject_id"], json!(agra_id));
+    assert_eq!(body["subject_label"], json!("Agra"));
     assert_eq!(body["due_at"], json!("2026-10-29T13:00:00Z"));
     assert_eq!(
         body["assignee"],
@@ -811,35 +811,35 @@ async fn list_with(client: &crm_testkit::CrmClient, query: &[(&str, &str)]) -> V
         .json_value()
 }
 
-/// Five activities, oldest first: Call Ada (a call on the contact Ada,
-/// rep 1's), Send deck (a task for rep 2), Email Acme (an email on the
+/// Five activities, oldest first: Call Anu (a call on the contact Anu,
+/// rep 1's), Send deck (a task for rep 2), Email Agra (an email on the
 /// company), Book demo (a task for rep 2, completed) and Plain note (a note
-/// on the deal). Returns the ids of rep 2, Acme and the deal.
+/// on the deal). Returns the ids of rep 2, Agra and the deal.
 async fn five_activities(crm: &crm_testkit::TestCrm) -> (Uuid, Uuid, Uuid) {
     let rep1 = crm.user_id(Role::Rep1);
     let rep2 = crm.user_id(Role::Rep2);
-    let acme = company(crm, rep1, "Acme").await;
-    let ada = contact(crm, rep1, "Ada", "Lovelace").await;
+    let agra = company(crm, rep1, "Agra").await;
+    let ada = contact(crm, rep1, "Anu", "Lakhotia").await;
     let renewal = deal(
         crm,
         rep1,
-        acme.id,
+        agra.id,
         NewDeal::open("Renewal", Stage::Lead, 100),
     )
     .await;
     let start = crm_testkit::TestCrm::start();
     let minutes = |n: i64| start + chrono::Duration::minutes(n);
     for new in [
-        NewActivity::task("Call Ada", renewal.id, rep1)
+        NewActivity::task("Call Anu", renewal.id, rep1)
             .kind(ActivityKind::Call)
             .on(SubjectType::Contact, ada.id)
             .created(minutes(1)),
         NewActivity::task("Send deck", renewal.id, rep1)
             .assigned(rep2)
             .created(minutes(2)),
-        NewActivity::task("Email Acme", renewal.id, rep1)
+        NewActivity::task("Email Agra", renewal.id, rep1)
             .kind(ActivityKind::Email)
-            .on(SubjectType::Company, acme.id)
+            .on(SubjectType::Company, agra.id)
             .created(minutes(3)),
         NewActivity::task("Book demo", renewal.id, rep1)
             .assigned(rep2)
@@ -851,13 +851,13 @@ async fn five_activities(crm: &crm_testkit::TestCrm) -> (Uuid, Uuid, Uuid) {
     ] {
         activity(crm, new).await;
     }
-    (rep2, acme.id, renewal.id)
+    (rep2, agra.id, renewal.id)
 }
 
 #[tokio::test]
 async fn filters_take_their_operators() {
     let crm = crm().await;
-    let (rep2, acme, renewal) = five_activities(&crm).await;
+    let (rep2, agra, renewal) = five_activities(&crm).await;
     let client = crm.login_as(Role::Rep2).await;
     let found = async |query: &[(&str, &str)]| subjects(&list_with(&client, query).await);
 
@@ -867,18 +867,18 @@ async fn filters_take_their_operators() {
         [
             "Plain note",
             "Book demo",
-            "Email Acme",
+            "Email Agra",
             "Send deck",
-            "Call Ada"
+            "Call Anu"
         ]
     );
     assert_eq!(
         found(&[("filter[kind][in]", "call,email")]).await,
-        ["Email Acme", "Call Ada"]
+        ["Email Agra", "Call Anu"]
     );
     assert_eq!(
         found(&[("filter[kind][ne]", "task")]).await,
-        ["Plain note", "Email Acme", "Call Ada"]
+        ["Plain note", "Email Agra", "Call Anu"]
     );
     assert_eq!(
         found(&[("filter[kind][not_in]", "note,call,email")]).await,
@@ -886,11 +886,11 @@ async fn filters_take_their_operators() {
     );
     assert_eq!(
         found(&[("filter[subject_type][in]", "company,contact")]).await,
-        ["Email Acme", "Call Ada"]
+        ["Email Agra", "Call Anu"]
     );
     assert_eq!(
-        found(&[("filter[subject_id]", &acme.to_string())]).await,
-        ["Email Acme"]
+        found(&[("filter[subject_id]", &agra.to_string())]).await,
+        ["Email Agra"]
     );
     assert_eq!(
         found(&[
@@ -902,7 +902,7 @@ async fn filters_take_their_operators() {
     );
     assert_eq!(
         found(&[("filter[assignee_id][null]", "true")]).await,
-        ["Plain note", "Email Acme", "Call Ada"]
+        ["Plain note", "Email Agra", "Call Anu"]
     );
     assert_eq!(
         found(&[("filter[assignee_id][null]", "false")]).await,
@@ -924,7 +924,7 @@ async fn filters_take_their_operators() {
     );
     assert_eq!(
         found(&[("filter[completed][eq]", "false")]).await,
-        ["Plain note", "Email Acme", "Send deck", "Call Ada"]
+        ["Plain note", "Email Agra", "Send deck", "Call Anu"]
     );
     assert_eq!(
         found(&[("filter[completed]", "true"), ("filter[kind]", "task")]).await,
@@ -942,7 +942,7 @@ async fn what_the_activity_list_does_not_allow_is_a_400_naming_the_parameter() {
     // (the parameter sent, its value, the parameter the 400 names)
     for (sent, value, param) in [
         ("filter[x]", "1", "filter[x]"),
-        ("filter[subject]", "Call Ada", "filter[subject]"),
+        ("filter[subject]", "Call Anu", "filter[subject]"),
         ("filter[kind]", "lunch", "filter[kind]"),
         ("filter[kind][gt]", "call", "filter[kind][gt]"),
         ("filter[subject_type]", "Deal", "filter[subject_type]"),

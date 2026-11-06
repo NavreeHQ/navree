@@ -13,16 +13,16 @@ async fn contacts_crud_happy_path() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let rep_id = crm.user_id(Role::Rep1);
-    let company = create_company(&rep, json!({ "name": "Acme Corp" })).await;
+    let company = create_company(&rep, json!({ "name": "Agra Corp" })).await;
     let company_id = id_of(&company);
 
     // Create: status defaults to `lead`; the company and owner are embedded.
     let response = rep
         .post("/api/v1/contacts")
         .json(&json!({
-            "first_name": "Ada",
-            "last_name": "Lovelace",
-            "email": "ada@acme.com",
+            "first_name": "Anu",
+            "last_name": "Lakhotia",
+            "email": "anu@agra.com",
             "phone": "+44 20 7946 0000",
             "title": "CTO",
             "company_id": company_id,
@@ -41,15 +41,15 @@ async fn contacts_crud_happy_path() {
         json!({
             "__type": "Contact",
             "id": id,
-            "first_name": "Ada",
-            "last_name": "Lovelace",
-            "full_name": "Ada Lovelace",
-            "email": "ada@acme.com",
+            "first_name": "Anu",
+            "last_name": "Lakhotia",
+            "full_name": "Anu Lakhotia",
+            "email": "anu@agra.com",
             "phone": "+44 20 7946 0000",
             "title": "CTO",
             "status": "lead",
             "company_id": company_id,
-            "company": { "id": company_id, "name": "Acme Corp" },
+            "company": { "id": company_id, "name": "Agra Corp" },
             "owner_id": rep_id,
             "owner": { "id": rep_id, "name": Role::Rep1.name() },
             "created_at": START,
@@ -62,8 +62,8 @@ async fn contacts_crud_happy_path() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("full_name", json!("Ada Lovelace"))
-        .assert_json_path("company", json!({ "id": company_id, "name": "Acme Corp" }));
+        .assert_json_path("full_name", json!("Anu Lakhotia"))
+        .assert_json_path("company", json!({ "id": company_id, "name": "Agra Corp" }));
 
     // Update: a new status, no company any more.
     tick(&crm);
@@ -77,8 +77,8 @@ async fn contacts_crud_happy_path() {
     assert_eq!(updated["status"], "customer");
     assert_eq!(updated["company_id"], Value::Null);
     assert_eq!(updated["company"], Value::Null);
-    assert_eq!(updated["full_name"], "Ada King");
-    assert_eq!(updated["email"], "ada@acme.com");
+    assert_eq!(updated["full_name"], "Anu Kaur");
+    assert_eq!(updated["email"], "anu@agra.com");
     assert_eq!(updated["updated_at"], "2026-10-26T10:01:00Z");
 
     let page = rep
@@ -102,7 +102,7 @@ async fn contact_validation_errors_are_400() {
 
     let body = rep
         .post("/api/v1/contacts")
-        .json(&json!({ "email": "ada@acme.com" }))
+        .json(&json!({ "email": "anu@agra.com" }))
         .send()
         .await
         .assert_validation_error("first_name")
@@ -114,21 +114,21 @@ async fn contact_validation_errors_are_400() {
     );
 
     rep.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "email": "not an email" }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia", "email": "not an email" }))
         .send()
         .await
         .assert_validation_error("email")
         .assert_error(400, "email must be a valid email address");
 
     rep.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "status": "vip" }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia", "status": "vip" }))
         .send()
         .await
         .assert_validation_error("status");
 
     // An unknown company (the `exists` rule), and a deleted one.
     rep.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "company_id": uuid::Uuid::now_v7() }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia", "company_id": uuid::Uuid::now_v7() }))
         .send()
         .await
         .assert_validation_error("company_id")
@@ -140,7 +140,7 @@ async fn contact_validation_errors_are_400() {
         .assert_status(204);
     rep.post("/api/v1/contacts")
         .json(
-            &json!({ "first_name": "Ada", "last_name": "Lovelace", "company_id": id_of(&company) }),
+            &json!({ "first_name": "Anu", "last_name": "Lakhotia", "company_id": id_of(&company) }),
         )
         .send()
         .await
@@ -150,7 +150,7 @@ async fn contact_validation_errors_are_400() {
     // Updates validate the fields sent.
     let contact = create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia" }),
     )
     .await;
     let path = format!("/api/v1/contacts/{}", id_of(&contact));
@@ -184,7 +184,7 @@ async fn contact_of_a_deleted_company_stays_editable() {
     let company_id = id_of(&company);
     let contact = create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Byte", "company_id": company_id }),
+        json!({ "first_name": "Anu", "last_name": "Byte", "company_id": company_id }),
     )
     .await;
     let other = create_company(&rep, json!({ "name": "Also Gone" })).await;
@@ -199,7 +199,7 @@ async fn contact_of_a_deleted_company_stays_editable() {
     // Exactly what the web form sends, with only the phone changed.
     rep.patch(&path)
         .json(&json!({
-            "first_name": "Ada",
+            "first_name": "Anu",
             "last_name": "Byte",
             "email": null,
             "phone": "+1 555 0100",
@@ -232,7 +232,7 @@ async fn contact_search_ignores_case_beyond_ascii() {
     .await;
     create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia" }),
     )
     .await;
     for term in ["Élodie", "élodie", "Åberg", "åberg", "ÉLODIE ÅBERG"] {
@@ -252,7 +252,7 @@ async fn rep_cannot_update_other_reps_contact_or_assign_contacts() {
     let rep2 = crm.login_as(Role::Rep2).await;
     let contact = create_contact(
         &rep2,
-        json!({ "first_name": "Grace", "last_name": "Hopper" }),
+        json!({ "first_name": "Gauri", "last_name": "Hundal" }),
     )
     .await;
     let path = format!("/api/v1/contacts/{}", id_of(&contact));
@@ -269,7 +269,7 @@ async fn rep_cannot_update_other_reps_contact_or_assign_contacts() {
 
     // A rep may not hand a new contact to someone else.
     rep1.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Al", "last_name": "Turing", "owner_id": crm.user_id(Role::Rep2) }))
+        .json(&json!({ "first_name": "Al", "last_name": "Tiwari", "owner_id": crm.user_id(Role::Rep2) }))
         .send()
         .await
         .assert_error(403, None);
@@ -302,21 +302,21 @@ async fn search_and_filters() {
     let crm = crm().await;
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
-    let acme = id_of(&create_company(&rep1, json!({ "name": "Acme" })).await);
-    let globex = id_of(&create_company(&rep1, json!({ "name": "Globex" })).await);
+    let agra = id_of(&create_company(&rep1, json!({ "name": "Agra" })).await);
+    let gulati = id_of(&create_company(&rep1, json!({ "name": "Gulati" })).await);
     create_contact(
         &rep1,
-        json!({ "first_name": "Ada", "last_name": "Lovelace", "email": "ada@acme.com", "company_id": acme, "status": "customer" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia", "email": "anu@agra.com", "company_id": agra, "status": "customer" }),
     )
     .await;
     create_contact(
         &rep2,
-        json!({ "first_name": "Grace", "last_name": "Hopper", "email": "grace@navy.mil", "company_id": globex }),
+        json!({ "first_name": "Gauri", "last_name": "Hundal", "email": "gauri@navy.mil", "company_id": gulati }),
     )
     .await;
     create_contact(
         &rep1,
-        json!({ "first_name": "alan", "last_name": "Turing", "email": "alan@bletchley.uk", "status": "churned" }),
+        json!({ "first_name": "arun", "last_name": "Tiwari", "email": "arun@bathinda.uk", "status": "churned" }),
     )
     .await;
 
@@ -326,38 +326,38 @@ async fn search_and_filters() {
     // By last name, then first name.
     assert_eq!(
         names(&[]).await,
-        ["Grace Hopper", "Ada Lovelace", "alan Turing"]
+        ["Gauri Hundal", "Anu Lakhotia", "arun Tiwari"]
     );
     // Search: first name, last name, email; every word must match.
-    assert_eq!(names(&[("search", "ADA")]).await, ["Ada Lovelace"]);
-    assert_eq!(names(&[("search", "hop")]).await, ["Grace Hopper"]);
-    assert_eq!(names(&[("search", "bletchley")]).await, ["alan Turing"]);
+    assert_eq!(names(&[("search", "ANU")]).await, ["Anu Lakhotia"]);
+    assert_eq!(names(&[("search", "hun")]).await, ["Gauri Hundal"]);
+    assert_eq!(names(&[("search", "bathinda")]).await, ["arun Tiwari"]);
     assert_eq!(names(&[("search", "a")]).await.len(), 3);
-    assert_eq!(names(&[("search", "ada love")]).await, ["Ada Lovelace"]);
+    assert_eq!(names(&[("search", "anu lakh")]).await, ["Anu Lakhotia"]);
     assert_eq!(
-        names(&[("search", "ada hopper")]).await,
+        names(&[("search", "anu hundal")]).await,
         Vec::<String>::new()
     );
     // Filters.
     assert_eq!(
-        names(&[("filter[company_id]", &acme)]).await,
-        ["Ada Lovelace"]
+        names(&[("filter[company_id]", &agra)]).await,
+        ["Anu Lakhotia"]
     );
     assert_eq!(
         names(&[("filter[status]", "churned")]).await,
-        ["alan Turing"]
+        ["arun Tiwari"]
     );
-    assert_eq!(names(&[("filter[status]", "lead")]).await, ["Grace Hopper"]);
+    assert_eq!(names(&[("filter[status]", "lead")]).await, ["Gauri Hundal"]);
     let rep2_id = crm.user_id(Role::Rep2).to_string();
     assert_eq!(
         names(&[("filter[owner_id]", &rep2_id)]).await,
-        ["Grace Hopper"]
+        ["Gauri Hundal"]
     );
     assert_eq!(
         names(&[
             ("filter[owner_id]", &crm.user_id(Role::Rep1).to_string()),
             ("search", "a"),
-            ("filter[company_id]", &globex)
+            ("filter[company_id]", &gulati)
         ])
         .await,
         Vec::<String>::new()
@@ -368,7 +368,7 @@ async fn search_and_filters() {
         .await
         .assert_validation_error("filter[status]");
     rep1.get("/api/v1/contacts")
-        .query(&[("filter[company_id]", "acme")])
+        .query(&[("filter[company_id]", "agra")])
         .send()
         .await
         .assert_validation_error("filter[company_id]");
@@ -410,13 +410,13 @@ async fn export_csv_header_and_rows() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let company = create_company(&rep, json!({ "name": "Acme, Inc." })).await;
+    let company = create_company(&rep, json!({ "name": "Agra, Inc." })).await;
     let ada = create_contact(
         &rep,
         json!({
-            "first_name": "Ada",
-            "last_name": "Lovelace",
-            "email": "ada@acme.com",
+            "first_name": "Anu",
+            "last_name": "Lakhotia",
+            "email": "anu@agra.com",
             "phone": "+44 20 7946 0000",
             "title": "Chief \"Analytical\" Engineer",
             "status": "customer",
@@ -426,7 +426,7 @@ async fn export_csv_header_and_rows() {
     .await;
     let grace = create_contact(
         &rep,
-        json!({ "first_name": "Grace", "last_name": "Hopper", "title": "=HYPERLINK(\"http://evil\")" }),
+        json!({ "first_name": "Gauri", "last_name": "Hundal", "title": "=HYPERLINK(\"http://evil\")" }),
     )
     .await;
 
@@ -446,8 +446,8 @@ async fn export_csv_header_and_rows() {
     let rep_name = Role::Rep1.name();
     let expected = format!(
         "id,first_name,last_name,email,phone,title,status,company,owner,created_at\r\n\
-         {grace},Grace,Hopper,,,\"'=HYPERLINK(\"\"http://evil\"\")\",lead,,{rep_name},{START}\r\n\
-         {ada},Ada,Lovelace,ada@acme.com,+44 20 7946 0000,\"Chief \"\"Analytical\"\" Engineer\",customer,\"Acme, Inc.\",{rep_name},{START}\r\n",
+         {grace},Gauri,Hundal,,,\"'=HYPERLINK(\"\"http://evil\"\")\",lead,,{rep_name},{START}\r\n\
+         {ada},Anu,Lakhotia,anu@agra.com,+44 20 7946 0000,\"Chief \"\"Analytical\"\" Engineer\",customer,\"Agra, Inc.\",{rep_name},{START}\r\n",
         grace = id_of(&grace),
         ada = id_of(&ada),
     );
@@ -510,7 +510,7 @@ async fn rep_cannot_export() {
     let rep = crm.login_as(Role::Rep1).await;
     create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia" }),
     )
     .await;
     rep.get("/api/v1/contacts/export")
@@ -527,34 +527,34 @@ async fn rep_cannot_export() {
 
 // The list query of contacts, in the list-query grammar.
 
-/// Four contacts, by last name: Grace Hopper (Globex, lead, rep 2),
-/// Katherine Johnson (Acme, prospect, rep 2), Ada Lovelace (Acme, customer,
-/// rep 1) and alan Turing (no company, churned, rep 1). Returns the ids of
-/// Acme and Globex.
+/// Four contacts, by last name: Gauri Hundal (Gulati, lead, rep 2),
+/// Kavita Joshi (Agra, prospect, rep 2), Anu Lakhotia (Agra, customer,
+/// rep 1) and arun Tiwari (no company, churned, rep 1). Returns the ids of
+/// Agra and Gulati.
 async fn four_contacts(rep1: &CrmClient, rep2: &CrmClient) -> (String, String) {
-    let acme = id_of(&create_company(rep1, json!({ "name": "Acme" })).await);
-    let globex = id_of(&create_company(rep1, json!({ "name": "Globex" })).await);
+    let agra = id_of(&create_company(rep1, json!({ "name": "Agra" })).await);
+    let gulati = id_of(&create_company(rep1, json!({ "name": "Gulati" })).await);
     for (client, body) in [
         (
             rep1,
-            json!({ "first_name": "Ada", "last_name": "Lovelace", "company_id": acme, "status": "customer" }),
+            json!({ "first_name": "Anu", "last_name": "Lakhotia", "company_id": agra, "status": "customer" }),
         ),
         (
             rep2,
-            json!({ "first_name": "Grace", "last_name": "Hopper", "company_id": globex }),
+            json!({ "first_name": "Gauri", "last_name": "Hundal", "company_id": gulati }),
         ),
         (
             rep1,
-            json!({ "first_name": "alan", "last_name": "Turing", "status": "churned" }),
+            json!({ "first_name": "arun", "last_name": "Tiwari", "status": "churned" }),
         ),
         (
             rep2,
-            json!({ "first_name": "Katherine", "last_name": "Johnson", "company_id": acme, "status": "prospect" }),
+            json!({ "first_name": "Kavita", "last_name": "Joshi", "company_id": agra, "status": "prospect" }),
         ),
     ] {
         create_contact(client, body).await;
     }
-    (acme, globex)
+    (agra, gulati)
 }
 
 #[tokio::test]
@@ -562,7 +562,7 @@ async fn contact_filters_take_their_operators() {
     let crm = crm().await;
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
-    let (acme, globex) = four_contacts(&rep1, &rep2).await;
+    let (agra, gulati) = four_contacts(&rep1, &rep2).await;
     let (one, two) = (
         crm.user_id(Role::Rep1).to_string(),
         crm.user_id(Role::Rep2).to_string(),
@@ -572,48 +572,48 @@ async fn contact_filters_take_their_operators() {
 
     assert_eq!(
         names(&[("filter[status][in]", "lead,customer")]).await,
-        ["Grace Hopper", "Ada Lovelace"]
+        ["Gauri Hundal", "Anu Lakhotia"]
     );
     assert_eq!(
         names(&[("filter[status][ne]", "lead")]).await,
-        ["Katherine Johnson", "Ada Lovelace", "alan Turing"]
+        ["Kavita Joshi", "Anu Lakhotia", "arun Tiwari"]
     );
     assert_eq!(
         names(&[("filter[status][not_in]", "lead,churned")]).await,
-        ["Katherine Johnson", "Ada Lovelace"]
+        ["Kavita Joshi", "Anu Lakhotia"]
     );
     assert_eq!(
         names(&[("filter[company_id][null]", "true")]).await,
-        ["alan Turing"]
+        ["arun Tiwari"]
     );
     assert_eq!(
         names(&[("filter[company_id][null]", "false")]).await,
-        ["Grace Hopper", "Katherine Johnson", "Ada Lovelace"]
+        ["Gauri Hundal", "Kavita Joshi", "Anu Lakhotia"]
     );
     assert_eq!(
-        names(&[("filter[company_id][in]", &format!("{acme},{globex}"))]).await,
-        ["Grace Hopper", "Katherine Johnson", "Ada Lovelace"]
+        names(&[("filter[company_id][in]", &format!("{agra},{gulati}"))]).await,
+        ["Gauri Hundal", "Kavita Joshi", "Anu Lakhotia"]
     );
     assert_eq!(
-        names(&[("filter[company_id]", &acme), ("filter[owner_id]", &two)]).await,
-        ["Katherine Johnson"]
+        names(&[("filter[company_id]", &agra), ("filter[owner_id]", &two)]).await,
+        ["Kavita Joshi"]
     );
     assert_eq!(
         names(&[("filter[owner_id][ne]", &one)]).await,
-        ["Grace Hopper", "Katherine Johnson"]
+        ["Gauri Hundal", "Kavita Joshi"]
     );
     // A search narrows the filtered list; every word must match.
     assert_eq!(
         names(&[("search", "a"), ("filter[status][in]", "customer,churned")]).await,
-        ["Ada Lovelace", "alan Turing"]
+        ["Anu Lakhotia", "arun Tiwari"]
     );
     assert_eq!(
         names(&[
             ("search", "katherine johnson"),
-            ("filter[company_id]", &acme)
+            ("filter[company_id]", &agra)
         ])
         .await,
-        ["Katherine Johnson"]
+        ["Kavita Joshi"]
     );
     // The list has no `sort`: contacts always come by last name.
     rep1.get("/api/v1/contacts")
@@ -630,7 +630,7 @@ async fn the_contact_export_reads_the_same_list_query() {
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
     let manager = crm.login_as(Role::Manager).await;
-    let (acme, _) = four_contacts(&rep1, &rep2).await;
+    let (agra, _) = four_contacts(&rep1, &rep2).await;
 
     let export = async |query: &[(&str, &str)]| {
         let csv = manager
@@ -648,19 +648,19 @@ async fn the_contact_export_reads_the_same_list_query() {
     };
     assert_eq!(
         export(&[]).await,
-        ["Hopper", "Johnson", "Lovelace", "Turing"]
+        ["Hundal", "Joshi", "Lakhotia", "Tiwari"]
     );
     assert_eq!(
-        export(&[("filter[company_id]", &acme)]).await,
-        ["Johnson", "Lovelace"]
+        export(&[("filter[company_id]", &agra)]).await,
+        ["Joshi", "Lakhotia"]
     );
     assert_eq!(
         export(&[("filter[status][in]", "lead,churned")]).await,
-        ["Hopper", "Turing"]
+        ["Hundal", "Tiwari"]
     );
     assert_eq!(
-        export(&[("search", "ada"), ("filter[status]", "customer")]).await,
-        ["Lovelace"]
+        export(&[("search", "anu"), ("filter[status]", "customer")]).await,
+        ["Lakhotia"]
     );
     // The export is not paged: a page size does not cut it short.
     assert_eq!(export(&[("per_page", "1")]).await.len(), 4);
@@ -668,9 +668,9 @@ async fn the_contact_export_reads_the_same_list_query() {
     assert_eq!(export(&[("status", "customer")]).await.len(), 4);
     // What the list refuses, the export refuses.
     for (param, value) in [
-        ("filter[email]", "ada@acme.com"),
+        ("filter[email]", "anu@agra.com"),
         ("filter[status]", "vip"),
-        ("filter[company_id]", "acme"),
+        ("filter[company_id]", "agra"),
         ("per_page", "101"),
     ] {
         manager
@@ -689,21 +689,21 @@ async fn what_the_contact_list_does_not_allow_is_a_400_naming_the_parameter() {
     let rep = crm.login_as(Role::Rep1).await;
     create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia" }),
     )
     .await;
 
     // (the parameter sent, its value, the parameter the 400 names)
     for (sent, value, param) in [
-        ("filter[email]", "ada@acme.com", "filter[email]"),
+        ("filter[email]", "anu@agra.com", "filter[email]"),
         (
             "filter[last_name][contains]",
-            "love",
+            "lakh",
             "filter[last_name][contains]",
         ),
         ("filter[status]", "vip", "filter[status]"),
         ("filter[status][gt]", "lead", "filter[status][gt]"),
-        ("filter[company_id]", "acme", "filter[company_id]"),
+        ("filter[company_id]", "agra", "filter[company_id]"),
         ("filter[owner_id][in]", "nope", "filter[owner_id][in]"),
         ("sort", "password", "sort"),
         ("per_page", "101", "per_page"),
@@ -729,12 +729,12 @@ async fn the_old_flat_contact_parameters_are_ignored() {
     let crm = crm().await;
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
-    let (acme, _) = four_contacts(&rep1, &rep2).await;
+    let (agra, _) = four_contacts(&rep1, &rep2).await;
 
     // No filter, and no error even for values that are no status or id.
     for query in [
-        [("status", "customer"), ("company_id", acme.as_str())],
-        [("status", "vip"), ("company_id", "acme")],
+        [("status", "customer"), ("company_id", agra.as_str())],
+        [("status", "vip"), ("company_id", "agra")],
     ] {
         let page = rep1
             .get("/api/v1/contacts")
@@ -760,7 +760,7 @@ async fn hostile_contact_values_are_just_values() {
     .await;
     create_contact(
         &rep,
-        json!({ "first_name": "Ada", "last_name": "Lovelace" }),
+        json!({ "first_name": "Anu", "last_name": "Lakhotia" }),
     )
     .await;
     let names =

@@ -25,7 +25,7 @@ pub struct CreateCompany {
     #[serde(default, deserialize_with = "trimmed")]
     #[validate(custom(not_blank), length(max = MAX_TEXT))]
     pub name: String,
-    /// The web domain, e.g. `acme.com`.
+    /// The web domain, e.g. `agra.com`.
     #[serde(default, deserialize_with = "optional_text")]
     #[validate(length(max = MAX_TEXT))]
     pub domain: Option<String>,

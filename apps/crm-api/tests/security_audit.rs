@@ -60,7 +60,7 @@ async fn denials_outside_the_route_authorizer_are_audited() {
     let rep = crm.login_as(Role::Rep1).await;
     let company = rep
         .post("/api/v1/companies")
-        .json(&json!({ "name": "Acme" }))
+        .json(&json!({ "name": "Agra" }))
         .send()
         .await
         .assert_status(201)

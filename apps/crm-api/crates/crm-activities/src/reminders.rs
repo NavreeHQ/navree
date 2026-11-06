@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn the_templates_render_every_task() {
         let views = navree::view::Views::from_templates(TEMPLATES).expect("templates compile");
-        let mail = reminder(&["Call <Acme>", "Send deck"])
+        let mail = reminder(&["Call <Agra>", "Send deck"])
             .to_mail(&NotifiableUser {
                 id: Uuid::nil(),
                 name: "Priya Shah".to_owned(),
@@ -347,14 +347,14 @@ mod tests {
         assert_eq!(
             text,
             "Hello Priya Shah,\n\nYou have 2 tasks due today:\n\
-             - Call <Acme>, due 09:00 UTC\n\
+             - Call <Agra>, due 09:00 UTC\n\
              - Send deck, due 09:00 UTC\n\n\
              Open your tasks: http://localhost:3000/tasks?tab=today"
         );
         let html = views
             .render("mail/crm/tasks-due-today.html", &mail.context)
             .expect("html renders");
-        assert!(html.contains("Call &lt;Acme&gt;"), "{html}");
+        assert!(html.contains("Call &lt;Agra&gt;"), "{html}");
         // HTML escaping writes `/` as `&#x2f;` in HTML, which browsers decode.
         assert!(
             html.replace("&#x2f;", "/")

@@ -26,7 +26,7 @@ const schema = z.object({
   domain: z
     .string()
     .trim()
-    .refine((v) => v === "" || /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v), "Use a bare domain, like acme.com."),
+    .refine((v) => v === "" || /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v), "Use a bare domain, like agra.com."),
   website: z
     .string()
     .trim()
@@ -125,8 +125,8 @@ const onSubmit = form.handleSubmit((values) => {
     <template v-if="$slots.trigger" #trigger><slot name="trigger" /></template>
     <TextField name="name" label="Name" required autofocus />
     <div class="grid gap-5 sm:grid-cols-2">
-      <TextField name="domain" label="Domain" placeholder="acme.com" />
-      <TextField name="website" label="Website" placeholder="https://acme.com" type="url" />
+      <TextField name="domain" label="Domain" placeholder="agra.com" />
+      <TextField name="website" label="Website" placeholder="https://agra.com" type="url" />
       <TextField name="industry" label="Industry" list="industry-options" />
       <SelectField
         name="size"

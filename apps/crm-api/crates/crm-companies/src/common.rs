@@ -139,18 +139,18 @@ mod tests {
 
     #[test]
     fn search_text_is_the_trimmed_term() {
-        assert_eq!(search_text(Some("  Acme ")), Some("Acme"));
+        assert_eq!(search_text(Some("  Agra ")), Some("Agra"));
         assert_eq!(search_text(Some("   ")), None);
         assert_eq!(search_text(None), None);
     }
 
     #[test]
     fn patches_change_only_what_was_sent() {
-        let mut name = "Acme".to_owned();
+        let mut name = "Agra".to_owned();
         set_some(&mut name, None);
-        assert_eq!(name, "Acme");
-        set_some(&mut name, Some("Globex".to_owned()));
-        assert_eq!(name, "Globex");
+        assert_eq!(name, "Agra");
+        set_some(&mut name, Some("Gulati".to_owned()));
+        assert_eq!(name, "Gulati");
     }
 
     #[test]
@@ -166,7 +166,7 @@ mod tests {
         // Phone numbers and plain text are left alone.
         assert_eq!(csv_safe("+1 555-0100"), "+1 555-0100");
         assert_eq!(csv_safe("+44 (20) 7946.0000"), "+44 (20) 7946.0000");
-        assert_eq!(csv_safe("Ada"), "Ada");
+        assert_eq!(csv_safe("Anu"), "Anu");
         assert_eq!(csv_safe("a=b"), "a=b");
         assert_eq!(csv_safe(""), "");
     }

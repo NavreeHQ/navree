@@ -14,8 +14,8 @@ use crate::support::{
 async fn move_to_lost_requires_reason() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let deal = create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let deal = create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
     let id = id_of(&deal);
     let path = format!("/api/v1/deals/{id}/move");
 
@@ -62,8 +62,8 @@ async fn move_to_lost_requires_reason() {
 async fn won_sets_closed_at() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let id = id_of(&create_deal(&rep, new_deal("Acme renewal", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let id = id_of(&create_deal(&rep, new_deal("Agra renewal", agra, 100)).await);
 
     crm.clock().advance(Duration::from_secs(10 * 60));
     let won = move_deal(&rep, id, json!({ "stage": "won" })).await;
@@ -86,8 +86,8 @@ async fn moving_back_reopens_the_deal() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let id = id_of(&create_deal(&rep, new_deal("Acme renewal", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let id = id_of(&create_deal(&rep, new_deal("Agra renewal", agra, 100)).await);
 
     move_deal(
         &rep,
@@ -112,10 +112,10 @@ async fn moving_back_reopens_the_deal() {
 async fn move_reorders_within_the_stage() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let a = id_of(&create_deal(&rep, new_deal("A", acme, 100)).await);
-    create_deal(&rep, new_deal("B", acme, 100)).await;
-    let c = id_of(&create_deal(&rep, new_deal("C", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let a = id_of(&create_deal(&rep, new_deal("A", agra, 100)).await);
+    create_deal(&rep, new_deal("B", agra, 100)).await;
+    let c = id_of(&create_deal(&rep, new_deal("C", agra, 100)).await);
 
     let moved = move_deal(&rep, c, json!({ "stage": "lead", "position": 0 })).await;
     assert_eq!(moved["position"], 0);
@@ -141,12 +141,12 @@ async fn move_reorders_within_the_stage() {
 async fn move_between_stages_shifts_both_columns() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("A", acme, 100)).await;
-    let b = id_of(&create_deal(&rep, new_deal("B", acme, 100)).await);
-    let c = id_of(&create_deal(&rep, new_deal("C", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("A", agra, 100)).await;
+    let b = id_of(&create_deal(&rep, new_deal("B", agra, 100)).await);
+    let c = id_of(&create_deal(&rep, new_deal("C", agra, 100)).await);
     for title in ["D", "E"] {
-        let mut input = new_deal(title, acme, 100);
+        let mut input = new_deal(title, agra, 100);
         input["stage"] = json!("proposal");
         create_deal(&rep, input).await;
     }
@@ -175,8 +175,8 @@ async fn move_between_stages_shifts_both_columns() {
 async fn move_validates_its_input() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let id = id_of(&create_deal(&rep, new_deal("A", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let id = id_of(&create_deal(&rep, new_deal("A", agra, 100)).await);
     let path = format!("/api/v1/deals/{id}/move");
 
     rep.post(&path)
@@ -208,8 +208,8 @@ async fn rep_cannot_move_others_deal() {
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep1.id()).await;
-    let deal = create_deal(&rep1, new_deal("Acme renewal", acme, 100)).await;
+    let agra = company(&crm, "Agra", rep1.id()).await;
+    let deal = create_deal(&rep1, new_deal("Agra renewal", agra, 100)).await;
     let id = id_of(&deal);
 
     rep2.post(&format!("/api/v1/deals/{id}/move"))
@@ -238,17 +238,17 @@ async fn rep_cannot_delete_won_deal() {
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
     let admin = crm.login_as(Role::Admin).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let won = id_of(&create_deal(&rep, new_deal("Won", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let won = id_of(&create_deal(&rep, new_deal("Won", agra, 100)).await);
     move_deal(&rep, won, json!({ "stage": "won" })).await;
-    let lost = id_of(&create_deal(&rep, new_deal("Lost", acme, 100)).await);
+    let lost = id_of(&create_deal(&rep, new_deal("Lost", agra, 100)).await);
     move_deal(
         &rep,
         lost,
         json!({ "stage": "lost", "lost_reason": "No budget" }),
     )
     .await;
-    let open = id_of(&create_deal(&rep, new_deal("Open", acme, 100)).await);
+    let open = id_of(&create_deal(&rep, new_deal("Open", agra, 100)).await);
 
     for id in [won, lost] {
         // Not even their own, and not a manager either.
@@ -285,10 +285,10 @@ async fn rep_cannot_reopen_closed_deal_to_delete_it() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let won = id_of(&create_deal(&rep, new_deal("Won", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let won = id_of(&create_deal(&rep, new_deal("Won", agra, 100)).await);
     move_deal(&rep, won, json!({ "stage": "won" })).await;
-    let lost = id_of(&create_deal(&rep, new_deal("Lost", acme, 100)).await);
+    let lost = id_of(&create_deal(&rep, new_deal("Lost", agra, 100)).await);
     move_deal(
         &rep,
         lost,
@@ -340,10 +340,10 @@ async fn rep_cannot_reopen_closed_deal_to_delete_it() {
 async fn patching_the_stage_follows_the_move_rules() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    let a = id_of(&create_deal(&rep, new_deal("A", acme, 100)).await);
-    create_deal(&rep, new_deal("B", acme, 100)).await;
-    let mut input = new_deal("W", acme, 100);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    let a = id_of(&create_deal(&rep, new_deal("A", agra, 100)).await);
+    create_deal(&rep, new_deal("B", agra, 100)).await;
+    let mut input = new_deal("W", agra, 100);
     input["stage"] = json!("won");
     create_deal(&rep, input).await;
     let path = format!("/api/v1/deals/{a}");
@@ -402,10 +402,10 @@ async fn moves_audit_the_moved_deal_only() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let admin = crm.login_as(Role::Admin).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
-    create_deal(&rep, new_deal("A", acme, 100)).await;
-    create_deal(&rep, new_deal("B", acme, 100)).await;
-    let c = id_of(&create_deal(&rep, new_deal("C", acme, 100)).await);
+    let agra = company(&crm, "Agra", rep.id()).await;
+    create_deal(&rep, new_deal("A", agra, 100)).await;
+    create_deal(&rep, new_deal("B", agra, 100)).await;
+    let c = id_of(&create_deal(&rep, new_deal("C", agra, 100)).await);
 
     // C jumps to the top: A and B shift down, but only C's move is news.
     move_deal(&rep, c, json!({ "stage": "qualified" })).await;

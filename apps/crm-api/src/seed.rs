@@ -239,7 +239,7 @@ const FIRST_NAMES: [&str; 25] = [
     "James",
     "Aiko",
     "Mateo",
-    "Grace",
+    "Gauri",
     "Oluwaseun",
     "Hannah",
     "Ravi",

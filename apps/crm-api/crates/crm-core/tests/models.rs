@@ -76,10 +76,10 @@ async fn company(core: &Core, owner: Uuid, name: &str) -> Record<Company> {
 async fn every_model_round_trips_its_columns() {
     let core = boot().await;
     let owner = core.users[2];
-    let acme = Company::create(
+    let agra = Company::create(
         &*core.db,
         Company {
-            name: "Acme".into(),
+            name: "Agra".into(),
             domain: Some("acme.test".into()),
             industry: Some("Software".into()),
             size: Some(CompanySize::Medium),
@@ -94,16 +94,16 @@ async fn every_model_round_trips_its_columns() {
     .expect("company");
     let ada = Contact::factory()
         .set(Contact::OWNER_ID, owner)
-        .set(Contact::FIRST_NAME, "Ada")
-        .set(Contact::LAST_NAME, "Lovelace")
+        .set(Contact::FIRST_NAME, "Anu")
+        .set(Contact::LAST_NAME, "Lakhotia")
         .set(Contact::STATUS, ContactStatus::Prospect)
-        .state(ContactFactory::at(acme.id))
+        .state(ContactFactory::at(agra.id))
         .create_one(&*core.db)
         .await
         .expect("contact");
     let renewal = Deal::factory()
         .set(Deal::OWNER_ID, owner)
-        .set(Deal::COMPANY_ID, acme.id)
+        .set(Deal::COMPANY_ID, agra.id)
         .set(Deal::CONTACT_ID, ada.id)
         .set(Deal::STAGE, Stage::Negotiation)
         .set(Deal::AMOUNT_CENTS, 1_250_000_i64)
@@ -124,11 +124,11 @@ async fn every_model_round_trips_its_columns() {
         .await
         .expect("activity");
 
-    let found = Company::find(&*core.db, acme.id).await.unwrap().unwrap();
-    assert_eq!(found.model(), acme.model());
+    let found = Company::find(&*core.db, agra.id).await.unwrap().unwrap();
+    assert_eq!(found.model(), agra.model());
     let found = Contact::find(&*core.db, ada.id).await.unwrap().unwrap();
     assert_eq!(found.model(), ada.model());
-    assert_eq!(found.full_name(), "Ada Lovelace");
+    assert_eq!(found.full_name(), "Anu Lakhotia");
     let found = Deal::find(&*core.db, renewal.id).await.unwrap().unwrap();
     assert_eq!(found.model(), renewal.model());
     assert_eq!((found.stage, found.probability()), (Stage::Negotiation, 75));
@@ -147,24 +147,24 @@ async fn every_model_round_trips_its_columns() {
 async fn relations_load_with_the_records_that_name_them() {
     let core = boot().await;
     let (rep1, rep2) = (core.users[2], core.users[3]);
-    let acme = company(&core, rep1, "Acme").await;
+    let agra = company(&core, rep1, "Agra").await;
     let ada = Contact::factory()
         .set(Contact::OWNER_ID, rep2)
-        .set(Contact::FIRST_NAME, "Ada")
-        .set(Contact::LAST_NAME, "Lovelace")
-        .state(ContactFactory::at(acme.id))
+        .set(Contact::FIRST_NAME, "Anu")
+        .set(Contact::LAST_NAME, "Lakhotia")
+        .state(ContactFactory::at(agra.id))
         .create_one(&*core.db)
         .await
         .unwrap();
     let deal = Deal::factory()
         .set(Deal::OWNER_ID, rep1)
-        .set(Deal::COMPANY_ID, acme.id)
+        .set(Deal::COMPANY_ID, agra.id)
         .set(Deal::CONTACT_ID, ada.id)
         .create_one(&*core.db)
         .await
         .unwrap();
     for (subject_type, id) in [
-        (SubjectType::Company, acme.id),
+        (SubjectType::Company, agra.id),
         (SubjectType::Contact, ada.id),
         (SubjectType::Deal, deal.id),
     ] {
@@ -177,7 +177,7 @@ async fn relations_load_with_the_records_that_name_them() {
     }
     // A deleted company and contact keep being named by what points at
     // them.
-    let mut gone = Company::find(&*core.db, acme.id).await.unwrap().unwrap();
+    let mut gone = Company::find(&*core.db, agra.id).await.unwrap().unwrap();
     gone.delete(&*core.db).await.unwrap();
     let mut gone = Contact::find(&*core.db, ada.id).await.unwrap().unwrap();
     gone.delete(&*core.db).await.unwrap();
@@ -189,9 +189,9 @@ async fn relations_load_with_the_records_that_name_them() {
         .unwrap();
     let loaded = &deals[0];
     let company = loaded.loaded(Deal::company).and_then(Option::as_ref);
-    assert_eq!(company.map(|c| c.name.as_str()), Some("Acme"));
+    assert_eq!(company.map(|c| c.name.as_str()), Some("Agra"));
     let contact = loaded.loaded(Deal::contact).and_then(Option::as_ref);
-    assert_eq!(contact.map(|c| c.full_name()), Some("Ada Lovelace".into()));
+    assert_eq!(contact.map(|c| c.full_name()), Some("Anu Lakhotia".into()));
     let owner = loaded.loaded(Deal::owner).and_then(Option::as_ref);
     assert_eq!(owner.map(|u| u.id), Some(rep1));
 
@@ -199,15 +199,15 @@ async fn relations_load_with_the_records_that_name_them() {
     assert_eq!(
         CompanyRef::loaded(loaded.loaded(Deal::company), loaded.company_id),
         CompanyRef {
-            id: acme.id,
-            name: "Acme".into()
+            id: agra.id,
+            name: "Agra".into()
         }
     );
     assert_eq!(
         contact.map(ContactRef::from),
         Some(ContactRef {
             id: ada.id,
-            full_name: "Ada Lovelace".into()
+            full_name: "Anu Lakhotia".into()
         })
     );
     assert_eq!(
@@ -260,11 +260,11 @@ async fn relations_load_with_the_records_that_name_them() {
 async fn aggregates_count_live_contacts_and_open_deals() {
     let core = boot().await;
     let rep = core.users[2];
-    let acme = company(&core, rep, "Acme").await;
+    let agra = company(&core, rep, "Agra").await;
     let contacts = Contact::factory()
         .count(3)
         .set(Contact::OWNER_ID, rep)
-        .state(ContactFactory::at(acme.id))
+        .state(ContactFactory::at(agra.id))
         .create(&*core.db)
         .await
         .unwrap();
@@ -273,7 +273,7 @@ async fn aggregates_count_live_contacts_and_open_deals() {
     let deal = || {
         Deal::factory()
             .set(Deal::OWNER_ID, rep)
-            .set(Deal::COMPANY_ID, acme.id)
+            .set(Deal::COMPANY_ID, agra.id)
     };
     deal()
         .set(Deal::AMOUNT_CENTS, 1_000_i64)
@@ -293,7 +293,7 @@ async fn aggregates_count_live_contacts_and_open_deals() {
         .await
         .unwrap();
 
-    let mut found = Company::find(&*core.db, acme.id).await.unwrap().unwrap();
+    let mut found = Company::find(&*core.db, agra.id).await.unwrap().unwrap();
     found
         .load_count(&*core.db, ["contacts", "open_deals"])
         .await
@@ -495,12 +495,12 @@ async fn the_activity_timeline_is_a_time_series() {
 
     // Activities still come back newest first.
     let rep = core.users[2];
-    let acme = company(&core, rep, "Acme").await;
+    let agra = company(&core, rep, "Agra").await;
     for hours in [3, 1, 2] {
         Activity::factory()
             .set(Activity::OWNER_ID, rep)
             .set(Activity::CREATED_AT, at(20, 9) + Duration::hours(hours))
-            .state(ActivityFactory::on(SubjectType::Company, acme.id))
+            .state(ActivityFactory::on(SubjectType::Company, agra.id))
             .create_one(&*core.db)
             .await
             .unwrap();

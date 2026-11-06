@@ -4,7 +4,7 @@ type Value = string | number | boolean | null | undefined;
 
 /**
  * List filters live in the URL so views can be shared and survive reloads.
- * `set({ search: "acme" })` replaces the history entry and, by default, resets
+ * `set({ search: "agra" })` replaces the history entry and, by default, resets
  * pagination. A late debounced update is dropped once the person has left the
  * page, so it can never drag them back.
  */

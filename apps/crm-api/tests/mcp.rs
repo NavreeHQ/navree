@@ -46,7 +46,7 @@ fn id(record: &Value) -> &str {
 async fn reps_log_activity_but_cannot_move_others_deals() {
     let crm = crm().await;
     let owner = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&owner, "Acme renewal").await;
+    let deal = create_deal(&owner, "Agra renewal").await;
 
     let rep = crm.login_as(Role::Rep2).await;
     let mcp = McpTestClient::new(rep.inner().clone())
@@ -136,8 +136,8 @@ async fn list_deals_filters_by_stage_title_and_owner() {
     let crm = crm().await;
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
-    let mine = create_deal(&rep1, "Acme renewal").await;
-    let theirs = create_deal(&rep2, "Globex expansion").await;
+    let mine = create_deal(&rep1, "Agra renewal").await;
+    let theirs = create_deal(&rep2, "Gulati expansion").await;
     let mcp = mcp(&rep1).await;
 
     let all = mcp.call_tool("list_deals", json!({})).await.assert_ok();
@@ -147,7 +147,7 @@ async fn list_deals_filters_by_stage_title_and_owner() {
         .map(|deal| deal["title"].as_str().unwrap().to_owned())
         .collect();
     // Newest first; reps read every deal.
-    assert_eq!(titles, ["Globex expansion", "Acme renewal"]);
+    assert_eq!(titles, ["Gulati expansion", "Agra renewal"]);
 
     let own = mcp
         .call_tool("list_deals", json!({ "mine": true }))
@@ -157,7 +157,7 @@ async fn list_deals_filters_by_stage_title_and_owner() {
     assert_eq!(own[0]["id"], mine["id"]);
 
     let found = mcp
-        .call_tool("list_deals", json!({ "query": "globex" }))
+        .call_tool("list_deals", json!({ "query": "gulati" }))
         .await
         .json::<Vec<Value>>();
     assert_eq!(found.len(), 1);
@@ -172,7 +172,7 @@ async fn list_deals_filters_by_stage_title_and_owner() {
     let combined = mcp
         .call_tool(
             "list_deals",
-            json!({ "query": "acme", "stage": "lead", "mine": true }),
+            json!({ "query": "agra", "stage": "lead", "mine": true }),
         )
         .await
         .json::<Vec<Value>>();
@@ -198,7 +198,7 @@ async fn list_deals_filters_by_stage_title_and_owner() {
 async fn owners_move_their_deals_and_lost_needs_a_reason() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&rep, "Acme renewal").await;
+    let deal = create_deal(&rep, "Agra renewal").await;
     let mcp = mcp(&rep).await;
 
     mcp.call_tool(
@@ -242,7 +242,7 @@ async fn owners_move_their_deals_and_lost_needs_a_reason() {
 async fn the_pipeline_and_deal_resources_read_with_the_users_access() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&rep, "Acme renewal").await;
+    let deal = create_deal(&rep, "Agra renewal").await;
     let mcp = mcp(&rep).await;
 
     let pipeline = mcp.read_resource("crm://pipeline").await.assert_ok();
@@ -255,8 +255,8 @@ async fn the_pipeline_and_deal_resources_read_with_the_users_access() {
     mcp.read_resource(&format!("crm://deals/{}", id(&deal)))
         .await
         .assert_ok()
-        .assert_json_path("title", json!("Acme renewal"))
-        .assert_json_path("company.name", json!("Acme renewal Ltd"));
+        .assert_json_path("title", json!("Agra renewal"))
+        .assert_json_path("company.name", json!("Agra renewal Ltd"));
     mcp.read_resource("crm://deals/0199e0c0-0000-7000-8000-000000000000")
         .await
         .assert_error(404, None);
@@ -266,7 +266,7 @@ async fn the_pipeline_and_deal_resources_read_with_the_users_access() {
 async fn the_follow_up_prompt_embeds_the_deal() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&rep, "Acme renewal").await;
+    let deal = create_deal(&rep, "Agra renewal").await;
     let mcp = mcp(&rep).await;
 
     let prompt = mcp
@@ -292,7 +292,7 @@ async fn the_follow_up_prompt_embeds_the_deal() {
 async fn activities_logged_over_mcp_are_the_users_and_audited() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let deal = create_deal(&rep, "Acme renewal").await;
+    let deal = create_deal(&rep, "Agra renewal").await;
     let mcp = mcp(&rep).await;
 
     let logged = mcp

@@ -96,7 +96,7 @@ async fn a_deal_from_first_contact_to_reassignment() {
     let company = create(
         &rep1,
         "/api/v1/companies",
-        json!({ "name": "Globex", "domain": "globex.example", "industry": "Energy" }),
+        json!({ "name": "Gulati", "domain": "gulati.example", "industry": "Energy" }),
     )
     .await;
     assert_eq!(company["__type"], "Company");
@@ -111,7 +111,7 @@ async fn a_deal_from_first_contact_to_reassignment() {
         json!({
             "first_name": "Hank",
             "last_name": "Scorpio",
-            "email": "hank@globex.example",
+            "email": "hank@gulati.example",
             "company_id": id(&company),
         }),
     )
@@ -120,14 +120,14 @@ async fn a_deal_from_first_contact_to_reassignment() {
     assert_eq!(contact["status"], "lead");
     assert_eq!(
         contact["company"],
-        json!({ "id": id(&company), "name": "Globex" })
+        json!({ "id": id(&company), "name": "Gulati" })
     );
 
     let deal = create(
         &rep1,
         "/api/v1/deals",
         json!({
-            "title": "Globex doomsday device",
+            "title": "Gulati doomsday device",
             "company_id": id(&company),
             "contact_id": id(&contact),
             "amount_cents": 1_250_000,
@@ -143,7 +143,7 @@ async fn a_deal_from_first_contact_to_reassignment() {
     assert_eq!(deal["currency"], "USD");
     assert_eq!(
         deal["company"],
-        json!({ "id": id(&company), "name": "Globex" })
+        json!({ "id": id(&company), "name": "Gulati" })
     );
     assert_eq!(
         deal["contact"],
@@ -165,7 +165,7 @@ async fn a_deal_from_first_contact_to_reassignment() {
     )
     .await;
     assert_eq!(task["__type"], "Activity");
-    assert_eq!(task["subject_label"], "Globex doomsday device");
+    assert_eq!(task["subject_label"], "Gulati doomsday device");
     assert_eq!(
         task["assignee"],
         json!({ "id": rep1.id(), "name": Role::Rep1.name() })
@@ -334,13 +334,13 @@ async fn a_deal_from_first_contact_to_reassignment() {
 async fn deleted_companies_drop_out_of_every_module() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let company = create(&rep, "/api/v1/companies", json!({ "name": "Initech" })).await;
+    let company = create(&rep, "/api/v1/companies", json!({ "name": "Indrani" })).await;
     let path = format!("/api/v1/companies/{}", id(&company));
     rep.delete(&path).send().await.assert_status(204);
 
     rep.get(&path).send().await.assert_error(404, None);
     rep.get("/api/v1/companies")
-        .query(&[("search", "Initech")])
+        .query(&[("search", "Indrani")])
         .send()
         .await
         .assert_status(200)
@@ -488,7 +488,7 @@ async fn errors_share_one_json_shape_across_modules() {
     assert_eq!(body["error"], "Bad Request");
     assert_eq!(body["message"].as_array().map(Vec::len), Some(2), "{body}");
     rep.post("/api/v1/contacts")
-        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "status": "vip" }))
+        .json(&json!({ "first_name": "Anu", "last_name": "Lakhotia", "status": "vip" }))
         .send()
         .await
         .assert_validation_error("status");

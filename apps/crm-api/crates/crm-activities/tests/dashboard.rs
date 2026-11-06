@@ -24,7 +24,7 @@ async fn seeded() -> TestCrm {
     let rep1 = crm.user_id(Role::Rep1);
     let rep2 = crm.user_id(Role::Rep2);
     let manager = crm.user_id(Role::Manager);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     for (owner, new) in [
         (rep1, NewDeal::open("Lead A", Stage::Lead, 100_000)),
         (
@@ -67,13 +67,13 @@ async fn seeded() -> TestCrm {
             NewDeal::closed("Lost I", Stage::Lost, 90_000, at("2026-10-10T08:00:00Z")),
         ),
     ] {
-        deal(&crm, owner, acme.id, new).await;
+        deal(&crm, owner, agra.id, new).await;
     }
 
     // Activities, created one minute apart (newest last).
     let base = at("2026-10-20T09:00:00Z");
     let task = |subject: &str, owner| {
-        NewActivity::task(subject, acme.id, owner).on(SubjectType::Company, acme.id)
+        NewActivity::task(subject, agra.id, owner).on(SubjectType::Company, agra.id)
     };
     let activities = [
         task("T1 overdue, assigned to rep1", rep2)
@@ -116,7 +116,7 @@ async fn seeded() -> TestCrm {
 async fn huge_amounts_do_not_break_the_dashboard() {
     let crm = crm_at(now()).await;
     let rep1 = crm.user_id(Role::Rep1);
-    let acme = company(&crm, rep1, "Acme").await;
+    let agra = company(&crm, rep1, "Agra").await;
     for new in [
         NewDeal::open("Huge A", Stage::Lead, i64::MAX),
         NewDeal::open("Huge B", Stage::Lead, i64::MAX),
@@ -125,7 +125,7 @@ async fn huge_amounts_do_not_break_the_dashboard() {
         NewDeal::closed("Won A", Stage::Won, i64::MAX, at("2026-10-05T12:00:00Z")),
         NewDeal::closed("Won B", Stage::Won, i64::MAX, at("2026-10-06T12:00:00Z")),
     ] {
-        deal(&crm, rep1, acme.id, new).await;
+        deal(&crm, rep1, agra.id, new).await;
     }
     let body = dashboard(&crm, Role::Manager).await;
     assert_eq!(
@@ -208,7 +208,7 @@ async fn dashboard_numbers_match_seeded_fixture() {
         ]
     );
     assert_eq!(recent[0]["__type"], json!("Activity"));
-    assert_eq!(recent[0]["subject_label"], json!("Acme"));
+    assert_eq!(recent[0]["subject_label"], json!("Agra"));
     assert_eq!(
         recent[0]["owner"],
         json!({ "id": crm.user_id(Role::Manager), "name": "Marcus Reyes" })

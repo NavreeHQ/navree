@@ -238,8 +238,8 @@ mod tests {
     fn won() -> DealNotification<Won> {
         let deal = Uuid::from_u128(9);
         let data =
-            NotificationData::new("Deal won", "“Acme” was marked won", "/deals/9").deal(deal);
-        DealNotification::new(data, "Priya", "Acme", "http://localhost:3000/deals/9")
+            NotificationData::new("Deal won", "“Agra” was marked won", "/deals/9").deal(deal);
+        DealNotification::new(data, "Priya", "Agra", "http://localhost:3000/deals/9")
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
             notification.to_database(&Owner),
             Some(json!({
                 "title": "Deal won",
-                "message": "“Acme” was marked won",
+                "message": "“Agra” was marked won",
                 "url": "/deals/9",
                 "deal_id": Uuid::from_u128(9),
             }))
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn the_mail_greets_the_owner_and_links_to_the_web_app() {
         let mail = won().to_mail(&Owner).expect("a mail");
-        assert_eq!(mail.subject, "Deal won: Acme");
+        assert_eq!(mail.subject, "Deal won: Agra");
         assert_eq!(mail.template, MAIL_TEMPLATE);
         assert!(mail.to.is_empty(), "sent to the owner's address");
         assert_eq!(
@@ -276,7 +276,7 @@ mod tests {
             json!({
                 "name": "Priya",
                 "title": "Deal won",
-                "message": "“Acme” was marked won",
+                "message": "“Agra” was marked won",
                 "url": "http://localhost:3000/deals/9",
             })
         );

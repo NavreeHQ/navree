@@ -17,13 +17,13 @@ async fn deal_update_broadcasts() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
     let watcher = crm.login_as(Role::Rep2).await;
-    let acme = company(&crm, "Acme", rep.id()).await;
+    let agra = company(&crm, "Agra", rep.id()).await;
     let addr = serve(&crm).await;
     // Another user's board, subscribed the way crm-web subscribes.
     let mut board = Socket::connect(addr).await;
     board.join(&watcher, CHANNEL).await;
 
-    let created = create_deal(&rep, new_deal("Acme renewal", acme, 100)).await;
+    let created = create_deal(&rep, new_deal("Agra renewal", agra, 100)).await;
     let frame = board.expect(EVENT).await;
     assert_eq!(frame.channel.as_deref(), Some(CHANNEL));
     assert_eq!(frame.data, json!({ "deal": created }));
@@ -31,7 +31,7 @@ async fn deal_update_broadcasts() {
 
     let updated = rep
         .patch(&format!("/api/v1/deals/{id}"))
-        .json(&json!({ "title": "Acme renewal 2027" }))
+        .json(&json!({ "title": "Agra renewal 2027" }))
         .send()
         .await
         .assert_status(200)
@@ -95,12 +95,12 @@ async fn notifications_from_a_worker_process_reach_the_socket() {
 
     let rep = server.login_as(Role::Rep1).await;
     let manager = server.login_as(Role::Manager).await;
-    let acme = company(&server, "Acme", manager.id()).await;
+    let agra = company(&server, "Agra", manager.id()).await;
     let channel = format!("private-users.{}", rep.id());
     let mut socket = Socket::connect(addr).await;
     socket.join(&rep, &channel).await;
 
-    let mut input = new_deal("Acme renewal", acme, 100);
+    let mut input = new_deal("Agra renewal", agra, 100);
     input["owner_id"] = json!(rep.id());
     let deal = create_deal(&manager, input).await;
     // The serving process does not run the queue.
@@ -126,7 +126,7 @@ async fn role_changes_and_logout_end_the_users_subscriptions() {
     let rep = crm.login_as(Role::Rep1).await;
     let manager = crm.login_as(Role::Manager).await;
     let admin = crm.login_as(Role::Admin).await;
-    let acme = company(&crm, "Acme", manager.id()).await;
+    let agra = company(&crm, "Agra", manager.id()).await;
     let addr = serve(&crm).await;
     let mut rep_board = Socket::connect(addr).await;
     rep_board.join(&rep, CHANNEL).await;
@@ -148,7 +148,7 @@ async fn role_changes_and_logout_end_the_users_subscriptions() {
         .send()
         .await
         .assert_status(403);
-    create_deal(&manager, new_deal("Acme renewal", acme, 100)).await;
+    create_deal(&manager, new_deal("Agra renewal", agra, 100)).await;
     manager_board.expect(EVENT).await;
 
     // Signing out ends the manager's subscriptions too.
