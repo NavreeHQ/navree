@@ -33,6 +33,9 @@
 # containers, so the suites that name a server print SKIPPED and pass), with
 # Chrome, Node.js and FFmpeg.
 #
+# The connectors that need more than one container of their own (identity
+# providers, mail servers, an SSH host) run in integrations.yml.
+#
 # Once a month a third job builds the projects `navree new` generates (the API,
 # SaaS and microservice kits) and runs their own tests and lints: the suites
 # marked `#[ignore]` in navree-cli, minutes each.
@@ -155,7 +158,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: apps/crm-web/pnpm-lock.yaml
+          cache-dependency-path: |
+            packages/js/pnpm-lock.yaml
+            apps/crm-web/pnpm-lock.yaml
 
       - name: Install FFmpeg, find Chrome
         run: |
@@ -181,8 +186,11 @@ jobs:
           df --human-readable /
 
       - name: Build crm-web
-        # The browser journeys of crm-api drive its production build.
+        # The browser journeys of crm-api drive its production build. crm-web
+        # links the Navree packages in packages/js, which are built first.
         run: |
+          pnpm --dir packages/js install --frozen-lockfile
+          pnpm --dir packages/js build
           pnpm --dir apps/crm-web install --frozen-lockfile
           pnpm --dir apps/crm-web build
 
@@ -347,7 +355,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: apps/crm-web/pnpm-lock.yaml
+          cache-dependency-path: |
+            packages/js/pnpm-lock.yaml
+            apps/crm-web/pnpm-lock.yaml
 
       - name: Install FFmpeg, find Chrome
         shell: pwsh
@@ -364,8 +374,11 @@ jobs:
         run: cargo test --locked --workspace --all-features --no-run
 
       - name: Build crm-web
-        # The browser journeys of crm-api drive its production build.
+        # The browser journeys of crm-api drive its production build. crm-web
+        # links the Navree packages in packages/js, which are built first.
         run: |
+          pnpm --dir packages/js install --frozen-lockfile
+          pnpm --dir packages/js build
           pnpm --dir apps/crm-web install --frozen-lockfile
           pnpm --dir apps/crm-web build
 
