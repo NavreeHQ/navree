@@ -411,7 +411,7 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
     // Each write was told to Dana's pages only.
     let channel = format!("private-navree-live.user.{dana}.assistant.{id}");
     let told = nudges.0.lock().unwrap().clone();
-    assert!(told.iter().any(|c| *c == channel), "{told:?}");
+    assert!(told.contains(&channel), "{told:?}");
     assert!(told.iter().all(|c| c.contains(&dana.to_string())), "{told:?}");
     // What changed since the first revision is the answer, finished, under its own key,
     // and its writing key is gone.

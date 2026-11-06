@@ -1696,6 +1696,9 @@ fn is_multipart(parts: &Parts) -> bool {
         })
 }
 
+/// A post's names and values, in order.
+type Pairs = Vec<(String, String)>;
+
 /// The files a post brought for a form's file fields: each field's name and the stored file's
 /// path.
 #[derive(Default)]
@@ -1710,7 +1713,7 @@ struct Posted {
 async fn read_multipart<T: Form>(
     request: Request,
     ctx: Option<&AppContext>,
-) -> Result<(Vec<(String, String)>, Posted), Result<StatusCode, AppError>> {
+) -> Result<(Pairs, Posted), Result<StatusCode, AppError>> {
     let Ok(mut form) = <navree_http::extract::Multipart as FromRequest>::from_request(request).await
     else {
         return Err(Ok(StatusCode::BAD_REQUEST));
@@ -1810,11 +1813,11 @@ const FILE_REFUSED: &str = "\0refused:";
 /// does not read is no file, and an error. A refused form shows the key of each file, so it is
 /// not chosen again.
 fn file_values<T: Form>(
-    pairs: Vec<(String, String)>,
+    pairs: Pairs,
     posted: Posted,
     signer: Option<&navree_http::UrlSigner>,
     words: &AppMessages,
-) -> (Vec<(String, String)>, Vec<(String, String)>, FieldErrors) {
+) -> (Pairs, Pairs, FieldErrors) {
     let mut errors = FieldErrors::new();
     let mut read = Vec::with_capacity(pairs.len());
     let mut shown = Vec::with_capacity(pairs.len());

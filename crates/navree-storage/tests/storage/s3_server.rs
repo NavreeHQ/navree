@@ -579,6 +579,8 @@ fn authorize(
 /// What Google Cloud Storage checks before it stores an upload: the size
 /// range a signed link bound (`x-goog-content-length-range: min,max`) and a
 /// write only if absent (`x-goog-if-generation-match: 0`).
+// The error is the answer the fake server sends, as every handler here builds it.
+#[allow(clippy::result_large_err)]
 fn gcs_preconditions(
     state: &ServerState,
     bucket: &str,

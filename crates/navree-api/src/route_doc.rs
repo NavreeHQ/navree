@@ -43,8 +43,8 @@ impl Target {
 pub(crate) enum Media {
     /// A type's schema, with the schemas it references (registered as components).
     Type(SchemaFn),
-    /// A schema written here.
-    Inline(Schema),
+    /// A schema written here (boxed: it is large next to a function).
+    Inline(Box<Schema>),
 }
 
 /// One response a doc adds.
@@ -202,7 +202,7 @@ impl RouteDoc {
         self.responses.push(ResponseDoc {
             status,
             description: Some(description.to_owned()),
-            content: Some(("application/json".to_owned(), Media::Inline(schema))),
+            content: Some(("application/json".to_owned(), Media::Inline(Box::new(schema)))),
         });
         self
     }
@@ -213,7 +213,7 @@ impl RouteDoc {
         self.responses.push(ResponseDoc {
             status,
             description: Some(description.to_owned()),
-            content: Some((content_type.to_owned(), Media::Inline(Schema::string()))),
+            content: Some((content_type.to_owned(), Media::Inline(Box::new(Schema::string())))),
         });
         self
     }

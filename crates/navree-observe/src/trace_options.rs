@@ -298,7 +298,9 @@ mod tests {
         use navree_config::{Config, ConfigSources};
         use navree_telemetry::TracePolicy;
 
-        let cases: [(&[(&str, &str)], Option<&str>); 6] = [
+        // The keys a case sets, and the error it expects.
+        type Case<'a> = (&'a [(&'a str, &'a str)], Option<&'a str>);
+        let cases: [Case<'_>; 6] = [
             (&[], None),
             (&[("enabled", "false"), ("sample_ratio", "0.25")], None),
             (&[("trust_incoming", "no")], None),

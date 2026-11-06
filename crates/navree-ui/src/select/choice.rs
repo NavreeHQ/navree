@@ -197,6 +197,8 @@ impl From<OptionItem> for Choice {
 }
 
 /// One entry of a list: a choice, a labelled group, or a divider.
+// Nearly every entry is a choice: boxing it would cost an allocation for each.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub(crate) enum Entry {
     Choice(Choice),

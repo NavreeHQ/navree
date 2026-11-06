@@ -295,7 +295,7 @@ impl Store {
             .await
             .map_err(db_error)?
             .filter(|row| row.user_id == user)
-            .ok_or_else(|| no_conversation())
+            .ok_or_else(no_conversation)
     }
 
     /// Begins a run: refuses one while another goes (unless that one went quiet past
@@ -316,7 +316,7 @@ impl Store {
             .one(&uow)
             .await
             .map_err(db_error)?
-            .ok_or_else(|| no_conversation())?;
+            .ok_or_else(no_conversation)?;
         if row.user_id != user {
             let _ = uow.rollback().await;
             return Err(no_conversation());
@@ -627,7 +627,7 @@ impl Store {
             .one(uow)
             .await
             .map_err(db_error)?
-            .ok_or_else(|| no_conversation())?;
+            .ok_or_else(no_conversation)?;
         let mut notes: Vec<String> = row
             .notes
             .as_deref()

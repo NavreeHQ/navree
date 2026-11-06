@@ -333,11 +333,9 @@ mod tests {
         note: &str,
         result: Option<Value>,
     ) -> OperationRecord {
-        let percent = if total == 0 {
-            0
-        } else {
-            u8::try_from((done * 100 / total).min(100)).unwrap_or(100)
-        };
+        let percent = (done * 100)
+            .checked_div(total)
+            .map_or(0, |share| u8::try_from(share.min(100)).unwrap_or(100));
         OperationRecord {
             id: Uuid::nil(),
             kind: "export".to_owned(),

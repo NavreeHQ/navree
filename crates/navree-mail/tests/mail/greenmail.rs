@@ -266,11 +266,7 @@ async fn gurmukhi_and_rupee_text_survives_a_real_mail_server() {
     let seen = mail.seen();
     let received = &seen[0].2;
     assert_eq!(received.subject.as_deref(), Some(subject.as_str()));
-    let text = received.text.as_deref().unwrap().replace(
-        "
-", "
-",
-    );
+    let text = received.text.as_deref().unwrap().replace("\r\n", "\n");
     assert_eq!(text.trim_end(), body);
 }
 

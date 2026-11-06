@@ -954,45 +954,6 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    /// What a value costs to read follows how many values it holds, text or
-    /// not.
-    #[test]
-    fn a_value_is_long_by_its_values_not_only_its_text() {
-        assert!(!is_long_value(
-            &json!({ "name": "Gurpreet Kaur", "size": 3 })
-        ));
-        assert!(is_long_value(
-            &json!({ "text": "x".repeat(OFF_THE_WORKER_BYTES) })
-        ));
-        let zeros = OFF_THE_WORKER_BYTES / 2;
-        assert!(is_long_value(&json!({ "values": vec![0; zeros] })));
-        assert!(!is_long_value(&json!({ "values": vec![0; zeros / 4] })));
-        assert!(is_long_value(&json!(vec![json!({}); zeros])));
-        assert!(is_long_value(&json!(vec![json!(null); zeros])));
-        let keys: serde_json::Map<String, Value> = (0..zeros / 2)
-            .map(|n| (n.to_string(), Value::Null))
-            .collect();
-        assert!(is_long_value(&Value::Object(keys)));
-    }
-
-    /// Nesting counts like anything else.
-    #[test]
-    fn deep_values_are_counted_too() {
-        let mut deep = json!(0);
-        for _ in 0..OFF_THE_WORKER_BYTES / 2 {
-            deep = Value::Array(vec![deep]);
-        }
-        assert!(is_long_value(&deep));
-        // serde_json drops a deep value on the stack: leave it to the heap.
-        std::mem::forget(deep);
-    }
-}
 
 /// Reads a form, keeping the request head: `None` for `GET` and `HEAD`,
 /// whose form is the query string (like [`Form`]), else the
@@ -1068,5 +1029,45 @@ fn rejected(status: StatusCode, text: String) -> AppError {
         error.with_detail(text)
     } else {
         error.with_source(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// What a value costs to read follows how many values it holds, text or
+    /// not.
+    #[test]
+    fn a_value_is_long_by_its_values_not_only_its_text() {
+        assert!(!is_long_value(
+            &json!({ "name": "Gurpreet Kaur", "size": 3 })
+        ));
+        assert!(is_long_value(
+            &json!({ "text": "x".repeat(OFF_THE_WORKER_BYTES) })
+        ));
+        let zeros = OFF_THE_WORKER_BYTES / 2;
+        assert!(is_long_value(&json!({ "values": vec![0; zeros] })));
+        assert!(!is_long_value(&json!({ "values": vec![0; zeros / 4] })));
+        assert!(is_long_value(&json!(vec![json!({}); zeros])));
+        assert!(is_long_value(&json!(vec![json!(null); zeros])));
+        let keys: serde_json::Map<String, Value> = (0..zeros / 2)
+            .map(|n| (n.to_string(), Value::Null))
+            .collect();
+        assert!(is_long_value(&Value::Object(keys)));
+    }
+
+    /// Nesting counts like anything else.
+    #[test]
+    fn deep_values_are_counted_too() {
+        let mut deep = json!(0);
+        for _ in 0..OFF_THE_WORKER_BYTES / 2 {
+            deep = Value::Array(vec![deep]);
+        }
+        assert!(is_long_value(&deep));
+        // serde_json drops a deep value on the stack: leave it to the heap.
+        std::mem::forget(deep);
     }
 }

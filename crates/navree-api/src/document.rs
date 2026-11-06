@@ -307,7 +307,8 @@ struct Prepared {
 
 enum PreparedMedia {
     Body(Body),
-    Inline(Schema),
+    // Boxed: a schema is large next to a body.
+    Inline(Box<Schema>),
 }
 
 /// A schema a [`SchemaFn`] returned. One that isn't a JSON object says nothing.
@@ -538,7 +539,7 @@ impl Builder {
                     response.content.insert(
                         content_type.clone(),
                         MediaType {
-                            schema: schema.clone(),
+                            schema: (**schema).clone(),
                         },
                     );
                 }

@@ -71,6 +71,8 @@ const COMPLETE: bool = cfg!(all(
 ));
 
 /// The registration of every section the build has.
+// Each push is behind the feature of its section, so the list cannot be one `vec![]`.
+#[allow(clippy::vec_init_then_push)]
 fn sections() -> Vec<SectionRegistration> {
     let mut sections: Vec<SectionRegistration> = Vec::new();
     #[cfg(feature = "ai")]

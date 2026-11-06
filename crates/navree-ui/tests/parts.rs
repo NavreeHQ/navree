@@ -4,6 +4,9 @@
 //! card variants, the smaller input sizes and the clear button, a breadcrumb that folds,
 //! the two smallest headings, the colour picker, a trace, a questionnaire and a sparkline
 //! in a table cell.
+//!
+//! The rupee amounts are written in lakh grouping (`1_00_000`), as the pages print them.
+#![allow(clippy::inconsistent_digit_grouping)]
 
 use navree_ui::charts::Sparkline;
 use navree_ui::{
