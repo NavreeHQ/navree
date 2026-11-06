@@ -174,6 +174,14 @@ impl Shadowed {
     /// The warning shown at boot and by `config:check`: the key, both
     /// sources and what to do.
     pub fn message(&self) -> String {
+        if self.winner.is_file() && self.hidden.is_file() {
+            return format!(
+                "`{key}` is set in two config files; the value in {winner} is used and the value in {hidden} has no effect. Remove one of the two.",
+                key = self.key,
+                winner = self.winner,
+                hidden = self.hidden,
+            );
+        }
         let (used, unused) = if self.winner.is_dotenv() {
             ("`.env`", "config file")
         } else {

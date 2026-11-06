@@ -1,7 +1,7 @@
 //! [`ConfigSources`]: the ordered list of places configuration comes from.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::layers::Limits;
 
@@ -64,6 +64,9 @@ pub(crate) enum Source {
     Dotenv(PathBuf),
     /// A TOML file.
     File(PathBuf),
+    /// A TOML or JSON file whose keys all belong to one section: its top
+    /// level is the table at `key`.
+    Section { path: PathBuf, key: String },
     /// The process environment (read at load time), mapped with `prefix`.
     Env { prefix: String },
     /// An explicit environment snapshot, mapped with `prefix`.
@@ -97,28 +100,66 @@ impl ConfigSources {
     /// set with different values does not depend on it.
     pub const DOTENV_RANKS_ABOVE_FILES: bool = true;
 
-    /// The conventional sources, relative to the working directory:
-    /// `config/app.toml`, then `.env` (so `.env` wins; the order of the two
-    /// is [`DOTENV_RANKS_ABOVE_FILES`](ConfigSources::DOTENV_RANKS_ABOVE_FILES)),
-    /// then `APP_` environment variables.
+    /// The conventional sources, relative to the working directory, lowest
+    /// first:
+    ///
+    /// 1. `config/app.toml`;
+    /// 2. a file per section, `config/<section>.toml` (see
+    ///    [`section_file`](ConfigSources::section_file)), in name order;
+    /// 3. the file of the environment, `config/env/<env>.toml`, when it
+    ///    exists (see [`defaults_in`](ConfigSources::defaults_in));
+    /// 4. `.env`;
+    /// 5. `APP_` environment variables.
+    ///
+    /// `.env` ranks above the files, as the order of the two is
+    /// [`DOTENV_RANKS_ABOVE_FILES`](ConfigSources::DOTENV_RANKS_ABOVE_FILES).
     pub fn defaults() -> Self {
         Self::defaults_in("")
     }
 
-    /// The conventional sources of the app in `dir`: `dir/config/app.toml`,
-    /// then `dir/.env`, then `APP_` environment variables. What
+    /// The conventional sources of the app in `dir`, what
     /// [`defaults`](ConfigSources::defaults) reads, for tools that look at
     /// an app from another directory (Navigator, `navree mcp`).
-    pub fn defaults_in(dir: impl AsRef<std::path::Path>) -> Self {
+    ///
+    /// The section files are the `*.toml` and `*.json` files in
+    /// `dir/config` other than `app`, found when this is called. A file
+    /// called `mail.toml` holds the keys of `[mail]` without the header, and
+    /// `database.mongodb.toml` those of `[database.mongodb]`. A key set in
+    /// both `config/app.toml` and a section file is reported (see
+    /// [`Config::shadowed`](crate::Config::shadowed)); the section file wins.
+    ///
+    /// The environment file `dir/config/env/<env>.toml` is a whole tree laid
+    /// over the files above it, so it is the place for what differs in
+    /// `production` or `testing`. `<env>` is the first of these that names
+    /// one, and `local` when none does: the real `APP_ENV`, `APP_ENV` in
+    /// `dir/.env`, `app.env` in `dir/config/app.toml`. A missing file is
+    /// skipped.
+    pub fn defaults_in(dir: impl AsRef<Path>) -> Self {
         let dir = dir.as_ref();
-        let (dotenv, file) = (dir.join(".env"), dir.join("config/app.toml"));
-        let sources = Self::new();
-        let sources = if Self::DOTENV_RANKS_ABOVE_FILES {
-            sources.file(file).dotenv(dotenv)
+        let dotenv = dir.join(".env");
+        let files = default_files(dir);
+        let mut sources = Self::new();
+        if Self::DOTENV_RANKS_ABOVE_FILES {
+            sources.sources.extend(files);
+            sources = sources.dotenv(dotenv);
         } else {
-            sources.dotenv(dotenv).file(file)
-        };
+            sources = sources.dotenv(dotenv);
+            sources.sources.extend(files);
+        }
         sources.env()
+    }
+
+    /// A TOML file (or a JSON file, when the name ends in `.json`) whose
+    /// keys all belong to the section `key`: with
+    /// `section_file("mail", "config/mail.toml")`, `from = "a@b.test"` in the
+    /// file is `mail.from`. `key` may be dotted (`database.mongodb`). Like
+    /// every file source it is optional.
+    pub fn section_file(mut self, key: &str, path: impl Into<PathBuf>) -> Self {
+        self.sources.push(Source::Section {
+            path: path.into(),
+            key: key.to_owned(),
+        });
+        self
     }
 
     /// `APP_` environment variables (see [`env_prefixed`](ConfigSources::env_prefixed)).
@@ -237,6 +278,11 @@ impl fmt::Debug for Source {
         match self {
             Source::Dotenv(path) => f.debug_tuple("Dotenv").field(path).finish(),
             Source::File(path) => f.debug_tuple("File").field(path).finish(),
+            Source::Section { path, key } => f
+                .debug_struct("Section")
+                .field("key", key)
+                .field("path", path)
+                .finish(),
             Source::Env { prefix } => f.debug_struct("Env").field("prefix", prefix).finish(),
             Source::EnvVars { prefix, vars } => f
                 .debug_struct("EnvVars")
@@ -245,6 +291,111 @@ impl fmt::Debug for Source {
                 .finish(),
         }
     }
+}
+
+/// The file sources of the conventional setup, lowest first: `app.toml`, the
+/// section files, and the file of the environment.
+fn default_files(dir: &Path) -> Vec<Source> {
+    let config_dir = dir.join("config");
+    let mut files = vec![Source::File(dir.join("config/app.toml"))];
+    files.extend(
+        section_files(&config_dir)
+            .into_iter()
+            .map(|(key, path)| Source::Section { path, key }),
+    );
+    if let Some(name) = environment_name(dir) {
+        let overlay = config_dir.join("env").join(format!("{name}.toml"));
+        if overlay.is_file() {
+            files.push(Source::File(overlay));
+        }
+    }
+    files
+}
+
+/// The files `config/<section>.toml` and `config/<section>.json` other than
+/// `app`, by section key, in name order.
+fn section_files(config_dir: &Path) -> Vec<(String, PathBuf)> {
+    let Ok(entries) = std::fs::read_dir(config_dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(String, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
+            let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+            if extension != "toml" && extension != "json" {
+                return None;
+            }
+            let key = path.file_stem()?.to_str()?.to_owned();
+            (key != "app" && is_section_key(&key)).then_some((key, path))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// Whether `key` can be a section key: dotted names of letters, digits, `_`
+/// and `-`.
+fn is_section_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
+}
+
+/// The name of the environment the conventional setup loads a file for: the
+/// real `APP_ENV`, then `APP_ENV` in `.env`, then `app.env` in
+/// `config/app.toml`, else `local`. Lower case; `None` when the name cannot be
+/// a file name.
+fn environment_name(dir: &Path) -> Option<String> {
+    let named = |value: String| Some(value.trim().to_owned()).filter(|value| !value.is_empty());
+    let name = std::env::var("APP_ENV")
+        .ok()
+        .and_then(named)
+        .or_else(|| std::env::var("APP_APP__ENV").ok().and_then(named))
+        .or_else(|| dotenv_environment(&dir.join(".env")))
+        .or_else(|| file_environment(&dir.join("config/app.toml")))
+        .unwrap_or_else(|| "local".to_owned())
+        .to_ascii_lowercase();
+    let valid = name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    valid.then_some(name)
+}
+
+/// `APP_ENV` (or `APP_APP__ENV`) in a `.env` file; the last entry wins.
+fn dotenv_environment(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let entries = crate::parse_dotenv(&text).ok()?;
+    entries
+        .into_iter()
+        .rev()
+        .find(|(name, value)| {
+            (name == "APP_ENV" || name == "APP_APP__ENV") && !value.trim().is_empty()
+        })
+        .map(|(_, value)| value)
+}
+
+/// `env` (or `app.env`) in a TOML file.
+fn file_environment(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let table: toml::Table = toml::from_str(&text).ok()?;
+    table
+        .get("env")
+        .or_else(|| table.get("app").and_then(|app| app.get("env")))
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+        .filter(|value| !value.trim().is_empty())
 }
 
 /// `APP` and `APP_` both mean the prefix `APP_`; an empty prefix stays empty.

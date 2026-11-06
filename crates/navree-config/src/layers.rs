@@ -52,7 +52,10 @@ pub(crate) fn load(sources: &ConfigSources) -> Result<Loaded, ConfigError> {
         if let Some(layer) = source_layer(source, &limits, rank)? {
             match source {
                 Source::File(_) => find_shadows(&root, &layer, Other::Dotenv, &mut shadows),
-                Source::Dotenv(_) => find_shadows(&root, &layer, Other::File, &mut shadows),
+                // A key that `config/app.toml` and a section file both set.
+                Source::Dotenv(_) | Source::Section { .. } => {
+                    find_shadows(&root, &layer, Other::File, &mut shadows)
+                }
                 _ => {}
             }
             merge(&mut root, layer);
@@ -94,6 +97,20 @@ fn source_layer(source: &Source, limits: &Limits, rank: u32) -> Result<Option<Va
         Source::File(path) => match read_optional(path, limits.max_file_bytes)? {
             Some(src) if is_json(path) => json_layer(path, &src, limits, rank)?,
             Some(src) => toml_layer(path, &src, limits, rank)?,
+            None => return Ok(None),
+        },
+        Source::Section { path, key } => match read_optional(path, limits.max_file_bytes)? {
+            Some(src) => {
+                let table = if is_json(path) {
+                    json_layer(path, &src, limits, rank)?
+                } else {
+                    toml_layer(path, &src, limits, rank)?
+                };
+                let segments: Vec<String> = key.split('.').map(str::to_owned).collect();
+                let mut tree = Value::empty_table();
+                insert_at(&mut tree, &segments, table);
+                tree
+            }
             None => return Ok(None),
         },
         Source::Env { prefix } => {
