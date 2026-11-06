@@ -205,7 +205,8 @@ fn the_options_reject_what_they_do_not_know() {
             section: Some("mail".to_owned()),
             defaults: true,
             origin: true,
-            json: true
+            json: true,
+            fallbacks: false,
         }
     );
 }
