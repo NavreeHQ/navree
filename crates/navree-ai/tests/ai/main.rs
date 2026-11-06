@@ -6,6 +6,7 @@ mod docs_surface;
 mod failover;
 mod module;
 mod rag;
+mod redteam;
 mod retrieval;
 mod servers;
 mod streaming;
